@@ -1,0 +1,6 @@
+Backend Service Requirements:
+    Postgresql
+    Cloudflare
+    Redis
+    Libre Office
+    
