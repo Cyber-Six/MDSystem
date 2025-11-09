@@ -3,4 +3,16 @@ Backend Service Requirements:
     Cloudflare
     Redis
     Libre Office
-    
+    Domain name aquisition
+
+Frontend Stack:
+    React.js (w/ vite)
+    Express.js
+    axios
+
+Tools Needed:
+    Postman
+
+Deployment:
+    Docker
+    Raspi 5 Model B Rev 1.1 (8GB)
