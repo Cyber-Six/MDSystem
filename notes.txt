@@ -3,6 +3,10 @@ Backend Service Requirements:
     Cloudflare
     Redis
     Libre Office
+
+Secure feature:
+bind 127.0.0.1 on redis and postgresql
+
     Domain name aquisition
 
 Frontend Stack:
