@@ -1,0 +1,11 @@
+/* Auth feature styles */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  max-width: 300px;
+  margin: 2em auto;
+  padding: 2em;
+  background: #333;
+  border-radius: 8px;
+}
