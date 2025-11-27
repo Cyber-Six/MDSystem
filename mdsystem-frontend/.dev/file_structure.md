@@ -1,5 +1,6 @@
 # Project File Structure
 
+
 ```
 mdsystem-frontend/
 │
@@ -8,17 +9,26 @@ mdsystem-frontend/
 │   └── vite.svg
 │
 ├── src/
-│   ├── App.css
 │   ├── App.jsx
-│   ├── index.css
 │   ├── main.jsx
 │   ├── assets/
 │   │   └── react.svg
+│   ├── components/
+│   │   ├── Demo/
+│   │   ├── Layout/
+│   │   └── User/
+│   ├── features/
+│   │   ├── auth/
+│   │   └── dashboard/
 │   ├── pages/
+│   │   ├── .dev_tips_pages.md
 │   │   ├── Dashboard.jsx
 │   │   └── Login.jsx
-│   └── routes/
-│       └── PrivateRoute.jsx
+│   ├── routes/
+│   │   └── PrivateRoute.jsx
+│   └── styles/
+│       ├── App.css
+│       └── index.css
 │
 ├── .gitignore
 ├── eslint.config.js
