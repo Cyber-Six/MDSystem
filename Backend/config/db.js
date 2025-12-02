@@ -16,6 +16,15 @@ const pool = new Pool({
   connectionTimeoutMillis: dbConfig.connectionTimeoutMillis,
 });
 
+pool.on('connect', () => {
+  console.log('✅ Connected to Postgres');
+  });
+
+pool.on('error', (err) => {
+  console.error('❌ Unexpected Postgres error', err);
+  process.exit(-1);
+  });
+
 // Optional: test connection on startup
 /*
 (async () => {

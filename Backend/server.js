@@ -4,6 +4,8 @@ const cors = require('cors');
 const fs = require('fs');
 const db = require('./config/db.js');
 const redis = require('./config/redis.js');
+const emailservice = require('./services/emailservice.js');
+const jwtConfig = require('./config/jwt.js');
 
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -14,23 +16,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-(async () => {
-  await redis.initRedis({
-    url: `redis://:${process.env.REDIS_PASS}@127.0.0.1:6379` 
-    });
-  })();
+// initialize DB
 
-const emailservice = require('./services/emailservice.js');
-/*
+redis.initRedis().then(() => {
+  console.log('Redis initialized');
+}).catch((err) => {
+  console.error('Failed to initialize Redis:', err);
+});
+
+
 (async () => {
-  await emailservice.sendOtpEmail('mjrpena@tip.edu.ph', 12394);
-  //await emailservice.sendOtpEmail('mcjyabut@tip.edu.ph', 123912);
-  //await emailservice.sendOtpEmail('mbjrivera@tip.edu.ph', 12391245);
-  //await emailservice.sendOtpEmail('mjmgarcia01@tip.edu.ph', 123934);
-  //await emailservice.sendOtpEmail('mkrmsamarita@tip.edu.ph', 123123);
+  console.log(jwtConfig.generateAccessToken({id:1, role:'patient'}));
+  /*
+  await emailservice.enqueueEmail2FA('mjrpena@tip.edu.ph');
+  await emailservice.enqueueEmail2FA('mcjyabut@tip.edu.ph');
+  await emailservice.enqueueEmailVerification('mbjrivera@tip.edu.ph');
+  await emailservice.enqueueEmailVerification('mjmgarcia01@tip.edu.ph');
+  await emailservice.enqueueEmail2FA('mkrmsamarita@tip.edu.ph');
+  */
 })();
 
-*/
+
 // Start server
 const PORT = process.env.PATIENT_PORT || 3001;
 app.listen(PORT, () => {
