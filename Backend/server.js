@@ -7,7 +7,8 @@ const redis = require('./config/redis.js');
 const emailservice = require('./services/emailservice.js');
 const jwtConfig = require('./config/jwt.js');
 
-
+const registerRoutes = require('./routes/patient/user/register.js');
+const consentRoutes = require('./routes/patient/info/consent.js');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
@@ -25,17 +26,8 @@ redis.initRedis().then(() => {
 });
 
 
-(async () => {
-  console.log(jwtConfig.generateAccessToken({id:1, role:'patient'}));
-  /*
-  await emailservice.enqueueEmail2FA('mjrpena@tip.edu.ph');
-  await emailservice.enqueueEmail2FA('mcjyabut@tip.edu.ph');
-  await emailservice.enqueueEmailVerification('mbjrivera@tip.edu.ph');
-  await emailservice.enqueueEmailVerification('mjmgarcia01@tip.edu.ph');
-  await emailservice.enqueueEmail2FA('mkrmsamarita@tip.edu.ph');
-  */
-})();
-
+app.use('/register', registerRoutes);
+app.use('/consent', consentRoutes);
 
 // Start server
 const PORT = process.env.PATIENT_PORT || 3001;

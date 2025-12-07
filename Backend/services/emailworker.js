@@ -71,7 +71,12 @@ const worker = new Worker('emailQueue', async job => {
     // ✅ Store OTP only after successful send (for OTP jobs)
     if (job.name === 'sendEmailVerification' || job.name === 'sendEmail2FA') {
       try {
-        await setOTP(userEmail, otp);
+        codeMap = {
+          'sendEmailVerification': 'emailVerification',
+          'sendEmail2FA': 'email2FA',
+        };
+
+        await setOTP(userEmail, otp, codeMap[job.name]);
         console.log(`✅ OTP stored for ${userEmail}`);
       } catch (redisErr) {
         console.error(`⚠️ Email sent but failed to store OTP: ${redisErr.message}`);

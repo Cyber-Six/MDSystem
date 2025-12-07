@@ -83,7 +83,7 @@ function emailVerificationTemplate(otp) {
       <div style="text-align:center; margin: 20px 0;">
         <span style="font-size: 24px; font-weight: bold; letter-spacing: 5px; background:#f0f0f0; padding:10px 20px; border-radius:5px;">${otp}</span>
       </div>
-      <p>This OTP will expire in 5 minutes.</p>
+      <p>This OTP will expire in 5 minutes.></p>
       <p style="color:#888;">If you didn’t request this, ignore this email.</p>
     </div>
   `;
