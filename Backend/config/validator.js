@@ -16,9 +16,17 @@ function isEmployeeEmail(email) {
   return regex.test(email);
 }
 
+
+function isMedicalEmail(email) {
+  const regex = /^[a-z]+(\.[a-z]+)*\.mds@tip\.edu\.ph$/;
+  return regex.test(email);
+}
+
+
 function detectRoleFromEmail(email) {
   if (isStudentEmail(email)) return "Student";
   if (isEmployeeEmail(email)) return "Employee";
+  if (isMedicalEmail(email)) return "Medical";
   return null;
 }
 
@@ -41,6 +49,7 @@ module.exports = {
   USER_STATUS,
   isStudentEmail,
   isEmployeeEmail,
+  isMedicalEmail,
   detectRoleFromEmail,
   validatePassword,
   isUserStaff,

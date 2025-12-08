@@ -9,6 +9,10 @@ const jwtConfig = require('./config/jwt.js');
 
 const registerRoutes = require('./routes/patient/user/register.js');
 const consentRoutes = require('./routes/patient/info/consent.js');
+const emailAuthRoutes = require('./routes/auth/emailauth.js');
+const refreshAuthRoutes = require('./routes/auth/refresh.js');
+
+const loginRoutes = require('./routes/patient/user/login.js');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
@@ -27,7 +31,10 @@ redis.initRedis().then(() => {
 
 
 app.use('/register', registerRoutes);
+app.use('/login', loginRoutes);
 app.use('/consent', consentRoutes);
+app.use('/auth', emailAuthRoutes);
+app.use('/auth', refreshAuthRoutes);
 
 // Start server
 const PORT = process.env.PATIENT_PORT || 3001;

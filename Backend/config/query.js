@@ -83,10 +83,34 @@ async function getUserConsentStateByEmail(email) {
 
   return result.rows[0];
 }
+
+async function updateUserConsent(userId, { data_consent, data_consent_version, data_consent_agreed }) {
+  const sql = `
+    UPDATE "UserCredentials"
+    SET
+      data_consent = $1,
+      data_consent_version = $2,
+      data_consent_agreed = $3
+    WHERE id = $4
+    RETURNING *;
+  `;
+
+  const result = await query(sql, [
+    data_consent,
+    data_consent_version,
+    data_consent_agreed,
+    userId
+  ]);
+
+  return result.rows[0] || null;
+}
+
+
 module.exports = {
     query,
     countUserByEmail,
     findUserByEmail,
     createUser,
-    getUserConsentStateByEmail
+    getUserConsentStateByEmail,
+    updateUserConsent
 };

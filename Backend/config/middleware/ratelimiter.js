@@ -5,7 +5,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 const { rateLimitIP } = require("../redis.js");
 const { detectRoleFromEmail } = require("../validator.js");
 const { mapRoleToProfile, rateLimitMatrix } = require("../data/matrix.js");
-
+const { detectPortalFromSubdomain } = require("../../routes/utils/portal.js");
 
 function ipRateLimiter(profileName="genericLimiter", route = "r") {
   const profile = rateLimitMatrix[profileName];
@@ -29,7 +29,7 @@ function ipRateLimiter(profileName="genericLimiter", route = "r") {
 }
 
 
-function roleBasedIpRateLimiter(route = "") {
+function roleBasedIpRateLimiter(route = "r") {
   return function (req, res, next) {
     const email = req.body?.email;
 
@@ -47,8 +47,17 @@ function roleBasedIpRateLimiter(route = "") {
   };
 }
 
+function portalBasedIpRateLimiter(route = "r") {
+  return function (req, res, next) {
+
+      const portal = detectPortalFromSubdomain(req);
+
+    const profileName = portal === "patient" ? "PatientAuthentication" : "staffAuthentication";
+
+    // Apply the correct IP limiter
+    return ipRateLimiter(profileName, route)(req, res, next);
+  };
+}
 
 
-
-
-module.exports = { ipRateLimiter, roleBasedIpRateLimiter };
+module.exports = { ipRateLimiter, roleBasedIpRateLimiter, portalBasedIpRateLimiter };

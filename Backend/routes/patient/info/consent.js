@@ -1,11 +1,16 @@
 const express = require("express");
 const router = express.Router();
 
-const { getVerificationSession, updateConsentInSession, enrichVerificationSession } = require('../../../config/redis.js');
+const { getVerificationSession, updateConsentInSession } = require('../../../config/redis.js');
+
+function containLoginRegister(purpose) {
+  return ["login", "register"].includes(purpose);
+  }
 
 // ✅ Load T&C consent state
-router.get("/", async (req, res) => {
+router.get("/:purpose", async (req, res) => {
   const { verificationKey } = req.query;
+  const purpose = req.params.purpose;
 
   if (!verificationKey) {
     return res.status(400).json({
@@ -13,12 +18,17 @@ router.get("/", async (req, res) => {
       message: "Verification key is required."
     });
   }
-  console.log("Verification Key:", verificationKey);
-  // ✅ Enrich session with DB consent state (non-destructive)
-  await enrichVerificationSession(verificationKey, "emailVerification");
+
+  // ✅ Validate perform
+  if (!containLoginRegister(purpose)) {
+    return res.status(400).json({
+      error: "INVALID_PERFORM_ACTION",
+      message: "Perform must be either 'login' or 'register'."
+    });
+  }
 
   // ✅ Reload session AFTER enrichment
-  const session = await getVerificationSession(verificationKey, "emailVerification");
+  const session = await getVerificationSession(verificationKey, purpose);
 
   if (!session) {
     return res.status(400).json({
@@ -39,18 +49,27 @@ router.get("/", async (req, res) => {
 
 
 // ✅ Record consent
-router.post("/", async (req, res) => {
+router.post("/:purpose", async (req, res) => {
     const { verificationKey } = req.body;
+    const purpose = req.params.purpose;
 
     if (!verificationKey) {
-        return res.status(400).json({
-            error: "MISSING_VERIFICATION_KEY",
-            message: "Verification key is required."
-        });
+      return res.status(400).json({
+        error: "MISSING_VERIFICATION_KEY",
+        message: "Verification key is required."
+      });
+    }
+
+    // ✅ Validate perform
+    if (!containLoginRegister(purpose)) {
+      return res.status(400).json({
+        error: "INVALID_PERFORM_ACTION",
+        message: "Perform must be either 'login' or 'register'."
+      });
     }
 
     // ✅ Update consent in Redis
-    const updated = await updateConsentInSession(verificationKey, "emailVerification");
+    const updated = await updateConsentInSession(verificationKey, purpose);
 
     if (!updated) {
         return res.status(400).json({

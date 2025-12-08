@@ -70,7 +70,7 @@ async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
   if (!client) throw new Error("Redis client not initialized");
 
   const key = `rl:${route}:ip:${ip}`; // rate-limit "route"
-
+  console.log("Checking IP rate limit key:", key);
   // Atomically increment the counter
   const current = await client.incr(key);
 
@@ -83,11 +83,10 @@ async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
   return current > limit;
 }
 
-async function rateLimitEmailCooldown(email, route = "", cooldownSeconds = 30) {
+async function rateLimitEmailCooldown(email, portal = "", route = "", cooldownSeconds = 30) {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `rl:${route}:ec:${email}`; // rate limit "email cooldown"
-  console.log("Cooldown Key:", key);
+  const key = `rl:${portal}:${route}:ec:${email}`; // rate limit "email cooldown"
   const exists = await client.exists(key);
   if (exists) return true; // still in cooldown → block
 
@@ -95,10 +94,20 @@ async function rateLimitEmailCooldown(email, route = "", cooldownSeconds = 30) {
   return false; // allowed
 }
 
-async function rateLimitEmailAttempts(email, route = "", limit = 5, windowSeconds = 300) {
+async function deleteEmailCooldown(email, portal = "", route = "") {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `rl:${route}:ea:${email}`; // rate limit "email attempts"
+  const key = `rl:${portal}:${route}:ec:${email}`;
+  const deleted = await client.del(key);
+
+  return deleted > 0; // true if key existed and was removed
+}
+
+
+async function rateLimitEmailAttempts(email, portal = "", route = "", limit = 5, windowSeconds = 300) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `rl:${portal}:${route}:ea:${email}`; // rate limit "email attempts"
 
   const current = await client.incr(key);
 
@@ -109,13 +118,23 @@ async function rateLimitEmailAttempts(email, route = "", limit = 5, windowSecond
   return current > limit; // true = block
 }
 
+async function deleteEmailAttempts(email, portal = "", route = "") {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `rl:${portal}:${route}:ea:${email}`;
+  const deleted = await client.del(key);
+
+  return deleted > 0;
+}
+
+
 // ------------------------------------------------
 // Validation OTP helpers 
 // ------------------------------------------------
 
 const OTPMatrix = {
-  sendEmail2FA: {
-    purpose: "2fa",
+  email2FA: {
+    purpose: "email2FA",
     expiration: Number(process.env.EMAIL_2FA_EXPIRATION) || 300, // fallback
     },
   emailVerification: {
@@ -124,21 +143,22 @@ const OTPMatrix = {
     },
   };
 
-async function setOTP(email, otp, code) {
+async function setOTP(email, otp, code, portal) {
   if (!client) throw new Error("Redis client not initialized");
   console.log("Setting OTP for", email, "code:", code, "otp:", otp);
   const config = OTPMatrix[code];
   if (!config) throw new Error(`Unknown OTP code type: ${code}`);
 
   const hashedOtp = hashOTP(otp);
-  const key = `otp:${config.purpose}:${email}`;
+  const key = `otp:${portal}:${config.purpose}:${email}`;
 
+  console.log("Storing OTP key:", key);
   await client.set(key, hashedOtp, {
     EX: config.expiration,
   });
 }
 
-async function verifyOTP(email, code, otpInput) {
+async function verifyOTP(email, code, otpInput, portal) {
   if (!client) throw new Error("Redis client not initialized");
 
   const config = OTPMatrix[code];
@@ -151,8 +171,9 @@ async function verifyOTP(email, code, otpInput) {
     return "LOCKED_OUT";
   }
 
-  const key = `otp:${purpose}:${email}`;
+  const key = `otp:${portal}:${purpose}:${email}`;
   const storedHashedOtp = await client.get(key);
+  console.log("verify OTP key:", key);
 
   // ✅ 2. If OTP does not exist → count as failure
   if (!storedHashedOtp) {
@@ -193,13 +214,13 @@ async function verifyOTP(email, code, otpInput) {
 }
 
 
-async function deleteOTP(email, code) {
+async function deleteOTP(email, code, portal) {
   if (!client) throw new Error("Redis client not initialized");
 
   const config = OTPMatrix[code];
   if (!config) throw new Error(`Unknown OTP code type: ${code}`);
 
-  const key = `otp:${config.purpose}:${email}`;
+  const key = `otp:${portal}:${config.purpose}:${email}`;
   await client.del(key);
 }
 
@@ -215,6 +236,7 @@ const OTP_GLOBAL_LOCKOUT_SECONDS =
 
 async function getOTPFailureCount(email, purpose) {
   const key = `otp:fail:${purpose}:${email}`;
+
   const count = await client.get(key);
   return Number(count) || 0;
 }
@@ -252,93 +274,23 @@ async function getOTPLockoutTTL(email, purpose) {
 // Verification session keys (post-OTP)
 // ------------------------------------------------
 
-  async function createVerificationSession(email, purpose) {
-    if (!client) throw new Error("Redis client not initialized");
-
-    const token = generateRandomKey();
-    const key = `verify:${purpose}:${token}`;
-
-    await client.hSet(key, {
-      email,
-      data_consent: "false",
-      data_consent_version: "",
-      created_at: Date.now().toString()
-    });
-
-    await client.expire(key, Number(process.env.VERIFICATION_SESSION_EXPIRATION) || 900);
-
-    return token;
-  }
-
-  async function getVerificationSession(token, purpose) {
-    if (!client) throw new Error("Redis client not initialized");
-
-    const key = `verify:${purpose}:${token}`;
-    const session = await client.hGetAll(key);
-
-    if (!session || !session.email) return null;
-
-    return session;
-  }
-
-
-  async function updateConsentInSession(token, purpose) {
-    if (!client) throw new Error("Redis client not initialized");
-
-    const key = `verify:${purpose}:${token}`;
-
-    const exists = await client.exists(key);
-    if (!exists) return false;
-
-    await client.hSet(key, {
-      data_consent: "true",
-      data_consent_version: process.env.DATA_CONSENT_VERSION,
-      data_consent_timestamp: Date.now().toString()
-    });
-
-    return true;
-  }
-  
-  async function validateVerificationSession(token, purpose) {
-    if (!client) throw new Error("Redis client not initialized");
-
-    const key = `verify:${purpose}:${token}`;
-    const session = await client.hGetAll(key);
-
-    if (!session || !session.email) return null;
-
-    // ✅ Enforce: only delete if consent is true AND version matches
-    const requiredVersion = process.env.DATA_CONSENT_VERSION;
-
-    const consentValid =
-      session.data_consent === "true" &&
-      session.data_consent_version === requiredVersion;
-
-    if (consentValid) {
-      await client.del(key); // ✅ delete only when fully validated
-    }
-
-    return session;
-  }
-
-async function enrichVerificationSession(verificationKey, purpose) {
+async function createVerificationSession(email, purpose, account_type = "patient") {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `verify:${purpose}:${verificationKey}`;
-
-  // ✅ Load existing session
-  const session = await client.hGetAll(key);
-  if (!session || !session.email) return null;
+  const token = generateRandomKey();
+  const key = `verify:${purpose}:${token}`;
 
   // ✅ Fetch user from DB (returns row OR null)
-  const user = await query.getUserConsentStateByEmail(session.email);
+  const user = await query.getUserConsentStateByEmail(email);
 
-  console.log("Enriching session for", session.email, "with user:", user);
-
-  // ✅ If user exists, enrich Redis session with consent state
   if (user) {
     await client.hSet(key, {
+      allow_email_2fa: user.allow_email_2fa ? "true" : "false",
+      email_2fa_verified: "false",
       user_exists: "true",
+      user_id: user.id.toString(),       // ✅ internal only
+      email,
+      account_type,                      // ✅ NEW: store role for login/register flows
       data_consent: user.data_consent ? "true" : "false",
       data_consent_version: user.data_consent_version || "",
       data_consent_agreed: user.data_consent_agreed
@@ -346,13 +298,143 @@ async function enrichVerificationSession(verificationKey, purpose) {
         : "",
     });
   } else {
-    await client.hSet(key, { user_exists: "false" });
+    await client.hSet(key, {
+      user_exists: "false",
+      user_id: "",                       // ✅ consistent field
+      email,
+      account_type,                              // ✅ still store role even if user doesn't exist
+      data_consent: "false",
+      data_consent_version: "",
+      data_consent_agreed: "",
+    });
   }
 
-  // ✅ Return updated session
-  return await client.hGetAll(key);
+  await client.expire(
+    key,
+    Number(process.env.VERIFICATION_SESSION_EXPIRATION) || 900
+  );
+
+  return token; // ✅ safe to return to user
 }
 
+
+async function getVerificationSession(token, purpose) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `verify:${purpose}:${token}`;
+  const session = await client.hGetAll(key);
+
+  if (!session || !session.email) return null;
+
+  return session;
+  }
+
+
+async function updateConsentInSession(token, purpose) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `verify:${purpose}:${token}`;
+
+  const exists = await client.exists(key);
+  if (!exists) return false;
+
+  await client.hSet(key, {
+    data_consent: "true",
+    data_consent_version: process.env.DATA_CONSENT_VERSION,
+    data_consent_timestamp: Date.now().toString()
+    });
+  
+  const userId = await getUserIdFromVerificationSession(token, purpose);
+  if (userId) {
+    await query.updateUserConsent(userId, {
+      data_consent: true,
+      data_consent_version: process.env.DATA_CONSENT_VERSION,
+      data_consent_agreed: new Date().toISOString()
+      });
+    } 
+  return true;
+  }
+  
+async function deleteVerificationSession(token, purpose) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `verify:${purpose}:${token}`;
+  await client.del(key);
+  
+  return true;
+  }
+
+
+async function getUserIdFromVerificationSession(token, purpose) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `verify:${purpose}:${token}`;
+
+  const exists = await client.exists(key);
+  if (!exists) return null;
+
+  // ✅ Fetch only the user_id field
+  const userId = await client.hGet(key, "user_id");
+
+  // Normalize: empty string → null
+  return userId || null;
+}
+
+// ------------------------------------------------
+// Refresh Token Storage Helpers
+// ------------------------------------------------
+
+// You already have these:
+async function saveRefreshSession(userId, deviceId, data, ttlSeconds) {
+  if (!userId || !deviceId) {
+    throw new Error("saveRefreshSession: userId and deviceId are required");
+  }
+
+  const key = `rt:${userId}:${deviceId}`;
+
+  await setKey(
+    key,
+    JSON.stringify(data),
+    ttlSeconds
+  );
+
+  return key;
+}
+
+async function saveStaffAnchor(userId, sessionId, ttlSeconds) {
+  if (!userId || !sessionId) {
+    throw new Error("saveStaffAnchor: userId and sessionId are required");
+  }
+
+  const key = `staff:anchor:${userId}`;
+
+  await setKey(
+    key,
+    sessionId,
+    ttlSeconds
+  );
+
+  return key;
+}
+
+async function getStaffAnchor(userId) {
+  if (!userId) throw new Error("getStaffAnchor: userId is required");
+
+  const key = `staff:anchor:${userId}`;
+  return await getKey(key); // string or null
+}
+
+// New: load refresh session
+async function getRefreshSession(userId, deviceId) {
+  if (!userId || !deviceId) {
+    throw new Error("getRefreshSession: userId and deviceId are required");
+  }
+
+  const key = `rt:${userId}:${deviceId}`;
+  const raw = await getKey(key);
+  if (!raw) return null;
+  return JSON.parse(raw);
+}
 
 
 
@@ -365,18 +447,23 @@ module.exports = {
   getKey,
   delKey,
   setOTP,
-  rateLimitIP,
-  rateLimitEmailCooldown,
-  rateLimitEmailAttempts,
   verifyOTP,
   deleteOTP,
-
+  rateLimitIP,
+  rateLimitEmailCooldown,
+  deleteEmailCooldown,
+  rateLimitEmailAttempts,
+  deleteEmailAttempts,
   getOTPFailureCount,
   getOTPLockoutTTL,
   
   createVerificationSession,
   getVerificationSession,
   updateConsentInSession,
-  validateVerificationSession,
-  enrichVerificationSession
+  deleteVerificationSession,
+
+  saveRefreshSession,
+  getRefreshSession, 
+  saveStaffAnchor,
+  getStaffAnchor,
 };

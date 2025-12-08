@@ -4,40 +4,37 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 
 const rateLimitMatrix = {
-  studentAuthentication: {
-    ipWindow: Number(process.env.STUDENT_AUTH_RATE_LIMIT_WINDOW) || 60,
-    ipMax: Number(process.env.STUDENT_AUTH_RATE_LIMIT_MAX_REQUESTS) || 8,
-    emailCooldown: Number(process.env.STUDENT_AUTH_RATE_LIMIT_EMAIL_COOLDOWN) || 900,
-    emailMaxAttempts: Number(process.env.STUDENT_AUTH_RATE_LIMIT_EMAIL_ATTEMPTS) || 4
-  },
-
-  employeeAuthentication: {
-    ipWindow: Number(process.env.EMPLOYEE_AUTH_RATE_LIMIT_WINDOW) || 60,
-    ipMax: Number(process.env.EMPLOYEE_AUTH_RATE_LIMIT_MAX_REQUESTS) || 4,
-    emailCooldown: Number(process.env.EMPLOYEE_AUTH_RATE_LIMIT_EMAIL_COOLDOWN) || 1200,
-    emailMaxAttempts: Number(process.env.EMPLOYEE_AUTH_RATE_LIMIT_EMAIL_ATTEMPTS) || 2
-  },
+  PatientAuthentication: {
+    ipWindow: Number(process.env.PATIENT_AUTH_RATE_LIMIT_WINDOW) || 60,
+    ipMax: Number(process.env.PATIENT_AUTH_RATE_LIMIT_MAX_REQUESTS) || 8,
+    emailCooldown_2fa: Number(process.env.PATIENT_EMAIL_COOLDOWN_2FA) || 30, // seconds
+    emailAttemptMax_2fa: Number(process.env.PATIENT_EMAIL_ATTEMPTS_2FA) || 2,
+    emailCooldown_emailv: Number(process.env.PATIENT_EMAIL_COOLDOWN_EMAILV) || 30,
+    emailAttemptMax_emailv: Number(process.env.PATIENT_EMAIL_ATTEMPTS_EMAILV) || 2, // seconds
+    },
 
   staffAuthentication: {
     ipWindow: Number(process.env.STAFF_AUTH_RATE_LIMIT_WINDOW) || 60,
     ipMax: Number(process.env.STAFF_AUTH_RATE_LIMIT_MAX_REQUESTS) || 3,
-    emailCooldown: Number(process.env.STAFF_AUTH_RATE_LIMIT_EMAIL_COOLDOWN) || 1800,
-    emailMaxAttempts: Number(process.env.STAFF_AUTH_RATE_LIMIT_EMAIL_ATTEMPTS) || 2
+    emailCooldown_2fa: Number(process.env.STAFF_EMAIL_COOLDOWN_2FA) || 30, // seconds
+    emailAttemptMax_2fa: Number(process.env.STAFF_EMAIL_ATTEMPTS_2FA) || 2,
+    emailCooldown_emailv: Number(process.env.STAFF_EMAIL_COOLDOWN_EMAILV) || 30,
+    emailAttemptMax_emailv: Number(process.env.STAFF_EMAIL_ATTEMPTS_EMAILV) || 2, // seconds
   },
 
   genericLimiter: {
-    ipWindow: Number(process.env.RATE_LIMIT_WINDOW) || 60,
-    ipMax: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 30
+    ipWindow: Number(process.env.GENERIC_ROUTE_RATE_LIMIT_WINDOW) || 60,
+    ipMax: Number(process.env.GENERIC_ROUTE_RATE_LIMIT_MAX_REQUESTS) || 30
   }
 };
 
 function mapRoleToProfile(role) {
   switch (role) {
     case "Student":
-      return "studentAuthentication";
+      return "PatientAuthentication";
     case "Employee":
-      return "employeeAuthentication";
-    case "Staff":
+      return "PatientAuthentication";
+    case "Medical":
       return "staffAuthentication";
     default:
       return null; // Not an institutional role

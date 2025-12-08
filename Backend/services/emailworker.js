@@ -51,7 +51,7 @@ const worker = new Worker('emailQueue', async job => {
   console.log(`Processing job ${job.id} of type ${job.name}`);
 
   try {
-    const { userEmail, otp, to, subject, htmlContent } = job.data;
+    const { userEmail, otp, portal, to, subject, htmlContent } = job.data;
 
     // ✅ Use buildEmailTemplate for OTP jobs
     let emailDetails;
@@ -76,7 +76,8 @@ const worker = new Worker('emailQueue', async job => {
           'sendEmail2FA': 'email2FA',
         };
 
-        await setOTP(userEmail, otp, codeMap[job.name]);
+        await setOTP(userEmail, otp, codeMap[job.name], portal);
+        console.log("portal: ", portal);
         console.log(`✅ OTP stored for ${userEmail}`);
       } catch (redisErr) {
         console.error(`⚠️ Email sent but failed to store OTP: ${redisErr.message}`);

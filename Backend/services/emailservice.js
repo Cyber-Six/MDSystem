@@ -33,9 +33,9 @@ async function enqueueOTPEmail(userEmail) { //XXXXX
   };
 }
 */
-async function enqueueEmail2FA(userEmail) {
+async function enqueueEmail2FA(userEmail, portal="patient") {
   const otp = generateOTP();
-  const job = await emailQueue.add('sendEmail2FA', { userEmail, otp }, {
+  const job = await emailQueue.add('sendEmail2FA', { userEmail, otp, portal }, {
     attempts: 5,
     backoff: { type: 'exponential', delay: 1000 },
     removeOnComplete: true,
@@ -50,9 +50,9 @@ async function enqueueEmail2FA(userEmail) {
     };
   }
 
-async function enqueueEmailVerification(userEmail) {
+async function enqueueEmailVerification(userEmail, portal="patient") {
   const otp = generateOTP();
-  const job = await emailQueue.add('sendEmailVerification', { userEmail, otp }, {
+  const job = await emailQueue.add('sendEmailVerification', { userEmail, otp, portal }, {
     attempts: 5,
     backoff: { type: 'exponential', delay: 1000 },
     removeOnComplete: true,
