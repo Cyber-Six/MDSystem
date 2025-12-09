@@ -1,0 +1,10 @@
+/* Layout styles */
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.layout main {
+  flex: 1;
+  padding: 2em;
+}
