@@ -1,0 +1,195 @@
+const express = require('express');
+
+const { detectRoleFromEmail, isMedicalEmail } = require('../../config/validator.js');
+const { portalBasedIpRateLimiter } = require('../../config/middleware/ratelimiter.js');
+const { verifyOTP, getOTPFailureCount, getOTPLockoutTTL,
+        createVerificationSession,
+        rateLimitEmailCooldown, rateLimitEmailAttempts, 
+        deleteEmailCooldown, deleteEmailAttempts} = require('../../config/redis.js');
+const { mapRoleToProfile, rateLimitMatrix } = require('../../config/data/matrix.js');
+const { verifyRecaptcha } = require('../../services/recaptcha.js');
+
+const { enqueueEmailVerification, enqueueEmail2FA } = require('../../services/emailservice.js');
+const { detectPortalFromSubdomain } = require('../utils/portal.js');
+const router = express.Router();
+
+function isValidOtpPurpose(purpose) {
+  return ["emailv", "2fa"].includes(purpose);
+  }
+
+router.post("/email/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
+    const { email, recaptchaToken } = req.body;
+    const purpose = req.params.purpose.toLowerCase();
+    
+    // ✅ Validate perform
+    if (!isValidOtpPurpose(purpose)) {
+        return res.status(400).json({
+        error: "INVALID_PERFORM_ACTION",
+        message: "Perform must be either 'emailv' or '2fa'."
+        });
+    }
+
+    // ✅ Required fields
+    if (!email || !recaptchaToken) {
+      return res.status(400).json({
+        error: "MISSING_FIELDS",
+        message: "Email and reCAPTCHA token are required."
+      });
+    }
+
+    // ✅ Basic email format
+    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!basicEmailRegex.test(email)) {
+      return res.status(400).json({
+        error: "INVALID_EMAIL_FORMAT",
+        message: "Email format is invalid."
+      });
+    }
+
+    // ✅ Institutional email validation
+    const declaredRole = detectRoleFromEmail(email);
+    if (!declaredRole) {
+      return res.status(400).json({
+        error: "INVALID_INSTITUTION_EMAIL",
+        message: "Email must follow TIP institutional format."
+      });
+    }
+
+    // ✅ Verify reCAPTCHA
+    const recaptchaValid = await verifyRecaptcha(recaptchaToken);
+    if (!recaptchaValid) {
+      return res.status(400).json({
+        error: "INVALID_RECAPTCHA",
+        message: "reCAPTCHA verification failed."
+      });
+    }
+
+    //add bearing for staff dashboard
+    const portal = detectPortalFromSubdomain(req);
+
+    const profileName = portal === "patient" ? "PatientAuthentication" : "staffAuthentication";
+    const profile = rateLimitMatrix[profileName];
+
+    const emailCooldown = purpose === "2fa" ? profile.emailCooldown_2fa : profile.emailCooldown_emailv;
+    const emailMaxAttempts = purpose === "2fa" ? profile.emailAttemptMax_2fa : profile.emailAttemptMax_emailv;
+    
+    // ✅ Cooldown check (write)
+    const cooldownActive = await rateLimitEmailCooldown(email, portal, purpose, emailCooldown);
+    if (cooldownActive) {
+      return res.status(429).json({
+        error: "EMAIL_COOLDOWN_ACTIVE",
+        message: "Too many attempts. Please try again later."
+      });
+    }
+
+    // ✅ Attempt increment (write)
+    const attemptsExceeded = await rateLimitEmailAttempts(
+      email,
+      portal,
+      purpose,
+      emailMaxAttempts,
+      emailCooldown
+    );
+
+    if (attemptsExceeded) {
+      return res.status(429).json({
+        error: "EMAIL_ATTEMPT_LIMIT_REACHED",
+        message: "Too many attempts. Please try again later."
+      });
+    }
+    
+    if (purpose === "emailv") await enqueueEmailVerification(email);
+    else if (purpose === "2fa") await enqueueEmail2FA(email, portal); 
+        
+
+    return res.status(200).json({
+      ok: true,
+      message: "OTP sent to your email."
+    });
+  }
+);
+
+router.post('/email/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => {
+    const { email, otp } = req.body;
+    const purpose = req.params.purpose.toLowerCase();
+
+    // ✅ Validate perform
+    if (!isValidOtpPurpose(purpose)) {
+        return res.status(400).json({
+        error: "INVALID_PERFORM_ACTION",
+        message: "Perform must be either 'emailv' or '2fa'."
+        });
+    }
+
+    if (!email || !otp) {
+        return res.status(400).json({
+            error: "MISSING_FIELDS",
+            message: "Email and OTP are required."
+        });
+    }
+
+    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!basicEmailRegex.test(email)) {
+        return res.status(400).json({
+            error: "INVALID_EMAIL_FORMAT",
+            message: "Email format is invalid."
+        });
+    }
+
+    const declaredRole = detectRoleFromEmail(email);
+    if (!declaredRole) {
+        return res.status(400).json({
+            error: "INVALID_INSTITUTION_EMAIL",
+            message: "Email must follow TIP institutional format."
+        });
+    }
+
+
+    const code = purpose === "emailv" ? "emailVerification" : "email2FA";
+    const portal = detectPortalFromSubdomain(req);
+
+    // ✅ Verify OTP using Redis (with lockout protection)
+    const result = await verifyOTP(email, code, otp, portal);
+
+    // ✅ If locked out, return TTL + failure count
+    if (result === "LOCKED_OUT") {
+        const failures = await getOTPFailureCount(email, code);
+        const ttl = await getOTPLockoutTTL(email, code);
+
+        return res.status(429).json({
+            error: "OTP_LOCKED_OUT",
+            message: "Too many invalid attempts. Please try again later.",
+            attempts: failures,
+            attemptLimit: Number(process.env.OTP_GLOBAL_ATTEMPT_LIMIT),
+            retryAfterSeconds: ttl
+        });
+    }
+
+    // ✅ Wrong OTP (but not locked out)
+    if (result === false) {
+        const failures = await getOTPFailureCount(email, code);
+
+        return res.status(400).json({
+            error: "INVALID_OTP",
+            message: "The OTP you entered is invalid or expired.",
+            attempts: failures,
+            attemptLimit: Number(process.env.OTP_GLOBAL_ATTEMPT_LIMIT)
+        });
+    }
+
+    // ✅ OTP is valid → create a short-lived verification session
+
+    await deleteEmailCooldown(email, portal, purpose);
+    await deleteEmailAttempts(email, portal, purpose);
+    const account_type = portal;
+    const verificationKey = await createVerificationSession(email, "register", account_type);
+
+    return res.status(200).json({
+        ok: true,
+        message: "Email verified successfully.",
+        verificationKey
+    });
+});
+
+
+module.exports = router;
