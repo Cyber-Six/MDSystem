@@ -1,7 +1,7 @@
 
 
 Backend/node_modules/
-
+Backend/Patients/node_modules/
 Backend/.env
+Database/setup.psql
 .env
-
