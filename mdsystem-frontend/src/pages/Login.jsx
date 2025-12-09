@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePortal } from '../hooks/usePortal';
+import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
 import axiosRequest from '../services/axiosRequest';
 import '../features/auth/login.module.css';
 
@@ -16,7 +16,8 @@ const Login = () => {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [consentAgreed, setConsentAgreed] = useState(false);
   
-  const { isPatient, isMedical, portal } = usePortal();
+  const role = useDetectPortalFromSubdomain();
+  const { isPatient, isMedical, portal } = role;
   const navigate = useNavigate();
 
   const handleSend2FA = async () => {

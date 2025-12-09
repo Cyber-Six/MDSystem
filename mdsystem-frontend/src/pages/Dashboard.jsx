@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { usePortal } from '../hooks/usePortal';
+import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
 import axiosRequest from '../services/axiosRequest';
 import reactLogo from '../assets/react.svg';
 import viteLogo from '/vite.svg';
@@ -10,7 +10,8 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
   const [count, setCount] = useState(0);
   const [user, setUser] = useState(null);
   const [appointments, setAppointments] = useState([]);
-  const { portal, isPatient, isMedical } = usePortal();
+  const role = useDetectPortalFromSubdomain();
+  const { portal, isPatient, isMedical } = role;
 
   useEffect(() => {
     // Load user data on mount
