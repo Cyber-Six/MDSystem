@@ -1,18 +1,3 @@
-
-
-Backend/node_modules/
-Backend/Patients/node_modules/
-Backend/.env
-Database/setup.psql
-.env
-
-.MDSystem-Drive/
-
-
-
-
-### mdsystem-frontend/.gitignore copy pasted below ###
-
 # Logs
 logs
 *.log
