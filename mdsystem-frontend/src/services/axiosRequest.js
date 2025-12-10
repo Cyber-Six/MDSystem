@@ -7,6 +7,15 @@
 
 import axios from 'axios';
 import { getApiBaseUrl } from './api.js';
+import { shouldShowBanner, getBannerType, extractBannerData } from '../config/bannerConfig.js';
+import { refreshAccessToken, TokenStorage, logout } from './tokenService.js';
+
+// Banner callback - will be set by BannerContext
+let bannerCallback = null;
+
+export const setBannerCallback = (callback) => {
+  bannerCallback = callback;
+};
 
 // Create axios request instance with automatic base URL detection
 const axiosRequest = axios.create({
@@ -36,49 +45,13 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-/**
- * Refresh access token using refresh token
- */
-const refreshAccessToken = async () => {
-  const refreshToken = localStorage.getItem('refreshToken');
-  
-  if (!refreshToken) {
-    throw new Error('No refresh token available');
-  }
-
-  try {
-    const response = await axios.post(
-      `${getApiBaseUrl()}/auth/refresh`,
-      { refreshToken },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        withCredentials: true,
-      }
-    );
-
-    if (response.data.ok) {
-      const { accessToken, refreshToken: newRefreshToken } = response.data;
-      
-      // Store new tokens
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', newRefreshToken);
-      
-      return accessToken;
-    }
-    
-    throw new Error('Token refresh failed');
-  } catch (error) {
-    // Clear tokens and redirect to login on refresh failure
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    throw error;
-  }
-};
+// Token refresh logic moved to tokenService.js for better maintainability and security
 
 // Request interceptor - add auth token if exists
 axiosRequest.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
+    // SECURITY: Use TokenStorage for centralized token access
+    const token = TokenStorage.getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -91,12 +64,29 @@ axiosRequest.interceptors.request.use(
 
 // Response interceptor - handle token refresh and common errors
 axiosRequest.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Show success banner if configured for this status code
+    if (shouldShowBanner(response.status)) {
+      const { error, message } = extractBannerData(response);
+      if (bannerCallback) {
+        bannerCallback({
+          type: getBannerType(response.status),
+          error,
+          message,
+        });
+      }
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
-    // Check if error is due to expired token
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // SECURITY: Prevent infinite loop - don't retry refresh endpoint itself
+    const isRefreshEndpoint = originalRequest.url?.includes('/auth/refresh');
+    
+    // Check if error is due to expired token (excluding refresh endpoint)
+    // SECURITY: Skip banner notification for 401 during token refresh flow
+    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshEndpoint) {
       if (isRefreshing) {
         // If already refreshing, queue this request
         return new Promise((resolve, reject) => {
@@ -115,36 +105,65 @@ axiosRequest.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Attempt to refresh the token
+        // SECURITY: Attempt to refresh the token (handled by tokenService)
         const newAccessToken = await refreshAccessToken();
         
-        // Update authorization header with new token
+        // SECURITY: Update authorization header with new token
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         
         // Process queued requests with new token
         processQueue(null, newAccessToken);
         
+        // SECURITY: Reset refresh flag before retry to allow new refresh if this retry fails
+        isRefreshing = false;
+        
         // Retry original request with new token
         return axiosRequest(originalRequest);
       } catch (refreshError) {
-        // Token refresh failed - clear queue and redirect to auth
+        // Token refresh failed - clear queue
         processQueue(refreshError, null);
         
-        // Clear tokens
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        // SECURITY: Reset flag before redirect
+        isRefreshing = false;
         
-        // Redirect to auth
-        window.location.href = '/auth';
+        // Show banner for failed refresh with specific error from backend
+        if (bannerCallback) {
+          const errorCode = refreshError.code || 'SESSION_EXPIRED';
+          const errorMessage = refreshError.message || 'Your session has expired. Please log in again.';
+          
+          bannerCallback({
+            type: 'error',
+            error: errorCode,
+            message: errorMessage,
+            duration: 0, // Don't auto-dismiss
+          });
+        }
+        
+        // SECURITY: Use logout function to ensure complete cleanup
+        // Redirect to auth after short delay to show banner
+        setTimeout(() => {
+          logout(true); // Clear tokens and redirect
+        }, 1000);
         
         return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
       }
     }
 
     // Handle other error status codes
     if (error.response) {
+      // Show error banner if configured for this status code
+      if (shouldShowBanner(error.response.status)) {
+        const { error: errorCode, message } = extractBannerData(error.response);
+        if (bannerCallback) {
+          bannerCallback({
+            type: getBannerType(error.response.status),
+            error: errorCode,
+            message,
+          });
+        }
+      }
+
+      // Log errors for debugging
       switch (error.response.status) {
         case 403:
           console.error('Access forbidden');
@@ -154,6 +173,15 @@ axiosRequest.interceptors.response.use(
           break;
         default:
           console.error('API Error:', error.response.data);
+      }
+    } else if (error.request) {
+      // Network error - no response received
+      if (bannerCallback) {
+        bannerCallback({
+          type: 'error',
+          error: 'NETWORK_ERROR',
+          message: 'Unable to connect to server. Please check your internet connection.',
+        });
       }
     }
     

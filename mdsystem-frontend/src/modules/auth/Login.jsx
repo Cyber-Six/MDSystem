@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
-import axiosRequest from '../services/axiosRequest';
-import '../modules/auth/login.module.css';
+import { useDetectPortalFromSubdomain } from '../../hooks/usePortal';
+import axiosRequest from '../../services/axiosRequest';
+import { TokenStorage } from '../../services/tokenService';
+import './login.module.css';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -186,12 +187,9 @@ const Login = () => {
       });
       
       if (response.data.ok) {
-        // Store access and refresh tokens
-        if (response.data.accessToken) {
-          localStorage.setItem('accessToken', response.data.accessToken);
-        }
-        if (response.data.refreshToken) {
-          localStorage.setItem('refreshToken', response.data.refreshToken);
+        // SECURITY: Store tokens using TokenStorage
+        if (response.data.accessToken && response.data.refreshToken) {
+          TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
         }
         
         // Redirect to dashboard on success

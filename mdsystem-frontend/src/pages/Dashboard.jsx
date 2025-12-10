@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
 import axiosRequest from '../services/axiosRequest';
+import { logout } from '../services/tokenService';
 import reactLogo from '../assets/react.svg';
 import viteLogo from '/vite.svg';
 import '../modules/dashboard/dashboard.module.css';
@@ -57,7 +58,15 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
           count is {count}
         </DemoButton>
         {setIsAuthenticated && (
-          <DemoButton onClick={() => setIsAuthenticated((v) => !v)}>
+          <DemoButton onClick={() => {
+            if (isAuthenticated) {
+              // SECURITY: Proper logout - clears tokens and redirects
+              logout(true);
+            } else {
+              // Simulate login (for demo purposes)
+              setIsAuthenticated((v) => !v);
+            }
+          }}>
             {isAuthenticated ? 'Logout' : 'Login (simulate)'}
           </DemoButton>
         )}

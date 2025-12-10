@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDetectPortalFromSubdomain } from '../../hooks/usePortal';
 import axiosRequest from '../../services/axiosRequest';
+import { TokenStorage } from '../../services/tokenService';
 import styles from './register.module.css';
 
 const Register = () => {
@@ -182,9 +183,10 @@ const Register = () => {
       });
 
       if (response.data.ok) {
-        // Store tokens
-        localStorage.setItem('accessToken', response.data.accessToken);
-        localStorage.setItem('refreshToken', response.data.refreshToken);
+        // SECURITY: Store tokens using TokenStorage
+        if (response.data.accessToken && response.data.refreshToken) {
+          TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+        }
 
         setSuccessMessage('Registration complete! Redirecting to dashboard...');
         
