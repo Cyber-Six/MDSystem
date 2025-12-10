@@ -1,0 +1,337 @@
+/* Register Component Styles */
+
+.registerContainer {
+  width: 100%;
+}
+
+/* Step Indicator */
+.stepIndicator {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 48px;
+  position: relative;
+}
+
+.stepIndicator::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e2e8f0;
+  z-index: 0;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.stepNumber {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #a0aec0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+}
+
+.step.active .stepNumber {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.stepLabel {
+  font-size: 0.85rem;
+  color: #718096;
+  font-weight: 500;
+}
+
+.step.active .stepLabel {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+/* Step Container */
+.stepContainer {
+  animation: fadeInSlide 0.4s ease-out;
+}
+
+.stepContainer h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 12px;
+}
+
+.subtitle {
+  font-size: 1rem;
+  color: #718096;
+  margin-bottom: 32px;
+}
+
+/* Form Styles */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.formGroup label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.formGroup input,
+.formGroup select {
+  padding: 12px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.formGroup input:focus,
+.formGroup select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.formGroup input:disabled,
+.formGroup select:disabled {
+  background: #f7fafc;
+  cursor: not-allowed;
+}
+
+.otpInput {
+  text-align: center;
+  font-size: 1.5rem;
+  letter-spacing: 0.5rem;
+  font-weight: 600;
+}
+
+/* Buttons */
+.submitButton {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 8px;
+}
+
+.submitButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.resendButton {
+  background: transparent;
+  color: #667eea;
+  padding: 12px 24px;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 8px;
+}
+
+.resendButton:hover:not(:disabled) {
+  background: #667eea;
+  color: white;
+}
+
+.resendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Messages */
+.error {
+  background: #fed7d7;
+  color: #c53030;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  border-left: 4px solid #c53030;
+}
+
+.success {
+  background: #c6f6d5;
+  color: #2f855a;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  border-left: 4px solid #2f855a;
+}
+
+/* OTP Send Container */
+.otpSendContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Consent Container */
+.consentContainer {
+  background: #f8f9fa;
+  padding: 24px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.consentText {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 16px;
+  margin-bottom: 24px;
+}
+
+.consentText h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+.consentText h3:first-child {
+  margin-top: 0;
+}
+
+.consentText p {
+  font-size: 0.95rem;
+  color: #4a5568;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.consentText ul {
+  padding-left: 24px;
+  margin-bottom: 16px;
+}
+
+.consentText li {
+  font-size: 0.95rem;
+  color: #4a5568;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.checkboxGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+}
+
+.checkboxGroup input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.checkboxGroup label {
+  font-size: 0.95rem;
+  color: #2d3748;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Animations */
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .stepIndicator {
+    margin-bottom: 32px;
+  }
+
+  .stepNumber {
+    width: 36px;
+    height: 36px;
+    font-size: 0.9rem;
+  }
+
+  .stepLabel {
+    font-size: 0.75rem;
+  }
+
+  .stepContainer h2 {
+    font-size: 1.5rem;
+  }
+
+  .consentText {
+    max-height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stepNumber {
+    width: 32px;
+    height: 32px;
+    font-size: 0.85rem;
+  }
+
+  .stepLabel {
+    font-size: 0.7rem;
+  }
+
+  .stepContainer h2 {
+    font-size: 1.3rem;
+  }
+
+  .formGroup input,
+  .formGroup select {
+    padding: 10px 14px;
+  }
+
+  .consentContainer {
+    padding: 16px;
+  }
+}
