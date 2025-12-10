@@ -1,0 +1,231 @@
+/* Auth Page Styles - Split Layout */
+
+.authContainer {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+/* Login Panel (Right Side) */
+.loginPanel {
+  width: 400px;
+  background: white;
+  box-shadow: -2px 0 24px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.loginPanelContent {
+  padding: 40px 30px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.portalBadge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: inline-block;
+  margin-bottom: 24px;
+  width: fit-content;
+}
+
+.loginTitle {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 24px;
+}
+
+.switchView {
+  margin-top: 24px;
+  text-align: center;
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.switchView p,
+.loginRedirect p {
+  color: #4a5568;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.switchButton {
+  background: transparent;
+  color: #667eea;
+  border: 2px solid #667eea;
+  padding: 10px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.switchButton:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.loginRedirect {
+  text-align: center;
+  margin-top: 24px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+}
+
+/* Center Content */
+.centerContent {
+  flex: 1;
+  margin-right: 400px;
+  padding: 60px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.registerContent {
+  max-width: 800px;
+  width: 100%;
+  background: white;
+  padding: 48px;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.welcomeContent {
+  max-width: 700px;
+  text-align: center;
+  animation: fadeIn 0.6s ease-out;
+}
+
+.welcomeContent h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 20px;
+}
+
+.welcomeDescription {
+  font-size: 1.2rem;
+  color: #4a5568;
+  margin-bottom: 48px;
+  line-height: 1.6;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 32px;
+  margin-top: 48px;
+}
+
+.feature {
+  text-align: center;
+}
+
+.featureIcon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.feature h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.feature p {
+  font-size: 0.95rem;
+  color: #718096;
+  line-height: 1.5;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .loginPanel {
+    width: 360px;
+  }
+
+  .centerContent {
+    margin-right: 360px;
+    padding: 40px 30px;
+  }
+}
+
+@media (max-width: 968px) {
+  .authContainer {
+    flex-direction: column;
+  }
+
+  .loginPanel {
+    width: 100%;
+    position: relative;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .centerContent {
+    margin-right: 0;
+    padding: 40px 20px;
+  }
+
+  .registerContent {
+    padding: 32px 24px;
+  }
+
+  .welcomeContent h2 {
+    font-size: 2rem;
+  }
+
+  .features {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .loginPanelContent {
+    padding: 30px 20px;
+  }
+
+  .loginTitle {
+    font-size: 1.5rem;
+  }
+
+  .registerContent {
+    padding: 24px 16px;
+  }
+
+  .welcomeContent h2 {
+    font-size: 1.75rem;
+  }
+
+  .welcomeDescription {
+    font-size: 1rem;
+  }
+}

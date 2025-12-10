@@ -127,15 +127,15 @@ axiosRequest.interceptors.response.use(
         // Retry original request with new token
         return axiosRequest(originalRequest);
       } catch (refreshError) {
-        // Token refresh failed - clear queue and redirect to login
+        // Token refresh failed - clear queue and redirect to auth
         processQueue(refreshError, null);
         
         // Clear tokens
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         
-        // Redirect to login
-        window.location.href = '/login';
+        // Redirect to auth
+        window.location.href = '/auth';
         
         return Promise.reject(refreshError);
       } finally {

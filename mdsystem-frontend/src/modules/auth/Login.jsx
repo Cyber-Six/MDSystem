@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
 import axiosRequest from '../services/axiosRequest';
-import '../features/auth/login.module.css';
+import '../modules/auth/login.module.css';
 
 const Login = () => {
   const [email, setEmail] = useState('');

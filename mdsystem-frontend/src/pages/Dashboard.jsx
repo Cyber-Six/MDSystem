@@ -3,7 +3,7 @@ import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
 import axiosRequest from '../services/axiosRequest';
 import reactLogo from '../assets/react.svg';
 import viteLogo from '/vite.svg';
-import '../features/dashboard/dashboard.module.css';
+import '../modules/dashboard/dashboard.module.css';
 import DemoButton from '../components/Demo/DemoButton';
 
 const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {

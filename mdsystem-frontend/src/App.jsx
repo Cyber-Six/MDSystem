@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import PrivateRoute from './routes/PrivateRoute.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import Login from './pages/Login.jsx';
+import Landing from './pages/Landing.jsx';
+import Auth from './pages/Auth.jsx';
 
 
 function App() {
@@ -12,8 +13,8 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Dashboard isHome isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/auth" element={<Auth />} />
         <Route path="/dashboard" element={
           <PrivateRoute isAuthenticated={isAuthenticated}>
             <Dashboard isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />
