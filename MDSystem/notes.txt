@@ -1,0 +1,22 @@
+Backend Service Requirements:
+    Postgresql
+    Cloudflare
+    Redis
+    Libre Office
+
+Secure feature:
+bind 127.0.0.1 on redis and postgresql
+
+    Domain name aquisition
+
+Frontend Stack:
+    React.js (w/ vite)
+    Express.js
+    axios
+
+Tools Needed:
+    Postman
+
+Deployment:
+    Docker
+    Raspi 5 Model B Rev 1.1 (8GB)

@@ -1,0 +1,8 @@
+/* Dashboard feature styles */
+.dashboard-container {
+  padding: 2em;
+  background: #222;
+  border-radius: 12px;
+  margin: 2em auto;
+  max-width: 600px;
+}

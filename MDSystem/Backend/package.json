@@ -1,0 +1,39 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "audit": "^0.0.6",
+    "bcrypt": "^6.0.0",
+    "bullmq": "^5.65.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "fix": "^0.0.3",
+    "install": "^0.13.0",
+    "ioredis": "^5.8.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "node-fetch": "^3.3.2",
+    "nodemailer": "^7.0.10",
+    "npm": "^11.6.4",
+    "pg": "^8.16.3",
+    "redis": "^5.9.0",
+    "socket.io": "^4.8.1",
+    "uuid": "^13.0.0",
+    "validator": "^13.15.20",
+    "winston": "^3.18.3",
+    "xss": "^1.0.15"
+  },
+  "devDependencies": {
+    "@ljharb/tsconfig": "^0.3.2",
+    "@tsconfig/recommended": "^1.0.13"
+  }
+}
