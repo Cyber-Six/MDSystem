@@ -6,7 +6,7 @@ import Landing from './pages/Landing.jsx';
 import Auth from './pages/Auth.jsx';
 import { BannerProvider, useBanner } from './context/BannerContext.jsx';
 import Banner from './components/banner/Banner.jsx';
-import { setBannerCallback } from './services/axiosRequest.js';
+import { setBannerCallback } from './services/axiosRequestHandler.js';
 
 function AppContent() {
   // Simulate authentication state (replace with real auth logic)

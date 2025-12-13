@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
-import axiosRequest from '../services/axiosRequest';
-import { logout } from '../services/tokenService';
+import axiosRequest from '../services/axiosRequestHandler';
+import { logout } from '../services/refreshTokenService';
 import reactLogo from '../assets/react.svg';
 import viteLogo from '/vite.svg';
 import '../modules/dashboard/dashboard.module.css';

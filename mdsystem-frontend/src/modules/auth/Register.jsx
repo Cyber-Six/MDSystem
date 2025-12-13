@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDetectPortalFromSubdomain } from '../../hooks/usePortal';
-import axiosRequest from '../../services/axiosRequest';
-import { TokenStorage } from '../../services/tokenService';
+import axiosRequest from '../../services/axiosRequestHandler';
+import { TokenStorage } from '../../services/refreshTokenService';
 import styles from './register.module.css';
 
 const Register = () => {

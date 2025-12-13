@@ -8,9 +8,13 @@ mdsystem-frontend/
 │   ├── copilot-context.md
 │   ├── docs/
 │   │   └── BANNER_SYSTEM.md
+│   ├── ENVIRONMENT_VARIABLES.md
 │   ├── file_structure.md
 │   ├── login-integration-notes.md
 │   └── token-refresh-mechanism.md
+│
+├── .env (Git-ignored - your actual configuration, DO NOT COMMIT!)
+├── .env.example (Committed - template for team)
 │
 ├── public/
 │   ├── MDSystem.png
@@ -68,9 +72,9 @@ mdsystem-frontend/
 │   │   └── PrivateRoute.jsx
 │   │
 │   ├── services/
-│   │   ├── api.js (Base URL detection)
-│   │   ├── axiosRequest.js (Axios with token refresh & banner integration)
-│   │   └── tokenService.js (Centralized token management)
+│   │   ├── apiBaseUrlProvider.js (Base URL detection for mdsystemtip.space)
+│   │   ├── axiosRequestHandler.js (Axios with token refresh & banner integration)
+│   │   └── refreshTokenService.js (Centralized token management & refresh logic)
 │   │
 │   └── styles/
 │       ├── App.css
@@ -89,10 +93,15 @@ mdsystem-frontend/
 
 ### `.dev/` - Development Documentation
 - **copilot-context.md** - Copilot context and best practices
+- **ENVIRONMENT_VARIABLES.md** - Complete guide to environment variables configuration
 - **file_structure.md** - This file
 - **login-integration-notes.md** - Login flow and reCAPTCHA integration guide
 - **token-refresh-mechanism.md** - JWT token refresh implementation
 - **docs/BANNER_SYSTEM.md** - Banner notification system documentation
+
+### Root Configuration Files
+- **.env** - Your environment variables (git-ignored, DO NOT COMMIT!)
+- **.env.example** - Template showing available variables (committed to git)
 
 ### `src/components/` - Reusable Components
 - **banner/Banner.jsx** - Global banner notification component (upper-right, z-index: 9999)
@@ -130,15 +139,32 @@ mdsystem-frontend/
 - **PrivateRoute.jsx** - Protected route component
 
 ### `src/services/` - API & Business Logic
-- **api.js** - `getApiBaseUrl()` function for subdomain-based URL detection
-- **axiosRequest.js** - Axios instance with automatic token refresh and banner integration
-- **tokenService.js** - Centralized token management (TokenStorage, refreshAccessToken, logout, isAuthenticated)
+- **apiBaseUrlProvider.js** - `getApiBaseUrl()` function for subdomain-based URL detection (www.mdsystemtip.space / staff.mdsystemtip.space)
+- **axiosRequestHandler.js** - Axios instance with automatic token refresh, request queuing, and banner integration
+- **refreshTokenService.js** - Centralized token management (TokenStorage, refreshAccessToken, logout, isAuthenticated)
 
 ## Recent Changes
 - ✅ Implemented global banner notification system
-- ✅ Extracted token refresh logic to tokenService.js
-- ✅ All token operations use TokenStorage for security
+- ✅ Extracted token refresh logic to refreshTokenService.js
+- ✅ All token operations use TokenStorage for atomic updates
 - ✅ Banner shows backend error codes and messages
-- ✅ Token refresh properly handles 401 with queuing
+- ✅ Token refresh uses queue mechanism for concurrent 401s
 - ✅ Logout clears all tokens and redirects
-- ✅ Case-sensitive paths verified (banner folder lowercase)
+- ✅ File naming: axiosRequest → axiosRequestHandler, tokenService → refreshTokenService, api → apiBaseUrlProvider
+- ✅ Updated domain configuration to mdsystemtip.space (www / staff subdomains)
+- ✅ Created single .env file (git-ignored) with .env.example template
+- ✅ Added .env to .gitignore for security (public repository)
+- ✅ Removed /api prefix from all URLs (backend uses root routes)
+
+## Build Tool & Environment
+
+### Vite (Lightning Fast Build Tool)
+- **Dev Server:** `npm run dev` - Starts in ~1 second with instant HMR
+- **Production Build:** `npm run build` - Optimized bundle with Rollup
+- **Preview:** `npm run preview` - Preview production build locally
+
+### Environment Variables
+- **Syntax:** `import.meta.env.VITE_*` (Vite's ES module standard)
+- **Why not process.env?** Vite uses modern ES module standard `import.meta.env`
+- **Security:** Only variables prefixed with `VITE_` are exposed to client-side code
+- **Build Time:** Variables are replaced at build time with actual values
