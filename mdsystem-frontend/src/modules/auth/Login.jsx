@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
 import DataConsent from '../../components/data-consent/DataConsent';
+import ForgetPassword from './forget-password';
 import './login.module.css';
 
 const Login = () => {
@@ -224,6 +225,15 @@ const Login = () => {
       setIsLoading(false);
     }
   };
+
+  // Show forgot password component
+  if (showForgotPassword) {
+    return (
+      <ForgetPassword
+        onBackToLogin={() => setShowForgotPassword(false)}
+      />
+    );
+  }
 
   // Initial login form
   if (!showTwoFactor && !showConsent) {
