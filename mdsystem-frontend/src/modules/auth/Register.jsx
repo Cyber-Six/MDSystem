@@ -1,32 +1,31 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDetectPortalFromSubdomain } from '../../hooks/usePortal';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
+import { AccountStep, SendOtpStep, VerifyOtpStep, ConsentStep, SuccessStep } from './register/index';
 import styles from './register.module.css';
 
-const Register = () => {
+const TOTAL_STEPS = 5;
+
+const Register = ({ onBackToLogin }) => {
   const navigate = useNavigate();
-  const role = useDetectPortalFromSubdomain();
-  const { isPatient, isMedical, portal } = role;
 
   // Multi-step state
   const [currentStep, setCurrentStep] = useState(1);
+  const [slideDirection, setSlideDirection] = useState('next');
   
   // Form data
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
-    role: portal || 'patient', // Default to detected portal role
+    role: 'patient',
   });
 
   // Step-specific state
   const [otp, setOtp] = useState('');
   const [verificationKey, setVerificationKey] = useState('');
-  const [declaredRole, setDeclaredRole] = useState('');
   const [consentAccepted, setConsentAccepted] = useState(false);
-  const [recaptchaToken, setRecaptchaToken] = useState('');
 
   // UI state
   const [error, setError] = useState('');
@@ -41,6 +40,13 @@ const Register = () => {
       [name]: value
     }));
     setError('');
+  };
+
+  const goToNextStep = () => {
+    setSlideDirection('next');
+    setError('');
+    setSuccessMessage('');
+    setCurrentStep(prev => prev + 1);
   };
 
   // Step 1: Initial Registration
@@ -76,18 +82,18 @@ const Register = () => {
       });
 
       if (response.data.ok) {
-        setDeclaredRole(response.data.declaredRole);
-        setSuccessMessage('Account created! Please verify your email.');
-        setCurrentStep(2);
+        goToNextStep();
       }
     } catch (err) {
-      const errorCode = err.response?.data?.error?.code;
-      const errorMessage = err.response?.data?.error?.message;
+      const errorCode = err.response?.data?.error;
+      const errorMessage = err.response?.data?.message;
       
       if (errorCode === 'EMAIL_EXISTS') {
         setError('This email is already registered. Please login instead.');
       } else if (errorCode === 'INVALID_EMAIL_FORMAT') {
         setError('Please enter a valid email address.');
+      } else if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
+        setError('Email must follow TIP institutional format.');
       } else {
         setError(errorMessage || 'Registration failed. Please try again.');
       }
@@ -102,21 +108,20 @@ const Register = () => {
     setLoading(true);
 
     try {
-      // In production, get reCAPTCHA token from Google reCAPTCHA v3
-      // For now, using placeholder
-      const recaptchaTokenPlaceholder = 'recaptcha_token_placeholder';
+      // TODO: Integrate Google reCAPTCHA token
+      const recaptchaToken = 'RECAPTCHA_TOKEN_PLACEHOLDER';
 
       const response = await axiosRequest.post('/auth/email/emailv', {
         email: formData.email,
-        recaptchaToken: recaptchaTokenPlaceholder
+        recaptchaToken
       });
 
       if (response.data.ok) {
         setSuccessMessage('Verification code sent to your email!');
-        setRecaptchaToken(recaptchaTokenPlaceholder);
+        goToNextStep();
       }
     } catch (err) {
-      const errorMessage = err.response?.data?.error?.message;
+      const errorMessage = err.response?.data?.message;
       setError(errorMessage || 'Failed to send verification code. Please try again.');
     } finally {
       setLoading(false);
@@ -143,17 +148,19 @@ const Register = () => {
 
       if (response.data.ok) {
         setVerificationKey(response.data.verificationKey);
-        setSuccessMessage('Email verified successfully!');
-        setCurrentStep(3);
+        goToNextStep();
       }
     } catch (err) {
-      const errorCode = err.response?.data?.error?.code;
-      const errorMessage = err.response?.data?.error?.message;
+      const errorCode = err.response?.data?.error;
+      const errorMessage = err.response?.data?.message;
 
       if (errorCode === 'INVALID_OTP') {
         setError('Invalid verification code. Please try again.');
       } else if (errorCode === 'OTP_EXPIRED') {
         setError('Verification code expired. Please request a new one.');
+      } else if (errorCode === 'OTP_LOCKED_OUT') {
+        const retryAfter = err.response?.data?.retryAfterSeconds;
+        setError(`Too many invalid attempts. Please try again after ${retryAfter} seconds.`);
       } else {
         setError(errorMessage || 'Verification failed. Please try again.');
       }
@@ -162,8 +169,40 @@ const Register = () => {
     }
   };
 
-  // Step 4: Complete Registration (after consent)
-  const handleCompleteRegistration = async (e) => {
+  // Resend OTP
+  const handleResendOTP = async () => {
+    setError('');
+    setLoading(true);
+
+    try {
+      const recaptchaToken = 'RECAPTCHA_TOKEN_PLACEHOLDER';
+
+      const response = await axiosRequest.post('/auth/email/emailv', {
+        email: formData.email,
+        recaptchaToken
+      });
+
+      if (response.data.ok) {
+        setSuccessMessage('A new verification code has been sent!');
+        setOtp('');
+      }
+    } catch (err) {
+      const errorCode = err.response?.data?.error;
+      
+      if (errorCode === 'EMAIL_COOLDOWN_ACTIVE') {
+        setError('Please wait before requesting another code.');
+      } else if (errorCode === 'EMAIL_ATTEMPT_LIMIT_REACHED') {
+        setError('Too many attempts. Please try again later.');
+      } else {
+        setError('Failed to resend code. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 4: Submit Consent and Complete Registration
+  const handleConsentSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -175,264 +214,127 @@ const Register = () => {
     }
 
     try {
-      const response = await axiosRequest.post('/register/complete', {
-        verificationKey: verificationKey,
-        email: formData.email,
-        password: formData.password,
-        role: formData.role
+      // Record consent
+      const consentResponse = await axiosRequest.post('/patient/consent/register', {
+        verificationKey
       });
 
-      if (response.data.ok) {
-        // SECURITY: Store tokens using TokenStorage
-        if (response.data.accessToken && response.data.refreshToken) {
-          TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
-        }
+      if (consentResponse.data.ok) {
+        // Complete registration
+        const response = await axiosRequest.post('/register/complete', {
+          verificationKey,
+          email: formData.email,
+          password: formData.password,
+          role: formData.role
+        });
 
-        setSuccessMessage('Registration complete! Redirecting to dashboard...');
-        
-        // Redirect to dashboard
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1500);
+        if (response.data.ok) {
+          // Store tokens
+          if (response.data.accessToken && response.data.refreshToken) {
+            TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+          }
+
+          goToNextStep();
+          
+          // Redirect after showing success
+          setTimeout(() => {
+            navigate('/dashboard');
+          }, 2000);
+        }
       }
     } catch (err) {
-      const errorCode = err.response?.data?.error?.code;
-      const errorMessage = err.response?.data?.error?.message;
+      const errorCode = err.response?.data?.error;
+      const errorMessage = err.response?.data?.message;
 
-      if (errorCode === 'INVALID_VERIFICATION_KEY') {
-        setError('Invalid verification. Please start over.');
+      if (errorCode === 'INVALID_VERIFICATION_SESSION' || errorCode === 'INVALID_OR_EXPIRED_SESSION') {
+        setError('Session expired. Please start over.');
         setCurrentStep(1);
-      } else if (errorCode === 'EMAIL_VERIFICATION_REQUIRED') {
-        setError('Please verify your email first.');
-        setCurrentStep(2);
+      } else if (errorCode === 'DATA_CONSENT_REQUIRED') {
+        setError('You must agree to the data consent policy.');
       } else {
-        setError(errorMessage || 'Registration completion failed. Please try again.');
+        setError(errorMessage || 'Registration failed. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Render Step 1: Initial Registration Form
-  const renderStepOne = () => (
-    <div className={styles.stepContainer}>
-      <h2>Create Your Account</h2>
-      <p className={styles.subtitle}>
-        {isPatient && 'Register as a Patient'}
-        {isMedical && 'Register as Medical Staff'}
-        {!isPatient && !isMedical && 'Register for MDSystem'}
-      </p>
-      
-      <form onSubmit={handleInitialRegistration} className={styles.form}>
-        <div className={styles.formGroup}>
-          <label htmlFor="email">Email Address</label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            value={formData.email}
-            onChange={handleInputChange}
-            placeholder="your.email@example.com"
-            required
-            disabled={loading}
+  const renderStep = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <AccountStep
+            formData={formData}
+            onInputChange={handleInputChange}
+            onSubmit={handleInitialRegistration}
+            loading={loading}
+            error={error}
+            successMessage={successMessage}
           />
-        </div>
-
-        <div className={styles.formGroup}>
-          <label htmlFor="password">Password</label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            value={formData.password}
-            onChange={handleInputChange}
-            placeholder="At least 8 characters"
-            required
-            disabled={loading}
+        );
+      case 2:
+        return (
+          <SendOtpStep
+            email={formData.email}
+            onSendOtp={handleSendOTP}
+            loading={loading}
+            error={error}
+            successMessage={successMessage}
           />
-        </div>
-
-        <div className={styles.formGroup}>
-          <label htmlFor="confirmPassword">Confirm Password</label>
-          <input
-            type="password"
-            id="confirmPassword"
-            name="confirmPassword"
-            value={formData.confirmPassword}
-            onChange={handleInputChange}
-            placeholder="Re-enter your password"
-            required
-            disabled={loading}
+        );
+      case 3:
+        return (
+          <VerifyOtpStep
+            email={formData.email}
+            otp={otp}
+            onOtpChange={setOtp}
+            onVerify={handleVerifyOTP}
+            onResend={handleResendOTP}
+            loading={loading}
+            error={error}
+            successMessage={successMessage}
           />
-        </div>
+        );
+      case 4:
+        return (
+          <ConsentStep
+            consentAccepted={consentAccepted}
+            onConsentChange={setConsentAccepted}
+            onSubmit={handleConsentSubmit}
+            loading={loading}
+            error={error}
+            successMessage={successMessage}
+          />
+        );
+      case 5:
+        return <SuccessStep message="Your account has been created successfully!" />;
+      default:
+        return null;
+    }
+  };
 
-        <div className={styles.formGroup}>
-          <label htmlFor="role">Account Type</label>
-          <select
-            id="role"
-            name="role"
-            value={formData.role}
-            onChange={handleInputChange}
-            disabled={loading}
-          >
-            <option value="patient">Patient</option>
-            <option value="staff">Medical Staff</option>
-          </select>
-        </div>
-
-        {error && <div className={styles.error}>{error}</div>}
-        {successMessage && <div className={styles.success}>{successMessage}</div>}
-
-        <button type="submit" className={styles.submitButton} disabled={loading}>
-          {loading ? 'Creating Account...' : 'Continue'}
-        </button>
-      </form>
-    </div>
-  );
-
-  // Render Step 2: Email Verification
-  const renderStepTwo = () => (
-    <div className={styles.stepContainer}>
-      <h2>Verify Your Email</h2>
-      <p className={styles.subtitle}>
-        We'll send a 6-digit verification code to {formData.email}
-      </p>
-
-      {!recaptchaToken ? (
-        <div className={styles.otpSendContainer}>
-          {error && <div className={styles.error}>{error}</div>}
-          {successMessage && <div className={styles.success}>{successMessage}</div>}
-          
-          <button 
-            onClick={handleSendOTP} 
-            className={styles.submitButton}
-            disabled={loading}
-          >
-            {loading ? 'Sending...' : 'Send Verification Code'}
-          </button>
-        </div>
-      ) : (
-        <form onSubmit={handleVerifyOTP} className={styles.form}>
-          <div className={styles.formGroup}>
-            <label htmlFor="otp">Verification Code</label>
-            <input
-              type="text"
-              id="otp"
-              value={otp}
-              onChange={(e) => {
-                setOtp(e.target.value);
-                setError('');
-              }}
-              placeholder="Enter 6-digit code"
-              maxLength={6}
-              required
-              disabled={loading}
-              className={styles.otpInput}
-            />
-          </div>
-
-          {error && <div className={styles.error}>{error}</div>}
-          {successMessage && <div className={styles.success}>{successMessage}</div>}
-
-          <button type="submit" className={styles.submitButton} disabled={loading}>
-            {loading ? 'Verifying...' : 'Verify Email'}
-          </button>
-
-          <button 
-            type="button"
-            onClick={handleSendOTP} 
-            className={styles.resendButton}
-            disabled={loading}
-          >
-            Resend Code
-          </button>
-        </form>
-      )}
-    </div>
-  );
-
-  // Render Step 3: Data Consent
-  const renderStepThree = () => (
-    <div className={styles.stepContainer}>
-      <h2>Data Consent Agreement</h2>
-      <p className={styles.subtitle}>Please review and accept our data usage policy</p>
-
-      <div className={styles.consentContainer}>
-        <div className={styles.consentText}>
-          <h3>Data Collection and Usage</h3>
-          <p>
-            By registering for MDSystem, you agree to allow us to collect and process your 
-            personal and medical information for the purpose of providing healthcare services.
-          </p>
-          
-          <h3>Privacy Protection</h3>
-          <p>
-            Your data is protected under HIPAA regulations and will only be shared with 
-            authorized healthcare providers involved in your care.
-          </p>
-
-          <h3>Your Rights</h3>
-          <ul>
-            <li>Access your data at any time</li>
-            <li>Request corrections to your information</li>
-            <li>Withdraw consent (subject to legal requirements)</li>
-            <li>Export your data in a portable format</li>
-          </ul>
-        </div>
-
-        <form onSubmit={handleCompleteRegistration} className={styles.form}>
-          <div className={styles.checkboxGroup}>
-            <input
-              type="checkbox"
-              id="consent"
-              checked={consentAccepted}
-              onChange={(e) => {
-                setConsentAccepted(e.target.checked);
-                setError('');
-              }}
-              disabled={loading}
-            />
-            <label htmlFor="consent">
-              I have read and agree to the data consent agreement
-            </label>
-          </div>
-
-          {error && <div className={styles.error}>{error}</div>}
-          {successMessage && <div className={styles.success}>{successMessage}</div>}
-
-          <button 
-            type="submit" 
-            className={styles.submitButton} 
-            disabled={loading || !consentAccepted}
-          >
-            {loading ? 'Completing Registration...' : 'Complete Registration'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-
-  // Render current step
   return (
     <div className={styles.registerContainer}>
-      <div className={styles.stepIndicator}>
-        <div className={`${styles.step} ${currentStep >= 1 ? styles.active : ''}`}>
-          <span className={styles.stepNumber}>1</span>
-          <span className={styles.stepLabel}>Account</span>
-        </div>
-        <div className={`${styles.step} ${currentStep >= 2 ? styles.active : ''}`}>
-          <span className={styles.stepNumber}>2</span>
-          <span className={styles.stepLabel}>Verify Email</span>
-        </div>
-        <div className={`${styles.step} ${currentStep >= 3 ? styles.active : ''}`}>
-          <span className={styles.stepNumber}>3</span>
-          <span className={styles.stepLabel}>Consent</span>
-        </div>
+      {/* Step Counter */}
+      <div className={styles.stepCounter}>
+        Step {currentStep} of {TOTAL_STEPS}
       </div>
 
-      {currentStep === 1 && renderStepOne()}
-      {currentStep === 2 && renderStepTwo()}
-      {currentStep === 3 && renderStepThree()}
+      {/* Back button */}
+      {currentStep === 1 && onBackToLogin && (
+        <button 
+          className={styles.backButton}
+          onClick={onBackToLogin}
+          type="button"
+        >
+          ← Back to Login
+        </button>
+      )}
+
+      {/* Step Content with Animation */}
+      <div className={`${styles.stepContent} ${styles[slideDirection]}`} key={currentStep}>
+        {renderStep()}
+      </div>
     </div>
   );
 };

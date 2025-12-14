@@ -1,16 +1,13 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import PrivateRoute from './routes/PrivateRoute.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import Landing from './pages/Landing.jsx';
 import Auth from './pages/Auth.jsx';
 import { BannerProvider, useBanner } from './context/BannerContext.jsx';
 import Banner from './components/banner/Banner.jsx';
 import { setBannerCallback } from './services/axiosRequestHandler.js';
 
 function AppContent() {
-  // Simulate authentication state (replace with real auth logic)
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const { showBanner } = useBanner();
 
   // Set up banner callback for axios interceptors
@@ -23,13 +20,21 @@ function AppContent() {
       <Banner />
       <Router>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          {/* Root route - Dashboard with authentication check */}
+          <Route 
+            path="/" 
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            } 
+          />
+          
+          {/* Auth route - Login/Register */}
           <Route path="/auth" element={<Auth />} />
-          <Route path="/dashboard" element={
-            <PrivateRoute isAuthenticated={isAuthenticated}>
-              <Dashboard isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />
-            </PrivateRoute>
-          } />
+          
+          {/* Redirect any unknown routes to root */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
     </>

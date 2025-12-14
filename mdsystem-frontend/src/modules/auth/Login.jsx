@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDetectPortalFromSubdomain } from '../../hooks/usePortal';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
+import DataConsent from '../../components/data-consent/DataConsent';
 import './login.module.css';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('');
+  const [selectedRole, setSelectedRole] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showTwoFactor, setShowTwoFactor] = useState(false);
@@ -16,9 +16,8 @@ const Login = () => {
   const [verificationKey, setVerificationKey] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [consentAgreed, setConsentAgreed] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   
-  const role = useDetectPortalFromSubdomain();
-  const { isPatient, isMedical, portal } = role;
   const navigate = useNavigate();
 
   const handleSend2FA = async () => {
@@ -49,7 +48,7 @@ const Login = () => {
       const response = await axiosRequest.post('/login', { 
         email, 
         password, 
-        role,
+        role: selectedRole,
         recaptchaToken 
       });
       
@@ -193,7 +192,7 @@ const Login = () => {
         }
         
         // Redirect to dashboard on success
-        navigate('/dashboard');
+        navigate('/');
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Login completion failed.';
@@ -230,7 +229,7 @@ const Login = () => {
   if (!showTwoFactor && !showConsent) {
     return (
       <form className="login-form" onSubmit={handleInitialLogin}>
-        <h2>{isPatient ? 'Patient Portal' : 'Staff Portal'} Login</h2>
+        <h2>Login</h2>
         
         {error && <div className="error-message">{error}</div>}
         
@@ -249,33 +248,30 @@ const Login = () => {
           required
         />
         <select 
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
+          value={selectedRole}
+          onChange={(e) => setSelectedRole(e.target.value)}
           required
         >
           <option value="">Select Role</option>
-          {isMedical ? (
-            <>
-              <option value="doctor">Doctor</option>
-              <option value="nurse">Nurse</option>
-              <option value="admin">Admin</option>
-            </>
-          ) : (
-            <option value="patient">Patient</option>
-          )}
+          <option value="patient">Patient</option>
+          <option value="doctor">Doctor</option>
+          <option value="nurse">Nurse</option>
+          <option value="admin">Admin</option>
         </select>
         
         {/* TODO: Add Google reCAPTCHA component here */}
         
-        <button type="submit" disabled={isLoading}>
+        <button type="submit" disabled={isLoading} className="btn-primary">
           {isLoading ? 'Logging in...' : 'Login'}
         </button>
         
-        {isPatient && (
-          <p className="register-link">
-            Don't have an account? <a href="/register">Register here</a>
-          </p>
-        )}
+        <button 
+          type="button" 
+          onClick={() => setShowForgotPassword(true)}
+          className="btn-link"
+        >
+          Forgot Password?
+        </button>
       </form>
     );
   }
