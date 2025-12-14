@@ -8,7 +8,7 @@ import './login.module.css';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('');
+  // const [role, setRole] = useState(''); // Commented out - conflicts with useDetectPortalFromSubdomain hook
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showTwoFactor, setShowTwoFactor] = useState(false);

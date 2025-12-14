@@ -5,7 +5,7 @@ import { logout } from '../services/refreshTokenService';
 import reactLogo from '../assets/react.svg';
 import viteLogo from '/vite.svg';
 import '../modules/dashboard/dashboard.module.css';
-import DemoButton from '../components/Demo/DemoButton';
+// import DemoButton from '../components/Demo/DemoButton'; // Commented out - component doesn't exist yet
 
 const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
   const [count, setCount] = useState(0);
@@ -54,11 +54,14 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
       <p>Portal: <strong>{portal}</strong></p>
       
       <div className="card">
-        <DemoButton onClick={() => setCount((count) => count + 1)}>
+        {/*<DemoButton -- commented for the meantime since it results a conflict which DemonButton does not exist yet>*/}
+        <button onClick={() => setCount((count) => count + 1)}>
           count is {count}
-        </DemoButton>
+          {/*<DemoButton -- commented for the meantime since it results a conflict which DemonButton does not exist yet>*/}
+        </button>
+        {/*<DemoButton -- commented for the meantime since it results a conflict which DemonButton does not exist yet>*/}
         {setIsAuthenticated && (
-          <DemoButton onClick={() => {
+          <button onClick={() => {
             if (isAuthenticated) {
               // SECURITY: Proper logout - clears tokens and redirects
               logout(true);
@@ -68,7 +71,7 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
             }
           }}>
             {isAuthenticated ? 'Logout' : 'Login (simulate)'}
-          </DemoButton>
+          </button>
         )}
         <p>
           Edit <code>src/pages/Dashboard.jsx</code> and save to test HMR
