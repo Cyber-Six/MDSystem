@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import axiosRequest from '../services/axiosRequestHandler';
 import { logout } from '../services/refreshTokenService';
-import reactLogo from '../assets/react.svg';
-import viteLogo from '/vite.svg';
+import mdSystemLogo from '../assets/MDSystem.png';
 import '../modules/dashboard/dashboard.module.css';
 // import DemoButton from '../components/Demo/DemoButton'; // Commented out - component doesn't exist yet
 
@@ -30,18 +29,14 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
   };
 
   return (
-    <div className="dashboard-container">
-      <a href="https://vite.dev" target="_blank" rel="noopener noreferrer">
-        <img src={viteLogo} className="logo" alt="Vite logo" />
-      </a>
-      <a href="https://react.dev" target="_blank" rel="noopener noreferrer">
-        <img src={reactLogo} className="logo react" alt="React logo" />
-      </a>
-      
-      <h1>
-        Dashboard
-        {user && <span> - Welcome, {user.name}</span>}
-      </h1>
+    <div className="dashboard-container" style={{ paddingTop: '80px' }}>
+      <div className="dashboard-header">
+        <img src={mdSystemLogo} className="logo" alt="MDSystem logo" />
+        <h1>
+          Dashboard
+          {user && <span> - Welcome, {user.name}</span>}
+        </h1>
+      </div>
       
       <div className="card">
         {/*<DemoButton -- commented for the meantime since it results a conflict which DemonButton does not exist yet>*/}
@@ -77,15 +72,6 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
             ))}
           </ul>
         </div>
-      )}
-      
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-      {isHome && (
-        <p>
-          <a href="/dashboard">Go to Dashboard (Protected)</a>
-        </p>
       )}
     </div>
   );

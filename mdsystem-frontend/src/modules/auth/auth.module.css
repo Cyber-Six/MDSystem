@@ -1,231 +1,313 @@
-/* Auth Page Styles - Split Layout */
+/* Auth Page - Fullscreen Landing with Sliding Panel */
 
-.authContainer {
-  display: flex;
+.authPage {
   min-height: 100vh;
-  background: #f5f7fa;
+  position: relative;
+  overflow: hidden;
+  padding-top: 80px;
 }
 
-/* Login Panel (Right Side) */
-.loginPanel {
-  width: 400px;
-  background: white;
-  box-shadow: -2px 0 24px rgba(0, 0, 0, 0.08);
-  display: flex;
-  flex-direction: column;
+/* Fullscreen Landing Content */
+.landingContent {
   position: fixed;
+  top: 80px;
+  left: 0;
   right: 0;
-  top: 0;
   bottom: 0;
-  overflow-y: auto;
-  z-index: 100;
+  background: linear-gradient(135deg, 
+    rgba(37, 99, 235, 0.9) 0%, 
+    rgba(59, 130, 246, 0.85) 25%,
+    rgba(245, 158, 11, 0.85) 75%,
+    rgba(217, 119, 6, 0.9) 100%
+  ),
+  url('/MDSystem.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
 
-.loginPanelContent {
-  padding: 40px 30px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+.landingOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
 }
 
-.portalBadge {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  display: inline-block;
-  margin-bottom: 24px;
-  width: fit-content;
-}
-
-.loginTitle {
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: #2d3748;
-  margin-bottom: 24px;
-}
-
-.switchView {
-  margin-top: 24px;
-  text-align: center;
-  padding-top: 24px;
-  border-top: 1px solid #e2e8f0;
-}
-
-.switchView p,
-.loginRedirect p {
-  color: #4a5568;
-  font-size: 0.9rem;
-  margin-bottom: 12px;
-}
-
-.switchButton {
-  background: transparent;
-  color: #667eea;
-  border: 2px solid #667eea;
-  padding: 10px 24px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.switchButton:hover {
-  background: #667eea;
-  color: white;
-  transform: translateY(-1px);
-}
-
-.loginRedirect {
-  text-align: center;
-  margin-top: 24px;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 12px;
-}
-
-/* Center Content */
-.centerContent {
-  flex: 1;
-  margin-right: 400px;
-  padding: 60px 40px;
+.landingInner {
+  position: relative;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow-y: auto;
+  padding: 3rem;
 }
 
-.registerContent {
-  max-width: 800px;
-  width: 100%;
-  background: white;
-  padding: 48px;
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-}
-
-.welcomeContent {
-  max-width: 700px;
+.heroSection {
+  max-width: 900px;
   text-align: center;
-  animation: fadeIn 0.6s ease-out;
+  color: white;
 }
 
-.welcomeContent h2 {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: #2d3748;
-  margin-bottom: 20px;
+.portalBadge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 2rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px);
 }
 
-.welcomeDescription {
-  font-size: 1.2rem;
-  color: #4a5568;
-  margin-bottom: 48px;
+.heroTitle {
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 1.5rem;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  line-height: 1.2;
+}
+
+.heroSubtitle {
+  font-size: 1.5rem;
+  margin-bottom: 4rem;
+  opacity: 0.95;
   line-height: 1.6;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
+/* Features Grid */
 .features {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 32px;
-  margin-top: 48px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  margin-bottom: 3rem;
 }
 
 .feature {
-  text-align: center;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 2rem;
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.feature:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
 }
 
 .featureIcon {
   font-size: 3rem;
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: 1rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .feature h3 {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: #2d3748;
-  margin-bottom: 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 0.75rem;
 }
 
 .feature p {
   font-size: 0.95rem;
-  color: #718096;
-  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.6;
+  margin: 0;
 }
 
-/* Animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+/* Sliding Auth Panel */
+.authPanel {
+  position: fixed;
+  top: 80px;
+  right: 0;
+  bottom: 0;
+  width: 500px;
+  background: white;
+  box-shadow: -4px 0 32px rgba(0, 0, 0, 0.2);
+  transform: translateX(100%);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+}
+
+.authPanel.panelOpen {
+  transform: translateX(0);
+}
+
+/* Toggle Button - Positioned at Top */
+.toggleButton {
+  position: absolute;
+  left: -56px;
+  top: 20px;
+  width: 56px;
+  height: 56px;
+  background: white;
+  border: none;
+  border-radius: 8px;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: var(--color-primary-600);
+  transition: all 0.3s ease;
+}
+
+.authPanel.panelOpen .toggleButton {
+  left: -1px;
+  border-radius: 8px 0 0 8px;
+  box-shadow: none;
+  background: white;
+  border-right: 1px solid var(--color-border-light);
+}
+
+.toggleButton:hover {
+  background: var(--color-gray-50);
+  color: var(--color-primary-700);
+}
+
+/* Auth Panel Content */
+.authPanelContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 3rem 2.5rem;
+}
+
+.authForm {
+  max-width: 100%;
+}
+
+.formTitle {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.formSubtitle {
+  color: var(--color-text-tertiary);
+  margin-bottom: 2rem;
+  font-size: 0.95rem;
+}
+
+/* Switch View */
+.switchView {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  text-align: center;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.switchView p {
+  color: var(--color-text-tertiary);
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.switchButton {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: color 0.2s ease;
+}
+
+.switchButton:hover {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
 }
 
 /* Responsive Design */
 @media (max-width: 1200px) {
-  .loginPanel {
-    width: 360px;
+  .heroTitle {
+    font-size: 2.5rem;
   }
 
-  .centerContent {
-    margin-right: 360px;
-    padding: 40px 30px;
-  }
-}
-
-@media (max-width: 968px) {
-  .authContainer {
-    flex-direction: column;
-  }
-
-  .loginPanel {
-    width: 100%;
-    position: relative;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
-  }
-
-  .centerContent {
-    margin-right: 0;
-    padding: 40px 20px;
-  }
-
-  .registerContent {
-    padding: 32px 24px;
-  }
-
-  .welcomeContent h2 {
-    font-size: 2rem;
+  .heroSubtitle {
+    font-size: 1.25rem;
   }
 
   .features {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 1.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .authPage {
+    padding-top: 80px;
+  }
+
+  .landingContent {
+    top: 80px;
+  }
+
+  .landingInner {
+    padding: 2rem 1.5rem;
+  }
+
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .heroSubtitle {
+    font-size: 1.125rem;
+    margin-bottom: 2rem;
+  }
+
+  .authPanel {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .toggleButton {
+    left: 50%;
+    top: -56px;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 56px;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .authPanel.panelOpen .toggleButton {
+    top: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 8px 8px 0 0;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+
+  .authPanelContent {
+    padding: 2rem 1.5rem;
   }
 }
 
 @media (max-width: 480px) {
-  .loginPanelContent {
-    padding: 30px 20px;
-  }
-
-  .loginTitle {
-    font-size: 1.5rem;
-  }
-
-  .registerContent {
-    padding: 24px 16px;
-  }
-
-  .welcomeContent h2 {
+  .heroTitle {
     font-size: 1.75rem;
   }
 
-  .welcomeDescription {
+  .heroSubtitle {
     font-size: 1rem;
+  }
+
+  .portalBadge {
+    font-size: 1rem;
+    padding: 10px 20px;
+  }
+
+  .feature {
+    padding: 1.5rem;
   }
 }

@@ -16,6 +16,7 @@ const Login = () => {
   const [verificationKey, setVerificationKey] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [consentAgreed, setConsentAgreed] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   
   const navigate = useNavigate();
 
@@ -191,7 +192,7 @@ const Login = () => {
         }
         
         // Redirect to dashboard on success
-        navigate('/dashboard');
+        navigate('/');
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Login completion failed.';
@@ -260,8 +261,16 @@ const Login = () => {
         
         {/* TODO: Add Google reCAPTCHA component here */}
         
-        <button type="submit" disabled={isLoading}>
+        <button type="submit" disabled={isLoading} className="btn-primary">
           {isLoading ? 'Logging in...' : 'Login'}
+        </button>
+        
+        <button 
+          type="button" 
+          onClick={() => setShowForgotPassword(true)}
+          className="btn-link"
+        >
+          Forgot Password?
         </button>
       </form>
     );

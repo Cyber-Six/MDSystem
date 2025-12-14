@@ -18,7 +18,7 @@ const Landing = () => {
   };
 
   return (
-    <div className={styles.landingContainer}>
+    <div className={styles.landingContainer} style={{ paddingTop: '60px' }}>
       {/* Hero Section */}
       <section className={styles.heroSection}>
         <div className={styles.heroContent}>
