@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDetectRoleFromSubdomain } from '../../hooks/useRole';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
 import DataConsent from '../../components/data-consent/DataConsent';
@@ -16,9 +15,8 @@ const Login = () => {
   const [showConsent, setShowConsent] = useState(false);
   const [verificationKey, setVerificationKey] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [consentAgreed, setConsentAgreed] = useState(false);
   
-  const roleContext = useDetectRoleFromSubdomain();
-  const { role } = roleContext;
   const navigate = useNavigate();
 
   const handleSend2FA = async () => {
@@ -254,15 +252,10 @@ const Login = () => {
           required
         >
           <option value="">Select Role</option>
-          {role === 'medical' ? (
-            <>
-              <option value="doctor">Doctor</option>
-              <option value="nurse">Nurse</option>
-              <option value="admin">Admin</option>
-            </>
-          ) : (
-            <option value="patient">Patient</option>
-          )}
+          <option value="patient">Patient</option>
+          <option value="doctor">Doctor</option>
+          <option value="nurse">Nurse</option>
+          <option value="admin">Admin</option>
         </select>
         
         {/* TODO: Add Google reCAPTCHA component here */}

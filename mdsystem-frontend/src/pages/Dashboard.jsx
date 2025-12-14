@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
 import axiosRequest from '../services/axiosRequestHandler';
 import { logout } from '../services/refreshTokenService';
 import reactLogo from '../assets/react.svg';
@@ -11,8 +10,6 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
   const [count, setCount] = useState(0);
   const [user, setUser] = useState(null);
   const [appointments, setAppointments] = useState([]);
-  const role = useDetectPortalFromSubdomain();
-  const { portal, isPatient, isMedical } = role;
 
   useEffect(() => {
     // Load user data on mount
@@ -24,14 +21,9 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
       const userResponse = await axiosRequest.get('/auth/me');
       setUser(userResponse.data);
 
-      // Load appointments based on portal
-      if (isPatient) {
-        const apptsResponse = await axiosRequest.get('/appointments');
-        setAppointments(apptsResponse.data);
-      } else if (isMedical) {
-        const apptsResponse = await axiosRequest.get('/staff/appointments');
-        setAppointments(apptsResponse.data);
-      }
+      // Load appointments - backend determines correct data based on user role
+      const apptsResponse = await axiosRequest.get('/appointments');
+      setAppointments(apptsResponse.data);
     } catch (error) {
       console.error('Failed to load user data:', error);
     }
@@ -47,11 +39,9 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
       </a>
       
       <h1>
-        {isPatient ? 'Patient Dashboard' : 'Staff Dashboard'}
+        Dashboard
         {user && <span> - Welcome, {user.name}</span>}
       </h1>
-      
-      <p>Portal: <strong>{portal}</strong></p>
       
       <div className="card">
         {/*<DemoButton -- commented for the meantime since it results a conflict which DemonButton does not exist yet>*/}

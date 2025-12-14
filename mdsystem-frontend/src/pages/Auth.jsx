@@ -2,14 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Login from '../modules/auth/Login';
 import Register from '../modules/auth/Register';
-import { useDetectPortalFromSubdomain } from '../hooks/usePortal';
 import styles from '../modules/auth/auth.module.css';
 
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const role = useDetectPortalFromSubdomain();
-  const { isPatient, isMedical, portal } = role;
 
   // Determine initial view from URL query params or default to login
   const queryParams = new URLSearchParams(location.search);
@@ -42,11 +39,7 @@ const Auth = () => {
       {/* Left/Right Panel - Login */}
       <div className={styles.loginPanel}>
         <div className={styles.loginPanelContent}>
-          <div className={styles.portalBadge}>
-            {isPatient && '👤 Patient Portal'}
-            {isMedical && '⚕️ Staff Portal'}
-            {!isPatient && !isMedical && '🏥 MDSystem'}
-          </div>
+          <div className={styles.portalBadge}>🏥 MDSystem</div>
           
           <h1 className={styles.loginTitle}>
             {activeView === 'login' ? 'Welcome Back' : 'Create Account'}
@@ -87,15 +80,9 @@ const Auth = () => {
           </div>
         ) : (
           <div className={styles.welcomeContent}>
-            <h2>
-              {isPatient && 'Patient Portal Access'}
-              {isMedical && 'Medical Staff Access'}
-              {!isPatient && !isMedical && 'Healthcare Management System'}
-            </h2>
+            <h2>Healthcare Management System</h2>
             <p className={styles.welcomeDescription}>
-              {isPatient && 'Access your medical records, appointments, and prescriptions securely.'}
-              {isMedical && 'Manage patient care with comprehensive tools and analytics.'}
-              {!isPatient && !isMedical && 'Comprehensive platform for healthcare management.'}
+              Comprehensive platform for healthcare management.
             </p>
             
             <div className={styles.features}>

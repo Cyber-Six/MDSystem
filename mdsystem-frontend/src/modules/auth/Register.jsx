@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDetectPortalFromSubdomain } from '../../hooks/usePortal';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
 import styles from './register.module.css';
 
 const Register = () => {
   const navigate = useNavigate();
-  const role = useDetectPortalFromSubdomain();
-  const { isPatient, isMedical, portal } = role;
 
   // Multi-step state
   const [currentStep, setCurrentStep] = useState(1);
@@ -18,7 +15,7 @@ const Register = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: portal || 'patient', // Default to detected portal role
+    role: 'patient', // Default role
   });
 
   // Step-specific state
@@ -217,11 +214,7 @@ const Register = () => {
   const renderStepOne = () => (
     <div className={styles.stepContainer}>
       <h2>Create Your Account</h2>
-      <p className={styles.subtitle}>
-        {isPatient && 'Register as a Patient'}
-        {isMedical && 'Register as Medical Staff'}
-        {!isPatient && !isMedical && 'Register for MDSystem'}
-      </p>
+      <p className={styles.subtitle}>Register for MDSystem</p>
       
       <form onSubmit={handleInitialRegistration} className={styles.form}>
         <div className={styles.formGroup}>
