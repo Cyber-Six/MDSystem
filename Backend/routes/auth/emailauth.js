@@ -11,13 +11,20 @@ const { verifyRecaptcha } = require('../../services/recaptcha.js');
 
 const { enqueueEmailVerification, enqueueEmail2FA } = require('../../services/emailservice.js');
 const { detectPortalFromSubdomain } = require('../utils/portal.js');
+
+const path = require("path");
+const dotenv = require("dotenv");
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+console.log("Loaded ENV in emailauth:", process.env.OTP_GLOBAL_ATTEMPT_LIMIT);
+
 const router = express.Router();
 
 function isValidOtpPurpose(purpose) {
-  return ["emailv", "2fa"].includes(purpose);
+  return ["verification", "2fa"].includes(purpose);
   }
 
-router.post("/email/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
+router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
     const { email, recaptchaToken } = req.body;
     const purpose = req.params.purpose.toLowerCase();
     
@@ -25,7 +32,7 @@ router.post("/email/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
     if (!isValidOtpPurpose(purpose)) {
         return res.status(400).json({
         error: "INVALID_PERFORM_ACTION",
-        message: "Perform must be either 'emailv' or '2fa'."
+        message: "Perform must be either 'verification' or '2fa'."
         });
     }
 
@@ -98,7 +105,7 @@ router.post("/email/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
       });
     }
     
-    if (purpose === "emailv") await enqueueEmailVerification(email);
+    if (purpose === "verification") await enqueueEmailVerification(email);
     else if (purpose === "2fa") await enqueueEmail2FA(email, portal); 
         
 
@@ -109,7 +116,7 @@ router.post("/email/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
   }
 );
 
-router.post('/email/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => {
+router.post('/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => {
     const { email, otp } = req.body;
     const purpose = req.params.purpose.toLowerCase();
 
@@ -117,7 +124,7 @@ router.post('/email/:purpose/verify', portalBasedIpRateLimiter(), async (req, re
     if (!isValidOtpPurpose(purpose)) {
         return res.status(400).json({
         error: "INVALID_PERFORM_ACTION",
-        message: "Perform must be either 'emailv' or '2fa'."
+        message: "Perform must be either 'verification' or '2fa'."
         });
     }
 
@@ -145,7 +152,7 @@ router.post('/email/:purpose/verify', portalBasedIpRateLimiter(), async (req, re
     }
 
 
-    const code = purpose === "emailv" ? "emailVerification" : "email2FA";
+    const code = purpose === "verification" ? "emailVerification" : "email2FA";
     const portal = detectPortalFromSubdomain(req);
 
     // ✅ Verify OTP using Redis (with lockout protection)
@@ -182,7 +189,7 @@ router.post('/email/:purpose/verify', portalBasedIpRateLimiter(), async (req, re
     await deleteEmailCooldown(email, portal, purpose);
     await deleteEmailAttempts(email, portal, purpose);
     const account_type = portal;
-    const verificationKey = await createVerificationSession(email, "register", account_type);
+    const verificationKey = await createVerificationSession(email, purpose, account_type);
 
     return res.status(200).json({
         ok: true,

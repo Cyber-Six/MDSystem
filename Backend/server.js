@@ -30,11 +30,11 @@ redis.initRedis().then(() => {
 });
 
 
-app.use('/register', registerRoutes);
-app.use('/login', loginRoutes);
+app.use('/user/register', registerRoutes);
+app.use('/user/login', loginRoutes);
 app.use('/consent', consentRoutes);
-app.use('/auth', emailAuthRoutes);
-app.use('/auth', refreshAuthRoutes);
+app.use('/user/auth', emailAuthRoutes);
+app.use('/user/auth', refreshAuthRoutes);
 
 // Start server
 const PORT = process.env.PATIENT_PORT || 3001;

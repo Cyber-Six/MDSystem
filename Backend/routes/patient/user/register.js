@@ -107,9 +107,9 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
             message: "Password must be between 8 and 64 characters."
         });
     }
-
+    const purpose = "verification";
     // ✅ 5. Validate verification session (anti-bypass)
-    const session = await getVerificationSession(verificationKey, "register");
+    const session = await getVerificationSession(verificationKey, purpose);
 
     if (!session || session.email !== email) {
         return res.status(400).json({
@@ -133,7 +133,7 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
         });
     }
 
-    await deleteVerificationSession(verificationKey, "register");
+    await deleteVerificationSession(verificationKey, purpose);
 
     // ✅ 7. Check if user exists (safe now — ownership proven)
     const existing = await query.findUserByEmail(email);
