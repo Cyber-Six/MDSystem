@@ -45,7 +45,7 @@ const Login = () => {
       // TODO: Integrate Google reCAPTCHA token
       const recaptchaToken = 'RECAPTCHA_TOKEN_HERE'; // Replace with actual reCAPTCHA implementation
       
-      const response = await axiosRequest.post('/login', { 
+      const response = await axiosRequest.post('auth/login', { 
         email, 
         password, 
         role: selectedRole,
