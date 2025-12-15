@@ -21,6 +21,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ✅ Ensure req.body is always an object (prevents destructuring crashes)
+app.use((req, res, next) => {
+  if (req.body === undefined) {
+    req.body = {}; // safe fallback
+  }
+  next();
+});
+
 // ✅ Global handler for malformed JSON
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
