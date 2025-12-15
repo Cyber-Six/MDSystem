@@ -274,6 +274,7 @@ async function getOTPLockoutTTL(email, purpose) {
 // Verification session keys (post-OTP)
 // ------------------------------------------------
 
+// purpose [verification, 2fa, resetpasswd]
 async function createVerificationSession(email, purpose, account_type = "patient") {
   if (!client) throw new Error("Redis client not initialized");
 
@@ -282,8 +283,7 @@ async function createVerificationSession(email, purpose, account_type = "patient
 
   // ✅ Fetch user from DB (returns row OR null)
   const user = await query.getUserConsentStateByEmail(email);
-
-  if (user) {
+  if (user) { // account do exist
     await client.hSet(key, {
       allow_email_2fa: user.allow_email_2fa ? "true" : "false",
       email_2fa_verified: "false",
@@ -297,7 +297,7 @@ async function createVerificationSession(email, purpose, account_type = "patient
         ? user.data_consent_agreed.toISOString()
         : "",
     });
-  } else {
+  } else { // account doesnt exist
     await client.hSet(key, {
       user_exists: "false",
       user_id: "",                       // ✅ consistent field
@@ -355,6 +355,30 @@ async function updateConsentInSession(token, purpose) {
   return true;
   }
   
+async function update2FAInSession(token, email, purpose) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `verify:${purpose}:${token}`;
+
+  // ✅ 1. Check if session exists
+  const exists = await client.exists(key);
+  if (!exists) return false;
+
+  // ✅ 2. Fetch stored email from Redis
+  const storedEmail = await client.hGet(key, "email");
+  if (!storedEmail || storedEmail.toLowerCase() !== email.toLowerCase()) {
+    return false; // ❌ Email mismatch → invalid attempt
+  }
+
+  // ✅ 3. Mark 2FA as verified
+  await client.hSet(key, {
+    email_2fa_verified: "true"
+  });
+
+  return true;
+}
+
+
 async function deleteVerificationSession(token, purpose) {
   if (!client) throw new Error("Redis client not initialized");
 
@@ -436,7 +460,94 @@ async function getRefreshSession(userId, deviceId) {
   return JSON.parse(raw);
 }
 
+// -----------------------------------------------------//
+// Generic Fail Limiter Helper 
+// -----------------------------------------------------//
 
+
+// ✅ Generic failure recorder
+async function recordFailure(prefix, ip, failTtl, threshold, lockTtl) {
+  const failKey = `${prefix}:fail:${ip}`;
+  const attempts = await client.incr(failKey);
+
+  if (attempts === 1) {
+    await client.expire(failKey, failTtl);
+  }
+
+  if (attempts >= threshold) {
+    const lockKey = `${prefix}:lock:${ip}`;
+    await client.set(lockKey, "1", { EX: lockTtl });
+  }
+
+  return attempts;
+}
+
+async function getFailures(prefix, ip) {
+  const failKey = `${prefix}:fail:${ip}`;
+  const val = await client.get(failKey);
+  return Number(val) || 0;
+}
+
+async function isLocked(prefix, ip) {
+  const lockKey = `${prefix}:lock:${ip}`;
+  return (await client.exists(lockKey)) === 1;
+}
+
+async function clearFailures(prefix, ip) {
+  const failKey = `${prefix}:fail:${ip}`;
+  const lockKey = `${prefix}:lock:${ip}`;
+
+  await client.del(failKey);
+  await client.del(lockKey);
+
+  return true;
+}
+
+// 
+// Implementation of generic fail limiter
+//
+async function recordResetPwFailure(ip) {
+  const failTtl = Number(process.env.RESET_PW_FAIL_TTL) || 300;
+  const threshold = Number(process.env.RESET_PW_LOCK_THRESHOLD) || 10;
+  const lockTtl = Number(process.env.RESET_PW_LOCK_TTL) || 1800;
+
+  return recordFailure("resetpw", ip, failTtl, threshold, lockTtl);
+}
+
+
+async function isResetPwLocked(ip) {
+  return isLocked("resetpw", ip);
+}
+
+async function getResetPwFailures(ip) {
+  return getFailures("resetpw", ip);
+}
+
+async function clearResetPwFailures(ip) {
+  return clearFailures("resetpw", ip);
+}
+
+// ---------// 
+
+async function recordRefreshTokenFailure(ip) {
+  const failTtl = Number(process.env.RT_FAIL_TTL) || 300;
+  const threshold = Number(process.env.RT_LOCK_THRESHOLD) || 10;
+  const lockTtl = Number(process.env.RT_LOCK_TTL) || 1800;
+
+  return recordFailure("rt", ip, failTtl, threshold, lockTtl);
+}
+
+async function isRefreshTokenLocked(ip) {
+  return isLocked("rt", ip);
+}
+
+async function getRefreshTokenFailures(ip) {
+  return getFailures("rt", ip);
+}
+
+async function clearRefreshTokenFailures(ip) {
+  return clearFailures("rt", ip);
+}
 
 // ------------------------------------------------
 
@@ -460,10 +571,22 @@ module.exports = {
   createVerificationSession,
   getVerificationSession,
   updateConsentInSession,
+  update2FAInSession,
   deleteVerificationSession,
+  getUserIdFromVerificationSession,
 
   saveRefreshSession,
   getRefreshSession, 
   saveStaffAnchor,
   getStaffAnchor,
+
+  recordResetPwFailure,
+  getResetPwFailures,
+  isResetPwLocked,
+  clearResetPwFailures,
+
+  recordRefreshTokenFailure,
+  getRefreshTokenFailures,
+  isRefreshTokenLocked,
+  clearRefreshTokenFailures,
 };

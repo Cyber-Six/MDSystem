@@ -1,6 +1,6 @@
 const express = require("express");
 
-const { detectRoleFromEmail } = require("../../../config/validator.js");
+const { isValidEmail } = require("../../../config/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
 
 const {createVerificationSession, getVerificationSession, deleteVerificationSession } = require("../../../config/redis.js");
@@ -14,30 +14,21 @@ const { detectPortalFromSubdomain } = require("../../utils/portal.js");
 const AuthSession = require("../../utils/authSession.js");
 const router = express.Router();
 
+const VERIFICATIONKEY_PURPOSE = "2fa";
 
 router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
-  const { email, password, role, recaptchaToken } = req.body;
+  const { email, password, recaptchaToken } = req.body;
 
   // ✅ Required fields
-  if (!email || !password || !role || !recaptchaToken) {
+  if (!email || !password || !recaptchaToken) {
     return res.status(400).json({
       error: "MISSING_FIELDS",
-      message: "Email, password, role, and reCAPTCHA token are required."
-    });
-  }
-
-  // ✅ Basic email format
-  const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!basicEmailRegex.test(email)) {
-    return res.status(400).json({
-      error: "INVALID_EMAIL_FORMAT",
-      message: "Email format is invalid."
+      message: "Email, password, and reCAPTCHA token are required."
     });
   }
 
   // ✅ Institutional email → detect role from email
-  const declaredRole = detectRoleFromEmail(email);
-  if (!declaredRole) {
+  if (!isValidEmail(email)) {
     return res.status(400).json({
       error: "INVALID_INSTITUTION_EMAIL",
       message: "Email must follow TIP institutional format."
@@ -73,7 +64,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 
   // ✅ Create login verification session (always the same purpose)
   const account_type = detectPortalFromSubdomain(req);
-  const verificationKey = await createVerificationSession(email, "login", account_type);
+  const verificationKey = await createVerificationSession(email, VERIFICATIONKEY_PURPOSE, account_type);
 
   // ✅ If 2FA is disabled → mark validated inside Redis and return
   return res.status(200).json({
@@ -95,7 +86,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
-  const session = await getVerificationSession(verificationKey, "login");
+  const session = await getVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
 
   if (!session || !session.email || session.user_exists !== "true" || session.user_id === "") {
     return res.status(400).json({
@@ -126,7 +117,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
       });
   }
 
-  deleteVerificationSession(verificationKey, "login");
+  deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
   // ✅ Create actual auth session (JWT, cookie, etc.)
   //const authToken = await query.createAuthToken(session.user_id);
 

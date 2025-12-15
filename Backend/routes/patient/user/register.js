@@ -1,9 +1,8 @@
 const express = require('express');
 
-const { detectRoleFromEmail, validatePassword } = require('../../../config/validator.js');
+const { detectRoleFromEmail, isValidEmail, validatePassword, isStudentEmail } = require('../../../config/validator.js');
 const { portalBasedIpRateLimiter, ipRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const { getVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
-const { verifyRecaptcha } = require('../../../services/recaptcha.js');
 const query = require('../../../config/query.js');
 const AuthSession = require("../../utils/authSession.js");
 
@@ -11,44 +10,25 @@ const router = express.Router();
 
 
 router.post('/', (req, res) => {
-    const { email, password, role } = req.body;
+    const { email, password } = req.body;
 
     // ✅ 1. Required fields
-    if (!email || !password || !role) {
+    if (!email || !password ) {
         return res.status(400).json({
         error: "MISSING_FIELDS",
-        message: "Email, password and role are required."
+        message: "Email, password are required."
         });
     }
 
-    // ✅ 2. Basic email format check (anti-garbage)
-    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!basicEmailRegex.test(email)) {
-        return res.status(400).json({
-        error: "INVALID_EMAIL_FORMAT",
-        message: "Email format is invalid."
-        });
-    }
-
-    // ✅ 3. Institutional email + role detection
-    const declaredRole = detectRoleFromEmail(email);
-
-    if (!declaredRole) {
+    // ✅ 2. Institutional email + role detection
+    if (!isValidEmail(email)) {
         return res.status(400).json({
         error: "INVALID_INSTITUTION_EMAIL",
         message: "Email must follow TIP institutional format."
         });
     }
 
-    // ✅ 4. Role mismatch check
-    if (role !== declaredRole) {
-        return res.status(403).json({
-            error: "ROLE_MISMATCH",
-            message: "You are trying to access the wrong dashboard."
-        });
-    }
-
-    // ✅ 5. Password validation
+    // ✅ 3. Password validation
     if (!validatePassword(password)) {
     return res.status(400).json({
         error: "INVALID_PASSWORD",
@@ -60,47 +40,29 @@ router.post('/', (req, res) => {
     // ✅ SUCCESS — no DB checks, no reCAPTCHA, no enumeration
     return res.status(200).json({
         ok: true,
-        declaredRole
     });
 });
 
 router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), async (req, res) => {
-    const { verificationKey, email, password, role } = req.body;
+    const { verificationKey, email, password } = req.body;
 
     // ✅ 1. Required fields
-    if (!verificationKey || !email || !password || !role) {
+    if (!verificationKey || !email || !password) {
         return res.status(400).json({
             error: "MISSING_FIELDS",
-            message: "Verification key, email, password, and role are required."
+            message: "VerificationKey, email, password are required."
         });
     }
 
-    // ✅ 2. Basic email format
-    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!basicEmailRegex.test(email)) {
-        return res.status(400).json({
-            error: "INVALID_EMAIL_FORMAT",
-            message: "Email format is invalid."
-        });
-    }
-
-    // ✅ 3. Institutional email + role detection
-    const declaredRole = detectRoleFromEmail(email);
-    if (!declaredRole) {
+    // ✅ 2. Institutional email + role detection
+    if (!isValidEmail(email)) {
         return res.status(400).json({
             error: "INVALID_INSTITUTION_EMAIL",
             message: "Email must follow TIP institutional format."
         });
     }
 
-    if (role !== declaredRole) {
-        return res.status(403).json({
-            error: "ROLE_MISMATCH",
-            message: "You are trying to access the wrong dashboard."
-        });
-    }
-
-    // ✅ 4. Password validation
+    // ✅ 3. Password validation
     if (!validatePassword(password)) {
         return res.status(400).json({
             error: "INVALID_PASSWORD",
@@ -108,7 +70,7 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
         });
     }
     const purpose = "verification";
-    // ✅ 5. Validate verification session (anti-bypass)
+    // ✅ 4. Validate verification session (anti-bypass)
     const session = await getVerificationSession(verificationKey, purpose);
 
     if (!session || session.email !== email) {
@@ -118,7 +80,7 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
         });
     }
 
-    // ✅ 6. Check consent from Redis (NOT from client)
+    // ✅ 5. Check consent from Redis (NOT from client)
     if (session.data_consent !== "true") {
         return res.status(400).json({
             error: "DATA_CONSENT_REQUIRED",
@@ -135,7 +97,7 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
 
     await deleteVerificationSession(verificationKey, purpose);
 
-    // ✅ 7. Check if user exists (safe now — ownership proven)
+    // ✅ 6. Check if user exists (safe now — ownership proven)
     const existing = await query.findUserByEmail(email);
 
     if (existing) {
@@ -145,11 +107,11 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
         });
     }
 
-    // ✅ 8. Create user (ownership + consent proven)
+    // ✅ 7. Create user (ownership + consent proven)
     const user = await query.createUser({
         email,
         password, // hashing inside service layer
-        role: declaredRole,
+        role: isStudentEmail(email) ? "Student" : "Employee",
         data_consent_version: process.env.DATA_CONSENT_VERSION,
     });
 

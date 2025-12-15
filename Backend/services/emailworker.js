@@ -8,7 +8,8 @@ const dotenv = require('dotenv');
 const { buildEmailTemplate } = require('./emailservice.js');
 
 
-const { connection, initRedis, setOTP } = require('../config/redis.js');
+const { connection, initRedis, setOTP, createVerificationSession } = require('../config/redis.js');
+const { detectPortalFromSubdomain } = require('../routes/utils/portal.js');
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
@@ -48,12 +49,18 @@ const worker = new Worker('emailQueue', async job => {
   console.log(`Processing job ${job.id} of type ${job.name}`);
 
   try {
-    const { userEmail, otp, portal, to, subject, htmlContent } = job.data;
-
+    const { userEmail, data, portal, to, subject, htmlContent } = job.data;
+    console.log(data);
     // ✅ Use buildEmailTemplate for OTP jobs
     let emailDetails;
-    if (job.name === 'sendEmailVerification' || job.name === 'sendEmail2FA') {
-      emailDetails = buildEmailTemplate(job.name, userEmail, otp);
+
+    if (job.name === 'sendEmailVerification' || job.name === 'sendEmail2FA' || job.name === "sendPasswordResetLink") {
+      if (job.name === "sendPasswordResetLink"){ // create verification ticket
+        data.resetpwlink = await createVerificationSession(userEmail, "resetpassword", portal);
+        data.portal = portal === "patient" ? "www" : "staff";
+        }
+
+      emailDetails = buildEmailTemplate(job.name, userEmail, data);
     } else if (job.name === 'sendEmail') {
       emailDetails = { to, subject, htmlContent };
     }
@@ -73,7 +80,7 @@ const worker = new Worker('emailQueue', async job => {
           'sendEmail2FA': 'email2FA',
         };
 
-        await setOTP(userEmail, otp, codeMap[job.name], portal);
+        await setOTP(userEmail, data.otp, codeMap[job.name], portal);
         console.log("portal: ", portal);
         console.log(`✅ OTP stored for ${userEmail}`);
       } catch (redisErr) {

@@ -30,6 +30,11 @@ function detectRoleFromEmail(email) {
   return null;
 }
 
+function isValidEmail(email) {
+  const regex = /^[^\s@]+@tip\.edu\.ph$/i;
+  return regex.test(email);
+}
+
 function validatePassword(password) {
   if (typeof password !== "string") return false;
 
@@ -51,6 +56,7 @@ module.exports = {
   isEmployeeEmail,
   isMedicalEmail,
   detectRoleFromEmail,
+  isValidEmail,
   validatePassword,
   isUserStaff,
 };

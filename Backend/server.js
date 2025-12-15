@@ -11,7 +11,7 @@ const registerRoutes = require('./routes/patient/user/register.js');
 const consentRoutes = require('./routes/patient/info/consent.js');
 const emailAuthRoutes = require('./routes/auth/emailauth.js');
 const refreshAuthRoutes = require('./routes/auth/refresh.js');
-
+const passwordResetRoutes = require('./routes/auth/emailpassword-reset.js');
 const loginRoutes = require('./routes/patient/user/login.js');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
@@ -21,6 +21,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ✅ Global handler for malformed JSON
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({
+      error: "INVALID_JSON",
+      message: "The JSON body is malformed or invalid."
+    });
+  }
+  next();
+});
 // initialize DB
 
 redis.initRedis().then(() => {
@@ -30,11 +40,14 @@ redis.initRedis().then(() => {
 });
 
 
-app.use('/user/register', registerRoutes);
-app.use('/user/login', loginRoutes);
-app.use('/consent', consentRoutes);
-app.use('/user/auth', emailAuthRoutes);
-app.use('/user/auth', refreshAuthRoutes);
+app.use('/auth/register', registerRoutes);
+app.use('/auth/login', loginRoutes);
+app.use('/auth/password', passwordResetRoutes);
+app.use('/auth/email', emailAuthRoutes);
+app.use('/auth/refresh', refreshAuthRoutes);
+
+app.use('/auth/consent', consentRoutes);
+
 
 // Start server
 const PORT = process.env.PATIENT_PORT || 3001;

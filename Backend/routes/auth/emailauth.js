@@ -1,11 +1,12 @@
 const express = require('express');
 
-const { detectRoleFromEmail, isMedicalEmail } = require('../../config/validator.js');
+const { detectRoleFromEmail, isMedicalEmail, isValidEmail } = require('../../config/validator.js');
 const { portalBasedIpRateLimiter } = require('../../config/middleware/ratelimiter.js');
 const { verifyOTP, getOTPFailureCount, getOTPLockoutTTL,
         createVerificationSession,
         rateLimitEmailCooldown, rateLimitEmailAttempts, 
-        deleteEmailCooldown, deleteEmailAttempts} = require('../../config/redis.js');
+        deleteEmailCooldown, deleteEmailAttempts,
+        update2FAInSession} = require('../../config/redis.js');
 const { mapRoleToProfile, rateLimitMatrix } = require('../../config/data/matrix.js');
 const { verifyRecaptcha } = require('../../services/recaptcha.js');
 
@@ -44,18 +45,9 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
       });
     }
 
-    // ✅ Basic email format
-    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!basicEmailRegex.test(email)) {
-      return res.status(400).json({
-        error: "INVALID_EMAIL_FORMAT",
-        message: "Email format is invalid."
-      });
-    }
 
     // ✅ Institutional email validation
-    const declaredRole = detectRoleFromEmail(email);
-    if (!declaredRole) {
+    if (!isValidEmail(email)) {
       return res.status(400).json({
         error: "INVALID_INSTITUTION_EMAIL",
         message: "Email must follow TIP institutional format."
@@ -79,7 +71,8 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
 
     const emailCooldown = purpose === "2fa" ? profile.emailCooldown_2fa : profile.emailCooldown_emailv;
     const emailMaxAttempts = purpose === "2fa" ? profile.emailAttemptMax_2fa : profile.emailAttemptMax_emailv;
-    
+    const penaltyCooldown = profile.penaltyCooldown_resetpw;
+
     // ✅ Cooldown check (write)
     const cooldownActive = await rateLimitEmailCooldown(email, portal, purpose, emailCooldown);
     if (cooldownActive) {
@@ -95,7 +88,7 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
       portal,
       purpose,
       emailMaxAttempts,
-      emailCooldown
+      penaltyCooldown
     );
 
     if (attemptsExceeded) {
@@ -117,14 +110,14 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
 );
 
 router.post('/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => {
-    const { email, otp } = req.body;
+    const { email, otp, verificationKey } = req.body;
     const purpose = req.params.purpose.toLowerCase();
 
     // ✅ Validate perform
     if (!isValidOtpPurpose(purpose)) {
         return res.status(400).json({
         error: "INVALID_PERFORM_ACTION",
-        message: "Perform must be either 'verification' or '2fa'."
+        message: "Purpose must be either 'verification' or '2fa'."
         });
     }
 
@@ -135,22 +128,19 @@ router.post('/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => 
         });
     }
 
-    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!basicEmailRegex.test(email)) {
-        return res.status(400).json({
-            error: "INVALID_EMAIL_FORMAT",
-            message: "Email format is invalid."
-        });
-    }
-
-    const declaredRole = detectRoleFromEmail(email);
-    if (!declaredRole) {
+    if (!isValidEmail(email)) {
         return res.status(400).json({
             error: "INVALID_INSTITUTION_EMAIL",
             message: "Email must follow TIP institutional format."
         });
     }
 
+    if (purpose !== "verification" && !verificationKey) {
+        return res.status(400).json({
+            error: "MISSING_VERIFICATION_KEY",
+            message: "Verification key is required for 2FA verification."
+        });
+    }
 
     const code = purpose === "verification" ? "emailVerification" : "email2FA";
     const portal = detectPortalFromSubdomain(req);
@@ -188,13 +178,21 @@ router.post('/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => 
 
     await deleteEmailCooldown(email, portal, purpose);
     await deleteEmailAttempts(email, portal, purpose);
-    const account_type = portal;
-    const verificationKey = await createVerificationSession(email, purpose, account_type);
+
+    let finalVerificationKey;
+    if (purpose === "verification"){
+      const account_type = portal;
+      finalVerificationKey = await createVerificationSession(email, purpose, account_type);
+      }
+    else if (purpose === "2fa"){
+      await update2FAInSession(verificationKey, email, purpose);
+      finalVerificationKey = verificationKey;
+    }
 
     return res.status(200).json({
         ok: true,
         message: "Email verified successfully.",
-        verificationKey
+        verificationKey: finalVerificationKey
     });
 });
 
