@@ -6,7 +6,7 @@
  */
 
 import axios from 'axios';
-import { getApiBaseUrl } from './apiBaseUrlProvider.js';
+import { getApiBaseUrl, getDevSubdomain } from './apiBaseUrlProvider.js';
 import { shouldShowBanner, getBannerType, extractBannerData } from '../config/bannerConfig.js';
 import { refreshAccessToken, TokenStorage, logout } from './refreshTokenService.js';
 
@@ -55,6 +55,13 @@ axiosRequest.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Send simulated subdomain header for local development
+    const devSubdomain = getDevSubdomain();
+    if (devSubdomain) {
+      config.headers['X-Forwarded-Host'] = devSubdomain;
+    }
+    
     return config;
   },
   (error) => {

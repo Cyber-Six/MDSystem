@@ -11,6 +11,10 @@ const rateLimitMatrix = {
     emailAttemptMax_2fa: Number(process.env.PATIENT_EMAIL_ATTEMPTS_2FA) || 2,
     emailCooldown_emailv: Number(process.env.PATIENT_EMAIL_COOLDOWN_EMAILV) || 30,
     emailAttemptMax_emailv: Number(process.env.PATIENT_EMAIL_ATTEMPTS_EMAILV) || 2, // seconds
+
+    emailCooldown_resetpw: Number(process.env.GENERIC_EMAIL_COOLDOWN_RESETPW) || 30,
+    emailAttemptMax_resetpw: Number(process.env.GENERIC_EMAIL_ATTEMPTS_RESETPW) || 2,
+    penaltyCooldown_resetpw: Number(process.env.GENERIC_PENALTY_COOLDOWN_RESETPW) || 300,
     },
 
   staffAuthentication: {
@@ -20,6 +24,11 @@ const rateLimitMatrix = {
     emailAttemptMax_2fa: Number(process.env.STAFF_EMAIL_ATTEMPTS_2FA) || 2,
     emailCooldown_emailv: Number(process.env.STAFF_EMAIL_COOLDOWN_EMAILV) || 30,
     emailAttemptMax_emailv: Number(process.env.STAFF_EMAIL_ATTEMPTS_EMAILV) || 2, // seconds
+
+    emailCooldown_resetpw: Number(process.env.GENERIC_EMAIL_COOLDOWN_RESETPW) || 30,
+    emailAttemptMax_resetpw: Number(process.env.GENERIC_EMAIL_ATTEMPTS_RESETPW) || 2,
+    penaltyCooldown_resetpw: Number(process.env.GENERIC_PENALTY_COOLDOWN_RESETPW) || 300,
+
   },
 
   genericLimiter: {

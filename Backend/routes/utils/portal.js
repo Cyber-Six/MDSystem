@@ -1,6 +1,7 @@
 // portal.js
 function detectPortalFromSubdomain(req) {
-  const host = req.get("host") || "";
+  // Support X-Forwarded-Host for local development portal switching
+  const host = req.get("x-forwarded-host") || req.get("host") || "";
 
   if (host.startsWith("staff.")) {
     return "medical";

@@ -1,0 +1,446 @@
+{
+  "authentication": [
+    {
+      "method": "POST",
+      "path": "/login",
+      "fullUrl": "www.mdsystemtip.space/auth/login",
+      "description": "Authentication",
+      "params": [
+        {
+          "name": "email",
+          "type": "string, tip email format",
+          "required": true
+        }
+      ],
+      "response": "verificationKey",
+      "requiresAuth": true
+    }
+  ],
+  "general": [
+    {
+      "method": "POST",
+      "path": "/login/complete",
+      "fullUrl": "www.mdsystemtip.space/auth/login/complete",
+      "description": "general",
+      "params": [
+        {
+          "name": "verificationKey",
+          "type": "uuid",
+          "required": true
+        }
+      ],
+      "response": "jwt token{access token, refresh token}",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/register",
+      "fullUrl": "www.mdsystemtip.space/auth/register",
+      "description": "general",
+      "params": [
+        {
+          "name": "email",
+          "type": "string, tip email format",
+          "required": true
+        }
+      ],
+      "response": "http response [200 | 400 | 409 | 429 | 500]",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/register/complete",
+      "fullUrl": "www.mdsystemtip.space/auth/register/complete",
+      "description": "general",
+      "params": [
+        {
+          "name": "email",
+          "type": "string, tip email format",
+          "required": true
+        }
+      ],
+      "response": "jwt token{access token, refresh token}",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/password/forget-password",
+      "fullUrl": "www.mdsystemtip.space/auth/password/forget-password",
+      "description": "general",
+      "params": [
+        {
+          "name": "email",
+          "type": "string, tip email format",
+          "required": true
+        }
+      ],
+      "response": "`HTTP response`",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/password/reset-password/:verificationKey",
+      "fullUrl": "www.mdsystemtip.space/auth/password/reset-password/:verificationKey",
+      "description": "general",
+      "params": [
+        {
+          "name": "new_password",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "response": "`HTTP response`",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/change-password",
+      "fullUrl": "messages",
+      "description": "general",
+      "params": [
+        {
+          "name": "access token",
+          "type": "token uuid",
+          "required": true
+        }
+      ],
+      "response": "`HTTP response`",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/refresh",
+      "fullUrl": "www.mdsystemtip.space/auth/refresh",
+      "description": "general",
+      "params": [
+        {
+          "name": "refresh token",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "response": "jwt token{access token, refresh token}",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/email/verification",
+      "fullUrl": "www.mdsystemtip.space/auth/email/verification",
+      "description": "general",
+      "params": [
+        {
+          "name": "email",
+          "type": "string, tip email format",
+          "required": true
+        }
+      ],
+      "response": "http response [200 | 400 | 429 | 500]",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/email/verification/verify",
+      "fullUrl": "www.mdsystemtip.space/auth/email/verification/verify",
+      "description": "general",
+      "params": [
+        {
+          "name": "otp",
+          "type": "int (000000-999999)",
+          "required": true
+        }
+      ],
+      "response": "email_key = [$email_key | null]",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/email/2fa",
+      "fullUrl": "www.mdsystemtip.space/auth/email/2fa",
+      "description": "general",
+      "params": [
+        {
+          "name": "email",
+          "type": "string, tip email format",
+          "required": true
+        }
+      ],
+      "response": "http response [200 | 400 | 429 | 500]",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/email/2fa/verify",
+      "fullUrl": "www.mdsystemtip.space/auth/email/2fa/verify",
+      "description": "general",
+      "params": [
+        {
+          "name": "otp",
+          "type": "int (000000-999999)",
+          "required": true
+        }
+      ],
+      "response": "email_key = [$email_key | null]",
+      "requiresAuth": false
+    },
+    {
+      "method": "GET",
+      "path": "/about",
+      "fullUrl": "www.mdsystemtip.space/info/about",
+      "description": "general",
+      "params": [
+        {
+          "name": "none",
+          "type": "none",
+          "required": false
+        }
+      ],
+      "response": "none",
+      "requiresAuth": false
+    },
+    {
+      "method": "GET",
+      "path": "/privacy",
+      "fullUrl": "www.mdsystemtip.space/info/privacy",
+      "description": "general",
+      "params": [
+        {
+          "name": "none",
+          "type": "none",
+          "required": false
+        }
+      ],
+      "response": "none",
+      "requiresAuth": false
+    },
+    {
+      "method": "GET",
+      "path": "/announcement",
+      "fullUrl": "www.mdsystemtip.space/info/announcement",
+      "description": "general",
+      "params": [
+        {
+          "name": "none",
+          "type": "none",
+          "required": false
+        }
+      ],
+      "response": "none",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/consent/login/",
+      "fullUrl": "www.mdsystemtip.space/info/consent/login/",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/consent/register/",
+      "fullUrl": "www.mdsystemtip.space/info/consent/register/",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/medical-update/",
+      "description": "general",
+      "params": [
+        {
+          "name": "none",
+          "type": "none",
+          "required": false
+        }
+      ],
+      "response": "updateId",
+      "requiresAuth": false
+    },
+    {
+      "method": "UPDATE",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/medical-update/",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/medical-update/",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/submit",
+      "fullUrl": "www.mdsystemtip.space/medical-update/submit",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/profile-update/",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/medical-update/",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/medical-update/",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/channel/:id",
+      "fullUrl": "www.mdsystemtip.space/econsultation/channel/:id",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/channel/:id",
+      "fullUrl": "www.mdsystemtip.space/econsultation/channel/:id",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/:defined",
+      "fullUrl": "www.mdsystemtip.space/appointment/:defined",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "POST",
+      "path": "/:defined/*",
+      "fullUrl": "www.mdsystemtip.space/appointment/:defined",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/:defined",
+      "fullUrl": "www.mdsystemtip.space/appointment/:defined",
+      "description": "general",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    }
+  ],
+  "information": [
+    {
+      "method": "GET",
+      "path": "/faq",
+      "fullUrl": "www.mdsystemtip.space/info/faq",
+      "description": "Information",
+      "params": [
+        {
+          "name": "none",
+          "type": "none",
+          "required": false
+        }
+      ],
+      "response": "none",
+      "requiresAuth": false
+    }
+  ],
+  "dashboard": [
+    {
+      "method": "GET",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/dashboard/",
+      "description": "Dashboard",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    }
+  ],
+  "medical-update-module": [
+    {
+      "method": "GET",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/medical-update/",
+      "description": "medical update module",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    }
+  ],
+  "profile-update-module": [
+    {
+      "method": "POST",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/profile-update/",
+      "description": "profile update module",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    }
+  ],
+  "medicine-request": [
+    {
+      "method": "GET",
+      "path": "/",
+      "fullUrl": "www.mdsystemtip.space/medical-update/",
+      "description": "Medicine Request",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    }
+  ],
+  "econsultation-channel": [
+    {
+      "method": "POST",
+      "path": "/create",
+      "fullUrl": "www.mdsystemtip.space/econsultation/create",
+      "description": "Econsultation Channel",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    }
+  ],
+  "appointment-system": [
+    {
+      "method": "GET",
+      "path": "/:defined",
+      "fullUrl": "www.mdsystemtip.space/appointment/:defined",
+      "description": "Appointment System",
+      "params": [],
+      "response": "",
+      "requiresAuth": false
+    }
+  ]
+}

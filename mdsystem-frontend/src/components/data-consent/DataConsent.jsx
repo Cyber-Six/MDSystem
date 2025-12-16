@@ -27,7 +27,7 @@ const DataConsent = ({
     setError('');
 
     try {
-      const response = await axiosRequest.get(`/patient/consent/${purpose}`, {
+      const response = await axiosRequest.get(`info/consent/${purpose}`, { // FIX endpoint ${purpose} needed?
         params: { verificationKey }
       });
 
@@ -60,7 +60,7 @@ const DataConsent = ({
     setError('');
 
     try {
-      const response = await axiosRequest.post(`/patient/consent/${purpose}`, {
+      const response = await axiosRequest.post(`/info/consent/${purpose}`, {
         verificationKey
       });
 
