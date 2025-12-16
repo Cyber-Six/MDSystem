@@ -10,23 +10,6 @@ const Dashboard = ({ isHome, isAuthenticated, setIsAuthenticated }) => {
   const [user, setUser] = useState(null);
   const [appointments, setAppointments] = useState([]);
 
-  useEffect(() => {
-    // Load user data on mount
-    loadUserData();
-  }, []);
-
-  const loadUserData = async () => {
-    try {
-      const userResponse = await axiosRequest.get('/auth/me');
-      setUser(userResponse.data);
-
-      // Load appointments - backend determines correct data based on user role
-      const apptsResponse = await axiosRequest.get('/appointments');
-      setAppointments(apptsResponse.data);
-    } catch (error) {
-      console.error('Failed to load user data:', error);
-    }
-  };
 
   return (
     <div className="dashboard-container" style={{ paddingTop: '80px' }}>

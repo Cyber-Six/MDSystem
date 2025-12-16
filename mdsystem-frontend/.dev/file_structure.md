@@ -6,19 +6,22 @@ mdsystem-frontend/
 ├── .dev/
 │   ├── auto-gen-documentation/
 │   ├── copilot-context.md
-│   ├── docs/
-│   │   └── BANNER_SYSTEM.md
+│   ├── CSS_GUIDELINES.md
 │   ├── ENVIRONMENT_VARIABLES.md
 │   ├── file_structure.md
 │   ├── login-integration-notes.md
+│   ├── SHEETS_INTEGRATION_GUIDE.md
 │   └── token-refresh-mechanism.md
 │
-├── .env (Git-ignored - your actual configuration, DO NOT COMMIT!)
+├── .env.local (Git-ignored - your actual configuration, DO NOT COMMIT!)
 ├── .env.example (Committed - template for team)
 │
 ├── public/
 │   ├── MDSystem.png
 │   └── vite.svg
+│
+├── scripts/
+│   └── fetch-sheets-config.js (Google Sheets to JSON converter)
 │
 ├── src/
 │   ├── App.jsx
@@ -33,7 +36,10 @@ mdsystem-frontend/
 │   │       └── Banner.module.css
 │   │
 │   ├── config/
-│   │   └── bannerConfig.js
+│   │   ├── bannerConfig.js
+│   │   └── generated/
+│   │       ├── api-endpoints.json (Auto-generated from Google Sheets)
+│   │       └── raw-endpoints.csv (Debug: Raw CSV data)
 │   │
 │   ├── context/
 │   │   ├── BannerContext.jsx
@@ -85,7 +91,10 @@ mdsystem-frontend/
 ├── index.html
 ├── package.json
 ├── package-lock.json
+├── postcss.config.js
 ├── README.md
+├── SHEETS_INTEGRATION_GUIDE.md
+├── tailwind.config.js
 └── vite.config.js
 ```
 
@@ -93,15 +102,22 @@ mdsystem-frontend/
 
 ### `.dev/` - Development Documentation
 - **copilot-context.md** - Copilot context and best practices
+- **CSS_GUIDELINES.md** - CSS design system and styling conventions
 - **ENVIRONMENT_VARIABLES.md** - Complete guide to environment variables configuration
 - **file_structure.md** - This file
 - **login-integration-notes.md** - Login flow and reCAPTCHA integration guide
+- **SHEETS_INTEGRATION_GUIDE.md** - Google Sheets integration for API endpoints
 - **token-refresh-mechanism.md** - JWT token refresh implementation
-- **docs/BANNER_SYSTEM.md** - Banner notification system documentation
 
 ### Root Configuration Files
-- **.env** - Your environment variables (git-ignored, DO NOT COMMIT!)
+- **.env.local** - Your environment variables (git-ignored, DO NOT COMMIT!)
 - **.env.example** - Template showing available variables (committed to git)
+- **postcss.config.js** - PostCSS configuration with Tailwind CSS v4
+- **tailwind.config.js** - Tailwind CSS custom theme configuration
+- **SHEETS_INTEGRATION_GUIDE.md** - Complete guide for Google Sheets integration
+
+### `scripts/` - Build & Automation Scripts
+- **fetch-sheets-config.js** - Fetches API endpoint data from Google Sheets and generates JSON
 
 ### `src/components/` - Reusable Components
 - **banner/Banner.jsx** - Global banner notification component (upper-right, z-index: 9999)
@@ -109,6 +125,9 @@ mdsystem-frontend/
 
 ### `src/config/` - Application Configuration
 - **bannerConfig.js** - HTTP status code configuration for banner notifications
+- **generated/** - Auto-generated files from Google Sheets (git-ignored)
+  - **api-endpoints.json** - API endpoint routes organized by module
+  - **raw-endpoints.csv** - Raw CSV data for debugging
 
 ### `src/context/` - React Context
 - **BannerContext.jsx** - Global banner state management (showBanner, dismissBanner)
@@ -144,6 +163,10 @@ mdsystem-frontend/
 - **refreshTokenService.js** - Centralized token management (TokenStorage, refreshAccessToken, logout, isAuthenticated)
 
 ## Recent Changes
+- ✅ Implemented Google Sheets integration for API endpoint documentation
+- ✅ Added Tailwind CSS v4 with PostCSS configuration
+- ✅ Created comprehensive CSS design system with custom properties
+- ✅ Redesigned Auth page with fullscreen landing and sliding login panel
 - ✅ Implemented global banner notification system
 - ✅ Extracted token refresh logic to refreshTokenService.js
 - ✅ All token operations use TokenStorage for atomic updates
@@ -152,9 +175,9 @@ mdsystem-frontend/
 - ✅ Logout clears all tokens and redirects
 - ✅ File naming: axiosRequest → axiosRequestHandler, tokenService → refreshTokenService, api → apiBaseUrlProvider
 - ✅ Updated domain configuration to mdsystemtip.space (www / staff subdomains)
-- ✅ Created single .env file (git-ignored) with .env.example template
-- ✅ Added .env to .gitignore for security (public repository)
+- ✅ Created single .env.local file (git-ignored) with .env.example template
 - ✅ Removed /api prefix from all URLs (backend uses root routes)
+- ✅ Auto-fetch Google Sheets config on `npm run dev`
 
 ## Build Tool & Environment
 

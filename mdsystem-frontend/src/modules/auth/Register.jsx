@@ -71,7 +71,7 @@ const Register = ({ onBackToLogin }) => {
     }
 
     try {
-      const response = await axiosRequest.post('/register', {
+      const response = await axiosRequest.post('auth/register', {
         email: formData.email,
         password: formData.password,
         role: formData.role
@@ -106,7 +106,7 @@ const Register = ({ onBackToLogin }) => {
     try {
       const recaptchaToken = 'RECAPTCHA_TOKEN_PLACEHOLDER';
 
-      const response = await axiosRequest.post('/auth/email/emailv', {
+      const response = await axiosRequest.post('/auth/email/verification', {
         email: formData.email,
         recaptchaToken
       });
@@ -136,7 +136,7 @@ const Register = ({ onBackToLogin }) => {
     }
 
     try {
-      const response = await axiosRequest.post('/auth/email/emailv/verify', {
+      const response = await axiosRequest.post('/auth/email/verification/verify', {
         email: formData.email,
         otp: otp
       });
@@ -172,7 +172,7 @@ const Register = ({ onBackToLogin }) => {
     try {
       const recaptchaToken = 'RECAPTCHA_TOKEN_PLACEHOLDER';
 
-      const response = await axiosRequest.post('/auth/email/emailv', {
+      const response = await axiosRequest.post('/auth/email/verification', {
         email: formData.email,
         recaptchaToken
       });
@@ -210,13 +210,13 @@ const Register = ({ onBackToLogin }) => {
 
     try {
       // Record consent
-      const consentResponse = await axiosRequest.post('/patient/consent/register', {
+      const consentResponse = await axiosRequest.post('auth/consent/register', { // FIX endpoint
         verificationKey
       });
 
       if (consentResponse.data.ok) {
         // Complete registration
-        const response = await axiosRequest.post('/register/complete', {
+        const response = await axiosRequest.post('auth/register/complete', {
           verificationKey,
           email: formData.email,
           password: formData.password,
