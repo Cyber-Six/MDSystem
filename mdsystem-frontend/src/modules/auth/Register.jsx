@@ -71,7 +71,7 @@ const Register = ({ onBackToLogin }) => {
     }
 
     try {
-      const response = await axiosRequest.post('auth/register', {
+      const response = await axiosRequest.post('/auth/register', {
         email: formData.email,
         password: formData.password,
         role: formData.role
@@ -210,13 +210,13 @@ const Register = ({ onBackToLogin }) => {
 
     try {
       // Record consent
-      const consentResponse = await axiosRequest.post('auth/consent/register', { // FIX endpoint
+      const consentResponse = await axiosRequest.post('/auth/consent/register', { // FIX endpoint
         verificationKey
       });
 
       if (consentResponse.data.ok) {
         // Complete registration
-        const response = await axiosRequest.post('auth/register/complete', {
+        const response = await axiosRequest.post('/auth/register/complete', {
           verificationKey,
           email: formData.email,
           password: formData.password,
