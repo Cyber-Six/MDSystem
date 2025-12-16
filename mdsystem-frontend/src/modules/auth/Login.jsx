@@ -26,12 +26,12 @@ const Login = () => {
   // Fetch consent data when consent view loads
   useEffect(() => {
     const fetchConsentData = async () => {
-      if (showConsent && !consentData) {
+      if (showConsent && !consentData && verificationKey) {
         try {
-          const response = await axiosRequest.get('/info/consent/login');
+          const response = await axiosRequest.get(`/info/consent/login?verificationKey=${verificationKey}`);
           if (response.data.ok) {
-            setConsentData(response.data.content);
-            setConsentVersion(response.data.version);
+            setConsentData(response.data.consent_text);
+            setConsentVersion(response.data.data_consent_version);
           }
         } catch (err) {
           console.error('Failed to fetch consent data:', err);
@@ -40,7 +40,7 @@ const Login = () => {
       }
     };
     fetchConsentData();
-  }, [showConsent, consentData]);
+  }, [showConsent, consentData, verificationKey]);
 
   const handleSend2FA = async () => {
     try {
@@ -189,20 +189,9 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      // First, get consent data and version if not already loaded
-      if (!consentData || !consentVersion) {
-        const consentGetResponse = await axiosRequest.get('/info/consent/login');
-        
-        if (consentGetResponse.data.ok) {
-          setConsentData(consentGetResponse.data.content);
-          setConsentVersion(consentGetResponse.data.version);
-        }
-      }
-
       // Record consent with verificationKey
       const consentResponse = await axiosRequest.post('/info/consent/login', {
-        verificationKey,
-        consentVersion: consentVersion || consentGetResponse?.data?.version
+        verificationKey
       });
 
       if (!consentResponse.data.ok) {

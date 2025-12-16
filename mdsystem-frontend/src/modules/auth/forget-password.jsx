@@ -44,7 +44,7 @@ const ForgetPassword = ({ onBackToLogin }) => {
       // TODO: Integrate Google reCAPTCHA token
       const recaptchaToken = 'RECAPTCHA_TOKEN_HERE'; // Replace with actual reCAPTCHA implementation
 
-      const response = await axiosRequest.post('/patient/user/forget-password', {
+      const response = await axiosRequest.post('/auth/password/forget-password', {
         email: formData.email,
         recaptchaToken,
       });
@@ -81,7 +81,7 @@ const ForgetPassword = ({ onBackToLogin }) => {
     setError('');
 
     try {
-      const response = await axiosRequest.post('/patient/user/forget-password', {
+      const response = await axiosRequest.post('/auth/password/forget-password', {
         email: formData.email,
         newPassword: formData.newPassword,
         otp: formData.otp,
