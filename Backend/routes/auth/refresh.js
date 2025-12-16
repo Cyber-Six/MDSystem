@@ -2,15 +2,27 @@ const express = require("express");
 const router = express.Router();
 
 const { handleRefresh } = require('../../config/jwt.js');
+const { portalBasedIpRateLimiter } = require('../../config/middleware/ratelimiter.js');
+const { recordRefreshTokenFailure, clearRefreshTokenFailures, isRefreshTokenLocked} = require('../../config/redis.js');
+
 // adjust path as needed
 
 // POST /auth/refresh
-router.post("/refresh", async (req, res) => {
+router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
+  const ip = req.ip;
   try {
-    const { refreshToken } = req.body;
+    // ✅ 0. Check if this IP is locked from refresh attempts
+    if (await isRefreshTokenLocked(ip)) {
+      return res.status(429).json({
+        error: "REFRESH_LOCKED",
+        message: "Too many failed refresh attempts. Try again later."
+      });
+    }
 
+    const { refreshToken } = req.body;
     // ✅ 1. Required field
     if (!refreshToken) {
+      await recordRefreshTokenFailure(ip);
       return res.status(400).json({
         error: "MISSING_REFRESH_TOKEN",
         message: "Refresh token is required."
@@ -20,6 +32,7 @@ router.post("/refresh", async (req, res) => {
     // ✅ 2. Parse combined token: userId:deviceId:rawToken
     const parts = refreshToken.split(":");
     if (parts.length !== 3) {
+      await recordRefreshTokenFailure(ip);
       return res.status(400).json({
         error: "INVALID_REFRESH_TOKEN_FORMAT",
         message: "Refresh token format is invalid."
@@ -30,6 +43,7 @@ router.post("/refresh", async (req, res) => {
     const userId = Number(userIdStr);
 
     if (!userId || !deviceId || !rawToken) {
+      await recordRefreshTokenFailure(ip);
       return res.status(400).json({
         error: "INVALID_REFRESH_TOKEN",
         message: "Refresh token is malformed."
@@ -43,6 +57,9 @@ router.post("/refresh", async (req, res) => {
       providedToken: rawToken
     });
 
+    // ✅ SUCCESS → clear failures
+    await clearRefreshTokenFailures(ip);
+
     // ✅ 4. Recombine rotated refresh token
     const finalRefreshToken = `${userId}:${deviceId}:${result.refreshToken}`;
 
@@ -54,6 +71,8 @@ router.post("/refresh", async (req, res) => {
 
   } catch (err) {
     const msg = err.message || "Refresh failed";
+
+    await recordRefreshTokenFailure(ip);
 
     switch (msg) {
       case "Invalid session":
