@@ -12,7 +12,7 @@
           "required": true
         }
       ],
-      "response": "jwt token{access token, refresh token}",
+      "response": "verificationKey",
       "requiresAuth": true
     }
   ],
@@ -95,7 +95,7 @@
     {
       "method": "POST",
       "path": "/change-password",
-      "fullUrl": "www.mdsystemtip.space/auth",
+      "fullUrl": "messages",
       "description": "general",
       "params": [
         {
@@ -228,9 +228,9 @@
       "requiresAuth": false
     },
     {
-      "method": "GET",
-      "path": "/consent",
-      "fullUrl": "www.mdsystemtip.space/info/consent",
+      "method": "POST",
+      "path": "/consent/login/",
+      "fullUrl": "www.mdsystemtip.space/info/consent/login/",
       "description": "general",
       "params": [],
       "response": "",
@@ -238,8 +238,8 @@
     },
     {
       "method": "POST",
-      "path": "/consent",
-      "fullUrl": "www.mdsystemtip.space/info/consent",
+      "path": "/consent/register/",
+      "fullUrl": "www.mdsystemtip.space/info/consent/register/",
       "description": "general",
       "params": [],
       "response": "",

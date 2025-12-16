@@ -16,7 +16,6 @@ const Register = ({ onBackToLogin }) => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'patient',
   });
 
   // Step-specific state
@@ -94,8 +93,7 @@ const Register = ({ onBackToLogin }) => {
     try {
       const response = await axiosRequest.post('/auth/register', {
         email: formData.email,
-        password: formData.password,
-        role: formData.role
+        password: formData.password
       });
 
       if (response.data.ok) {
@@ -363,36 +361,6 @@ const Register = ({ onBackToLogin }) => {
                      placeholder:text-neutral-400 dark:placeholder:text-dark-text-tertiary
                      transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           />
-        </div>
-
-        <div>
-          <label htmlFor="role" className="block text-xs font-medium text-secondary-700 dark:text-dark-text-primary mb-1.5">
-            Role
-          </label>
-          <select
-            id="role"
-            name="role"
-            value={formData.role}
-            onChange={handleInputChange}
-            required
-            disabled={loading}
-            className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-dark-bg-tertiary 
-                     text-secondary-900 dark:text-dark-text-primary 
-                     border border-neutral-300 dark:border-dark-border-primary 
-                     rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                     transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23737373'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-              backgroundSize: '1.25em',
-              backgroundPosition: 'right 0.5rem center',
-              backgroundRepeat: 'no-repeat'
-            }}
-          >
-            <option value="patient">Patient</option>
-            <option value="doctor">Doctor</option>
-            <option value="nurse">Nurse</option>
-            <option value="admin">Admin</option>
-          </select>
         </div>
 
         <button
