@@ -13,12 +13,20 @@ const PrivateRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuth = () => {
       // SECURITY: Check if both tokens exist
       const accessToken = TokenStorage.getAccessToken();
       const refreshToken = TokenStorage.getRefreshToken();
 
       if (!accessToken || !refreshToken) {
+        setIsAuthenticated(false);
+        setIsChecking(false);
+        return;
+      }
+
+      // SECURITY: Validate token format
+      if (!TokenStorage.validateToken(accessToken) || !TokenStorage.validateToken(refreshToken)) {
+        TokenStorage.clearTokens();
         setIsAuthenticated(false);
         setIsChecking(false);
         return;
@@ -33,17 +41,10 @@ const PrivateRoute = ({ children }) => {
         return;
       }
 
-      // SECURITY: Attempt to refresh access token to verify validity
-      try {
-        await refreshAccessToken();
-        setIsAuthenticated(true);
-      } catch (error) {
-        // Refresh failed - tokens are invalid or expired
-        TokenStorage.clearTokens();
-        setIsAuthenticated(false);
-      } finally {
-        setIsChecking(false);
-      }
+      // Tokens exist and are valid format - user is authenticated
+      // The axios interceptor will handle refreshing if access token is expired
+      setIsAuthenticated(true);
+      setIsChecking(false);
     };
 
     checkAuth();
