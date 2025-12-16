@@ -7,6 +7,11 @@ function containLoginRegister(purpose) {
   return ["login", "register"].includes(purpose);
   }
 
+function purposeLookup(purpose) {
+  if (purpose === "login") return "2fa";
+  if (purpose === "register") return "verification";
+  }
+
 // ✅ Load T&C consent state
 router.get("/:purpose", async (req, res) => {
   const { verificationKey } = req.query;
@@ -28,7 +33,7 @@ router.get("/:purpose", async (req, res) => {
   }
 
   // ✅ Reload session AFTER enrichment
-  const session = await getVerificationSession(verificationKey, purpose);
+  const session = await getVerificationSession(verificationKey, purposeLookup(purpose));
 
   if (!session) {
     return res.status(400).json({
@@ -69,7 +74,7 @@ router.post("/:purpose", async (req, res) => {
     }
 
     // ✅ Update consent in Redis
-    const updated = await updateConsentInSession(verificationKey, purpose);
+    const updated = await updateConsentInSession(verificationKey, purposeLookup(purpose));
 
     if (!updated) {
         return res.status(400).json({

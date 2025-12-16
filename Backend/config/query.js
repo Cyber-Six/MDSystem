@@ -69,9 +69,38 @@ async function createUser({ email, password, role, data_consent_version }) {
     return result.rows[0];
 }
 
-async function getUserConsentStateByEmail(email) {
+async function updateUserPasswordById(userId, newPassword) {
+  try {
+    // ✅ Hash new password using the same hashing logic as createUser()
+    const password_hash = await hashPassword(newPassword);
+
+    const sql = `
+      UPDATE "UserCredentials"
+      SET password_hash = $1
+      WHERE id = $2
+      RETURNING id;
+    `;
+
+    const params = [password_hash, userId];
+
+    const result = await query(sql, params);
+
+    if (result.rowCount === 0) {
+      throw new Error("USER_NOT_FOUND");
+    }
+
+    return result.rows[0];
+
+  } catch (err) {
+    console.error("updateUserPasswordById error:", err);
+    throw err;
+  }
+}
+
+
+async function getUserConsentStateByEmail(email) { // i add allow_email_2fa because im tired :(
   const sql = `
-    SELECT id, data_consent_version, data_consent, data_consent_agreed
+    SELECT id, data_consent_version, data_consent, data_consent_agreed, allow_email_2fa
     FROM "UserCredentials" WHERE email = $1 LIMIT 1;`;
 
   const params = [email];
@@ -111,6 +140,7 @@ module.exports = {
     countUserByEmail,
     findUserByEmail,
     createUser,
+    updateUserPasswordById,
     getUserConsentStateByEmail,
     updateUserConsent
 };
