@@ -6,28 +6,24 @@
  * - Patient Portal: www.mdsystemtip.space
  * - Staff Portal: staff.mdsystemtip.space
  * 
- * LOCAL DEVELOPMENT PORTAL SWITCH:
- * Change DEV_PORTAL to switch between portals when testing on localhost
- * - 'www' for patient portal
- * - 'staff' for staff portal
+ * LOCAL DEVELOPMENT:
+ * - DEV_PORTAL: Set VITE_DEV_PORTAL in .env.local to 'www' or 'staff'
  */
 
-// 🔧 DEVELOPER SWITCH: Change this to 'www' or 'staff' for local testing
-const DEV_PORTAL = 'staff';  // Options: 'www' | 'staff'
+// 🔧 DEVELOPER SWITCH: Change VITE_DEV_PORTAL in .env.local
+const DEV_PORTAL = import.meta.env.VITE_DEV_PORTAL || 'www';
 
 /**
  * Get the API base URL based on current hostname
- * @returns {string} The API base URL with correct subdomain
+ * @returns {string} The API base URL
  */
 export function getApiBaseUrl() {
   const hostname = window.location.hostname;
   
-  // For local development - use production URLs based on DEV_PORTAL
+  // For local development - use empty string to use Vite proxy
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    if (DEV_PORTAL === 'staff') {
-      return import.meta.env.VITE_STAFF_API_URL || 'https://staff.mdsystemtip.space';
-    }
-    return import.meta.env.VITE_PATIENT_API_URL || 'https://www.mdsystemtip.space';
+    // Empty string means relative URLs, which Vite proxy will forward
+    return '';
   }
   
   // For production with subdomains (mdsystemtip.space)

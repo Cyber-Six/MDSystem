@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
@@ -18,8 +18,29 @@ const Login = () => {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [consentAgreed, setConsentAgreed] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [consentData, setConsentData] = useState(null);
+  const [consentVersion, setConsentVersion] = useState(null);
   
   const navigate = useNavigate();
+
+  // Fetch consent data when consent view loads
+  useEffect(() => {
+    const fetchConsentData = async () => {
+      if (showConsent && !consentData) {
+        try {
+          const response = await axiosRequest.get('/info/consent/login');
+          if (response.data.ok) {
+            setConsentData(response.data.content);
+            setConsentVersion(response.data.version);
+          }
+        } catch (err) {
+          console.error('Failed to fetch consent data:', err);
+          // Use fallback static content if GET fails
+        }
+      }
+    };
+    fetchConsentData();
+  }, [showConsent, consentData]);
 
   const handleSend2FA = async () => {
     try {
@@ -168,7 +189,28 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const response = await axiosRequest.post('/login/complete', { 
+      // First, get consent data and version if not already loaded
+      if (!consentData || !consentVersion) {
+        const consentGetResponse = await axiosRequest.get('/info/consent/login');
+        
+        if (consentGetResponse.data.ok) {
+          setConsentData(consentGetResponse.data.content);
+          setConsentVersion(consentGetResponse.data.version);
+        }
+      }
+
+      // Record consent with verificationKey
+      const consentResponse = await axiosRequest.post('/info/consent/login', {
+        verificationKey,
+        consentVersion: consentVersion || consentGetResponse?.data?.version
+      });
+
+      if (!consentResponse.data.ok) {
+        throw new Error('Failed to record consent');
+      }
+
+      // Complete login
+      const response = await axiosRequest.post('/auth/login/complete', { 
         verificationKey 
       });
       

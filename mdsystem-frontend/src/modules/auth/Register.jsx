@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
@@ -23,6 +23,8 @@ const Register = ({ onBackToLogin }) => {
   const [otp, setOtp] = useState('');
   const [verificationKey, setVerificationKey] = useState('');
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [consentData, setConsentData] = useState(null);
+  const [consentVersion, setConsentVersion] = useState(null);
 
   // UI state
   const [error, setError] = useState('');
@@ -44,6 +46,25 @@ const Register = ({ onBackToLogin }) => {
     setSuccessMessage('');
     setCurrentStep(prev => prev + 1);
   };
+
+  // Fetch consent data when reaching consent step
+  useEffect(() => {
+    const fetchConsentData = async () => {
+      if (currentStep === 4 && !consentData) {
+        try {
+          const response = await axiosRequest.get('/info/consent');
+          if (response.data.ok) {
+            setConsentData(response.data.content);
+            setConsentVersion(response.data.version);
+          }
+        } catch (err) {
+          console.error('Failed to fetch consent data:', err);
+          // Use fallback static content if GET fails
+        }
+      }
+    };
+    fetchConsentData();
+  }, [currentStep, consentData]);
 
   // Step 1: Initial Registration
   const handleInitialRegistration = async (e) => {
@@ -209,9 +230,20 @@ const Register = ({ onBackToLogin }) => {
     }
 
     try {
-      // Record consent
-      const consentResponse = await axiosRequest.post('/auth/consent/register', { // FIX endpoint
-        verificationKey
+      // First, get consent data and version if not already loaded
+      if (!consentData || !consentVersion) {
+        const consentGetResponse = await axiosRequest.get('/info/consent/register');
+        
+        if (consentGetResponse.data.ok) {
+          setConsentData(consentGetResponse.data.content);
+          setConsentVersion(consentGetResponse.data.version);
+        }
+      }
+
+      // Record consent with verificationKey
+      const consentResponse = await axiosRequest.post('/info/consent/register', {
+        verificationKey,
+        consentVersion: consentVersion || consentGetResponse?.data?.version
       });
 
       if (consentResponse.data.ok) {

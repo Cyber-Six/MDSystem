@@ -26,10 +26,10 @@
         {
           "name": "verificationKey",
           "type": "uuid",
-          "required": false
+          "required": true
         }
       ],
-      "response": "",
+      "response": "jwt token{access token, refresh token}",
       "requiresAuth": false
     },
     {
@@ -64,8 +64,8 @@
     },
     {
       "method": "POST",
-      "path": "/forget-password",
-      "fullUrl": "www.mdsystemtip.space/auth/forget-password",
+      "path": "/password/forget-password",
+      "fullUrl": "www.mdsystemtip.space/auth/password/forget-password",
       "description": "general",
       "params": [
         {
@@ -74,13 +74,13 @@
           "required": true
         }
       ],
-      "response": "none",
+      "response": "`HTTP response`",
       "requiresAuth": false
     },
     {
       "method": "POST",
-      "path": "/reset-password/:uuid",
-      "fullUrl": "www.mdsystemtip.space/auth/reset-password/:uuid",
+      "path": "/password/reset-password/:verificationKey",
+      "fullUrl": "www.mdsystemtip.space/auth/password/reset-password/:verificationKey",
       "description": "general",
       "params": [
         {
@@ -95,31 +95,16 @@
     {
       "method": "POST",
       "path": "/change-password",
-      "fullUrl": "www.mdsystemtip.space/auth/change-password",
+      "fullUrl": "www.mdsystemtip.space/auth",
       "description": "general",
       "params": [
         {
-          "name": "current_password",
-          "type": "string",
+          "name": "access token",
+          "type": "token uuid",
           "required": true
         }
       ],
       "response": "`HTTP response`",
-      "requiresAuth": false
-    },
-    {
-      "method": "POST",
-      "path": "/refresh",
-      "fullUrl": "www.mdsystemtip.space/auth/refresh",
-      "description": "general",
-      "params": [
-        {
-          "name": "refresh token",
-          "type": "string",
-          "required": true
-        }
-      ],
-      "response": "jwt token{access token, refresh token}",
       "requiresAuth": false
     },
     {
