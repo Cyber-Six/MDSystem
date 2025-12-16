@@ -54,7 +54,7 @@ app.use('/auth/password', passwordResetRoutes);
 app.use('/auth/email', emailAuthRoutes);
 app.use('/auth/refresh', refreshAuthRoutes);
 
-app.use('/auth/consent', consentRoutes);
+app.use('/info/consent', consentRoutes);
 
 
 // Start server
