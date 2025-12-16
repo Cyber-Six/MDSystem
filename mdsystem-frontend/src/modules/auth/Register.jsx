@@ -50,12 +50,12 @@ const Register = ({ onBackToLogin }) => {
   // Fetch consent data when reaching consent step
   useEffect(() => {
     const fetchConsentData = async () => {
-      if (currentStep === 4 && !consentData) {
+      if (currentStep === 4 && !consentData && verificationKey) {
         try {
-          const response = await axiosRequest.get('/info/consent');
+          const response = await axiosRequest.get(`/info/consent/register?verificationKey=${verificationKey}`);
           if (response.data.ok) {
-            setConsentData(response.data.content);
-            setConsentVersion(response.data.version);
+            setConsentData(response.data.consent_text);
+            setConsentVersion(response.data.data_consent_version);
           }
         } catch (err) {
           console.error('Failed to fetch consent data:', err);
@@ -64,7 +64,7 @@ const Register = ({ onBackToLogin }) => {
       }
     };
     fetchConsentData();
-  }, [currentStep, consentData]);
+  }, [currentStep, consentData, verificationKey]);
 
   // Step 1: Initial Registration
   const handleInitialRegistration = async (e) => {
@@ -230,20 +230,9 @@ const Register = ({ onBackToLogin }) => {
     }
 
     try {
-      // First, get consent data and version if not already loaded
-      if (!consentData || !consentVersion) {
-        const consentGetResponse = await axiosRequest.get('/info/consent/register');
-        
-        if (consentGetResponse.data.ok) {
-          setConsentData(consentGetResponse.data.content);
-          setConsentVersion(consentGetResponse.data.version);
-        }
-      }
-
       // Record consent with verificationKey
       const consentResponse = await axiosRequest.post('/info/consent/register', {
-        verificationKey,
-        consentVersion: consentVersion || consentGetResponse?.data?.version
+        verificationKey
       });
 
       if (consentResponse.data.ok) {
@@ -251,8 +240,7 @@ const Register = ({ onBackToLogin }) => {
         const response = await axiosRequest.post('/auth/register/complete', {
           verificationKey,
           email: formData.email,
-          password: formData.password,
-          role: formData.role
+          password: formData.password
         });
 
         if (response.data.ok) {
@@ -270,6 +258,7 @@ const Register = ({ onBackToLogin }) => {
         }
       }
     } catch (err) {
+      console.error('Registration error:', err);
       const errorCode = err.response?.data?.error;
       const errorMessage = err.response?.data?.message;
 
