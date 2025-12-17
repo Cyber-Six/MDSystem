@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { useBanner } from '../../context/BannerContext';
 import axiosRequest from '../../services/axiosRequestHandler';
 import styles from './forget-password.module.css';
 
 const ForgetPassword = ({ onBackToLogin }) => {
-  const { showBanner } = useBanner();
 
   // Form data - only email needed
   const [formData, setFormData] = useState({
@@ -12,7 +10,6 @@ const ForgetPassword = ({ onBackToLogin }) => {
   });
 
   // UI state
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -23,48 +20,26 @@ const ForgetPassword = ({ onBackToLogin }) => {
       ...prev,
       [name]: value
     }));
-    setError('');
   };
 
   // Send Reset Link Email
   const handleSendResetLink = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
     setSuccessMessage('');
 
     try {
       // TODO: Integrate Google reCAPTCHA token
       const recaptchaToken = 'RECAPTCHA_TOKEN_HERE'; // Replace with actual reCAPTCHA implementation
 
-      console.log('Sending reset request for email:', formData.email);
-
-      const response = await axiosRequest.post('/auth/password/forget-password', {
+      await axiosRequest.post('/auth/password/forget-password', {
         email: formData.email,
         recaptchaToken,
       });
 
-      console.log('Reset request response:', response.data);
-      console.log('Response status:', response.status);
-
-      // Debug: Check if backend provides any link information
-      if (response.data.jobId) {
-        console.log('Email job queued with ID:', response.data.jobId);
-        console.log('Expected processing time:', response.data.expectedArrivalSeconds, 'seconds');
-      }
-
       setSuccessMessage('Password reset link sent! Please check your email.');
-      showBanner('Password reset link sent to your email. Please check your inbox.', 'success');
     } catch (err) {
-      console.error('Send reset link error:', err);
-      console.error('Error response:', err.response?.data);
-      console.error('Error status:', err.response?.status);
-
-      const errorMessage = err.response?.data?.message ||
-                          err.response?.data?.error ||
-                          'Failed to send reset link. Please try again.';
-      setError(errorMessage);
-      showBanner(errorMessage, 'error');
+      // Error handling is done by axiosRequest interceptor
     } finally {
       setLoading(false);
     }
@@ -105,24 +80,9 @@ const ForgetPassword = ({ onBackToLogin }) => {
             </p>
           </div>
 
-          {error && (
-            <div className={styles.error}>
-              <strong>Error:</strong> {error}
-              {error.includes('reCAPTCHA') && (
-                <div style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
-                  <em>Note: reCAPTCHA validation is required but not yet implemented in the frontend.</em>
-                </div>
-              )}
-            </div>
-          )}
           {successMessage && (
             <div className={styles.success}>
               {successMessage}
-              <div style={{ marginTop: '1rem', fontSize: '0.85rem', opacity: 0.8 }}>
-                <strong>Expected Link Format:</strong><br />
-                <code>https://[portal].[domain]/[session-token]</code><br />
-                <em>Where portal is 'www' for patients or 'staff' for staff accounts.</em>
-              </div>
             </div>
           )}
 

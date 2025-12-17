@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Ignore generated API documentation/scripts
+scripts/generated/
+
 # Environment variables
 .env
 .env.local
