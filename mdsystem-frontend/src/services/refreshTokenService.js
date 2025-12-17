@@ -165,7 +165,7 @@ export const logout = (redirectToAuth = true) => {
   
   // Redirect if requested
   if (redirectToAuth) {
-    window.location.href = '/auth';
+    window.location.href = '/';
   }
 };
 

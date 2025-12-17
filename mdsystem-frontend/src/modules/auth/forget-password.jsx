@@ -1,22 +1,14 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useBanner } from '../../context/BannerContext';
 import axiosRequest from '../../services/axiosRequestHandler';
 import styles from './forget-password.module.css';
 
 const ForgetPassword = ({ onBackToLogin }) => {
-  const navigate = useNavigate();
   const { showBanner } = useBanner();
 
-  // Step management
-  const [currentStep, setCurrentStep] = useState(1); // 1: Request OTP, 2: Reset Password
-
-  // Form data
+  // Form data - only email needed
   const [formData, setFormData] = useState({
     email: '',
-    otp: '',
-    newPassword: '',
-    confirmPassword: '',
   });
 
   // UI state
@@ -34,84 +26,48 @@ const ForgetPassword = ({ onBackToLogin }) => {
     setError('');
   };
 
-  // Step 1: Request OTP
-  const handleRequestOtp = async (e) => {
+  // Send Reset Link Email
+  const handleSendResetLink = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMessage('');
 
     try {
       // TODO: Integrate Google reCAPTCHA token
       const recaptchaToken = 'RECAPTCHA_TOKEN_HERE'; // Replace with actual reCAPTCHA implementation
 
-      const response = await axiosRequest.post('/patient/user/forget-password', {
+      console.log('Sending reset request for email:', formData.email);
+
+      const response = await axiosRequest.post('/auth/password/forget-password', {
         email: formData.email,
         recaptchaToken,
       });
 
-      setSuccessMessage('OTP sent to your email successfully!');
-      showBanner('OTP sent to your email. Please check your inbox.', 'success');
-      setCurrentStep(2);
+      console.log('Reset request response:', response.data);
+      console.log('Response status:', response.status);
+
+      // Debug: Check if backend provides any link information
+      if (response.data.jobId) {
+        console.log('Email job queued with ID:', response.data.jobId);
+        console.log('Expected processing time:', response.data.expectedArrivalSeconds, 'seconds');
+      }
+
+      setSuccessMessage('Password reset link sent! Please check your email.');
+      showBanner('Password reset link sent to your email. Please check your inbox.', 'success');
     } catch (err) {
-      console.error('Request OTP error:', err);
-      const errorMessage = err.response?.data?.message || 'Failed to send OTP. Please try again.';
+      console.error('Send reset link error:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+
+      const errorMessage = err.response?.data?.message ||
+                          err.response?.data?.error ||
+                          'Failed to send reset link. Please try again.';
       setError(errorMessage);
       showBanner(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
-  };
-
-  // Step 2: Reset Password
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-
-    // Validation
-    if (formData.newPassword !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (formData.newPassword.length < 8) {
-      setError('Password must be at least 8 characters long');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await axiosRequest.post('/patient/user/forget-password', {
-        email: formData.email,
-        newPassword: formData.newPassword,
-        otp: formData.otp,
-      });
-
-      setSuccessMessage('Password reset successfully!');
-      showBanner('Password reset successfully! You can now log in with your new password.', 'success');
-
-      // Redirect to login after a short delay
-      setTimeout(() => {
-        if (onBackToLogin) {
-          onBackToLogin();
-        } else {
-          navigate('/auth');
-        }
-      }, 2000);
-    } catch (err) {
-      console.error('Reset password error:', err);
-      const errorMessage = err.response?.data?.message || 'Failed to reset password. Please try again.';
-      setError(errorMessage);
-      showBanner(errorMessage, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const goBackToStep1 = () => {
-    setCurrentStep(1);
-    setError('');
-    setSuccessMessage('');
   };
 
   return (
@@ -119,156 +75,83 @@ const ForgetPassword = ({ onBackToLogin }) => {
       <div className={styles.card}>
         {/* Header */}
         <div className={styles.header}>
-          <h2 className={styles.title}>
-            {currentStep === 1 ? 'Forgot Password' : 'Reset Password'}
-          </h2>
+          <h2 className={styles.title}>Forgot Password</h2>
           <p className={styles.subtitle}>
-            {currentStep === 1
-              ? 'Enter your email address to receive a password reset code'
-              : 'Enter the code from your email and your new password'
-            }
+            Enter your email address to receive a password reset link
           </p>
         </div>
 
-        {/* Progress indicator */}
-        <div className={styles.progressContainer}>
-          <div className={styles.progressBar}>
-            <div
-              className={styles.progressFill}
-              style={{ width: `${(currentStep / 2) * 100}%` }}
+        {/* Form */}
+        <form onSubmit={handleSendResetLink} className={styles.form}>
+          <div className={styles.formGroup}>
+            <label htmlFor="email">Email Address</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              placeholder="your.email@tip.edu.ph"
+              required
+              disabled={loading}
             />
           </div>
-          <div className={styles.stepIndicators}>
-            <span className={`${styles.stepIndicator} ${currentStep >= 1 ? styles.active : ''}`}>
-              1
-            </span>
-            <span className={`${styles.stepIndicator} ${currentStep >= 2 ? styles.active : ''}`}>
-              2
-            </span>
+
+          {/* TODO: Add reCAPTCHA component here */}
+          <div className={styles.recaptchaPlaceholder}>
+            <p>⚠️ reCAPTCHA not implemented - using placeholder token</p>
+            <p style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.5rem' }}>
+              This will cause the request to fail until proper reCAPTCHA is integrated.
+            </p>
           </div>
-        </div>
 
-        {/* Step 1: Request OTP */}
-        {currentStep === 1 && (
-          <form onSubmit={handleRequestOtp} className={styles.form}>
-            <div className={styles.formGroup}>
-              <label htmlFor="email">Email Address</label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                placeholder="your.email@tip.edu.ph"
-                required
-                disabled={loading}
-              />
+          {error && (
+            <div className={styles.error}>
+              <strong>Error:</strong> {error}
+              {error.includes('reCAPTCHA') && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                  <em>Note: reCAPTCHA validation is required but not yet implemented in the frontend.</em>
+                </div>
+              )}
             </div>
-
-            {/* TODO: Add reCAPTCHA component here */}
-            <div className={styles.recaptchaPlaceholder}>
-              <p>reCAPTCHA will be implemented here</p>
+          )}
+          {successMessage && (
+            <div className={styles.success}>
+              {successMessage}
+              <div style={{ marginTop: '1rem', fontSize: '0.85rem', opacity: 0.8 }}>
+                <strong>Expected Link Format:</strong><br />
+                <code>https://[portal].[domain]/[session-token]</code><br />
+                <em>Where portal is 'www' for patients or 'staff' for staff accounts.</em>
+              </div>
             </div>
+          )}
 
-            {error && <div className={styles.error}>{error}</div>}
-            {successMessage && <div className={styles.success}>{successMessage}</div>}
-
-            <div className={styles.buttonGroup}>
-              <button
-                type="button"
-                onClick={onBackToLogin}
-                className={styles.backButton}
-                disabled={loading}
-              >
-                Back to Login
-              </button>
-              <button
-                type="submit"
-                className={styles.submitButton}
-                disabled={loading}
-              >
-                {loading ? 'Sending...' : 'Send Reset Code'}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Step 2: Reset Password */}
-        {currentStep === 2 && (
-          <form onSubmit={handleResetPassword} className={styles.form}>
-            <div className={styles.formGroup}>
-              <label htmlFor="otp">Verification Code</label>
-              <input
-                type="text"
-                id="otp"
-                name="otp"
-                value={formData.otp}
-                onChange={handleInputChange}
-                placeholder="Enter 6-digit code"
-                required
-                disabled={loading}
-                maxLength="6"
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label htmlFor="newPassword">New Password</label>
-              <input
-                type="password"
-                id="newPassword"
-                name="newPassword"
-                value={formData.newPassword}
-                onChange={handleInputChange}
-                placeholder="At least 8 characters"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div className={styles.formGroup}>
-              <label htmlFor="confirmPassword">Confirm New Password</label>
-              <input
-                type="password"
-                id="confirmPassword"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleInputChange}
-                placeholder="Re-enter your new password"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            {error && <div className={styles.error}>{error}</div>}
-            {successMessage && <div className={styles.success}>{successMessage}</div>}
-
-            <div className={styles.buttonGroup}>
-              <button
-                type="button"
-                onClick={goBackToStep1}
-                className={styles.backButton}
-                disabled={loading}
-              >
-                Back
-              </button>
-              <button
-                type="submit"
-                className={styles.submitButton}
-                disabled={loading}
-              >
-                {loading ? 'Resetting...' : 'Reset Password'}
-              </button>
-            </div>
-          </form>
-        )}
+          <div className={styles.buttonGroup}>
+            <button
+              type="button"
+              onClick={onBackToLogin}
+              className={styles.backButton}
+              disabled={loading}
+            >
+              Back to Login
+            </button>
+            <button
+              type="submit"
+              className={styles.submitButton}
+              disabled={loading}
+            >
+              {loading ? 'Sending...' : 'Send Reset Link'}
+            </button>
+          </div>
+        </form>
 
         {/* Footer */}
         <div className={styles.footer}>
           <p className={styles.hint}>
-            {currentStep === 1
-              ? 'Make sure to check your spam folder if you don\'t receive the email.'
-              : 'Password must be at least 8 characters long.'
-            }
+            Make sure to check your spam folder if you don't receive the email.
+          </p>
+          <p className={styles.hint} style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+            <strong>Debug:</strong> If the link doesn't work, check browser console for response details and verify backend domain configuration.
           </p>
         </div>
       </div>

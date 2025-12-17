@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
@@ -16,13 +16,14 @@ const Register = ({ onBackToLogin }) => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'patient',
   });
 
   // Step-specific state
   const [otp, setOtp] = useState('');
   const [verificationKey, setVerificationKey] = useState('');
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [consentData, setConsentData] = useState(null);
+  const [consentVersion, setConsentVersion] = useState(null);
 
   // UI state
   const [error, setError] = useState('');
@@ -44,6 +45,25 @@ const Register = ({ onBackToLogin }) => {
     setSuccessMessage('');
     setCurrentStep(prev => prev + 1);
   };
+
+  // Fetch consent data when reaching consent step
+  useEffect(() => {
+    const fetchConsentData = async () => {
+      if (currentStep === 4 && !consentData && verificationKey) {
+        try {
+          const response = await axiosRequest.get(`/info/consent/register?verificationKey=${verificationKey}`);
+          if (response.data.ok) {
+            setConsentData(response.data.consent_text);
+            setConsentVersion(response.data.data_consent_version);
+          }
+        } catch (err) {
+          console.error('Failed to fetch consent data:', err);
+          // Use fallback static content if GET fails
+        }
+      }
+    };
+    fetchConsentData();
+  }, [currentStep, consentData, verificationKey]);
 
   // Step 1: Initial Registration
   const handleInitialRegistration = async (e) => {
@@ -73,8 +93,7 @@ const Register = ({ onBackToLogin }) => {
     try {
       const response = await axiosRequest.post('/auth/register', {
         email: formData.email,
-        password: formData.password,
-        role: formData.role
+        password: formData.password
       });
 
       if (response.data.ok) {
@@ -209,8 +228,8 @@ const Register = ({ onBackToLogin }) => {
     }
 
     try {
-      // Record consent
-      const consentResponse = await axiosRequest.post('/auth/consent/register', { // FIX endpoint
+      // Record consent with verificationKey
+      const consentResponse = await axiosRequest.post('/info/consent/register', {
         verificationKey
       });
 
@@ -219,8 +238,7 @@ const Register = ({ onBackToLogin }) => {
         const response = await axiosRequest.post('/auth/register/complete', {
           verificationKey,
           email: formData.email,
-          password: formData.password,
-          role: formData.role
+          password: formData.password
         });
 
         if (response.data.ok) {
@@ -238,6 +256,7 @@ const Register = ({ onBackToLogin }) => {
         }
       }
     } catch (err) {
+      console.error('Registration error:', err);
       const errorCode = err.response?.data?.error;
       const errorMessage = err.response?.data?.message;
 
@@ -342,36 +361,6 @@ const Register = ({ onBackToLogin }) => {
                      placeholder:text-neutral-400 dark:placeholder:text-dark-text-tertiary
                      transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           />
-        </div>
-
-        <div>
-          <label htmlFor="role" className="block text-xs font-medium text-secondary-700 dark:text-dark-text-primary mb-1.5">
-            Role
-          </label>
-          <select
-            id="role"
-            name="role"
-            value={formData.role}
-            onChange={handleInputChange}
-            required
-            disabled={loading}
-            className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-dark-bg-tertiary 
-                     text-secondary-900 dark:text-dark-text-primary 
-                     border border-neutral-300 dark:border-dark-border-primary 
-                     rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                     transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23737373'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-              backgroundSize: '1.25em',
-              backgroundPosition: 'right 0.5rem center',
-              backgroundRepeat: 'no-repeat'
-            }}
-          >
-            <option value="patient">Patient</option>
-            <option value="doctor">Doctor</option>
-            <option value="nurse">Nurse</option>
-            <option value="admin">Admin</option>
-          </select>
         </div>
 
         <button

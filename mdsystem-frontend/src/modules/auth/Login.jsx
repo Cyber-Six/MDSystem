@@ -1,15 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
-import DataConsent from '../../components/data-consent/DataConsent';
+import DataConsent from '../../components/data-consent/DataConsent'; // currently global modal not in use
 import ForgetPassword from './forget-password';
 import './login.module.css';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showTwoFactor, setShowTwoFactor] = useState(false);
@@ -18,8 +17,29 @@ const Login = () => {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [consentAgreed, setConsentAgreed] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [consentData, setConsentData] = useState(null);
+  const [consentVersion, setConsentVersion] = useState(null);
   
   const navigate = useNavigate();
+
+  // Fetch consent data when consent view loads
+  useEffect(() => {
+    const fetchConsentData = async () => {
+      if (showConsent && !consentData && verificationKey) {
+        try {
+          const response = await axiosRequest.get(`/info/consent/login?verificationKey=${verificationKey}`);
+          if (response.data.ok) {
+            setConsentData(response.data.consent_text);
+            setConsentVersion(response.data.data_consent_version);
+          }
+        } catch (err) {
+          console.error('Failed to fetch consent data:', err);
+          // Use fallback static content if GET fails
+        }
+      }
+    };
+    fetchConsentData();
+  }, [showConsent, consentData, verificationKey]);
 
   const handleSend2FA = async () => {
     try {
@@ -46,7 +66,6 @@ const Login = () => {
       const response = await axiosRequest.post('auth/login', { 
         email, 
         password, 
-        role: selectedRole,
         recaptchaToken 
       });
       
@@ -168,7 +187,17 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const response = await axiosRequest.post('/login/complete', { 
+      // Record consent with verificationKey
+      const consentResponse = await axiosRequest.post('/info/consent/login', {
+        verificationKey
+      });
+
+      if (!consentResponse.data.ok) {
+        throw new Error('Failed to record consent');
+      }
+
+      // Complete login
+      const response = await axiosRequest.post('/auth/login/complete', { 
         verificationKey 
       });
       
@@ -273,37 +302,6 @@ const Login = () => {
                        placeholder:text-neutral-400 dark:placeholder:text-dark-text-tertiary
                        transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-          </div>
-          
-          {/* Role Select */}
-          <div>
-            <label htmlFor="role" className="block text-sm font-medium text-secondary-700 dark:text-dark-text-primary mb-2">
-              Role
-            </label>
-            <select 
-              id="role"
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
-              required
-              disabled={isLoading}
-              className="w-full px-4 py-3 bg-neutral-50 dark:bg-dark-bg-tertiary 
-                       text-secondary-900 dark:text-dark-text-primary 
-                       border border-neutral-300 dark:border-dark-border-primary 
-                       rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23737373'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                backgroundSize: '1.5em',
-                backgroundPosition: 'right 0.75rem center',
-                backgroundRepeat: 'no-repeat'
-              }}
-            >
-              <option value="">Select your role</option>
-              <option value="patient">Patient</option>
-              <option value="doctor">Doctor</option>
-              <option value="nurse">Nurse</option>
-              <option value="admin">Admin</option>
-            </select>
           </div>
           
           {/* Login Button */}

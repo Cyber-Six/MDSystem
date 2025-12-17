@@ -60,7 +60,7 @@ const DataConsent = ({
     setError('');
 
     try {
-      const response = await axiosRequest.post(`/info/consent/`, {
+      const response = await axiosRequest.post(`/info/consent/${purpose}`, {
         verificationKey
       });
 
