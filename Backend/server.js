@@ -76,6 +76,7 @@ app.get('*path', (req, res) => {
 // =======================================
 // Start server
 const PORT = process.env.PATIENT_PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const HOST = process.env.HOST;
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on ${HOST}:${PORT}`);
 });
