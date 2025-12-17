@@ -57,6 +57,23 @@ app.use('/auth/refresh', refreshAuthRoutes);
 app.use('/info/consent', consentRoutes);
 
 
+// ======================================
+
+// Serve static assets for the React app
+app.use(express.static(path.join(__dirname, '../mdsystem-frontend/dist')));
+
+// Redirect the root URL to '/app'
+
+// Handle all other routes for the React app by serving the index.html
+// Correct usage with named wildcard parameter
+// Serve index.html for all non-API routes
+
+app.get('*path', (req, res) => {
+  res.sendFile(path.join(__dirname, '../mdsystem-frontend/dist', 'index.html'));
+});
+
+
+// =======================================
 // Start server
 const PORT = process.env.PATIENT_PORT || 3001;
 app.listen(PORT, () => {

@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "bullmq": "^5.65.0"
+    "bullmq": "^5.65.0",
+    "winston": "^3.19.0"
   }
 }
