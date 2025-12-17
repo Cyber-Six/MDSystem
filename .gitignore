@@ -27,6 +27,9 @@ dist
 dist-ssr
 *.local
 
+# Ignore generated API documentation/scripts
+mdsystem-frontend/scripts/generated/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
