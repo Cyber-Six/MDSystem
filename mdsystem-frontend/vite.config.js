@@ -27,6 +27,13 @@ export default defineConfig(({ mode }) => {
         target: BACKEND_URL,
         changeOrigin: true,
         secure: true,
+        bypass: function(req, res, proxyOptions) {
+          // Don't proxy GET requests (browser navigation) - let React Router handle them
+          if (req.method === 'GET') {
+            return '/index.html';
+          }
+          // Proxy all other methods (POST, etc.) to backend
+        },
       },
       '/patient': {
         target: BACKEND_URL,
@@ -42,6 +49,11 @@ export default defineConfig(({ mode }) => {
         target: BACKEND_URL,
         changeOrigin: true,
         secure: true,
+        bypass: function(req, res, proxyOptions) {
+          if (req.method === 'GET') {
+            return '/index.html';
+          }
+        },
       },
       '/medical-update': {
         target: BACKEND_URL,

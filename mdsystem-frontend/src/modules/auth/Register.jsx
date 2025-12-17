@@ -243,16 +243,30 @@ const Register = ({ onBackToLogin }) => {
 
         if (response.data.ok) {
           // Store tokens
+          console.log("📦 Registration response:", { 
+            hasAccessToken: !!response.data.accessToken, 
+            hasRefreshToken: !!response.data.refreshToken,
+            message: response.data.message 
+          });
+          
           if (response.data.accessToken && response.data.refreshToken) {
             TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+            console.log("✅ Tokens stored successfully");
+            
+            goToNextStep();
+            
+            // Redirect after showing success
+            setTimeout(() => {
+              navigate('/', { replace: true });
+            }, 2000);
+          } else {
+            // Account already exists - redirect to login
+            console.warn("⚠️ Account already exists, redirecting to login");
+            setError('Account already exists. Redirecting to login...');
+            setTimeout(() => {
+              navigate('/auth/login', { replace: true });
+            }, 2000);
           }
-
-          goToNextStep();
-          
-          // Redirect after showing success
-          setTimeout(() => {
-            navigate('/dashboard');
-          }, 2000);
         }
       }
     } catch (err) {
