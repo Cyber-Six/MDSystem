@@ -30,8 +30,10 @@ function AppContent() {
             } 
           />
           
-          {/* Auth route - Login/Register */}
-          <Route path="/auth" element={<Auth />} />
+          {/* Auth routes - Login/Register */}
+          <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
+          <Route path="/auth/login" element={<Auth />} />
+          <Route path="/auth/register" element={<Auth />} />
           
           {/* Redirect any unknown routes to root */}
           <Route path="*" element={<Navigate to="/" replace />} />
