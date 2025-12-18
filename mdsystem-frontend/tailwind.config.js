@@ -10,18 +10,18 @@ export default {
       colors: {
         // Primary - TIP Yellow/Gold Brand Color
         primary: {
-          50: '#fffbeb',
-          100: '#fef3c7',
-          200: '#fde68a',
-          300: '#fcd34d',
-          400: '#fbbf24',
-          500: '#f50bb7ff',  // Main TIP Yellow
-          600: '#d97706',
-          700: '#b45309',
-          800: '#92400e',
-          900: '#78350f',
-          950: '#451a03',
-          DEFAULT: '#f50bbeff',
+          50: '#FFFBEB',
+          100: '#FEF3C7',
+          200: '#FDE68A',
+          300: '#FCD34D',
+          400: '#FBBF24',
+          500: '#F1C526',    
+          600: '#DDB322',    
+          700: '#C9A01E',    
+          800: '#B58D1A',    
+          900: '#8B6914',
+          950: '#6B520F',
+          DEFAULT: '#F1C526',
         },
         // Secondary - Dark Gray/Black for headers and text
         secondary: {
