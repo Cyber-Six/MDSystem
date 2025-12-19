@@ -237,29 +237,21 @@ const Login = () => {
     }
   };
 
-  // Show forgot password component
-  if (showForgotPassword) {
-    return (
-      <ForgetPassword
-        onBackToLogin={() => setShowForgotPassword(false)}
-      />
-    );
-  }
-
   // Initial login form
   if (!showTwoFactor && !showConsent) {
     return (
-      <div className="w-full max-w-md mx-auto">
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
-            <p className="text-error-600 dark:text-error-400 text-sm text-center">
-              {error}
-            </p>
-          </div>
-        )}
-        
-        <form onSubmit={handleInitialLogin} className="space-y-5">
+      <>
+        <div className="w-full max-w-md mx-auto">
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
+              <p className="text-error-600 dark:text-error-400 text-sm text-center">
+                {error}
+              </p>
+            </div>
+          )}
+          
+          <form onSubmit={handleInitialLogin} className="space-y-5">
           {/* Email Input */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-secondary-700 dark:text-dark-text-primary mb-2">
@@ -340,7 +332,29 @@ const Login = () => {
             </button>
           </div>
         </form>
-      </div>
+        </div>
+
+        {/* Forgot Password Modal */}
+        {showForgotPassword && (
+          <div className="fixed inset-0 flex items-center justify-center z-20 px-4 py-8">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowForgotPassword(false)}
+            />
+            
+            {/* Modal Card */}
+            <div className="relative w-full max-w-md bg-white dark:bg-dark-bg-primary rounded-2xl shadow-2xl">
+              <div className="px-8 md:px-6 sm:px-5 py-8 md:py-6">
+                {/* Forgot Password Component */}
+                <ForgetPassword
+                  onBackToLogin={() => setShowForgotPassword(false)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 

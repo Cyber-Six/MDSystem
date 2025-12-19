@@ -290,22 +290,8 @@ const Register = ({ onBackToLogin }) => {
   // Step 1: Account Creation Form
   const renderAccountStep = () => (
     <div className="w-full max-w-md mx-auto">
-      <div className="text-center mb-8">
-        <img 
-          src="/MDSystem.png" 
-          alt="MDSystem Logo" 
-          className="h-24 w-24 mx-auto mb-4"
-        />
-        <h1 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary font-heading mb-1">
-          Create Account
-        </h1>
-        <p className="text-xs text-neutral-600 dark:text-dark-text-secondary">
-          Fill in your details to get started
-        </p>
-      </div>
-
       {error && (
-        <div className="mb-4 p-3 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
+        <div className="mb-2 p-2 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
           <p className="text-error-600 dark:text-error-400 text-xs text-center">{error}</p>
         </div>
       )}
@@ -392,11 +378,12 @@ const Register = ({ onBackToLogin }) => {
       </form>
 
       {onBackToLogin && (
-        <div className="text-center mt-4">
+        <div className="text-center mt-6">
           <button
             onClick={onBackToLogin}
-            className="text-accent-600 dark:text-accent-400 hover:text-accent-700 dark:hover:text-accent-300 
-                     font-medium text-xs transition-colors hover:underline"
+            className="text-xs font-medium text-accent-600 dark:text-accent-400
+                     hover:text-accent-700 dark:hover:text-accent-300
+                     transition-colors hover:underline"
           >
             ← Back to Login
           </button>
