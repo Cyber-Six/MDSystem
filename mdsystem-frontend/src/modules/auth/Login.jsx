@@ -4,7 +4,6 @@ import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
 import DataConsent from '../../components/data-consent/DataConsent'; // currently global modal not in use
 import ForgetPassword from './forget-password';
-import './login.module.css';
 
 const Login = () => {
   const [email, setEmail] = useState('');
