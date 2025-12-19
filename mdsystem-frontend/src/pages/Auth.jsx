@@ -7,15 +7,23 @@ const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const queryParams = new URLSearchParams(location.search);
-  const initialView = queryParams.get('view') || 'login';
+  // Determine view from URL path instead of query params
+  const getViewFromPath = () => {
+    if (location.pathname === '/auth/register') return 'register';
+    return 'login';
+  };
   
-  const [activeView, setActiveView] = useState(initialView);
+  const [activeView, setActiveView] = useState(getViewFromPath());
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+  // Update activeView when path changes
+  useEffect(() => {
+    setActiveView(getViewFromPath());
+  }, [location.pathname]);
 
   const handleViewChange = (view) => {
     setActiveView(view);
-    navigate(`/auth?view=${view}`, { replace: true });
+    navigate(`/auth/${view}`, { replace: true });
   };
 
   const togglePanel = () => {
