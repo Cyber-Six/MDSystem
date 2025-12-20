@@ -2,18 +2,15 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import DashboardHome from '../modules/dashboard/DashboardHome';
-import RecordUpdateForm from '../modules/record-forms/update-record/RecordUpdateForm';
-import AppointmentPage from '../modules/appointment/AppointmentPage';
-import MedicineRequestPage from '../modules/medicine-request/MedicineRequestPage';
 
 const Dashboard = () => {
   return (
     <Layout>
       <Routes>
         <Route path="/" element={<DashboardHome />} />
-        <Route path="/record-update" element={<RecordUpdateForm />} />
-        <Route path="/appointments" element={<AppointmentPage />} />
-        <Route path="/medicine-request" element={<MedicineRequestPage />} />
+        <Route path="/record-update" element={<div>Record Update - Coming Soon</div>} />
+        <Route path="/appointments" element={<div>Appointments - Coming Soon</div>} />
+        <Route path="/medicine-request" element={<div>Medicine Request - Coming Soon</div>} />
         <Route path="/e-consultation" element={<div>E-Consultation - Coming Soon</div>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Checkbox, Input, Textarea, Select } from './FormElements';
+import { Checkbox, Input, Textarea, Select } from './form-elements';
 
 const MedicalBackgroundForm = ({ data, onChange }) => {
   const [activeAccordion, setActiveAccordion] = useState('immunizations');

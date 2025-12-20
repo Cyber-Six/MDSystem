@@ -1,5 +1,5 @@
 import React from 'react';
-import { Checkbox, Input } from './FormElements';
+import { Checkbox, Input } from './form-elements';
 
 const ReviewForm = ({ formData, onEdit, certification, onCertificationChange }) => {
   const handleCertificationChange = (field, value) => {
