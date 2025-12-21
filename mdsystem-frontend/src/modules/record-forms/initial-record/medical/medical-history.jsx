@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Checkbox, Input } from './FormElements';
+import { Checkbox, Input } from './form-elements';
 
 const medicalConditions = [
   { id: 'heartCondition', label: 'Heart Condition' },

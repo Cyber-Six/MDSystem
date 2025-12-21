@@ -22,7 +22,7 @@ function AppContent() {
         <Routes>
           {/* Root route - Dashboard with authentication check */}
           <Route 
-            path="/" 
+            path="/*" 
             element={
               <PrivateRoute>
                 <Dashboard />

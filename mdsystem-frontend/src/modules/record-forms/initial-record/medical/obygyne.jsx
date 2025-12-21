@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input, Select } from './FormElements';
+import { Input, Select } from './form-elements';
 
 const OBGYNEForm = ({ data, onChange }) => {
   const handleChange = (field, value) => {
