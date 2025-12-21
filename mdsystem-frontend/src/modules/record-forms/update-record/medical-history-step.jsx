@@ -93,13 +93,11 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
       <div className="mb-8">
         <h4 className="text-lg font-semibold text-secondary-800 dark:text-white mb-4">Medical Conditions</h4>
         <TabGroup tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
-
         {/* Yourself Tab Content */}
         {activeTab === 'yourself' && (
           <>
             <div className="space-y-4 mb-8">
               <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">Check any conditions that apply to you:</p>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {medicalConditions.map((condition) => (
                   <Checkbox
@@ -111,82 +109,51 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                 ))}
               </div>
             </div>
-          <div className="space-y-4">
-            <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">
-              Check any conditions that apply to your immediate family members and specify the relationship:
-            </p>
-            
-            <div className="space-y-3">
-              {medicalConditions.map((condition) => (
-                <div 
-                  key={condition.id} 
-                  className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 hover:border-primary-400 dark:hover:border-primary-500 transition-colors"
-                >
-                  <Checkbox
-                    label={condition.label}
-                    checked={formData.familyConditions?.[condition.id]?.checked || false}
-                    onChange={(e) => handleFamilyConditionChange(condition.id, e.target.checked)}
-                  />
-                  {formData.familyConditions?.[condition.id]?.checked && (
-                    <div className="mt-3 ml-6">
-                      <Input
-                        label="Relationship"
-                        placeholder="e.g., Mother, Father, Brother, Sister"
-                        value={formData.familyConditions[condition.id]?.relationship || ''}
-                        onChange={(e) => handleFamilyRelationshipChange(condition.id, e.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
             {/* Additional Sections - Only visible in Yourself Tab */}
-            <div className="space-y-4 mt-8">
+            <div className="space-y-4 mt-6">
               {/* Allergies Section */}
               <AccordionSection
-          id="allergies"
-          title="Allergies"
-          icon="⚠️"
-          isOpen={activeAccordion === 'allergies'}
-          onToggle={toggleAccordion}
-        >
-          <div className="space-y-4">
-            <div className="flex items-center gap-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasAllergies"
-                  value="yes"
-                  checked={formData.hasAllergies === 'yes'}
-                  onChange={(e) => handleInputChange('hasAllergies', e.target.value)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">Yes</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hasAllergies"
-                  value="no"
-                  checked={formData.hasAllergies === 'no'}
-                  onChange={(e) => handleInputChange('hasAllergies', e.target.value)}
-                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                />
-                <span className="text-sm text-secondary-700">No</span>
-              </label>
-            </div>
-            {formData.hasAllergies === 'yes' && (
-              <Textarea
-                label="Please specify your allergies"
-                placeholder="Food, medication, environmental allergies..."
-                value={formData.allergiesDetail || ''}
-                onChange={(e) => handleInputChange('allergiesDetail', e.target.value)}
-              />
-            )}
-          </div>
-        </AccordionSection>
+                id="allergies"
+                title="Allergies"
+                icon="⚠️"
+                isOpen={activeAccordion === 'allergies'}
+                onToggle={toggleAccordion}
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="hasAllergies"
+                        value="yes"
+                        checked={formData.hasAllergies === 'yes'}
+                        onChange={(e) => handleInputChange('hasAllergies', e.target.value)}
+                        className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-secondary-700">Yes</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="hasAllergies"
+                        value="no"
+                        checked={formData.hasAllergies === 'no'}
+                        onChange={(e) => handleInputChange('hasAllergies', e.target.value)}
+                        className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-secondary-700">No</span>
+                    </label>
+                  </div>
+                  {formData.hasAllergies === 'yes' && (
+                    <Textarea
+                      label="Please specify your allergies"
+                      placeholder="Food, medication, environmental allergies..."
+                      value={formData.allergiesDetail || ''}
+                      onChange={(e) => handleInputChange('allergiesDetail', e.target.value)}
+                    />
+                  )}
+                </div>
+              </AccordionSection>
 
         {/* Lifestyle Section */}
         <AccordionSection

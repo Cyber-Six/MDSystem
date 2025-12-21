@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import Login from '../modules/auth/Login';
-import Register from '../modules/auth/Register';
+import Login from '../modules/auth/login';
+import Register from '../modules/auth/register';
 import AuthSlides from '../modules/auth/auth-slides';
 
 const Auth = () => {

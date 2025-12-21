@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axiosRequest from '../../services/axiosRequestHandler';
 import { TokenStorage } from '../../services/refreshTokenService';
-import DataConsent from '../../components/data-consent/DataConsent'; // currently global modal not in use
+import DataConsent from '../../components/data-consent/data-consent'; // currently global modal not in use
 import ForgetPassword from './forget-password';
 
 const Login = () => {
