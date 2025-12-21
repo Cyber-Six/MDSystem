@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import Sidebar from './Sidebar';
-import TopBar from './TopBar';
+import Sidebar from './sidebar';
+import TopBar from './top-bar';
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -14,14 +14,14 @@ const Layout = ({ children }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-neutral-800">
+    <div className="flex h-screen bg-gray-50 dark:bg-neutral-800">
       {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden md:ml-24">
         {/* Top Bar */}
-        <TopBar onMenuClick={toggleSidebar} />
+        <TopBar onMenuClick={toggleSidebar} isSidebarOpen={sidebarOpen} />
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto">

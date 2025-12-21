@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import Layout from '../components/layout/Layout';
-import DashboardHome from '../modules/dashboard/DashboardHome';
+import Layout from '../components/layout/layout';
+import DashboardHome from '../modules/dashboard/dashboard-home';
 
 const Dashboard = () => {
   return (

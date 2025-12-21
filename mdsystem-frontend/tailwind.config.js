@@ -113,7 +113,7 @@ export default {
         // Dark mode specific colors
         dark: {
           bg: {
-            primary: '#0f172a',    // Main dark background
+            primary: '#404040',    // Main dark background
             secondary: '#1e293b',  // Card/elevated background
             tertiary: '#334155',   // Hover states
           },

@@ -6,7 +6,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
+    { path: '/', icon: 'dashboard', label: 'Dashboard' },
     { path: '/record-update', icon: 'edit', label: 'Record Update' },
     { path: '/appointments', icon: 'calendar', label: 'Appointment' },
     { path: '/medicine-request', icon: 'medication', label: 'Medicine Request' },
@@ -43,46 +43,53 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   return (
     <>
-      {/* Mobile Overlay */}
+      {/* Mobile Overlay - Full screen dark overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-60 z-40 md:hidden"
           onClick={onClose}
         ></div>
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 w-20 bg-primary-500 dark:bg-neutral-900 transform transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        className={`fixed inset-y-0 left-0 z-40 bg-primary-500 dark:bg-neutral-900 transform transition-transform duration-300 ease-in-out shadow-2xl ${
+          isOpen ? 'translate-x-0 w-72' : '-translate-x-full w-24 md:translate-x-0'
         }`}
       >
         <div className="flex flex-col h-full">
           {/* Logo Section */}
-          <div className="flex items-center justify-center p-4 border-b border-neutral-800/10 dark:border-white/10">
+          <div className="flex items-center justify-center border-b border-neutral-800/10 dark:border-white/10 bg-primary-500 dark:bg-neutral-900" style={{height: '60px'}}>
             <img src={logo} alt="MDSystem" className="h-12 w-12" />
           </div>
 
           {/* Navigation Items */}
-          <nav className="flex-1 overflow-y-auto py-4">
+          <nav className="flex-1 overflow-y-auto">
             {navItems.map((item) => {
-              const isActive = location.pathname.includes(item.path);
+              // Exact match for all paths
+              const isActive = location.pathname === item.path;
               return (
                 <li key={item.path}>
                   <Link
                     to={item.path}
                     onClick={() => onClose()}
                     title={item.label}
-                    className={`flex flex-col items-center justify-center p-3 rounded-lg transition-all duration-200 ${
+                    className={`flex items-center transition-all duration-200 ${
+                      isOpen 
+                        ? 'flex-row space-x-4 py-4 px-6' 
+                        : 'flex-col justify-center space-y-1.5 py-4'
+                    } ${
                       isActive
-                        ? 'bg-white dark:bg-primary-600 text-neutral-900 dark:text-white'
-                        : 'text-neutral-800 dark:text-white/70 hover:bg-primary-400 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white'
+                        ? 'bg-white dark:bg-neutral-800 text-black dark:text-white border-l-4 border-primary-600 dark:border-yellow-400 font-semibold'
+                        : 'text-white dark:text-white/70 hover:bg-white/10 dark:hover:bg-neutral-800 hover:text-white dark:hover:text-white'
                     }`}
                   >
-                    <span className="mb-1">
+                    <span>
                       {icons[item.icon]}
                     </span>
-                    <span className="text-[10px] font-medium text-center leading-tight">
+                    <span className={`font-medium leading-tight ${
+                      isOpen ? 'text-base' : 'text-[11px] text-center'
+                    }`}>
                       {item.label}
                     </span>
                   </Link>
