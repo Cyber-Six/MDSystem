@@ -28,12 +28,39 @@ mdsystem-frontend/
 │   ├── main.jsx
 │   │
 │   ├── assets/
+│   │   ├── MDSystem.png
 │   │   └── react.svg
 │   │
 │   ├── components/
-│   │   └── banner/
-│   │       ├── Banner.jsx
-│   │       └── Banner.module.css
+│   │   ├── banner/
+│   │   │   ├── Banner.jsx
+│   │   │   └── Banner.module.css
+│   │   ├── data-consent/
+│   │   │   ├── data-consent.jsx
+│   │   │   └── DataConsent.module.css
+│   │   ├── help-support/
+│   │   │   ├── contact-support-modal.jsx
+│   │   │   ├── faqs-modal.jsx
+│   │   │   ├── feedback-modal.jsx
+│   │   │   └── help-support-modal.jsx
+│   │   ├── layout/
+│   │   │   ├── Layout.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   └── top-bar.jsx
+│   │   ├── modals/
+│   │   │   └── modal.jsx
+│   │   ├── navbar/
+│   │   │   ├── nav-bar.jsx
+│   │   │   └── NavBar.module.css
+│   │   ├── profile/
+│   │   │   └── profile-modal.jsx
+│   │   ├── settings/
+│   │   │   ├── change-password-modal.jsx
+│   │   │   ├── login-activity-modal.jsx
+│   │   │   ├── settings-modal.jsx
+│   │   │   └── two-factor-auth-modal.jsx
+│   │   └── user-menu/
+│   │       └── user-menu.jsx
 │   │
 │   ├── config/
 │   │   ├── bannerConfig.js
@@ -42,40 +69,52 @@ mdsystem-frontend/
 │   │       └── raw-endpoints.csv (Debug: Raw CSV data)
 │   │
 │   ├── context/
-│   │   ├── BannerContext.jsx
-│   │   ├── PortalContext.jsx (Provider only)
-│   │   └── PortalContextObject.js (Context object only)
+│   │   ├── banner-context.jsx (Banner state management)
+│   │   ├── role-context.jsx (Role Provider - subdomain detection)
+│   │   ├── RoleContextObject.js (Context object only)
+│   │   └── __tests__/
 │   │
 │   ├── docs/
+│   │   ├── apiBaseUrlProvider.md
 │   │   ├── API_INTEGRATION_GUIDE.md
 │   │   ├── BANNER_SYSTEM.md
-│   │   ├── TOKEN_SERVICE.md
 │   │   ├── login-integration-notes.md
-│   │   └── token-refresh-mechanism.md
+│   │   ├── PORTAL_TO_ROLE_REFACTORING.md
+│   │   ├── Response interceptor - error.md
+│   │   ├── ROLE_CONTEXT_USAGE.md
+│   │   ├── TAILWIND_SETUP_GUIDE.md
+│   │   ├── token-refresh-mechanism.md
+│   │   └── TOKEN_SERVICE.md
 │   │
 │   ├── modules/
+│   │   ├── appointment/
+│   │   │   └── appointment-page.jsx
 │   │   ├── auth/
-│   │   │   ├── Login.jsx
-│   │   │   ├── Register.jsx
-│   │   │   ├── auth.module.css
-│   │   │   ├── login.module.css
-│   │   │   └── register.module.css
+│   │   │   ├── auth-slides.jsx
+│   │   │   ├── forget-password.jsx
+│   │   │   ├── login.jsx
+│   │   │   └── register.jsx
 │   │   ├── dashboard/
-│   │   │   └── dashboard.module.css
-│   │   └── landing/
-│   │       └── landing.module.css
+│   │   │   └── dashboard-home.jsx
+│   │   ├── landing/
+│   │   │   └── landing.jsx
+│   │   ├── medicine-request/
+│   │   │   └── medicine-request-page.jsx
+│   │   └── record-forms/
+│   │       └── update-record/
+│   │           └── record-update-form.jsx
 │   │
 │   ├── hooks/
-│   │   └── usePortal.js (exports useDetectPortalFromSubdomain)
+│   │   └── useRole.js (exports useDetectRoleFromSubdomain)
 │   │
 │   ├── pages/
-│   │   ├── .dev_tips_pages.md
 │   │   ├── Auth.jsx
 │   │   ├── Dashboard.jsx
+│   │   ├── Dashboard_New.jsx
 │   │   └── Landing.jsx
 │   │
 │   ├── routes/
-│   │   └── PrivateRoute.jsx
+│   │   └── private-route.jsx
 │   │
 │   ├── services/
 │   │   ├── apiBaseUrlProvider.js (Base URL detection for mdsystemtip.space)
@@ -112,8 +151,10 @@ mdsystem-frontend/
 ### Root Configuration Files
 - **.env.local** - Your environment variables (git-ignored, DO NOT COMMIT!)
 - **.env.example** - Template showing available variables (committed to git)
-- **postcss.config.js** - PostCSS configuration with Tailwind CSS v4
-- **tailwind.config.js** - Tailwind CSS custom theme configuration
+- **postcss.config.js** - PostCSS configuration with Tailwind CSS
+- **tailwind.config.js** - Tailwind CSS v3 custom theme configuration
+- **vite.config.js** - Vite configuration with proxy and React Compiler
+- **eslint.config.js** - ESLint configuration for React
 - **SHEETS_INTEGRATION_GUIDE.md** - Complete guide for Google Sheets integration
 
 ### `scripts/` - Build & Automation Scripts
@@ -122,6 +163,14 @@ mdsystem-frontend/
 ### `src/components/` - Reusable Components
 - **banner/Banner.jsx** - Global banner notification component (upper-right, z-index: 9999)
 - **banner/Banner.module.css** - Banner styling (green/red/grey color-coded)
+- **data-consent/** - Data consent agreement components
+- **help-support/** - Help, support, FAQs, and feedback modals
+- **layout/** - Main layout components (Layout, Sidebar, TopBar)
+- **modals/** - Reusable modal components
+- **navbar/** - Navigation bar components
+- **profile/** - User profile modal
+- **settings/** - Settings modals (password, 2FA, login activity)
+- **user-menu/** - User dropdown menu component
 
 ### `src/config/` - Application Configuration
 - **bannerConfig.js** - HTTP status code configuration for banner notifications
@@ -130,32 +179,42 @@ mdsystem-frontend/
   - **raw-endpoints.csv** - Raw CSV data for debugging
 
 ### `src/context/` - React Context
-- **BannerContext.jsx** - Global banner state management (showBanner, dismissBanner)
-- **PortalContext.jsx** - Provides PortalProvider component
-- **PortalContextObject.js** - Exports PortalContext object only
+- **banner-context.jsx** - Global banner state management (showBanner, dismissBanner)
+- **role-context.jsx** - Provides RoleProvider component with subdomain-based role detection
+- **RoleContextObject.js** - Exports RoleContext object only
+- **__tests__/** - Context unit tests
 
 ### `src/docs/` - Documentation
-- **API_INTEGRATION_GUIDE.md** - API integration guide
+- **apiBaseUrlProvider.md** - Base URL provider documentation
+- **API_INTEGRATION_GUIDE.md** - Comprehensive API integration guide
 - **BANNER_SYSTEM.md** - Complete banner system documentation
+- **login-integration-notes.md** - Login flow integration notes
+- **PORTAL_TO_ROLE_REFACTORING.md** - Portal to role refactoring guide
+- **Response interceptor - error.md** - Error handling documentation
+- **ROLE_CONTEXT_USAGE.md** - Role context usage patterns
+- **TAILWIND_SETUP_GUIDE.md** - Tailwind CSS setup and customization
+- **token-refresh-mechanism.md** - Token refresh implementation details
 - **TOKEN_SERVICE.md** - Token management and security documentation
-- **login-integration-notes.md** - Login flow notes
-- **token-refresh-mechanism.md** - Token refresh implementation
 
 ### `src/hooks/` - Custom React Hooks
-- **usePortal.js** - Exports `useDetectPortalFromSubdomain()` hook
+- **useRole.js** - Exports `useDetectRoleFromSubdomain()` hook for role detection
 
 ### `src/modules/` - Feature Modules
-- **auth/** - Authentication components (Login, Register) with CSS modules
-- **dashboard/** - Dashboard-specific styles
-- **landing/** - Landing page styles
+- **appointment/** - Appointment booking and management
+- **auth/** - Authentication components (login, register, auth-slides, forget-password)
+- **dashboard/** - Dashboard home and related components
+- **landing/** - Landing page components
+- **medicine-request/** - Medicine request functionality
+- **record-forms/** - Medical record update forms
 
 ### `src/pages/` - Page Components
-- **Auth.jsx** - Split-layout auth page (login panel + register center)
-- **Dashboard.jsx** - Main dashboard with portal-specific content
-- **Landing.jsx** - Landing page with portal detection and auto-redirect
+- **Auth.jsx** - Auth page with fullscreen slides, sliding login panel, and centered register modal
+- **Dashboard.jsx** - Main dashboard with nested routing (home, appointments, medicine request, etc.)
+- **Dashboard_New.jsx** - Alternative dashboard implementation
+- **Landing.jsx** - Landing page component
 
 ### `src/routes/` - Route Configuration
-- **PrivateRoute.jsx** - Protected route component
+- **private-route.jsx** - Protected route component with token validation and auth checking
 
 ### `src/services/` - API & Business Logic
 - **apiBaseUrlProvider.js** - `getApiBaseUrl()` function for subdomain-based URL detection (www.mdsystemtip.space / staff.mdsystemtip.space)
@@ -164,20 +223,28 @@ mdsystem-frontend/
 
 ## Recent Changes
 - ✅ Implemented Google Sheets integration for API endpoint documentation
-- ✅ Added Tailwind CSS v4 with PostCSS configuration
-- ✅ Created comprehensive CSS design system with custom properties
-- ✅ Redesigned Auth page with fullscreen landing and sliding login panel
-- ✅ Implemented global banner notification system
-- ✅ Extracted token refresh logic to refreshTokenService.js
-- ✅ All token operations use TokenStorage for atomic updates
-- ✅ Banner shows backend error codes and messages
-- ✅ Token refresh uses queue mechanism for concurrent 401s
-- ✅ Logout clears all tokens and redirects
-- ✅ File naming: axiosRequest → axiosRequestHandler, tokenService → refreshTokenService, api → apiBaseUrlProvider
+- ✅ Added Tailwind CSS v3 with comprehensive custom theme configuration
+- ✅ Created extensive design system with custom colors, typography, and animations
+- ✅ Redesigned Auth page with fullscreen auth-slides carousel, sliding login panel, and centered register modal
+- ✅ Implemented global banner notification system with type-based styling
+- ✅ Extracted token refresh logic to refreshTokenService.js with TokenStorage interface
+- ✅ All token operations use TokenStorage for atomic updates and security
+- ✅ Banner integration with axios interceptors (configurable status codes)
+- ✅ Token refresh uses queue mechanism for concurrent 401s (prevents duplicate refreshes)
+- ✅ Logout clears all tokens and redirects with cleanup
+- ✅ File naming standardization: lowercase with hyphens for consistency
+- ✅ Updated to role-based architecture (RoleContext) detecting subdomain (www = patient, staff = medical)
 - ✅ Updated domain configuration to mdsystemtip.space (www / staff subdomains)
 - ✅ Created single .env.local file (git-ignored) with .env.example template
 - ✅ Removed /api prefix from all URLs (backend uses root routes)
 - ✅ Auto-fetch Google Sheets config on `npm run dev`
+- ✅ Comprehensive layout system with Sidebar, TopBar, and responsive design
+- ✅ User menu with nested panels (main, settings, help & support)
+- ✅ Multi-step authentication flows (login with 2FA, registration with email verification)
+- ✅ Dashboard with nested routing (home, appointments, medicine request, record update)
+- ✅ Dark mode support throughout the application
+- ✅ React 19 with React Compiler for automatic optimizations
+- ✅ Lucide React icons integration
 
 ## Build Tool & Environment
 
