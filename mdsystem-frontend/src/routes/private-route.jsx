@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
  * SECURITY: Validates authentication by checking refresh token validity
  * If refresh token is valid, attempts to refresh access token
  * If authentication fails, redirects to /auth
+ * 
+ * DEV MODE: Set VITE_BYPASS_AUTH=true in .env.local to bypass authentication
  */
 const PrivateRoute = ({ children }) => {
   const [isChecking, setIsChecking] = useState(true);
@@ -14,6 +16,14 @@ const PrivateRoute = ({ children }) => {
 
   useEffect(() => {
     const checkAuth = () => {
+      // DEV MODE: Bypass authentication if environment variable is set
+      if (import.meta.env.VITE_BYPASS_AUTH === 'true') {
+        console.warn('⚠️ DEV MODE: Authentication bypassed. Remove VITE_BYPASS_AUTH in production!');
+        setIsAuthenticated(true);
+        setIsChecking(false);
+        return;
+      }
+
       // SECURITY: Check if both tokens exist
       const accessToken = TokenStorage.getAccessToken();
       const refreshToken = TokenStorage.getRefreshToken();
@@ -66,7 +76,7 @@ const PrivateRoute = ({ children }) => {
     );
   }
 
-  return isAuthenticated ? children : <Navigate to="/auth" replace />;
+  return isAuthenticated ? children : <Navigate to="/auth/login" replace />;
 };
 
 export default PrivateRoute;

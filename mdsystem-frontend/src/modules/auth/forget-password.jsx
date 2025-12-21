@@ -1,36 +1,32 @@
 import { useState } from 'react';
 import axiosRequest from '../../services/axiosRequestHandler';
-import styles from './forget-password.module.css';
 
 const ForgetPassword = ({ onBackToLogin }) => {
-
-  // Form data - only email needed
   const [formData, setFormData] = useState({
     email: '',
   });
 
-  // UI state
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [error, setError] = useState('');
 
-  // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+    setError('');
   };
 
-  // Send Reset Link Email
   const handleSendResetLink = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     setSuccessMessage('');
 
     try {
-      // TODO: Integrate Google reCAPTCHA token
-      const recaptchaToken = 'RECAPTCHA_TOKEN_HERE'; // Replace with actual reCAPTCHA implementation
+      const recaptchaToken = 'no-recaptcha-token';
 
       await axiosRequest.post('/auth/password/forget-password', {
         email: formData.email,
@@ -38,83 +34,122 @@ const ForgetPassword = ({ onBackToLogin }) => {
       });
 
       setSuccessMessage('Password reset link sent! Please check your email.');
+      setFormData({ email: '' });
+      
+      setTimeout(() => {
+        onBackToLogin();
+      }, 2000);
     } catch (err) {
-      // Error handling is done by axiosRequest interceptor
+      if (err.response?.data?.error === 'INVALID_INSTITUTION_EMAIL') {
+        setError('Email must follow TIP institutional format (@tip.edu.ph).');
+      } else if (err.response?.data?.error === 'EMAIL_COOLDOWN_ACTIVE') {
+        setError('Too many attempts. Please try again later.');
+      } else {
+        setError(err.response?.data?.message || 'Failed to send reset link. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className={styles.container}>
-      <div className={styles.card}>
-        {/* Header */}
-        <div className={styles.header}>
-          <h2 className={styles.title}>Forgot Password</h2>
-          <p className={styles.subtitle}>
-            Enter your email address to receive a password reset link
-          </p>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSendResetLink} className={styles.form}>
-          <div className={styles.formGroup}>
-            <label htmlFor="email">Email Address</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              placeholder="your.email@tip.edu.ph"
-              required
-              disabled={loading}
-            />
-          </div>
-
-          {/* TODO: Add reCAPTCHA component here */}
-          <div className={styles.recaptchaPlaceholder}>
-            <p>⚠️ reCAPTCHA not implemented - using placeholder token</p>
-            <p style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.5rem' }}>
-              This will cause the request to fail until proper reCAPTCHA is integrated.
-            </p>
-          </div>
-
-          {successMessage && (
-            <div className={styles.success}>
-              {successMessage}
-            </div>
-          )}
-
-          <div className={styles.buttonGroup}>
-            <button
-              type="button"
-              onClick={onBackToLogin}
-              className={styles.backButton}
-              disabled={loading}
-            >
-              Back to Login
-            </button>
-            <button
-              type="submit"
-              className={styles.submitButton}
-              disabled={loading}
-            >
-              {loading ? 'Sending...' : 'Send Reset Link'}
-            </button>
-          </div>
-        </form>
-
-        {/* Footer */}
-        <div className={styles.footer}>
-          <p className={styles.hint}>
-            Make sure to check your spam folder if you don't receive the email.
-          </p>
-          <p className={styles.hint} style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
-            <strong>Debug:</strong> If the link doesn't work, check browser console for response details and verify backend domain configuration.
-          </p>
-        </div>
+    <div className="w-full max-w-md mx-auto">
+      {/* Header */}
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary font-heading mb-2">
+          Forgot Password?
+        </h2>
+        <p className="text-xs text-neutral-600 dark:text-dark-text-secondary">
+          Enter your email to receive a password reset link
+        </p>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mb-2 p-2 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
+          <p className="text-error-600 dark:text-error-400 text-xs text-center">{error}</p>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {successMessage && (
+        <div className="mb-4 p-3 bg-success-50 dark:bg-success-900/20 border border-success-300 dark:border-success-700 rounded-lg">
+          <p className="text-success-600 dark:text-success-400 text-xs text-center flex items-center justify-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            {successMessage}
+          </p>
+        </div>
+      )}
+
+      {/* Form */}
+      <form onSubmit={handleSendResetLink} className="space-y-4">
+        <div>
+          <label htmlFor="email" className="block text-xs font-medium text-secondary-700 dark:text-dark-text-primary mb-2">
+            Email Address
+          </label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            value={formData.email}
+            onChange={handleInputChange}
+            placeholder="your.email@tip.edu.ph"
+            required
+            disabled={loading || !!successMessage}
+            className="w-full px-3 py-2.5 text-sm bg-neutral-50 dark:bg-dark-bg-tertiary 
+                     text-secondary-900 dark:text-dark-text-primary 
+                     border border-neutral-300 dark:border-dark-border-primary 
+                     rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                     placeholder:text-neutral-400 dark:placeholder:text-dark-text-tertiary
+                     transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+        </div>
+
+        {/* Buttons */}
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onBackToLogin}
+            disabled={loading || !!successMessage}
+            className="flex-1 px-4 py-2.5 text-sm font-semibold text-primary-500
+                     border-2 border-primary-500 bg-white dark:bg-dark-bg-primary
+                     hover:bg-primary-500 hover:text-white
+                     dark:hover:text-white
+                     rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Back
+          </button>
+          <button
+            type="submit"
+            disabled={loading || !!successMessage}
+            className="flex-1 px-4 py-2.5 text-sm font-semibold text-white
+                     bg-primary-500 hover:bg-primary-600 active:bg-primary-700
+                     dark:bg-primary-600 dark:hover:bg-primary-700
+                     rounded-lg transition-all duration-200 
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Sending...
+              </>
+            ) : (
+              'Send Reset Link'
+            )}
+          </button>
+        </div>
+      </form>
+
+      {/* Helper Text */}
+      <p className="text-xs text-neutral-500 dark:text-dark-text-tertiary text-center mt-4">
+        Check your spam folder if you don't receive the email
+      </p>
     </div>
   );
 };

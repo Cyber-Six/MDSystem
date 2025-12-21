@@ -1,0 +1,163 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import UserMenu from '../user-menu/user-menu';
+
+const TopBar = ({ onMenuClick, isSidebarOpen }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const notifRef = useRef(null);
+
+  // Get page title based on current route
+  const getPageTitle = () => {
+    const path = location.pathname;
+    if (path.includes('/record-update')) return 'Update Record';
+    if (path.includes('/appointments')) return 'Appointment';
+    if (path.includes('/medicine-request')) return 'Medicine Request';
+    if (path.includes('/e-consultation')) return 'E-Consultation';
+    if (path.includes('/dashboard') || path === '/') return 'Dashboard';
+    return 'MDSystem';
+  };
+
+  const notifications = [
+    { id: 1, title: 'Appointment Confirmed', message: 'Your appointment for Dec 25 has been confirmed', time: '2h ago', unread: true },
+    { id: 2, title: 'Medicine Request Approved', message: 'Your medicine request has been approved', time: '5h ago', unread: true },
+    { id: 3, title: 'Record Update Pending', message: 'Please verify your updated information', time: '1d ago', unread: false },
+  ];
+
+  const unreadCount = notifications.filter(n => n.unread).length;
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Toggle dark mode
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+    document.documentElement.classList.toggle('dark');
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    // Add your logout logic here (clear tokens, reset state, etc.)
+    console.log('Logging out...');
+    navigate('/auth'); // Navigate to login page
+  };
+
+  // Responsive: yellow in light mode, black in dark mode, on mobile
+  return (
+    <header
+      className={`sticky top-0 z-30 transition-colors border-b
+        md:bg-white md:dark:bg-neutral-900 md:border-gray-200 md:dark:border-neutral-700
+        bg-primary-500 dark:bg-neutral-900 border-primary-600 dark:border-neutral-800
+      `}
+      style={{paddingLeft: 0}}
+    >
+      <div className="flex items-center justify-between px-4" style={{height: '60px'}}>
+        {/* Left Section */}
+        <div className="flex items-center space-x-4">
+          {/* Hamburger Menu */}
+          <button
+            onClick={onMenuClick}
+            className="md:hidden p-2 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-neutral-800"
+          >
+            <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          {/* Page Title - Hidden on mobile when sidebar is closed */}
+          <div className={`items-center space-x-2 ${
+            isSidebarOpen ? 'hidden md:flex' : 'hidden md:flex'
+          }`}>
+            <div className="w-8 h-8 bg-primary-500 dark:bg-primary-500 rounded-lg flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <span className="hidden sm:block text-lg font-semibold text-gray-800 dark:text-white">{getPageTitle()}</span>
+          </div>
+        </div>
+
+        {/* Center Title - Visible on mobile when sidebar is closed */}
+        <div className="md:hidden absolute left-1/2 transform -translate-x-1/2">
+          <span className="text-lg font-semibold text-gray-800 dark:text-white">{getPageTitle()}</span>
+        </div>
+
+        {/* Right Section */}
+        <div className="flex items-center space-x-2 sm:space-x-4">
+          {/* Notifications */}
+          <div className="relative" ref={notifRef}>
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-2 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-neutral-800"
+            >
+              <svg className="w-6 h-6 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Notifications Dropdown */}
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-neutral-900 rounded-lg shadow-lg border border-gray-200 dark:border-neutral-700 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 dark:border-neutral-700">
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
+                </div>
+                <div className="max-h-96 overflow-y-auto">
+                  {notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      className={`px-4 py-3 border-b border-gray-100 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800 cursor-pointer ${
+                        notif.unread ? 'bg-primary-50 dark:bg-primary-500/10' : ''
+                      }`}
+                    >
+                      <div className="flex items-start">
+                        {notif.unread && (
+                          <span className="w-2 h-2 bg-primary-500 rounded-full mt-2 mr-2"></span>
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{notif.title}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{notif.message}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{notif.time}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 py-3 text-center border-t border-gray-200 dark:border-neutral-700">
+                  <button className="text-sm text-primary-600 dark:text-primary-500 hover:text-primary-700 dark:hover:text-primary-400 font-medium">
+                    View all notifications
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* User Avatar */}
+          <UserMenu 
+            isDarkMode={darkMode}
+            toggleTheme={toggleDarkMode}
+            onLogout={handleLogout}
+          />
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default TopBar;

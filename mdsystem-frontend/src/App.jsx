@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import PrivateRoute from './routes/PrivateRoute.jsx';
+import PrivateRoute from './routes/private-route.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Auth from './pages/Auth.jsx';
-import { BannerProvider, useBanner } from './context/BannerContext.jsx';
-import Banner from './components/banner/Banner.jsx';
+import { BannerProvider, useBanner } from './context/banner-context.jsx';
+import Banner from './components/banner/banner.jsx';
 import { setBannerCallback } from './services/axiosRequestHandler.js';
 
 function AppContent() {
@@ -22,7 +22,7 @@ function AppContent() {
         <Routes>
           {/* Root route - Dashboard with authentication check */}
           <Route 
-            path="/" 
+            path="/*" 
             element={
               <PrivateRoute>
                 <Dashboard />
@@ -30,8 +30,10 @@ function AppContent() {
             } 
           />
           
-          {/* Auth route - Login/Register */}
-          <Route path="/auth" element={<Auth />} />
+          {/* Auth routes - Login/Register */}
+          <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
+          <Route path="/auth/login" element={<Auth />} />
+          <Route path="/auth/register" element={<Auth />} />
           
           {/* Redirect any unknown routes to root */}
           <Route path="*" element={<Navigate to="/" replace />} />
