@@ -1,10 +1,10 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import Layout from '../components/layout/layout';
-import DashboardHome from '../modules/dashboard/dashboard-home';
+import Layout from '../components/layout/layout.jsx';
+import DashboardHome from '../modules/dashboard/dashboard-home.jsx';
 import RecordUpdateForm from '../modules/record-forms/update-record/record-update-form.jsx';
-import AppointmentPage from '../modules/appointment/appointment-page';
-import MedicineRequestPage from '../modules/medicine-request/medicine-request-page';
+import AppointmentPage from '../modules/appointment/appointment-page.jsx';
+import MedicineRequestPage from '../modules/medicine-request/medicine-request-page.jsx';
 
 const Dashboard = () => {
   return (
