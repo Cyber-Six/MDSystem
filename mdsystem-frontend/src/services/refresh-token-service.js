@@ -5,7 +5,7 @@
  */
 
 import axios from 'axios';
-import { getApiBaseUrl } from './apiBaseUrlProvider.js';
+import { getApiBaseUrl } from './api-base-url-provider.js';
 
 /**
  * SECURITY: Token storage interface

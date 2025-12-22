@@ -6,7 +6,7 @@
  */
 
 import axios from 'axios';
-import { getApiBaseUrl, getDevSubdomain } from './apiBaseUrlProvider.js';
+import { getApiBaseUrl, getDevSubdomain } from './api-base-url-provider.js';
 import { shouldShowBanner, getBannerType, extractBannerData } from '../config/bannerConfig.js';
 import { refreshAccessToken, TokenStorage, logout } from './refreshTokenService.js';
 
