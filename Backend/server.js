@@ -60,7 +60,7 @@ app.use('/info/consent', consentRoutes);
 // ======================================
 
 // Serve static assets for the React app
-app.use(express.static(path.join(__dirname, '../mdsystem-frontend/dist')));
+app.use(express.static(path.join(__dirname, '../mds-frontend/dist')));
 
 // Redirect the root URL to '/app'
 
@@ -69,7 +69,7 @@ app.use(express.static(path.join(__dirname, '../mdsystem-frontend/dist')));
 // Serve index.html for all non-API routes
 
 app.get('*path', (req, res) => {
-  res.sendFile(path.join(__dirname, '../mdsystem-frontend/dist', 'index.html'));
+  res.sendFile(path.join(__dirname, '../mds-frontend/dist', 'index.html'));
 });
 
 
