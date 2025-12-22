@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RoleContext } from './RoleContextObject';
+import { RoleContext } from './role-context-object';
 
 export function RoleProvider({ children }) {
   const getInitialRole = () => {

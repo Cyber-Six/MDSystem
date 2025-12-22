@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import Modal from '../modals/Modal';
+import Modal from '../modals/modal';
 
 const FeedbackModal = ({ isOpen, onClose }) => {
   const [formData, setFormData] = useState({

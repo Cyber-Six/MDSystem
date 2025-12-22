@@ -4,8 +4,8 @@ import PrivateRoute from './routes/private-route.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Auth from './pages/Auth.jsx';
 import { BannerProvider, useBanner } from './context/banner-context.jsx';
-import Banner from './components/banner/banner_temp.jsx';
-import { setBannerCallback } from './services/axiosRequestHandler.js';
+import Banner from './components/banner/banner.jsx';
+import { setBannerCallback } from './services/axios-request-handler.js';
 
 function AppContent() {
   const { showBanner } = useBanner();

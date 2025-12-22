@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { RoleContext } from '../context/RoleContextObject';
+import { RoleContext } from '../context/role-context-object';
 
 export function useDetectRoleFromSubdomain() {
   const context = useContext(RoleContext);

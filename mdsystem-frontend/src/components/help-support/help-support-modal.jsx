@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { HelpCircle, MessageSquare, Send } from 'lucide-react';
-import Modal from '../modals/Modal';
+import Modal from '../modals/modal';
 import FAQsModal from './faqs-modal';
 import ContactSupportModal from './contact-support-modal';
 import FeedbackModal from './feedback-modal';

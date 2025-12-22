@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axiosRequest from '../../services/axiosRequestHandler';
-import { TokenStorage } from '../../services/refreshTokenService';
+import axiosRequest from '../../services/axios-request-handler';
+import { TokenStorage } from '../../services/refresh-token-service';
 
 const TOTAL_STEPS = 5;
 

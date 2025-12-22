@@ -7,8 +7,8 @@
 
 import axios from 'axios';
 import { getApiBaseUrl, getDevSubdomain } from './api-base-url-provider.js';
-import { shouldShowBanner, getBannerType, extractBannerData } from '../config/bannerConfig.js';
-import { refreshAccessToken, TokenStorage, logout } from './refreshTokenService.js';
+import { shouldShowBanner, getBannerType, extractBannerData } from '../config/banner-config.js';
+import { refreshAccessToken, TokenStorage, logout } from './refresh-token-service.js';
 
 // Banner callback - will be set by BannerContext
 let bannerCallback = null;
