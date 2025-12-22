@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axiosRequest from '../../services/axiosRequestHandler';
-import styles from './DataConsent.module.css';
+import styles from './data-consent.module.css';
 
 const DataConsent = ({ 
   verificationKey, 

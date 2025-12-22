@@ -1,6 +1,6 @@
 import React from 'react';
 import { useBanner } from '../../context/banner-context.jsx';
-import styles from './banner_notif.module.css';
+import styles from './banner.module.css';
 
 const Banner = () => {
   const { banners, dismissBanner } = useBanner();
