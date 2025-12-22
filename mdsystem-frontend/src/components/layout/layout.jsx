@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Sidebar from './sidebar_temp';
+import Sidebar from './sidebasar_temp';
 import TopBar from './top-bar';
 
 const Layout = ({ children }) => {
