@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axiosRequest from '../../services/axios-request-handler';
-import { TokenStorage } from '../../services/refresh-token-service';
+import { axiosRequest } from '../../core';
+import { TokenStorage } from '../../core';
+import { validatePassword, passwordsMatch } from '@mdsystem/core/validation/password-validation';
 
 const TOTAL_STEPS = 5;
 
@@ -78,13 +79,13 @@ const Register = ({ onBackToLogin }) => {
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    if (!passwordsMatch(formData.password, formData.confirmPassword)) {
       setError('Passwords do not match.');
       setLoading(false);
       return;
     }
 
-    if (formData.password.length < 8) {
+    if (!validatePassword(formData.password)) {
       setError('Password must be at least 8 characters long.');
       setLoading(false);
       return;

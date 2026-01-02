@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axiosRequest from '../../services/axios-request-handler';
+import { axiosRequest } from '../../core';
 import styles from './data-consent.module.css';
 
 const DataConsent = ({ 

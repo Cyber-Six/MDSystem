@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { TokenStorage, refreshAccessToken } from '../services/refresh-token-service';
+import { TokenStorage, refreshAccessToken } from '../core';
 import { useState, useEffect } from 'react';
 
 /**

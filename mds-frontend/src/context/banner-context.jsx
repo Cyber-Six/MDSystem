@@ -1,53 +1,30 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { bannerService } from '../core';
 
 const BannerContext = createContext();
 
 export const BannerProvider = ({ children }) => {
   const [banners, setBanners] = useState([]);
+  const bannerServiceRef = useRef(bannerService);
 
-  /**
-   * Dismiss a specific banner by ID
-   */
-  const dismissBanner = useCallback((id) => {
-    setBanners((prev) => prev.filter((banner) => banner.id !== id));
+  // Subscribe to banner service updates
+  useEffect(() => {
+    const unsubscribe = bannerServiceRef.current.subscribe(setBanners);
+    return unsubscribe;
   }, []);
 
-  /**
-   * Add a new banner notification
-   * @param {Object} banner - Banner configuration
-   * @param {string} banner.type - 'success', 'error', or 'info' (maps to green, red, grey)
-   * @param {string} banner.message - Main message to display
-   * @param {string} [banner.error] - Error code (optional)
-   * @param {number} [banner.duration] - Auto-dismiss duration in ms (default: 5000, 0 for no auto-dismiss)
-   */
-  const showBanner = useCallback((banner) => {
-    const id = Date.now() + Math.random();
-    const newBanner = {
-      id,
-      type: banner.type || 'info',
-      message: banner.message || 'An action occurred',
-      error: banner.error || null,
-      duration: banner.duration !== undefined ? banner.duration : 5000,
-    };
+  // Create wrapper functions that use the banner service
+  const showBanner = (banner) => {
+    return bannerServiceRef.current.showBanner(banner);
+  };
 
-    setBanners((prev) => [...prev, newBanner]);
+  const dismissBanner = (id) => {
+    bannerServiceRef.current.dismissBanner(id);
+  };
 
-    // Auto-dismiss if duration > 0
-    if (newBanner.duration > 0) {
-      setTimeout(() => {
-        dismissBanner(id);
-      }, newBanner.duration);
-    }
-
-    return id;
-  }, [dismissBanner]);
-
-  /**
-   * Clear all banners
-   */
-  const clearAllBanners = useCallback(() => {
-    setBanners([]);
-  }, []);
+  const clearAllBanners = () => {
+    bannerServiceRef.current.clearAllBanners();
+  };
 
   const value = {
     banners,

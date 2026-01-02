@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import Modal from '../modals/modal';
+import { validatePassword, passwordsMatch, getPasswordError } from '@mdsystem/core/validation/password-validation';
 
 const ChangePasswordModal = ({ isOpen, onClose }) => {
   const [formData, setFormData] = useState({
@@ -24,10 +25,13 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
     }
     if (!formData.newPassword) {
       newErrors.newPassword = 'New password is required';
-    } else if (formData.newPassword.length < 8) {
-      newErrors.newPassword = 'Password must be at least 8 characters';
+    } else {
+      const passwordError = getPasswordError(formData.newPassword);
+      if (passwordError) {
+        newErrors.newPassword = passwordError;
+      }
     }
-    if (formData.newPassword !== formData.confirmPassword) {
+    if (!passwordsMatch(formData.newPassword, formData.confirmPassword)) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
