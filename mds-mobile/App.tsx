@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Text, View, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { axiosRequest, bannerService, TokenStorage } from './src/core';
-import { validatePassword } from '@mdsystem/core/validation/password-validation';
-import { isValidTipEmail } from '@mdsystem/core/validation/email-validation';
+import { validatePassword } from '../packages/core/src/validation/password-validation';
+import { isValidTipEmail } from '../packages/core/src/validation/email-validation';
 
 interface Banner {
   id: string;
