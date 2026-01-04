@@ -4,22 +4,33 @@ const cors = require('cors');
 const fs = require('fs');
 const db = require('./config/db.js');
 const redis = require('./config/redis.js');
-const emailservice = require('./services/emailservice.js');
-const jwtConfig = require('./config/jwt.js');
+const logger = require('./utils/logger.js');
 
-const registerRoutes = require('./routes/patient/user/register.js');
-const consentRoutes = require('./routes/patient/info/consent.js');
-const emailAuthRoutes = require('./routes/auth/emailauth.js');
-const refreshAuthRoutes = require('./routes/auth/refresh.js');
+const registerRoutes = require('./routes/auth/user/register.js');
+const loginRoutes = require('./routes/auth/user/login.js');
+
+const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
 const passwordResetRoutes = require('./routes/auth/emailpassword-reset.js');
-const loginRoutes = require('./routes/patient/user/login.js');
+
+const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
+
+const consentRoutes = require('./routes/info/compliance/consent.js');
+
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
 
+// initialize DB
+redis.initRedis().then(() => {
+  logger.info('✅ Redis initialized');
+}).catch((err) => {
+  logger.error('Failed to initialize Redis', {  error: err  });
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.set("trust proxy", true);
 
 // ✅ Ensure req.body is always an object (prevents destructuring crashes)
 app.use((req, res, next) => {
@@ -39,13 +50,7 @@ app.use((err, req, res, next) => {
   }
   next();
 });
-// initialize DB
 
-redis.initRedis().then(() => {
-  console.log('Redis initialized');
-}).catch((err) => {
-  console.error('Failed to initialize Redis:', err);
-});
 
 
 app.use('/auth/register', registerRoutes);
@@ -78,5 +83,5 @@ app.get('*path', (req, res) => {
 const PORT = process.env.PATIENT_PORT || 3001;
 const HOST = process.env.HOST;
 app.listen(PORT, HOST, () => {
-  console.log(`Server running on ${HOST}:${PORT}`);
+  logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
 });

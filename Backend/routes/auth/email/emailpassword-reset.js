@@ -2,9 +2,9 @@ const express = require("express");
 const router = express.Router();
 
 const { portalBasedIpRateLimiter } = require('../../config/middleware/ratelimiter.js');
-
-const { isValidEmail } = require('../../config/validator.js');
-const { detectPortalFromSubdomain } = require('../utils/portal.js');
+const logger = require('../../utils/logger.js');
+const { isValidEmail } = require('../../utils/validator.js');
+const { detectPortalFromSubdomain } = require('../../utils/portal.js');
 const { rateLimitEmailCooldown, rateLimitEmailAttempts, getUserIdFromVerificationSession, deleteVerificationSession } = require('../../config/redis.js');
 const query = require('../../config/query.js');
 
@@ -83,26 +83,26 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
     }
 
     // ✅ 5. Check if user exists
-    
     await clearResetPwFailures(ip);
 
     const existing = await query.findUserByEmail(email);
     if (!existing) {
+        logger.debug(`Cant send password reset, user not found: ${email}`);
         return res.status(200).json({
             ok: true,
             message: "OTP sent to your email for password change."
         });
     }
-
+    logger.debug(`Enqueuing password reset for user: ${email}`);
     await enqueueResetPassword(email, portal);
-
+    
     return res.status(200).json({
       ok: true,
       message: "OTP sent to your email for password change."
     });
 
   } catch (err) {
-    console.error("Password change request error:", err);
+    logger.error("Password change request error:", err);
     return res.status(500).json({
       error: "SERVER_ERROR",
       message: "An unexpected error occurred."
@@ -161,7 +161,7 @@ router.post("/reset-password/:verificationKey", portalBasedIpRateLimiter(), asyn
     });
 
   } catch (err) {
-    console.error("Reset password verification error:", err);
+    logger.error("Reset password verification error:", err);
     return res.status(500).json({
       error: "SERVER_ERROR",
       message: "An unexpected error occurred."

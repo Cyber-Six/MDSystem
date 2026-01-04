@@ -2,7 +2,7 @@
 
 const { Pool } = require('pg');
 const { db: dbConfig } = require('./config');
-
+const logger = require('../utils/logger.js');
 //console.log('DB Config:', dbConfig); // Debugging line
 // Set up a PostgreSQL connection pool using config.js
 const pool = new Pool({
@@ -17,24 +17,13 @@ const pool = new Pool({
 });
 
 pool.on('connect', () => {
-  console.log('✅ Connected to Postgres');
+  logger.info('✅ Connected to Postgres');
   });
 
 pool.on('error', (err) => {
-  console.error('❌ Unexpected Postgres error', err);
+  logger.error('❌ Unexpected Postgres error', err);
   process.exit(-1);
   });
 
-// Optional: test connection on startup
-/*
-(async () => {
-  try {
-    const result = await pool.query('SELECT NOW()');
-    console.log('✅ DB connected at:', result.rows[0].now);
-  } catch (err) {
-    console.error('❌ DB connection error:', err.message);
-    process.exit(1); // Fail fast
-  }
-})();
-*/
+
 module.exports = pool;

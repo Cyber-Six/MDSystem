@@ -1,7 +1,9 @@
 const { rateLimitIP } = require("../redis.js");
-const { detectRoleFromEmail } = require("../validator.js");
+const { detectRoleFromEmail } = require("../../utils/validator.js");
 const { mapRoleToProfile, rateLimitMatrix } = require("../data/matrix.js");
-const { detectPortalFromSubdomain } = require("../../routes/utils/portal.js");
+const { detectPortalFromSubdomain } = require("../../utils/portal.js");
+
+const logger = require('../../utils/logger.js');
 
 function ipRateLimiter(profileName="genericLimiter", route = "r") {
   const profile = rateLimitMatrix[profileName];
@@ -45,8 +47,8 @@ function roleBasedIpRateLimiter(route = "r") {
 
 function portalBasedIpRateLimiter(route = "r") {
   return function (req, res, next) {
-
-      const portal = detectPortalFromSubdomain(req);
+    const portal = detectPortalFromSubdomain(req);
+    logger.debug("Applying portalBasedIpRateLimiter middleware");
 
     const profileName = portal === "patient" ? "PatientAuthentication" : "staffAuthentication";
 

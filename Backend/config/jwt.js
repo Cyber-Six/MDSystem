@@ -3,10 +3,10 @@ const path = require("path");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const client = require("./redis.js"); // assume you have a Redis client
-const validator = require("./validator.js");
+const validator = require("../utils/validator.js");
 const { saveRefreshSession, getRefreshSession, 
         saveStaffAnchor, getStaffAnchor, } = require("./redis.js");
-
+const logger = require("../utils/logger.js");
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 if (!process.env.JWT_SECRET) {
@@ -127,7 +127,7 @@ async function handleSuspiciousRefresh({ userId, deviceId, session, reason, now 
 
   session.suspiciousCount = (session.suspiciousCount || 0) + 1;
 
-  console.log("[SECURITY]", {
+  logger.warn("[SECURITY]", {
     userId,
     deviceId,
     role: session.role,
@@ -255,7 +255,7 @@ async function handleLogin({ userId, deviceId, role }) {
 
     await saveRefreshSession(userId, deviceId, session, REFRESH_EXP);
 
-    console.log("[SECURITY] Suspicious session cleared on login", {
+    logger.warn("[SECURITY] Suspicious session cleared on login", {
       userId,
       deviceId,
       role: normalizedRole,
