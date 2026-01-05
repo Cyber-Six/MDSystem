@@ -1,0 +1,159 @@
+
+
+enum USER_SEX {
+    Male
+    Female
+}
+
+enum USER_CIVILSTATUS {
+    Single
+    Married
+    Widowed
+    Divorced
+    Separated
+}
+
+enum STUDENT_YEAR {
+    SeniorHighSchool
+    Transferee
+    Returnee
+    Freshman
+    Sophomore
+    Junior
+    Senior
+    Masteral
+    Doctorate
+}
+
+enum STUDENT_DEPARTMENT {
+    ab_english_coa
+    ab_political_science_coa
+    ab_psychology
+    act
+    accountancy_cbe
+    bs_accountancy_cbe
+    bs_ba_accounting_information_system_ais_cbe
+    bs_business_administration_financial_management_cbe
+    bs_business_administration_hrm_cbe
+    bs_business_administration_lscm_cbe
+    bs_business_administration_marketing_management_cbe
+    bs_internal_audit
+
+    architecture_cea
+    civil_engineering_cea
+    chemical_engineering_cea
+    computer_engineering_cea
+    industrial_engineering_cea
+    mechanical_engineering_cea
+    electrical_engineering_cea
+    electronics_and_communication_engineering_cea
+
+    information_system_ccs
+    information_technology_ccs
+    computer_science_ccs
+    data_science_ccs
+    emc_dat_ccs
+    emc_gd_ccs
+
+    graduate_program
+    others
+    }
+
+enum EMPLOYEE_DEPARTMENT{
+    computer_engineering
+    electrical_engineering
+    electronics_and_communication_engineering
+    industrial_engineering
+    mechanical_engineering
+    civil_engineering
+    chemical_engineering
+    architecture
+    college_of_System_studies
+    college_of_business_and_education
+    college_of_arts
+    others
+}
+
+# Shared base profile
+interface userProfile{
+  id: ID!
+  first_name: String!
+  middle_name: String!
+  last_name: String!
+  suffix: String!
+  date_of_birth: Date!
+  sex: USER_SEX!
+  status: USER_CIVILSTATUS!
+  religion: String!
+  contactNumber: String!
+  present_address: String!
+  province_address: String!
+  email: String!
+}
+
+# Student profile
+type StudentProfile {
+  id: ID!
+  profile: userProfile!   # FK reference
+  program: String!
+  year: STUDENT_YEAR!
+  guardianName: String!
+  guardianRelation: String!
+  guardianContact: String!
+}
+
+# Employee profile
+type EmployeeProfile {
+  id: ID!
+  profile: ProfileRecord!   # FK reference
+  department: String!
+  role: String!
+  position: String!
+}
+
+# Enums for controlled vocabularies
+enum StudentYear {
+  FRESHMAN
+  SOPHOMORE
+  JUNIOR
+  SENIOR
+}
+
+enum EmployeeRole {
+  DOCTOR
+  NURSE
+  ADMIN
+  STAFF
+}
+
+# Queries
+type Query {
+  # Student queries
+  getStudentProfile(id: ID!): StudentProfile
+  listStudentProfiles: [StudentProfile]
+
+  # Employee queries
+  getEmployeeProfile(id: ID!): EmployeeProfile
+  listEmployeeProfiles: [EmployeeProfile]
+}
+
+# Mutations
+type Mutation {
+  # Student mutations
+  createStudentProfile(
+    profileId: ID!
+    program: String!
+    year: StudentYear!
+    guardianName: String
+    guardianRelation: String
+    guardianContact: String
+  ): StudentProfile
+
+  # Employee mutations
+  createEmployeeProfile(
+    profileId: ID!
+    department: String!
+    role: EmployeeRole!
+    position: String!
+  ): EmployeeProfile
+}

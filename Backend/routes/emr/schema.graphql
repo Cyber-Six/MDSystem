@@ -1,0 +1,215 @@
+
+
+enum USER_SEX {
+    Male
+    Female
+}
+
+enum USER_CIVILSTATUS {
+    Single
+    Married
+    Widowed
+    Divorced
+    Separated
+}
+
+
+
+interface userProfile{
+  id: ID!
+  first_name: String!
+  middle_name: String!
+  last_name: String!
+  suffix: String!
+  date_of_birth: Date!
+  sex: USER_SEX!
+  status: USER_CIVILSTATUS!
+  religion: String!
+  contactNumber: String!
+  present_address: String!
+  province_address: String!
+  email: String!
+}
+
+type StudentProfile implements userProfile {
+  id: ID!
+  profile: userProfile!   # FK reference
+  program: String!
+  year: STUDENT_YEAR!
+  guardianName: String!
+  guardianRelation: String!
+  guardianContact: String!
+}
+
+type EmployeeProfile implements userProfile {
+  id: ID!
+  profile: userProfile!   # FK reference
+  department: String!
+  role: String!
+  position: String!
+}
+
+
+type MedicalCondition {
+    id: ID!
+    name: String!
+    description: String
+    diagnosedDate: Date
+    relationship: String
+}
+
+type MedicalHistory {
+    id: ID!
+    conditions: [MedicalCondition!]
+}
+
+type DentalHistory {
+    id: ID!
+
+    seenByDentist: Boolean!
+    lastDentalCleaning: Date!
+    purpose: String!
+
+    lastVisitDate: Date
+}
+
+type LifeStyle {
+    id: ID!
+    smoker: Boolean!
+    numberOfCigarettesPerDay: Int
+    yearsSmoked: Int
+    alcoholConsumer: Boolean!
+    frequencyOfAlcoholConsumption: String
+    notes: String
+}
+
+type ObgynHistory {
+    id: ID!
+    lastMenstrualPeriod: Date!
+    hasDismonerrhea: Boolean!
+    notes: String
+}
+
+type VisualAcuity {
+    id: ID!
+    left_eye: String!
+    right_eye: String!
+    notes: String
+}
+
+type VitalSigns {
+    id: ID!
+    height_cm: Float!
+    weight_kg: Float!
+    blood_pressure: String!
+    heart_rate: Int!
+    blood_pressure: String!
+    temperature: Float!
+    notes: String
+}
+
+type dentalPhotoRecord{
+    id: ID!
+    upperTeeth: UUID!
+    lowerTeeth: UUID!
+    isValid: Boolean!
+}
+
+type ToothLegend{
+  id: ID!
+  name: String!
+  description: String
+}
+
+type ToothPlacement{ # singular tooth info
+  id: ID!
+  tooth_index: Int!
+  legend: [ToothLegend]!
+}
+
+# Oral Finding
+type OralFindingLegend{
+  id: ID!
+  name: String!
+  status: Boolean!
+  description: String
+  notes: String
+}
+
+type OralFinding{
+  id: ID!
+  oral: [OralFindingLegend]!
+}
+
+
+type DentalRecord{
+    numberOfTeeth: Int!
+    cariesForFilling: Int!
+    cariesForExtraction: Int!
+    rootFragment: Int!
+    missingTeeth: Int!
+    filled: Int!
+    totalDMF: Int!
+    notes: String
+
+    ToothStatus: [ToothPlacement!]!
+    created_at: Date!
+}
+
+
+# Intra Oral Appliance
+
+enum oralApplianceArch{
+  None
+  Upper
+  Lower
+  Both
+}
+
+type IntraOralApplianceTags{
+  id: ID!
+  name: String!
+  description: String
+  arch: Boolean!
+  status: String!
+  dateIssued: Date!
+}
+
+type IntraOralAppliance{
+  id: ID!
+  name: String!
+  description: String
+  notes: String
+}
+
+# Queries
+type Query {
+  # Student queries
+  getStudentProfile(id: ID!): StudentProfile
+  listStudentProfiles: [StudentProfile]
+
+  # Employee queries
+  getEmployeeProfile(id: ID!): EmployeeProfile
+  listEmployeeProfiles: [EmployeeProfile]
+}
+
+# Mutations
+type Mutation {
+  # Student mutations
+  createStudentProfile(
+    profileId: ID!
+    program: String!
+    year: StudentYear!
+    guardianName: String
+    guardianRelation: String
+    guardianContact: String
+  ): StudentProfile
+
+  # Employee mutations
+  createEmployeeProfile(
+    profileId: ID!
+    department: String!
+    role: EmployeeRole!
+    position: String!
+  ): EmployeeProfile
+}

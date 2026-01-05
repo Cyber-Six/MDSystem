@@ -10,11 +10,14 @@ const registerRoutes = require('./routes/auth/user/register.js');
 const loginRoutes = require('./routes/auth/user/login.js');
 
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
-const passwordResetRoutes = require('./routes/auth/emailpassword-reset.js');
+const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
+
+
+const registerGraphQLRoutes = require('./testinggsql/index.js');
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
@@ -51,6 +54,7 @@ app.use((err, req, res, next) => {
   next();
 });
 
+registerGraphQLRoutes(app);
 
 
 app.use('/auth/register', registerRoutes);

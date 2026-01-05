@@ -1,16 +1,16 @@
 const express = require("express");
 const router = express.Router();
 
-const { portalBasedIpRateLimiter } = require('../../config/middleware/ratelimiter.js');
-const logger = require('../../utils/logger.js');
-const { isValidEmail } = require('../../utils/validator.js');
-const { detectPortalFromSubdomain } = require('../../utils/portal.js');
-const { rateLimitEmailCooldown, rateLimitEmailAttempts, getUserIdFromVerificationSession, deleteVerificationSession } = require('../../config/redis.js');
-const query = require('../../config/query.js');
+const { portalBasedIpRateLimiter } = require('../../../config/middleware/ratelimiter.js');
+const logger = require('../../../utils/logger.js');
+const { isValidEmail } = require('../../../utils/validator.js');
+const { detectPortalFromSubdomain } = require('../../../utils/portal.js');
+const { rateLimitEmailCooldown, rateLimitEmailAttempts, getUserIdFromVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
+const query = require('../../../config/query.js');
 
-const { recordResetPwFailure, clearResetPwFailures, isResetPwLocked} = require('../../config/redis.js');
-const { rateLimitMatrix } = require('../../config/data/matrix.js');
-const { enqueueResetPassword } = require('../../services/emailservice.js');
+const { recordResetPwFailure, clearResetPwFailures, isResetPwLocked} = require('../../../config/redis.js');
+const { rateLimitMatrix } = require('../../../config/data/matrix.js');
+const { enqueueResetPassword } = require('../../../services/emailservice.js');
 
 
 router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => {
