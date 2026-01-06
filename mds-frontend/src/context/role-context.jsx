@@ -1,17 +1,10 @@
 import { useState } from 'react';
 import { RoleContext } from './role-context-object';
+import { detectRoleFromHostname } from '@mdsystem/core/utils/role-detection';
 
 export function RoleProvider({ children }) {
   const getInitialRole = () => {
-    const hostname = window.location.hostname.toLowerCase();
-    
-    // Staff subdomain → medical role
-    if (hostname.startsWith('staff.')) {
-      return 'medical';
-    }
-    
-    // Default to patient role (www, root domain, localhost, etc.)
-    return 'patient';
+    return detectRoleFromHostname(window.location.hostname);
   };
 
   const [role] = useState(getInitialRole);
