@@ -1,4 +1,5 @@
 
+#====================== USER PROFILE SCHEMA ==================== ###
 
 enum USER_SEX {
     Male
@@ -9,11 +10,8 @@ enum USER_CIVILSTATUS {
     Single
     Married
     Widowed
-    Divorced
     Separated
 }
-
-
 
 interface userProfile{
   id: ID!
@@ -29,6 +27,17 @@ interface userProfile{
   present_address: String!
   province_address: String!
   email: String!
+}
+
+enum STUDENT_YEAR {
+    Grade11
+    Grade12
+    Freshman
+    Sophomore
+    Junior
+    Senior
+    Masteral
+    Doctorate
 }
 
 type StudentProfile implements userProfile {
@@ -49,8 +58,11 @@ type EmployeeProfile implements userProfile {
   position: String!
 }
 
+### ====================== EMR SCHEMA ==================== ###
 
-type MedicalCondition {
+## --------Medical Dental History-------- ##
+
+type MedicalHistoryCondition {
     id: ID!
     name: String!
     description: String
@@ -60,17 +72,44 @@ type MedicalCondition {
 
 type MedicalHistory {
     id: ID!
-    conditions: [MedicalCondition!]
+    conditions: [MedicalHistoryCondition!]
+    archived_at: Date
+}
+
+type MedicalCondition{
+    id: ID!
+    name: String!
+    description: String
+    isActive: Boolean!
+    created_at: Date
 }
 
 type DentalHistory {
     id: ID!
 
     seenByDentist: Boolean!
-    lastDentalCleaning: Date!
+    lastDentalCleaning: String!
     purpose: String!
 
     lastVisitDate: Date
+    archived_at: Date
+}
+ ## 
+
+type VisualAcuity {
+    id: ID!
+    left_eye: String!
+    right_eye: String!
+    notes: String
+    archived_at: Date
+}
+
+type ObgynHistory {
+    id: ID!
+    lastMenstrualPeriod: Date!
+    hasDismonerrhea: Boolean!
+    notes: String
+    archived_at: Date
 }
 
 type LifeStyle {
@@ -81,21 +120,21 @@ type LifeStyle {
     alcoholConsumer: Boolean!
     frequencyOfAlcoholConsumption: String
     notes: String
+    archived_at: Date
+
 }
 
-type ObgynHistory {
+type dentalPhotoRecord{
     id: ID!
-    lastMenstrualPeriod: Date!
-    hasDismonerrhea: Boolean!
-    notes: String
+    upperTeeth: UUID!
+    lowerTeeth: UUID!
+    isValid: Boolean!
+    archived_at: Date
+
+
 }
 
-type VisualAcuity {
-    id: ID!
-    left_eye: String!
-    right_eye: String!
-    notes: String
-}
+## -------- For the Staff-------- ##
 
 type VitalSigns {
     id: ID!
@@ -106,14 +145,10 @@ type VitalSigns {
     blood_pressure: String!
     temperature: Float!
     notes: String
+    archived_at: Date
 }
 
-type dentalPhotoRecord{
-    id: ID!
-    upperTeeth: UUID!
-    lowerTeeth: UUID!
-    isValid: Boolean!
-}
+## -------- Dental Record-------- ##
 
 type ToothLegend{
   id: ID!
@@ -130,15 +165,17 @@ type ToothPlacement{ # singular tooth info
 # Oral Finding
 type OralFindingLegend{
   id: ID!
-  name: String!
-  status: Boolean!
+  name: String! # Calculus
+  isActive: Boolean!
   description: String
-  notes: String
 }
 
 type OralFinding{
   id: ID!
-  oral: [OralFindingLegend]!
+  oral: OralFindingLegend!
+  status: Boolean!
+  notes: String
+  created_at: Date!
 }
 
 
@@ -152,35 +189,109 @@ type DentalRecord{
     totalDMF: Int!
     notes: String
 
-    ToothStatus: [ToothPlacement!]!
+    oralFindings: [OralFinding!]!
+    ToothPlacement: [ToothPlacement!]!
     created_at: Date!
 }
 
 
 # Intra Oral Appliance
 
-enum oralApplianceArch{
+enum oralApplianceArch {
   None
   Upper
   Lower
   Both
 }
 
-type IntraOralApplianceTags{
+type OralApplianceLegend{
   id: ID!
   name: String!
   description: String
-  arch: Boolean!
-  status: String!
-  dateIssued: Date!
+  archable: Boolean!
+  isActive: Boolean!
+  created_at: Date
 }
 
-type IntraOralAppliance{
+type OralAppliance{
   id: ID!
-  name: String!
-  description: String
-  notes: String
+  legend: OralApplianceLegend!
+  status: String!
+  dateIssued: Date!
+  arch: oralApplianceArch!
 }
+
+type OralApplianceProfile{
+  id: ID!
+  appliances: [OralAppliance!]!
+  notes: String
+  archived_at: Date!
+}
+
+## -------- Emergency Contact -------- ##
+
+type EmergencyNumber {
+    id: ID!
+    name: String!
+    relationship: String!
+    contactNumber: String!
+    isVerified: Boolean!
+    created_at: Date!
+}
+
+type EmergencyContact {
+    id: ID!
+    firstContact: EmergencyNumber!
+    secondContact: EmergencyNumber!
+    archived_at: Date!
+
+}
+
+## Allergies
+
+enum ALLERGEN_TYPE{
+  Food
+  Drug
+  Environmental
+  Insect
+  Chemical
+  Other
+}
+
+enum ALLERGY_STATUS{
+  Active
+  Resolved
+  Suspected
+}
+
+type AllergenCatalog{
+  id: ID!
+  allergen: String!
+  type: ALLERGEN_TYPE!
+  isValid: Boolean!
+  created_at: Date!
+}
+
+type AllergyRecord{
+  id: ID!
+  allergen: AllergenCatalog!
+  status: ALLERGY_STATUS!
+  severity: String!
+  notes: String
+  dateIdentified: Date
+}
+
+type AllergyProfile{
+  id: ID!
+  allergies: [AllergyRecord!]!
+  notes: String
+  archived_at: Date
+}
+
+## maintenance
+
+
+
 
 # Queries
 type Query {
