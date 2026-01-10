@@ -223,7 +223,7 @@ type OralAppliance{
 
 type OralApplianceProfile{
   id: ID!
-  appliances: [OralAppliance!]!
+  appliances: [OralAppliance!]
   notes: String
   archived_at: Date!
 }
@@ -283,15 +283,101 @@ type AllergyRecord{
 
 type AllergyProfile{
   id: ID!
-  allergies: [AllergyRecord!]!
+  allergies: [AllergyRecord!]
   notes: String
   archived_at: Date
 }
 
+## Catalog
+
+type DomainCatalog {
+  id: ID!
+  domain: String!
+  name: String!
+  code: String!
+  description: String
+  isValid: Boolean!
+  created_at: Date
+} 
+
 ## maintenance
 
+type MaintenanceMedication {
+  id: ID!
+  medication: DomainCatalog!
+  description: String!
+}
 
+type MedicationProfile {
+  id: ID!
+  medications: [MaintenanceMedication!]
+  notes: String
+  archived_at: Date
+}
 
+## hospitalization record
+
+type hospitalizationRecord {
+  id: ID!
+  condition: DomainCatalog!
+  admissionDate: Date!
+  dischargeDate: Date
+  notes: String
+  }
+
+type HospitalizationProfile {
+  id: ID!
+  hospitalizations: [hospitalizationRecord!]
+  notes: String
+  archived_at: Date
+}
+
+## operation
+
+type operationRecord {
+  id: ID!
+  procedure: DomainCatalog!
+  operationDate: Date!
+  notes: String
+  }
+
+type OperationProfile {
+  id: ID!
+  operations: [operationRecord!]
+  notes: String
+  archived_at: Date
+  }
+
+## Immunization record
+
+type immunizationRecord {
+  id: ID!
+  vaccine: DomainCatalog!
+  immunizationDate: Date!
+  doseNumber: Int!
+  }
+
+type ImmunizationProfile {
+  id: ID!
+  immunizations: [immunizationRecord!]
+  notes: String
+  archived_at: Date
+  }
+
+## Dental Procedure record
+
+type dentalProcedureRecord {
+  id: ID!
+  procedure: DomainCatalog!
+  procedureDate: Date!
+  }
+
+type DentalProcedureProfile {
+  id: ID!
+  procedures: [dentalProcedureRecord!]
+  notes: String
+  archived_at: Date
+  }
 
 # Queries
 type Query {
