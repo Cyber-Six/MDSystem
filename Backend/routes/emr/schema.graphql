@@ -62,27 +62,6 @@ type EmployeeProfile implements userProfile {
 
 ## --------Medical Dental History-------- ##
 
-type MedicalHistoryCondition {
-    id: ID!
-    name: String!
-    description: String
-    diagnosedDate: Date
-    relationship: String
-}
-
-type MedicalHistory {
-    id: ID!
-    conditions: [MedicalHistoryCondition!]
-    archived_at: Date
-}
-
-type MedicalCondition{
-    id: ID!
-    name: String!
-    description: String
-    isActive: Boolean!
-    created_at: Date
-}
 
 type DentalHistory {
     id: ID!
@@ -102,6 +81,11 @@ type VisualAcuity {
     right_eye: String!
     notes: String
     archived_at: Date
+}
+
+type VisualAcuityProfile {
+    id: ID!
+    visualAcuityRecords: [VisualAcuity!]!
 }
 
 type ObgynHistory {
@@ -124,7 +108,7 @@ type LifeStyle {
 
 }
 
-type dentalPhotoRecord{
+type dentalPhotos{
     id: ID!
     upperTeeth: UUID!
     lowerTeeth: UUID!
@@ -379,34 +363,51 @@ type DentalProcedureProfile {
   archived_at: Date
   }
 
+## Medical History
+type MedicalConditionRecord {
+    id: ID!
+    condition: DomainCatalog!
+    description: String
+    diagnosedDate: Date
+    relationship: String
+}
+
+type MedicalHistory {
+    id: ID!
+    conditions: [MedicalConditionRecord!]
+    notes: String
+    archived_at: Date
+}
+
+
+enum UpdateScope{
+    Medical
+    Dental
+    Both
+}
+
+enum UpdateStatus{
+    In-progress
+    Pending
+    Revised
+    Cancelled
+    Approved
+}
 # Queries
 type Query {
-  # Student queries
-  getStudentProfile(id: ID!): StudentProfile
-  listStudentProfiles: [StudentProfile]
+  getProfile(id: ID!, from: Date, to: Date, offset: Int, limit: Int): [userProfile] # diffenent resolver for patient vs staff
+  getAllProfiles(from: Date, to: Date, offset: Int, limit: Int, scope: UpdateScope, statuses: [UpdateStatus]): [userProfile]!
 
-  # Employee queries
-  getEmployeeProfile(id: ID!): EmployeeProfile
-  listEmployeeProfiles: [EmployeeProfile]
+  getDentalPhotos(id: ID!, from: Date, to: Date, offset: Int, limit: Int): dentalPhotos 
+  getAllDentalPhotos(from: Date, to: Date, offset: Int, limit: Int, scope: UpdateScope, statuses: [UpdateStatus]): [dentalPhotos!]!
+  
+  
+  getDentalHistory(id: ID!): DentalHistory
+  getDentalRecord
+
 }
 
 # Mutations
 type Mutation {
-  # Student mutations
-  createStudentProfile(
-    profileId: ID!
-    program: String!
-    year: StudentYear!
-    guardianName: String
-    guardianRelation: String
-    guardianContact: String
-  ): StudentProfile
 
-  # Employee mutations
-  createEmployeeProfile(
-    profileId: ID!
-    department: String!
-    role: EmployeeRole!
-    position: String!
-  ): EmployeeProfile
 }
