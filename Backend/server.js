@@ -15,7 +15,7 @@ const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js'
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
-
+const initEMRGraphQL = require('./routes/emr/graphql.js');
 
 const registerGraphQLRoutes = require('./testinggsql/index.js');
 
@@ -55,6 +55,7 @@ app.use((err, req, res, next) => {
 });
 
 registerGraphQLRoutes(app);
+initEMRGraphQL(app);
 
 
 app.use('/auth/register', registerRoutes);
