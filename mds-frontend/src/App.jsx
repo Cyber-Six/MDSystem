@@ -5,21 +5,24 @@ import Dashboard from './pages/Dashboard.jsx';
 import Auth from './pages/Auth.jsx';
 import { BannerProvider, useBanner } from './context/banner-context.jsx';
 import Banner from './components/banner/banner.jsx';
-import { setBannerCallback } from './services/axios-request-handler.js';
+import ResetPassword from './modules/auth/resetpassword.jsx';
 
 function AppContent() {
   const { showBanner } = useBanner();
 
-  // Set up banner callback for axios interceptors
-  useEffect(() => {
-    setBannerCallback(showBanner);
-  }, [showBanner]);
+  // Banner callback is now automatically handled by core.js
+  // No need to set it up here anymore
 
   return (
     <>
       <Banner />
+
       <Router>
         <Routes>
+            <Route 
+            path="/auth/password/reset-password/:verificationKey" 
+            element={<ResetPassword />} 
+            />
           {/* Root route - Dashboard with authentication check */}
           <Route 
             path="/*" 
@@ -29,12 +32,13 @@ function AppContent() {
               </PrivateRoute>
             } 
           />
-          
+
           {/* Auth routes - Login/Register */}
           <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
           <Route path="/auth/login" element={<Auth />} />
           <Route path="/auth/register" element={<Auth />} />
-          
+
+
           {/* Redirect any unknown routes to root */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -51,4 +55,4 @@ function App() {
   );
 }
 
-export default App
+export default App;

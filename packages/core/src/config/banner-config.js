@@ -52,6 +52,8 @@ export const SILENT_STATUS_CODES = [
 
 /**
  * Check if a status code should display a banner
+ * @param {number} statusCode - HTTP status code
+ * @returns {boolean} True if banner should be shown
  */
 export const shouldShowBanner = (statusCode) => {
   return (
@@ -63,6 +65,8 @@ export const shouldShowBanner = (statusCode) => {
 
 /**
  * Get banner type based on status code
+ * @param {number} statusCode - HTTP status code
+ * @returns {'success'|'error'|'info'} Banner type
  */
 export const getBannerType = (statusCode) => {
   if (SUCCESS_STATUS_CODES.includes(statusCode)) return 'success';
@@ -73,6 +77,8 @@ export const getBannerType = (statusCode) => {
 
 /**
  * Extract error and message from backend response
+ * @param {Object} response - Axios response object
+ * @returns {{error: string|null, message: string}} Extracted banner data
  */
 export const extractBannerData = (response) => {
   const data = response?.data;
@@ -85,6 +91,8 @@ export const extractBannerData = (response) => {
 
 /**
  * Default messages for status codes when backend doesn't provide one
+ * @param {number} statusCode - HTTP status code
+ * @returns {string} Default message
  */
 const getDefaultMessage = (statusCode) => {
   const defaultMessages = {
