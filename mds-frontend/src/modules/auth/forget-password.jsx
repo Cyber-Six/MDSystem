@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axiosRequest from '../../services/axios-request-handler';
+import { axiosRequest } from '../../core';
 
 const ForgetPassword = ({ onBackToLogin }) => {
   const [formData, setFormData] = useState({

@@ -1,0 +1,700 @@
+TOOLS AND RESOURCES FOR DEVELOPMENT
+
+MDSystem - Medical System
+
+Platform: Raspberry Pi 5
+CDN/Proxy/Security: Cloudflare
+Last Updated: January 12, 2026
+
+════════════════════════════════════════════════════════════════════════════════
+
+TABLE OF CONTENTS
+
+1. Infrastructure & Hosting
+2. Backend Technologies
+3. Frontend Technologies (Web)
+4. Mobile Technologies
+5. Shared Core Package
+6. Database & Caching
+7. Authentication & Security
+8. Email & Messaging
+9. Development Tools
+10. Build & Bundling
+11. Summary List
+12. Environment Variables Required
+13. Project Structure Overview
+
+════════════════════════════════════════════════════════════════════════════════
+
+1. INFRASTRUCTURE & HOSTING
+
+Raspberry Pi 5
+    Purpose: Production Server Platform
+    Notes: Self-hosted server
+
+Cloudflare
+    Purpose: CDN, DDoS Protection, SSL/TLS, Proxy
+    Notes: Tunnels for secure access
+
+Node.js
+    Purpose: Runtime Environment
+    Version: 18.0.0 or higher
+
+════════════════════════════════════════════════════════════════════════════════
+
+2. BACKEND TECHNOLOGIES
+
+Core Framework
+────────────────────────────────────────
+
+Express.js (Version 5.1.0)
+    Purpose: Web server framework (REST API)
+
+Socket.io (Version 4.8.1)
+    Purpose: Real-time bidirectional communication
+
+CORS
+    Purpose: Cross-Origin Resource Sharing middleware
+
+dotenv (Version 17.2.3)
+    Purpose: Environment variable management
+
+
+Database & ORM
+────────────────────────────────────────
+
+pg / node-postgres (Version 8.16.3)
+    Purpose: PostgreSQL client for Node.js
+
+
+Caching & Message Queue
+────────────────────────────────────────
+
+Redis (Version 5.9.0)
+    Purpose: In-memory data store / caching
+
+ioredis (Version 5.8.2)
+    Purpose: Redis client with cluster support
+
+BullMQ (Version 5.65.0)
+    Purpose: Message queue for background jobs
+
+
+Authentication & Security Packages
+────────────────────────────────────────
+
+jsonwebtoken (Version 9.0.2)
+    Purpose: JWT token generation & verification
+
+bcrypt (Version 6.0.0)
+    Purpose: Password hashing
+
+validator (Version 13.15.20)
+    Purpose: String validation & sanitization
+
+xss (Version 1.0.15)
+    Purpose: XSS attack prevention
+
+crypto (Native)
+    Purpose: Cryptographic functions
+
+
+Email Services
+────────────────────────────────────────
+
+nodemailer (Version 7.0.10)
+    Purpose: Email sending (SMTP)
+
+
+Utilities
+────────────────────────────────────────
+
+winston (Version 3.18.3)
+    Purpose: Logging library
+
+uuid (Version 13.0.0)
+    Purpose: UUID generation
+
+multer (Version 2.0.2)
+    Purpose: File upload handling
+
+node-fetch (Version 3.3.2)
+    Purpose: HTTP client for Node.js
+
+
+External Services
+────────────────────────────────────────
+
+Google reCAPTCHA
+    Purpose: Bot protection & CAPTCHA verification
+
+SMTP Server
+    Purpose: Email delivery (Gmail SMTP)
+
+════════════════════════════════════════════════════════════════════════════════
+
+3. FRONTEND TECHNOLOGIES (WEB)
+
+Core Framework
+────────────────────────────────────────
+
+React (Version 19.2.3)
+    Purpose: UI library
+
+React DOM (Version 19.2.3)
+    Purpose: React rendering for web
+
+React Router DOM (Version 7.10.1)
+    Purpose: Client-side routing
+
+
+HTTP Client
+────────────────────────────────────────
+
+Axios (Version 1.13.2)
+    Purpose: HTTP client with interceptors
+
+
+UI Components
+────────────────────────────────────────
+
+Lucide React (Version 0.562.0)
+    Purpose: Icon library
+
+TailwindCSS (Version 3.4.19)
+    Purpose: Utility-first CSS framework
+
+PostCSS (Version 8.5.6)
+    Purpose: CSS transformations
+
+Autoprefixer (Version 10.4.22)
+    Purpose: CSS vendor prefixing
+
+
+Build Tools
+────────────────────────────────────────
+
+Vite (Version 7.2.7)
+    Purpose: Build tool & dev server
+
+@vitejs/plugin-react (Version 5.1.2)
+    Purpose: React plugin for Vite
+
+babel-plugin-react-compiler (Version 1.0.0)
+    Purpose: React Compiler optimization
+
+
+Code Quality
+────────────────────────────────────────
+
+ESLint (Version 9.39.2)
+    Purpose: JavaScript/JSX linter
+
+eslint-plugin-react-hooks (Version 7.0.1)
+    Purpose: React Hooks linting rules
+
+eslint-plugin-react-refresh (Version 0.4.24)
+    Purpose: Fast Refresh linting
+
+
+TypeScript Support
+────────────────────────────────────────
+
+@types/react (Version 19.2.7)
+    Purpose: React type definitions
+
+@types/react-dom (Version 19.2.3)
+    Purpose: React DOM type definitions
+
+════════════════════════════════════════════════════════════════════════════════
+
+4. MOBILE TECHNOLOGIES
+
+Core Framework
+────────────────────────────────────────
+
+React Native (Version 0.81.5)
+    Purpose: Mobile app framework
+
+Expo (Version 54.0.30)
+    Purpose: React Native toolchain
+
+React (Version 19.1.0)
+    Purpose: UI library
+
+
+Navigation & Storage
+────────────────────────────────────────
+
+@react-native-async-storage/async-storage (Version 2.2.0)
+    Purpose: Persistent local storage
+
+react-native-safe-area-context (Version 5.6.2)
+    Purpose: Safe area handling
+
+expo-status-bar (Version 3.0.9)
+    Purpose: Status bar management
+
+
+Styling
+────────────────────────────────────────
+
+NativeWind (Version 2.0.11)
+    Purpose: TailwindCSS for React Native
+
+TailwindCSS (Version 3.3.2)
+    Purpose: Utility-first CSS framework
+
+
+HTTP Client
+────────────────────────────────────────
+
+Axios (Version 1.13.2)
+    Purpose: HTTP client with interceptors
+
+
+TypeScript
+────────────────────────────────────────
+
+TypeScript (Version 5.9.2)
+    Purpose: Type-safe JavaScript
+
+@types/react (Version 19.1.0)
+    Purpose: React type definitions
+
+@types/react-native (Version 0.72.8)
+    Purpose: React Native type definitions
+
+════════════════════════════════════════════════════════════════════════════════
+
+5. SHARED CORE PACKAGE
+
+Package Name: @mdsystem/core
+
+Purpose:
+Platform-agnostic business logic shared between web and mobile applications.
+
+Exports & Features:
+
+    createApiBaseUrlProvider
+        Purpose: Dynamic API URL management
+
+    createTokenService
+        Purpose: JWT token storage & refresh
+
+    createAxiosRequestHandler
+        Purpose: Configured Axios with interceptors
+
+    BannerService
+        Purpose: Cross-platform notification system
+
+    detectRoleFromHostname
+        Purpose: Role detection utility
+
+    Email Validation
+        Purpose: Email format & domain validation
+
+    Password Validation
+        Purpose: Password strength validation
+
+    User Constants
+        Purpose: Shared user-related constants
+
+
+Dependencies:
+
+    Axios (Version 1.7.9)
+        Purpose: HTTP client foundation
+
+════════════════════════════════════════════════════════════════════════════════
+
+6. DATABASE & CACHING
+
+PostgreSQL Configuration
+────────────────────────────────────────
+
+    pg Pool
+        Purpose: Connection pooling
+
+    Configurable pool size
+        Default: 5 connections maximum
+
+    Connection timeout
+        Value: 10,000 milliseconds
+
+    Idle timeout
+        Value: 30,000 milliseconds
+
+
+Redis Configuration
+────────────────────────────────────────
+
+    Session storage
+        Purpose: JWT refresh tokens, session data
+
+    OTP storage
+        Purpose: Email verification codes
+
+    Rate limiting
+        Purpose: IP-based request throttling
+
+    Message queue backend
+        Purpose: BullMQ job storage
+
+    ACL authentication
+        Purpose: Secure user/password access
+
+════════════════════════════════════════════════════════════════════════════════
+
+7. AUTHENTICATION & SECURITY
+
+JWT Configuration
+────────────────────────────────────────
+
+    Access Tokens
+        Implementation: Short-lived (configurable per role)
+
+    Refresh Tokens
+        Implementation: Long-lived (approximately 7 days default)
+
+    Token Storage
+        Implementation: Redis-backed sessions
+
+    Role-based expiration
+        Implementation: Patient vs Staff tokens
+
+
+Password Security
+────────────────────────────────────────
+
+    Hashing
+        Implementation: bcrypt with 12 salt rounds
+
+    Minimum length
+        Value: 8 characters
+
+    Maximum length
+        Value: 64 characters
+
+
+Rate Limiting
+────────────────────────────────────────
+
+    IP-based limiting
+        Implementation: Redis-backed counters
+
+    Role-based profiles
+        Implementation: Different limits per user type
+
+    Portal-based limiting
+        Implementation: Patient vs Staff portals
+
+
+Security Features
+────────────────────────────────────────
+
+    XSS Protection
+        Implementation: xss sanitization library
+
+    Input Validation
+        Implementation: validator.js library
+
+    Timing Attack Prevention
+        Implementation: Random delay on auth failures
+
+    reCAPTCHA
+        Implementation: Google reCAPTCHA v2/v3
+
+    CORS
+        Implementation: Configured allowed origins
+
+    Cloudflare
+        Implementation: DDoS protection & WAF
+
+════════════════════════════════════════════════════════════════════════════════
+
+8. EMAIL & MESSAGING
+
+Email Queue System (BullMQ)
+────────────────────────────────────────
+
+    Queue Name
+        Value: emailQueue
+
+    Retry Attempts
+        Value: 5 attempts
+
+    Backoff Strategy
+        Value: Exponential (1 second initial)
+
+    Job Types
+        Values: Verification, 2FA, Password Reset
+
+
+Email Templates
+────────────────────────────────────────
+
+    Email Verification
+        Purpose: Account activation OTP
+
+    2FA OTP
+        Purpose: Two-factor authentication
+
+    Password Reset
+        Purpose: Secure password recovery link
+
+
+SMTP Configuration
+────────────────────────────────────────
+
+    Host
+        Default: smtp.gmail.com
+
+    Port
+        Default: 465 (secure)
+
+    Secure
+        Default: TLS enabled
+
+════════════════════════════════════════════════════════════════════════════════
+
+9. DEVELOPMENT TOOLS
+
+Package Managers
+────────────────────────────────────────
+
+    npm
+        Purpose: Node package management
+
+
+Code Quality
+────────────────────────────────────────
+
+    ESLint
+        Purpose: JavaScript/TypeScript linting
+
+    TypeScript
+        Purpose: Static type checking (mobile)
+
+
+Logging
+────────────────────────────────────────
+
+    Winston
+        Purpose: Application logging
+
+    Daily log rotation
+        Purpose: File-based log management
+
+
+Version Control
+────────────────────────────────────────
+
+    Git
+        Purpose: Source code management
+
+════════════════════════════════════════════════════════════════════════════════
+
+10. BUILD & BUNDLING
+
+Web (mds-frontend)
+────────────────────────────────────────
+
+    Vite
+        Configuration: ES modules, HMR, optimized builds
+
+    TailwindCSS
+        Configuration: JIT compilation
+
+    PostCSS
+        Configuration: CSS processing pipeline
+
+    React Compiler
+        Configuration: Automatic optimization
+
+
+Mobile (mds-mobile)
+────────────────────────────────────────
+
+    Expo
+        Configuration: Managed workflow
+
+    Metro
+        Configuration: React Native bundler
+
+    Babel
+        Configuration: Transpilation with presets
+
+    TypeScript
+        Configuration: Type checking & compilation
+
+
+Shared (packages/core)
+────────────────────────────────────────
+
+    ES Modules
+        Configuration: Native ESM exports
+
+    Subpath exports
+        Configuration: Granular module access
+
+════════════════════════════════════════════════════════════════════════════════
+
+11. SUMMARY LIST
+
+INFRASTRUCTURE
+    • Raspberry Pi 5 (Server)
+    • Cloudflare (CDN/Security/Proxy)
+    • Node.js version 18.0.0 or higher
+
+DATABASE & CACHE
+    • PostgreSQL (Database)
+    • Redis (Cache/Sessions/Queue)
+
+BACKEND STACK
+    • Express.js 5.x
+    • Socket.io
+    • BullMQ (Job Queue)
+    • jsonwebtoken (JWT)
+    • bcrypt (Password Hashing)
+    • nodemailer (Email)
+    • Winston (Logging)
+
+WEB FRONTEND STACK
+    • React 19.x
+    • React Router DOM 7.x
+    • Vite 7.x
+    • TailwindCSS 3.x
+    • Axios
+    • ESLint
+
+MOBILE STACK
+    • React Native 0.81.x
+    • Expo 54.x
+    • NativeWind
+    • TypeScript 5.x
+    • AsyncStorage
+
+SECURITY
+    • JWT Authentication
+    • bcrypt (12 rounds)
+    • Google reCAPTCHA
+    • XSS Protection
+    • Rate Limiting (Redis)
+    • Cloudflare WAF
+
+EMAIL SERVICES
+    • Nodemailer (SMTP)
+    • BullMQ Email Queue
+    • Gmail SMTP (default)
+
+SHARED CORE
+    • @mdsystem/core package
+    • Token Service
+    • API URL Provider
+    • Banner/Notification System
+    • Input Validation
+
+DEV TOOLS
+    • npm
+    • ESLint
+    • TypeScript
+    • Git
+
+════════════════════════════════════════════════════════════════════════════════
+
+12. ENVIRONMENT VARIABLES REQUIRED
+
+Backend (.env)
+────────────────────────────────────────
+
+Database Configuration:
+    POSTGRES_HOST=
+    POSTGRES_USER=
+    POSTGRES_PASSWORD=
+    POSTGRES_DB=
+    POSTGRES_PORT=5432
+
+Redis Configuration:
+    REDIS_HOST=127.0.0.1
+    REDIS_PORT=6379
+    REDIS_USERNAME=
+    REDIS_PASSWORD=
+    REDIS_DB=0
+
+JWT Configuration:
+    JWT_SECRET=
+    JWT_PATIENT_ACCESS_EXPIRATION=
+    JWT_STAFF_ACCESS_EXPIRATION=
+    JWT_REFRESH_EXPIRATION=604800
+
+Email Configuration:
+    SMTP_HOST=smtp.gmail.com
+    SMTP_PORT=465
+    SMTP_SECURE=true
+    SMTP_USER=
+    SMTP_PASS=
+    EMAIL_DELAY=1000
+
+OTP Expiration (in seconds):
+    EMAIL_VERIF_EXPIRATION=300
+    EMAIL_2FA_EXPIRATION=300
+    EMAIL_PASSWD_RESET_EXPIRATION=900
+
+reCAPTCHA Configuration:
+    RECAPTCHA_SECRET_KEY=
+    RECAPTCHA_TEST_MODE=false
+
+Server Configuration:
+    HOST=
+    PATIENT_PORT=3001
+
+Logging Configuration:
+    LOGGER_DIR=logs
+    LOG_LEVEL=info
+
+
+Frontend (.env.local)
+────────────────────────────────────────
+
+    VITE_DEV_PORTAL=www
+
+════════════════════════════════════════════════════════════════════════════════
+
+13. PROJECT STRUCTURE OVERVIEW
+
+MDSystem/
+│
+├── Backend/                    Express.js API Server
+│   ├── config/                 Configuration modules
+│   ├── routes/                 API endpoints
+│   └── services/               Business logic services
+│
+├── mds-frontend/               React Web Application
+│   └── src/
+│       ├── components/         Reusable UI components
+│       ├── context/            React context providers
+│       ├── modules/            Feature modules
+│       ├── pages/              Page components
+│       └── services/           API service layer
+│
+├── mds-mobile/                 React Native Mobile App
+│   └── src/
+│       ├── components/         Mobile UI components
+│       ├── context/            React context providers
+│       └── screens/            Screen components
+│
+└── packages/
+    └── core/                   Shared business logic
+        └── src/
+            ├── config/         Shared configurations
+            ├── services/       Core services
+            ├── utils/          Utility functions
+            └── validation/     Validation logic
+
+════════════════════════════════════════════════════════════════════════════════
+
+This document serves as a reference for all tools, technologies, and resources 
+used in the MDSystem development project.
+
+════════════════════════════════════════════════════════════════════════════════

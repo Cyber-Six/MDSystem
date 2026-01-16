@@ -1,0 +1,47 @@
+{
+  "name": "@mdsystem/core",
+  "version": "1.0.0",
+  "description": "Shared core business logic for MDSystem web and mobile applications",
+  "main": "src/index.js",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./config/*": "./src/config/*.js",
+    "./services/*": "./src/services/*.js",
+    "./utils/*": "./src/utils/*.js",
+    "./validation/*": "./src/validation/*.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mdsystem",
+    "core",
+    "shared",
+    "react",
+    "react-native",
+    "axios",
+    "authentication",
+    "token-management"
+  ],
+  "author": "Cyber-Six",
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "axios": "^1.7.9"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "file:../../../"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
