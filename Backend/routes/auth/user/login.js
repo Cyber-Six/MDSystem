@@ -1,6 +1,6 @@
 const express = require("express");
 
-const { isValidEmail } = require("../../../config/validator.js");
+const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
 
 const {createVerificationSession, getVerificationSession, deleteVerificationSession } = require("../../../config/redis.js");
@@ -8,10 +8,10 @@ const {createVerificationSession, getVerificationSession, deleteVerificationSess
 const { verifyRecaptcha } = require("../../../services/recaptcha.js");
 
 const query = require("../../../config/query.js");
-const { verifyPassword, generateRandomKey } = require("../../../config/security.js");
+const { verifyPassword, generateRandomKey } = require("../../../utils/security.js");
 
-const { detectPortalFromSubdomain } = require("../../utils/portal.js");
-const AuthSession = require("../../utils/authSession.js");
+const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
+const AuthSession = require("../../../utils/authSession.js");
 const router = express.Router();
 
 const VERIFICATIONKEY_PURPOSE = "2fa";
@@ -70,14 +70,14 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   return res.status(200).json({
     ok: true,
     requires2FA: user.allow_email_2fa,
-    verificationKey,
+    LoginKey: verificationKey,
     });
   });
 
 
 
 router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
-  const { verificationKey } = req.body;
+  const { LoginKey: verificationKey } = req.body;
 
   if (!verificationKey) {
     return res.status(400).json({

@@ -1,6 +1,3 @@
-
-const USER_STATUS = ["Student", "Employee", "Medical"];
-
 function isUserStaff(status) {
   return status === "Medical";
 }
@@ -51,7 +48,6 @@ function validatePassword(password) {
 
 
 module.exports = {
-  USER_STATUS,
   isStudentEmail,
   isEmployeeEmail,
   isMedicalEmail,

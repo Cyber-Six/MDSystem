@@ -1,23 +1,21 @@
 const express = require('express');
 
-const { detectRoleFromEmail, isMedicalEmail, isValidEmail } = require('../../config/validator.js');
-const { portalBasedIpRateLimiter } = require('../../config/middleware/ratelimiter.js');
+const { detectRoleFromEmail, isMedicalEmail, isValidEmail } = require('../../../utils/validator.js');
+const { portalBasedIpRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const { verifyOTP, getOTPFailureCount, getOTPLockoutTTL,
         createVerificationSession,
         rateLimitEmailCooldown, rateLimitEmailAttempts, 
         deleteEmailCooldown, deleteEmailAttempts,
-        update2FAInSession} = require('../../config/redis.js');
-const { mapRoleToProfile, rateLimitMatrix } = require('../../config/data/matrix.js');
-const { verifyRecaptcha } = require('../../services/recaptcha.js');
+        update2FAInSession} = require('../../../config/redis.js');
+const { rateLimitMatrix } = require('../../../config/data/matrix.js');
+const { verifyRecaptcha } = require('../../../services/recaptcha.js');
 
-const { enqueueEmailVerification, enqueueEmail2FA } = require('../../services/emailservice.js');
-const { detectPortalFromSubdomain } = require('../utils/portal.js');
+const { enqueueEmailVerification, enqueueEmail2FA } = require('../../../services/emailservice.js');
+const { detectPortalFromSubdomain } = require('../../../utils/portal.js');
 
 const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
-
-console.log("Loaded ENV in emailauth:", process.env.OTP_GLOBAL_ATTEMPT_LIMIT);
 
 const router = express.Router();
 

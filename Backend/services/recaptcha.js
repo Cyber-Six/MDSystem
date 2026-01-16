@@ -1,15 +1,19 @@
-const fetch = require("node-fetch");
 const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+const logger = require('../utils/logger.js');
 
 async function verifyRecaptcha(token) {
     try {
         const secret = process.env.RECAPTCHA_SECRET_KEY;
 
+        // `node-fetch` is an ES module in recent versions. Dynamically import it
+        // so this CommonJS file can use it without ERR_REQUIRE_ESM.
+        const { default: fetch } = await import('node-fetch');
+
         if (!secret) {
-            console.error("Missing RECAPTCHA_SECRET_KEY in environment");
+            logger.error("Missing RECAPTCHA_SECRET_KEY in environment");
             return false;
         }
 
@@ -23,7 +27,7 @@ async function verifyRecaptcha(token) {
 
         return data.success === true;
     } catch (err) {
-        console.error("reCAPTCHA verification error:", err);
+        logger.error("reCAPTCHA verification error:", err);
         return false;
     }
 }
@@ -31,7 +35,7 @@ async function verifyRecaptcha(token) {
 async function verifyRecaptcha_demo(token) {
     // ✅ TEST MODE — always return true
     // This lets you develop without needing a real Google key.
-    console.log("⚠️  reCAPTCHA TEST MODE: always returning true");
+    logger.warn("⚠️  reCAPTCHA TEST MODE: always returning true");
     return true;
     }
 

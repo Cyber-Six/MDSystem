@@ -1,7 +1,8 @@
 const { Queue } = require('bullmq');
-const { generateOTP } = require('../config/security.js');
-const { connection } = require('../config/redis.js'); // ✅ centralized Redis connection
+const { generateOTP } = require('../utils/security.js');
+const { redisConfig } = require('../config/redis.js');
 
+const logger = require('../utils/logger.js');
 // ✅ Email Verification Expiration
 const EMAIL_VERIF_EXP_SECONDS = Number(process.env.EMAIL_VERIF_EXPIRATION) || 300;
 const EMAIL_VERIF_EXP_MINUTES = Math.floor(EMAIL_VERIF_EXP_SECONDS / 60);
@@ -15,8 +16,8 @@ const EMAIL_RESETPW_EXP_SECONDS = Number(process.env.EMAIL_PASSWD_RESET_EXPIRATI
 const EMAIL_RESETPW_EXP_MINUTES = Math.floor(EMAIL_RESETPW_EXP_SECONDS / 60);
 
 
-const emailQueue = new Queue('emailQueue', { connection });
-console.log('✅ Email queue initialized');
+const emailQueue = new Queue('emailQueue', { connection: redisConfig });
+logger.info('✅ Email queue initialized');
 
 async function enqueueEmail(to, subject, htmlContent) {
   const job = await emailQueue.add('sendEmail', { to, subject, htmlContent }, {
@@ -37,7 +38,6 @@ async function enqueueEmail2FA(userEmail, portal="patient") {
     removeOnComplete: true,
   });
   const waitingCount = await emailQueue.getWaitingCount();
-  console.log(`Enqueued OTP email job ${job.id} for ${userEmail}`);
   return {
     jobId: job.id,
     position: waitingCount,
@@ -63,6 +63,8 @@ async function enqueueEmailVerification(userEmail, portal="patient") {
   }
 
 async function enqueueResetPassword(userEmail, portal="patient") {
+  logger.debug(`Enqueued password reset email for ${userEmail} in portal ${portal}, job ID: ${job.id}`);
+  console.log("NIGGA");
   // verifcation token would be created when th email is preparing to be sent
   job = await emailQueue.add("sendPasswordResetLink", {userEmail, data: { undefined }, portal}, {
       attempts: 5,
