@@ -1,0 +1,102 @@
+
+
+enum USER_SEX {
+    Male
+    Female
+}
+
+enum USER_CIVILSTATUS {
+    Single
+    Married
+    Widowed
+    Divorced
+    Separated
+}
+
+
+interface userProfile{
+  id: ID!
+  first_name: String!
+  middle_name: String!
+  last_name: String!
+  suffix: String!
+  date_of_birth: Date!
+  sex: USER_SEX!
+  status: USER_CIVILSTATUS!
+  religion: String!
+  contactNumber: String!
+  present_address: String!
+  province_address: String!
+  email: String!
+  updated_at: Date
+  created_at: Date
+}
+
+interface userProfileInput{
+  first_name: String!
+  middle_name: String!
+  last_name: String!
+  suffix: String!
+  date_of_birth: Date!
+  sex: USER_SEX!
+  status: USER_CIVILSTATUS!
+  religion: String!
+  contactNumber: String!
+  present_address: String!
+  province_address: String!
+  email: String!
+}
+
+
+
+# Student profile
+type StudentProfile {
+  id: ID!
+  profile: userProfile!   # FK reference
+  program: String!
+  year: STUDENT_YEAR!
+  guardianName: String!
+  guardianRelation: String!
+  guardianContact: String!
+}
+
+# Employee profile
+type EmployeeProfile {
+  id: ID!
+  profile: ProfileRecord!   # FK reference
+  department: String!
+  role: String!
+  position: String!
+}
+
+# Queries
+type Query {
+  # Student queries
+  getStudentProfile(id: ID!): StudentProfile
+  listStudentProfiles: [StudentProfile]
+
+  # Employee queries
+  getEmployeeProfile(id: ID!): EmployeeProfile
+  listEmployeeProfiles: [EmployeeProfile]
+}
+
+# Mutations
+type Mutation {
+  # Student mutations
+  createStudentProfile(
+    profileId: ID!
+    program: String!
+    year: StudentYear!
+    guardianName: String
+    guardianRelation: String
+    guardianContact: String
+  ): StudentProfile
+
+  # Employee mutations
+  createEmployeeProfile(
+    profileId: ID!
+    department: String!
+    role: EmployeeRole!
+    position: String!
+  ): EmployeeProfile
+}

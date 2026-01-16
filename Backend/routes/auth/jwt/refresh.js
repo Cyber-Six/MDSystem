@@ -1,14 +1,15 @@
 const express = require("express");
 const router = express.Router();
 
-const { handleRefresh } = require('../../config/jwt.js');
-const { portalBasedIpRateLimiter } = require('../../config/middleware/ratelimiter.js');
-const { recordRefreshTokenFailure, clearRefreshTokenFailures, isRefreshTokenLocked} = require('../../config/redis.js');
+const { handleRefresh } = require('../../../config/jwt.js');
+const { portalBasedIpRateLimiter } = require('../../../config/middleware/ratelimiter.js');
+const { recordRefreshTokenFailure, clearRefreshTokenFailures, isRefreshTokenLocked} = require('../../../config/redis.js');
 
+const logger = require('../../../utils/logger.js');
 // adjust path as needed
 
 // POST /auth/refresh
-router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
+router.post("/", portalBasedIpRateLimiter("r"), async (req, res) => {
   const ip = req.ip;
   try {
     // ✅ 0. Check if this IP is locked from refresh attempts
@@ -118,7 +119,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
         });
 
       default:
-        console.error("Refresh error:", err);
+        logger.error("Refresh error:", err);
         return res.status(500).json({
           error: "SERVER_ERROR",
           message: "An unexpected error occurred."

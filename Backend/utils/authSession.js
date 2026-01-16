@@ -1,6 +1,6 @@
 // authSession.js
-const { handleLogin } = require("./../../config/jwt.js");
-const { generateRandomKey } = require("./../../config/security.js");
+const { handleLogin } = require("./../config/jwt.js");
+const { generateRandomKey } = require("./security.js");
 const { detectPortalFromSubdomain } = require("./portal.js");
 
 class AuthSession {

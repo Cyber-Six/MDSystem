@@ -6,18 +6,8 @@ const db = require('./config/db.js');
 const redis = require('./config/redis.js');
 const logger = require('./utils/logger.js');
 
-const registerRoutes = require('./routes/auth/user/register.js');
 const loginRoutes = require('./routes/auth/user/login.js');
 
-const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
-const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
-
-const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
-
-const consentRoutes = require('./routes/info/compliance/consent.js');
-const initEMRGraphQL = require('./routes/emr/graphql.js');
-
-const registerGraphQLRoutes = require('./testinggsql/index.js');
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
@@ -54,18 +44,7 @@ app.use((err, req, res, next) => {
   next();
 });
 
-registerGraphQLRoutes(app);
-initEMRGraphQL(app);
-
-
-app.use('/auth/register', registerRoutes);
 app.use('/auth/login', loginRoutes);
-app.use('/auth/password', passwordResetRoutes);
-app.use('/auth/email', emailAuthRoutes);
-app.use('/auth/refresh', refreshAuthRoutes);
-
-app.use('/info/consent', consentRoutes);
-
 
 // ======================================
 
@@ -85,7 +64,8 @@ app.get('*path', (req, res) => {
 
 // =======================================
 // Start server
-const PORT = process.env.PATIENT_PORT || 3001;
+
+const PORT = process.env.MEDICAL_PORT || 3001;
 const HOST = process.env.HOST;
 app.listen(PORT, HOST, () => {
   logger.info(`⚙️ Server running on ${HOST}:${PORT}`);

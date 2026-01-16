@@ -2,9 +2,10 @@
 const redis = require("redis");
 const path = require("path");
 const dotenv = require("dotenv");
-const { hashOTP, generateRandomKey, delayRandom } = require("./security.js");
+const { hashOTP, generateRandomKey, delayRandom } = require("../utils/security.js");
 const query = require("./query.js");
-
+const { redis: redisConfig } = require('./config');
+const logger = require("../utils/logger.js");
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 let client;
@@ -15,27 +16,26 @@ const connection = {
   username: process.env.REDIS_USERNAME || 'mdsadmin', // ACL user
   password: process.env.REDIS_PASSWORD,               // ACL password
   };
-
 async function initRedis(options = {}) {
   if (client) return client; // reuse if already initialized
 
   client = redis.createClient({
     socket: {
-      host: process.env.REDIS_HOST || "127.0.0.1",
-      port: Number(process.env.REDIS_PORT) || 6379,
+      host: redisConfig.host,
+      port: redisConfig.port,
     },
-    username: process.env.REDIS_USERNAME,
-    password: process.env.REDIS_PASSWORD || undefined,
-    database: Number(process.env.REDIS_DB) || 0,
+    username: redisConfig.username,
+    password: redisConfig.password,
+    database: redisConfig.database,
     ...options, // allow overrides
   });
 
   client.on("connect", () => {
-    console.log("✅ Connected to Redis");
+    logger.info("✅ Connected to Redis");
   });
 
   client.on("error", (err) => {
-    console.error("Redis Client Error", err);
+    logger.error(`Redis Client Error: ${err.message}`); 
   });
 
   await client.connect();
@@ -70,7 +70,6 @@ async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
   if (!client) throw new Error("Redis client not initialized");
 
   const key = `rl:${route}:ip:${ip}`; // rate-limit "route"
-  console.log("Checking IP rate limit key:", key);
   // Atomically increment the counter
   const current = await client.incr(key);
 
@@ -145,14 +144,12 @@ const OTPMatrix = {
 
 async function setOTP(email, otp, code, portal) {
   if (!client) throw new Error("Redis client not initialized");
-  console.log("Setting OTP for", email, "code:", code, "otp:", otp);
   const config = OTPMatrix[code];
   if (!config) throw new Error(`Unknown OTP code type: ${code}`);
 
   const hashedOtp = hashOTP(otp);
   const key = `otp:${portal}:${config.purpose}:${email}`;
 
-  console.log("Storing OTP key:", key);
   await client.set(key, hashedOtp, {
     EX: config.expiration,
   });
@@ -173,7 +170,6 @@ async function verifyOTP(email, code, otpInput, portal) {
 
   const key = `otp:${portal}:${purpose}:${email}`;
   const storedHashedOtp = await client.get(key);
-  console.log("verify OTP key:", key);
 
   // ✅ 2. If OTP does not exist → count as failure
   if (!storedHashedOtp) {
@@ -553,6 +549,7 @@ async function clearRefreshTokenFailures(ip) {
 
 module.exports = {
   connection,
+  redisConfig,
   initRedis,
   setKey,
   getKey,

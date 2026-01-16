@@ -1,13 +1,12 @@
 const express = require('express');
 
-const { detectRoleFromEmail, isValidEmail, validatePassword, isStudentEmail } = require('../../../config/validator.js');
+const { detectRoleFromEmail, isValidEmail, validatePassword, isStudentEmail } = require('../../../utils/validator.js');
 const { portalBasedIpRateLimiter, ipRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const { getVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
 const query = require('../../../config/query.js');
-const AuthSession = require("../../utils/authSession.js");
+const AuthSession = require("../../../utils/authSession.js");
 
 const router = express.Router();
-
 
 router.post('/', (req, res) => {
     const { email, password } = req.body;

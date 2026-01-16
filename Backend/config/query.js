@@ -1,14 +1,14 @@
 const pool = require("./db.js");
-const { hashPassword } = require("./security.js");
+const { hashPassword } = require("../utils/security.js");
 
-
+const logger = require("../utils/logger.js");
 // ✅ Generic query wrapper
 async function query(text, params) {
     try {
         const result = await pool.query(text, params);
         return result;
     } catch (err) {
-        console.error("DB QUERY ERROR:", err);
+        logger.error("DB QUERY ERROR:", err);
         throw err;
     }
 }
@@ -92,7 +92,7 @@ async function updateUserPasswordById(userId, newPassword) {
     return result.rows[0];
 
   } catch (err) {
-    console.error("updateUserPasswordById error:", err);
+    logger.error("updateUserPasswordById error:", err);
     throw err;
   }
 }
@@ -135,6 +135,28 @@ async function updateUserConsent(userId, { data_consent, data_consent_version, d
 }
 
 
+async function getUserIdentity(userId) {
+  const sql = `
+    SELECT identity
+    FROM "UserCredentials"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+
+    if (result.rows.length === 0) {
+      return null; // user not found
+    }
+
+    return result.rows[0].identity; // only return identity
+  } catch (err) {
+    logger.error("Error fetching identity:", err);
+    throw err;
+  }
+}
+
 module.exports = {
     query,
     countUserByEmail,
@@ -142,5 +164,6 @@ module.exports = {
     createUser,
     updateUserPasswordById,
     getUserConsentStateByEmail,
-    updateUserConsent
+    updateUserConsent,
+    getUserIdentity
 };
