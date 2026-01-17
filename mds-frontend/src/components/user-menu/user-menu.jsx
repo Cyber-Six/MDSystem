@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { User, Settings, Moon, Sun, HelpCircle, LogOut, ChevronRight, ChevronLeft, Lock, ShieldCheck, Activity, MessageSquare, Send } from 'lucide-react';
+import { User, Settings, Moon, Sun, Monitor, HelpCircle, LogOut, ChevronRight, ChevronLeft, Lock, ShieldCheck, Activity, MessageSquare, Send } from 'lucide-react';
 import ProfileModal from '../profile/profile-modal';
 import ChangePasswordModal from '../settings/change-password-modal';
 import TwoFactorAuthModal from '../settings/two-factor-auth-modal';
@@ -8,7 +8,7 @@ import FAQsModal from '../help-support/faqs-modal';
 import ContactSupportModal from '../help-support/contact-support-modal';
 import FeedbackModal from '../help-support/feedback-modal';
 
-const UserMenu = ({ isDarkMode, toggleTheme, onLogout }) => {
+const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentPanel, setCurrentPanel] = useState('main'); // 'main', 'settings', 'help'
   const [activeModal, setActiveModal] = useState(null);
@@ -96,9 +96,9 @@ const UserMenu = ({ isDarkMode, toggleTheme, onLogout }) => {
     },
     {
       id: 'appearance',
-      icon: isDarkMode ? Sun : Moon,
+      icon: themeMode === 'light' ? Moon : (themeMode === 'dark' ? Sun : Monitor),
       label: 'Appearance',
-      subLabel: isDarkMode ? 'Dark' : 'Light',
+      subLabel: themeMode === 'system' ? 'System' : (themeMode === 'dark' ? 'Dark' : 'Light'),
       onClick: toggleTheme
     },
     {

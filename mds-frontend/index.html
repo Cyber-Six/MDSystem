@@ -5,6 +5,19 @@
     <link rel="icon" type="image/png" href="/MDSystem.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MDSystem</title>
+    <!-- Theme initialization to prevent flash of unstyled content -->
+    <script>
+      (function() {
+        const themeMode = localStorage.getItem('themeMode') || 'system';
+        if (themeMode === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else if (themeMode === 'system') {
+          if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+          }
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
