@@ -44,6 +44,23 @@ function validatePassword(password) {
   return true;
 }
 
+function getStudentBranchFromEmail(email) {
+  if (!isStudentEmail(email)) {
+    return null; // not a valid student email
+  }
+
+  // Extract the first character
+  const firstChar = email.charAt(0).toLowerCase();
+
+  if (firstChar === "m") {
+    return "Manila";
+  } else if (firstChar === "q") {
+    return "Quezon City";
+  }
+
+  return null; // fallback
+}
+
 
 
 
@@ -52,6 +69,7 @@ module.exports = {
   isEmployeeEmail,
   isMedicalEmail,
   detectRoleFromEmail,
+  getStudentBranchFromEmail,
   isValidEmail,
   validatePassword,
   isUserStaff,

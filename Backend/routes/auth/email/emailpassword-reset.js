@@ -46,7 +46,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
     }
 
     // ✅ 3. Verify reCAPTCHA
-    const { verifyRecaptcha } = require('../../services/recaptcha.js');
+    const { verifyRecaptcha } = require('../../../services/recaptcha.js');
     const recaptchaValid = await verifyRecaptcha(recaptchaToken);
     if (!recaptchaValid) {
       await recordResetPwFailure(ip);

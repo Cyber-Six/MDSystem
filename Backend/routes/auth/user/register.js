@@ -1,6 +1,6 @@
 const express = require('express');
 
-const { detectRoleFromEmail, isValidEmail, validatePassword, isStudentEmail } = require('../../../utils/validator.js');
+const { isValidEmail, validatePassword, isStudentEmail } = require('../../../utils/validator.js');
 const { portalBasedIpRateLimiter, ipRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const { getVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
 const query = require('../../../config/query.js');
@@ -114,6 +114,10 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
         data_consent_version: process.env.DATA_CONSENT_VERSION,
     });
 
+    const createPatient = await query.createPatient({
+        id: user.id,
+        email: email,
+    });
     const tokens = await AuthSession.create(req, user.id);
 
     return res.status(201).json({
