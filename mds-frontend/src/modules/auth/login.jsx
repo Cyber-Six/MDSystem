@@ -68,7 +68,7 @@ const Login = () => {
       });
       
       if (response.data.ok) {
-        setVerificationKey(response.data.verificationKey);
+        setVerificationKey(response.data.LoginKey);
         
         if (response.data.requires2FA) {
           await handleSend2FA();
@@ -113,10 +113,13 @@ const Login = () => {
     try {
       const response = await axiosRequest.post('/auth/email/2fa/verify', { 
         email,
-        otp: twoFactorCode 
+        otp: twoFactorCode,
+        verificationKey
       });
       
       if (response.data.ok) {
+        // Update verification key with the one returned from backend (always update to ensure sync)
+        setVerificationKey(response.data.verificationKey);
         setShowTwoFactor(false);
         setShowConsent(true);
       }
@@ -196,7 +199,7 @@ const Login = () => {
 
       // Complete login
       const response = await axiosRequest.post('/auth/login/complete', { 
-        verificationKey 
+        LoginKey: verificationKey 
       });
       
       if (response.data.ok) {
