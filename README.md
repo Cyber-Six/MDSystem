@@ -1,6 +1,6 @@
 # MDSystem - Medical Data Management System
 
-A comprehensive medical data management platform built with **React 19** (frontend) and **Node.js/Express** (backend), designed for the TIP (Technological Institute of the Philippines) ecosystem. The system provides secure patient portals, staff management, and medical consultation features across multiple subdomains.
+A comprehensive medical data management platform built with **React 19** (web), **React Native/Expo** (mobile), and **Node.js/Express** (backend), designed for the TIP (Technological Institute of the Philippines) ecosystem. The system provides secure patient portals, staff management, and medical consultation features across multiple subdomains with a **monorepo architecture** sharing business logic between web and mobile.
 
 ---
 
@@ -11,6 +11,11 @@ A comprehensive medical data management platform built with **React 19** (fronte
 - **Staff Portal** (`staff.mdsystemtip.space`) - Administrative and medical staff interface  
 - **Medical Portal** (`medic.mdsystemtip.space`) - Advanced medical professional tools
 
+### Platform Support
+- 🌐 **Web Application** - React 19 + Vite
+- 📱 **Mobile Application** - React Native + Expo (iOS & Android)
+- 🔄 **Shared Core** - Platform-agnostic business logic package
+
 ---
 
 ## 📁 Repository Structure
@@ -19,6 +24,8 @@ A comprehensive medical data management platform built with **React 19** (fronte
 MDSystem/
 ├── Backend/                 # Node.js/Express API server
 │   ├── config/              # Database, JWT, Redis, security configs
+│   │   ├── data/            # Data matrices and mappings
+│   │   └── middleware/      # Rate limiting, security middleware
 │   ├── routes/              # API route handlers
 │   │   ├── auth/            # Authentication endpoints
 │   │   ├── patient/         # Patient data & consent management
@@ -26,22 +33,55 @@ MDSystem/
 │   ├── services/            # Email service, reCAPTCHA validation
 │   └── server.js            # Main server entry point
 │
-├── mdsystem-frontend/       # React 19 + Vite frontend
-│   ├── .dev/                # Development documentation
+├── mds-frontend/            # React 19 + Vite web frontend
 │   ├── scripts/             # Build & automation scripts
+│   │   └── generated/       # Auto-generated config files
 │   ├── src/
 │   │   ├── components/      # Reusable UI components
-│   │   ├── config/          # App configuration + auto-generated API docs
+│   │   │   ├── banner/      # Global notification banners
+│   │   │   ├── data-consent/# Data consent forms
+│   │   │   ├── layout/      # Layout components
+│   │   │   ├── modals/      # Modal dialogs
+│   │   │   ├── profile/     # User profile components
+│   │   │   └── settings/    # Settings components
+│   │   ├── config/          # App configuration
 │   │   ├── context/         # React Context providers
+│   │   ├── docs/            # API integration documentation
 │   │   ├── hooks/           # Custom React hooks
-│   │   ├── modules/         # Feature modules (auth, dashboard)
+│   │   ├── modules/         # Feature modules
+│   │   │   ├── appointment/ # Appointment scheduling
+│   │   │   ├── auth/        # Authentication module
+│   │   │   ├── dashboard/   # Dashboard views
+│   │   │   ├── medicine-request/ # Medicine requests
+│   │   │   └── record-forms/# Medical record forms
 │   │   ├── pages/           # Page components
 │   │   ├── routes/          # Route configuration
-│   │   ├── services/        # API handlers, token management
 │   │   └── styles/          # Global CSS & design system
 │   └── public/              # Static assets
 │
-├── LICENSE                  # Project license
+├── mds-mobile/              # React Native + Expo mobile app
+│   ├── src/
+│   │   ├── components/      # Mobile UI components
+│   │   │   └── ui/          # Base UI components
+│   │   ├── context/         # React Native contexts
+│   │   │   ├── AuthContext  # Authentication state
+│   │   │   ├── BannerContext# Notification banners
+│   │   │   └── ThemeContext # Theme management
+│   │   └── screens/         # App screens
+│   │       ├── auth/        # Login, register screens
+│   │       └── dashboard/   # Dashboard screens
+│   └── assets/              # Mobile assets (images, fonts)
+│
+├── packages/
+│   └── core/                # @mdsystem/core - Shared business logic
+│       └── src/
+│           ├── config/      # Banner configuration
+│           ├── services/    # API, token, banner services
+│           ├── utils/       # Role detection utilities
+│           ├── validation/  # Email, password validation
+│           └── types/       # Type definitions
+│
+├── LICENSE                  # Proprietary license (Cyber-Six)
 └── README.md                # This file
 ```
 
@@ -54,6 +94,18 @@ MDSystem/
 - **npm** 9+
 - **PostgreSQL** 14+ (for backend database)
 - **Redis** 6+ (for session management)
+- **Expo CLI** (for mobile development)
+
+### Monorepo Setup (Recommended)
+
+```bash
+# Clone and install root dependencies
+git clone https://github.com/Cyber-Six/MDSystem.git
+cd MDSystem
+npm install
+
+# This links the @mdsystem/core package for all projects
+```
 
 ### Backend Setup
 
@@ -62,20 +114,19 @@ cd Backend
 npm install
 
 # Configure environment
-cp config/config.json.example config/config.json
-# Edit config.json with your database credentials
+cp .env.example .env
+# Edit .env with your database and service credentials
 
 # Start development server
 npm start                    # Production mode
-npm run dev                  # Development mode with nodemon
 ```
 
 **Backend runs on:** `http://localhost:3001`
 
-### Frontend Setup
+### Web Frontend Setup
 
 ```bash
-cd mdsystem-frontend
+cd mds-frontend
 npm install
 
 # Configure environment
@@ -89,7 +140,24 @@ npm run fetch-config
 npm run dev
 ```
 
-**Frontend runs on:** `http://localhost:5173`
+**Web Frontend runs on:** `http://localhost:5173`
+
+### Mobile App Setup
+
+```bash
+cd mds-mobile
+npm install
+
+# Start Expo development server
+npm start
+
+# Or run directly on platform
+npm run android              # Android emulator/device
+npm run ios                  # iOS simulator (macOS only)
+npm run web                  # Web browser
+```
+
+**Scan QR code** with Expo Go app on your device
 
 ---
 
@@ -98,7 +166,6 @@ npm run dev
 ### Production Domains
 - **Patient Portal:** `https://www.mdsystemtip.space`
 - **Staff Portal:** `https://staff.mdsystemtip.space`  
-- **Medical Portal:** `https://medic.mdsystemtip.space`
 
 ### Subdomain-Based Routing
 The application automatically detects the subdomain and adjusts:
@@ -120,49 +187,71 @@ The application automatically detects the subdomain and adjusts:
 - **Secure password reset** with UUID-based reset links
 - **Role-based access control** (student, employee, staff, admin)
 
-### Frontend Highlights
-- ⚡ **Lightning-fast** with Vite + React 19
-- 🎨 **Tailwind CSS v4** with custom design system
+### Shared Core Package (`@mdsystem/core`)
+- 🔄 **Platform-agnostic** business logic
+- 🏭 **Factory patterns** for dependency injection
+- 🔐 **Token service** - localStorage (web) / AsyncStorage (mobile)
+- 🌐 **API base URL provider** - automatic subdomain detection
+- 📡 **Axios request handler** - unified HTTP client with auth
+- 🔔 **Banner service** - cross-platform notifications
+- ✅ **Validation utilities** - email, password, user constants
+
+### Web Frontend Highlights
+- ⚡ **Lightning-fast** with Vite 7 + React 19
+- 🎨 **Tailwind CSS v3** with custom design system
 - 🔄 **Automatic token refresh** with request queuing
 - 🔔 **Global banner notifications** for error/success messages
 - 📱 **Responsive design** - mobile-first approach
 - 🎯 **Portal auto-detection** from subdomain
 - 📊 **Google Sheets integration** for API documentation
+- 🧪 **React Compiler** support via Babel plugin
+
+### Mobile App Highlights
+- 📱 **Expo ~54** for simplified development
+- 🎨 **NativeWind** - Tailwind CSS for React Native
+- 🔤 **TypeScript** - Full type safety
+- 🔄 **Shared business logic** via `@mdsystem/core`
+- 🎨 **Consistent design system** - shares Tailwind config with web
+- 💾 **AsyncStorage** for secure token persistence
 
 ### Backend Capabilities
-- **RESTful API** with Express.js
+- **RESTful API** with Express.js 5
 - **PostgreSQL database** with parameterized queries
 - **Redis caching** for session management
-- **Email service** with worker queue (Bull)
+- **Email service** with BullMQ worker queue
 - **Rate limiting** to prevent abuse
 - **CORS configuration** for multi-subdomain support
-- **Security middleware** (Helmet, HPP, XSS protection)
+- **Security middleware** (XSS protection, input validation)
+- **Socket.io** support for real-time features
 
 ---
 
 ## 📚 Documentation
 
-### Frontend Documentation
-Located in `mdsystem-frontend/.dev/`:
-- **[ENVIRONMENT_VARIABLES.md](mdsystem-frontend/.dev/ENVIRONMENT_VARIABLES.md)** - Complete environment setup guide
-- **[SHEETS_INTEGRATION_GUIDE.md](mdsystem-frontend/.dev/SHEETS_INTEGRATION_GUIDE.md)** - Google Sheets API docs integration
-- **[CSS_GUIDELINES.md](mdsystem-frontend/.dev/CSS_GUIDELINES.md)** - Design system and styling conventions
-- **[copilot-context.md](mdsystem-frontend/.dev/copilot-context.md)** - AI Copilot integration guide
-- **[file_structure.md](mdsystem-frontend/.dev/file_structure.md)** - Complete file structure reference
-- **[token-refresh-mechanism.md](mdsystem-frontend/.dev/token-refresh-mechanism.md)** - Token management details
-- **[login-integration-notes.md](mdsystem-frontend/.dev/login-integration-notes.md)** - Login flow implementation
+### Web Frontend Documentation
+Located in `mds-frontend/src/docs/`:
+- **[API_INTEGRATION_GUIDE.md](mds-frontend/src/docs/API_INTEGRATION_GUIDE.md)** - API integration patterns
+- **[BANNER_SYSTEM.md](mds-frontend/src/docs/BANNER_SYSTEM.md)** - Global banner notification system
+- **[TOKEN_SERVICE.md](mds-frontend/src/docs/TOKEN_SERVICE.md)** - Token management details
+- **[token-refresh-mechanism.md](mds-frontend/src/docs/token-refresh-mechanism.md)** - Token refresh flow
+- **[ROLE_CONTEXT_USAGE.md](mds-frontend/src/docs/ROLE_CONTEXT_USAGE.md)** - Role-based access control
+- **[apiBaseUrlProvider.md](mds-frontend/src/docs/apiBaseUrlProvider.md)** - API URL configuration
 
-### Generated Documentation
-- **[src/config/generated/api-endpoints.json](mdsystem-frontend/src/config/generated/api-endpoints.json)** - Auto-generated from Google Sheets
-  - Run `npm run fetch-config` to update
+### Core Package Documentation
+Located in `packages/core/`:
+- **[README.md](packages/core/README.md)** - Complete core package documentation
+- **[VALIDATION_UTILITIES.md](packages/core/src/validation/VALIDATION_UTILITIES.md)** - Email & password validation
+
+### Mobile App Documentation
+- **[README.md](mds-mobile/README.md)** - Mobile app setup and architecture
 
 ---
 
 ## 🛠️ Development Workflow
 
-### Frontend Development
+### Web Frontend Development
 ```bash
-cd mdsystem-frontend
+cd mds-frontend
 
 npm run dev              # Start dev server (auto-fetches Google Sheets)
 npm run build            # Production build
@@ -171,23 +260,47 @@ npm run lint             # Run ESLint
 npm run fetch-config     # Manually fetch Google Sheets data
 ```
 
+### Mobile Development
+```bash
+cd mds-mobile
+
+npm start                # Start Expo development server
+npm run android          # Run on Android
+npm run ios              # Run on iOS (macOS only)
+npm run web              # Run in browser
+```
+
 ### Backend Development
 ```bash
 cd Backend
 
 npm start                # Production server
-npm run dev              # Dev server with auto-reload (nodemon)
-npm test                 # Run tests (if configured)
+```
+
+### Core Package Development
+```bash
+cd packages/core
+
+# After making changes, reinstall in consuming packages:
+cd ../mds-frontend && npm install
+cd ../mds-mobile && npm install
 ```
 
 ### Environment Variables
 
-**Frontend (`.env.local`):**
+**Web Frontend (`.env.local`):**
 ```env
 VITE_API_URL=http://localhost:3001
 VITE_PATIENT_API_URL=https://www.mdsystemtip.space
 VITE_STAFF_API_URL=https://staff.mdsystemtip.space
 ENDPOINTS_SHEET_URL=https://docs.google.com/spreadsheets/d/e/.../pub?output=csv
+```
+
+**Backend (`.env`):**
+```env
+PATIENT_PORT=3001
+HOST=localhost
+# Database, JWT, and Redis configs in config/config.json
 ```
 
 **Backend (`config/config.json`):**
@@ -215,29 +328,42 @@ ENDPOINTS_SHEET_URL=https://docs.google.com/spreadsheets/d/e/.../pub?output=csv
 
 ## 🧪 Testing
 
-### Frontend Testing
+### Web Frontend Testing
 ```bash
-cd mdsystem-frontend
+cd mds-frontend
 npm run lint             # Code quality checks
 ```
 
-### Backend Testing
+### Core Package Testing
 ```bash
-cd Backend
-npm test                 # Run test suite (configure as needed)
+cd packages/core
+npm test                 # Run test suite
 ```
 
 ---
 
 ## 📦 Deployment
 
-### Frontend (Vite Build)
+### Web Frontend (Vite Build)
 ```bash
-cd mdsystem-frontend
+cd mds-frontend
 npm run build            # Creates optimized build in dist/
 ```
 
 Deploy the `dist/` folder to your hosting service (Vercel, Netlify, etc.).
+
+### Mobile App (Expo)
+```bash
+cd mds-mobile
+
+# Build for production
+npx expo build:android   # Android APK/AAB
+npx expo build:ios       # iOS IPA (requires Apple Developer account)
+
+# Or use EAS Build
+npx eas build --platform android
+npx eas build --platform ios
+```
 
 ### Backend (Node.js Server)
 ```bash
@@ -287,21 +413,24 @@ server {
 
 ### Coding Standards
 - Follow **ESLint** rules (run `npm run lint`)
-- Use **CSS Modules** for component-scoped styles
+- Use **CSS Modules** for component-scoped styles (web)
+- Use **NativeWind** classes for mobile styling
 - Write **descriptive commit messages**
-- Document new features in `.dev/` folder
+- Keep shared logic in `packages/core`
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **ISC License** - see the [LICENSE](LICENSE) file for details.
+This project is **proprietary software** owned by Cyber-Six. All rights reserved. See the [LICENSE](LICENSE) file for details.
+
+Unauthorized copying, modification, distribution, or use of this software is strictly prohibited without prior written permission.
 
 ---
 
 ## 👥 Team
 
-**Project Owner:** K1taru  
+**Project Owner:** Cyber-Six  
 **Institution:** Technological Institute of the Philippines (TIP)
 
 ### Contact
@@ -310,24 +439,52 @@ This project is licensed under the **ISC License** - see the [LICENSE](LICENSE) 
 
 ---
 
-## 🙏 Acknowledgments
-
-- **React Team** - For React 19 with improved performance
-- **Vite Team** - For the blazing-fast build tool
-- **Tailwind CSS** - For the utility-first CSS framework
-- **TIP Community** - For testing and feedback
-
----
-
 ## 📝 Changelog
 
 ### Latest Updates
+- ✅ **Monorepo Architecture** - Unified workspace with shared packages
+- ✅ **@mdsystem/core Package** - Platform-agnostic business logic
+- ✅ **Mobile App (mds-mobile)** - React Native + Expo implementation
+- ✅ **NativeWind Integration** - Shared Tailwind styles across platforms
+- ✅ **TypeScript Support** - Full type safety for mobile app
+- ✅ **Factory Pattern Services** - Dependency injection for platform support
 - ✅ **Google Sheets Integration** - Auto-generate API docs from spreadsheets
-- ✅ **Tailwind CSS v4** - Modern design system implementation
 - ✅ **Auth Page Redesign** - Fullscreen landing with sliding panel
 - ✅ **Token Refresh Queue** - Prevents duplicate refresh requests
-- ✅ **Global Banner System** - User-friendly error/success notifications
+- ✅ **Global Banner System** - Cross-platform notifications
 - ✅ **Multi-subdomain Support** - Patient, Staff, Medical portals
+
+---
+
+## 🏗️ Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MDSystem Monorepo                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────────────┐ │
+│  │ mds-frontend │   │  mds-mobile  │   │       Backend        │ │
+│  │  (React 19)  │   │   (Expo)     │   │   (Express.js 5)     │ │
+│  │   + Vite     │   │   + RN       │   │   + PostgreSQL       │ │
+│  └──────┬───────┘   └──────┬───────┘   │   + Redis            │ │
+│         │                  │           └──────────────────────┘ │
+│         │                  │                      ▲              │
+│         ▼                  ▼                      │              │
+│  ┌─────────────────────────────────┐              │              │
+│  │       @mdsystem/core            │◄─────────────┘              │
+│  │   (Shared Business Logic)       │        REST API             │
+│  ├─────────────────────────────────┤                             │
+│  │ • Token Service (Factory)       │                             │
+│  │ • API Base URL Provider         │                             │
+│  │ • Axios Request Handler         │                             │
+│  │ • Banner Service                │                             │
+│  │ • Validation Utilities          │                             │
+│  │ • Role Detection                │                             │
+│  └─────────────────────────────────┘                             │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -335,6 +492,6 @@ This project is licensed under the **ISC License** - see the [LICENSE](LICENSE) 
 
 **Built with ❤️ for the TIP Healthcare Community**
 
-[Report Bug](https://github.com/K1taru/MDSystem/issues) · [Request Feature](https://github.com/K1taru/MDSystem/issues) · [Documentation](mdsystem-frontend/.dev/)
+[Report Bug](https://github.com/K1taru/MDSystem/issues) · [Request Feature](https://github.com/K1taru/MDSystem/issues)
 
 </div>
