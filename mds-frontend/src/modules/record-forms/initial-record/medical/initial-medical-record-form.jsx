@@ -4,6 +4,7 @@ import ProgressStepper from './progress-stepper';
 import PersonalInfoForm from './personal-info';
 import MedicalHistoryForm from './medical-history';
 import MedicalBackgroundForm from './medical-background';
+import DentalHistoryForm from './dental-history';
 import OBGYNEForm from './obygyne';
 import ReviewForm from './review-form';
 import { Button } from './form-elements';
@@ -13,7 +14,7 @@ const InitialMedicalRecordForm = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const steps = ['Personal Info', 'Medical History', 'Medical Background', 'OB-GYNE', 'Review'];
+  const steps = ['Personal Info', 'Medical History', 'Medical Background', 'Dental History', 'OB-GYNE', 'Review'];
 
   // Initialize form data state
   const [formData, setFormData] = useState({
@@ -30,11 +31,14 @@ const InitialMedicalRecordForm = () => {
       address: '',
       contactNumber: '',
       program: '',
-      department: '',
+      programOther: '',
       studentNumber: '',
+      studentCategory: '',
+      lastSchoolAttended: '',
+      drugTestDone: '',
       emergencyContacts: [
-        { name: '', relationship: '', contactNumber: '' },
-        { name: '', relationship: '', contactNumber: '' }
+        { name: '', relationship: '', contactNumber: '', address: '' },
+        { name: '', relationship: '', contactNumber: '', address: '' }
       ]
     },
     medicalHistory: {
@@ -64,6 +68,18 @@ const InitialMedicalRecordForm = () => {
       height: '',
       weight: ''
     },
+    dentalHistory: {
+      firstTimeDentist: '',
+      lastDentalConsultation: '',
+      lastDentalCleaning: '',
+      hasIntraOralAppliance: '',
+      intraOralAppliances: {},
+      applianceLocation: '',
+      toothExtraction: '',
+      dentalFilling: '',
+      upperTeethPhoto: null,
+      lowerTeethPhoto: null
+    },
     obgyne: {
       menarcheYearAge: '',
       menstruationDuration: '',
@@ -89,6 +105,10 @@ const InitialMedicalRecordForm = () => {
     setFormData({ ...formData, medicalBackground: data });
   };
 
+  const handleDentalHistoryChange = (data) => {
+    setFormData({ ...formData, dentalHistory: data });
+  };
+
   const handleOBGYNEChange = (data) => {
     setFormData({ ...formData, obgyne: data });
   };
@@ -105,8 +125,8 @@ const InitialMedicalRecordForm = () => {
   const handleNext = () => {
     if (validateStep(currentStep)) {
       // Skip OB-GYNE step if gender is not Female
-      if (currentStep === 2 && formData.personalInfo.gender !== 'Female') {
-        setCurrentStep(4); // Skip to Review
+      if (currentStep === 3 && formData.personalInfo.gender !== 'Female') {
+        setCurrentStep(5); // Skip to Review
       } else {
         setCurrentStep(currentStep + 1);
       }
@@ -115,8 +135,8 @@ const InitialMedicalRecordForm = () => {
 
   const handleBack = () => {
     // Skip OB-GYNE step when going back if gender is not Female
-    if (currentStep === 4 && formData.personalInfo.gender !== 'Female') {
-      setCurrentStep(2); // Go back to Medical Background
+    if (currentStep === 5 && formData.personalInfo.gender !== 'Female') {
+      setCurrentStep(3); // Go back to Dental History
     } else {
       setCurrentStep(currentStep - 1);
     }
@@ -172,12 +192,19 @@ const InitialMedicalRecordForm = () => {
         );
       case 3:
         return (
+          <DentalHistoryForm 
+            data={formData.dentalHistory} 
+            onChange={handleDentalHistoryChange} 
+          />
+        );
+      case 4:
+        return (
           <OBGYNEForm 
             data={formData.obgyne} 
             onChange={handleOBGYNEChange} 
           />
         );
-      case 4:
+      case 5:
         return (
           <ReviewForm 
             formData={formData} 
@@ -208,7 +235,7 @@ const InitialMedicalRecordForm = () => {
         <ProgressStepper 
           currentStep={currentStep} 
           steps={formData.personalInfo.gender !== 'Female' && currentStep > 2 
-            ? steps.filter((_, idx) => idx !== 3) 
+            ? steps.filter((_, idx) => idx !== 4) 
             : steps
           } 
         />
@@ -235,7 +262,7 @@ const InitialMedicalRecordForm = () => {
             Step {currentStep + 1} of {formData.personalInfo.gender !== 'Female' ? steps.length - 1 : steps.length}
           </div>
 
-          {currentStep < (formData.personalInfo.gender !== 'Female' && currentStep >= 2 ? 3 : 4) ? (
+          {currentStep < steps.length - 1 ? (
             <Button
               variant="primary"
               onClick={handleNext}
