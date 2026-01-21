@@ -1,6 +1,6 @@
 const pool = require("./db.js");
 const { hashPassword } = require("../utils/security.js");
-
+const { detectRoleFromEmail, getStudentBranchFromEmail } = require("../utils/validator.js");
 const logger = require("../utils/logger.js");
 // ✅ Generic query wrapper
 async function query(text, params) {
@@ -68,6 +68,25 @@ async function createUser({ email, password, role, data_consent_version }) {
     const result = await query(sql, params);
     return result.rows[0];
 }
+
+
+
+async function createPatient({ id, email }) { 
+
+  const role = detectRoleFromEmail(email) === "Medical" ? "Employee" : detectRoleFromEmail(email);
+  const sql = `
+    INSERT INTO "Patients" (
+        id,      
+        profile
+    )
+    VALUES ($1, $2)
+    RETURNING id;
+    `;
+  const params = [id, role];
+  const result = await query(sql, params);
+  return result.rows[0];
+  }
+
 
 async function updateUserPasswordById(userId, newPassword) {
   try {
@@ -157,13 +176,55 @@ async function getUserIdentity(userId) {
   }
 }
 
+async function setExpiredUpdateTickets(id) {
+    const sql = `
+      UPDATE "patientUpdateLog"
+      SET status = 'Expired'
+      WHERE id = $1 AND status = 'In-progress';
+      `;
+
+    try {
+      const result = await query(sql, [id]);
+      logger.info(`Expired ${result.rowCount} update tickets.`);
+    } catch (err) {
+      logger.error("Error expiring update tickets:", err);
+    }
+  }
+
+async function isPatientValidated(userId) {
+  const sql = `
+    SELECT credentials_status AS status
+    FROM "UserCredentials"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+
+    if (result.rows.length === 0) {
+      return false; // patient not found
+    }
+
+    const status = result.rows[0].status?.toLowerCase();
+    return status !== "unverified"; // true if verified or other
+  } catch (err) {
+    logger.error(`Error fetching credential status for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
+
 module.exports = {
     query,
     countUserByEmail,
     findUserByEmail,
     createUser,
+    createPatient,
     updateUserPasswordById,
     getUserConsentStateByEmail,
     updateUserConsent,
-    getUserIdentity
+    getUserIdentity,
+    isPatientValidated,
+    setExpiredUpdateTickets
 };

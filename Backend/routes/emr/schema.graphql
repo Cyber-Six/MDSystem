@@ -34,18 +34,24 @@ enum STUDENT_YEAR {
 
 
 ## Student profile & Employee profile types
-type StudentProfile {
+
+interface UserProfile{
+  id: ID
+  }
+
+
+type StudentProfile implements UserProfile {
   id: ID!
   program: String!
   year: STUDENT_YEAR!
-  guardianName: String!
-  guardianRelation: String!
-  guardianContact: String!
+  guardian_name: String!
+  guardian_relation: String!
+  guardian_contact: String!
   archived_at: Date
 
 }
 
-type EmployeeProfile {
+type EmployeeProfile implements UserProfile {
   id: ID!
   department: String!
   role: String!
@@ -57,9 +63,9 @@ type EmployeeProfile {
 input StudentProfileInput{
   program: String!
   year: STUDENT_YEAR!
-  guardianName: String!
-  guardianRelation: String!
-  guardianContact: String!
+  guardian_name: String!
+  guardian_relation: String!
+  guardian_contact: String!
 }
 
 input EmployeeProfileInput {
@@ -71,9 +77,9 @@ input EmployeeProfileInput {
 input StudentProfileUpdateInput{
   program: String 
   year: STUDENT_YEAR
-  guardianName: String
-  guardianRelation: String
-  guardianContact: String
+  guardian_name: String
+  guardian_relation: String
+  guardian_contact: String
 }
 
 input EmployeeProfileUpdateInput {
@@ -759,16 +765,15 @@ enum UpdateStatus{
 }
 
 
-union userProfile = StudentProfile | EmployeeProfile
-
 # Queries
 type Query {
   # Mescilanous 
 
+  getUpdateTicket: ID
 
   # Categories
-  getProfile: userProfile
-  getUserProfile(id: ID!, from: Date, to: Date, offset: Int, limit: Int, scope: UpdateScope, statuses: [UpdateStatus]): [userProfile!]! # diffenent resolver for patient vs staff
+  getProfile: UserProfile!
+  getUserProfile(id: ID!, from: Date, to: Date, offset: Int, limit: Int, scope: UpdateScope, statuses: [UpdateStatus]): [UserProfile!]! # diffenent resolver for patient vs staff
 
   getDentalPhotos: dentalPhotos
   getUserDentalPhotos(id: ID!, from: Date, to: Date, offset: Int, limit: Int, scope: UpdateScope, statuses: [UpdateStatus]): [dentalPhotos!]! 
@@ -830,12 +835,14 @@ type Query {
 # Mutations
 type Mutation {
   # Profile
-  createStudentProfile(input: StudentProfileInput!): userProfile!
-  createEmployeeProfile(input: EmployeeProfileInput!): userProfile!
 
-  updateStudentProfile(id: ID!, input: StudentProfileUpdateInput!): userProfile!
-  updateEmployeeProfile(id: ID!, input: EmployeeProfileUpdateInput!): userProfile!
+  createUpdateTicket(scope: UpdateScope!): ID!
 
+  createStudentProfile(input: StudentProfileInput!): StudentProfile!
+  createEmployeeProfile(input: EmployeeProfileInput!): EmployeeProfile!
+
+  updateStudentProfile(id: ID!, input: StudentProfileUpdateInput!): StudentProfile!
+  updateEmployeeProfile(id: ID!, input: EmployeeProfileUpdateInput!): EmployeeProfile!
   # Dental Photos
   createDentalPhotos(input: dentalPhotosInput!): dentalPhotos!
   updateDentalPhotos(id: ID!, input: dentalPhotosUpdateInput!): dentalPhotos!

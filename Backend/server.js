@@ -15,9 +15,9 @@ const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js'
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
-const initEMRGraphQL = require('./routes/emr/graphql.js');
+const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 
-const registerGraphQLRoutes = require('./testinggsql/index.js');
+//const registerGraphQLRoutes = require('./testinggsql/index.js');
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
@@ -48,14 +48,15 @@ app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({
       error: "INVALID_JSON",
-      message: "The JSON body is malformed or invalid."
+      message: `The JSON body is malformed or invalid. ${req.body}`,
+      body: req.body // safe fallback
     });
   }
   next();
 });
 
-registerGraphQLRoutes(app);
-initEMRGraphQL(app);
+//registerGraphQLRoutes(app);
+initPatientEMRGraphQL(app);
 
 
 app.use('/auth/register', registerRoutes);

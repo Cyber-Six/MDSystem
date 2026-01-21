@@ -1,18 +1,16 @@
 const jwt = require("jsonwebtoken");
-
-const dotenv = require('dotenv');
-const path = require('path');
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-
-const { getStaffAnchor } = require("../redis.js"); // adjust import if needed
-const { getUserIdentity } = require("../query.js"); // adjust import if needed
-const { convertIdentity } = require("../../utils/converter.js"); // if needed
 const logger = require("../../utils/logger.js");
+const { getStaffAnchor } = require("../redis.js");
+const { getUserIdentity } = require("../query.js");
+const { convertIdentity } = require("../../utils/converter.js");
 
 function jwtProtect(requiredRole = "patient") {
   return async (req, res, next) => {
+    logger.debug(`[AUTH] Request entered jwtProtect route=${req.path}, ip=${req.ip}`);
+
     const authHeader = req.headers.authorization;
     if (!authHeader) {
+      logger.warn(`[AUTH] Missing Authorization header route=${req.path}, ip=${req.ip}`);
       return res.status(401).json({
         error: "TOKEN_REQUIRED",
         message: "Authorization header missing"
@@ -21,6 +19,7 @@ function jwtProtect(requiredRole = "patient") {
 
     const token = authHeader.split(" ")[1];
     if (!token) {
+      logger.warn(`[AUTH] Missing Bearer token route=${req.path}, ip=${req.ip}`);
       return res.status(401).json({
         error: "TOKEN_REQUIRED",
         message: "Bearer token missing"
@@ -35,9 +34,17 @@ function jwtProtect(requiredRole = "patient") {
 
       const role = decoded.role?.toLowerCase();
 
-      // 🔍 Role enforcement
+      if (decoded.id === undefined || role === undefined) {
+        logger.warn(`[AUTH] Incomplete token payload route=${req.path}, ip=${req.ip}`);
+        return res.status(401).json({
+          error: "INVALID_TOKEN",
+          message: "Token payload incomplete"
+          });
+        }
+
+       // 🔍 Role enforcement
       if (requiredRole && role !== requiredRole.toLowerCase()) {
-        logger.warn(`Unauthorized role access attempt on userId ${decoded.id}: required=${requiredRole}, got=${role}`);
+        logger.warn(`[AUTH] Role mismatch userId=${decoded.id}, required=${requiredRole}, got=${role}, route=${req.path}, ip=${req.ip}`);
         return res.status(403).json({
           error: "FORBIDDEN",
           message: "Access denied: role not authorized for this route."
@@ -46,10 +53,11 @@ function jwtProtect(requiredRole = "patient") {
 
       // 🩺 Extra validation for medical role only
       if (role === "medical") {
-        const user = await getUserIdentity(decoded.id);
-        user = convertIdentity(user);
-        if (!user || user.role.toLowerCase() !== "medical") {
-          logger.warn(`Medical role validation failed for userId ${decoded.id}`);
+        const rawUser = await getUserIdentity(decoded.id);
+        const user = convertIdentity(rawUser);
+
+        if (!user || user.role?.toLowerCase() !== "medical") {
+          logger.warn(`[AUTH] Medical role validation failed userId=${decoded.id}, route=${req.path}, ip=${req.ip}`);
           return res.status(403).json({
             error: "FORBIDDEN",
             message: "Medical role not validated"
@@ -57,6 +65,7 @@ function jwtProtect(requiredRole = "patient") {
         }
 
         if (!decoded.sid) {
+          logger.warn(`[AUTH] Missing session anchor (sid) userId=${decoded.id}, route=${req.path}, ip=${req.ip}`);
           return res.status(403).json({
             error: "FORBIDDEN",
             message: "Medical role requires a session anchor"
@@ -65,6 +74,7 @@ function jwtProtect(requiredRole = "patient") {
 
         const activeSession = await getStaffAnchor(decoded.id);
         if (!activeSession || activeSession !== decoded.sid) {
+          logger.warn(`[AUTH] Invalid/expired session userId=${decoded.id}, expectedSid=${activeSession}, providedSid=${decoded.sid}, route=${req.path}, ip=${req.ip}`);
           return res.status(403).json({
             error: "FORBIDDEN",
             message: "Session invalid or expired"
@@ -74,8 +84,14 @@ function jwtProtect(requiredRole = "patient") {
 
       // ✅ Attach user payload to request for downstream use
       req.user = decoded;
+      logger.debug(`[AUTH] Access granted userId=${decoded.id}, role=${role}, route=${req.path}, ip=${req.ip}`);
       next();
     } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        logger.warn(`[AUTH] Token expired route=${req.path}, ip=${req.ip}`);
+        return res.status(401).json({ error: "TOKEN_EXPIRED", message: "JWT expired" });
+      }
+      logger.error(`[AUTH] JWT verification failed route=${req.path}, ip=${req.ip}, error=${err.message}`);
       return res.status(401).json({
         error: "INVALID_TOKEN",
         message: err.message
@@ -83,4 +99,5 @@ function jwtProtect(requiredRole = "patient") {
     }
   };
 }
-module.exports = jwtProtect;
+
+module.exports = { jwtProtect };
