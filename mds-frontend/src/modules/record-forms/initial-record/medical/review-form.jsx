@@ -63,9 +63,24 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange }) 
       <div className="form-section">
         <SectionHeader title="School Information" onEditClick={() => onEdit(0)} />
         <dl className="space-y-1">
-          <DataRow label="Program" value={formData.personalInfo?.program} />
-          <DataRow label="Department" value={formData.personalInfo?.department} />
+          <DataRow 
+            label="Program" 
+            value={formData.personalInfo?.program === 'Other' 
+              ? formData.personalInfo?.programOther 
+              : formData.personalInfo?.program
+            } 
+          />
           <DataRow label="Student Number" value={formData.personalInfo?.studentNumber} />
+        </dl>
+      </div>
+
+      {/* Student Status */}
+      <div className="form-section">
+        <SectionHeader title="Student Status" onEditClick={() => onEdit(0)} />
+        <dl className="space-y-1">
+          <DataRow label="Student Category" value={formData.personalInfo?.studentCategory} />
+          <DataRow label="Last School Attended" value={formData.personalInfo?.lastSchoolAttended} />
+          <DataRow label="Drug Test Completed" value={formData.personalInfo?.drugTestDone} />
         </dl>
       </div>
 
@@ -79,6 +94,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange }) 
               <DataRow label="Name" value={contact.name} />
               <DataRow label="Relationship" value={contact.relationship} />
               <DataRow label="Contact Number" value={contact.contactNumber} />
+              <DataRow label="Address" value={contact.address} />
             </dl>
           </div>
         ))}
