@@ -46,7 +46,7 @@ export const Checkbox = ({ label, ...props }) => (
   </div>
 );
 
-export const Textarea = ({ label, required, error, ...props }) => (
+export const Textarea = ({ label, required, error, rows = 3, ...props }) => (
   <div className="mb-4">
     {label && (
       <label className="form-label">
@@ -56,6 +56,7 @@ export const Textarea = ({ label, required, error, ...props }) => (
     )}
     <textarea
       className={`form-input min-h-[100px] ${error ? 'border-error-500 focus:ring-error-500' : ''}`}
+      rows={rows}
       {...props}
     />
     {error && <p className="mt-1 text-sm text-error-600">{error}</p>}

@@ -6,8 +6,38 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [themeMode, setThemeMode] = useState(() => {
+    // Initialize from localStorage or default to 'system'
+    return localStorage.getItem('themeMode') || 'system';
+  });
   const notifRef = useRef(null);
+
+  // Apply theme based on mode
+  useEffect(() => {
+    const applyTheme = (mode) => {
+      if (mode === 'system') {
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.classList.toggle('dark', systemPrefersDark);
+      } else if (mode === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    applyTheme(themeMode);
+    localStorage.setItem('themeMode', themeMode);
+
+    // Listen for system theme changes when in system mode
+    if (themeMode === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = (e) => {
+        document.documentElement.classList.toggle('dark', e.matches);
+      };
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+  }, [themeMode]);
 
   // Get page title based on current route
   const getPageTitle = () => {
@@ -40,10 +70,13 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Toggle dark mode
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    document.documentElement.classList.toggle('dark');
+  // Cycle through theme modes: light -> dark -> system -> light
+  const toggleTheme = () => {
+    setThemeMode((current) => {
+      if (current === 'light') return 'dark';
+      if (current === 'dark') return 'system';
+      return 'light';
+    });
   };
 
   // Handle logout
@@ -150,8 +183,8 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
 
           {/* User Avatar */}
           <UserMenu 
-            isDarkMode={darkMode}
-            toggleTheme={toggleDarkMode}
+            themeMode={themeMode}
+            toggleTheme={toggleTheme}
             onLogout={handleLogout}
           />
         </div>

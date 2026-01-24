@@ -64,6 +64,7 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
             </svg>
           }
         >
+          <p className="text-sm text-secondary-600 mb-4">Have you had any vaccinations from these?</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <Checkbox
               label="BCG"
@@ -71,14 +72,9 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
               onChange={(e) => handleImmunizationChange('bcg', e.target.checked)}
             />
             <Checkbox
-              label="Chickenpox"
-              checked={data.immunizations?.chickenpox || false}
-              onChange={(e) => handleImmunizationChange('chickenpox', e.target.checked)}
-            />
-            <Checkbox
-              label="HPV"
-              checked={data.immunizations?.hpv || false}
-              onChange={(e) => handleImmunizationChange('hpv', e.target.checked)}
+              label="Chicken Pox"
+              checked={data.immunizations?.chickenPox || false}
+              onChange={(e) => handleImmunizationChange('chickenPox', e.target.checked)}
             />
             <Checkbox
               label="Hepatitis A"
@@ -91,7 +87,12 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
               onChange={(e) => handleImmunizationChange('hepatitisB', e.target.checked)}
             />
             <Checkbox
-              label="MMR"
+              label="HPV"
+              checked={data.immunizations?.hpv || false}
+              onChange={(e) => handleImmunizationChange('hpv', e.target.checked)}
+            />
+            <Checkbox
+              label="MMR (Measles, Mumps, Rubella)"
               checked={data.immunizations?.mmr || false}
               onChange={(e) => handleImmunizationChange('mmr', e.target.checked)}
             />
@@ -100,67 +101,389 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
               checked={data.immunizations?.antiTetanus || false}
               onChange={(e) => handleImmunizationChange('antiTetanus', e.target.checked)}
             />
+            <Checkbox
+              label="COVID Vaccine (1st and 2nd Dose)"
+              checked={data.immunizations?.covidVaccine || false}
+              onChange={(e) => handleImmunizationChange('covidVaccine', e.target.checked)}
+            />
+            <Checkbox
+              label="COVID Vaccine Booster"
+              checked={data.immunizations?.covidBooster || false}
+              onChange={(e) => handleImmunizationChange('covidBooster', e.target.checked)}
+            />
+          </div>
+          <div className="mt-4">
+            <Input
+              label="Other:"
+              placeholder="Specify other vaccines..."
+              value={data.immunizationOther || ''}
+              onChange={(e) => handleChange('immunizationOther', e.target.value)}
+            />
           </div>
         </AccordionSection>
 
         {/* Allergies */}
         <AccordionSection
           id="allergies"
-          title="Allergies"
+          title="History of Allergies"
           icon={
             <svg className="w-5 h-5 mr-2 text-error-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           }
         >
-          <Textarea
-            label="Drug Allergy"
-            placeholder="List any medication allergies..."
-            value={data.drugAllergy || ''}
-            onChange={(e) => handleChange('drugAllergy', e.target.value)}
-          />
-          <Textarea
-            label="Food Allergy"
-            placeholder="List any food allergies..."
-            value={data.foodAllergy || ''}
-            onChange={(e) => handleChange('foodAllergy', e.target.value)}
-          />
-          <Textarea
-            label="Other Allergy"
-            placeholder="List any other allergies..."
-            value={data.otherAllergy || ''}
-            onChange={(e) => handleChange('otherAllergy', e.target.value)}
-          />
+          <div className="mb-4">
+            <label className="form-label">Do you have any Allergies?</label>
+            <div className="flex gap-6 mt-2">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="hasAllergies"
+                  value="Yes"
+                  checked={data.hasAllergies === 'Yes'}
+                  onChange={(e) => handleChange('hasAllergies', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">Yes</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="hasAllergies"
+                  value="No"
+                  checked={data.hasAllergies === 'No'}
+                  onChange={(e) => handleChange('hasAllergies', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">No</span>
+              </label>
+            </div>
+          </div>
+          
+          {data.hasAllergies === 'Yes' && (
+            <div className="mt-4">
+              <p className="text-sm text-secondary-600 mb-3">If Yes, What are you allergic to?</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Checkbox
+                  label="Beverages (Please Specify)"
+                  checked={data.allergies?.beverages || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, beverages: e.target.checked } })}
+                />
+                <Checkbox
+                  label="Food (Please Specify)"
+                  checked={data.allergies?.food || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, food: e.target.checked } })}
+                />
+                <Checkbox
+                  label="Medicine (Please Specify)"
+                  checked={data.allergies?.medicine || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, medicine: e.target.checked } })}
+                />
+                <Checkbox
+                  label="Others (Dust, Smoke)"
+                  checked={data.allergies?.dustSmoke || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, dustSmoke: e.target.checked } })}
+                />
+                <Checkbox
+                  label="Others (Soaps, Lotions, Fabric conditioner)"
+                  checked={data.allergies?.soapsLotions || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, soapsLotions: e.target.checked } })}
+                />
+                <Checkbox
+                  label="Others (Cologne, Perfume)"
+                  checked={data.allergies?.colognePerfume || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, colognePerfume: e.target.checked } })}
+                />
+                <Checkbox
+                  label="Others (Fur etc.)"
+                  checked={data.allergies?.fur || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, fur: e.target.checked } })}
+                />
+                <Checkbox
+                  label="Others (Please specify)"
+                  checked={data.allergies?.othersSpecify || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, othersSpecify: e.target.checked } })}
+                />
+                <Checkbox
+                  label="None"
+                  checked={data.allergies?.none || false}
+                  onChange={(e) => onChange({ ...data, allergies: { ...data.allergies, none: e.target.checked } })}
+                />
+              </div>
+              <div className="mt-4">
+                <Input
+                  label="Other:"
+                  placeholder="Specify other allergies..."
+                  value={data.allergyOther || ''}
+                  onChange={(e) => handleChange('allergyOther', e.target.value)}
+                />
+              </div>
+            </div>
+          )}
         </AccordionSection>
 
-        {/* Medical Background */}
+        {/* Vaccine Section */}
         <AccordionSection
-          id="background"
-          title="Medical Background"
+          id="vaccine"
+          title="Vaccine"
+          icon={
+            <svg className="w-5 h-5 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          }
+        >
+          {/* COVID Vaccine Type */}
+          <div className="mb-6">
+            <label className="form-label mb-3">What type of COVID Vaccine?</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <Checkbox
+                label="Astrazeneca"
+                checked={data.covidVaccineType?.astrazeneca || false}
+                onChange={(e) => onChange({ ...data, covidVaccineType: { ...data.covidVaccineType, astrazeneca: e.target.checked } })}
+              />
+              <Checkbox
+                label="Janssen"
+                checked={data.covidVaccineType?.janssen || false}
+                onChange={(e) => onChange({ ...data, covidVaccineType: { ...data.covidVaccineType, janssen: e.target.checked } })}
+              />
+              <Checkbox
+                label="Moderna"
+                checked={data.covidVaccineType?.moderna || false}
+                onChange={(e) => onChange({ ...data, covidVaccineType: { ...data.covidVaccineType, moderna: e.target.checked } })}
+              />
+              <Checkbox
+                label="Pfizer"
+                checked={data.covidVaccineType?.pfizer || false}
+                onChange={(e) => onChange({ ...data, covidVaccineType: { ...data.covidVaccineType, pfizer: e.target.checked } })}
+              />
+              <Checkbox
+                label="Sinovac"
+                checked={data.covidVaccineType?.sinovac || false}
+                onChange={(e) => onChange({ ...data, covidVaccineType: { ...data.covidVaccineType, sinovac: e.target.checked } })}
+              />
+              <Checkbox
+                label="Sinopharm"
+                checked={data.covidVaccineType?.sinopharm || false}
+                onChange={(e) => onChange({ ...data, covidVaccineType: { ...data.covidVaccineType, sinopharm: e.target.checked } })}
+              />
+              <Checkbox
+                label="Sputnik"
+                checked={data.covidVaccineType?.sputnik || false}
+                onChange={(e) => onChange({ ...data, covidVaccineType: { ...data.covidVaccineType, sputnik: e.target.checked } })}
+              />
+              <Checkbox
+                label="None"
+                checked={data.covidVaccineType?.none || false}
+                onChange={(e) => onChange({ ...data, covidVaccineType: { ...data.covidVaccineType, none: e.target.checked } })}
+              />
+            </div>
+          </div>
+
+          {/* COVID Vaccine Booster Type */}
+          <div className="mb-6">
+            <label className="form-label mb-3">What type of COVID Vaccine Booster?</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <Checkbox
+                label="Astrazeneca"
+                checked={data.covidBoosterType?.astrazeneca || false}
+                onChange={(e) => onChange({ ...data, covidBoosterType: { ...data.covidBoosterType, astrazeneca: e.target.checked } })}
+              />
+              <Checkbox
+                label="Moderna"
+                checked={data.covidBoosterType?.moderna || false}
+                onChange={(e) => onChange({ ...data, covidBoosterType: { ...data.covidBoosterType, moderna: e.target.checked } })}
+              />
+              <Checkbox
+                label="Pfizer"
+                checked={data.covidBoosterType?.pfizer || false}
+                onChange={(e) => onChange({ ...data, covidBoosterType: { ...data.covidBoosterType, pfizer: e.target.checked } })}
+              />
+              <Checkbox
+                label="Sinovac"
+                checked={data.covidBoosterType?.sinovac || false}
+                onChange={(e) => onChange({ ...data, covidBoosterType: { ...data.covidBoosterType, sinovac: e.target.checked } })}
+              />
+              <Checkbox
+                label="None"
+                checked={data.covidBoosterType?.none || false}
+                onChange={(e) => onChange({ ...data, covidBoosterType: { ...data.covidBoosterType, none: e.target.checked } })}
+              />
+            </div>
+            <div className="mt-4">
+              <Input
+                label="Other:"
+                placeholder="Specify other booster type..."
+                value={data.covidBoosterOther || ''}
+                onChange={(e) => handleChange('covidBoosterOther', e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Other Vaccine */}
+          <div>
+            <Textarea
+              label="Other Vaccine?"
+              placeholder="Please specify any other vaccines..."
+              value={data.otherVaccine || ''}
+              onChange={(e) => handleChange('otherVaccine', e.target.value)}
+              rows={3}
+            />
+          </div>
+        </AccordionSection>
+
+        {/* History of Hospitalizations */}
+        <AccordionSection
+          id="hospitalizations"
+          title="History of Hospitalizations"
+          icon={
+            <svg className="w-5 h-5 mr-2 text-accent-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          }
+        >
+          <div className="mb-4">
+            <label className="form-label">HAVE YOU BEEN HOSPITALIZED IN THE PAST YEARS? <span className="text-error-500">*</span></label>
+            <p className="text-xs text-secondary-500 mb-2">(Ikaw ba ay na-ospital sa mga nakaraang taon?)</p>
+            <div className="flex gap-6 mt-2">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="hasHospitalization"
+                  value="Yes"
+                  checked={data.hasHospitalization === 'Yes'}
+                  onChange={(e) => handleChange('hasHospitalization', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">Yes</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="hasHospitalization"
+                  value="No"
+                  checked={data.hasHospitalization === 'No'}
+                  onChange={(e) => handleChange('hasHospitalization', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">No</span>
+              </label>
+            </div>
+          </div>
+          
+          {data.hasHospitalization === 'Yes' && (
+            <div className="mt-4">
+              <Textarea
+                label="If Yes, When did you've been hospitalized? What is the reason for the hospitalization?"
+                placeholder="Your answer"
+                value={data.hospitalizationDetails || ''}
+                onChange={(e) => handleChange('hospitalizationDetails', e.target.value)}
+                rows={3}
+              />
+            </div>
+          )}
+        </AccordionSection>
+
+        {/* History of Operation */}
+        <AccordionSection
+          id="operations"
+          title="History of Operation"
           icon={
             <svg className="w-5 h-5 mr-2 text-accent-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           }
         >
-          <Textarea
-            label="Hospitalizations"
-            placeholder="List any past hospitalizations..."
-            value={data.hospitalizations || ''}
-            onChange={(e) => handleChange('hospitalizations', e.target.value)}
-          />
-          <Textarea
-            label="Operations"
-            placeholder="List any past operations..."
-            value={data.operations || ''}
-            onChange={(e) => handleChange('operations', e.target.value)}
-          />
-          <Textarea
-            label="Maintenance Medications"
-            placeholder="List any regular medications..."
-            value={data.maintenanceMedications || ''}
-            onChange={(e) => handleChange('maintenanceMedications', e.target.value)}
-          />
+          <div className="mb-4">
+            <label className="form-label">HAVE YOU UNDERGONE SURGERY IN THE PAST YEARS? <span className="text-error-500">*</span></label>
+            <p className="text-xs text-secondary-500 mb-2">( Ikaw ba ay sumailalim sa operasyon sa mga nakaraang taon? )</p>
+            <div className="flex gap-6 mt-2">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="hasOperation"
+                  value="Yes"
+                  checked={data.hasOperation === 'Yes'}
+                  onChange={(e) => handleChange('hasOperation', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">Yes</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="hasOperation"
+                  value="No"
+                  checked={data.hasOperation === 'No'}
+                  onChange={(e) => handleChange('hasOperation', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">No</span>
+              </label>
+            </div>
+          </div>
+          
+          {data.hasOperation === 'Yes' && (
+            <div className="mt-4">
+              <Textarea
+                label="If Yes, What kind of Operations? and When?"
+                placeholder="Your answer"
+                value={data.operationDetails || ''}
+                onChange={(e) => handleChange('operationDetails', e.target.value)}
+                rows={3}
+              />
+            </div>
+          )}
+        </AccordionSection>
+
+        {/* Medications */}
+        <AccordionSection
+          id="medications"
+          title="Medications"
+          icon={
+            <svg className="w-5 h-5 mr-2 text-accent-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
+          }
+        >
+          <div className="mb-4">
+            <label className="form-label">Are you taking any Medications?</label>
+            <div className="flex gap-6 mt-2">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="hasMedications"
+                  value="Yes"
+                  checked={data.hasMedications === 'Yes'}
+                  onChange={(e) => handleChange('hasMedications', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">Yes</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="hasMedications"
+                  value="No"
+                  checked={data.hasMedications === 'No'}
+                  onChange={(e) => handleChange('hasMedications', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">No</span>
+              </label>
+            </div>
+          </div>
+          
+          {data.hasMedications === 'Yes' && (
+            <div className="mt-4">
+              <Textarea
+                label="If Yes, What Medication/s are you taking ?"
+                placeholder="Your answer"
+                value={data.medicationDetails || ''}
+                onChange={(e) => handleChange('medicationDetails', e.target.value)}
+                rows={3}
+              />
+            </div>
+          )}
         </AccordionSection>
 
         {/* Body Modifications */}

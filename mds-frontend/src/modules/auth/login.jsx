@@ -68,7 +68,7 @@ const Login = () => {
       });
       
       if (response.data.ok) {
-        setVerificationKey(response.data.verificationKey);
+        setVerificationKey(response.data.LoginKey);
         
         if (response.data.requires2FA) {
           await handleSend2FA();
@@ -113,10 +113,13 @@ const Login = () => {
     try {
       const response = await axiosRequest.post('/auth/email/2fa/verify', { 
         email,
-        otp: twoFactorCode 
+        otp: twoFactorCode,
+        verificationKey
       });
       
       if (response.data.ok) {
+        // Update verification key with the one returned from backend (always update to ensure sync)
+        setVerificationKey(response.data.verificationKey);
         setShowTwoFactor(false);
         setShowConsent(true);
       }
@@ -196,14 +199,24 @@ const Login = () => {
 
       // Complete login
       const response = await axiosRequest.post('/auth/login/complete', { 
-        verificationKey 
+        LoginKey: verificationKey 
       });
       
       if (response.data.ok) {
         if (response.data.accessToken && response.data.refreshToken) {
           TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
         }
-        navigate('/');
+        
+        // Check if user has completed initial medical record
+        // For now, redirect to initial medical record form
+        // TODO: Query the backend to check if user has filled EMR
+        const hasCompletedMedicalRecord = false; // This should be checked via API
+        
+        if (hasCompletedMedicalRecord) {
+          navigate('/');
+        } else {
+          navigate('/initial-medical-record');
+        }
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Login completion failed.';

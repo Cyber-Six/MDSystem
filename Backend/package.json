@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@graphql-tools/schema": "^10.0.31",
     "audit": "^0.0.6",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.65.0",
