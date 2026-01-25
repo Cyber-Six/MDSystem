@@ -5,7 +5,7 @@ const { makeExecutableSchema } = require("@graphql-tools/schema");
 const fs = require("fs");
 const path = require("path");
 
-const patientResolver = require("./patient-resolver.js");
+const patientResolver = require("./patient/patient-resolver.js");
 const medicalResolver = require("./medical-resolver.js");
 const logger = require("../../utils/logger.js");
 const { jwtProtect } = require("../../config/middleware/jwtProtect.js");

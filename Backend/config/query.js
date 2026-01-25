@@ -1,6 +1,7 @@
 const pool = require("./db.js");
 const { hashPassword } = require("../utils/security.js");
-const { detectRoleFromEmail, getStudentBranchFromEmail } = require("../utils/validator.js");
+const { detectRoleFromEmail, generateDomainCode,
+    normalizeName, normalizeNumber } = require("../utils/validator.js");
 const logger = require("../utils/logger.js");
 // ✅ Generic query wrapper
 async function query(text, params) {
@@ -12,6 +13,26 @@ async function query(text, params) {
         throw err;
     }
 }
+
+async function queryControlled(text, params) {
+  try {
+    const result = await pool.query(text, params);
+    return { success: true, rows: result.rows };
+  } catch (err) {
+    if (err.code === '23503') {
+      // Foreign key violation
+      logger.warn("Expected FK violation(queryControlled):", err.detail);
+    }
+    else if (err.code === '23505') {
+      // Unique constraint violation
+      logger.warn("Expected unique constraint violation(queryControlled):", err.detail);
+    }
+    // Unexpected errors still logged as errors
+    else logger.error("Unexpected DB error(queryControlled):", err);
+    throw err;
+  }
+}
+
 
 // ✅ Count-only version (safe for anti-enumeration)
 async function countUserByEmail(email) {
@@ -215,8 +236,10 @@ async function isPatientValidated(userId) {
 }
 
 
+
 module.exports = {
     query,
+    queryControlled,
     countUserByEmail,
     findUserByEmail,
     createUser,
