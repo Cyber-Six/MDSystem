@@ -5,8 +5,8 @@ const { makeExecutableSchema } = require("@graphql-tools/schema");
 const fs = require("fs");
 const path = require("path");
 
-const patientResolver = require("./patient/patient-resolver.js");
-const medicalResolver = require("./medical-resolver.js");
+const patientResolver = require("./resolvers/patient/patient-resolver.js");
+const medicalResolver = require("./resolvers/medical/medical-resolver.js");
 const logger = require("../../utils/logger.js");
 const { jwtProtect } = require("../../config/middleware/jwtProtect.js");
 
@@ -25,7 +25,11 @@ const patientSchema = makeExecutableSchema({
 
 const medicalSchema = makeExecutableSchema({
   typeDefs,
-  resolvers: medicalResolver,
+  resolvers: {
+    Query: medicalResolver.Query,
+    Mutation: medicalResolver.Mutation,
+    UserProfile: medicalResolver.UserProfile, // <-- interface resolver
+  },
 });
 
 function initPatientEMRGraphQL(app) {
@@ -48,6 +52,7 @@ function initPatientEMRGraphQL(app) {
   );
 }
 
+/*
 function initMedicalEMRGraphQL(app) {
   app.use(
     "/emr/medical",
@@ -67,5 +72,6 @@ function initMedicalEMRGraphQL(app) {
     })
   );
 }
+*/
 
-module.exports = { initPatientEMRGraphQL, initMedicalEMRGraphQL };
+module.exports = { initPatientEMRGraphQL };

@@ -55,8 +55,12 @@ async function AllergyRecord(id) {
   return deleteRecord("AllergyRecord", "allergyId", id);
 }
 
+async function OralApplianceRecord(id) {
+  return deleteRecord("OralApplianceRecord", "applianceId", id);
+}
+
 module.exports = {
   VisualAcuityRecord, MedicalCondition, HospitalizationRecord,
   OperationRecord, ImmunizationRecord, DentalProcedureRecord,
-  MedicationRecord, AllergyRecord
+  MedicationRecord, AllergyRecord, OralApplianceRecord
 };

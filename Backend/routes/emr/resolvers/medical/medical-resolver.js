@@ -1,5 +1,3 @@
-const db  = require("../../../config/query.js");
-const logger = require("../../../utils/logger.js");
 const path = require("path");
 const dotenv = require("dotenv");
 const Mutation = require("./mutation.js");

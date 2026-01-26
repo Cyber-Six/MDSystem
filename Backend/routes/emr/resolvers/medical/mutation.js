@@ -1,39 +1,17 @@
-const db  = require("../../../config/query.js");
+const db  = require("../../../../config/query.js");
 
-const { upsertEmergencyNumber } = require("../query/upsert.js");
+const { upsertEmergencyNumber } = require("../../query/upsert.js");
 
-const anchor = require("../query/anchor.js");
-const remove = require("../query/delete.js");
+const anchor = require("../../query/anchor.js");
+const remove = require("../../query/delete.js");
 const { assertActiveUpdateTicket } = require("./helper.js");
 
-const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
-const logger = require("../../../utils/logger.js");
+const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
+const logger = require("../../../../utils/logger.js");
 
 const Query = require("./query.js");
 
 const Mutation = {
-  createUpdateTicket: async (_, { scope }, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
-    if (record.status === "In-progress" || record.status === "Pending") {
-      throwGraphQLError(res).message("An update ticket is already in progress.").status(400).throw();  
-      }
-    if (scope !== "Both"){
-      const isverified = await db.isPatientValidated(user.id);
-      if (!isverified){
-        throwGraphQLError(res).message(
-        "Creating update tickets for partial scopes is not allowed without an existing ticket.").status(400).throw();
-        }
-      }
-    const result = await db.query(
-    `INSERT INTO "patientUpdateLog" ("patientId", "status", "scope")
-     VALUES ($1, 'In-progress', $2)
-     RETURNING "id";
-    `,
-    [user.id, scope]
-    );
-    return result.rows[0].id;
-  },
-
   createStudentProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
     assertActiveUpdateTicket(record, res);

@@ -61,9 +61,18 @@ async function Allergy(id, notes) {
   return queryAnchor("Allergy", id, notes);
 }
 
+async function OralAppliance(id, notes) {
+  return queryAnchor("OralAppliance", id, notes);
+}
+
+async function DentalRecord(id, notes) {
+  return queryAnchor("DentalRecord", id, notes);
+}
+
 module.exports = {
   VisualAcuity, MedicalHistory, Hospitalization,
   Operation, Immunization, DentalProcedure,
-  MaintenanceMedication, Allergy
+  MaintenanceMedication, Allergy,
+  OralAppliance, DentalRecord
 
 };
