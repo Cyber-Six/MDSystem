@@ -47,6 +47,7 @@ type StudentProfile implements UserProfile {
   guardian_name: String!
   guardian_relation: String!
   guardian_contact: String!
+  status: UpdateStatus! 
   archived_at: Date
   created_at: Date
 }
@@ -56,6 +57,7 @@ type EmployeeProfile implements UserProfile {
   department: String!
   role: String!
   position: String!
+  status: UpdateStatus! 
   archived_at: Date
   created_at: Date!
 }
@@ -238,12 +240,12 @@ input VitalSignsUpdateInput {
 
 type ToothPlacement{ # singular tooth info
   id: ID!
-  tooth_index: Int!
-  legend: [String!]!
+  toothIndex: Int!
+  legend: String!
 }
 
 input ToothPlacementInput{
-  tooth_index: Int!
+  toothIndex: Int!
   legend: [String!]!
 }
 
@@ -261,15 +263,15 @@ input OralFindingLegendInput{
   description: String
 }
 
-type OralFinding{
-  oral: OralFindingLegend!
+type OralFindingRecord{
+  oralFindingId: ID!
   status: Boolean!
   notes: String
   created_at: Date!
 }
 
-input OralFindingInput{
-  oralId: ID!
+input OralFindingRecordInput{
+  oralFindingId: ID!
   status: Boolean!
   notes: String
 }
@@ -278,14 +280,14 @@ type DentalRecord{
     id: ID!
     notes: String
 
-    oralFindings: [OralFinding!]!
+    oralFindings: [OralFindingRecord!]!
     ToothPlacements: [ToothPlacement!]!
     created_at: Date!
 }
 
 input DentalRecordInput{
     notes: String
-    oralFindings: [OralFindingInput!]!
+    oralFindings: [OralFindingRecordInput!]!
     ToothPlacements: [ToothPlacementInput!]!
 }
 
@@ -334,7 +336,7 @@ input OralApplianceInput{
 
 type OralApplianceProfile{
   id: ID!
-  appliances: [OralAppliance]!
+  appliances: [OralAppliance!]!
   notes: String
   archived_at: Date
   created_at: Date!
@@ -417,7 +419,7 @@ input AllergenCatalogUpdateInput{
 
 type AllergyRecord{
   id: ID!
-  allergen: AllergenCatalog!
+  allergenCatalogId: ID!
   status: ALLERGY_STATUS!
   severity: String!
   notes: String
@@ -425,7 +427,7 @@ type AllergyRecord{
 }
 
 input AllergyRecordInput{
-  allergenId: ID!
+  allergenCatalogId: ID!
   status: ALLERGY_STATUS!
   severity: String!
   notes: String
@@ -442,7 +444,7 @@ input AllergyRecordUpdateInput{
 
 type AllergyProfile{
   id: ID!
-  allergies: [AllergyRecord!]
+  allergies: [AllergyRecord!]!
   notes: String
   archived_at: Date
   created_at: Date!
@@ -515,14 +517,14 @@ input VisualAcuityUpdateInput {
 type VisualAcuityProfile {
     id: ID!
     notes: String
-    visualAcuity: VisualAcuity
+    acuity: VisualAcuity
     archived_at: Date
     created_at: Date!
 }
 
 input VisualAcuityProfileInput {
     notes: String
-    visualAcuity: VisualAcuityInput
+    acuity: VisualAcuityInput
 }
 
 ## maintenance
@@ -657,13 +659,7 @@ type dentalProcedureRecord {
 input dentalProcedureRecordInput {
   procedureTypeId: ID!
   procedureDate: Date!
-  } 
-
-input dentalProcedureRecordUpdateInput {
-  procedureTypeId: ID
-  procedureDate: Date
   }
-
 
 type DentalProcedureProfile {
   id: ID!
@@ -716,7 +712,7 @@ enum UpdateScope{
 }
 
 enum UpdateStatus{
-    Inprogress
+    InProgress
     Pending
     Revision
     RevisionSubmitted
