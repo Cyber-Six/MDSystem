@@ -731,6 +731,7 @@ type Query {
   # Mescilanous 
 
   getUpdateTicket: UpdateTicket!
+  getUserUpdateTicket(userId: ID!): UpdateTicket!
 
   # Categories
   getProfile: UserProfile!
@@ -798,58 +799,60 @@ type Mutation {
   # Profile
 
   createUpdateTicket(scope: UpdateScope!): ID!
-  submitUpdateTicket: UpdateStatus!
 
+  submitUpdateTicket: UpdateStatus!
+  cancelUpdateTicket: UpdateStatus!
+
+  staffUpdateTicket(userId: ID!, status: UpdateStatus!): UpdateStatus!
+  
 
   createStudentProfile(input: StudentProfileInput!): StudentProfile! # for patients
   createEmployeeProfile(input: EmployeeProfileInput!): EmployeeProfile!
 
-  updateStudentProfile(id: ID!, input: StudentProfileUpdateInput!): StudentProfile! # for medical
-  updateEmployeeProfile(id: ID!, input: EmployeeProfileUpdateInput!): EmployeeProfile!
+  updateStudentProfile(userId: ID!, input: StudentProfileUpdateInput!): StudentProfile! # for medical
+  updateEmployeeProfile(userId: ID!, input: EmployeeProfileUpdateInput!): EmployeeProfile!
   # Dental Photos
   createDentalPhotos(input: dentalPhotosInput!): dentalPhotos!
-  updateDentalPhotos(id: ID!, input: dentalPhotosUpdateInput!): dentalPhotos!
-
+  updateDentalPhotos(userId: ID!, input: dentalPhotosUpdateInput!): dentalPhotos!
   # Obgyn History
   createObgynHistory(input: ObgynHistoryInput!): ObgynHistory!
-  updateObgynHistory(id: ID!, input: ObgynHistoryUpdateInput!): ObgynHistory!
+  updateObgynHistory(userId: ID!, input: ObgynHistoryUpdateInput!): ObgynHistory!
 
   createLifestyle(input: LifestyleInput!): Lifestyle!
-  updateLifestyle(id: ID!, input: LifestyleUpdateInput!): Lifestyle!
+  updateLifestyle(userId: ID!, input: LifestyleUpdateInput!): Lifestyle!
 
   createDentalHistory(input: DentalHistoryInput!): DentalHistory!
-  updateDentalHistory(id: ID!, input: DentalHistoryUpdateInput!): DentalHistory!
+  updateDentalHistory(userId: ID!, input: DentalHistoryUpdateInput!): DentalHistory!
 
-  createDentalRecord(input: DentalRecordInput!): DentalRecord!
-
-  createVitalSigns(input: VitalSignsInput!): VitalSigns!
-  updateVitalSigns(id: ID!, input: VitalSignsUpdateInput!): VitalSigns!
+  updateDentalRecord(userId: ID!, input: DentalRecordUpdateInput!): DentalRecord!
+  updateVitalSigns(userId: ID!, input: VitalSignsUpdateInput!): VitalSigns!
 
   createOralApplianceProfile(input: OralApplianceProfileInput!): OralApplianceProfile!
+  updateOralApplianceProfile(userId: ID!, input: OralApplianceProfileInput!): OralApplianceProfile!
 
   createEmergencyContact(input: EmergencyContactInput!): EmergencyContact!
-  updateEmergencyContact(id: ID!, input: EmergencyContactInput!): EmergencyContact!
+  updateEmergencyContact(userId: ID!, input: EmergencyContactInput!): EmergencyContact!
 
   createAllergyProfile(input: AllergyProfileInput!): AllergyProfile!
-  updateAllergyProfile(id: ID!, input: AllergyProfileUpdateInput!): AllergyProfile
+  updateAllergyProfile(userId: ID!, input: AllergyProfileUpdateInput!): AllergyProfile
 
   createMedicationProfile(input: MedicationProfileInput!): MedicationProfile!
-  updateMedicationProfile(id: ID!, input: MedicationProfileInput!): MedicationProfile!
+  updateMedicationProfile(userId: ID!, input: MedicationProfileInput!): MedicationProfile!
 
   createDentalProcedureProfile(input: DentalProcedureProfileInput!): DentalProcedureProfile!
-  updateDentalProcedureProfile(id: ID!, input: DentalProcedureProfileInput!): DentalProcedureProfile!
+  updateDentalProcedureProfile(userId: ID!, input: DentalProcedureProfileInput!): DentalProcedureProfile!
 
   createImmunizationProfile(input: ImmunizationProfileInput!): ImmunizationProfile!
-  updateImmunizationProfile(id: ID!, input: ImmunizationProfileInput!): ImmunizationProfile!
+  updateImmunizationProfile(userId: ID!, input: ImmunizationProfileInput!): ImmunizationProfile!
 
   createOperationProfile(input: OperationProfileInput!): OperationProfile!
-  updateOperationProfile(id: ID!, input: OperationProfileInput!): OperationProfile!
+  updateOperationProfile(userId: ID!, input: OperationProfileInput!): OperationProfile!
 
   createHospitalizationProfile(input: HospitalizationProfileInput!): HospitalizationProfile!
-  updateHospitalizationProfile(id: ID!, input: HospitalizationProfileInput!): HospitalizationProfile!
+  updateHospitalizationProfile(userId: ID!, input: HospitalizationProfileInput!): HospitalizationProfile!
 
   createMedicalHistory(input: MedicalHistoryInput!): MedicalHistory!
-  updateMedicalHistory(id: ID!, input: MedicalHistoryInput!): MedicalHistory!
+  updateMedicalHistory(userId: ID!, input: MedicalHistoryInput!): MedicalHistory!
 
   createVisualAcuityProfile(input: VisualAcuityProfileInput!): VisualAcuityProfile!
 }

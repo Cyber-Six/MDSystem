@@ -2,13 +2,11 @@ const db  = require("../../../../config/query.js");
 
 const { upsertEmergencyNumber } = require("../../query/upsert.js");
 
-const anchor = require("../../query/anchor.js");
-const remove = require("../../query/delete.js");
 const { assertActiveUpdateTicket } = require("./helper.js");
 const Wrapper = require("../../wrapper/mutation.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
-const logger = require("../../../../utils/logger.js");
 
+const { validateUpdateTicket } = require("../record-validator.js");
 const Query = require("./query.js");
 
 const Mutation = {
@@ -37,13 +35,15 @@ const Mutation = {
   submitUpdateTicket: async (_, {}, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
     assertActiveUpdateTicket(record, res);
-    console.log("Submitting ticket:", record);
-    if (record.status !== "Revision" && record.status !== "InProgress") {
+    
+    const missingRecords = await validateUpdateTicket(record.id, record.scope);
+    if (missingRecords.length > 0) {
       throwGraphQLError(res)
         .status(400)
-        .message("Only tickets with 'Revision' or 'InProgress' status can be submitted.")
+        .message(`Cannot submit update ticket. Required records are missing or incomplete: ${missingRecords.join(", ")}`)
         .throw();
       }
+
     let newStatus = "Pending";
     if (record.status !== "InProgress") newStatus = "RevisionSubmitted";
     await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
@@ -52,10 +52,20 @@ const Mutation = {
     return newStatus;
   },
 
+  cancelUpdateTicket: async (_, {}, { user, res }) => {
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res);
+
+    let newStatus = "Cancelled";
+    await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
+      [newStatus, record.id]
+    );
+    return newStatus;
+  },
 
   createStudentProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
     //console.log(args.input);
     const result = await Wrapper._StudentProfile(_, {args, recordId: record.id}, { user, res });
 
@@ -64,7 +74,7 @@ const Mutation = {
 
   createEmployeeProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
     //console.log(args.input);
     const result = await Wrapper._EmployeeProfile(_, {args, recordId: record.id}, { user, res });
     return result;
@@ -72,7 +82,7 @@ const Mutation = {
 
   createDentalHistory: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
     const result = await Wrapper._DentalHistory(_, {args, recordId: record.id}, { user, res });
     return result;
@@ -80,7 +90,7 @@ const Mutation = {
 
   createObgynHistory: async (_, args, { user, res }) => { // test start here
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
 
     const result = await Wrapper._ObgynHistory(_, {args, recordId: record.id}, { user, res });
@@ -89,7 +99,7 @@ const Mutation = {
 
   createLifestyle: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
 
     const result = await Wrapper._Lifestyle(_, {args, recordId: record.id}, { user, res });
@@ -98,7 +108,7 @@ const Mutation = {
 
   createDentalPhotos: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
 
     const result = await Wrapper._DentalPhotos(_, {args, recordId: record.id}, { user, res });
@@ -107,7 +117,7 @@ const Mutation = {
 
   createOralApplianceProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
     
     const result = await Wrapper._OralApplianceProfile(_, {args, recordId: record.id}, { user, res });
@@ -116,7 +126,7 @@ const Mutation = {
 
   createEmergencyContact: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
     const result = await Wrapper._EmergencyContact(_, {args, recordId: record.id}, { user, res });
@@ -126,7 +136,7 @@ const Mutation = {
 
   createVisualAcuityProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
     
     const result = await Wrapper._VisualAcuityProfile(_, {args, recordId: record.id}, { user, res });
@@ -135,7 +145,7 @@ const Mutation = {
 
   createMedicalHistory: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
 
     const result = await Wrapper._MedicalHistory(_, {args, recordId: record.id}, { user, res });
@@ -144,7 +154,7 @@ const Mutation = {
 
   createHospitalizationProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
     
     const result = await Wrapper._HospitalizationProfile(_, {args, recordId: record.id}, { user, res });
@@ -153,7 +163,7 @@ const Mutation = {
 
   createOperationProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
     
     const result = await Wrapper._OperationProfile(_, {args, recordId: record.id}, { user, res });
@@ -162,7 +172,7 @@ const Mutation = {
 
   createImmunizationProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
 
     const result = await Wrapper._ImmunizationProfile(_, {args, recordId: record.id}, { user, res });
@@ -171,7 +181,7 @@ const Mutation = {
 
   createDentalProcedureProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
 
     const result = await Wrapper._DentalProcedureProfile(_, {args, recordId: record.id}, { user, res });
@@ -180,7 +190,7 @@ const Mutation = {
 
   createAllergyProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
     
     const result = await Wrapper._AllergyProfile(_, {args, recordId: record.id}, { user, res });
@@ -190,7 +200,7 @@ const Mutation = {
 
   createMedicationProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
 
     const result = await Wrapper._MedicationProfile(_, {args, recordId: record.id}, { user, res });

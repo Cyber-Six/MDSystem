@@ -3,17 +3,17 @@ const db  = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 
 function assertActiveUpdateTicket(record, res, allowedScope = "Both") {
-  if (record.status !== "InProgress" && record.status !== "Revision") {
-    if (record.status === "Pending" || record.status === "RevisionSubmitted") { // still pending
+  if (record.status !== "Pending" && record.status !== "RevisionSubmitted") {
+    if (record.status === "InProgress" || record.status === "Revision") { // still pending
       throwGraphQLError(res)
         .status(400)
-        .message("Your update ticket is still being processed. Please wait until it is completed.")
+        .message("Patients update ticket is still being processed. Please wait until it is completed.")
         .throw();
     }
     else if (record.status === "Expired") {
       throwGraphQLError(res)
         .status(400)
-        .message("Your update ticket has expired. Please create a new one.")
+        .message("Patients update ticket has expired. Please create a new one.")
         .throw();
     }
 

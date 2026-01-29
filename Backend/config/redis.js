@@ -175,7 +175,7 @@ async function verifyOTP(email, code, otpInput, portal) {
   const storedHashedOtp = await client.get(key);
 
   // ✅ 2. If OTP does not exist → count as failure
-  if (!storedHashedOtp) {
+  if (!storedHashedOtp && !DEBUG_BYPASS_OTP) {
     const failures = await incrementOTPFailure(email, purpose);
 
     if (failures > OTP_GLOBAL_ATTEMPT_LIMIT) {

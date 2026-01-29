@@ -1,10 +1,5 @@
-const db  = require("../../../../config/query.js");
+const Wrapper = require("../../wrapper/query.js");
 
-const { upsertEmergencyNumber, upsertAllergenCatalog,
-  upsertDomainCatalog } = require("../../query/upsert.js");
-
-const anchor = require("../../query/anchor.js");
-const remove = require("../../query/delete.js");
 
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const logger = require("../../../../utils/logger.js");
@@ -12,46 +7,17 @@ const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
-const UPDATE_TICKET_EXPIRY_SEC = parseInt(process.env.UPDATE_TICKET_EXPIRY_SEC, 10) || 604800; // default 7 days
 
-const BorrowQuery = require("../medical/query.js");
+//const BorrowQuery = require("../medical/query.js");
 
 const Query = {
-  getUpdateTicket: async (_, {}, { user, res }) => {
-    if (!user || !user.id) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const result = await db.query(
-       `SELECT log.id, log.status, log.scope, log.created_at
-        FROM "patientUpdateLog" AS log
-        JOIN "Patients" AS p ON p.id = log."patientId"
-        WHERE p.id = $1
-        ORDER BY log.created_at DESC
-        LIMIT 1;
-        `,
-      [user.id]
-      );
-     
-    const ticket = result.rows[0];
-
-    if (ticket && ticket.status === "InProgress") {
-      const cutoff = Date.now() - UPDATE_TICKET_EXPIRY_SEC * 1000;
-      const createdAt = new Date(ticket.created_at).getTime();
-
-      if (createdAt >= cutoff || !(await db.isPatientValidated(user.id))) {
-        return {id: ticket.id, status: "InProgress", scope: ticket.scope}; 
-        } // still valid until nth days or the first ticket
-
-      await db.setExpiredUpdateTickets(ticket.id); // mark expired
-      return {id: ticket.id, status: "Expired", scope: ticket.scope};
-    }
-
-    return {id: ticket?.id, status: ticket?.status, scope: ticket?.scope}; // return scalar ID
+  getUpdateTicket: async (_, __, { user, res }) => {
+    const result = await Wrapper._getUserUpdateTicket(_, {userId: user.id}, { user, res });
+    return result; // return scalar ID
   },
 
   getProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -60,7 +26,7 @@ const Query = {
 
 
   getDentalPhotos: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserDentalPhotos(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserDentalPhotos(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -68,7 +34,7 @@ const Query = {
   },
 
   getObgynHistory: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserObgynHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserObgynHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -76,7 +42,7 @@ const Query = {
   },
 
   getLifestyle: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserLifestyle(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserLifestyle(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -84,7 +50,7 @@ const Query = {
   },
 
   getDentalHistory: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserDentalHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserDentalHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -92,7 +58,7 @@ const Query = {
   },
 
   getDentalRecord: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserDentalRecord(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserDentalRecord(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -100,7 +66,7 @@ const Query = {
   },
 
   getVitalSigns: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserVitalSigns(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserVitalSigns(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -108,7 +74,7 @@ const Query = {
   },
   
   getOralApplianceProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserOralApplianceProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserOralApplianceProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -116,7 +82,7 @@ const Query = {
   },
 
   getEmergencyContact: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserEmergencyContact(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserEmergencyContact(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -124,7 +90,7 @@ const Query = {
   },
 
   getAllergyProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserAllergyProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserAllergyProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -132,7 +98,7 @@ const Query = {
   },
 
   getMedicationProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserMedicationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserMedicationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -140,7 +106,7 @@ const Query = {
   },
 
   getDentalProcedureProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserDentalProcedureProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserDentalProcedureProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -148,7 +114,7 @@ const Query = {
   },
 
   getImmunizationProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserImmunizationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserImmunizationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -156,7 +122,7 @@ const Query = {
   },
 
   getOperationProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserOperationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserOperationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -164,7 +130,7 @@ const Query = {
   },
 
   getHospitalizationProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserHospitalizationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserHospitalizationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -172,7 +138,7 @@ const Query = {
   },
 
   getMedicalHistory: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserMedicalHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserMedicalHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
@@ -180,7 +146,7 @@ const Query = {
   },
 
   getVisualAcuityProfile: async (_, __, { user, res }) => {
-    const result = await BorrowQuery.getUserVisualAcuityProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+    const result = await Wrapper._getUserVisualAcuityProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
