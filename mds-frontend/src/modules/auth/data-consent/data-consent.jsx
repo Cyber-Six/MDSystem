@@ -32,6 +32,7 @@ const DataConsent = ({
   const [submitting, setSubmitting] = useState(false);
   const [showExitWarning, setShowExitWarning] = useState(false);
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+  const [showEmailExistsDialog, setShowEmailExistsDialog] = useState(false);
 
   // Load consent data when modal opens
   useEffect(() => {
@@ -112,6 +113,15 @@ const DataConsent = ({
         case 'INVALID_OR_EXPIRED_SESSION':
           setError('Your session has expired. Please restart the process.');
           break;
+        case 'EMAIL_ALREADY_EXISTS':
+        case 'USER_ALREADY_EXISTS':
+          // Show email exists dialog for registration flow
+          if (purpose === 'register') {
+            setShowEmailExistsDialog(true);
+          } else {
+            setError(errorMessage);
+          }
+          break;
         default:
           setError(errorMessage);
       }
@@ -135,6 +145,12 @@ const DataConsent = ({
 
   const handleCancelExit = () => {
     setShowExitWarning(false);
+  };
+
+  const handleGoToLogin = () => {
+    setShowEmailExistsDialog(false);
+    // Redirect to login page
+    window.location.href = '/auth/login';
   };
 
   const handleScroll = (e) => {
@@ -530,6 +546,62 @@ const DataConsent = ({
                          text-white font-semibold rounded-lg
                          transition-colors text-sm"
               >
+
+      {/* Email Already Exists Dialog */}
+      {showEmailExistsDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/70" />
+          
+          {/* Dialog */}
+          <div className="relative w-full max-w-md bg-white dark:bg-neutral-900 rounded-xl 
+                        shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-150">
+            {/* Icon */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 
+                            flex items-center justify-center">
+                <svg className="w-8 h-8 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-bold text-secondary-900 dark:text-white mb-2">
+                Account Already Exists
+              </h3>
+              <p className="text-neutral-600 dark:text-neutral-400 text-sm leading-relaxed">
+                An account with this email address already exists in our system. 
+                Please log in to your existing account instead of creating a new one.
+              </p>
+            </div>
+
+            {/* Info Box */}
+            <div className="mb-6 p-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 
+                          dark:border-primary-800 rounded-lg">
+              <p className="text-primary-700 dark:text-primary-400 text-xs text-center font-medium">
+                💡 If you forgot your password, you can reset it on the login page.
+              </p>
+            </div>
+
+            {/* Button */}
+            <button
+              onClick={handleGoToLogin}
+              className="w-full px-4 py-3 bg-primary-500 hover:bg-primary-600 
+                       text-white font-semibold rounded-lg
+                       transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                      d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+              Go to Login Page
+            </button>
+          </div>
+        </div>
+      )}
                 Continue Review
               </button>
             </div>
