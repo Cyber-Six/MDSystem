@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { axiosRequest } from '../../core';
-import { TokenStorage } from '../../core';
+import { axiosRequest } from '../../packages-core-adapter';
+import { TokenStorage } from '../../packages-core-adapter';
 import { validatePassword, passwordsMatch } from '@mdsystem/core/validation/password-validation';
+import DataConsent from './data-consent';
 
 const TOTAL_STEPS = 5;
 
@@ -22,9 +23,6 @@ const Register = ({ onBackToLogin }) => {
   // Step-specific state
   const [otp, setOtp] = useState('');
   const [verificationKey, setVerificationKey] = useState('');
-  const [consentAccepted, setConsentAccepted] = useState(false);
-  const [consentData, setConsentData] = useState(null);
-  const [consentVersion, setConsentVersion] = useState(null);
 
   // UI state
   const [error, setError] = useState('');
@@ -46,25 +44,6 @@ const Register = ({ onBackToLogin }) => {
     setSuccessMessage('');
     setCurrentStep(prev => prev + 1);
   };
-
-  // Fetch consent data when reaching consent step
-  useEffect(() => {
-    const fetchConsentData = async () => {
-      if (currentStep === 4 && !consentData && verificationKey) {
-        try {
-          const response = await axiosRequest.get(`/info/consent/register?verificationKey=${verificationKey}`);
-          if (response.data.ok) {
-            setConsentData(response.data.consent_text);
-            setConsentVersion(response.data.data_consent_version);
-          }
-        } catch (err) {
-          console.error('Failed to fetch consent data:', err);
-          // Use fallback static content if GET fails
-        }
-      }
-    };
-    fetchConsentData();
-  }, [currentStep, consentData, verificationKey]);
 
   // Step 1: Initial Registration
   const handleInitialRegistration = async (e) => {
@@ -216,58 +195,44 @@ const Register = ({ onBackToLogin }) => {
     }
   };
 
-  // Step 4: Submit Consent and Complete Registration
-  const handleConsentSubmit = async (e) => {
-    e.preventDefault();
+  // Step 4: Handle consent acceptance from DataConsent modal
+  const handleConsentAccept = async () => {
     setError('');
     setLoading(true);
 
-    if (!consentAccepted) {
-      setError('You must accept the data consent agreement to continue.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      // Record consent with verificationKey
-      const consentResponse = await axiosRequest.post('/info/consent/register', {
-        verificationKey
+      // Complete registration after consent has been recorded by DataConsent component
+      const response = await axiosRequest.post('/auth/register/complete', {
+        verificationKey,
+        email: formData.email,
+        password: formData.password
       });
 
-      if (consentResponse.data.ok) {
-        // Complete registration
-        const response = await axiosRequest.post('/auth/register/complete', {
-          verificationKey,
-          email: formData.email,
-          password: formData.password
+      if (response.data.ok) {
+        // Store tokens
+        console.log("📦 Registration response:", { 
+          hasAccessToken: !!response.data.accessToken, 
+          hasRefreshToken: !!response.data.refreshToken,
+          message: response.data.message 
         });
-
-        if (response.data.ok) {
-          // Store tokens
-          console.log("📦 Registration response:", { 
-            hasAccessToken: !!response.data.accessToken, 
-            hasRefreshToken: !!response.data.refreshToken,
-            message: response.data.message 
-          });
+        
+        if (response.data.accessToken && response.data.refreshToken) {
+          TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+          console.log("✅ Tokens stored successfully");
           
-          if (response.data.accessToken && response.data.refreshToken) {
-            TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
-            console.log("✅ Tokens stored successfully");
-            
-            goToNextStep();
-            
-            // Redirect after showing success
-            setTimeout(() => {
-              navigate('/', { replace: true });
-            }, 2000);
-          } else {
-            // Account already exists - redirect to login
-            console.warn("⚠️ Account already exists, redirecting to login");
-            setError('Account already exists. Redirecting to login...');
-            setTimeout(() => {
-              navigate('/auth/login', { replace: true });
-            }, 2000);
-          }
+          goToNextStep();
+          
+          // Redirect after showing success
+          setTimeout(() => {
+            navigate('/', { replace: true });
+          }, 2000);
+        } else {
+          // Account already exists - redirect to login
+          console.warn("⚠️ Account already exists, redirecting to login");
+          setError('Account already exists. Redirecting to login...');
+          setTimeout(() => {
+            navigate('/auth/login', { replace: true });
+          }, 2000);
         }
       }
     } catch (err) {
@@ -286,6 +251,16 @@ const Register = ({ onBackToLogin }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle consent cancellation - reset registration
+  const handleConsentCancel = () => {
+    setCurrentStep(1);
+    setVerificationKey('');
+    setFormData({ email: '', password: '', confirmPassword: '' });
+    setOtp('');
+    setError('');
+    setSuccessMessage('');
   };
 
   // Step 1: Account Creation Form
@@ -520,7 +495,7 @@ const Register = ({ onBackToLogin }) => {
     </div>
   );
 
-  // Step 4: Consent
+  // Step 4: Consent - Now uses the DataConsent modal
   const renderConsentStep = () => (
     <div className="w-full max-w-lg mx-auto">
       <div className="text-center mb-6">
@@ -530,10 +505,10 @@ const Register = ({ onBackToLogin }) => {
           </svg>
         </div>
         <h2 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary mb-2">
-          Data Consent Policy
+          Data Consent Required
         </h2>
         <p className="text-sm text-neutral-600 dark:text-dark-text-secondary">
-          Please review and agree to continue
+          Please review and accept the data consent policy to complete your registration
         </p>
       </div>
 
@@ -543,64 +518,10 @@ const Register = ({ onBackToLogin }) => {
         </div>
       )}
 
-      <div className="bg-neutral-50 dark:bg-dark-bg-tertiary border border-neutral-300 dark:border-dark-border-primary rounded-lg p-6 mb-5 max-h-80 overflow-y-auto">
-        <div className="space-y-4 text-neutral-700 dark:text-dark-text-secondary text-sm leading-relaxed">
-          <p>
-            By using the TIP Medical System, you agree to the collection and processing of your personal and medical data in accordance with our privacy policy and the Data Privacy Act of 2012.
-          </p>
-          
-          <div>
-            <h3 className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-1">Data Collection</h3>
-            <p>We collect personal information including your name, email, contact details, medical history, and health records.</p>
-          </div>
-          
-          <div>
-            <h3 className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-1">Data Usage</h3>
-            <p>Your data will be used solely for medical purposes including diagnosis, treatment, and health monitoring.</p>
-          </div>
-          
-          <div>
-            <h3 className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-1">Data Protection</h3>
-            <p>All data is encrypted and access is restricted to authorized medical personnel only.</p>
-          </div>
-          
-          <div>
-            <h3 className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-1">Your Rights</h3>
-            <p>You have the right to access, rectify, and request deletion of your personal data.</p>
-          </div>
-        </div>
-      </div>
-
-      <form onSubmit={handleConsentSubmit}>
-        <label className="flex items-start space-x-3 mb-6 cursor-pointer group">
-          <input
-            type="checkbox"
-            checked={consentAccepted}
-            onChange={(e) => setConsentAccepted(e.target.checked)}
-            className="mt-0.5 w-5 h-5 border-2 border-neutral-400 dark:border-dark-border-primary 
-                     rounded bg-white dark:bg-dark-bg-tertiary
-                     checked:bg-primary-500 checked:border-primary-500 
-                     focus:ring-2 focus:ring-primary-300
-                     transition-all cursor-pointer"
-          />
-          <span className="text-sm text-secondary-700 dark:text-dark-text-secondary group-hover:text-secondary-900 dark:group-hover:text-dark-text-primary transition-colors">
-            I agree to the data consent policy and terms of service
-          </span>
-        </label>
-
-        <button
-          type="submit"
-          disabled={loading || !consentAccepted}
-          className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
-                   dark:bg-primary-600 dark:hover:bg-primary-700
-                   text-white font-semibold py-2.5 rounded-md text-sm
-                   transition-all duration-200 
-                   disabled:opacity-50 disabled:cursor-not-allowed
-                   flex items-center justify-center shadow-md hover:shadow-lg"
-        >
-          {loading ? 'Completing Registration...' : 'Accept & Complete Registration'}
-        </button>
-      </form>
+      {/* DataConsent modal is rendered at the bottom of the component */}
+      <p className="text-center text-neutral-500 dark:text-dark-text-tertiary text-sm">
+        Opening consent agreement...
+      </p>
     </div>
   );
 
@@ -672,6 +593,15 @@ const Register = ({ onBackToLogin }) => {
     <div className="transition-opacity duration-300">
       {renderStep()}
     </div>
+
+    {/* Data Consent Modal - Rendered when on consent step */}
+    <DataConsent
+      isOpen={currentStep === 4}
+      verificationKey={verificationKey}
+      purpose="register"
+      onAccept={handleConsentAccept}
+      onCancel={handleConsentCancel}
+    />
   </div>
 );
 

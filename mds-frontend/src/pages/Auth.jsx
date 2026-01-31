@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import Login from '../modules/auth/login';
+import Login from '../modules/auth/login/login';
 import Register from '../modules/auth/register';
 import AuthSlides from '../modules/auth/auth-slides';
 

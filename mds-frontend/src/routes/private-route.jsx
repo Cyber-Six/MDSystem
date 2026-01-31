@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { TokenStorage, refreshAccessToken } from '../core';
+import { TokenStorage, refreshAccessToken } from '../packages-core-adapter';
 import { useState, useEffect } from 'react';
 
 /**
@@ -13,7 +13,6 @@ import { useState, useEffect } from 'react';
 const PrivateRoute = ({ children }) => {
   const [isChecking, setIsChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-
   useEffect(() => {
     const checkAuth = () => {
       // DEV MODE: Bypass authentication if environment variable is set

@@ -1,17 +1,44 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { existsSync, readFileSync } from 'fs'
+import { resolve } from 'path'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  const envDir = process.cwd()
   
-  // 🔧 DEVELOPER SWITCH: Change VITE_DEV_PORTAL in .env.local to 'www' or 'staff'
+  // Load environment variables from .env files
+  let env = loadEnv(mode, envDir, '')
+  
+  // If .env doesn't exist, manually load .env.example as fallback
+  const envFile = resolve(envDir, '.env')
+  const envExampleFile = resolve(envDir, '.env.example')
+  
+  if (!existsSync(envFile) && existsSync(envExampleFile)) {
+    console.log('ℹ️  Using .env.example (no .env file found)')
+    const exampleContent = readFileSync(envExampleFile, 'utf-8')
+    
+    // Simple env parser (supports KEY=VALUE format)
+    exampleContent.split('\n').forEach(line => {
+      const match = line.match(/^([A-Z_]+)=(.*)$/);
+      if (match && !env[match[1]]) {
+        env[match[1]] = match[2];
+      } 
+    });
+  }
+  
+  // 🔧 DEVELOPER SWITCH: Change VITE_DEV_PORTAL in .env to 'www', 'www2', 'staff', or 'staff2'
   const DEV_PORTAL = env.VITE_DEV_PORTAL || 'www';
   
   // Determine backend URL based on DEV_PORTAL
-  const BACKEND_URL = DEV_PORTAL === 'staff' 
-    ? 'https://staff.mdsystemtip.space'
-    : 'https://www.mdsystemtip.space';
+  const PORTAL_URLS = {
+    www: 'https://www.mdsystemtip.space',
+    www2: 'https://www2.mdsystemtip.space',
+    staff: 'https://staff.mdsystemtip.space',
+    staff2: 'https://staff2.mdsystemtip.space'
+  };
+  
+  const BACKEND_URL = PORTAL_URLS[DEV_PORTAL] || PORTAL_URLS['www'];
 
   return {
     plugins: [
