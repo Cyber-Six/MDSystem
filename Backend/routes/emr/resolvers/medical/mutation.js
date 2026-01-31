@@ -1,0 +1,215 @@
+const db  = require("../../../../config/query.js");
+
+const { validateUpdateTicket } = require("../record-validator.js");
+
+const { assertActiveUpdateTicket } = require("./helper.js");
+const Wrapper = require("../../wrapper/mutation.js");
+const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
+const logger = require("../../../../utils/logger.js");
+const permit = require("../../../../services/permit.js");
+
+const Query = require("./query.js");
+
+const Mutation = {
+  staffUpdateTicket: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_approval, args.userId)) {
+      logger.warn(`Unauthorized access attempt by user ID ${user.id} to ApproveUpdateTicket`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res);
+    
+    let newStatus = args.status;
+    if (newStatus !== "Approved" && newStatus !== "Revision" && newStatus !== "Rejected") {
+      throwGraphQLError(res)
+        .status(400)
+        .message("Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.")
+        .throw();
+      }
+    
+    if (newStatus === 'Approved') { // approval require check again
+      const missingRecords = await validateUpdateTicket(record.id, record.scope);
+      if (missingRecords.length > 0) {
+        throwGraphQLError(res)
+          .status(400)
+          .message(`Cannot submit update ticket. Required records are missing or incomplete: ${missingRecords.join(", ")}`)
+          .throw();
+        }
+      }
+
+    await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
+      [newStatus, record.id]
+    );
+    logger.info(`User ID ${user.id} updated ticket ID ${record.id} to status ${newStatus}`);
+    return newStatus;
+  },
+
+
+  updateStudentProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    //console.log(args.input);
+    const result = await Wrapper._StudentProfile(_, {args, recordId: record.id}, { user, res });
+
+    return result;
+  },
+
+  updateEmployeeProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    //console.log(args.input);
+    const result = await Wrapper._EmployeeProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateDentalHistory: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+    console.log(args.input);
+    const result = await Wrapper._DentalHistory(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateObgynHistory: async (_, args, { user, res }) => { // test start here
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+
+    const result = await Wrapper._ObgynHistory(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateLifestyle: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+
+    const result = await Wrapper._Lifestyle(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateDentalPhotos: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+    console.log(args.input);
+
+    const result = await Wrapper._DentalPhotos(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateOralApplianceProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+    console.log(args.input);
+    
+    const result = await Wrapper._OralApplianceProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateEmergencyContact: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    console.log(args.input);
+
+    const result = await Wrapper._EmergencyContact(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+
+  updateVisualAcuityProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+    
+    const result = await Wrapper._VisualAcuityProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateMedicalHistory: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+
+    const result = await Wrapper._MedicalHistory(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateHospitalizationProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+    
+    const result = await Wrapper._HospitalizationProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateOperationProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+    
+    const result = await Wrapper._OperationProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateImmunizationProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+
+    const result = await Wrapper._ImmunizationProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateDentalProcedureProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+    console.log(args.input);
+
+    const result = await Wrapper._DentalProcedureProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateAllergyProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+    
+    const result = await Wrapper._AllergyProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+
+  updateMedicationProfile: async (_, args, { user, res }) => {
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+
+    const result = await Wrapper._MedicationProfile(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+
+  updateDentalRecord: async (_, args, { user, res }) => { // only available for medical scope
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+    console.log(args.input);
+
+    const result = await Wrapper._DentalRecord(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+  updateVitalSigns: async (_, args, { user, res }) => { // only available for medical scope
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+    console.log(args.input);
+
+    const result = await Wrapper._VitalSigns(_, {args, recordId: record.id}, { user, res });
+    return result;
+  },
+
+
+};
+
+module.exports =  Mutation;
