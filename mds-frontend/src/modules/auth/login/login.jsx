@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { axiosRequest } from '../../core';
-import { TokenStorage } from '../../core';
+import { axiosRequest } from '../../../packages-core-adapter';
+import { TokenStorage } from '../../../packages-core-adapter';
 import ForgetPassword from './forget-password';
+import DataConsent from '../data-consent';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -13,31 +14,9 @@ const Login = () => {
   const [showConsent, setShowConsent] = useState(false);
   const [verificationKey, setVerificationKey] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
-  const [consentAgreed, setConsentAgreed] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [consentData, setConsentData] = useState(null);
-  const [consentVersion, setConsentVersion] = useState(null);
   
   const navigate = useNavigate();
-
-  // Fetch consent data when consent view loads
-  useEffect(() => {
-    const fetchConsentData = async () => {
-      if (showConsent && !consentData && verificationKey) {
-        try {
-          const response = await axiosRequest.get(`/info/consent/login?verificationKey=${verificationKey}`);
-          if (response.data.ok) {
-            setConsentData(response.data.consent_text);
-            setConsentVersion(response.data.data_consent_version);
-          }
-        } catch (err) {
-          console.error('Failed to fetch consent data:', err);
-          // Use fallback static content if GET fails
-        }
-      }
-    };
-    fetchConsentData();
-  }, [showConsent, consentData, verificationKey]);
 
   const handleSend2FA = async () => {
     try {
@@ -178,26 +157,13 @@ const Login = () => {
     }
   };
 
-  const handleCompleteLogin = async () => {
-    if (!consentAgreed) {
-      setError('You must agree to the data consent policy to continue.');
-      return;
-    }
-
+  // Called when user accepts consent in the DataConsent modal
+  const handleConsentAccept = async () => {
     setError('');
     setIsLoading(true);
 
     try {
-      // Record consent with verificationKey
-      const consentResponse = await axiosRequest.post('/info/consent/login', {
-        verificationKey
-      });
-
-      if (!consentResponse.data.ok) {
-        throw new Error('Failed to record consent');
-      }
-
-      // Complete login
+      // Complete login after consent is recorded
       const response = await axiosRequest.post('/auth/login/complete', { 
         LoginKey: verificationKey 
       });
@@ -208,9 +174,8 @@ const Login = () => {
         }
         
         // Check if user has completed initial medical record
-        // For now, redirect to initial medical record form
         // TODO: Query the backend to check if user has filled EMR
-        const hasCompletedMedicalRecord = false; // This should be checked via API
+        const hasCompletedMedicalRecord = false;
         
         if (hasCompletedMedicalRecord) {
           navigate('/');
@@ -245,11 +210,19 @@ const Login = () => {
       }
     } finally {
       setIsLoading(false);
+      setShowConsent(false);
     }
   };
 
+  // Called when user cancels consent in the DataConsent modal
+  const handleConsentCancel = () => {
+    setShowConsent(false);
+    setVerificationKey('');
+    setError('');
+  };
+
   // Initial login form
-  if (!showTwoFactor && !showConsent) {
+  if (!showTwoFactor) {
     return (
       <>
         <div className="w-full max-w-md mx-auto">
@@ -365,6 +338,15 @@ const Login = () => {
             </div>
           </div>
         )}
+
+        {/* Data Consent Modal */}
+        <DataConsent
+          isOpen={showConsent}
+          verificationKey={verificationKey}
+          purpose="login"
+          onAccept={handleConsentAccept}
+          onCancel={handleConsentCancel}
+        />
       </>
     );
   }
@@ -461,113 +443,6 @@ const Login = () => {
             </button>
           </div>
         </form>
-      </div>
-    );
-  }
-
-  // Data consent form
-  if (showConsent) {
-    return (
-      <div className="w-full max-w-lg mx-auto">
-        <div className="text-center mb-6">
-          <div className="bg-accent-100 dark:bg-accent-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-accent-600 dark:text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary mb-2">
-            Data Consent Policy
-          </h2>
-          <p className="text-sm text-neutral-600 dark:text-dark-text-secondary">
-            Please review and agree to continue
-          </p>
-        </div>
-        
-        {error && (
-          <div className="mb-5 p-4 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
-            <p className="text-error-600 dark:text-error-400 text-sm text-center">
-              {error}
-            </p>
-          </div>
-        )}
-        
-        {/* Consent Content */}
-        <div className="bg-neutral-50 dark:bg-dark-bg-tertiary border border-neutral-300 dark:border-dark-border-primary rounded-lg p-6 mb-5 max-h-80 overflow-y-auto">
-          <div className="space-y-4 text-neutral-700 dark:text-dark-text-secondary text-sm leading-relaxed">
-            <p>
-              By using the TIP Medical System, you agree to the collection and processing of your personal and medical data in accordance with our privacy policy and the Data Privacy Act of 2012.
-            </p>
-            
-            <div>
-              <h3 className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-1">Data Collection</h3>
-              <p>We collect personal information including your name, email, contact details, medical history, and health records.</p>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-1">Data Usage</h3>
-              <p>Your data will be used solely for medical purposes including diagnosis, treatment, and health monitoring.</p>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-1">Data Protection</h3>
-              <p>All data is encrypted and access is restricted to authorized medical personnel only.</p>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-1">Your Rights</h3>
-              <p>You have the right to access, rectify, and request deletion of your personal data.</p>
-            </div>
-          </div>
-        </div>
-        
-        {/* Consent Checkbox */}
-        <label className="flex items-start space-x-3 mb-6 cursor-pointer group">
-          <input 
-            type="checkbox" 
-            checked={consentAgreed}
-            onChange={(e) => setConsentAgreed(e.target.checked)}
-            className="mt-0.5 w-5 h-5 border-2 border-neutral-400 dark:border-dark-border-primary 
-                     rounded bg-white dark:bg-dark-bg-tertiary
-                     checked:bg-primary-500 checked:border-primary-500 
-                     focus:ring-2 focus:ring-primary-300
-                     transition-all cursor-pointer"
-          />
-          <span className="text-sm text-secondary-700 dark:text-dark-text-secondary group-hover:text-secondary-900 dark:group-hover:text-dark-text-primary transition-colors">
-            I agree to the data consent policy and terms of service
-          </span>
-        </label>
-        
-        {/* Buttons */}
-        <div className="flex gap-3">
-          <button 
-            type="button"
-            onClick={handleCompleteLogin}
-            disabled={isLoading || !consentAgreed}
-            className="flex-1 bg-primary-500 hover:bg-primary-600 active:bg-primary-700
-                     dark:bg-primary-600 dark:hover:bg-primary-700
-                     text-white font-semibold py-3.5 rounded-lg
-                     transition-all duration-200 
-                     disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-          >
-            {isLoading ? 'Processing...' : 'Accept & Continue'}
-          </button>
-          
-          <button 
-            type="button" 
-            onClick={() => {
-              setShowConsent(false);
-              setVerificationKey('');
-              setConsentAgreed(false);
-            }}
-            disabled={isLoading}
-            className="flex-1 bg-white dark:bg-dark-bg-primary hover:bg-neutral-50 dark:hover:bg-secondary-800
-                     text-secondary-700 dark:text-dark-text-primary font-medium py-3.5 rounded-lg 
-                     border border-neutral-300 dark:border-dark-border-secondary
-                     transition-all duration-200 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-        </div>
       </div>
     );
   }

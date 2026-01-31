@@ -8,7 +8,7 @@
     <!-- Theme initialization to prevent flash of unstyled content -->
     <script>
       (function() {
-        const themeMode = localStorage.getItem('themeMode') || 'system';
+        const themeMode = localStorage.getItem('themeMode') || 'light';
         if (themeMode === 'dark') {
           document.documentElement.classList.add('dark');
         } else if (themeMode === 'system') {

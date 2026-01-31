@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { bannerService } from '../core';
+import { bannerService } from '../packages-core-adapter';
 
 const BannerContext = createContext();
 

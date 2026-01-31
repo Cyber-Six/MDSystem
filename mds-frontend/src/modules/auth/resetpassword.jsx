@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { axiosRequest } from "../../core";
+import { axiosRequest } from "../../packages-core-adapter";
 
 const ResetPassword = () => {
   const { verificationKey } = useParams(); // comes from the URL
