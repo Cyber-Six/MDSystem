@@ -824,7 +824,7 @@ type Mutation {
   createDentalHistory(input: DentalHistoryInput!): DentalHistory!
   updateDentalHistory(userId: ID!, input: DentalHistoryUpdateInput!): DentalHistory!
 
-  updateDentalRecord(userId: ID!, input: DentalRecordUpdateInput!): DentalRecord!
+  updateDentalRecord(userId: ID!, input: DentalRecordInput!): DentalRecord!
   updateVitalSigns(userId: ID!, input: VitalSignsUpdateInput!): VitalSigns!
 
   createOralApplianceProfile(input: OralApplianceProfileInput!): OralApplianceProfile!
@@ -855,5 +855,6 @@ type Mutation {
   updateMedicalHistory(userId: ID!, input: MedicalHistoryInput!): MedicalHistory!
 
   createVisualAcuityProfile(input: VisualAcuityProfileInput!): VisualAcuityProfile!
+  updateVisualAcuityProfile(userId: ID!, input: VisualAcuityProfileInput!): VisualAcuityProfile!
 }
   
