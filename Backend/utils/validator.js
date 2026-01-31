@@ -61,8 +61,48 @@ function getStudentBranchFromEmail(email) {
   return null; // fallback
 }
 
+function normalizeName(name) {
+  return name
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
+function normalizeNumber(number) {
+  // Strip everything except digits
+  const digits = number.replace(/\D/g, "");
 
+  // Example: enforce PH country code (+63)
+  if (digits.startsWith("0")) {
+    return "+63" + digits.slice(1);
+  }
+  if (!digits.startsWith("+")) {
+    return "+" + digits;
+  }
+  return digits;
+}
+
+function generateDomainCode(name, domain) {
+  if (!domain || !name) {
+    throw new Error("Both domain and name are required to generate code");
+  }
+
+  // Normalize inputs: trim, lowercase, replace spaces with underscores
+  const normalizedDomain = domain.trim().toLowerCase();
+  const normalizedName = name.trim().toLowerCase();
+
+  // Slugify: keep only alphanumeric + underscore
+  const slugDomain = normalizedDomain.replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+  const slugName = normalizedName.replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+
+  // Combine domain + name
+  const code = `${slugDomain}_${slugName}`;
+
+  // Ensure max length (50 chars per schema)
+  return code.substring(0, 50);
+}
 
 module.exports = {
   isStudentEmail,
@@ -73,4 +113,7 @@ module.exports = {
   isValidEmail,
   validatePassword,
   isUserStaff,
+  normalizeName,
+  normalizeNumber,
+  generateDomainCode
 };
