@@ -9,6 +9,7 @@ const permitions = {
   emr_allow_edit: "ALLOW_TO_EDIT_EMR",
   emr_allow_view: "ALLOW_TO_VIEW_EMR",
   emr_allow_set_dental_record: "ALLOW_TO_SET_DENTAL_RECORD",
+  emr_allow_edit_catalogs: "ALLOW_TO_EDIT_CATALOGS",
 
 };
 

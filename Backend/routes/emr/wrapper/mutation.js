@@ -7,6 +7,7 @@ const remove = require("../query/delete.js");
 
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
+const { generateDomainCodes } = require("../../../utils/validator.js");
 
 const Mutation = {
   _StudentProfile: async (_, {args, recordId}, { user, res }) => {
@@ -127,7 +128,7 @@ const Mutation = {
       });
 
       const query = `
-        INSERT INTO "ToothPlacement" ("oralFindingId", "tooth_index", "legends")
+        INSERT INTO "ToothPlacement" ("dentalRecordId", "toothIndex", "legend")
         VALUES ${values.join(", ")}
         RETURNING *;
       `;
@@ -146,14 +147,15 @@ const Mutation = {
     for (const finding of args.input.oralFindings) {
       try {
         const resultFinder = await db.queryControlled(
-          `INSERT INTO "OralFinding"
-            ("oralFindingId", "findingType", "description")
-           VALUES ($1, $2, $3)
+          `INSERT INTO "OralFindingRecord"
+            ("dentalRecordId", "oralFindingId", "status", "notes")
+           VALUES ($1, $2, $3, $4)
            RETURNING *;`,
           [
             recordId,
-            finding.findingType,
-            finding.description || null
+            finding.oralFindingId,
+            finding.status,
+            finding.notes || null
             ]
           );
         insert.push(resultFinder.rows[0]);
@@ -161,7 +163,7 @@ const Mutation = {
           if (err.code === '23503') { // foreign key violation
             throwGraphQLError(res)
               .status(400)
-              .message(`Invalid findingType: ${finding.findingType}`)
+              .message(`Invalid oralFindingId: ${finding.oralFindingId}`)
               .throw();
             }
           else throw err;
@@ -219,7 +221,7 @@ const Mutation = {
           args.input.notes
         ]
       );
-
+    console.log("Upserted ObGynHistory:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -696,6 +698,222 @@ const Mutation = {
       archived_at: null
     };
   },
+
+  _DomainCatalog: async (_, { domain, names }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
+    }
+
+    const query = `
+      INSERT INTO "DomainTypeCatalog" (domain, name, created_by, code)
+      SELECT $1, UNNEST($2::text[]), $3, UNNEST($4::text[])
+      ON CONFLICT (domain, name) DO NOTHING
+      RETURNING *;
+    `;
+
+    const result = await db.query(query, [domain, names || [], user.id, generateDomainCodes(names, domain)]);
+    return result.rows;
+  },
+
+  _AllergenCatalogs: async (_, { allergens }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
+    }
+
+    if (!allergens || allergens.length === 0) {
+      throwGraphQLError(res).status(400).message("No allergens provided").throw();
+    }
+
+    // Build VALUES placeholders dynamically
+    const values = allergens
+      .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
+      .join(", ");
+
+    // Flatten params [allergen, type, allergen, type, ...]
+    const params = allergens.flatMap(a => [a.allergen, a.type, user.id]);
+    const query = `
+      INSERT INTO "AllergenCatalog" (allergen, type, created_by)
+      VALUES ${values}
+      ON CONFLICT (allergen, type) DO NOTHING
+      RETURNING *;
+    `;
+
+    const result = await db.queryControlled(query, params);
+    return result.rows;
+  },
+
+  _OralApplianceCatalogs: async (_, { appliances }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
+    }
+
+    if (!appliances || appliances.length === 0) {
+      throwGraphQLError(res).status(400).message("No oral appliances provided").throw();
+    }
+
+    // Build VALUES placeholders dynamically
+    const values = appliances
+      .map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`)
+      .join(", ");
+
+    // Flatten params [name, archable, description, created_by, ...]
+    const params = appliances.flatMap(a => [a.name, a.archable, a.description, user.id]);
+
+    const query = `
+      INSERT INTO "OralApplianceCatalog" (name, archable, description, created_by)
+      VALUES ${values}
+      ON CONFLICT (name) DO NOTHING
+      RETURNING *;
+    `;
+
+    const result = await db.queryControlled(query, params);
+    return result.rows;
+  },
+
+  _UpdateDomainCatalogs: async (_, { catalogs }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
+    }
+
+    if (!catalogs || catalogs.length === 0) {
+      throwGraphQLError(res).status(400).message("No catalogs provided").throw();
+    }
+
+    // Build VALUES placeholders dynamically
+    const values = catalogs
+      .map((_, i) =>
+        `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`
+      )
+      .join(", ");
+
+    // Flatten params: [id, domain, name, code, description, isValid, ...]
+    const params = catalogs.flatMap(c => [
+      c.id,
+      c.domain ?? null,
+      c.name ?? null,
+      c.code ?? null,
+      c.description ?? null,
+      c.isValid ?? null
+    ]);
+
+    const query = `
+      UPDATE "DomainTypeCatalog" AS d
+      SET domain      = COALESCE(v.domain, d.domain),
+          name        = COALESCE(v.name, d.name),
+          code        = COALESCE(v.code, d.code),
+          description = COALESCE(v.description, d.description),
+          isValid     = COALESCE(v.isValid, d.isValid)
+      FROM (VALUES ${values}) AS v(id, domain, name, code, description, isValid)
+      WHERE d.id = v.id
+      RETURNING d.*;
+    `;
+
+    const result = await db.query(query, params);
+
+    if (result.rows.length === 0) {
+      throwGraphQLError(res)
+        .status(404)
+        .message(`No matching domain catalogs found.`)
+        .throw();
+    }
+
+    return result.rows;
+  }, // update catalog
+
+  _UpdateAllergenCatalog: async (_, { allergens }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
+    }
+
+    if (!allergens || allergens.length === 0) {
+      throwGraphQLError(res).status(400).message("No allergens provided").throw();
+    }
+
+    // Build VALUES placeholders dynamically
+    const values = allergens
+      .map((_, i) =>
+        `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`
+      )
+      .join(", ");
+
+    // Flatten params: [id, allergen, type, isValid, ...]
+    const params = allergens.flatMap(a => [
+      a.id,
+      a.allergen ?? null,
+      a.type ?? null,
+      a.isValid ?? null
+    ]);
+
+    const query = `
+      UPDATE "AllergenCatalog" AS ac
+      SET allergen = COALESCE(v.allergen, ac.allergen),
+          type     = COALESCE(v.type, ac.type),
+          isValid  = COALESCE(v.isValid, ac.isValid)
+      FROM (VALUES ${values}) AS v(id, allergen, type, isValid)
+      WHERE ac.id = v.id
+      RETURNING ac.*;
+    `;
+
+    const result = await db.query(query, params);
+
+    if (result.rows.length === 0) {
+      throwGraphQLError(res)
+        .status(404)
+        .message(`No matching allergen catalogs found.`)
+        .throw();
+    }
+
+    return result.rows;
+  },
+
+  _UpdateOralApplianceCatalog: async (_, { appliances }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
+    }
+
+    if (!appliances || appliances.length === 0) {
+      throwGraphQLError(res).status(400).message("No oral appliances provided").throw();
+    }
+
+    // Build VALUES placeholders dynamically
+    const values = appliances
+      .map((_, i) =>
+        `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`
+      )
+      .join(", ");
+
+    // Flatten params: [id, name, description, archable, isActive, ...]
+    const params = appliances.flatMap(a => [
+      a.id,
+      a.name === undefined ? null : a.name,
+      a.description === undefined ? null : a.description,
+      a.archable === undefined ? null : a.archable,
+      a.isActive === undefined ? null : a.isActive
+    ]);
+
+    const query = `
+      UPDATE "OralApplianceCatalog" AS oac
+      SET name        = COALESCE(v.name, oac.name),
+          description = COALESCE(v.description, oac.description),
+          archable    = COALESCE(v.archable, oac.archable),
+          isActive    = COALESCE(v.isActive, oac.isActive)
+      FROM (VALUES ${values}) AS v(id, name, description, archable, isActive)
+      WHERE oac.id = v.id
+      RETURNING oac.*;
+    `;
+
+    const result = await db.query(query, params);
+
+    if (result.rows.length === 0) {
+      throwGraphQLError(res)
+        .status(404)
+        .message(`No matching oral appliance catalogs found.`)
+        .throw();
+    }
+
+    return result.rows;
+  },
+
 };
 
 module.exports =  Mutation;
