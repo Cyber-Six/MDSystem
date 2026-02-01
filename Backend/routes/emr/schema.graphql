@@ -821,10 +821,10 @@ type Query {
   getProcedureDomain: [DomainType!]! 
   # get the list of procedure domain available
 
-  getDomainCatalogs(domain: DomainType, filterIsValid: Boolean, offset: Int, limit: Int): [DomainCatalog!]
-  getAllergenCatalogs(type: ALLERGEN_TYPE, filterIsValid: Boolean, offset: Int, limit: Int): [AllergenCatalog!]
-  getOralApplianceCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralApplianceTag!]
-  getOralFindingCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralFindingCatalog!]
+  getDomainCatalogs(domain: DomainType, filterIsValid: Boolean, offset: Int, limit: Int): [DomainCatalog!]!
+  getAllergenCatalogs(type: ALLERGEN_TYPE, filterIsValid: Boolean, offset: Int, limit: Int): [AllergenCatalog!]!
+  getOralApplianceCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralApplianceTag!]!
+  getOralFindingCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralFindingCatalog!]!
   # render the list of options per catalog
 
 
