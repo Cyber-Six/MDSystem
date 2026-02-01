@@ -4,6 +4,7 @@ const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
 const path = require("path");
 const dotenv = require("dotenv");
+const { log } = require("console");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 const UPDATE_TICKET_EXPIRY_SEC = parseInt(process.env.UPDATE_TICKET_EXPIRY_SEC, 10) || 604800; // default 7 days
@@ -27,7 +28,7 @@ const Query = {
       );
      
     const ticket = result.rows[0];
-
+    logger.debug("Fetched Update Ticket:", ticket);
     if (ticket && ticket.status === "InProgress") {
       const cutoff = Date.now() - UPDATE_TICKET_EXPIRY_SEC * 1000;
       const createdAt = new Date(ticket.created_at).getTime();
@@ -71,6 +72,7 @@ const Query = {
       from || new Date(0)
     ]);
 
+    logger.debug("User Profile Query Result:", result.rows);
     if (result.rows.length === 0) return [];
 
     return result.rows.map(row => {
@@ -124,6 +126,7 @@ const Query = {
     ]);
 
     if (result.rows.length === 0) return [];
+    logger.debug("User Dental Photos Query Result:", result.rows);
     return result.rows;
   },
 
@@ -147,7 +150,7 @@ const Query = {
       offset || 0,
       new Date(from)
     ]);
-
+    logger.debug("User ObGyn History Query Result:", result.rows);
     if (result.rows.length === 0) return [];
     return result.rows;
   },
@@ -173,7 +176,7 @@ const Query = {
       offset || 0,
       new Date(from)
     ]);
-
+    logger.debug("User Lifestyle Query Result:", result.rows);
     if (result.rows.length === 0) return [];
     return result.rows;
   },
@@ -202,6 +205,7 @@ const Query = {
     ]);
 
     if (result.rows.length === 0) return [];
+    logger.debug("User Dental History Query Result:", result.rows);
     return result.rows;
   },
 
@@ -225,7 +229,7 @@ const Query = {
       offset || 0,
       new Date(from)
     ]);
-
+    logger.debug("User Dental Record Query Result:", result.rows);
     if (result.rows.length === 0) return [];
     
     for (const row of result.rows) { // define the every tooth status here
@@ -237,7 +241,7 @@ const Query = {
       const ToothPlacements = await db.query(teethQuery, [row.id]);
       row.ToothPlacements = ToothPlacements.rows;
     }
-    
+    logger.debug("User Dental Record with Tooth Placements:", result.rows);
     for (const row of result.rows) { // define the oral findings here
       const findingsQuery = `
         SELECT oralFindingId, status, notes
@@ -247,6 +251,7 @@ const Query = {
       const DentalFindings = await db.query(findingsQuery, [row.id]);
       row.DentalFindings = DentalFindings.rows;
       }
+    logger.debug("User Dental Record with Findings:", result.rows);
     return result.rows;
   },
 
@@ -270,7 +275,7 @@ const Query = {
       offset || 0,
       new Date(from)
     ]);
-
+    logger.debug("User Vital Signs Query Result:", result.rows);
     if (result.rows.length === 0) return [];
     return result.rows;
   },
@@ -307,6 +312,7 @@ const Query = {
       const ApplianceProfiles = await db.query(appliancesQuery, [row.id]);
       row.appliances = ApplianceProfiles.rows;
     } 
+    logger.debug("User Oral Appliance Profile with Appliances:", result.rows);
     return result.rows;
   },
 
@@ -346,6 +352,7 @@ const Query = {
       row.secondContact = ContactNumbers?.rows[!f1] || null;
     }
 
+    logger.debug("User Emergency Contact with Numbers:", result.rows);
     return result.rows; 
   },
 
@@ -381,7 +388,7 @@ const Query = {
       const AllergenCatalog = await db.query(catalogQuery, [row.id]);
       row.allergies = AllergenCatalog.rows || [];
     }
-
+    logger.debug("User Allergy Profile with Allergies:", result.rows);
     return result.rows;
   },
 
@@ -417,6 +424,7 @@ const Query = {
       row.medications = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Medication Profile with Medications:", result.rows);
     return result.rows;
   },
 
@@ -452,6 +460,7 @@ const Query = {
       row.procedures = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Dental Procedure Profile with Procedures:", result.rows);
     return result.rows;
   },
 
@@ -487,6 +496,7 @@ const Query = {
       row.immunizations = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Immunization Profile with Immunizations:", result.rows);
     return result.rows;
   },
 
@@ -522,6 +532,7 @@ const Query = {
       row.operations = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Operation Profile with Operations:", result.rows);
     return result.rows;
   },
 
@@ -557,6 +568,7 @@ const Query = {
       row.hospitalizations = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Hospitalization Profile with Hospitalizations:", result.rows);
     return result.rows;
   },
 
@@ -591,6 +603,7 @@ const Query = {
       row.conditions = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Medical History with Conditions:", result.rows);
     return result.rows;
   },
   
@@ -625,6 +638,7 @@ const Query = {
       const AcuityRecords = await db.query(acuityQuery, [row.id]);
       row.acuity = AcuityRecords.rows[0] || null;
     }
+    logger.debug("User Visual Acuity Profile with Acuity Records:", result.rows);
     return result.rows;
   },
   
@@ -634,7 +648,7 @@ const Query = {
   },
 
   _getDomainCatalogs: async (_, { domain, filterIsValid, offset, limit }, { user, res }) => {
-    console.log("Fetching Domain Catalogs:", { domain, filterIsValid, offset, limit });
+    logger.debug("Fetching Domain Catalogs:", { domain, filterIsValid, offset, limit });
     const query = `
     SELECT *
     FROM "DomainTypeCatalog"
@@ -644,13 +658,14 @@ const Query = {
     LIMIT $3 OFFSET $4;
 
     `;
-    console.log(typeof domain);
+
     const result = await db.query(query, [
       domain || null,
       filterIsValid === undefined ? null : filterIsValid,
       limit || 10,
       offset || 0
     ]);
+    logger.debug("Domain Catalogs Query Result:", result.rows);
     return result.rows;
   },
 
@@ -671,7 +686,7 @@ const Query = {
       limit || 10,
       offset || 0
     ]);
-
+    logger.debug("Allergen Catalogs Query Result:", result.rows);
     return result.rows;
   },
 
@@ -690,6 +705,7 @@ const Query = {
       offset || 0
     ]);
 
+    logger.debug("User Oral Appliance Profile with Appliances:", result.rows);
     return result.rows;
   },
 
@@ -708,6 +724,7 @@ const Query = {
       offset || 0
     ]);
 
+    logger.debug("User Oral Finding Profile with Findings:", result.rows);
     return result.rows;
   },
 
@@ -737,6 +754,7 @@ const Query = {
       offset || 0
     ]);
 
+    logger.debug("User Status Update Tickets with Statuses:", result.rows);
     return result.rows;
   },
 
@@ -756,6 +774,7 @@ const Query = {
       filterIsValid === undefined ? null : filterIsValid
     ]);
 
+    logger.debug("Searched Domain Catalogs Query Result:", result.rows);
     return result.rows;
   },
 
@@ -773,6 +792,7 @@ const Query = {
       filterIsValid === undefined ? null : filterIsValid
     ]);
 
+    logger.debug("Searched Allergen Catalogs Query Result:", result.rows);
     return result.rows;
   },
 
@@ -790,6 +810,7 @@ const Query = {
       filterIsValid === undefined ? null : filterIsValid
     ]);
 
+    logger.debug("Searched Oral Appliance Catalogs Query Result:", result.rows);
     return result.rows;
   },
 };

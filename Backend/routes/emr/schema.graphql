@@ -824,16 +824,16 @@ type Query {
   getDomainCatalogs(domain: DomainType, filterIsValid: Boolean, offset: Int, limit: Int): [DomainCatalog!]!
   getAllergenCatalogs(type: ALLERGEN_TYPE, filterIsValid: Boolean, offset: Int, limit: Int): [AllergenCatalog!]!
   getOralApplianceCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralApplianceTag!]!
-  getOralFindingCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralFindingCatalog!]
+  getOralFindingCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralFindingCatalog!]!
   # render the list of options per catalog
 
 
   getStatusUpdateTickets(statuses: [UpdateStatus!]!, branch: DesignationBranch!, offset: Int, limit: Int): [UpdateTicket!]
   # fetch all latest ticket of users
 
-  searchDomainCatalogs(domain: String, filterIsValid: Boolean, names: [String!]!): [DomainCatalog!]!
-  searchAllergenCatalogs(allergens: [String!]!, filterIsValid: Boolean): [AllergenCatalog!]!
-  searchOralApplianceCatalogs(names: [String!]!, filterIsValid: Boolean): [OralApplianceTag!]!
+  searchDomainCatalogs(domain: String, filterIsValid: Boolean, names: [String!]!): [DomainCatalog!]
+  searchAllergenCatalogs(allergens: [String!]!, filterIsValid: Boolean): [AllergenCatalog!]
+  searchOralApplianceCatalogs(names: [String!]!, filterIsValid: Boolean): [OralApplianceTag!]
 }
 
 # Mutations

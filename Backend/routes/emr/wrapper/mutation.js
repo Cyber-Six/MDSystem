@@ -45,7 +45,7 @@ const Mutation = {
         args.input.guardian_contact
       ]
     );
-
+    logger.debug("Upserted Student Profile:", result.rows[0]);
     //return result.rows[0];
     return {...(args.input), id: recordId, archived_at: null};
   },
@@ -82,6 +82,7 @@ const Mutation = {
       ]
     );
 
+    logger.debug("Upserted Employee Profile:", result.rows[0]);
     //return result.rows[0];
     return {...(args.input), id: recordId, archived_at: null};
   },
@@ -111,6 +112,7 @@ const Mutation = {
       ]
     );
 
+    logger.debug("Upserted Vital Signs:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -134,8 +136,9 @@ const Mutation = {
       `;
       result = await db.queryControlled(query, params);
 
-      console.log("Inserted Tooth Placements:", result.rows);
+      logger.debug("Inserted Tooth Placements:", result.rows);
     } catch (err) {
+      logger.error("Error inserting Tooth Placements:", err);
       throwGraphQLError(res)
         .status(400)
         .message(`Failed to insert DentalRecord: ${err.message}`)
@@ -169,7 +172,7 @@ const Mutation = {
           else throw err;
         }
       }
-
+    logger.debug("Inserted Oral Findings:", insert);
     return {
       ...args.input,
       id: recordId,
@@ -201,6 +204,7 @@ const Mutation = {
       ]
     );  
 
+    logger.debug("Upserted Dental History:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -221,7 +225,7 @@ const Mutation = {
           args.input.notes
         ]
       );
-    console.log("Upserted ObGynHistory:", result.rows[0]);
+    logger.debug("Upserted ObGynHistory:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -249,6 +253,7 @@ const Mutation = {
         args.input.notes
       ]
     );
+    logger.debug("Upserted Lifestyle:", result.rows[0]);
 
     return {...(args.input), id: recordId, archived_at: null};
   },
@@ -269,6 +274,7 @@ const Mutation = {
       ]
     );
 
+    logger.debug("Upserted Dental Photos:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -301,7 +307,7 @@ const Mutation = {
             appliance.arch
             ]
           );
-        console.log("Inserted Oral Appliance:", result.rows[0]);
+        logger.debug("Inserted Oral Appliance:", result.rows[0]);
         inserted.push(result.rows[0]);
       } catch (err) {
         if (err.code === '23503') { // foreign key violation
@@ -313,6 +319,7 @@ const Mutation = {
         else throw err;
       }
     }
+    logger.warn("Inserted Oral Appliances:", inserted);
     return {
       id: recordId,
       appliances: inserted,
@@ -335,6 +342,7 @@ const Mutation = {
        RETURNING *;`,
       [recordId, firstNumber.id, secondNumber.id]
     );
+    logger.debug("Upserted Emergency Contact:", result.rows[0]);
 
     return {
       id: recordId,
@@ -388,6 +396,7 @@ const Mutation = {
       else { throw err; }
     }
 
+    logger.debug("Upserted Visual Acuity Profile:", result.rows[0]);
     return {...(args.input), id: recordId, archived_at: null};
   },
 
@@ -419,12 +428,13 @@ const Mutation = {
             condition.diagnosedDate || null
             ]
           );
-        console.log("Inserted Medical Condition:", result.rows[0]);
+        logger.debug("Inserted Medical Condition:", result.rows[0]);
         inserted.push(result.rows[0]);
       } catch (err) {
         throw err;
       }
     }
+    logger.debug("Inserted Medical Conditions:", inserted);
     return {
       id: recordId,
       conditions: inserted,
@@ -463,12 +473,13 @@ const Mutation = {
             hospitalization.notes || null
             ]
           );
-        console.log("Inserted Hospitalization:", result.rows[0]);
+        logger.debug("Inserted Hospitalization:", result.rows[0]);
         inserted.push(result.rows[0]);
       } catch (err) {
         throw err;
       }
     }
+    logger.debug("Inserted Hospitalizations:", inserted);
     return {
       id: recordId,
       hospitalizations: inserted,
@@ -504,7 +515,7 @@ const Mutation = {
             operation.notes || null
             ]
           );
-        console.log("Inserted Operation:", result.rows[0]);
+        logger.debug("Inserted Operation:", result.rows[0]);
         inserted.push(result.rows[0]);
       } catch (err) {
         throw err;
@@ -546,6 +557,7 @@ const Mutation = {
             immunization.doseNumber
             ]
           );
+        logger.debug("Inserted Immunization:", result.rows[0]);
         inserted.push(result.rows[0]);
       } catch (err) {
         throw err;
@@ -586,6 +598,7 @@ const Mutation = {
             procedure.procedureDate
             ]
           );
+        logger.debug("Inserted Dental Procedure:", result.rows[0]);
         inserted.push(result.rows[0]);
       } catch (err) {
         if (err.code === '23503') { // foreign key violation
@@ -634,7 +647,7 @@ const Mutation = {
             allergy.date_identified || null
             ]
           );
-        console.log("Inserted Allergy:", result.rows[0]);
+        logger.debug("Inserted Allergy:", result.rows[0]);
         inserted.push(result.rows[0]);
       } catch (err) {
         if (err.code === '23503') { // foreign key violation
@@ -646,6 +659,7 @@ const Mutation = {
         else { throw err; }
       }
     }
+
     return {
       id: recordId,
       allergies: inserted,
@@ -681,6 +695,7 @@ const Mutation = {
             medication.description || null
             ]
           );
+        logger.debug("Inserted Medication:", result.rows[0]);
         inserted.push(result.rows[0]);
       } catch (err) {
         if (err.code === '23503') { // foreign key violation
@@ -712,6 +727,7 @@ const Mutation = {
     `;
 
     const result = await db.query(query, [domain, names || [], user.id, generateDomainCodes(names, domain)]);
+    logger.debug("Inserted DomainTypeCatalogs:", result.rows);
     return result.rows;
   },
 
@@ -739,6 +755,7 @@ const Mutation = {
     `;
 
     const result = await db.queryControlled(query, params);
+    logger.debug("Inserted AllergenCatalogs:", result.rows);
     return result.rows;
   },
 
@@ -767,6 +784,7 @@ const Mutation = {
     `;
 
     const result = await db.queryControlled(query, params);
+    logger.debug("Inserted OralApplianceCatalogs:", result.rows);
     return result.rows;
   },
 
@@ -816,6 +834,7 @@ const Mutation = {
         .message(`No matching domain catalogs found.`)
         .throw();
     }
+    logger.debug("Updated DomainTypeCatalogs:", result.rows);
 
     return result.rows;
   }, // update catalog
@@ -862,6 +881,7 @@ const Mutation = {
         .message(`No matching allergen catalogs found.`)
         .throw();
     }
+    logger.debug("Updated AllergenCatalogs:", result.rows);
 
     return result.rows;
   },
@@ -910,6 +930,7 @@ const Mutation = {
         .message(`No matching oral appliance catalogs found.`)
         .throw();
     }
+    logger.debug("Updated OralApplianceCatalogs:", result.rows);
 
     return result.rows;
   },
