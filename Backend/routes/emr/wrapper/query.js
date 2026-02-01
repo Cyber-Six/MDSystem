@@ -33,14 +33,14 @@ const Query = {
       const createdAt = new Date(ticket.created_at).getTime();
 
       if (createdAt >= cutoff || !(await db.isPatientValidated(userId))) {
-        return {id: ticket.id, status: "InProgress", scope: ticket.scope}; 
+        return {id: ticket.id, patientId: userId, status: "InProgress", scope: ticket.scope}; 
         } // still valid until nth days or the first ticket
 
       await db.setExpiredUpdateTickets(ticket.id); // mark expired
-      return {id: ticket.id, status: "Expired", scope: ticket.scope};
+      return {id: ticket.id, patientId: userId, status: "Expired", scope: ticket.scope};
     }
 
-    return {id: ticket?.id, status: ticket?.status, scope: ticket?.scope}; // return scalar ID
+    return {id: ticket?.id, patientId: userId, status: ticket?.status, scope: ticket?.scope}; // return scalar ID
   },
 
 
@@ -230,9 +230,8 @@ const Query = {
     
     for (const row of result.rows) { // define the every tooth status here
       const teethQuery = `
-        SELECT tp.id, tp.toothIndex, tpc.legend
+        SELECT tp.id, tp.toothIndex, tp.legend
         FROM "ToothPlacement" tp
-        JOIN "ToothPlacementCatalog" tpc ON tp.id = tpc.toothPlacementId
         WHERE "dentalRecordId" = $1;
       `;
       const ToothPlacements = await db.query(teethQuery, [row.id]);
@@ -626,6 +625,171 @@ const Query = {
       const AcuityRecords = await db.query(acuityQuery, [row.id]);
       row.acuity = AcuityRecords.rows[0] || null;
     }
+    return result.rows;
+  },
+  
+  _getProcedureDomain: async (_, __, { user, res }) => {
+    const domains = ["VisualAcuity", "Medication", "Hospitalization", "Operation", "Immunization", "DentalProcedure"];
+    return domains;
+  },
+
+  _getDomainCatalogs: async (_, { domain, filterIsValid, offset, limit }, { user, res }) => {
+    console.log("Fetching Domain Catalogs:", { domain, filterIsValid, offset, limit });
+    const query = `
+    SELECT *
+    FROM "DomainTypeCatalog"
+    WHERE domain = COALESCE($1, domain)
+      AND "isValid" = COALESCE($2, "isValid")
+    ORDER BY created_at ASC
+    LIMIT $3 OFFSET $4;
+
+    `;
+    console.log(typeof domain);
+    const result = await db.query(query, [
+      domain || null,
+      filterIsValid === undefined ? null : filterIsValid,
+      limit || 10,
+      offset || 0
+    ]);
+    return result.rows;
+  },
+
+
+  _getAllergenCatalogs: async (_, { type, filterIsValid, offset, limit }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "AllergenCatalog"
+      WHERE type = COALESCE($1, type)
+        AND "isValid" = COALESCE($2, "isValid")
+      ORDER BY created_at ASC
+      LIMIT $3 OFFSET $4;
+    `;
+
+    const result = await db.query(query, [
+      type || null,
+      filterIsValid === undefined ? null : filterIsValid,
+      limit || 10,
+      offset || 0
+    ]);
+
+    return result.rows;
+  },
+
+  _getOralApplianceCatalogs: async (_, { filterIsValid, offset, limit }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "oralApplianceCatalog"
+      WHERE "isActive" = COALESCE($1, "isActive")
+      ORDER BY created_at ASC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [
+      filterIsValid === undefined ? null : filterIsValid,
+      limit || 10,
+      offset || 0
+    ]);
+
+    return result.rows;
+  },
+
+  _getOralFindingCatalogs: async (_, { filterIsValid, offset, limit }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "oralFindingCatalog"
+      WHERE "isActive" = COALESCE($1, "isActive")
+      ORDER BY created_at ASC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [
+      filterIsValid === undefined ? null : filterIsValid,
+      limit || 10,
+      offset || 0
+    ]);
+
+    return result.rows;
+  },
+
+  _getStatusUpdateTickets: async (_, { statuses, branch, offset, limit }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
+    }
+
+    const query = `
+      SELECT *
+      FROM (
+        SELECT DISTINCT ON (pul."patientId") pul.*, up.*
+        FROM "patientUpdateLog" pul
+        JOIN "UsersPersonal" up ON up.id = pul."patientId"
+        ORDER BY pul."patientId", pul.created_at DESC, pul.id DESC
+      ) latest
+      WHERE latest.branch = $1
+        AND latest.status = ANY(COALESCE($2, ARRAY[latest.status]))
+      ORDER BY latest.created_at DESC
+      LIMIT $3 OFFSET $4;
+    `;
+
+    const result = await db.query(query, [
+      branch,
+      statuses && statuses.length > 0 ? statuses : null,
+      limit || 10,
+      offset || 0
+    ]);
+
+    return result.rows;
+  },
+
+  _searchDomainCatalogs: async (_, { domain, filterIsValid, names }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "DomainTypeCatalog"
+      WHERE domain = COALESCE($1, domain)
+        AND name = ANY($2)
+        AND "isValid" = COALESCE($3, "isValid")
+      ORDER BY created_at ASC;
+    `;
+
+    const result = await db.query(query, [
+      domain || null,
+      names || [],
+      filterIsValid === undefined ? null : filterIsValid
+    ]);
+
+    return result.rows;
+  },
+
+  _searchAllergenCatalogs: async (_, { allergens, filterIsValid }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "AllergenCatalog"
+      WHERE name = ANY($1)
+        AND "isValid" = COALESCE($2, "isValid")
+      ORDER BY created_at ASC;
+    `;
+
+    const result = await db.query(query, [
+      allergens || [],
+      filterIsValid === undefined ? null : filterIsValid
+    ]);
+
+    return result.rows;
+  },
+
+  _searchOralApplianceCatalogs: async (_, { filterIsValid, names }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "oralApplianceCatalog"
+      WHERE name = ANY($1)
+        AND "isActive" = COALESCE($2, "isActive")
+      ORDER BY created_at ASC;
+    `;
+
+    const result = await db.query(query, [
+      names || [],
+      filterIsValid === undefined ? null : filterIsValid
+    ]);
+
     return result.rows;
   },
 };

@@ -59,7 +59,7 @@ type EmployeeProfile implements UserProfile {
   position: String!
   status: UpdateStatus! 
   archived_at: Date
-  created_at: Date!
+  created_at: Date
 }
 
 input StudentProfileInput{
@@ -130,7 +130,7 @@ type ObgynHistory {
     hasDysmenorrhea: Boolean!
     notes: String
     archived_at: Date
-    created_at: Date!
+    created_at: Date
 }
 
 input ObgynHistoryInput {
@@ -156,7 +156,7 @@ type Lifestyle {
     frequencyOfAlcoholConsumption: String
     notes: String
     archived_at: Date
-    created_at: Date!
+    created_at: Date
 }
 
 input LifestyleInput {
@@ -184,7 +184,7 @@ type dentalPhotos{
     lowerTeeth: UUID!
     isValid: Boolean!
     archived_at: Date
-    created_at: Date!
+    created_at: Date
 }
 
 input dentalPhotosInput{
@@ -208,7 +208,7 @@ type VitalSigns {
     heart_rate: Int!
     temperature: Float!
     notes: String
-    created_at: Date!
+    created_at: Date
     archived_at: Date
 }
 
@@ -246,18 +246,18 @@ type ToothPlacement{ # singular tooth info
 
 input ToothPlacementInput{
   toothIndex: Int!
-  legend: [String!]!
+  legend: String!
 }
 
 
 # Oral Finding
-type OralFindingLegend{
+type OralFindingCatalog{
   name: String! # Calculus
   isActive: Boolean!
   description: String
 }
 
-input OralFindingLegendInput{
+input OralFindingCatalogInput{
   name: String! # Calculus
   isActive: Boolean
   description: String
@@ -267,7 +267,7 @@ type OralFindingRecord{
   oralFindingId: ID!
   status: Boolean!
   notes: String
-  created_at: Date!
+  created_at: Date
 }
 
 input OralFindingRecordInput{
@@ -282,7 +282,7 @@ type DentalRecord{
 
     oralFindings: [OralFindingRecord!]!
     ToothPlacements: [ToothPlacement!]!
-    created_at: Date!
+    created_at: Date
 }
 
 input DentalRecordInput{
@@ -308,13 +308,21 @@ type OralApplianceTag{
   description: String
   archable: Boolean!
   isActive: Boolean!
-  created_at: Date!
+  created_at: Date
 }
 
 input OralApplianceTagInput{
   name: String!
   description: String
   archable: Boolean!
+  isActive: Boolean
+}
+
+input OralApplianceTagUpdateInput{
+  id: ID!
+  name: String
+  description: String
+  archable: Boolean
   isActive: Boolean
 }
 
@@ -339,7 +347,7 @@ type OralApplianceProfile{
   appliances: [OralAppliance!]!
   notes: String
   archived_at: Date
-  created_at: Date!
+  created_at: Date
 }
 
 input OralApplianceProfileInput{
@@ -356,7 +364,7 @@ type EmergencyNumber {
     relationship: String!
     contactNumber: String!
     isVerified: Boolean
-    created_at: Date!
+    created_at: Date
 }
 
 input EmergencyNumberInput {
@@ -371,7 +379,7 @@ type EmergencyContact {
     firstContact: EmergencyNumber!
     secondContact: EmergencyNumber!
     archived_at: Date
-    created_at: Date!
+    created_at: Date
 }
 
 input EmergencyContactInput {
@@ -402,7 +410,7 @@ type AllergenCatalog{
   allergen: String!
   type: ALLERGEN_TYPE!
   isValid: Boolean
-  created_at: Date!
+  created_at: Date
 }
 
 input AllergenCatalogInput{
@@ -412,6 +420,7 @@ input AllergenCatalogInput{
 }
 
 input AllergenCatalogUpdateInput{
+  id: ID!
   allergen: String
   type: ALLERGEN_TYPE
   isValid: Boolean
@@ -447,7 +456,7 @@ type AllergyProfile{
   allergies: [AllergyRecord!]!
   notes: String
   archived_at: Date
-  created_at: Date!
+  created_at: Date
 }
 
 input AllergyProfileInput{
@@ -469,15 +478,16 @@ type DomainCatalog {
   code: String!
   description: String
   isValid: Boolean!
-  created_at: Date!
+  created_at: Date
 } 
 
 input DomainCatalogInput {
-  domain: String!
-  name: String!
-  code: String!
+  id: ID!
+  domain: String
+  name: String
+  code: String
   description: String
-  isValid: Boolean!
+  isValid: Boolean
 }
 
 input DomainCatalogUpdateInput {
@@ -519,7 +529,7 @@ type VisualAcuityProfile {
     notes: String
     acuity: VisualAcuity
     archived_at: Date
-    created_at: Date!
+    created_at: Date
 }
 
 input VisualAcuityProfileInput {
@@ -546,7 +556,7 @@ type MedicationProfile {
   medications: [MaintenanceMedication!]!
   notes: String
   archived_at: Date
-  created_at: Date!
+  created_at: Date
 }
 
 input MedicationProfileInput {
@@ -583,7 +593,7 @@ type HospitalizationProfile {
   hospitalizations: [hospitalizationRecord!]!
   notes: String
   archived_at: Date
-  created_at: Date!
+  created_at: Date
 }
 
 input HospitalizationProfileInput {
@@ -611,7 +621,7 @@ type OperationProfile {
   operations: [operationRecord!]!
   notes: String
   archived_at: Date
-  created_at: Date!
+  created_at: Date
   }
 
 input OperationProfileInput {
@@ -640,7 +650,7 @@ type ImmunizationProfile {
   immunizations: [immunizationRecord!]!
   notes: String
   archived_at: Date
-  created_at: Date!
+  created_at: Date
   }
 
 input ImmunizationProfileInput {
@@ -666,7 +676,7 @@ type DentalProcedureProfile {
   procedures: [dentalProcedureRecord!]!
   notes: String
   archived_at: Date
-  created_at: Date!
+  created_at: Date
   }
 
 input DentalProcedureProfileInput {
@@ -696,7 +706,7 @@ type MedicalHistory {
     conditions: [MedicalConditionRecord!]!
     notes: String
     archived_at: Date
-    created_at: Date!
+    created_at: Date
 }
 
 input MedicalHistoryInput {
@@ -723,138 +733,180 @@ enum UpdateStatus{
 
 type UpdateTicket {
   id: ID!
+  patientId: ID!
   status: UpdateStatus!
 }
 
+
+enum DesignationBranch{
+  Manila
+  QuezonCity
+  Both
+}
+
+enum DomainType {
+  VisualAcuity
+  Medication
+  Hospitalization
+  Operation
+  Immunization
+  DentalProcedure
+}
 # Queries
 type Query {
-  # Mescilanous 
+  # Miscellaneous 
 
-  getUpdateTicket: UpdateTicket!
-  getUserUpdateTicket(userId: ID!): UpdateTicket!
+  getUpdateTicket: UpdateTicket
+  getUserUpdateTicket(userId: ID!): UpdateTicket
+
+  getUserIDViaEntityId(entityId: String!, branch: DesignationBranch!): [UserProfile!]
+  getUserIdViaName(Name: String!, branch: DesignationBranch!): [UserProfile!]
+  getUserIdViaEmail(email: String!, branch: DesignationBranch!): [UserProfile!]
+
 
   # Categories
-  getProfile: UserProfile!
-  getUserProfile(userId: ID!, from: Date, offset: Int, limit: Int): [UserProfile!]!
+  getProfile: UserProfile
+  getUserProfile(userId: ID!, from: Date, offset: Int, limit: Int): [UserProfile!]
 
   getDentalPhotos: dentalPhotos
-  getUserDentalPhotos(userId: ID!, from: Date, offset: Int, limit: Int): [dentalPhotos!]! 
+  getUserDentalPhotos(userId: ID!, from: Date, offset: Int, limit: Int): [dentalPhotos!]
 
   getObgynHistory: ObgynHistory 
-  getUserObgynHistory(userId: ID!, from: Date, offset: Int, limit: Int): [ObgynHistory!]! # for medical
+  getUserObgynHistory(userId: ID!, from: Date, offset: Int, limit: Int): [ObgynHistory!] # for medical
   
   getLifestyle: Lifestyle
-  getUserLifestyle(userId: ID!, from: Date, offset: Int, limit: Int): [Lifestyle!]!
+  getUserLifestyle(userId: ID!, from: Date, offset: Int, limit: Int): [Lifestyle!]
 
   getDentalHistory: DentalHistory
-  getUserDentalHistory(userId: ID!, from: Date, offset: Int, limit: Int): [DentalHistory!]!
+  getUserDentalHistory(userId: ID!, from: Date, offset: Int, limit: Int): [DentalHistory!]
 
   getDentalRecord: DentalRecord
-  getUserDentalRecord(userId: ID!, from: Date, offset: Int, limit: Int): [DentalRecord!]!
+  getUserDentalRecord(userId: ID!, from: Date, offset: Int, limit: Int): [DentalRecord!]
 
   getVitalSigns: VitalSigns
-  getUserVitalSigns(userId: ID!, from: Date, offset: Int, limit: Int): [VitalSigns!]!
+  getUserVitalSigns(userId: ID!, from: Date, offset: Int, limit: Int): [VitalSigns!]
 
   getOralApplianceProfile: OralApplianceProfile
-  getUserOralApplianceProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OralApplianceProfile!]!
+  getUserOralApplianceProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OralApplianceProfile!]
 
   getEmergencyContact: EmergencyContact
-  getUserEmergencyContact(userId: ID!, from: Date, offset: Int, limit: Int): [EmergencyContact!]!
+  getUserEmergencyContact(userId: ID!, from: Date, offset: Int, limit: Int): [EmergencyContact!]
 
   getAllergyProfile: AllergyProfile
-  getUserAllergyProfile(userId: ID!, from: Date, offset: Int, limit: Int): [AllergyProfile!]!
+  getUserAllergyProfile(userId: ID!, from: Date, offset: Int, limit: Int): [AllergyProfile!]
 
   getMedicationProfile: MedicationProfile
-  getUserMedicationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [MedicationProfile!]!
+  getUserMedicationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [MedicationProfile!]
 
   getDentalProcedureProfile: DentalProcedureProfile
-  getUserDentalProcedureProfile(userId: ID!, from: Date, offset: Int, limit: Int): [DentalProcedureProfile!]!
+  getUserDentalProcedureProfile(userId: ID!, from: Date, offset: Int, limit: Int): [DentalProcedureProfile!]
 
   getImmunizationProfile: ImmunizationProfile
-  getUserImmunizationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [ImmunizationProfile!]!
+  getUserImmunizationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [ImmunizationProfile!]
 
   getOperationProfile: OperationProfile
-  getUserOperationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OperationProfile!]!
+  getUserOperationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OperationProfile!]
   
   getHospitalizationProfile: HospitalizationProfile
-  getUserHospitalizationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [HospitalizationProfile!]!
+  getUserHospitalizationProfile(userId: ID!, from: Date, offset: Int, limit: Int): [HospitalizationProfile!]
 
   getMedicalHistory: MedicalHistory
-  getUserMedicalHistory(userId: ID!, from: Date, offset: Int, limit: Int): [MedicalHistory!]!
+  getUserMedicalHistory(userId: ID!, from: Date, offset: Int, limit: Int): [MedicalHistory!]
 
   getVisualAcuityProfile: VisualAcuityProfile
-  getUserVisualAcuityProfile(userId: ID!, from: Date, offset: Int, limit: Int): [VisualAcuityProfile!]!
+  getUserVisualAcuityProfile(userId: ID!, from: Date, offset: Int, limit: Int): [VisualAcuityProfile!]
   
   # miscellaneous
-  getConditionDomain: [String!]!
-  getprocedureDomain: [String!]! 
-  getDomainCatalogs(domain: String, isValid: Boolean, offset: Int, limit: Int): [DomainCatalog!]!
-  getAllergenCatalogs(type: ALLERGEN_TYPE, isValid: Boolean, offset: Int, limit: Int): [AllergenCatalog!]!
+
+  getProcedureDomain: [DomainType!]! 
+  # get the list of procedure domain available
+
+  getDomainCatalogs(domain: DomainType, filterIsValid: Boolean, offset: Int, limit: Int): [DomainCatalog!]!
+  getAllergenCatalogs(type: ALLERGEN_TYPE, filterIsValid: Boolean, offset: Int, limit: Int): [AllergenCatalog!]!
+  getOralApplianceCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralApplianceTag!]!
+  getOralFindingCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralFindingCatalog!]
+  # render the list of options per catalog
 
 
+  getStatusUpdateTickets(statuses: [UpdateStatus!]!, branch: DesignationBranch!, offset: Int, limit: Int): [UpdateTicket!]
+  # fetch all latest ticket of users
+
+  searchDomainCatalogs(domain: String, filterIsValid: Boolean, names: [String!]!): [DomainCatalog!]!
+  searchAllergenCatalogs(allergens: [String!]!, filterIsValid: Boolean): [AllergenCatalog!]!
+  searchOralApplianceCatalogs(names: [String!]!, filterIsValid: Boolean): [OralApplianceTag!]!
 }
 
 # Mutations
 type Mutation {
   # Profile
 
-  createUpdateTicket(scope: UpdateScope!): ID!
+  createUpdateTicket(scope: UpdateScope!): ID
 
-  submitUpdateTicket: UpdateStatus!
-  cancelUpdateTicket: UpdateStatus!
+  submitUpdateTicket: UpdateStatus
+  cancelUpdateTicket: UpdateStatus
 
-  staffUpdateTicket(userId: ID!, status: UpdateStatus!): UpdateStatus!
+  staffUpdateTicket(userId: ID!, status: UpdateStatus!): UpdateStatus
   
 
-  createStudentProfile(input: StudentProfileInput!): StudentProfile! # for patients
-  createEmployeeProfile(input: EmployeeProfileInput!): EmployeeProfile!
+  createStudentProfile(input: StudentProfileInput!): StudentProfile # for patients
+  createEmployeeProfile(input: EmployeeProfileInput!): EmployeeProfile
 
-  updateStudentProfile(userId: ID!, input: StudentProfileUpdateInput!): StudentProfile! # for medical
-  updateEmployeeProfile(userId: ID!, input: EmployeeProfileUpdateInput!): EmployeeProfile!
+  updateStudentProfile(userId: ID!, input: StudentProfileUpdateInput!): StudentProfile # for medical
+  updateEmployeeProfile(userId: ID!, input: EmployeeProfileUpdateInput!): EmployeeProfile
   # Dental Photos
-  createDentalPhotos(input: dentalPhotosInput!): dentalPhotos!
-  updateDentalPhotos(userId: ID!, input: dentalPhotosUpdateInput!): dentalPhotos!
+  createDentalPhotos(input: dentalPhotosInput!): dentalPhotos
+  updateDentalPhotos(userId: ID!, input: dentalPhotosUpdateInput!): dentalPhotos
   # Obgyn History
-  createObgynHistory(input: ObgynHistoryInput!): ObgynHistory!
-  updateObgynHistory(userId: ID!, input: ObgynHistoryUpdateInput!): ObgynHistory!
+  createObgynHistory(input: ObgynHistoryInput!): ObgynHistory
+  updateObgynHistory(userId: ID!, input: ObgynHistoryUpdateInput!): ObgynHistory
 
-  createLifestyle(input: LifestyleInput!): Lifestyle!
-  updateLifestyle(userId: ID!, input: LifestyleUpdateInput!): Lifestyle!
+  createLifestyle(input: LifestyleInput!): Lifestyle
+  updateLifestyle(userId: ID!, input: LifestyleUpdateInput!): Lifestyle
 
-  createDentalHistory(input: DentalHistoryInput!): DentalHistory!
-  updateDentalHistory(userId: ID!, input: DentalHistoryUpdateInput!): DentalHistory!
+  createDentalHistory(input: DentalHistoryInput!): DentalHistory
+  updateDentalHistory(userId: ID!, input: DentalHistoryUpdateInput!): DentalHistory
 
-  updateDentalRecord(userId: ID!, input: DentalRecordInput!): DentalRecord!
-  updateVitalSigns(userId: ID!, input: VitalSignsUpdateInput!): VitalSigns!
+  updateDentalRecord(userId: ID!, input: DentalRecordInput!): DentalRecord
+  updateVitalSigns(userId: ID!, input: VitalSignsUpdateInput!): VitalSigns
 
-  createOralApplianceProfile(input: OralApplianceProfileInput!): OralApplianceProfile!
-  updateOralApplianceProfile(userId: ID!, input: OralApplianceProfileInput!): OralApplianceProfile!
+  createOralApplianceProfile(input: OralApplianceProfileInput!): OralApplianceProfile
+  updateOralApplianceProfile(userId: ID!, input: OralApplianceProfileInput!): OralApplianceProfile
 
-  createEmergencyContact(input: EmergencyContactInput!): EmergencyContact!
-  updateEmergencyContact(userId: ID!, input: EmergencyContactInput!): EmergencyContact!
+  createEmergencyContact(input: EmergencyContactInput!): EmergencyContact
+  updateEmergencyContact(userId: ID!, input: EmergencyContactInput!): EmergencyContact
 
-  createAllergyProfile(input: AllergyProfileInput!): AllergyProfile!
+  createAllergyProfile(input: AllergyProfileInput!): AllergyProfile
   updateAllergyProfile(userId: ID!, input: AllergyProfileUpdateInput!): AllergyProfile
 
-  createMedicationProfile(input: MedicationProfileInput!): MedicationProfile!
-  updateMedicationProfile(userId: ID!, input: MedicationProfileInput!): MedicationProfile!
+  createMedicationProfile(input: MedicationProfileInput!): MedicationProfile
+  updateMedicationProfile(userId: ID!, input: MedicationProfileInput!): MedicationProfile
 
-  createDentalProcedureProfile(input: DentalProcedureProfileInput!): DentalProcedureProfile!
-  updateDentalProcedureProfile(userId: ID!, input: DentalProcedureProfileInput!): DentalProcedureProfile!
+  createDentalProcedureProfile(input: DentalProcedureProfileInput!): DentalProcedureProfile
+  updateDentalProcedureProfile(userId: ID!, input: DentalProcedureProfileInput!): DentalProcedureProfile
 
-  createImmunizationProfile(input: ImmunizationProfileInput!): ImmunizationProfile!
-  updateImmunizationProfile(userId: ID!, input: ImmunizationProfileInput!): ImmunizationProfile!
+  createImmunizationProfile(input: ImmunizationProfileInput!): ImmunizationProfile
+  updateImmunizationProfile(userId: ID!, input: ImmunizationProfileInput!): ImmunizationProfile
 
-  createOperationProfile(input: OperationProfileInput!): OperationProfile!
-  updateOperationProfile(userId: ID!, input: OperationProfileInput!): OperationProfile!
+  createOperationProfile(input: OperationProfileInput!): OperationProfile
+  updateOperationProfile(userId: ID!, input: OperationProfileInput!): OperationProfile
 
-  createHospitalizationProfile(input: HospitalizationProfileInput!): HospitalizationProfile!
-  updateHospitalizationProfile(userId: ID!, input: HospitalizationProfileInput!): HospitalizationProfile!
+  createHospitalizationProfile(input: HospitalizationProfileInput!): HospitalizationProfile
+  updateHospitalizationProfile(userId: ID!, input: HospitalizationProfileInput!): HospitalizationProfile
 
-  createMedicalHistory(input: MedicalHistoryInput!): MedicalHistory!
-  updateMedicalHistory(userId: ID!, input: MedicalHistoryInput!): MedicalHistory!
+  createMedicalHistory(input: MedicalHistoryInput!): MedicalHistory
+  updateMedicalHistory(userId: ID!, input: MedicalHistoryInput!): MedicalHistory
 
-  createVisualAcuityProfile(input: VisualAcuityProfileInput!): VisualAcuityProfile!
-  updateVisualAcuityProfile(userId: ID!, input: VisualAcuityProfileInput!): VisualAcuityProfile!
+  createVisualAcuityProfile(input: VisualAcuityProfileInput!): VisualAcuityProfile
+  updateVisualAcuityProfile(userId: ID!, input: VisualAcuityProfileInput!): VisualAcuityProfile
+
+
+  createDomainCatalogs(domain: DomainType!, names: [String!]!): [DomainCatalog!]!
+  updateDomainCatalogs(catalogs: [DomainCatalogInput!]!): [DomainCatalog!]
+
+  createAllergenCatalogs(allergens: [AllergenCatalogInput!]!): [AllergenCatalog!]!
+  updateAllergenCatalogs(allergens: [AllergenCatalogUpdateInput!]!): [AllergenCatalog!]
+
+  createOralApplianceCatalogs(appliances: [OralApplianceTagInput!]!): [OralApplianceTag!]!
+  updateOralApplianceCatalogs(appliances: [OralApplianceTagUpdateInput!]!): [OralApplianceTag!]
 }
   

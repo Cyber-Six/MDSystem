@@ -24,7 +24,7 @@ const Mutation = {
       }
     const result = await db.query(
     `INSERT INTO "patientUpdateLog" ("patientId", "status", "scope")
-     VALUES ($1, 'In-progress', $2)
+     VALUES ($1, 'InProgress', $2)
      RETURNING "id";
     `,
     [user.id, scope]
@@ -207,7 +207,29 @@ const Mutation = {
     return result;
   },
 
+  createDomainCatalogs: async (_, args, { user, res }) => {
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
 
+    const result = await Wrapper._DomainCatalog(_, args, { user, res });
+    return result;
+  },
+
+  createAllergenCatalogs: async (_, args, { user, res }) => {
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+
+    const result = await Wrapper._AllergenCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  createOralApplianceCatalogs: async (_, args, { user, res }) => {
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+
+    const result = await Wrapper._OralApplianceCatalogs(_, args, { user, res });
+    return result;
+  },
 
 };
 
