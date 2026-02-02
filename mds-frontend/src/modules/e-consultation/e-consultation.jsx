@@ -50,6 +50,23 @@ const EConsultation = () => {
   }, [messages]);
   // Save messages to localStorage whenever they change TEMPORARY TEMPORARY TEMPORARY TEMPORARY TEMPORARY
 
+  // Clear storage on unmount if chat was cleared
+  useEffect(() => {
+    return () => {
+      try {
+        const currentMessages = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+        if (currentMessages.length === 1 && 
+            currentMessages[0].content === 'Chat cleared. How can I help you today?') {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      } catch (error) {
+        console.error('Error cleaning up chat history:', error);
+      }
+    };
+  }, []);
+  // Save messages to localStorage whenever they change TEMPORARY TEMPORARY TEMPORARY TEMPORARY TEMPORARY
+
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
