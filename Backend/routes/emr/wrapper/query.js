@@ -4,6 +4,7 @@ const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
 const path = require("path");
 const dotenv = require("dotenv");
+const { log } = require("console");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 const UPDATE_TICKET_EXPIRY_SEC = parseInt(process.env.UPDATE_TICKET_EXPIRY_SEC, 10) || 604800; // default 7 days
@@ -27,20 +28,20 @@ const Query = {
       );
      
     const ticket = result.rows[0];
-
+    logger.debug("Fetched Update Ticket:", ticket);
     if (ticket && ticket.status === "InProgress") {
       const cutoff = Date.now() - UPDATE_TICKET_EXPIRY_SEC * 1000;
       const createdAt = new Date(ticket.created_at).getTime();
 
       if (createdAt >= cutoff || !(await db.isPatientValidated(userId))) {
-        return {id: ticket.id, status: "InProgress", scope: ticket.scope}; 
+        return {id: ticket.id, patientId: userId, status: "InProgress", scope: ticket.scope}; 
         } // still valid until nth days or the first ticket
 
       await db.setExpiredUpdateTickets(ticket.id); // mark expired
-      return {id: ticket.id, status: "Expired", scope: ticket.scope};
+      return {id: ticket.id, patientId: userId, status: "Expired", scope: ticket.scope};
     }
 
-    return {id: ticket?.id, status: ticket?.status, scope: ticket?.scope}; // return scalar ID
+    return {id: ticket?.id, patientId: userId, status: ticket?.status, scope: ticket?.scope}; // return scalar ID
   },
 
 
@@ -71,6 +72,7 @@ const Query = {
       from || new Date(0)
     ]);
 
+    logger.debug("User Profile Query Result:", result.rows);
     if (result.rows.length === 0) return [];
 
     return result.rows.map(row => {
@@ -124,6 +126,7 @@ const Query = {
     ]);
 
     if (result.rows.length === 0) return [];
+    logger.debug("User Dental Photos Query Result:", result.rows);
     return result.rows;
   },
 
@@ -147,7 +150,7 @@ const Query = {
       offset || 0,
       new Date(from)
     ]);
-
+    logger.debug("User ObGyn History Query Result:", result.rows);
     if (result.rows.length === 0) return [];
     return result.rows;
   },
@@ -173,7 +176,7 @@ const Query = {
       offset || 0,
       new Date(from)
     ]);
-
+    logger.debug("User Lifestyle Query Result:", result.rows);
     if (result.rows.length === 0) return [];
     return result.rows;
   },
@@ -202,6 +205,7 @@ const Query = {
     ]);
 
     if (result.rows.length === 0) return [];
+    logger.debug("User Dental History Query Result:", result.rows);
     return result.rows;
   },
 
@@ -225,20 +229,19 @@ const Query = {
       offset || 0,
       new Date(from)
     ]);
-
+    logger.debug("User Dental Record Query Result:", result.rows);
     if (result.rows.length === 0) return [];
     
     for (const row of result.rows) { // define the every tooth status here
       const teethQuery = `
-        SELECT tp.id, tp.toothIndex, tpc.legend
+        SELECT tp.id, tp.toothIndex, tp.legend
         FROM "ToothPlacement" tp
-        JOIN "ToothPlacementCatalog" tpc ON tp.id = tpc.toothPlacementId
         WHERE "dentalRecordId" = $1;
       `;
       const ToothPlacements = await db.query(teethQuery, [row.id]);
       row.ToothPlacements = ToothPlacements.rows;
     }
-    
+    logger.debug("User Dental Record with Tooth Placements:", result.rows);
     for (const row of result.rows) { // define the oral findings here
       const findingsQuery = `
         SELECT oralFindingId, status, notes
@@ -248,6 +251,7 @@ const Query = {
       const DentalFindings = await db.query(findingsQuery, [row.id]);
       row.DentalFindings = DentalFindings.rows;
       }
+    logger.debug("User Dental Record with Findings:", result.rows);
     return result.rows;
   },
 
@@ -271,7 +275,7 @@ const Query = {
       offset || 0,
       new Date(from)
     ]);
-
+    logger.debug("User Vital Signs Query Result:", result.rows);
     if (result.rows.length === 0) return [];
     return result.rows;
   },
@@ -308,6 +312,7 @@ const Query = {
       const ApplianceProfiles = await db.query(appliancesQuery, [row.id]);
       row.appliances = ApplianceProfiles.rows;
     } 
+    logger.debug("User Oral Appliance Profile with Appliances:", result.rows);
     return result.rows;
   },
 
@@ -347,6 +352,7 @@ const Query = {
       row.secondContact = ContactNumbers?.rows[!f1] || null;
     }
 
+    logger.debug("User Emergency Contact with Numbers:", result.rows);
     return result.rows; 
   },
 
@@ -382,7 +388,7 @@ const Query = {
       const AllergenCatalog = await db.query(catalogQuery, [row.id]);
       row.allergies = AllergenCatalog.rows || [];
     }
-
+    logger.debug("User Allergy Profile with Allergies:", result.rows);
     return result.rows;
   },
 
@@ -418,6 +424,7 @@ const Query = {
       row.medications = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Medication Profile with Medications:", result.rows);
     return result.rows;
   },
 
@@ -453,6 +460,7 @@ const Query = {
       row.procedures = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Dental Procedure Profile with Procedures:", result.rows);
     return result.rows;
   },
 
@@ -488,6 +496,7 @@ const Query = {
       row.immunizations = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Immunization Profile with Immunizations:", result.rows);
     return result.rows;
   },
 
@@ -523,6 +532,7 @@ const Query = {
       row.operations = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Operation Profile with Operations:", result.rows);
     return result.rows;
   },
 
@@ -558,6 +568,7 @@ const Query = {
       row.hospitalizations = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Hospitalization Profile with Hospitalizations:", result.rows);
     return result.rows;
   },
 
@@ -592,6 +603,7 @@ const Query = {
       row.conditions = DomainCatalog.rows || [];
     }
 
+    logger.debug("User Medical History with Conditions:", result.rows);
     return result.rows;
   },
   
@@ -626,6 +638,179 @@ const Query = {
       const AcuityRecords = await db.query(acuityQuery, [row.id]);
       row.acuity = AcuityRecords.rows[0] || null;
     }
+    logger.debug("User Visual Acuity Profile with Acuity Records:", result.rows);
+    return result.rows;
+  },
+  
+  _getProcedureDomain: async (_, __, { user, res }) => {
+    const domains = ["VisualAcuity", "Medication", "Hospitalization", "Operation", "Immunization", "DentalProcedure"];
+    return domains;
+  },
+
+  _getDomainCatalogs: async (_, { domain, filterIsValid, offset, limit }, { user, res }) => {
+    logger.debug("Fetching Domain Catalogs:", { domain, filterIsValid, offset, limit });
+    const query = `
+    SELECT *
+    FROM "DomainTypeCatalog"
+    WHERE domain = COALESCE($1, domain)
+      AND "isValid" = COALESCE($2, "isValid")
+    ORDER BY created_at ASC
+    LIMIT $3 OFFSET $4;
+
+    `;
+
+    const result = await db.query(query, [
+      domain || null,
+      filterIsValid === undefined ? null : filterIsValid,
+      limit || 10,
+      offset || 0
+    ]);
+    logger.debug("Domain Catalogs Query Result:", result.rows);
+    return result.rows;
+  },
+
+
+  _getAllergenCatalogs: async (_, { type, filterIsValid, offset, limit }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "AllergenCatalog"
+      WHERE type = COALESCE($1, type)
+        AND "isValid" = COALESCE($2, "isValid")
+      ORDER BY created_at ASC
+      LIMIT $3 OFFSET $4;
+    `;
+
+    const result = await db.query(query, [
+      type || null,
+      filterIsValid === undefined ? null : filterIsValid,
+      limit || 10,
+      offset || 0
+    ]);
+    logger.debug("Allergen Catalogs Query Result:", result.rows);
+    return result.rows;
+  },
+
+  _getOralApplianceCatalogs: async (_, { filterIsValid, offset, limit }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "oralApplianceCatalog"
+      WHERE "isActive" = COALESCE($1, "isActive")
+      ORDER BY created_at ASC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [
+      filterIsValid === undefined ? null : filterIsValid,
+      limit || 10,
+      offset || 0
+    ]);
+
+    logger.debug("User Oral Appliance Profile with Appliances:", result.rows);
+    return result.rows;
+  },
+
+  _getOralFindingCatalogs: async (_, { filterIsValid, offset, limit }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "oralFindingCatalog"
+      WHERE "isActive" = COALESCE($1, "isActive")
+      ORDER BY created_at ASC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [
+      filterIsValid === undefined ? null : filterIsValid,
+      limit || 10,
+      offset || 0
+    ]);
+
+    logger.debug("User Oral Finding Profile with Findings:", result.rows);
+    return result.rows;
+  },
+
+  _getStatusUpdateTickets: async (_, { statuses, branch, offset, limit }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
+    }
+
+    const query = `
+      SELECT *
+      FROM (
+        SELECT DISTINCT ON (pul."patientId") pul.*, up.*
+        FROM "patientUpdateLog" pul
+        JOIN "UsersPersonal" up ON up.id = pul."patientId"
+        ORDER BY pul."patientId", pul.created_at DESC, pul.id DESC
+      ) latest
+      WHERE latest.branch = $1
+        AND latest.status = ANY(COALESCE($2, ARRAY[latest.status]))
+      ORDER BY latest.created_at DESC
+      LIMIT $3 OFFSET $4;
+    `;
+
+    const result = await db.query(query, [
+      branch,
+      statuses && statuses.length > 0 ? statuses : null,
+      limit || 10,
+      offset || 0
+    ]);
+
+    logger.debug("User Status Update Tickets with Statuses:", result.rows);
+    return result.rows;
+  },
+
+  _searchDomainCatalogs: async (_, { domain, filterIsValid, names }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "DomainTypeCatalog"
+      WHERE domain = COALESCE($1, domain)
+        AND name = ANY($2)
+        AND "isValid" = COALESCE($3, "isValid")
+      ORDER BY created_at ASC;
+    `;
+
+    const result = await db.query(query, [
+      domain || null,
+      names || [],
+      filterIsValid === undefined ? null : filterIsValid
+    ]);
+
+    logger.debug("Searched Domain Catalogs Query Result:", result.rows);
+    return result.rows;
+  },
+
+  _searchAllergenCatalogs: async (_, { allergens, filterIsValid }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "AllergenCatalog"
+      WHERE name = ANY($1)
+        AND "isValid" = COALESCE($2, "isValid")
+      ORDER BY created_at ASC;
+    `;
+
+    const result = await db.query(query, [
+      allergens || [],
+      filterIsValid === undefined ? null : filterIsValid
+    ]);
+
+    logger.debug("Searched Allergen Catalogs Query Result:", result.rows);
+    return result.rows;
+  },
+
+  _searchOralApplianceCatalogs: async (_, { filterIsValid, names }, { user, res }) => {
+    const query = `
+      SELECT *
+      FROM "oralApplianceCatalog"
+      WHERE name = ANY($1)
+        AND "isActive" = COALESCE($2, "isActive")
+      ORDER BY created_at ASC;
+    `;
+
+    const result = await db.query(query, [
+      names || [],
+      filterIsValid === undefined ? null : filterIsValid
+    ]);
+
+    logger.debug("Searched Oral Appliance Catalogs Query Result:", result.rows);
     return result.rows;
   },
 };

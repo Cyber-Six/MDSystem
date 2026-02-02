@@ -52,7 +52,7 @@ function initPatientEMRGraphQL(app) {
   );
 }
 
-/*
+
 function initMedicalEMRGraphQL(app) {
   app.use(
     "/emr/medical",
@@ -72,6 +72,6 @@ function initMedicalEMRGraphQL(app) {
     })
   );
 }
-*/
+
 
 module.exports = { initPatientEMRGraphQL };

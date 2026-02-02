@@ -240,6 +240,57 @@ const Query = {
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
+
+  getProcedureDomain: async (_, __, { user, res }) => {
+    const result = await Wrapper._getProcedureDomain(_, {}, { user, res });
+    return result;
+  },
+
+  getDomainCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._getDomainCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  getAllergenCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._getAllergenCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  getOralApplianceCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._getOralApplianceCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  getOralFindingCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._getOralFindingCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  searchDomainCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._searchDomainCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  searchAllergenCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._searchAllergenCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  searchOralApplianceCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._searchOralApplianceCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  getStatusUpdateTickets: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_approval)) {
+      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getStatusUpdateTickets`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
+    const result = await Wrapper._getStatusUpdateTickets(_, args, { user, res });
+    return result;
+  },
+  
 };
 
 

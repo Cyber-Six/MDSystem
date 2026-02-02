@@ -47,6 +47,11 @@ const Mutation = {
 
 
   updateStudentProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update StudentProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     //console.log(args.input);
@@ -56,6 +61,11 @@ const Mutation = {
   },
 
   updateEmployeeProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update EmployeeProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     //console.log(args.input);
@@ -64,6 +74,11 @@ const Mutation = {
   },
 
   updateDentalHistory: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update DentalHistory`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
@@ -71,7 +86,12 @@ const Mutation = {
     return result;
   },
 
-  updateObgynHistory: async (_, args, { user, res }) => { // test start here
+  updateObgynHistory: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update ObgynHistory`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -81,6 +101,11 @@ const Mutation = {
   },
 
   updateLifestyle: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update Lifestyle`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -90,6 +115,11 @@ const Mutation = {
   },
 
   updateDentalPhotos: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update DentalPhotos`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+      
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
@@ -99,6 +129,11 @@ const Mutation = {
   },
 
   updateOralApplianceProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update OralApplianceProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+      
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
@@ -108,6 +143,11 @@ const Mutation = {
   },
 
   updateEmergencyContact: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update EmergencyContact`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
@@ -118,6 +158,11 @@ const Mutation = {
 
 
   updateVisualAcuityProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update VisualAcuityProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -127,6 +172,11 @@ const Mutation = {
   },
 
   updateMedicalHistory: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update MedicalHistory`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -136,6 +186,11 @@ const Mutation = {
   },
 
   updateHospitalizationProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update HospitalizationProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+      
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -145,6 +200,11 @@ const Mutation = {
   },
 
   updateOperationProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update OperationProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+      
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -154,6 +214,11 @@ const Mutation = {
   },
 
   updateImmunizationProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update ImmunizationProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -163,6 +228,11 @@ const Mutation = {
   },
 
   updateDentalProcedureProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update DentalProcedureProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
@@ -172,6 +242,11 @@ const Mutation = {
   },
 
   updateAllergyProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update AllergyProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -182,6 +257,11 @@ const Mutation = {
 
 
   updateMedicationProfile: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update MedicationProfile`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -192,6 +272,11 @@ const Mutation = {
 
 
   updateDentalRecord: async (_, args, { user, res }) => { // only available for medical scope
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_set_dental_record, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to create DentalRecord`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
@@ -201,6 +286,11 @@ const Mutation = {
   },
 
   updateVitalSigns: async (_, args, { user, res }) => { // only available for medical scope
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update VitalSigns`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
@@ -209,7 +299,76 @@ const Mutation = {
     return result;
   },
 
+  // Catalog mutations
+  
+  createDomainCatalogs: async (_, args, { user, res }) => {
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    console.log(args.input);
 
+    const result = await Wrapper._DomainCatalog(_, args, { user, res });
+    return result;
+  },
+
+  createAllergenCatalogs: async (_, args, { user, res }) => {
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    console.log(args.input);
+
+    const result = await Wrapper._AllergenCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  createOralApplianceCatalogs: async (_, args, { user, res }) => {
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    console.log(args.input);
+
+    const result = await Wrapper._OralApplianceCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  updateDomainCatalogs: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit_catalogs, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update DomainCatalogs`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+      
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    console.log(args.input);
+
+    const result = await Wrapper._UpdateDomainCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  updateAllergenCatalogs: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit_catalogs, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update AllergenCatalogs`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    console.log(args.input);
+
+    const result = await Wrapper._UpdateAllergenCatalog(_, args, { user, res });
+    return result;
+  },
+
+  updateOralApplianceCatalogs: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit_catalogs, args.userId)) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update OralApplianceCatalogs`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+      }
+
+    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Both");
+    console.log(args.input);
+
+    const result = await Wrapper._UpdateOralApplianceCatalog(_, args, { user, res });
+    return result;
+  },
 };
 
 module.exports =  Mutation;

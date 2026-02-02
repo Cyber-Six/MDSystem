@@ -5,6 +5,7 @@ const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const logger = require("../../../../utils/logger.js");
 const path = require("path");
 const dotenv = require("dotenv");
+const { getOralFindingCatalogs } = require("../medical/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 
@@ -13,6 +14,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 const Query = {
   getUpdateTicket: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserUpdateTicket(_, {userId: user.id}, { user, res });
+    console.log("Get Update Ticket:", result);
     return result; // return scalar ID
   },
 
@@ -152,6 +154,44 @@ const Query = {
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
+
+  getProcedureDomain: async (_, __, { user, res }) => {
+    const result = await Wrapper._getProcedureDomain(_, {}, { user, res });
+    return result;
+  },
+
+  getDomainCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._getDomainCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  getAllergenCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._getAllergenCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  getOralApplianceCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._getOralApplianceCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  // search
+  searchDomainCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._searchDomainCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  searchAllergenCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._searchAllergenCatalogs(_, args, { user, res });
+    return result;
+  },
+
+  searchOralApplianceCatalogs: async (_, args, { user, res }) => {
+    const result = await Wrapper._searchOralApplianceCatalogs(_, args, { user, res });
+    return result;
+  },
+
+
 };
 
 

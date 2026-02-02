@@ -28,7 +28,7 @@ function detectRoleFromEmail(email) {
 }
 
 function isValidEmail(email) {
-  const regex = /^[^\s@]+@tip\.edu\.ph$/i;
+  const regex = /^[^\s@]+@tip\.edu\.ph$/;
   return regex.test(email);
 }
 
@@ -84,25 +84,25 @@ function normalizeNumber(number) {
   return digits;
 }
 
-function generateDomainCode(name, domain) {
-  if (!domain || !name) {
-    throw new Error("Both domain and name are required to generate code");
+function generateDomainCodes(names, domain) {
+  if (!domain || !Array.isArray(names)) {
+    throw new Error("Domain and names array are required");
   }
 
-  // Normalize inputs: trim, lowercase, replace spaces with underscores
-  const normalizedDomain = domain.trim().toLowerCase();
-  const normalizedName = name.trim().toLowerCase();
+  return names.map(name => {
+    if (!name) throw new Error("Name is required to generate code");
 
-  // Slugify: keep only alphanumeric + underscore
-  const slugDomain = normalizedDomain.replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-  const slugName = normalizedName.replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const normalizedDomain = domain.trim().toLowerCase();
+    const normalizedName = String(name).trim().toLowerCase();
 
-  // Combine domain + name
-  const code = `${slugDomain}_${slugName}`;
+    const slugDomain = normalizedDomain.replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const slugName = normalizedName.replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
 
-  // Ensure max length (50 chars per schema)
-  return code.substring(0, 50);
+    const code = `${slugDomain}_${slugName}`;
+    return code.substring(0, 50);
+  });
 }
+
 
 module.exports = {
   isStudentEmail,
@@ -115,5 +115,5 @@ module.exports = {
   isUserStaff,
   normalizeName,
   normalizeNumber,
-  generateDomainCode
+  generateDomainCodes
 };
