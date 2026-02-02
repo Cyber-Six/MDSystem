@@ -1,0 +1,312 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Bot, User, Loader2, AlertCircle, Sparkles, RotateCcw } from 'lucide-react';
+
+const STORAGE_KEY = 'econsultation_chat_history';
+
+const getInitialMessages = () => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Convert timestamp strings back to Date objects
+      return parsed.map(msg => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp)
+      }));
+    }
+  } catch (error) {
+    console.error('Error loading chat history:', error);
+  }
+  
+  return [
+    {
+      id: 1,
+      role: 'assistant',
+      content: 'Hello! I\'m your AI medical assistant. How can I help you today?\n\nYou can ask me about:\n• General health questions\n• Symptom information\n• Medication queries\n• Wellness tips',
+      timestamp: new Date()
+    }
+  ];
+};
+
+const EConsultation = () => {
+  const [messages, setMessages] = useState(getInitialMessages);
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Save messages to localStorage whenever they change TEMPORARY TEMPORARY TEMPORARY TEMPORARY TEMPORARY
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch (error) {
+      console.error('Error saving chat history:', error);
+    }
+  }, [messages]);
+  // Save messages to localStorage whenever they change TEMPORARY TEMPORARY TEMPORARY TEMPORARY TEMPORARY
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!inputValue.trim() || isLoading) return;
+
+    const userMessage = {
+      id: Date.now(),
+      role: 'user',
+      content: inputValue.trim(),
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue('');
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // TODO: Replace with your actual API call
+      // const response = await fetch('/api/chat', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ message: userMessage.content, history: messages })
+      // });
+      // const data = await response.json();
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: 'This is a placeholder response. Connect this to your AI model API endpoint.',
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (err) {
+      setError('Failed to get response. Please try again.');
+      console.error('Error sending message:', err);
+    } finally {
+      setIsLoading(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleClearChat = () => {
+    setMessages([{
+      id: Date.now(),
+      role: 'assistant',
+      content: 'Chat cleared. How can I help you today?',
+      timestamp: new Date()
+    }]);
+    setError(null);
+  };
+
+  const formatTime = (date) => {
+    return new Date(date).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-neutral-900 dark:text-white mb-2">
+          AI Medical Consultation
+        </h1>
+        <p className="text-neutral-600 dark:text-neutral-400">
+          Chat with our AI assistant about your health concerns
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Chat Container */}
+        <div className="lg:col-span-2">
+          <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg overflow-hidden">
+            {/* Chat Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="flex items-center gap-3">
+                <div className="relative flex-shrink-0">
+                  <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg">
+                    <Sparkles className="w-5 h-5 text-white" />
+                  </div>
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-neutral-900 ${isLoading ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+                </div>
+                <div className="flex flex-col justify-center">
+                  <h2 className="text-base font-semibold text-neutral-900 dark:text-white leading-tight">
+                    AI Medical Assistant
+                  </h2>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-tight">
+                    {isLoading ? 'Generating response...' : 'Online • Ready to help'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleClearChat}
+                className="p-2 text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+                title="Clear chat"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Messages Area */}
+            <div className="h-[450px] overflow-y-auto bg-white dark:bg-neutral-900">
+              <div className="px-6 py-6 space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+            >
+              {/* Avatar */}
+              <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${
+                message.role === 'assistant'
+                  ? 'bg-gradient-to-br from-blue-500 to-indigo-600'
+                  : 'bg-gray-700 dark:bg-gray-600'
+              }`}>
+                {message.role === 'assistant' ? (
+                  <Bot className="w-4 h-4 text-white" />
+                ) : (
+                  <User className="w-4 h-4 text-white" />
+                )}
+              </div>
+
+              {/* Message Bubble */}
+              <div className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'} flex-1`}>
+                <div
+                  className={`rounded-xl px-4 py-2.5 shadow-sm ${
+                    message.role === 'assistant'
+                      ? 'bg-neutral-50 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700 rounded-tl-md'
+                      : 'bg-blue-600 text-white rounded-tr-md shadow-md'
+                  }`}
+                >
+                  <p className={`text-sm leading-relaxed whitespace-pre-wrap m-0 ${
+                    message.role === 'assistant' ? 'text-neutral-800 dark:text-neutral-100' : 'text-white'
+                  }`}>{message.content}</p>
+                </div>
+                <span className="text-[10px] text-neutral-400 dark:text-neutral-500 mt-1 px-1">
+                  {formatTime(message.timestamp)}
+                </span>
+              </div>
+            </div>
+          ))}
+
+          {/* Loading Indicator */}
+          {isLoading && (
+            <div className="flex gap-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                <Bot className="w-4 h-4 text-white" />
+              </div>
+              <div className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl rounded-tl-md px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 bg-neutral-400 dark:bg-neutral-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-neutral-400 dark:bg-neutral-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-neutral-400 dark:bg-neutral-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-xl">
+              <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+              <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Input Area */}
+      <div className="bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 px-6 py-4">
+        <form onSubmit={handleSendMessage}>
+          <div className="flex items-end gap-2">
+            <div className="flex-1 relative">
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                  }
+                }}
+                placeholder="Ask me anything about your health..."
+                className="w-full px-4 py-2.5 border border-neutral-300 dark:border-neutral-600 rounded-lg 
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                         bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white
+                         placeholder-neutral-400 dark:placeholder-neutral-500
+                         resize-none text-sm"
+                rows="2"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isLoading}
+              className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-300 dark:disabled:bg-neutral-700
+                       text-white rounded-lg transition-all duration-200 flex items-center justify-center
+                       disabled:cursor-not-allowed shadow-sm hover:shadow-md disabled:shadow-none self-center"
+            >
+              {isLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {/* Guidelines Card */}
+  <div>
+    <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-6">
+      <h3 className="text-lg font-semibold text-primary-900 dark:text-primary-100 mb-4">
+        Important Guidelines
+      </h3>
+      <ul className="space-y-3 text-sm text-primary-700 dark:text-primary-300">
+        <li className="flex items-start space-x-2">
+          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          <span>This AI assistant provides general health information only</span>
+        </li>
+        <li className="flex items-start space-x-2">
+          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          <span>Not a substitute for professional medical advice or diagnosis</span>
+        </li>
+        <li className="flex items-start space-x-2">
+          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          <span>For emergencies, please visit the clinic immediately</span>
+        </li>
+        <li className="flex items-start space-x-2">
+          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          <span>Your conversation is private and secure</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+</div>
+  );
+};
+
+export default EConsultation;
