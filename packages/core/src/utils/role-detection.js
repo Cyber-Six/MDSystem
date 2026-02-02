@@ -8,10 +8,17 @@
  */
 
 /**
+ * Valid subdomains for each portal type
+ */
+export const PATIENT_SUBDOMAINS = ['www', 'www2'];
+export const MEDICAL_SUBDOMAINS = ['staff', 'staff2'];
+
+/**
  * Detect user role from hostname
  * 
  * Logic:
- * - Hostname starting with "staff." → medical role
+ * - Hostname starting with "staff." or "staff2." → medical role
+ * - Hostname starting with "www." or "www2." → patient role
  * - All other hostnames → patient role (default)
  * 
  * @param {string} hostname - The hostname to check (e.g., "staff.mdsystemtip.space", "www.mdsystemtip.space")
@@ -29,21 +36,23 @@
  * 
  * @example
  * // Test cases
- * detectRoleFromHostname('staff.mdsystemtip.space')  // → 'medical'
- * detectRoleFromHostname('STAFF.mdsystemtip.space')  // → 'medical' (case-insensitive)
- * detectRoleFromHostname('www.mdsystemtip.space')    // → 'patient'
- * detectRoleFromHostname('mdsystemtip.space')        // → 'patient'
- * detectRoleFromHostname('localhost')                // → 'patient'
+ * detectRoleFromHostname('staff.mdsystemtip.space')   // → 'medical'
+ * detectRoleFromHostname('staff2.mdsystemtip.space')  // → 'medical'
+ * detectRoleFromHostname('STAFF.mdsystemtip.space')   // → 'medical' (case-insensitive)
+ * detectRoleFromHostname('www.mdsystemtip.space')     // → 'patient'
+ * detectRoleFromHostname('www2.mdsystemtip.space')    // → 'patient'
+ * detectRoleFromHostname('mdsystemtip.space')         // → 'patient'
+ * detectRoleFromHostname('localhost')                 // → 'patient'
  */
 export const detectRoleFromHostname = (hostname) => {
   // Normalize to lowercase for case-insensitive comparison
   const lowerHostname = hostname.toLowerCase();
   
-  // Staff subdomain → medical role
-  if (lowerHostname.startsWith('staff.')) {
+  // Check if hostname starts with any medical subdomain
+  if (MEDICAL_SUBDOMAINS.some(subdomain => lowerHostname.startsWith(`${subdomain}.`))) {
     return 'medical';
   }
   
-  // Default to patient role (www, root domain, localhost, etc.)
+  // Default to patient role (www, www2, root domain, localhost, etc.)
   return 'patient';
 };

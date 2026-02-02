@@ -227,7 +227,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
     
     // Redirect/navigate if requested
     if (redirectToAuth) {
-      navigator.navigate('/');
+      navigator.navigate('/auth');
     }
   };
 

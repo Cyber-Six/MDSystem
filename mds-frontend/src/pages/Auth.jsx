@@ -3,13 +3,18 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Login from '../modules/auth/login/login';
 import Register from '../modules/auth/register';
 import AuthSlides from '../modules/auth/auth-slides';
+import { useRole } from '../hooks/use-role';
 
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { role: userRole } = useRole();
 
   // Determine view from URL path instead of query params
   const getViewFromPath = () => {
+    // Staff portal should not access register
+    if (userRole === 'medical') return 'login';
+    
     if (location.pathname === '/auth/register') return 'register';
     return 'login';
   };
@@ -103,18 +108,20 @@ const Auth = () => {
               <Login />
             </div>
             
-            {/* Register Link */}
-            <div className="mt-6 pt-4 border-t border-neutral-200 dark:border-dark-border-primary text-center">
-              <p className="text-xs text-neutral-600 dark:text-dark-text-secondary mb-2">
-                Don't have an account?
-              </p>
-              <button 
-                onClick={() => handleViewChange('register')}
-                className="text-accent-600 dark:text-accent-400 font-semibold text-xs hover:text-accent-700 dark:hover:text-accent-300 transition-colors hover:underline"
-              >
-                Sign up!
-              </button>
-            </div>
+            {/* Register Link - Only show for patient portal */}
+            {userRole === 'patient' && (
+              <div className="mt-6 pt-4 border-t border-neutral-200 dark:border-dark-border-primary text-center">
+                <p className="text-xs text-neutral-600 dark:text-dark-text-secondary mb-2">
+                  Don't have an account?
+                </p>
+                <button 
+                  onClick={() => handleViewChange('register')}
+                  className="text-accent-600 dark:text-accent-400 font-semibold text-xs hover:text-accent-700 dark:hover:text-accent-300 transition-colors hover:underline"
+                >
+                  Sign up!
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
