@@ -16,7 +16,7 @@ const Mutation = {
       throwGraphQLError(res).message("An update ticket is already in progress.").status(400).throw();  
       }
     if (scope !== "Both"){
-      const isverified = await db.isPatientValidated(user.id);
+      const isverified = await db.isUserValidated(user.id);
       if (!isverified){
         throwGraphQLError(res).message(
         "Creating update tickets for partial scopes is not allowed without an existing ticket.").status(400).throw();

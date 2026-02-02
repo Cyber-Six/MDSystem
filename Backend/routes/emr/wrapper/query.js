@@ -33,7 +33,7 @@ const Query = {
       const cutoff = Date.now() - UPDATE_TICKET_EXPIRY_SEC * 1000;
       const createdAt = new Date(ticket.created_at).getTime();
 
-      if (createdAt >= cutoff || !(await db.isPatientValidated(userId))) {
+      if (createdAt >= cutoff || !(await db.isUserValidated(userId))) {
         return {id: ticket.id, patientId: userId, status: "InProgress", scope: ticket.scope}; 
         } // still valid until nth days or the first ticket
 

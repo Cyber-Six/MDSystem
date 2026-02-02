@@ -14,7 +14,7 @@ enum USER_CIVILSTATUS {
 }
 
 
-interface userProfile{
+type userProfile{
   id: ID!
   first_name: String!
   middle_name: String!
@@ -23,16 +23,18 @@ interface userProfile{
   date_of_birth: Date!
   sex: USER_SEX!
   status: USER_CIVILSTATUS!
+  nationality: String!
   religion: String!
   contactNumber: String!
   present_address: String!
   province_address: String!
-  email: String!
+  email: String
+  entityId: ID
   updated_at: Date
   created_at: Date
 }
 
-interface userProfileInput{
+input userProfileInput{
   first_name: String!
   middle_name: String!
   last_name: String!
@@ -40,63 +42,73 @@ interface userProfileInput{
   date_of_birth: Date!
   sex: USER_SEX!
   status: USER_CIVILSTATUS!
+  nationality: String!
   religion: String!
   contactNumber: String!
   present_address: String!
   province_address: String!
   email: String!
+  entityId: ID!
 }
 
+input userProfileUpdateInput{
+  first_name: String
+  middle_name: String
+  last_name: String
+  suffix: String
+  date_of_birth: Date
+  sex: USER_SEX
+  status: USER_CIVILSTATUS
+  nationality: String
+  religion: String
+  contactNumber: String
+  present_address: String
+  province_address: String
+}
 
-
-# Student profile
-type StudentProfile {
+type userAnchorData{
   id: ID!
-  profile: userProfile!   # FK reference
-  program: String!
-  year: STUDENT_YEAR!
-  guardianName: String!
-  guardianRelation: String!
-  guardianContact: String!
+  email: String!
+  entityId: ID!
 }
 
-# Employee profile
-type EmployeeProfile {
-  id: ID!
-  profile: ProfileRecord!   # FK reference
-  department: String!
-  role: String!
-  position: String!
+input userAnchorDataInput{
+  email: String
+  entityId: ID
 }
+
 
 # Queries
 type Query {
   # Student queries
-  getStudentProfile(id: ID!): StudentProfile
-  listStudentProfiles: [StudentProfile]
+  getCredentialStatus: String # get is unverified or not
+  getUserCredentialStatus(userId: ID!): String
 
-  # Employee queries
-  getEmployeeProfile(id: ID!): EmployeeProfile
-  listEmployeeProfiles: [EmployeeProfile]
+  getPersonalRecord: userProfile # get the main record of the logged in user 
+  getUserPersonalRecord(userId: ID!): userProfile
+
+  getPersonalRecordLogStatus: String # get the update status of the logged in user
+  getUserPersonalRecordLogStatus(userId: ID!): String
+
+  getPersonalRecordLog: userProfile
+  getUserPersonalRecordLog(userId: ID!, from: Date, offset: Int, limit: Int): [userProfile!]
+
+  getAnchorData: userAnchorData
+  getUserAnchorData(userId: ID!): userAnchorData
 }
 
 # Mutations
 type Mutation {
   # Student mutations
-  createStudentProfile(
-    profileId: ID!
-    program: String!
-    year: StudentYear!
-    guardianName: String
-    guardianRelation: String
-    guardianContact: String
-  ): StudentProfile
+  updatePersonalRecord(input: userProfileUpdateInput!): userProfile
+  createPersonalRecord(input: userProfileInput!): userProfile
+  
+  staffSetPersonalRecord(userId: ID!, status: UpdateStatus!): UpdateStatus
+  cancelUpdatePersonalRecord: String
 
-  # Employee mutations
-  createEmployeeProfile(
-    profileId: ID!
-    department: String!
-    role: EmployeeRole!
-    position: String!
-  ): EmployeeProfile
+  reloadCredentialStatus: String
+  staffSetCredentialStatus(userId: ID!, status: CredentialStatus!): CredentialStatus
+
+  updateUserAnchorData(data: userAnchorDataInput!): userAnchorData
+
 }
