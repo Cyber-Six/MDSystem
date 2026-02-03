@@ -7,7 +7,8 @@ const path = require('path');
 
 module.exports = {
   // Model Settings
-  modelPath: path.join(__dirname, '../models-storage/llama-3-8b-instruct.Q4_K_M.gguf'),
+  // Use env variable or default to LLaMA 3 8B Instruct Q4_K_M
+  modelPath: process.env.LLAMA_MODEL_PATH || path.join(__dirname, '../models-storage/Meta-Llama-3-8B-Instruct.Q4_K_M.gguf'),
   
   // Server Configuration
   llamaServer: {
