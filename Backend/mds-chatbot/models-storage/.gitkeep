@@ -1,0 +1,72 @@
+# AI Medical Chatbot Models
+
+This directory should contain your downloaded LLaMA model files.
+
+## Required Model
+
+**LLaMA 3 8B Instruct Q4_K_M**
+- File: `llama-3-8b-instruct.Q4_K_M.gguf`
+- Size: ~4.9GB
+- Quantization: Q4_K_M (good balance of quality and speed)
+
+## How to Download
+
+### Option 1: Hugging Face
+
+```bash
+# Install huggingface-cli
+pip install huggingface-hub
+
+# Download model
+huggingface-cli download \
+  TheBloke/Llama-2-7B-Chat-GGUF \
+  llama-2-7b-chat.Q4_K_M.gguf \
+  --local-dir ./models-storage
+```
+
+### Option 2: Direct Download
+
+Visit: https://huggingface.co/TheBloke/
+Find LLaMA 3 8B Instruct models and download the Q4_K_M variant.
+
+### Option 3: Manual
+
+1. Download from trusted source
+2. Place in this directory
+3. Update path in `../config/model-config.js` if needed
+
+## Directory Structure
+
+```
+models-storage/
+├── .gitkeep
+└── llama-3-8b-instruct.Q4_K_M.gguf  (you download this)
+```
+
+## Important Notes
+
+- **DO NOT commit model files to git** (already in .gitignore)
+- Model files are large (4-8GB)
+- Ensure sufficient disk space
+- Keep models secure and private
+
+## Verification
+
+After placing your model here, verify the path in:
+`Backend/mds-chatbot/config/model-config.js`
+
+```javascript
+modelPath: path.join(__dirname, '../models-storage/llama-3-8b-instruct.Q4_K_M.gguf')
+```
+
+## Alternative Models
+
+If you want to use a different model:
+
+1. Place it in this directory
+2. Update `modelPath` in config
+3. Adjust generation parameters if needed
+
+**Recommended alternatives:**
+- Mistral 7B Instruct (Q5_K_M)
+- Phi-3 Mini (3.8B) - faster, less capable

@@ -1,0 +1,197 @@
+/**
+ * Chat Routes
+ * API endpoints for AI medical chatbot
+ * 
+ * Security Compliance:
+ * - Public endpoints: IP-based rate limiting (PatientAuthentication profile)
+ * - Staff endpoints: JWT authentication + staff role + IP rate limiting
+ * - All inputs sanitized via safety-filter middleware
+ */
+
+const express = require('express');
+const router = express.Router();
+
+const chatController = require('../controllers/chat-controller');
+const handoffController = require('../controllers/handoff-controller');
+
+const { validateMessage, validateSession, sanitizeContent, detectSpam } = require('../middleware/safety-filter');
+const { emergencyDetectorMiddleware } = require('../middleware/emergency-detector');
+const { jwtProtect } = require('../../config/middleware/jwtProtect');
+const { ipRateLimiter } = require('../../config/middleware/ratelimiter');
+
+// ============================================
+// Rate Limiting Configuration
+// ============================================
+// Using existing rate limit profiles from matrix.js for consistency
+const patientChatLimiter = ipRateLimiter('PatientAuthentication', 'chat');
+const staffChatLimiter = ipRateLimiter('staffAuthentication', 'staffchat');
+
+// ============================================
+// Public Chat Endpoints (Patient-facing)
+// ============================================
+
+/**
+ * POST /api/chat/session/new
+ * Create a new chat session
+ * Rate limited to prevent session abuse
+ */
+router.post('/session/new', 
+  patientChatLimiter,
+  chatController.createSession
+);
+
+/**
+ * POST /api/chat/message
+ * Send a message and get AI response
+ * 
+ * Body: { sessionId, message }
+ * 
+ * Security:
+ * - IP rate limited (PatientAuthentication profile)
+ * - Session validation
+ * - Input sanitization
+ * - Spam detection
+ * - Emergency keyword detection
+ */
+router.post('/message',
+  patientChatLimiter,
+  validateSession,
+  validateMessage,
+  sanitizeContent,
+  detectSpam,
+  emergencyDetectorMiddleware,
+  chatController.sendMessage
+);
+
+/**
+ * GET /api/chat/history/:sessionId
+ * Get conversation history
+ * Rate limited to prevent enumeration attacks
+ */
+router.get('/history/:sessionId', 
+  patientChatLimiter,
+  chatController.getHistory
+);
+
+/**
+ * DELETE /api/chat/session/:sessionId
+ * Close/clear a chat session
+ */
+router.delete('/session/:sessionId', 
+  patientChatLimiter,
+  chatController.closeSession
+);
+
+// ============================================
+// Staff Endpoints (Protected)
+// All staff endpoints require:
+// 1. Valid JWT token
+// 2. Medical staff role (doctor, nurse, staff)
+// 3. IP-based rate limiting
+// ============================================
+
+/**
+ * GET /api/chat/staff/active
+ * Get all active chat sessions
+ * Requires: Staff authentication with medical role
+ */
+router.get('/staff/active', 
+  staffChatLimiter,
+  jwtProtect('medical'), 
+  handoffController.getActiveChats
+);
+
+/**
+ * GET /api/chat/staff/handoffs
+ * Get pending handoff requests
+ * Requires: Staff authentication with medical role
+ */
+router.get('/staff/handoffs', 
+  staffChatLimiter,
+  jwtProtect('medical'), 
+  handoffController.getPendingHandoffs
+);
+
+/**
+ * POST /api/chat/staff/takeover
+ * Take over an AI chat session
+ * Requires: Staff authentication with medical role
+ * 
+ * Body: { sessionId }
+ */
+router.post('/staff/takeover', 
+  staffChatLimiter,
+  jwtProtect('medical'), 
+  handoffController.takeoverChat
+);
+
+/**
+ * POST /api/chat/staff/release
+ * Release chat back to AI
+ * Requires: Staff authentication with medical role
+ * 
+ * Body: { sessionId }
+ */
+router.post('/staff/release', 
+  staffChatLimiter,
+  jwtProtect('medical'), 
+  handoffController.releaseChat
+);
+
+/**
+ * POST /api/chat/staff/message
+ * Send message as staff in taken-over conversation
+ * Requires: Staff authentication with medical role
+ * 
+ * Body: { sessionId, message }
+ */
+router.post('/staff/message',
+  staffChatLimiter,
+  jwtProtect('medical'),
+  validateMessage,
+  sanitizeContent,
+  handoffController.sendStaffMessage
+);
+
+/**
+ * GET /api/chat/staff/transcript/:sessionId
+ * Get full conversation transcript
+ * Requires: Staff authentication with medical role
+ */
+router.get('/staff/transcript/:sessionId', 
+  staffChatLimiter,
+  jwtProtect('medical'), 
+  handoffController.getTranscript
+);
+
+// ============================================
+// Admin/Health Endpoints
+// ============================================
+
+/**
+ * GET /api/chat/health
+ * Health check for AI service
+ */
+router.get('/health', async (req, res) => {
+  const llamaService = require('../services/llama-service');
+  
+  try {
+    const status = llamaService.getStatus();
+    const isHealthy = await llamaService.healthCheck();
+
+    res.json({
+      status: isHealthy ? 'healthy' : 'unhealthy',
+      service: 'ai-medical-chatbot',
+      ...status,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+module.exports = router;
