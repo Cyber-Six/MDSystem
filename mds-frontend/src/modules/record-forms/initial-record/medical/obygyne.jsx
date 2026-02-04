@@ -35,17 +35,6 @@ const OBGYNEForm = ({ data, onChange }) => {
           />
         </div>
 
-        {/* Menarche Year/Age */}
-        <div className="mb-6">
-          <label className="form-label">Menarche Year / Age</label>
-          <p className="text-xs text-secondary-500 mb-2">(Pinaka-unang regla)</p>
-          <Input
-            placeholder="Your answer"
-            value={data.menarcheYearAge || ''}
-            onChange={(e) => handleChange('menarcheYearAge', e.target.value)}
-          />
-        </div>
-
         {/* Menstruation Duration */}
         <div className="mb-6">
           <label className="form-label">Menstruation Duration ?</label>
@@ -54,16 +43,6 @@ const OBGYNEForm = ({ data, onChange }) => {
             placeholder="Your answer"
             value={data.menstruationDuration || ''}
             onChange={(e) => handleChange('menstruationDuration', e.target.value)}
-          />
-        </div>
-
-        {/* Pads per day */}
-        <div className="mb-6">
-          <label className="form-label">How many pad/s per day</label>
-          <Input
-            placeholder="Your answer"
-            value={data.padsPerDay || ''}
-            onChange={(e) => handleChange('padsPerDay', e.target.value)}
           />
         </div>
 

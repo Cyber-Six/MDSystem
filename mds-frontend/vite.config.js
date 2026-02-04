@@ -27,11 +27,12 @@ export default defineConfig(({ mode }) => {
     });
   }
   
-  // 🔧 DEVELOPER SWITCH: Change VITE_DEV_PORTAL in .env to 'www', 'www2', 'staff', or 'staff2'
+  // 🔧 DEVELOPER SWITCH: Change VITE_DEV_PORTAL in .env to 'www', 'www2', 'staff', 'staff2', or 'local'
   const DEV_PORTAL = env.VITE_DEV_PORTAL || 'www';
   
   // Determine backend URL based on DEV_PORTAL
   const PORTAL_URLS = {
+    local: 'http://localhost:3001',
     www: 'https://www.mdsystemtip.space',
     www2: 'https://www2.mdsystemtip.space',
     staff: 'https://staff.mdsystemtip.space',
@@ -39,6 +40,8 @@ export default defineConfig(({ mode }) => {
   };
   
   const BACKEND_URL = PORTAL_URLS[DEV_PORTAL] || PORTAL_URLS['www'];
+  
+  console.log(`🔗 Backend proxy target: ${BACKEND_URL} (DEV_PORTAL=${DEV_PORTAL})`);
 
   return {
     plugins: [
@@ -61,6 +64,11 @@ export default defineConfig(({ mode }) => {
           }
           // Proxy all other methods (POST, etc.) to backend
         },
+      },
+      '/emr': {
+        target: BACKEND_URL,
+        changeOrigin: true,
+        secure: true,
       },
       '/patient': {
         target: BACKEND_URL,
