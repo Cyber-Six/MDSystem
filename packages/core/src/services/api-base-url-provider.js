@@ -50,8 +50,11 @@ export const createApiBaseUrlProvider = ({ getHostname, getEnv }) => {
    * 
    * Logic:
    * - localhost/127.0.0.1: Returns empty string (for proxy/relative URLs)
-   * - staff.* subdomain: Returns staff API URL
+   * - staff.* or staff2.* subdomain: Returns staff API URL (staff.)
+   * - www.* or www2.* subdomain: Returns patient API URL (www.)
    * - Default: Returns patient/www API URL
+   * 
+   * Note: Backend only accepts www. and staff., so www2/staff2 are mapped accordingly
    * 
    * @returns {string} The API base URL
    */
@@ -64,18 +67,22 @@ export const createApiBaseUrlProvider = ({ getHostname, getEnv }) => {
     }
     
     // For production with subdomains (mdsystemtip.space)
-    if (hostname.startsWith('staff.')) {
-      // Staff Portal: staff.mdsystemtip.space
-      return getEnv('STAFF_API_URL') || `https://${hostname}`;
+    // Map staff2 → staff for backend compatibility
+    if (hostname.startsWith('staff.') || hostname.startsWith('staff2.')) {
+      // Staff Portal: Always use staff.mdsystemtip.space for API
+      return getEnv('STAFF_API_URL') || 'https://staff.mdsystemtip.space';
     }
     
-    // Default to www/patient portal: www.mdsystemtip.space
-    return getEnv('PATIENT_API_URL') || `https://${hostname}`;
+    // Map www2 → www for backend compatibility
+    // Default to www/patient portal: Always use www.mdsystemtip.space for API
+    return getEnv('PATIENT_API_URL') || 'https://www.mdsystemtip.space';
   };
 
   /**
    * Get the simulated subdomain for local development
    * Used by backend to detect which portal is being tested
+   * 
+   * Maps www2/staff2 to www/staff for backend compatibility
    * 
    * @returns {string|null} Simulated hostname for dev, null for production
    */
@@ -85,7 +92,9 @@ export const createApiBaseUrlProvider = ({ getHostname, getEnv }) => {
     // Only for local development
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       const devPortal = getEnv('DEV_PORTAL') || 'www';
-      return devPortal === 'staff' 
+      // Map www2 → www, staff2 → staff for backend compatibility
+      const normalizedPortal = devPortal.replace(/2$/, ''); // Remove trailing '2'
+      return normalizedPortal === 'staff' 
         ? 'staff.mdsystemtip.space' 
         : 'www.mdsystemtip.space';
     }
