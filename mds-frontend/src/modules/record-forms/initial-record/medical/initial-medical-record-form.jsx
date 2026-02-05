@@ -11,7 +11,15 @@ import { Button } from './form-elements';
 import { createInitialMedicalRecord } from '../../../../services/emr-service';
 import { validateFormData, sanitizeFormData, logDataStructure } from '../../../../utils/data-transformer';
 
-const InitialMedicalRecordForm = () => {
+/**
+ * Initial Medical Record Form Component
+ * Can be used as a standalone page or within a modal
+ * 
+ * @param {Object} props
+ * @param {Function} props.onComplete - Optional callback when form is successfully submitted
+ * @param {boolean} props.isModal - Whether the form is displayed in a modal (affects styling)
+ */
+const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -241,8 +249,13 @@ const InitialMedicalRecordForm = () => {
       
       alert('Medical record submitted successfully! You can now access the system.');
       
-      // Navigate to dashboard
-      navigate('/dashboard');
+      // If onComplete callback is provided (modal mode), call it
+      if (onComplete) {
+        onComplete(result);
+      } else {
+        // Navigate to dashboard (standalone page mode)
+        navigate('/dashboard');
+      }
       
     } catch (error) {
       console.error('[Initial Medical Record Form] Submission error:', error);
@@ -333,17 +346,19 @@ const InitialMedicalRecordForm = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 py-8 px-4">
-      <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 mb-2">
-            Initial Medical Record
-          </h1>
-          <p className="text-secondary-600">
-            Please complete your medical information to access the system
-          </p>
-        </div>
+    <div className={`${isModal ? 'bg-gradient-to-br from-primary-50 via-white to-accent-50 p-6' : 'min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 py-8 px-4'}`}>
+      <div className={`${isModal ? 'w-full' : 'max-w-5xl mx-auto'}`}>
+        {/* Header - Only show in standalone mode, modal has its own header */}
+        {!isModal && (
+          <div className="text-center mb-8">
+            <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 mb-2">
+              Initial Medical Record
+            </h1>
+            <p className="text-secondary-600">
+              Please complete your medical information to access the system
+            </p>
+          </div>
+        )}
 
         {/* Progress Stepper */}
         <ProgressStepper 
@@ -355,12 +370,12 @@ const InitialMedicalRecordForm = () => {
         />
 
         {/* Form Content */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-6">
+        <div className={`bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-6 ${isModal ? 'shadow-none border border-gray-200' : ''}`}>
           {renderStepContent()}
         </div>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between items-center bg-white rounded-2xl shadow-xl p-6">
+        <div className={`flex justify-between items-center bg-white rounded-2xl shadow-xl p-6 ${isModal ? 'shadow-none border border-gray-200 sticky bottom-0' : ''}`}>
           <Button
             variant="outline"
             onClick={handleBack}

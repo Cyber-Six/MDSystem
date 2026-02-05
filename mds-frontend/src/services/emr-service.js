@@ -794,6 +794,58 @@ const mapDentalCleaningRange = (frontendValue) => {
   return mapping[frontendValue] || '';
 };
 
+/**
+ * Check if the current user needs to complete their initial medical record
+ * Returns true if user needs to fill out the form (no approved record exists)
+ * Returns false if user has already completed their initial record
+ */
+export const checkInitialRecordStatus = async () => {
+  console.log('[EMR Service] Checking initial record status...');
+  
+  const query = `
+    query GetUpdateTicket {
+      getUpdateTicket {
+        id
+        status
+      }
+    }
+  `;
+  
+  try {
+    const data = await sendGraphQLRequest(query, {});
+    console.log('[EMR Service] Update ticket status:', data.getUpdateTicket);
+    
+    // If there's a ticket with status Pending, Approved, or RevisionSubmitted, they've completed the initial record
+    const ticket = data.getUpdateTicket;
+    
+    if (!ticket) {
+      // No ticket at all - needs to fill out initial record
+      console.log('[EMR Service] No update ticket found - initial record required');
+      return { needsInitialRecord: true, status: null };
+    }
+    
+    // Check if the status indicates they've completed the initial record
+    const completedStatuses = ['Pending', 'Approved', 'RevisionSubmitted'];
+    const needsInitialRecord = !completedStatuses.includes(ticket.status);
+    
+    console.log('[EMR Service] Initial record status:', { 
+      needsInitialRecord, 
+      currentStatus: ticket.status 
+    });
+    
+    return { 
+      needsInitialRecord, 
+      status: ticket.status,
+      ticketId: ticket.id
+    };
+  } catch (error) {
+    // If the query fails (e.g., no ticket exists), user needs to fill out the initial record
+    console.log('[EMR Service] Error checking status (likely no ticket):', error.message);
+    return { needsInitialRecord: true, status: null, error: error.message };
+  }
+};
+
 export default {
-  createInitialMedicalRecord
+  createInitialMedicalRecord,
+  checkInitialRecordStatus
 };
