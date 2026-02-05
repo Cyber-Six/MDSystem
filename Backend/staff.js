@@ -7,6 +7,7 @@ const redis = require('./config/redis.js');
 const logger = require('./utils/logger.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
+const { initializeChatbot, shutdownChatbot } = require('./mds-chatbot');
 
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -46,17 +47,25 @@ app.use((err, req, res, next) => {
 
 app.use('/auth/login', loginRoutes);
 
+// Initialize AI Medical Chatbot
+initializeChatbot(app, {
+  autoStartLlama: process.env.AUTO_START_LLAMA === 'true'
+}).then(chatbot => {
+  if (chatbot) {
+    logger.info('✅ AI Medical Chatbot initialized on staff portal');
+  } else {
+    logger.warn('⚠️ AI Medical Chatbot not available - staff portal running without AI');
+  }
+}).catch(err => {
+  logger.error('Failed to initialize chatbot on staff portal', { error: err.message });
+});
+
 // ======================================
 
 // Serve static assets for the React app
 app.use(express.static(path.join(__dirname, '../mds-frontend/dist')));
 
-// Redirect the root URL to '/app'
-
 // Handle all other routes for the React app by serving the index.html
-// Correct usage with named wildcard parameter
-// Serve index.html for all non-API routes
-
 app.get('*path', (req, res) => {
   res.sendFile(path.join(__dirname, '../mds-frontend/dist', 'index.html'));
 });
@@ -67,6 +76,25 @@ app.get('*path', (req, res) => {
 
 const PORT = process.env.MEDICAL_PORT || 3001;
 const HOST = process.env.HOST;
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received, shutting down staff server gracefully...');
+  await shutdownChatbot();
+  server.close(() => {
+    logger.info('Staff server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', async () => {
+  logger.info('SIGINT received, shutting down staff server gracefully...');
+  await shutdownChatbot();
+  server.close(() => {
+    logger.info('Staff server closed');
+    process.exit(0);
+  });
 });
