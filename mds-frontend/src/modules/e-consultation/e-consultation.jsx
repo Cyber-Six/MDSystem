@@ -1,56 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, AlertCircle, Sparkles, RotateCcw, WifiOff } from 'lucide-react';
+import { axiosRequest } from '../../packages-core-adapter';
 
-// Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-const LLAMA_DIRECT_URL = import.meta.env.VITE_LLAMA_DIRECT_URL || 'http://localhost:8080';
+// Configuration - All requests go through backend via proper domain (X-Forwarded-Host header)
 const STORAGE_KEY = 'econsultation_session_id';
-const LOCAL_MESSAGES_KEY = 'econsultation_messages';
-
-// Test mode: Set to true to bypass backend and test directly with llama.cpp
-const TEST_MODE = import.meta.env.VITE_AI_TEST_MODE === 'true';
-
-// Medical system prompt for direct llama.cpp testing
-const MEDICAL_SYSTEM_PROMPT = `You are a medical support assistant, not a doctor.
-
-Rules:
-- You do NOT diagnose illnesses.
-- You do NOT prescribe medication or give dosages.
-- You do NOT replace professional medical advice.
-- You provide general health information only.
-- You help users understand possible causes in a non-diagnostic way.
-- You encourage consulting a licensed doctor or nurse.
-- If symptoms are severe, worsening, or emergency-related, you must say so clearly.
-
-Behavior:
-- Ask clarifying questions before giving guidance.
-- Use calm, supportive, non-alarming language.
-- Avoid medical certainty words like "you have" or "this is".
-- Use phrases like "may be associated with", "can sometimes indicate", "might be related to".
-- Always remind users this is not a medical diagnosis.
-
-Response Structure:
-1. Empathy / acknowledgment
-2. Clarifying question (if needed)
-3. General information (non-diagnostic)
-4. What to do now (safe actions only)
-5. When to seek professional help
-6. Disclaimer reminder
-
-Emergency:
-If the user mentions chest pain, breathing difficulty, heavy bleeding, fainting, seizures, suicidal thoughts, or severe pain:
-- Clearly instruct them to seek emergency care immediately.
-- Do not provide general information for emergency conditions.`;
-
-// Emergency keywords for client-side detection in test mode
-const EMERGENCY_KEYWORDS = [
-  'chest pain', 'heart attack', "can't breathe", 'shortness of breath',
-  'severe bleeding', 'heavy bleeding', 'fainted', 'passed out',
-  'seizure', 'unconscious', 'suicidal', 'kill myself', 'overdose',
-  'severe pain', 'stroke', 'choking'
-];
-
-const DISCLAIMER = '\n\n⚠️ **Important**: This information is not a medical diagnosis. Please consult a healthcare professional for proper evaluation.';
 
 const EConsultation = () => {
   const [messages, setMessages] = useState([]);
@@ -59,7 +12,6 @@ const EConsultation = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [isTestMode, setIsTestMode] = useState(TEST_MODE);
   const [connectionStatus, setConnectionStatus] = useState('checking');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -76,27 +28,13 @@ const EConsultation = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Check if llama.cpp server is available (for test mode)
-  const checkLlamaConnection = async () => {
-    try {
-      const response = await fetch(`${LLAMA_DIRECT_URL}/health`, { 
-        method: 'GET',
-        signal: AbortSignal.timeout(3000)
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  };
-
-  // Check if backend is available
+  // Check if backend is available (via proper domain routing)
   const checkBackendConnection = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/econsultation/chat/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(3000)
+      const response = await axiosRequest.get('/econsultation/chat/health', {
+        timeout: 5000
       });
-      return response.ok;
+      return response.status === 200;
     } catch {
       return false;
     }
@@ -108,32 +46,17 @@ const EConsultation = () => {
       setIsInitializing(true);
       setError(null);
 
-      // Check connections
       const backendAvailable = await checkBackendConnection();
-      const llamaAvailable = await checkLlamaConnection();
 
-      if (!backendAvailable && !llamaAvailable) {
+      if (!backendAvailable) {
         setConnectionStatus('offline');
         setError('Unable to connect to AI service. Please ensure the server is running.');
         setIsInitializing(false);
         return;
       }
 
-      // If backend is not available but llama is, switch to test mode
-      if (!backendAvailable && llamaAvailable) {
-        setIsTestMode(true);
-        setConnectionStatus('test-mode');
-      } else if (backendAvailable) {
-        setConnectionStatus('connected');
-      }
-
-      if (isTestMode || (!backendAvailable && llamaAvailable)) {
-        // Test mode: Use local storage for messages
-        await initializeTestMode();
-      } else {
-        // Production mode: Use backend API
-        await initializeProductionMode();
-      }
+      setConnectionStatus('connected');
+      await initializeProductionMode();
 
     } catch (err) {
       console.error('Failed to initialize session:', err);
@@ -144,57 +67,16 @@ const EConsultation = () => {
     }
   };
 
-  // Initialize test mode (direct llama.cpp connection)
-  const initializeTestMode = async () => {
-    const savedMessages = localStorage.getItem(LOCAL_MESSAGES_KEY);
-    
-    if (savedMessages) {
-      try {
-        const parsed = JSON.parse(savedMessages);
-        setMessages(parsed.map(msg => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        })));
-        setSessionId('test-mode-session');
-        return;
-      } catch (e) {
-        console.error('Failed to parse saved messages:', e);
-      }
-    }
-
-    // Create initial greeting
-    const greeting = {
-      id: Date.now(),
-      role: 'assistant',
-      content: `Hello! I'm your AI medical assistant. How can I help you today?
-
-You can ask me about:
-• General health questions
-• Symptom information
-• Medication queries
-• Wellness tips
-
-⚠️ **Important**: I provide general health information only. I am not a substitute for professional medical advice.
-
-🧪 **Test Mode Active**: Running directly with llama.cpp (no database)`,
-      timestamp: new Date()
-    };
-
-    setMessages([greeting]);
-    setSessionId('test-mode-session');
-    localStorage.setItem(LOCAL_MESSAGES_KEY, JSON.stringify([greeting]));
-  };
-
-  // Initialize production mode (backend API)
+  // Initialize production mode (backend API via proper domain)
   const initializeProductionMode = async () => {
     const savedSessionId = localStorage.getItem(STORAGE_KEY);
     
     if (savedSessionId) {
       try {
-        const historyResponse = await fetch(`${API_BASE_URL}/econsultation/chat/history/${savedSessionId}`);
+        const historyResponse = await axiosRequest.get(`/econsultation/chat/history/${savedSessionId}`);
         
-        if (historyResponse.ok) {
-          const data = await historyResponse.json();
+        if (historyResponse.status === 200) {
+          const data = historyResponse.data;
           setSessionId(savedSessionId);
           setMessages(data.messages.map(msg => ({
             ...msg,
@@ -208,24 +90,21 @@ You can ask me about:
     }
     
     // Create new session
-    const response = await fetch(`${API_BASE_URL}/econsultation/chat/session/new`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const response = await axiosRequest.post('/econsultation/chat/session/new');
 
-    if (!response.ok) {
+    if (response.status !== 200 && response.status !== 201) {
       throw new Error('Failed to create chat session');
     }
 
-    const data = await response.json();
+    const data = response.data;
     const newSessionId = data.session.sessionId;
     
     setSessionId(newSessionId);
     localStorage.setItem(STORAGE_KEY, newSessionId);
     
     // Fetch initial greeting
-    const historyResponse = await fetch(`${API_BASE_URL}/econsultation/chat/history/${newSessionId}`);
-    const historyData = await historyResponse.json();
+    const historyResponse = await axiosRequest.get(`/econsultation/chat/history/${newSessionId}`);
+    const historyData = historyResponse.data;
     
     setMessages(historyData.messages.map(msg => ({
       ...msg,
@@ -233,87 +112,7 @@ You can ask me about:
     })));
   };
 
-  // Check for emergency keywords
-  const detectEmergency = (message) => {
-    const lower = message.toLowerCase();
-    return EMERGENCY_KEYWORDS.some(keyword => lower.includes(keyword));
-  };
-
-  // Get emergency response
-  const getEmergencyResponse = () => {
-    return `🚨 **EMERGENCY ALERT**
-
-Based on your symptoms, this could be a medical emergency.
-
-**SEEK IMMEDIATE MEDICAL ATTENTION:**
-- Call emergency services (911 or your local emergency number)
-- Go to the nearest emergency room
-- Do not drive yourself if possible
-
-Your symptoms require immediate evaluation by medical professionals.
-
-This is NOT a diagnosis, but these symptoms warrant urgent medical care.`;
-  };
-
-  // Send message directly to llama.cpp (test mode)
-  const sendToLlama = async (userMessage, conversationHistory) => {
-    // Check for emergency first
-    if (detectEmergency(userMessage)) {
-      return getEmergencyResponse();
-    }
-
-    // Build prompt with conversation history
-    let prompt = MEDICAL_SYSTEM_PROMPT + '\n\n';
-    
-    // Add last 5 conversation turns for context
-    const recentMessages = conversationHistory.slice(-10);
-    for (const msg of recentMessages) {
-      if (msg.role === 'user') {
-        prompt += `User: ${msg.content}\n\n`;
-      } else if (msg.role === 'assistant') {
-        prompt += `Assistant: ${msg.content}\n\n`;
-      }
-    }
-    
-    prompt += `User: ${userMessage}\n\nAssistant: `;
-
-    try {
-      const response = await fetch(`${LLAMA_DIRECT_URL}/completion`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          temperature: 0.4,
-          top_p: 0.9,
-          top_k: 40,
-          repeat_penalty: 1.15,
-          n_predict: 500,
-          stop: ['\n\nUser:', '\n\nHuman:', 'User:', 'Human:'],
-          stream: false
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get response from AI');
-      }
-
-      const data = await response.json();
-      let content = data.content?.trim() || 'I apologize, but I was unable to generate a response. Please try again.';
-      
-      // Add disclaimer if not present
-      if (!content.includes('⚠️') && !content.includes('Important')) {
-        content += DISCLAIMER;
-      }
-
-      return content;
-
-    } catch (error) {
-      console.error('Llama API error:', error);
-      throw new Error('Failed to communicate with AI service');
-    }
-  };
-
-  // Handle sending message
+  // Handle sending message (via backend API)
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
@@ -333,45 +132,24 @@ This is NOT a diagnosis, but these symptoms warrant urgent medical care.`;
     setError(null);
 
     try {
-      let assistantContent;
+      // All requests go through backend via axiosRequest (with X-Forwarded-Host header)
+      const response = await axiosRequest.post('/econsultation/chat/message', { 
+        sessionId: sessionId,
+        message: messageContent 
+      });
 
-      if (isTestMode) {
-        // Test mode: Direct llama.cpp communication
-        assistantContent = await sendToLlama(messageContent, messages);
-      } else {
-        // Production mode: Backend API
-        const response = await fetch(`${API_BASE_URL}/econsultation/chat/message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            sessionId: sessionId,
-            message: messageContent 
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to get response');
-        }
-
-        const data = await response.json();
-        assistantContent = data.message;
+      if (response.status !== 200) {
+        throw new Error(response.data?.message || 'Failed to get response');
       }
 
       const assistantMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: assistantContent,
+        content: response.data.message,
         timestamp: new Date()
       };
 
-      const finalMessages = [...updatedMessages, assistantMessage];
-      setMessages(finalMessages);
-
-      // Save to local storage in test mode
-      if (isTestMode) {
-        localStorage.setItem(LOCAL_MESSAGES_KEY, JSON.stringify(finalMessages));
-      }
+      setMessages([...updatedMessages, assistantMessage]);
 
     } catch (err) {
       setError(err.message || 'Failed to get response. Please try again.');
@@ -385,18 +163,11 @@ This is NOT a diagnosis, but these symptoms warrant urgent medical care.`;
   // Handle clearing chat
   const handleClearChat = async () => {
     try {
-      if (isTestMode) {
-        localStorage.removeItem(LOCAL_MESSAGES_KEY);
-        await initializeTestMode();
-      } else {
-        if (sessionId) {
-          await fetch(`${API_BASE_URL}/econsultation/chat/session/${sessionId}`, {
-            method: 'DELETE'
-          });
-          localStorage.removeItem(STORAGE_KEY);
-        }
-        await initializeProductionMode();
+      if (sessionId) {
+        await axiosRequest.delete(`/econsultation/chat/session/${sessionId}`);
+        localStorage.removeItem(STORAGE_KEY);
       }
+      await initializeProductionMode();
       setError(null);
     } catch (err) {
       console.error('Error clearing chat:', err);
@@ -439,8 +210,8 @@ This is NOT a diagnosis, but these symptoms warrant urgent medical care.`;
               The AI service is currently unavailable. Please ensure:
             </p>
             <ul className="text-left text-neutral-600 dark:text-neutral-400 mb-6 max-w-md mx-auto">
-              <li>• The backend server is running on port 3001</li>
-              <li>• OR llama.cpp server is running on port 8080</li>
+              <li>• The backend server is running</li>
+              <li>• Your network connection is stable</li>
             </ul>
             <button
               onClick={initializeSession}
@@ -464,11 +235,6 @@ This is NOT a diagnosis, but these symptoms warrant urgent medical care.`;
         <p className="text-neutral-600 dark:text-neutral-400">
           Chat with our AI assistant about your health concerns
         </p>
-        {isTestMode && (
-          <div className="mt-2 inline-flex items-center px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 text-sm rounded-full">
-            🧪 Test Mode - Direct llama.cpp connection (no database)
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -653,14 +419,13 @@ This is NOT a diagnosis, but these symptoms warrant urgent medical care.`;
             <h4 className="text-sm font-medium text-neutral-900 dark:text-white mb-2">Connection Status</h4>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${
-                connectionStatus === 'connected' ? 'bg-green-500' :
-                connectionStatus === 'test-mode' ? 'bg-yellow-500' : 'bg-red-500'
+                connectionStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'
               }`} />
               <span className="text-xs text-neutral-600 dark:text-neutral-400">
                 {connectionStatus === 'connected' && 'Connected to backend'}
-                {connectionStatus === 'test-mode' && 'Test mode (direct llama.cpp)'}
                 {connectionStatus === 'offline' && 'Offline'}
                 {connectionStatus === 'error' && 'Connection error'}
+                {connectionStatus === 'checking' && 'Checking connection...'}
               </span>
             </div>
           </div>

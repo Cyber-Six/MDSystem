@@ -17,12 +17,14 @@ async function initializeChatbot(app, options = {}) {
   try {
     logger.info('Initializing AI Medical Chatbot...');
 
-    // Initialize llama.cpp service
+    // IMPORTANT: Register routes FIRST (synchronously) before any async operations
+    // This ensures routes are available immediately, before static file middleware
+    app.use('/econsultation/chat', chatRoutes);
+    logger.info('✅ Chatbot routes registered at /econsultation/chat');
+
+    // Initialize llama.cpp service (async - connects to localhost:8080)
     const autoStartLlama = options.autoStartLlama || process.env.AUTO_START_LLAMA === 'true';
     await llamaService.initialize(autoStartLlama);
-
-    // Register routes
-    app.use('/econsultation/chat', chatRoutes);
 
     logger.info('✅ AI Medical Chatbot initialized successfully');
 
@@ -37,8 +39,9 @@ async function initializeChatbot(app, options = {}) {
       stack: error.stack
     });
     
-    // Don't throw - allow server to start without AI
-    logger.warn('⚠️ Server starting without AI chatbot functionality');
+    // Routes are already registered, so endpoints will work
+    // They'll return appropriate errors if llama service is unavailable
+    logger.warn('⚠️ Chatbot routes available but AI service may be unavailable');
     
     return null;
   }

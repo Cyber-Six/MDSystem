@@ -47,26 +47,32 @@ app.use((err, req, res, next) => {
 
 app.use('/auth/login', loginRoutes);
 
-// Initialize AI Medical Chatbot
-initializeChatbot(app, {
-  autoStartLlama: process.env.AUTO_START_LLAMA === 'true'
-}).then(chatbot => {
-  if (chatbot) {
-    logger.info('✅ AI Medical Chatbot initialized on staff portal');
-  } else {
-    logger.warn('⚠️ AI Medical Chatbot not available - staff portal running without AI');
+// ======================================
+// Initialize AI Medical Chatbot BEFORE static files
+// This ensures API routes are registered first
+(async () => {
+  try {
+    const chatbot = await initializeChatbot(app, {
+      autoStartLlama: process.env.AUTO_START_LLAMA === 'true'
+    });
+    
+    if (chatbot) {
+      logger.info('✅ AI Medical Chatbot initialized on staff portal');
+    } else {
+      logger.warn('⚠️ AI Medical Chatbot not available - staff portal running without AI');
+    }
+  } catch (err) {
+    logger.error('Failed to initialize chatbot on staff portal', { error: err.message });
   }
-}).catch(err => {
-  logger.error('Failed to initialize chatbot on staff portal', { error: err.message });
-});
+})();
 
 // ======================================
 
-// Serve static assets for the React app
+// Serve static assets for the React app (AFTER API routes)
 app.use(express.static(path.join(__dirname, '../mds-frontend/dist')));
 
 // Handle all other routes for the React app by serving the index.html
-app.get('*path', (req, res) => {
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../mds-frontend/dist', 'index.html'));
 });
 

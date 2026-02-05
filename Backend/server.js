@@ -59,18 +59,22 @@ app.use((err, req, res, next) => {
 //registerGraphQLRoutes(app);
 initPatientEMRGraphQL(app);
 
-// Initialize AI Medical Chatbot
-initializeChatbot(app, {
-  autoStartLlama: process.env.AUTO_START_LLAMA === 'true'
-}).then(chatbot => {
-  if (chatbot) {
-    logger.info('✅ AI Medical Chatbot initialized');
-  } else {
-    logger.warn('⚠️ AI Medical Chatbot not available - server running without AI');
+// Initialize AI Medical Chatbot (routes registered synchronously, llama connection async)
+(async () => {
+  try {
+    const chatbot = await initializeChatbot(app, {
+      autoStartLlama: process.env.AUTO_START_LLAMA === 'true'
+    });
+    
+    if (chatbot) {
+      logger.info('✅ AI Medical Chatbot initialized on patient portal');
+    } else {
+      logger.warn('⚠️ AI Medical Chatbot llama service not available - routes still accessible');
+    }
+  } catch (err) {
+    logger.error('AI Chatbot initialization error', { error: err.message });
   }
-}).catch(err => {
-  logger.error('AI Chatbot initialization error', { error: err.message });
-});
+})();
 
 app.use('/auth/register', registerRoutes);
 app.use('/auth/login', loginRoutes);
