@@ -4,18 +4,27 @@
  */
 
 const path = require('path');
+const os = require('os');
+
+// Helper function to expand tilde paths
+const expandPath = (p) => {
+  if (p.startsWith('~')) {
+    return path.join(os.homedir(), p.slice(1));
+  }
+  return p;
+};
 
 module.exports = {
   // Model Settings
-  // Use env variable or default to LLaMA 3 8B Instruct Q4_K_M
-  modelPath: process.env.LLAMA_MODEL_PATH || path.join(__dirname, '../models-storage/Phi-3-mini-4k-instruct-Q4_K_M.gguf'),
+  // Use env variable or default to Phi-3-mini Q4_K_M
+  modelPath: expandPath(process.env.LLAMA_MODEL_PATH || '~/Models/llama.cpp/models/Phi-3-mini-4k-instruct-Q4_K_M.gguf'),
   
   // Server Configuration
   llamaServer: {
     host: process.env.LLAMA_SERVER_HOST || 'localhost',
     port: process.env.LLAMA_SERVER_PORT || 8080,
     timeout: 30000, // 30 seconds request timeout
-    serverBin: process.env.LLAMA_SERVER_BIN || '~/Models/llama.cpp/build/bin/llama-server',
+    serverBin: expandPath(process.env.LLAMA_SERVER_BIN || '~/Models/llama.cpp/build/bin/llama-server'),
     threads: parseInt(process.env.LLAMA_THREADS || '3', 10),
   },
 
