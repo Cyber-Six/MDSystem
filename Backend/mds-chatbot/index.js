@@ -22,7 +22,7 @@ async function initializeChatbot(app, options = {}) {
     await llamaService.initialize(autoStartLlama);
 
     // Register routes
-    app.use('/api/chat', chatRoutes);
+    app.use('/econsultation/chat', chatRoutes);
 
     logger.info('✅ AI Medical Chatbot initialized successfully');
 

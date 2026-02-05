@@ -13,6 +13,8 @@ class LlamaService {
     this.serverProcess = null;
     this.isInitialized = false;
     this.baseUrl = `http://${config.llamaServer.host}:${config.llamaServer.port}`;
+    this.lastActivityTimestamp = null;
+    this.idleCheckInterval = null;
   }
 
   /**
@@ -60,10 +62,12 @@ class LlamaService {
         '-c', config.generationParams.contextSize.toString(),
         '--port', config.llamaServer.port.toString(),
         '--host', config.llamaServer.host,
-        '-t', '4', // threads
+        '-t', config.llamaServer.threads.toString(),
       ];
 
-      this.serverProcess = spawn('llama-server', args);
+      const serverBin = config.llamaServer.serverBin || 'llama-server';
+
+      this.serverProcess = spawn(serverBin, args);
 
       this.serverProcess.stdout.on('data', (data) => {
         const output = data.toString();
@@ -72,6 +76,13 @@ class LlamaService {
         // Check if server is ready
         if (output.includes('HTTP server listening')) {
           this.isInitialized = true;
+          this.lastActivityTimestamp = Date.now();
+          
+          // Start idle timeout checker if on-demand is enabled
+          if (config.onDemand.enabled) {
+            this.startIdleChecker();
+          }
+          
           logger.info('✅ LLaMA server started successfully');
           resolve();
         }
@@ -90,6 +101,7 @@ class LlamaService {
         logger.info('LLaMA server process exited', { code });
         this.isInitialized = false;
         this.serverProcess = null;
+        this.stopIdleChecker();
       });
 
       // Timeout after 30 seconds
@@ -121,6 +133,17 @@ class LlamaService {
    * @param {Object} options - Generation options
    */
   async generateResponse(messages, options = {}) {
+    // Auto-start server if on-demand is enabled
+    if (config.onDemand.enabled && !this.isInitialized) {
+      const isRunning = await this.healthCheck();
+      if (!isRunning) {
+        logger.info('On-demand starting LLaMA server...');
+        await this.startServer();
+      } else {
+        this.isInitialized = true;
+      }
+    }
+
     if (!this.isInitialized) {
       const isRunning = await this.healthCheck();
       if (!isRunning) {
@@ -128,6 +151,9 @@ class LlamaService {
       }
       this.isInitialized = true;
     }
+
+    // Update last activity timestamp
+    this.lastActivityTimestamp = Date.now();
 
     try {
       // Format messages for the model
@@ -219,6 +245,8 @@ class LlamaService {
    * Shutdown llama.cpp server gracefully
    */
   async shutdown() {
+    this.stopIdleChecker();
+    
     if (this.serverProcess) {
       logger.info('Shutting down LLaMA server...');
       this.serverProcess.kill('SIGTERM');
@@ -231,7 +259,46 @@ class LlamaService {
 
       this.serverProcess = null;
       this.isInitialized = false;
+      this.lastActivityTimestamp = null;
       logger.info('LLaMA server shut down');
+    }
+  }
+
+  /**
+   * Start idle timeout checker (runs every minute)
+   */
+  startIdleChecker() {
+    if (this.idleCheckInterval) {
+      return; // Already running
+    }
+
+    const timeoutMs = config.onDemand.idleTimeoutMinutes * 60 * 1000;
+
+    this.idleCheckInterval = setInterval(() => {
+      const now = Date.now();
+      const idleTime = now - (this.lastActivityTimestamp || now);
+
+      if (idleTime >= timeoutMs) {
+        logger.info('LLaMA server idle timeout reached, shutting down...', {
+          idleMinutes: Math.round(idleTime / 60000),
+        });
+        this.shutdown();
+      }
+    }, 60000); // Check every minute
+
+    logger.info('Idle timeout checker started', {
+      timeoutMinutes: config.onDemand.idleTimeoutMinutes,
+    });
+  }
+
+  /**
+   * Stop idle timeout checker
+   */
+  stopIdleChecker() {
+    if (this.idleCheckInterval) {
+      clearInterval(this.idleCheckInterval);
+      this.idleCheckInterval = null;
+      logger.info('Idle timeout checker stopped');
     }
   }
 
@@ -239,10 +306,20 @@ class LlamaService {
    * Get server status
    */
   getStatus() {
+    const idleMinutes = this.lastActivityTimestamp 
+      ? Math.round((Date.now() - this.lastActivityTimestamp) / 60000)
+      : null;
+
     return {
       initialized: this.isInitialized,
       processRunning: this.serverProcess !== null,
       baseUrl: this.baseUrl,
+      onDemandEnabled: config.onDemand.enabled,
+      idleTimeoutMinutes: config.onDemand.idleTimeoutMinutes,
+      currentIdleMinutes: idleMinutes,
+      lastActivity: this.lastActivityTimestamp 
+        ? new Date(this.lastActivityTimestamp).toISOString()
+        : null,
     };
   }
 }

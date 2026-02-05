@@ -31,7 +31,7 @@ const staffChatLimiter = ipRateLimiter('staffAuthentication', 'staffchat');
 // ============================================
 
 /**
- * POST /api/chat/session/new
+ * POST /econsultation/chat/session/new
  * Create a new chat session
  * Rate limited to prevent session abuse
  */
@@ -41,7 +41,7 @@ router.post('/session/new',
 );
 
 /**
- * POST /api/chat/message
+ * POST /econsultation/chat/message
  * Send a message and get AI response
  * 
  * Body: { sessionId, message }
@@ -64,7 +64,7 @@ router.post('/message',
 );
 
 /**
- * GET /api/chat/history/:sessionId
+ * GET /econsultation/chat/history/:sessionId
  * Get conversation history
  * Rate limited to prevent enumeration attacks
  */
@@ -74,7 +74,7 @@ router.get('/history/:sessionId',
 );
 
 /**
- * DELETE /api/chat/session/:sessionId
+ * DELETE /econsultation/chat/session/:sessionId
  * Close/clear a chat session
  */
 router.delete('/session/:sessionId', 
@@ -91,7 +91,7 @@ router.delete('/session/:sessionId',
 // ============================================
 
 /**
- * GET /api/chat/staff/active
+ * GET /econsultation/chat/staff/active
  * Get all active chat sessions
  * Requires: Staff authentication with medical role
  */
@@ -102,7 +102,7 @@ router.get('/staff/active',
 );
 
 /**
- * GET /api/chat/staff/handoffs
+ * GET /econsultation/chat/staff/handoffs
  * Get pending handoff requests
  * Requires: Staff authentication with medical role
  */
@@ -113,7 +113,7 @@ router.get('/staff/handoffs',
 );
 
 /**
- * POST /api/chat/staff/takeover
+ * POST /econsultation/chat/staff/takeover
  * Take over an AI chat session
  * Requires: Staff authentication with medical role
  * 
@@ -126,7 +126,7 @@ router.post('/staff/takeover',
 );
 
 /**
- * POST /api/chat/staff/release
+ * POST /econsultation/chat/staff/release
  * Release chat back to AI
  * Requires: Staff authentication with medical role
  * 
@@ -139,7 +139,7 @@ router.post('/staff/release',
 );
 
 /**
- * POST /api/chat/staff/message
+ * POST /econsultation/chat/staff/message
  * Send message as staff in taken-over conversation
  * Requires: Staff authentication with medical role
  * 
@@ -154,7 +154,7 @@ router.post('/staff/message',
 );
 
 /**
- * GET /api/chat/staff/transcript/:sessionId
+ * GET /econsultation/chat/staff/transcript/:sessionId
  * Get full conversation transcript
  * Requires: Staff authentication with medical role
  */
@@ -169,7 +169,7 @@ router.get('/staff/transcript/:sessionId',
 // ============================================
 
 /**
- * GET /api/chat/health
+ * GET /econsultation/chat/health
  * Health check for AI service
  */
 router.get('/health', async (req, res) => {

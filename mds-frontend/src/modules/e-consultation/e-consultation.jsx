@@ -92,7 +92,7 @@ const EConsultation = () => {
   // Check if backend is available
   const checkBackendConnection = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/health`, {
+      const response = await fetch(`${API_BASE_URL}/econsultation/chat/health`, {
         method: 'GET',
         signal: AbortSignal.timeout(3000)
       });
@@ -191,7 +191,7 @@ You can ask me about:
     
     if (savedSessionId) {
       try {
-        const historyResponse = await fetch(`${API_BASE_URL}/api/chat/history/${savedSessionId}`);
+        const historyResponse = await fetch(`${API_BASE_URL}/econsultation/chat/history/${savedSessionId}`);
         
         if (historyResponse.ok) {
           const data = await historyResponse.json();
@@ -208,7 +208,7 @@ You can ask me about:
     }
     
     // Create new session
-    const response = await fetch(`${API_BASE_URL}/api/chat/session/new`, {
+    const response = await fetch(`${API_BASE_URL}/econsultation/chat/session/new`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -224,7 +224,7 @@ You can ask me about:
     localStorage.setItem(STORAGE_KEY, newSessionId);
     
     // Fetch initial greeting
-    const historyResponse = await fetch(`${API_BASE_URL}/api/chat/history/${newSessionId}`);
+    const historyResponse = await fetch(`${API_BASE_URL}/econsultation/chat/history/${newSessionId}`);
     const historyData = await historyResponse.json();
     
     setMessages(historyData.messages.map(msg => ({
@@ -340,7 +340,7 @@ This is NOT a diagnosis, but these symptoms warrant urgent medical care.`;
         assistantContent = await sendToLlama(messageContent, messages);
       } else {
         // Production mode: Backend API
-        const response = await fetch(`${API_BASE_URL}/api/chat/message`, {
+        const response = await fetch(`${API_BASE_URL}/econsultation/chat/message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -390,7 +390,7 @@ This is NOT a diagnosis, but these symptoms warrant urgent medical care.`;
         await initializeTestMode();
       } else {
         if (sessionId) {
-          await fetch(`${API_BASE_URL}/api/chat/session/${sessionId}`, {
+          await fetch(`${API_BASE_URL}/econsultation/chat/session/${sessionId}`, {
             method: 'DELETE'
           });
           localStorage.removeItem(STORAGE_KEY);
