@@ -103,7 +103,9 @@ export const createAxiosRequestHandler = ({
         config.headers.Authorization = `Bearer ${token}`;
       }
       
-      // Send simulated subdomain header for local development
+      // Send subdomain header for backend portal detection
+      // In dev: simulates subdomain (localhost → www/staff)
+      // In prod: normalizes subdomain (www2 → www, staff2 → staff)
       const devSubdomain = getDevSubdomain();
       if (devSubdomain) {
         config.headers['X-Forwarded-Host'] = devSubdomain;
