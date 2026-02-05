@@ -104,12 +104,12 @@ class LlamaService {
         this.stopIdleChecker();
       });
 
-      // Timeout after 30 seconds
+      // Timeout from config
       setTimeout(() => {
         if (!this.isInitialized) {
           reject(new Error('LLaMA server failed to start within timeout'));
         }
-      }, 30000);
+      }, config.llamaServer.startupTimeout);
     });
   }
 
@@ -119,7 +119,7 @@ class LlamaService {
   async healthCheck() {
     try {
       const response = await axios.get(`${this.baseUrl}/health`, {
-        timeout: 5000,
+        timeout: config.llamaServer.healthCheckTimeout,
       });
       return response.status === 200;
     } catch (error) {
@@ -254,7 +254,7 @@ class LlamaService {
       // Wait for graceful shutdown
       await new Promise(resolve => {
         this.serverProcess.on('close', resolve);
-        setTimeout(resolve, 5000); // Force after 5 seconds
+        setTimeout(resolve, config.llamaServer.shutdownTimeout);
       });
 
       this.serverProcess = null;

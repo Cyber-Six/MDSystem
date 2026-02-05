@@ -23,7 +23,10 @@ module.exports = {
   llamaServer: {
     host: process.env.LLAMA_SERVER_HOST || 'localhost',
     port: process.env.LLAMA_SERVER_PORT || 8080,
-    timeout: 30000, // 30 seconds request timeout
+    timeout: parseInt(process.env.LLAMA_REQUEST_TIMEOUT || '300000', 10), // AI response generation timeout
+    healthCheckTimeout: parseInt(process.env.LLAMA_HEALTH_CHECK_TIMEOUT || '120000', 10), // Health check timeout
+    startupTimeout: parseInt(process.env.LLAMA_STARTUP_TIMEOUT || '600000', 10), // Server startup timeout
+    shutdownTimeout: parseInt(process.env.LLAMA_SHUTDOWN_TIMEOUT || '120000', 10), // Graceful shutdown timeout
     serverBin: expandPath(process.env.LLAMA_SERVER_BIN || '~/Models/llama.cpp/build/bin/llama-server'),
     threads: parseInt(process.env.LLAMA_THREADS || '3', 10),
   },

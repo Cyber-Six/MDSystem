@@ -72,7 +72,7 @@ app.use('/auth/login', loginRoutes);
 app.use(express.static(path.join(__dirname, '../mds-frontend/dist')));
 
 // Handle all other routes for the React app by serving the index.html
-app.get('*', (req, res) => {
+app.get('*path', (req, res) => {
   res.sendFile(path.join(__dirname, '../mds-frontend/dist', 'index.html'));
 });
 
