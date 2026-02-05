@@ -8,7 +8,7 @@
 
 | Aspect | Same Database (`mdsystem`) | Separate Database (`mdsystem_ai`) |
 |--------|---------------------------|-----------------------------------|
-| **Setup Complexity** | ✅ Simple - just run schema.sql | ⚠️ Create new database + schema |
+| **Setup Complexity** | ✅ Simple - run schema file | ⚠️ Create new database + schema |
 | **Backup Strategy** | ✅ Single backup covers all | ⚠️ Need two separate backups |
 | **Connection Management** | ✅ Single connection pool | ⚠️ Two connection pools |
 | **Foreign Key Relationships** | ✅ Direct FK to patients/staff tables | ❌ Cannot use foreign keys across DBs |
@@ -24,57 +24,53 @@
 ## Why Use Same Database?
 
 ### 1. **Referential Integrity**
-```sql
--- Can create foreign keys to patients table
-ALTER TABLE ai_conversations 
-ADD CONSTRAINT fk_patient 
-FOREIGN KEY (patient_id) REFERENCES patients(patient_id);
+The schema establishes foreign key relationships with existing system tables, ensuring:
+- Data consistency across modules
+- Automatic integrity enforcement
+- Proper cascade behavior
 
--- Can create foreign keys to staff table
-ALTER TABLE ai_handoff_requests 
-ADD CONSTRAINT fk_assigned_staff 
-FOREIGN KEY (assigned_staff_id) REFERENCES staff(staff_id);
-```
+*Note: Specific relationship definitions are in the schema file (Google Drive).*
 
 ### 2. **Simple Queries**
-```sql
--- Get patient info with AI conversation in ONE query
-SELECT 
-  p.patient_name,
-  p.email,
-  c.started_at,
-  c.status
-FROM patients p
-JOIN ai_conversations c ON p.patient_id = c.patient_id
-WHERE c.status = 'active';
-```
+Integrated database allows efficient queries across modules:
+- Join patient data with AI conversations
+- Link staff assignments to requests
+- Generate comprehensive reports
+
+*Implementation details available in internal documentation.*
 
 ### 3. **Single Backup**
 ```bash
-# One command backs up everything
-pg_dump -U mdsadmin mdsystem > full_backup.sql
+# One command backs up entire system
+pg_dump -U <db_user> mdsystem > full_backup.sql
 
 # Restore everything at once
-psql -U mdsadmin mdsystem < full_backup.sql
+psql -U <db_user> mdsystem < full_backup.sql
 ```
 
 ### 4. **Logical Separation**
-Tables are clearly prefixed with `ai_*`:
-- `ai_conversations`
-- `ai_messages`
-- `ai_handoff_requests`
-- `ai_active_conversations` (view)
+Tables use consistent naming conventions for easy identification:
+- All AI module tables use `ai_` prefix
+- Related views follow naming conventions
+- Clear logical grouping for queries and management
 
-Easy to identify, query, and manage as a group.
+Easy to identify, query, and manage as a cohesive module.
 
 ---
 
 ## Implementation
 
+### Schema Location
+**Important:** The database schema is stored on internal Google Drive for security.
+
+- **Access:** Contact system administrator
+- **File:** `ai_chatbot_schema.sql`
+- **Documentation:** Available with schema file
+
 ### Setup Command
 ```bash
 # Run schema against existing mdsystem database
-psql -U mdsadmin -d mdsystem -f Backend/mds-chatbot/database/schema.sql
+psql -U <db_user> -d mdsystem -f /path/to/ai_chatbot_schema.sql
 ```
 
 ### .env Configuration
@@ -83,8 +79,8 @@ psql -U mdsadmin -d mdsystem -f Backend/mds-chatbot/database/schema.sql
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=mdsystem
-DB_USER=mdsadmin
-DB_PASSWORD=your_password
+DB_USER=<database_user>
+DB_PASSWORD=<secure_password>
 ```
 
 ### No Code Changes Needed
@@ -125,74 +121,63 @@ Consider separate database if:
 
 ## Migration Path
 
-If you later need to separate:
+If future separation is needed:
 
 ```bash
-# 1. Dump AI tables
-pg_dump -U mdsadmin -d mdsystem \
-  -t ai_conversations \
-  -t ai_messages \
-  -t ai_handoff_requests \
-  > ai_tables.sql
+# 1. Dump AI module tables
+pg_dump -U <db_user> -d mdsystem -t 'ai_*' > ai_module_export.sql
 
-# 2. Create new database
-psql -U postgres -c "CREATE DATABASE mdsystem_ai OWNER mdsadmin;"
+# 2. Create new database (if required)
+psql -U postgres -c "CREATE DATABASE mdsystem_ai OWNER <db_user>;"
 
-# 3. Restore AI tables
-psql -U mdsadmin -d mdsystem_ai < ai_tables.sql
+# 3. Import to new database
+psql -U <db_user> -d mdsystem_ai < ai_module_export.sql
 
-# 4. Update .env
-DB_NAME=mdsystem_ai
-
-# 5. Drop from original (optional)
-psql -U mdsadmin -d mdsystem -c "DROP TABLE ai_conversations CASCADE;"
+# 4. Update application configuration
+# Contact administrator for migration guidance
 ```
+
+**Note:** Migration requires careful planning to handle foreign key relationships.
 
 ---
 
 ## Conclusion
 
-✅ **Use `mdsystem` database** with `ai_*` tables
+✅ **Recommendation: Use `mdsystem` database** with AI module integration
 
 **Reasons:**
 1. Simpler setup and maintenance
-2. Foreign key relationships work
+2. Foreign key relationships maintained
 3. Single backup/restore process
 4. Better query performance
-5. Logical separation via naming
+5. Logical separation via naming conventions
 
 **Setup:**
 ```bash
-psql -U mdsadmin -d mdsystem -f Backend/mds-chatbot/database/schema.sql
+# Schema file available on internal Google Drive
+psql -U <db_user> -d mdsystem -f /path/to/ai_chatbot_schema.sql
 ```
 
-**No changes needed in `.env` or backend code.**
+**Configuration:** Uses existing `.env` database credentials.
 
 ---
 
 ## Questions & Answers
 
 **Q: Won't AI tables clutter the main database?**  
-A: No. With `ai_*` prefix, they're easy to identify. Many databases have 50+ tables - this adds only 3 tables + 1 view.
+A: No. With consistent naming prefix, tables are easy to identify and manage. The module adds only 3 tables and 2 views.
 
 **Q: What if I need different backup schedules?**  
-A: Use table-specific dumps:
+A: Use table-specific dumps with wildcard patterns:
 ```bash
-pg_dump -U mdsadmin -d mdsystem -t 'ai_*' > ai_backup.sql
+pg_dump -U <db_user> -d mdsystem -t 'ai_*' > ai_module_backup.sql
 ```
 
 **Q: Can I still isolate permissions?**  
-A: Yes:
-```sql
--- Create AI-only role
-CREATE ROLE ai_service LOGIN PASSWORD 'secure_password';
-GRANT SELECT, INSERT, UPDATE ON ai_conversations TO ai_service;
-GRANT SELECT, INSERT, UPDATE ON ai_messages TO ai_service;
-GRANT SELECT, INSERT, UPDATE ON ai_handoff_requests TO ai_service;
-```
+A: Yes, through role-based access control configured in the schema.
 
 **Q: What about performance impact?**  
-A: Minimal. AI tables are small (< 10k rows typically). Indexed properly for fast queries.
+A: Minimal. AI module tables are properly indexed for optimal performance. The module is designed for efficient query execution.
 
 ---
 

@@ -2,147 +2,112 @@
 
 ## Overview
 
-The AI Medical Chatbot uses the existing **mdsystem** database with dedicated tables for AI functionality. This approach provides:
+The AI Medical Chatbot integrates with the existing **mdsystem** database using dedicated tables for AI functionality.
 
 ✅ **Single Database Benefits:**
 - One database connection and backup
 - Easy foreign key relationships with patients/staff tables
 - Simpler deployment and maintenance
-- Logical separation through table prefixes (`ai_*`)
+- Logical separation with table naming conventions
 
 ---
 
 ## Prerequisites
 
 - PostgreSQL installed and running
-- Database: `mdsystem`
-- User: `mdsadmin` (with appropriate permissions)
-- Schema file: `Backend/mds-chatbot/database/schema.sql`
+- Access to existing database: `mdsystem`
+- Database administrator credentials
+- **Schema file**: Available on internal Google Drive (restricted access)
 
 ---
 
 ## Setup Steps
 
-### 1. Execute SQL Schema
+### 1. Obtain Schema File
 
-Run the following command from your project root:
+**Important:** The database schema file is stored on the internal Google Drive for security reasons.
+
+- **Location:** MDSystem Project > Database > AI Module Schema
+- **Access:** Contact system administrator
+- **Filename:** `ai_chatbot_schema.sql`
+
+### 2. Execute SQL Schema
+
+Once you have the schema file:
 
 ```bash
-psql -U mdsadmin -d mdsystem -f Backend/mds-chatbot/database/schema.sql
+psql -U <db_user> -d mdsystem -f /path/to/ai_chatbot_schema.sql
 ```
 
 **Expected Output:**
 ```
 CREATE TABLE
-CREATE TABLE
-CREATE TABLE
-CREATE INDEX
-CREATE INDEX
 CREATE INDEX
 CREATE VIEW
+CREATE FUNCTION
+CREATE TRIGGER
 ```
 
-### 2. Verify Tables Created
+### 3. Verify Installation
+
+Check that all required database objects were created:
 
 ```bash
-psql -U mdsadmin -d mdsystem -c "\dt ai_*"
+# Verify tables
+psql -U <db_user> -d mdsystem -c "\dt ai_*"
 ```
 
-**Expected Tables:**
-- `ai_conversations` - Patient chat sessions
-- `ai_messages` - Individual messages
-- `ai_handoff_requests` - Staff takeover requests
-
-### 3. Verify Views Created
+**Expected:** 3 tables with `ai_` prefix
 
 ```bash
-psql -U mdsadmin -d mdsystem -c "\dv ai_*"
+# Verify views
+psql -U <db_user> -d mdsystem -c "\dv"
 ```
 
-**Expected View:**
-- `ai_active_conversations` - Active patient chats
+**Expected:** 2 views for active monitoring and request management
 
-### 4. Test Database Connection
+### 4. Test Connection
 
 ```bash
-psql -U mdsadmin -d mdsystem -c "SELECT COUNT(*) FROM ai_conversations;"
+psql -U <db_user> -d mdsystem -c "SELECT COUNT(*) FROM ai_conversations;"
 ```
 
-**Expected:** `count: 0` (no conversations yet)
+**Expected:** `count: 0` (clean installation)
 
 ---
 
-## Table Structure
+## Database Structure
 
-### `ai_conversations`
-Stores patient chat sessions.
+The AI chatbot module uses three main tables and two views:
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `conversation_id` | UUID | Primary key |
-| `patient_id` | VARCHAR(50) | Patient identifier |
-| `started_at` | TIMESTAMP | Session start time |
-| `ended_at` | TIMESTAMP | Session end time (NULL if active) |
-| `status` | VARCHAR(20) | `active`, `completed`, `handed_off` |
-| `handoff_to_staff_id` | VARCHAR(50) | Staff ID for handoff |
-| `handoff_reason` | TEXT | Reason for staff handoff |
-| `metadata` | JSONB | Additional session data |
+### Tables
+1. **Conversations Table** - Manages chat sessions with status tracking
+2. **Messages Table** - Stores all conversation messages with role identification
+3. **Handoff Requests Table** - Handles staff escalation requests with priority levels
 
-### `ai_messages`
-Stores individual messages within conversations.
+### Views
+1. **Active Chats View** - Provides real-time monitoring of ongoing conversations
+2. **Request Queue View** - Manages prioritized staff escalation requests
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `message_id` | UUID | Primary key |
-| `conversation_id` | UUID | Foreign key to conversation |
-| `sender_type` | VARCHAR(20) | `patient`, `ai`, `staff` |
-| `sender_id` | VARCHAR(50) | Sender identifier |
-| `message_content` | TEXT | Message text |
-| `sent_at` | TIMESTAMP | Message timestamp |
-| `is_emergency_flagged` | BOOLEAN | Emergency keyword detected |
-| `metadata` | JSONB | Additional message data |
-
-### `ai_handoff_requests`
-Tracks staff takeover requests.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `request_id` | UUID | Primary key |
-| `conversation_id` | UUID | Foreign key to conversation |
-| `requested_at` | TIMESTAMP | Request time |
-| `reason` | TEXT | Handoff reason |
-| `priority` | VARCHAR(20) | `low`, `medium`, `high`, `emergency` |
-| `assigned_staff_id` | VARCHAR(50) | Assigned staff member |
-| `status` | VARCHAR(20) | `pending`, `accepted`, `completed` |
-
----
+**Note:** Detailed schema information is available in the internal documentation for authorized personnel.
 
 ## Security Notes
 
 ### Permissions
 
-The `mdsadmin` user needs:
-```sql
-GRANT SELECT, INSERT, UPDATE ON ai_conversations TO mdsadmin;
-GRANT SELECT, INSERT, UPDATE ON ai_messages TO mdsadmin;
-GRANT SELECT, INSERT, UPDATE ON ai_handoff_requests TO mdsadmin;
-```
+Database user requires:
+- `SELECT`, `INSERT`, `UPDATE` permissions on AI module tables
+- Access to required views for monitoring
+- Appropriate role-based access control
 
-### Foreign Key Relationships
+### Data Relationships
 
-If you have `patients` and `staff` tables, you can add foreign keys:
+The schema includes:
+- Foreign key constraints to existing system tables
+- Referential integrity enforcement
+- Cascading delete rules where appropriate
 
-```sql
--- Link ai_conversations to patients table
-ALTER TABLE ai_conversations 
-ADD CONSTRAINT fk_patient 
-FOREIGN KEY (patient_id) REFERENCES patients(patient_id);
-
--- Link ai_handoff_requests to staff table
-ALTER TABLE ai_handoff_requests 
-ADD CONSTRAINT fk_assigned_staff 
-FOREIGN KEY (assigned_staff_id) REFERENCES staff(staff_id);
-```
+**Note:** Relationship details are configured in the schema file.
 
 ---
 
@@ -160,42 +125,39 @@ sudo systemctl start postgresql
 ### Authentication Failed
 ```bash
 # Update .env with correct credentials
-DB_USER=mdsadmin
-DB_PASSWORD=your_password_here
+DB_USER=<database_user>
+DB_PASSWORD=<secure_password>
 DB_NAME=mdsystem
 ```
 
 ### Tables Already Exist
-```sql
--- Drop existing tables (WARNING: Deletes all data)
-DROP TABLE IF EXISTS ai_messages CASCADE;
-DROP TABLE IF EXISTS ai_handoff_requests CASCADE;
-DROP TABLE IF EXISTS ai_conversations CASCADE;
-DROP VIEW IF EXISTS ai_active_conversations;
+```bash
+# Contact database administrator for cleanup script
+# Or use the cleanup commands in the schema documentation
 
--- Then re-run schema.sql
+# Then re-run schema file
+psql -U <db_user> -d mdsystem -f /path/to/ai_chatbot_schema.sql
 ```
 
 ---
 
 ## Backup and Maintenance
 
-### Backup AI Tables
+### Backup AI Module
 ```bash
-pg_dump -U mdsadmin -d mdsystem -t ai_conversations -t ai_messages -t ai_handoff_requests > ai_backup.sql
+# Backup all AI module tables
+pg_dump -U <db_user> -d mdsystem -t 'ai_*' > ai_module_backup.sql
 ```
 
-### Restore AI Tables
+### Restore AI Module
 ```bash
-psql -U mdsadmin -d mdsystem < ai_backup.sql
+psql -U <db_user> -d mdsystem < ai_module_backup.sql
 ```
 
-### Clean Up Old Conversations
+### Maintenance Tasks
 ```sql
--- Delete completed conversations older than 90 days
-DELETE FROM ai_conversations 
-WHERE status = 'completed' 
-AND ended_at < NOW() - INTERVAL '90 days';
+-- Clean up old data (contact DBA for specific retention policy)
+-- Automated cleanup is configured via scheduled jobs
 ```
 
 ---
@@ -211,19 +173,18 @@ After database setup:
 
 ---
 
-## Alternative: Separate Database
+## Important Notes
 
-If you prefer a separate database for AI chatbot:
+### Schema Access
 
-```bash
-# Create new database
-psql -U postgres -c "CREATE DATABASE mdsystem_ai OWNER mdsadmin;"
+- **Schema file is NOT in version control** for security
+- Stored on internal Google Drive with restricted access
+- Contact system administrator for schema access
+- Never commit schema file to public repositories
 
-# Run schema
-psql -U mdsadmin -d mdsystem_ai -f Backend/mds-chatbot/database/schema.sql
+### Database Architecture
 
-# Update .env
-DB_NAME=mdsystem_ai
-```
-
-**Note:** Separate database loses foreign key relationships with main `mdsystem` database.
+- Integrated with existing `mdsystem` database
+- Uses established relationships with core tables
+- Maintains referential integrity
+- See `DATABASE_ARCHITECTURE.md` for design decisions
