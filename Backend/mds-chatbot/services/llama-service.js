@@ -192,7 +192,13 @@ class LlamaService {
         throw new Error('Invalid response from LLaMA server');
       }
 
-      const generatedText = response.data.content.trim();
+      // Clean response: remove model artifacts like <|assistant|> tags
+      let generatedText = response.data.content
+        .replace(/<\|assistant\|>/gi, '')
+        .replace(/<\|user\|>/gi, '')
+        .replace(/<\|system\|>/gi, '')
+        .replace(/<\|end\|>/gi, '')
+        .trim();
 
       logger.info('AI response generated successfully', { 
         duration,
@@ -226,7 +232,9 @@ class LlamaService {
    * @param {Array} messages - Conversation history
    */
   formatPrompt(messages) {
-    let prompt = config.systemPrompt + '\n\n';
+    // Use fast or full system prompt based on safety mode
+    const sysPrompt = config.safetyMode ? config.systemPrompt : config.systemPromptFast;
+    let prompt = sysPrompt + '\n\n';
 
     for (const msg of messages) {
       if (msg.role === 'user') {

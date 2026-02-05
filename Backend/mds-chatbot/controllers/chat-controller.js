@@ -9,6 +9,9 @@ const { detectEmergency, detectProhibitedTopic, validateResponse } = require('..
 const modelConfig = require('../config/model-config');
 const logger = require('../../utils/logger');
 
+// Check if safety mode is enabled
+const isSafetyMode = modelConfig.safetyMode;
+
 class ChatController {
   /**
    * Handle new message and generate AI response
@@ -44,21 +47,32 @@ class ChatController {
         });
       }
 
-      // Emergency detection (from middleware)
+      // Save user message first
+      await conversationService.addMessage(conversation.id, 'user', message, {});
+
+      // FAST MODE: Skip all safety processing
+      if (!isSafetyMode) {
+        const contextMessages = await conversationService.getContextMessages(sessionId, 10);
+        const aiResponse = await llamaService.generateResponse(contextMessages);
+
+        await conversationService.addMessage(conversation.id, 'assistant', aiResponse.content, {
+          tokens: aiResponse.tokens,
+          duration: aiResponse.duration,
+          fastMode: true,
+        });
+
+        return res.json({
+          sessionId,
+          message: aiResponse.content,
+          role: 'assistant',
+          metadata: { tokens: aiResponse.tokens, duration: aiResponse.duration },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // SAFETY MODE: Full emergency/prohibited detection
       const emergencyDetection = req.emergencyDetection || detectEmergency(message);
       const prohibitedDetection = req.prohibitedDetection || detectProhibitedTopic(message);
-
-      // Save user message
-      await conversationService.addMessage(
-        conversation.id,
-        'user',
-        message,
-        {
-          emergencyDetected: emergencyDetection.isEmergency,
-          urgentDetected: emergencyDetection.isUrgent,
-          prohibitedDetected: prohibitedDetection.isProhibited,
-        }
-      );
 
       // Handle emergency situations
       if (emergencyDetection.isEmergency) {
@@ -144,16 +158,10 @@ class ChatController {
         });
 
         finalResponse = 'I apologize, but I cannot provide a proper response to that. ' +
-          'For your safety and accurate information, please consult with a healthcare professional ' +
-          'who can give you appropriate guidance based on a proper medical evaluation.';
+          'Please consult with a healthcare professional for appropriate guidance.';
 
         responseMetadata.safetyOverride = true;
         responseMetadata.validationFailed = true;
-      }
-
-      // Add disclaimer if not already present
-      if (!finalResponse.includes('⚠️') && !finalResponse.includes('Important')) {
-        finalResponse += modelConfig.disclaimer;
       }
 
       // Handle urgent situations with additional guidance

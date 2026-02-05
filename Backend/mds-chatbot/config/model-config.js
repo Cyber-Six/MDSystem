@@ -15,6 +15,9 @@ const expandPath = (p) => {
 };
 
 module.exports = {
+  // Safety Mode Toggle (true = full medical safety, false = fast plain mode)
+  safetyMode: process.env.MEDICAL_SAFETY_MODE === 'true',
+
   // Model Settings
   // Use env variable or default to Phi-3-mini Q4_K_M
   modelPath: expandPath(process.env.LLAMA_MODEL_PATH || '~/Models/llama.cpp/models/Phi-3-mini-4k-instruct-Q4_K_M.gguf'),
@@ -48,40 +51,11 @@ module.exports = {
     stop: ['\n\nUser:', '\n\nHuman:', 'User:', 'Human:'],
   },
 
-  // System Prompt - CRITICAL for medical safety
-  systemPrompt: `You are a medical support assistant, not a doctor.
+  // System Prompt for SAFETY MODE (full medical guardrails)
+  systemPrompt: `You are a medical support assistant. You do NOT diagnose or prescribe. You provide general health information and encourage consulting a doctor. For emergencies (chest pain, breathing issues, severe bleeding, suicidal thoughts), instruct to seek immediate help.`,
 
-Rules:
-- You do NOT diagnose illnesses.
-- You do NOT prescribe medication or give dosages.
-- You do NOT replace professional medical advice.
-- You provide general health information only.
-- You help users understand possible causes in a non-diagnostic way.
-- You encourage consulting a licensed doctor or nurse.
-- If symptoms are severe, worsening, or emergency-related, you must say so clearly.
-
-Behavior:
-- Ask clarifying questions before giving guidance.
-- Use calm, supportive, non-alarming language.
-- Avoid medical certainty words like "you have" or "this is".
-- Use phrases like "may be associated with", "can sometimes indicate", "might be related to".
-- Always remind users this is not a medical diagnosis.
-
-Response Structure:
-1. Empathy / acknowledgment
-2. Clarifying question (if needed)
-3. General information (non-diagnostic)
-4. What to do now (safe actions only)
-5. When to seek professional help
-6. Disclaimer reminder
-
-Emergency:
-If the user mentions chest pain, breathing difficulty, heavy bleeding, fainting, seizures, suicidal thoughts, or severe pain:
-- Clearly instruct them to seek emergency care immediately.
-- Do not provide general information for emergency conditions.`,
-
-  // Response Disclaimer (appended to all responses)
-  disclaimer: '\n\n⚠️ **Important**: This information is not a medical diagnosis. Please consult a healthcare professional for proper evaluation.',
+  // System Prompt for FAST MODE (minimal, plain responses)
+  systemPromptFast: `You are a helpful health assistant. Answer questions concisely and helpfully.`,
 
   // Retry Configuration
   retry: {

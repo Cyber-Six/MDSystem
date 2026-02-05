@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../../config/db');
 const logger = require('../../utils/logger');
 const safetyRules = require('../config/safety-rules');
+const modelConfig = require('../config/model-config');
 
 class ConversationService {
   /**
@@ -33,17 +34,14 @@ class ConversationService {
         conversationId: session.id
       });
 
-      // Add initial greeting message
-      await this.addMessage(session.id, 'assistant', 
-        'Hello! I\'m your AI medical assistant. How can I help you today?\n\n' +
-        'You can ask me about:\n' +
-        '• General health questions\n' +
-        '• Symptom information\n' +
-        '• Medication queries\n' +
-        '• Wellness tips\n\n' +
-        '⚠️ **Important**: I provide general health information only. I am not a substitute for professional medical advice.',
-        { isGreeting: true }
-      );
+      // Add initial greeting message (simple in fast mode, detailed in safety mode)
+      const greeting = modelConfig.safetyMode
+        ? 'Hello! I\'m your AI medical assistant. How can I help you today?\n\n' +
+          'You can ask me about general health questions, symptom information, or wellness tips.\n\n' +
+          'Note: I provide general health information only, not professional medical advice.'
+        : 'Hello! How can I help you today?';
+
+      await this.addMessage(session.id, 'assistant', greeting, { isGreeting: true });
 
       return {
         sessionId,
