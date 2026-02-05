@@ -22,6 +22,11 @@ module.exports = {
     'abortion', 'euthanasia', 'drug synthesis', 'self-surgery',
   ],
 
+  // Restricted Actions (for response validation)
+  restrictedActions: [
+    'prescribe', 'diagnosis', 'stop taking medication',
+  ],
+
   // Emergency Response
   emergencyResponse: {
     title: 'EMERGENCY',
