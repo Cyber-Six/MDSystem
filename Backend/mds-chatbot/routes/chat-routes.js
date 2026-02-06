@@ -64,6 +64,37 @@ router.post('/message',
 );
 
 /**
+ * POST /econsultation/chat/message/stream
+ * Send a message and get streaming AI response (Server-Sent Events)
+ * 
+ * Body: { sessionId, message }
+ * 
+ * Returns: SSE stream with events:
+ * - start: Streaming started
+ * - token: Individual token/chunk
+ * - done: Complete response
+ * - error: Error occurred
+ * 
+ * This endpoint prevents Cloudflare 524 timeout by streaming tokens in real-time
+ * 
+ * Security:
+ * - IP rate limited (PatientAuthentication profile)
+ * - Session validation
+ * - Input sanitization
+ * - Spam detection
+ * - Emergency keyword detection
+ */
+router.post('/message/stream',
+  patientChatLimiter,
+  validateSession,
+  validateMessage,
+  sanitizeContent,
+  detectSpam,
+  emergencyDetectorMiddleware,
+  chatController.sendMessageStream
+);
+
+/**
  * GET /econsultation/chat/history/:sessionId
  * Get conversation history
  * Rate limited to prevent enumeration attacks

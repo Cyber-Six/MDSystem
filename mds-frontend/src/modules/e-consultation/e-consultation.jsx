@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, AlertCircle, Sparkles, RotateCcw, WifiOff } from 'lucide-react';
-import { axiosRequest } from '../../packages-core-adapter';
+import { axiosRequest, getApiBaseUrl } from '../../packages-core-adapter';
 
 // Configuration - All requests go through backend via proper domain (X-Forwarded-Host header)
 const STORAGE_KEY = 'econsultation_session_id';
@@ -13,8 +13,10 @@ const EConsultation = () => {
   const [error, setError] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState('checking');
+  const [streamingContent, setStreamingContent] = useState('');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -27,6 +29,15 @@ const EConsultation = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   // Check if backend is available (via proper domain routing)
   const checkBackendConnection = async () => {
@@ -112,7 +123,7 @@ const EConsultation = () => {
     })));
   };
 
-  // Handle sending message (via backend API)
+  // Handle sending message with streaming (via backend API)
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
@@ -130,32 +141,122 @@ const EConsultation = () => {
     setInputValue('');
     setIsLoading(true);
     setError(null);
+    setStreamingContent('');
+
+    // Create placeholder message for streaming
+    const assistantMessageId = Date.now() + 1;
+    const streamingMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      isStreaming: true
+    };
+    setMessages([...updatedMessages, streamingMessage]);
 
     try {
-      // All requests go through backend via axiosRequest (with X-Forwarded-Host header)
-      const response = await axiosRequest.post('/econsultation/chat/message', { 
-        sessionId: sessionId,
-        message: messageContent 
+      // Create AbortController for cleanup
+      abortControllerRef.current = new AbortController();
+      
+      // Get the base URL for the API
+      const baseUrl = getApiBaseUrl();
+      const streamUrl = `${baseUrl}/econsultation/chat/message/stream`;
+      
+      // Use fetch for SSE streaming
+      const response = await fetch(streamUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId: sessionId,
+          message: messageContent
+        }),
+        credentials: 'include',
+        signal: abortControllerRef.current.signal
       });
 
-      if (response.status !== 200) {
-        throw new Error(response.data?.message || 'Failed to get response');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const assistantMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: response.data.message,
-        timestamp: new Date()
-      };
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
 
-      setMessages([...updatedMessages, assistantMessage]);
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            // Parse event type
+            const eventType = line.slice(7).trim();
+            continue;
+          }
+          
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              // Handle different event types based on data content
+              if (data.token !== undefined) {
+                // Token received - update streaming content
+                accumulatedContent = data.content || (accumulatedContent + data.token);
+                setStreamingContent(accumulatedContent);
+                
+                // Update the streaming message in place
+                setMessages(prevMessages => {
+                  const newMessages = [...prevMessages];
+                  const lastMessage = newMessages[newMessages.length - 1];
+                  if (lastMessage && lastMessage.id === assistantMessageId) {
+                    lastMessage.content = accumulatedContent;
+                  }
+                  return newMessages;
+                });
+              } else if (data.message !== undefined && data.role === 'assistant') {
+                // Done event - finalize message
+                const finalContent = data.message;
+                setMessages(prevMessages => {
+                  const newMessages = [...prevMessages];
+                  const lastMessage = newMessages[newMessages.length - 1];
+                  if (lastMessage && lastMessage.id === assistantMessageId) {
+                    lastMessage.content = finalContent;
+                    lastMessage.isStreaming = false;
+                  }
+                  return newMessages;
+                });
+                setStreamingContent('');
+              } else if (data.error) {
+                // Error event
+                throw new Error(data.message || 'An error occurred');
+              }
+            } catch (parseError) {
+              // Ignore parse errors for incomplete data
+              console.debug('Skipping unparseable SSE data:', line);
+            }
+          }
+        }
+      }
 
     } catch (err) {
-      setError(err.message || 'Failed to get response. Please try again.');
-      console.error('Error sending message:', err);
+      if (err.name === 'AbortError') {
+        console.log('Request aborted');
+      } else {
+        setError(err.message || 'Failed to get response. Please try again.');
+        console.error('Error sending message:', err);
+        
+        // Remove the failed streaming message
+        setMessages(updatedMessages);
+      }
     } finally {
       setIsLoading(false);
+      setStreamingContent('');
+      abortControllerRef.current = null;
       inputRef.current?.focus();
     }
   };
@@ -255,7 +356,7 @@ const EConsultation = () => {
                     AI Medical Assistant
                   </h2>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-tight">
-                    {isLoading ? 'Generating response...' : 'Online • Ready to help'}
+                    {isLoading ? (streamingContent ? 'Generating response...' : 'Connecting...') : 'Online • Ready to help'}
                   </p>
                 </div>
               </div>
@@ -309,8 +410,8 @@ const EConsultation = () => {
                   </div>
                 ))}
 
-                {/* Loading Indicator */}
-                {isLoading && (
+                {/* Loading Indicator - only show if no streaming content yet */}
+                {isLoading && !streamingContent && (
                   <div className="flex gap-3">
                     <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
                       <Bot className="w-4 h-4 text-white" />

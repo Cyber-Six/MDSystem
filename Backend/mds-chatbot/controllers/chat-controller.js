@@ -201,6 +201,233 @@ class ChatController {
   }
 
   /**
+   * Handle new message with streaming AI response (Server-Sent Events)
+   * This prevents Cloudflare 524 timeout by sending tokens in real-time
+   */
+  async sendMessageStream(req, res) {
+    const { sessionId, message } = req.body;
+
+    // Set up SSE headers immediately to prevent timeout
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.flushHeaders();
+
+    // Helper to send SSE event
+    const sendEvent = (event, data) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      // Get or validate conversation
+      let conversation = await conversationService.getConversation(sessionId);
+
+      if (!conversation) {
+        sendEvent('error', { error: 'SESSION_NOT_FOUND', message: 'Chat session not found' });
+        return res.end();
+      }
+
+      // Check if conversation is still active
+      if (conversation.status === 'staff-taken') {
+        sendEvent('error', { error: 'SESSION_TAKEN_BY_STAFF', message: 'A staff member has taken over this conversation' });
+        return res.end();
+      }
+
+      // Check conversation limits
+      const limitsCheck = await conversationService.checkLimits(sessionId);
+      if (limitsCheck.exceeded) {
+        sendEvent('error', { error: 'CONVERSATION_LIMIT_EXCEEDED', message: limitsCheck.reason });
+        return res.end();
+      }
+
+      // Save user message first
+      await conversationService.addMessage(conversation.id, 'user', message, {});
+
+      // FAST MODE: Skip all safety processing
+      if (!isSafetyMode) {
+        const contextMessages = await conversationService.getContextMessages(sessionId, 10);
+        
+        // Signal that streaming is starting
+        sendEvent('start', { sessionId, timestamp: new Date().toISOString() });
+
+        let fullContent = '';
+
+        // Generate streaming response
+        const aiResponse = await llamaService.generateStreamingResponse(
+          contextMessages,
+          {},
+          (token, isStop) => {
+            fullContent += token;
+            sendEvent('token', { token, content: fullContent });
+          }
+        );
+
+        // Save the complete response
+        await conversationService.addMessage(conversation.id, 'assistant', aiResponse.content, {
+          tokens: aiResponse.tokens,
+          duration: aiResponse.duration,
+          fastMode: true,
+          streamed: true,
+        });
+
+        // Send completion event
+        sendEvent('done', {
+          sessionId,
+          message: aiResponse.content,
+          role: 'assistant',
+          metadata: { tokens: aiResponse.tokens, duration: aiResponse.duration, streamed: true },
+          timestamp: new Date().toISOString(),
+        });
+        return res.end();
+      }
+
+      // SAFETY MODE: Full emergency/prohibited detection
+      const emergencyDetection = req.emergencyDetection || detectEmergency(message);
+      const prohibitedDetection = req.prohibitedDetection || detectProhibitedTopic(message);
+
+      // Handle emergency situations (no streaming for immediate emergency response)
+      if (emergencyDetection.isEmergency) {
+        const emergencyMessage = emergencyDetection.response.message;
+        
+        await conversationService.addMessage(
+          conversation.id,
+          'assistant',
+          emergencyMessage,
+          { safetyOverride: true, emergencyResponse: true, priority: 'emergency' }
+        );
+
+        await this.createHandoffRequest(conversation.id, 'emergency', 'emergency');
+
+        sendEvent('start', { sessionId, timestamp: new Date().toISOString() });
+        sendEvent('token', { token: emergencyMessage, content: emergencyMessage });
+        sendEvent('done', {
+          sessionId,
+          message: emergencyMessage,
+          role: 'assistant',
+          metadata: { isEmergency: true, priority: 'emergency', handoffCreated: true },
+          timestamp: new Date().toISOString(),
+        });
+        return res.end();
+      }
+
+      // Handle prohibited topics (no streaming for refusal)
+      if (prohibitedDetection.isProhibited) {
+        const refusalMessage = prohibitedDetection.response.message;
+        
+        await conversationService.addMessage(
+          conversation.id,
+          'assistant',
+          refusalMessage,
+          { safetyOverride: true, refusal: true }
+        );
+
+        sendEvent('start', { sessionId, timestamp: new Date().toISOString() });
+        sendEvent('token', { token: refusalMessage, content: refusalMessage });
+        sendEvent('done', {
+          sessionId,
+          message: refusalMessage,
+          role: 'assistant',
+          metadata: { isRefusal: true },
+          timestamp: new Date().toISOString(),
+        });
+        return res.end();
+      }
+
+      // Get conversation context
+      const contextMessages = await conversationService.getContextMessages(sessionId, 10);
+
+      // Signal that streaming is starting
+      sendEvent('start', { sessionId, timestamp: new Date().toISOString() });
+
+      logger.info('Generating streaming AI response', { sessionId, messageLength: message.length });
+
+      let fullContent = '';
+      let urgentPrefix = '';
+
+      // Add urgent guidance prefix if needed
+      if (emergencyDetection.isUrgent) {
+        urgentPrefix = emergencyDetection.response.message + '\n\n';
+        sendEvent('token', { token: urgentPrefix, content: urgentPrefix });
+        fullContent = urgentPrefix;
+      }
+
+      // Generate streaming AI response
+      const aiResponse = await llamaService.generateStreamingResponse(
+        contextMessages,
+        {},
+        (token, isStop) => {
+          fullContent += token;
+          sendEvent('token', { token, content: fullContent });
+        }
+      );
+
+      // Validate AI response for safety
+      const validation = validateResponse(aiResponse.content);
+
+      let finalResponse = urgentPrefix + aiResponse.content;
+      let responseMetadata = {
+        tokens: aiResponse.tokens,
+        duration: aiResponse.duration,
+        model: aiResponse.model,
+        validated: validation.isValid,
+        streamed: true,
+      };
+
+      // If response is unsafe, override with safe fallback
+      if (!validation.isValid) {
+        logger.warn('AI streaming response failed validation', {
+          sessionId,
+          violations: validation.violations,
+          reason: validation.reason
+        });
+
+        finalResponse = 'I apologize, but I cannot provide a proper response to that. ' +
+          'Please consult with a healthcare professional for appropriate guidance.';
+
+        responseMetadata.safetyOverride = true;
+        responseMetadata.validationFailed = true;
+      }
+
+      if (emergencyDetection.isUrgent) {
+        responseMetadata.urgentGuidance = true;
+      }
+
+      // Save AI response
+      await conversationService.addMessage(
+        conversation.id,
+        'assistant',
+        finalResponse,
+        responseMetadata
+      );
+
+      // Send completion event
+      sendEvent('done', {
+        sessionId,
+        message: finalResponse,
+        role: 'assistant',
+        metadata: responseMetadata,
+        timestamp: new Date().toISOString(),
+      });
+
+      return res.end();
+
+    } catch (error) {
+      logger.error('Failed to process streaming chat message', {
+        error: error.message,
+        sessionId,
+        stack: error.stack
+      });
+
+      sendEvent('error', {
+        error: 'CHAT_ERROR',
+        message: 'Failed to process your message. Please try again.',
+      });
+      return res.end();
+    }
+  }
+
+  /**
    * Create new chat session
    */
   async createSession(req, res) {

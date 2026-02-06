@@ -1,12 +1,14 @@
 /**
  * LLaMA Service - Interface with locally-run llama.cpp server
  * Handles model initialization, requests, and response generation
+ * Supports streaming responses for real-time token delivery
  */
 
 const axios = require('axios');
 const { spawn } = require('child_process');
 const config = require('../config/model-config');
 const logger = require('../../utils/logger');
+const { EventEmitter } = require('events');
 
 class LlamaService {
   constructor() {
@@ -215,6 +217,183 @@ class LlamaService {
 
     } catch (error) {
       logger.error('Failed to generate AI response', { 
+        error: error.message,
+        messageCount: messages.length 
+      });
+
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error('Cannot connect to LLaMA server. Make sure it is running.');
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Generate streaming AI response
+   * @param {Array} messages - Conversation history [{ role: 'user'|'assistant', content: string }]
+   * @param {Object} options - Generation options
+   * @param {Function} onToken - Callback for each token chunk
+   * @returns {Promise<Object>} - Final response with content, tokens, and duration
+   */
+  async generateStreamingResponse(messages, options = {}, onToken) {
+    // Auto-start server if on-demand is enabled
+    if (config.onDemand.enabled && !this.isInitialized) {
+      const isRunning = await this.healthCheck();
+      if (!isRunning) {
+        logger.info('On-demand starting LLaMA server for streaming...');
+        await this.startServer();
+      } else {
+        this.isInitialized = true;
+      }
+    }
+
+    if (!this.isInitialized) {
+      const isRunning = await this.healthCheck();
+      if (!isRunning) {
+        throw new Error('LLaMA server is not running. Please start it first.');
+      }
+      this.isInitialized = true;
+    }
+
+    // Update last activity timestamp
+    this.lastActivityTimestamp = Date.now();
+
+    try {
+      // Format messages for the model
+      const prompt = this.formatPrompt(messages);
+
+      const requestBody = {
+        prompt,
+        temperature: options.temperature ?? config.generationParams.temperature,
+        top_p: options.topP ?? config.generationParams.topP,
+        top_k: options.topK ?? config.generationParams.topK,
+        repeat_penalty: options.repeatPenalty ?? config.generationParams.repeatPenalty,
+        n_predict: options.maxTokens ?? config.generationParams.maxTokens,
+        stop: config.generationParams.stop,
+        stream: true,  // Enable streaming
+      };
+
+      logger.info('Generating streaming AI response', { 
+        messageCount: messages.length,
+        promptLength: prompt.length 
+      });
+
+      const startTime = Date.now();
+      let fullContent = '';
+      let tokenCount = 0;
+
+      // Make streaming request to llama.cpp server
+      const response = await axios.post(
+        `${this.baseUrl}/completion`,
+        requestBody,
+        {
+          timeout: config.llamaServer.timeout,
+          headers: { 'Content-Type': 'application/json' },
+          responseType: 'stream',
+        }
+      );
+
+      return new Promise((resolve, reject) => {
+        let buffer = '';
+
+        response.data.on('data', (chunk) => {
+          buffer += chunk.toString();
+          
+          // Process complete lines (llama.cpp sends "data: {...}\n\n")
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';  // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.slice(6).trim();  // Remove "data: " prefix
+                if (!jsonStr || jsonStr === '[DONE]') continue;
+                
+                const data = JSON.parse(jsonStr);
+                
+                if (data.content) {
+                  fullContent += data.content;
+                  tokenCount++;
+                  
+                  // Callback for each token
+                  if (onToken && typeof onToken === 'function') {
+                    onToken(data.content, data.stop || false);
+                  }
+                }
+
+                // Check if generation is complete
+                if (data.stop) {
+                  const duration = Date.now() - startTime;
+                  
+                  // Clean response: remove model artifacts
+                  let cleanedContent = fullContent
+                    .replace(/<\|assistant\|>/gi, '')
+                    .replace(/<\|user\|>/gi, '')
+                    .replace(/<\|system\|>/gi, '')
+                    .replace(/<\|end\|>/gi, '')
+                    .trim();
+
+                  logger.info('Streaming AI response completed', { 
+                    duration,
+                    responseLength: cleanedContent.length,
+                    tokens: tokenCount 
+                  });
+
+                  resolve({
+                    content: cleanedContent,
+                    tokens: tokenCount,
+                    duration,
+                    model: 'llama-3-8b-instruct',
+                    streamed: true,
+                  });
+                }
+              } catch (parseError) {
+                // Ignore parse errors for incomplete data
+                logger.debug('Skipping unparseable chunk', { line });
+              }
+            }
+          }
+        });
+
+        response.data.on('end', () => {
+          // If we haven't resolved yet (no stop signal), resolve now
+          const duration = Date.now() - startTime;
+          
+          let cleanedContent = fullContent
+            .replace(/<\|assistant\|>/gi, '')
+            .replace(/<\|user\|>/gi, '')
+            .replace(/<\|system\|>/gi, '')
+            .replace(/<\|end\|>/gi, '')
+            .trim();
+
+          if (cleanedContent) {
+            logger.info('Streaming completed on stream end', { 
+              duration,
+              responseLength: cleanedContent.length,
+              tokens: tokenCount 
+            });
+
+            resolve({
+              content: cleanedContent,
+              tokens: tokenCount,
+              duration,
+              model: 'llama-3-8b-instruct',
+              streamed: true,
+            });
+          } else {
+            reject(new Error('Empty response from streaming'));
+          }
+        });
+
+        response.data.on('error', (error) => {
+          logger.error('Streaming error', { error: error.message });
+          reject(error);
+        });
+      });
+
+    } catch (error) {
+      logger.error('Failed to generate streaming AI response', { 
         error: error.message,
         messageCount: messages.length 
       });
