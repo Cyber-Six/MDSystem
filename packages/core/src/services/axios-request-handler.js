@@ -67,7 +67,7 @@ export const createAxiosRequestHandler = ({
   // Create axios instance with automatic base URL detection
   const axiosRequest = axios.create({
     baseURL: getApiBaseUrl(),
-    timeout: 15000,
+    timeout: 15000, // Default timeout for normal requests
     headers: {
       'Content-Type': 'application/json',
     },
@@ -96,6 +96,11 @@ export const createAxiosRequestHandler = ({
   // Request interceptor - add auth token if exists
   axiosRequest.interceptors.request.use(
     async (config) => {
+      // AI Chatbot requires much longer timeout (5 minutes for model inference)
+      if (config.url?.includes('/econsultation/')) {
+        config.timeout = 300000; // 5 minutes for AI responses
+      }
+      
       // SECURITY: Use TokenStorage for centralized token access
       // Handle async storage (React Native)
       const token = await Promise.resolve(tokenService.TokenStorage.getAccessToken());
@@ -103,7 +108,9 @@ export const createAxiosRequestHandler = ({
         config.headers.Authorization = `Bearer ${token}`;
       }
       
-      // Send simulated subdomain header for local development
+      // Send subdomain header for backend portal detection
+      // In dev: simulates subdomain (localhost → www/staff)
+      // In prod: normalizes subdomain (www2 → www, staff2 → staff)
       const devSubdomain = getDevSubdomain();
       if (devSubdomain) {
         config.headers['X-Forwarded-Host'] = devSubdomain;

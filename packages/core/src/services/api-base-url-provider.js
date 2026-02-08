@@ -50,48 +50,53 @@ export const createApiBaseUrlProvider = ({ getHostname, getEnv }) => {
    * 
    * Logic:
    * - localhost/127.0.0.1: Returns empty string (for proxy/relative URLs)
-   * - staff.* subdomain: Returns staff API URL
-   * - Default: Returns patient/www API URL
+   * - Production (any subdomain): Returns empty string (uses relative URLs to avoid CORS)
    * 
-   * @returns {string} The API base URL
+   * Note: In production, we use relative URLs so requests go to the same origin.
+   * This prevents CORS issues when accessing via www2/staff2 but backend is at www/staff.
+   * The backend must handle requests from all subdomains (www, www2, staff, staff2).
+   * 
+   * @returns {string} The API base URL (empty for relative URLs in both dev and prod)
    */
   const getApiBaseUrl = () => {
-    const hostname = getHostname();
-    
-    // For local development - use empty string to use proxy or relative URLs
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return '';
-    }
-    
-    // For production with subdomains (mdsystemtip.space)
-    if (hostname.startsWith('staff.')) {
-      // Staff Portal: staff.mdsystemtip.space
-      return getEnv('STAFF_API_URL') || `https://${hostname}`;
-    }
-    
-    // Default to www/patient portal: www.mdsystemtip.space
-    return getEnv('PATIENT_API_URL') || `https://${hostname}`;
+    // Always use relative URLs (empty string) for both dev and production
+    // This ensures requests go to the same origin, avoiding CORS issues
+    return '';
   };
 
   /**
    * Get the simulated subdomain for local development
-   * Used by backend to detect which portal is being tested
+   * Used by backend to detect which portal is being tested via X-Forwarded-Host header
    * 
-   * @returns {string|null} Simulated hostname for dev, null for production
+   * In production, returns the actual hostname so backend can detect the portal type.
+   * Maps www2 → www, staff2 → staff for backend compatibility.
+   * 
+   * @returns {string|null} Hostname to send in X-Forwarded-Host header
    */
   const getDevSubdomain = () => {
     const hostname = getHostname();
     
-    // Only for local development
+    // For local development - simulate subdomain
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       const devPortal = getEnv('DEV_PORTAL') || 'www';
-      return devPortal === 'staff' 
+      // Map www2 → www, staff2 → staff for backend compatibility
+      const normalizedPortal = devPortal.replace(/2$/, ''); // Remove trailing '2'
+      return normalizedPortal === 'staff' 
         ? 'staff.mdsystemtip.space' 
         : 'www.mdsystemtip.space';
     }
     
-    // Production uses actual hostname (no simulation needed)
-    return null;
+    // Production: Send normalized hostname (map www2→www, staff2→staff)
+    // This tells the backend which portal type is being accessed
+    if (hostname.startsWith('staff2.')) {
+      return hostname.replace('staff2.', 'staff.');
+    }
+    if (hostname.startsWith('www2.')) {
+      return hostname.replace('www2.', 'www.');
+    }
+    
+    // For www. or staff., return as-is
+    return hostname;
   };
 
   return {
