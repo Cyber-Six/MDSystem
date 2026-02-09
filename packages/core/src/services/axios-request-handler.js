@@ -81,7 +81,7 @@ export const createAxiosRequestHandler = ({
   // Create axios instance with relative URLs and 1-minute timeout
   const axiosRequest = axios.create({
     baseURL: computedBaseURL,
-    timeout: 60000, // 1 minute timeout for all requests
+    timeout: 45000, // timeout for all requests
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
   });

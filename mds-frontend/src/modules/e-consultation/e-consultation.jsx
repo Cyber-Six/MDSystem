@@ -1,14 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, AlertCircle, Sparkles, RotateCcw } from 'lucide-react';
 import { axiosRequest, getApiBaseUrl } from '../../packages-core-adapter';
 import GuidelinesCard from './components/GuidelinesCard';
-import MessageBubble from './components/MessageBubble';
-import LoadingIndicator from './components/LoadingIndicator';
-import EmptyState from './components/EmptyState';
+import ChatBox from './components/ChatBox';
 
 // Configuration - All requests go through backend via proper domain (X-Forwarded-Host header)
 const STORAGE_KEY = 'econsultation_session_id';
-const AI_MODEL_NAME = 'AI Chatbot: econsul-ey';
+const SESSION_INITIALIZED_KEY = 'econsultation_initialized'; // sessionStorage key
 
 const EConsultation = () => {
   const [messages, setMessages] = useState([]);
@@ -29,24 +26,97 @@ const EConsultation = () => {
   };
 
   useEffect(() => {
-    // Prevent duplicate health checks (React Strict Mode runs effects twice)
+    // Prevent duplicate initialization (React Strict Mode runs effects twice)
     if (hasInitialized.current) return;
     hasInitialized.current = true;
-    initializeSession();
+    
+    // Check if we've already initialized in this browser session (not page refresh)
+    const isAlreadyInitialized = sessionStorage.getItem(SESSION_INITIALIZED_KEY) === 'true';
+    const savedSessionId = localStorage.getItem(STORAGE_KEY);
+    
+    if (isAlreadyInitialized && savedSessionId) {
+      // Fast path: we're navigating back to this module (not a page refresh)
+      // Just restore session without any backend checks
+      fastRestoreSession(savedSessionId);
+    } else if (savedSessionId) {
+      // Page refresh with existing session: restore with history check
+      quickRestoreSession(savedSessionId);
+    } else {
+      // No session at all: do full initialization with health check
+      initializeSession();
+    }
   }, []);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // Cleanup abort controller on unmount
+  // Cleanup: abort streaming when navigating away from module
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
     };
   }, []);
+
+  // Fast restore: instant restore when navigating between modules (no backend calls except history)
+  const fastRestoreSession = async (savedSessionId) => {
+    try {
+      setIsInitializing(true);
+      setSessionId(savedSessionId);
+      setConnectionStatus('connected');
+      
+      // Fetch message history to restore conversation
+      const historyResponse = await axiosRequest.get(`/econsultation/chat/history/${savedSessionId}`);
+      
+      if (historyResponse.status === 200) {
+        const data = historyResponse.data;
+        setMessages(data.messages.map(msg => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        })));
+      }
+      
+      setIsInitializing(false);
+    } catch (err) {
+      console.error('Fast restore failed:', err);
+      // Fall back to full initialization
+      await initializeSession();
+    }
+  };
+
+  // Quick restore session with history check (for page refresh)
+  const quickRestoreSession = async (savedSessionId) => {
+    try {
+      setIsInitializing(true);
+      setSessionId(savedSessionId);
+      
+      // Try to fetch history
+      const historyResponse = await axiosRequest.get(`/econsultation/chat/history/${savedSessionId}`);
+      
+      if (historyResponse.status === 200) {
+        const data = historyResponse.data;
+        setMessages(data.messages.map(msg => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        })));
+        setConnectionStatus('connected');
+        setIsInitializing(false);
+        
+        // Mark session as initialized for this browser session
+        sessionStorage.setItem(SESSION_INITIALIZED_KEY, 'true');
+        return;
+      }
+      
+      // If history fetch fails, fall back to full initialization
+      throw new Error('Session not found');
+    } catch (err) {
+      console.log('Quick restore failed, doing full initialization');
+      await initializeSession();
+    }
+  };
 
   // Check if backend is available (via proper domain routing)
   const checkBackendConnection = async () => {
@@ -60,7 +130,7 @@ const EConsultation = () => {
     }
   };
 
-  // Initialize session
+  // Initialize session (only called when no session exists or quick restore fails)
   const initializeSession = async () => {
     try {
       setIsInitializing(true);
@@ -77,6 +147,9 @@ const EConsultation = () => {
 
       setConnectionStatus('connected');
       await initializeProductionMode();
+      
+      // Mark session as initialized for this browser session
+      sessionStorage.setItem(SESSION_INITIALIZED_KEY, 'true');
 
     } catch (err) {
       console.error('Failed to initialize session:', err);
@@ -132,6 +205,42 @@ const EConsultation = () => {
     })));
   };
 
+  // Handle canceling generation
+  const handleCancelGeneration = async () => {
+    // First, call backend to cancel generation and prevent database save
+    try {
+      if (sessionId) {
+        await axiosRequest.post('/econsultation/chat/cancel', {
+          sessionId: sessionId
+        });
+        console.log('Generation cancelled via backend', sessionId);
+      }
+    } catch (err) {
+      console.error('Failed to cancel via backend:', err);
+      // Continue with client-side cleanup even if backend call fails
+    }
+
+    // Abort the fetch request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    setIsLoading(false);
+    setStreamingContent('');
+    
+    // Remove the incomplete streaming message
+    setMessages(prevMessages => {
+      const lastMessage = prevMessages[prevMessages.length - 1];
+      if (lastMessage && lastMessage.isStreaming) {
+        return prevMessages.slice(0, -1);
+      }
+      return prevMessages;
+    });
+    
+    inputRef.current?.focus();
+  };
+
   // Handle sending message with streaming (via backend API)
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -156,14 +265,14 @@ const EConsultation = () => {
     const assistantMessageId = Date.now() + 1;
 
     try {
-      // Create AbortController for cleanup
+      // Create AbortController for cleanup and cancellation
       abortControllerRef.current = new AbortController();
       
-      // Get the base URL for the API
+      // Get the base URL for the API (uses the actual backend domain, not localhost)
       const baseUrl = getApiBaseUrl();
       const streamUrl = `${baseUrl}/econsultation/chat/message/stream`;
       
-      // Use fetch for SSE streaming
+      // Use fetch for SSE streaming (axios doesn't properly support SSE in browsers)
       const response = await fetch(streamUrl, {
         method: 'POST',
         headers: {
@@ -173,7 +282,7 @@ const EConsultation = () => {
           sessionId: sessionId,
           message: messageContent
         }),
-        credentials: 'include',
+        credentials: 'include', // Include cookies like axiosRequest does
         signal: abortControllerRef.current.signal
       });
 
@@ -286,6 +395,7 @@ const EConsultation = () => {
       if (sessionId) {
         await axiosRequest.delete(`/econsultation/chat/session/${sessionId}`);
         localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(SESSION_INITIALIZED_KEY);
       }
       
       // Clear messages immediately for better UX
@@ -294,6 +404,9 @@ const EConsultation = () => {
       
       // Create new session
       await initializeProductionMode();
+      
+      // Mark new session as initialized
+      sessionStorage.setItem(SESSION_INITIALIZED_KEY, 'true');
     } catch (err) {
       console.error('Error clearing chat:', err);
       setMessages([]);
@@ -310,9 +423,9 @@ const EConsultation = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-6">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold text-neutral-900 dark:text-white mb-2">
           AI Medical Consultation
         </h1>
@@ -324,126 +437,29 @@ const EConsultation = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Chat Container */}
         <div className="lg:col-span-2">
-          <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg overflow-hidden">
-            {/* Chat Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-neutral-700">
-              <div className="flex items-center gap-3">
-                <div className="relative flex-shrink-0">
-                  <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg">
-                    <Sparkles className="w-5 h-5 text-white" />
-                  </div>
-                  <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-neutral-900 ${isLoading ? 'bg-amber-400' : 'bg-emerald-500'}`} />
-                </div>
-                <div className="flex flex-col justify-center">
-                  <h2 className="text-base font-semibold text-neutral-900 dark:text-white leading-tight">
-                    {AI_MODEL_NAME}
-                  </h2>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-tight">
-                    {isLoading ? (streamingContent ? 'Generating response...' : 'Connecting...') : 'Online • Ready to help'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleClearChat}
-                disabled={isLoading || connectionStatus !== 'connected'}
-                className="p-2 text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-white 
-                         hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors
-                         disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Clear chat and start new session"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Messages Area */}
-            <div className="h-[450px] overflow-y-auto bg-white dark:bg-neutral-900">
-              <div className="px-6 py-6 space-y-4">
-                {/* Show empty states only when no messages and initializing/offline/error */}
-                {messages.length === 0 && isInitializing && (
-                  <EmptyState type="initializing" />
-                )}
-
-                {messages.length === 0 && !isInitializing && connectionStatus === 'offline' && (
-                  <EmptyState type="offline" onRetry={initializeSession} />
-                )}
-
-                {messages.length === 0 && !isInitializing && connectionStatus === 'error' && (
-                  <EmptyState type="error" error={error} onRetry={initializeSession} />
-                )}
-
-                {/* Messages - show when connected or when messages exist */}
-                {messages.map((message) => (
-                  <MessageBubble 
-                    key={message.id} 
-                    message={message} 
-                    formatTime={formatTime} 
-                  />
-                ))}
-
-                {/* Loading Indicator - only show when loading AND no streaming content */}
-                {!isInitializing && connectionStatus === 'connected' && isLoading && !streamingContent && (
-                  <LoadingIndicator />
-                )}
-
-                {/* Error Message - only show when connected and has messages */}
-                {!isInitializing && connectionStatus === 'connected' && messages.length > 0 && error && (
-                  <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-xl">
-                    <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-                    <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
-                  </div>
-                )}
-
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-
-            {/* Input Area */}
-            <div className="bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 px-6 py-4">
-              <form onSubmit={handleSendMessage}>
-                <div className="flex items-end gap-2">
-                  <div className="flex-1 relative">
-                    <textarea
-                      ref={inputRef}
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage(e);
-                        }
-                      }}
-                      placeholder={
-                        isInitializing ? 'Connecting...' :
-                        connectionStatus === 'offline' ? 'Service unavailable...' :
-                        connectionStatus === 'error' ? 'Connection error. Please retry.' :
-                        'Ask me anything about your health...'
-                      }
-                      disabled={connectionStatus !== 'connected' || isInitializing}
-                      className="w-full px-4 py-2.5 border border-neutral-300 dark:border-neutral-600 rounded-lg 
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                               bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white
-                               placeholder-neutral-400 dark:placeholder-neutral-500
-                               resize-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      rows="2"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={!inputValue.trim() || isLoading || connectionStatus !== 'connected' || isInitializing}
-                    className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-300 dark:disabled:bg-neutral-700
-                             text-white rounded-lg transition-all duration-200 flex items-center justify-center
-                             disabled:cursor-not-allowed shadow-sm hover:shadow-md disabled:shadow-none self-center"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Send className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          <ChatBox
+            messages={messages}
+            isLoading={isLoading}
+            isInitializing={isInitializing}
+            connectionStatus={connectionStatus}
+            streamingContent={streamingContent}
+            error={error}
+            inputValue={inputValue}
+            inputRef={inputRef}
+            messagesEndRef={messagesEndRef}
+            onInputChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(e);
+              }
+            }}
+            onSubmit={handleSendMessage}
+            onClearChat={handleClearChat}
+            onCancelGeneration={handleCancelGeneration}
+            formatTime={formatTime}
+            onRetry={initializeSession}
+          />
         </div>
 
         {/* Guidelines Card */}
