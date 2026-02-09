@@ -8,7 +8,7 @@ import EmptyState from './components/EmptyState';
 
 // Configuration - All requests go through backend via proper domain (X-Forwarded-Host header)
 const STORAGE_KEY = 'econsultation_session_id';
-const AI_MODEL_NAME = 'AI Chatbot - solGPT';
+const AI_MODEL_NAME = 'AI Chatbot: econsul-ey';
 
 const EConsultation = () => {
   const [messages, setMessages] = useState([]);
