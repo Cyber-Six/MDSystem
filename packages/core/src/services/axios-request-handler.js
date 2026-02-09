@@ -64,10 +64,33 @@ export const createAxiosRequestHandler = ({
   bannerConfig,
   onShowBanner
 }) => {
+  // ============================================
+  // DEBUG FLAG & LOGGING - Remove for production
+  // ============================================
+  const DEBUG_REQUESTS = true;
+  
+  /**
+   * Log request details to console for debugging
+   * @private
+   */
+  const logRequestDebug = (config) => {
+    if (DEBUG_REQUESTS) {
+      console.log('🔵 Axios Request:', {
+        method: config.method?.toUpperCase(),
+        url: config.url,
+        baseURL: config.baseURL,
+        fullURL: `${config.baseURL || ''}${config.url || ''}`,
+        data: config.data,
+        params: config.params,
+      });
+    }
+  };
+  // ============================================
+
   // Create axios instance with automatic base URL detection
   const axiosRequest = axios.create({
     baseURL: getApiBaseUrl(),
-    timeout: 15000, // Default timeout for normal requests
+    timeout: 60000, // Default timeout for normal requests 1 minute
     headers: {
       'Content-Type': 'application/json',
     },
@@ -96,11 +119,6 @@ export const createAxiosRequestHandler = ({
   // Request interceptor - add auth token if exists
   axiosRequest.interceptors.request.use(
     async (config) => {
-      // AI Chatbot requires much longer timeout (5 minutes for model inference)
-      if (config.url?.includes('/econsultation/')) {
-        config.timeout = 300000; // 5 minutes for AI responses
-      }
-      
       // SECURITY: Use TokenStorage for centralized token access
       // Handle async storage (React Native)
       const token = await Promise.resolve(tokenService.TokenStorage.getAccessToken());
@@ -115,6 +133,9 @@ export const createAxiosRequestHandler = ({
       if (devSubdomain) {
         config.headers['X-Forwarded-Host'] = devSubdomain;
       }
+      
+      // Log request for debugging
+      logRequestDebug(config);
       
       return config;
     },
