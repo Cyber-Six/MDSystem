@@ -6,6 +6,10 @@ import RecordUpdateForm from '../modules/record-forms/update-record/record-updat
 import AppointmentPage from '../modules/appointment/appointment-page.jsx';
 import MedicineRequestPage from '../modules/medicine-request/medicine-request-page.jsx';
 import EConsultation from '../modules/e-consultation/e-consultation.jsx';
+import { useDetectRoleFromSubdomain } from '../hooks/use-role.js';
+import { checkInitialRecordStatus } from '../services/emr-service.js';
+import InitialRecordModal from '../components/modals/initial-record-modal.jsx';
+import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 
 const Dashboard = () => {
   const { role } = useDetectRoleFromSubdomain();
@@ -15,6 +19,14 @@ const Dashboard = () => {
   // Check if user needs to complete initial medical record (students only)
   useEffect(() => {
     const checkRecordStatus = async () => {
+      // Check if bypass is enabled
+      const bypassInitialRecord = import.meta.env.VITE_BYPASS_INITIAL_RECORD === 'true';
+      if (bypassInitialRecord) {
+        console.log('[Dashboard] Bypass enabled - skipping initial record requirement');
+        setIsCheckingStatus(false);
+        return;
+      }
+
       // Only check for students, not staff
       if (role === 'staff' || role === 'admin') {
         console.log('[Dashboard] Staff/admin user - skipping initial record check');

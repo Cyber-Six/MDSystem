@@ -18,17 +18,19 @@ const projectRoot = resolve(__dirname, '..');
 const envFile = resolve(projectRoot, '.env');
 const envExampleFile = resolve(projectRoot, '.env.example');
 
-console.log('\n🔧 Checking environment configuration...\n');
+console.log('\n🔧 Syncing environment configuration...\n');
 
-if (existsSync(envFile)) {
-  console.log('✅ .env file already exists');
-} else if (existsSync(envExampleFile)) {
+if (existsSync(envExampleFile)) {
   try {
     copyFileSync(envExampleFile, envFile);
-    console.log('✅ Created .env file from .env.example');
+    if (existsSync(envFile) && envFile !== envExampleFile) {
+      console.log('✅ Synced .env file from .env.example');
+    } else {
+      console.log('✅ Created .env file from .env.example');
+    }
     console.log('📝 Please review and update .env with your configuration\n');
   } catch (error) {
-    console.error('❌ Failed to create .env file:', error.message);
+    console.error('❌ Failed to sync .env file:', error.message);
     process.exit(1);
   }
 } else {

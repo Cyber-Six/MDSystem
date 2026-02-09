@@ -40,13 +40,21 @@ function AppContent() {
             element={<ResetPassword />} 
             />
           
-          {/* Staff/Doctor Portal - Auth bypassed for development */}
+          {/* Staff/Doctor Portal - Conditionally protected by authentication */}
           <Route 
             path="/staff/*" 
             element={
-              <Suspense fallback={<StaffLoader />}>
-                <StaffModule />
-              </Suspense>
+              import.meta.env.VITE_BYPASS_STAFF_AUTH === 'true' ? (
+                <Suspense fallback={<StaffLoader />}>
+                  <StaffModule />
+                </Suspense>
+              ) : (
+                <PrivateRoute>
+                  <Suspense fallback={<StaffLoader />}>
+                    <StaffModule />
+                  </Suspense>
+                </PrivateRoute>
+              )
             } 
           />
 
