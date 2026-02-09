@@ -21,7 +21,9 @@ export const apiBaseUrlProvider = createApiBaseUrlProvider({
 export const tokenService = createTokenService({
   storage: localStorage,
   navigator: { 
-    navigate: (path) => { window.location.href = path; } 
+    navigate: (path) => { 
+      window.location.assign(path); // Assign instead of href to properly trigger navigation
+    } 
   },
   getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl
 });

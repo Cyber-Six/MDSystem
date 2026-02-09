@@ -1,0 +1,79 @@
+# AI Medical Chatbot Models
+
+This directory should contain your downloaded model files for the medical chatbot.
+
+## Required Model
+
+**Phi-3-mini-4k-instruct Q4_K_M** (Recommended for Raspberry Pi 5)
+- File: `Phi-3-mini-4k-instruct-Q4_K_M.gguf`
+- Size: ~2.3GB
+- Quantization: Q4_K_M (optimized balance for Pi 5)
+- Advantage: Optimized for medical/healthcare tasks
+
+## How to Download
+
+### Option 1: Hugging Face (Recommended)
+
+```bash
+# Install huggingface-cli
+pip install huggingface-hub
+
+# Download Phi-3-mini model
+huggingface-cli download \
+  microsoft/Phi-3-mini-4k-instruct-gguf \
+  Phi-3-mini-4k-instruct-Q4_K_M.gguf \
+  --local-dir ./models-storage
+```
+
+### Option 2: Direct Download
+
+Visit: https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf
+
+Download the `Phi-3-mini-4k-instruct-Q4_K_M.gguf` file.
+
+### Option 3: Manual
+
+1. Download from trusted source
+2. Place in this directory
+3. Update path in `../config/model-config.js` if needed
+
+## Directory Structure
+
+```
+models-storage/
+├── .gitkeep
+└── Phi-3-mini-4k-instruct-Q4_K_M.gguf  (you download this)
+```
+
+## Important Notes
+
+- **DO NOT commit model files to git** (already in .gitignore)
+- Model files are large (2-8GB depending on model)
+- Ensure sufficient disk space on Raspberry Pi
+- Keep models secure and private
+- Use `~/ Models/llama.cpp/models/` on Pi instead for external storage
+
+## Verification
+
+After placing your model here, verify the path in:
+`Backend/mds-chatbot/config/model-config.js`
+
+```javascript
+modelPath: path.join(
+  process.env.LLAMA_MODEL_PATH || 
+  path.join(__dirname, '../models-storage/Phi-3-mini-4k-instruct-Q4_K_M.gguf')
+)
+```
+
+## Alternative Models
+
+If you want to use a different model:
+
+1. Place it in this directory
+2. Update `LLAMA_MODEL_PATH` in `.env`
+3. Adjust generation parameters if needed
+
+**Recommended alternatives:**
+- Mistral 7B Instruct Q4_K_M (better quality, slower)
+- Llama-2-7B-Chat Q4_K_M (traditional option)
+- Phi-2 Q4_K_M (smaller, faster)

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UserMenu from '../user-menu/user-menu';
+import { logout } from '../../packages-core-adapter';
 
 const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   const location = useLocation();
@@ -80,10 +81,17 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   };
 
   // Handle logout
-  const handleLogout = () => {
-    // Add your logout logic here (clear tokens, reset state, etc.)
-    console.log('Logging out...');
-    navigate('/auth'); // Navigate to login page
+  const handleLogout = async () => {
+    try {
+      // Call the proper logout function from token service
+      // This clears tokens, calls backend logout, and redirects
+      await logout(true);
+      // Force a full page reload to ensure clean state
+      window.location.reload();
+    } catch (error) {
+      console.error('Logout error:', error);
+      window.location.href = '/auth';
+    }
   };
 
   // Responsive: yellow in light mode, black in dark mode, on mobile
