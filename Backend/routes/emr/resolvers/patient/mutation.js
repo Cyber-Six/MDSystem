@@ -12,7 +12,7 @@ const Query = require("./query.js");
 const Mutation = {
   createUpdateTicket: async (_, { scope }, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    if (record.status === "InProgress" || record.status === "Pending") {
+    if (record?.status === "InProgress" || record?.status === "Pending" || record?.status === "Revision") {
       throwGraphQLError(res).message("An update ticket is already in progress.").status(400).throw();  
       }
     if (scope !== "Both"){
@@ -68,7 +68,7 @@ const Mutation = {
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     //console.log(args.input);
     const result = await Wrapper._StudentProfile(_, {args, recordId: record.id}, { user, res });
-
+    result.status = record.status;
     return result;
   },
 
@@ -106,12 +106,12 @@ const Mutation = {
     return result;
   },
 
-  createDentalPhotos: async (_, args, { user, res }) => {
+  createDentalPhotoRecord: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Dental");
-    console.log(args.input);
 
-    const result = await Wrapper._DentalPhotos(_, {args, recordId: record.id}, { user, res });
+    const result = await Wrapper._DentalPhotoRecord(_, {args, recordId: record.id}, { user, res });
+    console.log("result", result);  
     return result;
   },
 
@@ -137,8 +137,7 @@ const Mutation = {
   createVisualAcuityProfile: async (_, args, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
-    console.log(args.input);
-    
+
     const result = await Wrapper._VisualAcuityProfile(_, {args, recordId: record.id}, { user, res });
     return result;
   },

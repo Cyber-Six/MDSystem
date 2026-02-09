@@ -44,9 +44,6 @@ type StudentProfile implements UserProfile {
   id: ID!
   program: String!
   year: STUDENT_YEAR!
-  guardian_name: String!
-  guardian_relation: String!
-  guardian_contact: String!
   status: UpdateStatus! 
   archived_at: Date
   created_at: Date
@@ -65,9 +62,6 @@ type EmployeeProfile implements UserProfile {
 input StudentProfileInput{
   program: String!
   year: STUDENT_YEAR!
-  guardian_name: String!
-  guardian_relation: String!
-  guardian_contact: String!
 }
 
 input EmployeeProfileInput {
@@ -79,9 +73,6 @@ input EmployeeProfileInput {
 input StudentProfileUpdateInput{
   program: String 
   year: STUDENT_YEAR
-  guardian_name: String
-  guardian_relation: String
-  guardian_contact: String
 }
 
 input EmployeeProfileUpdateInput {
@@ -176,9 +167,9 @@ input LifestyleUpdateInput {
     frequencyOfAlcoholConsumption: String
     notes: String
 }
-## -------- Dental Photos -------- ##
+## -------- Dental Photo Record -------- ##
 
-type dentalPhotos{
+type DentalPhotoRecord{
     id: ID!
     upperTeeth: UUID!
     lowerTeeth: UUID!
@@ -187,12 +178,12 @@ type dentalPhotos{
     created_at: Date
 }
 
-input dentalPhotosInput{
+input DentalPhotoRecordInput{
     upperTeeth: UUID!
     lowerTeeth: UUID!
 }
 
-input dentalPhotosUpdateInput{
+input DentalPhotoRecordUpdateInput{
     upperTeeth: UUID
     lowerTeeth: UUID
     isValid: Boolean
@@ -768,8 +759,8 @@ type Query {
   getProfile: UserProfile
   getUserProfile(userId: ID!, from: Date, offset: Int, limit: Int): [UserProfile!]
 
-  getDentalPhotos: dentalPhotos
-  getUserDentalPhotos(userId: ID!, from: Date, offset: Int, limit: Int): [dentalPhotos!]
+  getDentalPhotoRecord: DentalPhotoRecord
+  getUserDentalPhotoRecord(userId: ID!, from: Date, offset: Int, limit: Int): [DentalPhotoRecord!]
 
   getObgynHistory: ObgynHistory 
   getUserObgynHistory(userId: ID!, from: Date, offset: Int, limit: Int): [ObgynHistory!] # for medical
@@ -854,8 +845,8 @@ type Mutation {
   updateStudentProfile(userId: ID!, input: StudentProfileUpdateInput!): StudentProfile # for medical
   updateEmployeeProfile(userId: ID!, input: EmployeeProfileUpdateInput!): EmployeeProfile
   # Dental Photos
-  createDentalPhotos(input: dentalPhotosInput!): dentalPhotos
-  updateDentalPhotos(userId: ID!, input: dentalPhotosUpdateInput!): dentalPhotos
+  createDentalPhotoRecord(input: DentalPhotoRecordInput!): DentalPhotoRecord
+  updateDentalPhotoRecord(userId: ID!, input: DentalPhotoRecordUpdateInput!): DentalPhotoRecord
   # Obgyn History
   createObgynHistory(input: ObgynHistoryInput!): ObgynHistory
   updateObgynHistory(userId: ID!, input: ObgynHistoryUpdateInput!): ObgynHistory

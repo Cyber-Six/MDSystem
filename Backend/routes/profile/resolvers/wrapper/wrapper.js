@@ -100,7 +100,24 @@ const Query = {
     if (result.rows.length === 0) return [];
     logger.debug("User Personal Record Log Query Result:", result.rows);
     return result.rows;
-  }
+  },
+
+  _getUserAnchorData: async (_, { userId }, { user, res }) => {
+    if (!userId) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const result = await db.query(
+       `SELECT up.id, up.email, up."entityId"
+        FROM "UsersPersonal" AS up
+        WHERE up.id = $1
+        ORDER BY up.created_at DESC
+        LIMIT 1;
+        `,
+      [userId]
+      );
+    return result.rows[0] || null;
+    },
 };
 
 const Mutation = {
@@ -145,7 +162,7 @@ const Mutation = {
     return result.rows[0];
   },
   //continuation
-  createPersonalRecord: async (_, { input }, { user, res }) => {
+  _createPersonalRecordLog: async (_, { input }, { user, res }) => {
     if (!user || !user.id) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }

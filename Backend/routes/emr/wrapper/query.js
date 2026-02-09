@@ -26,7 +26,7 @@ const Query = {
         `,
       [userId]
       );
-     
+    
     const ticket = result.rows[0];
     logger.debug("Fetched Update Ticket:", ticket);
     if (ticket && ticket.status === "InProgress") {
@@ -104,7 +104,7 @@ const Query = {
     });
   },
 
-  _getUserDentalPhotos: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit }, { user, res }) => {
+  _getUserDentalPhotoRecord: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -362,7 +362,7 @@ const Query = {
     }
 
     const query = `
-      SELECT al.*, pul.created_at, pil.status
+      SELECT al.*, pul.created_at, pul.status
       FROM "Allergy" al
       JOIN "patientUpdateLog" pul ON pul.id = al.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4

@@ -51,20 +51,7 @@ input userProfileInput{
   entityId: ID!
 }
 
-input userProfileUpdateInput{
-  first_name: String
-  middle_name: String
-  last_name: String
-  suffix: String
-  date_of_birth: Date
-  sex: USER_SEX
-  status: USER_CIVILSTATUS
-  nationality: String
-  religion: String
-  contactNumber: String
-  present_address: String
-  province_address: String
-}
+ 
 
 type userAnchorData{
   id: ID!
@@ -100,8 +87,8 @@ type Query {
 # Mutations
 type Mutation {
   # Student mutations
-  updatePersonalRecord(input: userProfileUpdateInput!): userProfile
-  createPersonalRecord(input: userProfileInput!): userProfile
+  updatePersonalRecord(userId: ID!, input: userProfileUpdateInput!): userProfile
+  createPersonalRecordLog(input: userProfileInput!): userProfile
   
   staffSetPersonalRecord(userId: ID!, status: UpdateStatus!): UpdateStatus
   cancelUpdatePersonalRecord: String
@@ -109,6 +96,7 @@ type Mutation {
   reloadCredentialStatus: String
   staffSetCredentialStatus(userId: ID!, status: CredentialStatus!): CredentialStatus
 
-  updateUserAnchorData(data: userAnchorDataInput!): userAnchorData
+  setUserAnchorData(data: userAnchorDataInput!): userAnchorData
+  # for staff to set the email and entityId of the user for anchor data
 
 }

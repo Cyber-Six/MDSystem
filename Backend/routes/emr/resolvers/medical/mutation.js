@@ -114,9 +114,9 @@ const Mutation = {
     return result;
   },
 
-  updateDentalPhotos: async (_, args, { user, res }) => {
+  updateDentalPhotoRecord: async (_, args, { user, res }) => {
     if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_edit, args.userId)) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to update DentalPhotos`);
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to update DentalPhotoRecord`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
       
@@ -124,7 +124,7 @@ const Mutation = {
     assertActiveUpdateTicket(record, res, allowedScope="Dental");
     console.log(args.input);
 
-    const result = await Wrapper._DentalPhotos(_, {args, recordId: record.id}, { user, res });
+    const result = await Wrapper._DentalPhotoRecord(_, {args, recordId: record.id}, { user, res });
     return result;
   },
 
