@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@mdsystem/core": "file:../packages/core",
-    "axios": "^1.13.2",
+    "axios": "^1.13.4",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
