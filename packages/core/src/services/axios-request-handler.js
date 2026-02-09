@@ -12,6 +12,7 @@
  */
 
 import axios from 'axios';
+import { createRequestLogger } from './console-request-logger.js';
 
 /**
  * Creates an axios instance with platform-specific dependencies
@@ -65,36 +66,24 @@ export const createAxiosRequestHandler = ({
   onShowBanner
 }) => {
   // ============================================
-  // DEBUG FLAG & LOGGING - Remove for production
+  // DEBUG LOGGING
+  // Auto-enabled on localhost, auto-disabled in production
+  // Set forceEnabled: true to enable logging in production
   // ============================================
-  const DEBUG_REQUESTS = true;
-  
-  /**
-   * Log request details to console for debugging
-   * @private
-   */
-  const logRequestDebug = (config) => {
-    if (DEBUG_REQUESTS) {
-      console.log('🔵 Axios Request:', {
-        method: config.method?.toUpperCase(),
-        url: config.url,
-        baseURL: config.baseURL,
-        fullURL: `${config.baseURL || ''}${config.url || ''}`,
-        data: config.data,
-        params: config.params,
-      });
-    }
-  };
+  const computedBaseURL = getApiBaseUrl();
+  const requestLogger = createRequestLogger({
+    forceEnabled: undefined, // Set to true to force enable in production, false to force disable
+    computedBaseURL,
+    getDevSubdomain,
+  });
   // ============================================
 
-  // Create axios instance with automatic base URL detection
+  // Create axios instance with relative URLs and 1-minute timeout
   const axiosRequest = axios.create({
-    baseURL: getApiBaseUrl(),
-    timeout: 60000, // Default timeout for normal requests 1 minute
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    withCredentials: true, // Send cookies with requests
+    baseURL: computedBaseURL,
+    timeout: 60000, // 1 minute timeout for all requests
+    headers: { 'Content-Type': 'application/json' },
+    withCredentials: true,
   });
 
   // Flag to prevent multiple simultaneous refresh requests
@@ -116,155 +105,107 @@ export const createAxiosRequestHandler = ({
     failedQueue = [];
   };
 
-  // Request interceptor - add auth token if exists
+  // Request interceptor - inject auth token and subdomain headers
   axiosRequest.interceptors.request.use(
     async (config) => {
-      // SECURITY: Use TokenStorage for centralized token access
-      // Handle async storage (React Native)
+      // Inject access token if available (handles both sync and async storage)
       const token = await Promise.resolve(tokenService.TokenStorage.getAccessToken());
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
       
-      // Send subdomain header for backend portal detection
-      // In dev: simulates subdomain (localhost → www/staff)
-      // In prod: normalizes subdomain (www2 → www, staff2 → staff)
+      // Add X-Forwarded-Host for backend portal detection
+      // Dev: Maps localhost → www/staff.mdsystemtip.space
+      // Prod: Normalizes www2/staff2 → www/staff
       const devSubdomain = getDevSubdomain();
       if (devSubdomain) {
         config.headers['X-Forwarded-Host'] = devSubdomain;
       }
       
-      // Log request for debugging
-      logRequestDebug(config);
-      
+      requestLogger.logRequest(config);
       return config;
     },
-    (error) => {
-      return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
   );
 
-  // Response interceptor - handle token refresh and common errors
+  // Response interceptor - handle token refresh and error notifications
   axiosRequest.interceptors.response.use(
     (response) => {
-      // Show success banner if configured for this status code
-      if (bannerConfig.shouldShowBanner(response.status)) {
+      // Show banner notification for configured status codes
+      if (onShowBanner && bannerConfig.shouldShowBanner(response.status)) {
         const { error, message } = bannerConfig.extractBannerData(response);
-        if (onShowBanner) {
-          onShowBanner({
-            type: bannerConfig.getBannerType(response.status),
-            error,
-            message,
-          });
-        }
+        onShowBanner({
+          type: bannerConfig.getBannerType(response.status),
+          error,
+          message,
+        });
       }
       return response;
     },
     async (error) => {
       const originalRequest = error.config;
-
-      // SECURITY: Prevent infinite loop - don't retry refresh endpoint itself
-      const isRefreshEndpoint = originalRequest.url?.includes('/auth/refresh');
+      const isRefreshEndpoint = originalRequest?.url?.includes('/auth/refresh');
       
-      // Check if error is due to expired token (excluding refresh endpoint)
-      // SECURITY: Skip banner notification for 401 during token refresh flow
+      // Handle 401 errors with automatic token refresh (skip if already retrying or is refresh endpoint)
       if (error.response?.status === 401 && !originalRequest._retry && !isRefreshEndpoint) {
+        // Queue request if refresh is already in progress
         if (isRefreshing) {
-          // If already refreshing, queue this request
           return new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });
-          })
-            .then((token) => {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              return axiosRequest(originalRequest);
-            })
-            .catch((err) => {
-              return Promise.reject(err);
-            });
+          }).then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return axiosRequest(originalRequest);
+          });
         }
 
+        // Attempt to refresh the token
         originalRequest._retry = true;
         isRefreshing = true;
 
         try {
-          // SECURITY: Attempt to refresh the token
           const newAccessToken = await tokenService.refreshAccessToken();
-          
-          // SECURITY: Update authorization header with new token
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-          
-          // Process queued requests with new token
           processQueue(null, newAccessToken);
-          
-          // SECURITY: Reset refresh flag before retry to allow new refresh if this retry fails
           isRefreshing = false;
           
-          // Retry original request with new token
           return axiosRequest(originalRequest);
         } catch (refreshError) {
-          // Token refresh failed - clear queue
           processQueue(refreshError, null);
-          
-          // SECURITY: Reset flag before redirect
           isRefreshing = false;
           
-          // Show banner for failed refresh with specific error from backend
+          // Show session expired banner
           if (onShowBanner) {
-            const errorCode = refreshError.code || 'SESSION_EXPIRED';
-            const errorMessage = refreshError.message || 'Your session has expired. Please log in again.';
-            
             onShowBanner({
               type: 'error',
-              error: errorCode,
-              message: errorMessage,
-              duration: 0, // Don't auto-dismiss
+              error: refreshError.code || 'SESSION_EXPIRED',
+              message: refreshError.message || 'Your session has expired. Please log in again.',
+              duration: 0,
             });
           }
           
-          // SECURITY: Use logout function to ensure complete cleanup
-          // Redirect to auth after short delay to show banner
-          setTimeout(() => {
-            tokenService.logout(true); // Clear tokens and redirect
-          }, 1000);
-          
+          // Logout after brief delay to show banner
+          setTimeout(() => tokenService.logout(true), 1000);
           return Promise.reject(refreshError);
         }
       }
 
-      // Handle other error status codes
+      // Handle other HTTP errors
       if (error.response) {
-        // Show error banner if configured for this status code
-        if (bannerConfig.shouldShowBanner(error.response.status)) {
+        if (onShowBanner && bannerConfig.shouldShowBanner(error.response.status)) {
           const { error: errorCode, message } = bannerConfig.extractBannerData(error.response);
-          if (onShowBanner) {
-            onShowBanner({
-              type: bannerConfig.getBannerType(error.response.status),
-              error: errorCode,
-              message,
-            });
-          }
-        }
-
-        // Log errors for debugging
-        switch (error.response.status) {
-          case 403:
-            console.error('Access forbidden');
-            break;
-          case 500:
-            console.error('Server error');
-            break;
-          default:
-            console.error('API Error:', error.response.data);
-        }
-      } else if (error.request) {
-        // Network error - no response received
-        if (onShowBanner) {
           onShowBanner({
-            type: 'error',
-            error: 'NETWORK_ERROR',
-            message: 'Unable to connect to server. Please check your internet connection.',
+            type: bannerConfig.getBannerType(error.response.status),
+            error: errorCode,
+            message,
           });
         }
+      } else if (error.request && onShowBanner) {
+        // Network error - no response received
+        onShowBanner({
+          type: 'error',
+          error: 'NETWORK_ERROR',
+          message: 'Unable to connect to server. Please check your internet connection.',
+        });
       }
       
       return Promise.reject(error);
