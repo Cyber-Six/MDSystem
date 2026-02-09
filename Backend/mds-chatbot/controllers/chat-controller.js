@@ -263,9 +263,15 @@ class ChatController {
 
     // Set up SSE headers immediately to prevent timeout
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    // Prevent compression that might buffer the stream
+    res.setHeader('Content-Encoding', 'none');
+    
     res.flushHeaders();
 
     // Create abort controller for cancellation support
