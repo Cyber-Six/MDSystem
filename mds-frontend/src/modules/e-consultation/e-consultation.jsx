@@ -2,13 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, AlertCircle, Sparkles, RotateCcw } from 'lucide-react';
 import { axiosRequest, getApiBaseUrl } from '../../packages-core-adapter';
 import GuidelinesCard from './components/GuidelinesCard';
-import ConnectionStatus from './components/ConnectionStatus';
 import MessageBubble from './components/MessageBubble';
 import LoadingIndicator from './components/LoadingIndicator';
 import EmptyState from './components/EmptyState';
 
 // Configuration - All requests go through backend via proper domain (X-Forwarded-Host header)
 const STORAGE_KEY = 'econsultation_session_id';
+const AI_MODEL_NAME = 'AI Chatbot: econsul-ey';
 
 const EConsultation = () => {
   const [messages, setMessages] = useState([]);
@@ -22,12 +22,16 @@ const EConsultation = () => {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const hasInitialized = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
+    // Prevent duplicate health checks (React Strict Mode runs effects twice)
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
     initializeSession();
   }, []);
 
@@ -332,7 +336,7 @@ const EConsultation = () => {
                 </div>
                 <div className="flex flex-col justify-center">
                   <h2 className="text-base font-semibold text-neutral-900 dark:text-white leading-tight">
-                    AI Medical Assistant
+                    {AI_MODEL_NAME}
                   </h2>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-tight">
                     {isLoading ? (streamingContent ? 'Generating response...' : 'Connecting...') : 'Online • Ready to help'}
@@ -445,11 +449,6 @@ const EConsultation = () => {
         {/* Guidelines Card */}
         <div>
           <GuidelinesCard />
-
-          {/* Connection Status Card */}
-          <div className="mt-4">
-            <ConnectionStatus connectionStatus={connectionStatus} />
-          </div>
         </div>
       </div>
     </div>
