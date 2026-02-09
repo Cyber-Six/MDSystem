@@ -13,6 +13,59 @@ const logger = require('../../utils/logger');
 const isSafetyMode = modelConfig.safetyMode;
 
 class ChatController {
+  constructor() {
+    // Track active streaming sessions for cancellation support
+    this.activeSessions = new Map(); // sessionId -> { abortController, isCancelled }
+  }
+
+  /**
+   * Cancel ongoing message generation for a session
+   */
+  async cancelGeneration(req, res) {
+    const { sessionId } = req.body;
+
+    try {
+      if (!sessionId) {
+        return res.status(400).json({
+          error: 'INVALID_REQUEST',
+          message: 'Session ID is required'
+        });
+      }
+
+      const sessionData = this.activeSessions.get(sessionId);
+
+      if (!sessionData) {
+        // No active generation for this session
+        return res.json({
+          success: true,
+          message: 'No active generation to cancel'
+        });
+      }
+
+      // Mark as cancelled and abort the request
+      sessionData.isCancelled = true;
+      sessionData.abortController.abort();
+
+      logger.info('Generation cancelled by user', { sessionId });
+
+      return res.json({
+        success: true,
+        message: 'Generation cancelled successfully'
+      });
+
+    } catch (error) {
+      logger.error('Failed to cancel generation', {
+        error: error.message,
+        sessionId
+      });
+
+      return res.status(500).json({
+        error: 'CANCEL_FAILED',
+        message: 'Failed to cancel generation'
+      });
+    }
+  }
+
   /**
    * Handle new message and generate AI response
    */
@@ -219,8 +272,20 @@ class ChatController {
     const abortController = new AbortController();
     let isCancelled = false;
 
+    // Register this session for external cancellation
+    this.activeSessions.set(sessionId, {
+      abortController,
+      isCancelled: false
+    });
+
     // Handle client disconnect/cancellation
     req.on('close', () => {
+      // Check if cancelled via explicit cancel endpoint
+      const sessionData = this.activeSessions.get(sessionId);
+      if (sessionData && sessionData.isCancelled) {
+        isCancelled = true;
+      }
+      
       if (!res.writableEnded) {
         logger.info('Client disconnected, cancelling streaming response', { sessionId });
         isCancelled = true;
@@ -434,9 +499,15 @@ class ChatController {
         });
       }
 
+      // Clean up session tracking
+      this.activeSessions.delete(sessionId);
+
       return res.end();
 
     } catch (error) {
+      // Clean up session tracking
+      this.activeSessions.delete(sessionId);
+      
       // Don't log or send error if request was cancelled by client
       if (error.name === 'AbortError' || isCancelled) {
         logger.info('Streaming request cancelled by client', { sessionId });

@@ -206,11 +206,26 @@ const EConsultation = () => {
   };
 
   // Handle canceling generation
-  const handleCancelGeneration = () => {
+  const handleCancelGeneration = async () => {
+    // First, call backend to cancel generation and prevent database save
+    try {
+      if (sessionId) {
+        await axiosRequest.post('/econsultation/chat/cancel', {
+          sessionId: sessionId
+        });
+        console.log('Generation cancelled via backend', sessionId);
+      }
+    } catch (err) {
+      console.error('Failed to cancel via backend:', err);
+      // Continue with client-side cleanup even if backend call fails
+    }
+
+    // Abort the fetch request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    
     setIsLoading(false);
     setStreamingContent('');
     

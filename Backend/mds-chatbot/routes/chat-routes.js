@@ -95,6 +95,21 @@ router.post('/message/stream',
 );
 
 /**
+ * POST /econsultation/chat/cancel
+ * Cancel ongoing AI response generation
+ * 
+ * Body: { sessionId }
+ * 
+ * Immediately halts the AI generation for the specified session
+ * and ensures the incomplete response is not saved to database
+ */
+router.post('/cancel',
+  patientChatLimiter,
+  validateSession,
+  chatController.cancelGeneration
+);
+
+/**
  * GET /econsultation/chat/history/:sessionId
  * Get conversation history
  * Rate limited to prevent enumeration attacks
