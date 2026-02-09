@@ -281,22 +281,24 @@ class ChatController {
           }
         );
 
-        // Save the complete response
-        await conversationService.addMessage(conversation.id, 'assistant', aiResponse.content, {
-          tokens: aiResponse.tokens,
-          duration: aiResponse.duration,
-          fastMode: true,
-          streamed: true,
-        });
+        // Only save the complete response if not cancelled
+        if (!isCancelled) {
+          await conversationService.addMessage(conversation.id, 'assistant', aiResponse.content, {
+            tokens: aiResponse.tokens,
+            duration: aiResponse.duration,
+            fastMode: true,
+            streamed: true,
+          });
 
-        // Send completion event
-        sendEvent('done', {
-          sessionId,
-          message: aiResponse.content,
-          role: 'assistant',
-          metadata: { tokens: aiResponse.tokens, duration: aiResponse.duration, streamed: true },
-          timestamp: new Date().toISOString(),
-        });
+          // Send completion event
+          sendEvent('done', {
+            sessionId,
+            message: aiResponse.content,
+            role: 'assistant',
+            metadata: { tokens: aiResponse.tokens, duration: aiResponse.duration, streamed: true },
+            timestamp: new Date().toISOString(),
+          });
+        }
         return res.end();
       }
 
@@ -413,22 +415,24 @@ class ChatController {
         responseMetadata.urgentGuidance = true;
       }
 
-      // Save AI response
-      await conversationService.addMessage(
-        conversation.id,
-        'assistant',
-        finalResponse,
-        responseMetadata
-      );
+      // Only save AI response if not cancelled
+      if (!isCancelled) {
+        await conversationService.addMessage(
+          conversation.id,
+          'assistant',
+          finalResponse,
+          responseMetadata
+        );
 
-      // Send completion event
-      sendEvent('done', {
-        sessionId,
-        message: finalResponse,
-        role: 'assistant',
-        metadata: responseMetadata,
-        timestamp: new Date().toISOString(),
-      });
+        // Send completion event
+        sendEvent('done', {
+          sessionId,
+          message: finalResponse,
+          role: 'assistant',
+          metadata: responseMetadata,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       return res.end();
 
