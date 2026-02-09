@@ -203,6 +203,7 @@ class ChatController {
   /**
    * Handle new message with streaming AI response (Server-Sent Events)
    * This prevents Cloudflare 524 timeout by sending tokens in real-time
+   * Supports client-side cancellation via connection close
    */
   async sendMessageStream(req, res) {
     const { sessionId, message } = req.body;
@@ -214,9 +215,24 @@ class ChatController {
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
     res.flushHeaders();
 
+    // Create abort controller for cancellation support
+    const abortController = new AbortController();
+    let isCancelled = false;
+
+    // Handle client disconnect/cancellation
+    req.on('close', () => {
+      if (!res.writableEnded) {
+        logger.info('Client disconnected, cancelling streaming response', { sessionId });
+        isCancelled = true;
+        abortController.abort();
+      }
+    });
+
     // Helper to send SSE event
     const sendEvent = (event, data) => {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (!isCancelled && !res.writableEnded) {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
     };
 
     try {
@@ -253,13 +269,15 @@ class ChatController {
 
         let fullContent = '';
 
-        // Generate streaming response
+        // Generate streaming response with abort support
         const aiResponse = await llamaService.generateStreamingResponse(
           contextMessages,
-          {},
+          { signal: abortController.signal },
           (token, isStop) => {
-            fullContent += token;
-            sendEvent('token', { token, content: fullContent });
+            if (!isCancelled) {
+              fullContent += token;
+              sendEvent('token', { token, content: fullContent });
+            }
           }
         );
 
@@ -352,13 +370,15 @@ class ChatController {
         fullContent = urgentPrefix;
       }
 
-      // Generate streaming AI response
+      // Generate streaming AI response with abort support
       const aiResponse = await llamaService.generateStreamingResponse(
         contextMessages,
-        {},
+        { signal: abortController.signal },
         (token, isStop) => {
-          fullContent += token;
-          sendEvent('token', { token, content: fullContent });
+          if (!isCancelled) {
+            fullContent += token;
+            sendEvent('token', { token, content: fullContent });
+          }
         }
       );
 
@@ -413,6 +433,12 @@ class ChatController {
       return res.end();
 
     } catch (error) {
+      // Don't log or send error if request was cancelled by client
+      if (error.name === 'AbortError' || isCancelled) {
+        logger.info('Streaming request cancelled by client', { sessionId });
+        return res.end();
+      }
+
       logger.error('Failed to process streaming chat message', {
         error: error.message,
         sessionId,
