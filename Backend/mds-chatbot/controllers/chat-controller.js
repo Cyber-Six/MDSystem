@@ -16,6 +16,14 @@ class ChatController {
   constructor() {
     // Track active streaming sessions for cancellation support
     this.activeSessions = new Map(); // sessionId -> { abortController, isCancelled }
+    
+    // Bind methods that use 'this' so they work as Express route handlers
+    this.cancelGeneration = this.cancelGeneration.bind(this);
+    this.sendMessageStream = this.sendMessageStream.bind(this);
+    this.sendMessage = this.sendMessage.bind(this);
+    this.createSession = this.createSession.bind(this);
+    this.getHistory = this.getHistory.bind(this);
+    this.closeSession = this.closeSession.bind(this);
   }
 
   /**

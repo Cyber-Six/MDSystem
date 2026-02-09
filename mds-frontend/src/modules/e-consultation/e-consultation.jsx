@@ -268,9 +268,9 @@ const EConsultation = () => {
       // Create AbortController for cleanup and cancellation
       abortControllerRef.current = new AbortController();
       
-      // Use relative URL to go through Vite proxy (same as axiosRequest)
-      // This routes through https://www.mdsystemtip.space in production
-      const streamUrl = `/econsultation/chat/message/stream`;
+      // Get the base URL for the API (uses the actual backend domain, not localhost)
+      const baseUrl = getApiBaseUrl();
+      const streamUrl = `${baseUrl}/econsultation/chat/message/stream`;
       
       // Use fetch for SSE streaming (axios doesn't properly support SSE in browsers)
       const response = await fetch(streamUrl, {
