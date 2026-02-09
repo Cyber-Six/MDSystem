@@ -173,15 +173,8 @@ const Login = () => {
           TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
         }
         
-        // Check if user has completed initial medical record
-        // TODO: Query the backend to check if user has filled EMR
-        const hasCompletedMedicalRecord = false;
-        
-        if (hasCompletedMedicalRecord) {
-          navigate('/');
-        } else {
-          navigate('/initial-medical-record');
-        }
+        // Always navigate to dashboard - the dashboard will show the initial record modal if needed
+        navigate('/');
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Login completion failed.';

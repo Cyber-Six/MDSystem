@@ -52,8 +52,8 @@ const DentalHistoryForm = ({ data, onChange }) => {
               <input
                 type="radio"
                 name="firstTimeDentist"
-                value="Yes"
-                checked={data.firstTimeDentist === 'Yes'}
+                value="yes"
+                checked={data.firstTimeDentist === 'yes'}
                 onChange={(e) => handleChange('firstTimeDentist', e.target.value)}
                 className="form-checkbox"
               />
@@ -63,29 +63,18 @@ const DentalHistoryForm = ({ data, onChange }) => {
               <input
                 type="radio"
                 name="firstTimeDentist"
-                value="No"
-                checked={data.firstTimeDentist === 'No'}
+                value="no"
+                checked={data.firstTimeDentist === 'no'}
                 onChange={(e) => handleChange('firstTimeDentist', e.target.value)}
                 className="form-checkbox"
               />
               <span className="ml-2 text-secondary-700">No</span>
             </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="firstTimeDentist"
-                value="I don't know"
-                checked={data.firstTimeDentist === "I don't know"}
-                onChange={(e) => handleChange('firstTimeDentist', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">I don't know</span>
-            </label>
           </div>
         </div>
 
         {/* Last Dental Consultation */}
-        {data.firstTimeDentist === 'No' && (
+        {data.firstTimeDentist === 'no' && (
           <div>
             <label className="form-label">IF "NO"... WHEN WAS YOUR LAST DENTAL CONSULTATION ?</label>
             <p className="text-xs text-secondary-500 mb-2">Indicate Month and Year</p>
@@ -149,8 +138,8 @@ const DentalHistoryForm = ({ data, onChange }) => {
               <input
                 type="radio"
                 name="hasIntraOralAppliance"
-                value="Yes"
-                checked={data.hasIntraOralAppliance === 'Yes'}
+                value="yes"
+                checked={data.hasIntraOralAppliance === 'yes'}
                 onChange={(e) => handleChange('hasIntraOralAppliance', e.target.value)}
                 className="form-checkbox"
               />
@@ -160,8 +149,8 @@ const DentalHistoryForm = ({ data, onChange }) => {
               <input
                 type="radio"
                 name="hasIntraOralAppliance"
-                value="No"
-                checked={data.hasIntraOralAppliance === 'No'}
+                value="no"
+                checked={data.hasIntraOralAppliance === 'no'}
                 onChange={(e) => handleChange('hasIntraOralAppliance', e.target.value)}
                 className="form-checkbox"
               />
@@ -171,10 +160,10 @@ const DentalHistoryForm = ({ data, onChange }) => {
         </div>
 
         {/* Appliance Types */}
-        {data.hasIntraOralAppliance === 'Yes' && (
+        {data.hasIntraOralAppliance === 'yes' && (
           <div>
             <label className="form-label mb-3">IF YES, KINDLY CHECK BELOW</label>
-            <div className="space-y-2 ml-6">
+            <div className="space-y-3 ml-6">
               <Checkbox
                 label="Dental Brace (Orthodontic appliance)"
                 checked={data.intraOralAppliances?.dentalBrace || false}
@@ -185,11 +174,53 @@ const DentalHistoryForm = ({ data, onChange }) => {
                 checked={data.intraOralAppliances?.dentalBridge || false}
                 onChange={(e) => handleApplianceChange('dentalBridge', e.target.checked)}
               />
-              <Checkbox
-                label="Dentures"
-                checked={data.intraOralAppliances?.dentures || false}
-                onChange={(e) => handleApplianceChange('dentures', e.target.checked)}
-              />
+              
+              {/* Dentures with inline location selection */}
+              <div className="flex flex-col gap-2">
+                <Checkbox
+                  label="Dentures"
+                  checked={data.intraOralAppliances?.dentures || false}
+                  onChange={(e) => handleApplianceChange('dentures', e.target.checked)}
+                />
+                {data.intraOralAppliances?.dentures && (
+                  <div className="ml-6 flex gap-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="dentureLocation"
+                        value="Upper"
+                        checked={data.dentureLocation === 'Upper'}
+                        onChange={(e) => handleChange('dentureLocation', e.target.value)}
+                        className="form-checkbox"
+                      />
+                      <span className="ml-2 text-secondary-700">Upper</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="dentureLocation"
+                        value="Lower"
+                        checked={data.dentureLocation === 'Lower'}
+                        onChange={(e) => handleChange('dentureLocation', e.target.value)}
+                        className="form-checkbox"
+                      />
+                      <span className="ml-2 text-secondary-700">Lower</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="dentureLocation"
+                        value="Both"
+                        checked={data.dentureLocation === 'Both'}
+                        onChange={(e) => handleChange('dentureLocation', e.target.value)}
+                        className="form-checkbox"
+                      />
+                      <span className="ml-2 text-secondary-700">Both</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+              
               <Checkbox
                 label="Bite planes, Expander, Night guards"
                 checked={data.intraOralAppliances?.bitePlanes || false}
@@ -217,42 +248,42 @@ const DentalHistoryForm = ({ data, onChange }) => {
               </div>
             </div>
 
-            {/* Appliance Location */}
+            {/* Appliance Location - for non-denture appliances */}
             <div className="mt-6">
-              <label className="form-label mb-3">SPECIFY THE LOCATION OF YOUR INTRA-ORAL APPLIANCE</label>
-              <div className="space-y-2 ml-6">
+              <label className="form-label mb-3">SPECIFY THE LOCATION OF YOUR INTRA-ORAL APPLIANCE (except dentures)</label>
+              <div className="flex gap-6 ml-6">
                 <label className="flex items-center">
                   <input
                     type="radio"
                     name="applianceLocation"
-                    value="Upper only"
-                    checked={data.applianceLocation === 'Upper only'}
+                    value="Upper"
+                    checked={data.applianceLocation === 'Upper'}
                     onChange={(e) => handleChange('applianceLocation', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2 text-secondary-700">Upper only</span>
+                  <span className="ml-2 text-secondary-700">Upper</span>
                 </label>
                 <label className="flex items-center">
                   <input
                     type="radio"
                     name="applianceLocation"
-                    value="Lower only"
-                    checked={data.applianceLocation === 'Lower only'}
+                    value="Lower"
+                    checked={data.applianceLocation === 'Lower'}
                     onChange={(e) => handleChange('applianceLocation', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2 text-secondary-700">Lower only</span>
+                  <span className="ml-2 text-secondary-700">Lower</span>
                 </label>
                 <label className="flex items-center">
                   <input
                     type="radio"
                     name="applianceLocation"
-                    value="Both Upper and Lower"
-                    checked={data.applianceLocation === 'Both Upper and Lower'}
+                    value="Both"
+                    checked={data.applianceLocation === 'Both'}
                     onChange={(e) => handleChange('applianceLocation', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2 text-secondary-700">Both Upper and Lower</span>
+                  <span className="ml-2 text-secondary-700">Both</span>
                 </label>
               </div>
             </div>
@@ -269,8 +300,8 @@ const DentalHistoryForm = ({ data, onChange }) => {
               <input
                 type="radio"
                 name="toothExtraction"
-                value="Yes"
-                checked={data.toothExtraction === 'Yes'}
+                value="yes"
+                checked={data.toothExtraction === 'yes'}
                 onChange={(e) => handleChange('toothExtraction', e.target.value)}
                 className="form-checkbox"
               />
@@ -280,8 +311,8 @@ const DentalHistoryForm = ({ data, onChange }) => {
               <input
                 type="radio"
                 name="toothExtraction"
-                value="No"
-                checked={data.toothExtraction === 'No'}
+                value="no"
+                checked={data.toothExtraction === 'no'}
                 onChange={(e) => handleChange('toothExtraction', e.target.value)}
                 className="form-checkbox"
               />
@@ -300,8 +331,8 @@ const DentalHistoryForm = ({ data, onChange }) => {
               <input
                 type="radio"
                 name="dentalFilling"
-                value="Yes"
-                checked={data.dentalFilling === 'Yes'}
+                value="yes"
+                checked={data.dentalFilling === 'yes'}
                 onChange={(e) => handleChange('dentalFilling', e.target.value)}
                 className="form-checkbox"
               />
@@ -311,8 +342,8 @@ const DentalHistoryForm = ({ data, onChange }) => {
               <input
                 type="radio"
                 name="dentalFilling"
-                value="No"
-                checked={data.dentalFilling === 'No'}
+                value="no"
+                checked={data.dentalFilling === 'no'}
                 onChange={(e) => handleChange('dentalFilling', e.target.value)}
                 className="form-checkbox"
               />

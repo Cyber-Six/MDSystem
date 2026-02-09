@@ -6,7 +6,6 @@ import Auth from './pages/Auth.jsx';
 import { BannerProvider, useBanner } from './context/banner-context.jsx';
 import Banner from './components/banner/banner.jsx';
 import ResetPassword from './modules/auth/resetpassword.jsx';
-import InitialMedicalRecordForm from './modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 
 // Lazy load Staff Module for better performance
 const StaffModule = lazy(() => import('./modules/staff/index.jsx'));
@@ -66,14 +65,10 @@ function AppContent() {
           <Route path="/auth/login" element={<Auth />} />
           <Route path="/auth/register" element={<Auth />} />
           
-          {/* Initial Medical Record */}
+          {/* Initial Medical Record - Now redirects to dashboard where modal appears */}
           <Route 
             path="/initial-medical-record" 
-            element={
-              <PrivateRoute>
-                <InitialMedicalRecordForm />
-              </PrivateRoute>
-            } 
+            element={<Navigate to="/" replace />}
           />
 
           {/* Redirect any unknown routes to root */}
