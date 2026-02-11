@@ -13,6 +13,11 @@ enum USER_CIVILSTATUS {
     Separated
 }
 
+enum USER_BRANCH {
+  Manila
+  QuezonCity
+  Both
+}
 
 type userProfile{
   id: ID!
@@ -34,36 +39,37 @@ type userProfile{
   created_at: Date
 }
 
-input userProfileInput{
+input userProfileUpdateInput{
   first_name: String!
   middle_name: String!
   last_name: String!
   suffix: String!
   date_of_birth: Date!
   sex: USER_SEX!
-  status: USER_CIVILSTATUS!
+  civil_status: USER_CIVILSTATUS!
   nationality: String!
   religion: String!
   contactNumber: String!
-  present_address: String!
+  home_address: String!
   province_address: String!
-  email: String!
-  entityId: ID!
 }
 
- 
 
-type userAnchorData{
-  id: ID!
-  email: String!
-  entityId: ID!
+
+type BranchIdentifier{
+  branch: USER_BRANCH!
+  identifier: ID!
 }
 
-input userAnchorDataInput{
-  email: String
-  entityId: ID
+input BranchIdentifierInput{
+  branch: USER_BRANCH!
+  identifier: ID!
 }
 
+input BranchIdentifierUpdateInput{
+  branch: USER_BRANCH
+  identifier: ID
+}
 
 # Queries
 type Query {
@@ -77,26 +83,28 @@ type Query {
   getPersonalRecordLogStatus: String # get the update status of the logged in user
   getUserPersonalRecordLogStatus(userId: ID!): String
 
-  getPersonalRecordLog: userProfile
   getUserPersonalRecordLog(userId: ID!, from: Date, offset: Int, limit: Int): [userProfile!]
 
-  getAnchorData: userAnchorData
-  getUserAnchorData(userId: ID!): userAnchorData
+  getBranchIdentifier: BranchIdentifier
+  getUserBranchIdentifier(userId: ID!): BranchIdentifier
+
 }
 
 # Mutations
 type Mutation {
-  # Student mutations
-  updatePersonalRecord(userId: ID!, input: userProfileUpdateInput!): userProfile
-  createPersonalRecordLog(input: userProfileInput!): userProfile
-  
-  staffSetPersonalRecord(userId: ID!, status: UpdateStatus!): UpdateStatus
-  cancelUpdatePersonalRecord: String
+  createPersonalRecordLog(input: userProfileUpdateInput!): userProfile
+  updatePersonalRecordLog(userId: ID!, input: userProfileUpdateInput!): userProfile
+
+  createUserBranchIdentifier(input: BranchIdentifierInput!): BranchIdentifier
+  updateUserBranchIdentifier(userId: ID!, input: BranchIdentifierUpdateInput!): BranchIdentifier
+
+  SetPersonalRecordLog(userId: ID!, status: UpdateStatus!): UpdateStatus
+  cancelPersonalRecordLog: String
 
   reloadCredentialStatus: String
+  reloadUserCredentialStatus(userId: ID!): String
+  
   staffSetCredentialStatus(userId: ID!, status: CredentialStatus!): CredentialStatus
 
-  setUserAnchorData(data: userAnchorDataInput!): userAnchorData
-  # for staff to set the email and entityId of the user for anchor data
 
 }
