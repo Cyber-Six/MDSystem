@@ -46,6 +46,7 @@ function validatePassword(password) {
 
 function getStudentBranchFromEmail(email) {
   if (!isStudentEmail(email)) {
+    console.log("Email does not match student pattern:", email);
     return null; // not a valid student email
   }
 
@@ -55,7 +56,7 @@ function getStudentBranchFromEmail(email) {
   if (firstChar === "m") {
     return "Manila";
   } else if (firstChar === "q") {
-    return "Quezon City";
+    return "QuezonCity";
   }
 
   return null; // fallback

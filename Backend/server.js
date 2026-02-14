@@ -16,7 +16,7 @@ const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
-
+const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -57,7 +57,7 @@ app.use((err, req, res, next) => {
 
 //registerGraphQLRoutes(app);
 initPatientEMRGraphQL(app);
-
+initPatientProfileGraphQL(app);
 
 app.use('/auth/register', registerRoutes);
 app.use('/auth/login', loginRoutes);

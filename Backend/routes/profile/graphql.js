@@ -19,7 +19,6 @@ const patientSchema = makeExecutableSchema({
   resolvers: {
     Query: patientResolver.Query,
     Mutation: patientResolver.Mutation,
-    UserProfile: patientResolver.UserProfile, // <-- interface resolver
   },
 });
 
@@ -28,7 +27,6 @@ const medicalSchema = makeExecutableSchema({
   resolvers: {
     Query: medicalResolver.Query,
     Mutation: medicalResolver.Mutation,
-    UserProfile: medicalResolver.UserProfile, // <-- interface resolver
   },
 });
 

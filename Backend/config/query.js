@@ -59,6 +59,18 @@ async function findUserByEmail(email) {
     return result.rows[0] || null;
 }
 
+async function findEmailByUserId(userId) {
+  const sql = `
+      SELECT email
+      FROM "UserCredentials"
+      WHERE id = $1
+      LIMIT 1;
+  `;
+
+  const result = await query(sql, [userId]);
+  return result.rows[0]?.email || null;
+}
+
 // ✅ Create user (final step of registration)
 async function createUser({ email, password, role, data_consent_version }) {
     // ✅ Hash password
@@ -257,6 +269,7 @@ module.exports = {
     queryControlled,
     countUserByEmail,
     findUserByEmail,
+    findEmailByUserId,
     createUser,
     createPatient,
     updateUserPasswordById,

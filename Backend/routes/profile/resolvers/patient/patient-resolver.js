@@ -1,23 +1,14 @@
-const db  = require("../../../../config/query.js");
-const logger = require("../../../../utils/logger.js");
 const Wrapper = require("../wrapper/wrapper.js");
 const path = require("path");
 const dotenv = require("dotenv");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
-
+const { getStudentBranchFromEmail } = require("../../../../utils/validator.js");
+const db = require("../../../../config/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 // creating of updateTicket
 // In-progress do expire after nth time
 // Unless if the user is unverified where the first ticket never expires
-
-const UserProfile = {
-  __resolveType(obj) {
-    if (obj.profile_type === "Student") return "StudentProfile";
-    if (obj.profile_type === "Employee") return "EmployeeProfile";
-    return null;
-  },
-};
 
 Query = {
 
@@ -66,8 +57,8 @@ Mutation = {
     }
     return await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
   },
-
-  createBranchIdentifier: async (_, { input }, { user, res }) => {
+  
+  createBranchIdentifier: async (_, { identifier }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -75,6 +66,12 @@ Mutation = {
     if (credentialStatus !== "unverified") {
       throwGraphQLError(res).message("For patients, branch and identifier can only be set for unverified users.").status(400).throw();
       }
+   
+    const getEmail = await db.findEmailByUserId(user.id);
+    if (!getEmail) {
+      throwGraphQLError(res).message("Email not found for the user.").status(400).throw();
+    }
+    const input =  { branch: getStudentBranchFromEmail(getEmail), identifier};
     return await Wrapper.Mutation._UserBranchIdentifier(_, { userId: user.id, input }, { user, res });
   },
   
@@ -95,10 +92,19 @@ Mutation = {
     }
     const result = await Wrapper.Mutation._reloadCredentialStatus(_, { userId: user.id }, { user, res });
     return result;
-  }
+  },
+
+  setPersonalRecordLog: async (_, { userId, status }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const result = await Wrapper.Mutation._setPersonalRecordLog(_, { userId, status }, { user, res });
+    return result;
+  },
+
 };
 
 
 
 
-module.exports = { Query, Mutation, UserProfile };
+module.exports = { Query, Mutation };

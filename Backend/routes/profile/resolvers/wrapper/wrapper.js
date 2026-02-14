@@ -32,13 +32,16 @@ const Query = {
 
     const result = await db.query(
        `SELECT up.*
-        FROM "usersPersonal" AS up
+        FROM "UsersPersonal" AS up
+        JOIN "UserCredentials" AS uc
+          ON up.id = uc.id
         WHERE up."id" = $1
-        ORDER BY up.created_at DESC
+        ORDER BY uc.created_at DESC
         LIMIT 1;
         `,
       [userId]
       );
+
     return result.rows[0] || null;
     },
 
@@ -96,7 +99,6 @@ const Query = {
     ]);
 
     if (result.rows.length === 0) return [];
-    logger.debug("User Personal Record Log Query Result:", result.rows);
     return result.rows;
   },
 
@@ -108,8 +110,10 @@ const Query = {
     const result = await db.query(
        `SELECT up.identifier, up.branch
         FROM "UsersPersonal" AS up
+        JOIN "UserCredentials" AS uc
+          ON up.id = uc.id
         WHERE up.id = $1
-        ORDER BY up.created_at DESC
+        ORDER BY uc.created_at DESC
         LIMIT 1;
         `,
       [userId]
@@ -135,18 +139,14 @@ const Query = {
 const Mutation = {
   //continuation
   _PersonalRecordLog: async (_, { userId, input }, { user, res }) => {
-    if (!user || !user.id) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
     const query = `
       INSERT INTO "UsersPersonalLog" (
         user_id,
         first_name, middle_name, last_name, suffix,
         date_of_birth, sex, civil_status, nationality, religion,
-        contactNumber,
+        "contactNumber",
         present_address, province_address,
-        status, approvedBy
+        status
         )
       VALUES (
         $1, 
@@ -154,7 +154,7 @@ const Mutation = {
         $6, $7, $8, $9, $10,
         $11,
         $12, $13,
-        $14, $15
+        $14
       )
       RETURNING *;
     `;
@@ -166,11 +166,13 @@ const Mutation = {
       input.date_of_birth, input.sex, input.civil_status, input.nationality, input.religion,
       input.contactNumber,
       input.present_address, input.province_address,
-      pending, null
+      pending
     ];
 
     try {
       const { rows } = await db.query(query, values);
+
+      console.log("Created personal record log with ID:", rows[0]);
       return rows[0];
     } catch (err) {
       logger.error("Error in _PersonalRecordLog:", err);
@@ -179,8 +181,8 @@ const Mutation = {
   },
 
   _UserBranchIdentifier: async (_, { userId, input }, { user, res }) => {
-    if (!user || !user.id) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    if (!input.identifier || !input.branch) {
+      throwGraphQLError(res).message("Both identifier and branch are required.").status(400).throw();
     }
 
     const query = `
@@ -208,13 +210,13 @@ const Mutation = {
   },
 
   _setPersonalRecordLog: async (_, { userId, status }, { user, res }) => {
-    if (!user || !user.id) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
     const validStatuses = ["Revision", "Approved", "Rejected"];
     if (!validStatuses.includes(status)) {
       throwGraphQLError(res).message("Invalid status").status(400).throw();
+    }
+    const BI = await Query._getBranchIdentifier(_, { userId }, { user, res });
+    if (!(BI?.identifier && BI?.branch)) {
+      throwGraphQLError(res).message("Branch identifier not set. Please notify the patient to set their branch identifier.").status(400).throw();
     }
 
     const query = `
@@ -224,29 +226,21 @@ const Mutation = {
       RETURNING *;
     `;
 
-    try {
       const { rows } = await db.query(query, [status, userId]);
       if (rows.length === 0) {
-        throwGraphQLError(res).message("No pending log found").status(404).throw();
+        return null;
       }
 
       if (status === "Approved") {
         logger.info(`Applying approved personal record update for user ${userId}, log ID ${rows[0].id}`);
-        await applyUpdatePersonalRecord(_, { userId, input: rows[0] }, { user, res, db });
+        await applyUpdatePersonalRecord(_, { userId, input: rows[0] }, { res, db });
         }
         
       return rows[0].status;
-    } catch (err) {
-      logger.error("Error in _setPersonalRecordLog:", err);
-      throwGraphQLError(res).message("Database error").status(500).throw();
-    }
+
   },
 
-  _reloadCredentialStatus: async (_, { userId }, { user, res, db }) => {
-    if (!user || !user.id) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
+  _reloadCredentialStatus: async (_, { userId }, { user, res }) => {
     const checkQuery = `
       SELECT EXISTS (
         SELECT 1
@@ -258,9 +252,8 @@ const Mutation = {
           AND pul.status = 'Approved'
       );
     `;
-
+    
     const result = await db.query(checkQuery, [userId]);
-
     if (result.rows[0].exists) {
       const updateQuery = `
         UPDATE "UsersCredentials"
@@ -275,10 +268,6 @@ const Mutation = {
   },
 
   _cancelPersonalRecordLog: async (_, { userId }, { user, res }) => {
-    if (!user || !user.id) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
     const query = `
       UPDATE "UsersPersonalLog"
       SET status = 'Cancelled'
@@ -298,11 +287,7 @@ const Mutation = {
     }
   },
 
-  _StaffUpdatePersonalRecordLog: async (_, { userId, id, input }, { user, res, db }) => {
-    if (!user || !user.id) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
+  _StaffUpdatePersonalRecordLog: async (_, { userId, id, input }, { user, res }) => {
     // Build dynamic SET clauses based on non-null input fields
     const fields = [];
     const values = [];
@@ -342,12 +327,55 @@ const Mutation = {
     }
   },
 
+  _staffSetCredentialStatus: async (_, { userId, status, lockDays = 7 }, { user, res }) => {
+    const validStatuses = ["locked", "active"];
+    if (!validStatuses.includes(status)) {
+      throwGraphQLError(res).message("Invalid credential status").status(400).throw();
+    }
+
+    let query, params;
+    console.log("Executing _staffSetCredentialStatus with params:", params);
+
+    if (status === "locked") {
+      query = `
+        UPDATE "UserCredentials"
+        SET credentials_status = $1,
+            locked_until = NOW() + $3 * INTERVAL '1 day'
+        WHERE id = $2
+        AND credentials_status != 'unverified'
+        RETURNING credentials_status, locked_until;
+      `;
+      params = [status, userId, lockDays];
+    } else {
+      // status = "active"
+      query = `
+        UPDATE "UserCredentials"
+        SET credentials_status = $1,
+            locked_until = NULL
+        WHERE id = $2
+        AND credentials_status != 'unverified'
+        RETURNING credentials_status, locked_until;
+      `;
+      params = [status, userId];
+    }
+
+    
+    try {
+      const { rows } = await db.query(query, params);
+      if (rows.length === 0) {
+        throwGraphQLError(res).message("User not found").status(404).throw();
+      }
+      return rows[0];
+    } catch (err) {
+      logger.error("Error in _staffSetCredentialStatus:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    }
+  },
+
 };
 
-const applyUpdatePersonalRecord = async (_, { userId, input }, { user, res, db }) => {
-  if (!user || !user.id) {
-    throwGraphQLError(res).message("Unauthorized").status(401).throw();
-  }
+const applyUpdatePersonalRecord = async (_, { userId, input }, { user, res }) => {
+
 
   // Whitelist of allowed fields
   const allowedFields = [
@@ -361,7 +389,7 @@ const applyUpdatePersonalRecord = async (_, { userId, input }, { user, res, db }
     "nationality",
     "religion",
     "contactNumber",
-    "home_address",
+    "present_address",
     "province_address"
   ];
 

@@ -1,3 +1,4 @@
+scalar Date
 
 
 enum USER_SEX {
@@ -24,15 +25,16 @@ type userProfile{
   first_name: String!
   middle_name: String!
   last_name: String!
-  suffix: String!
+  suffix: String
   date_of_birth: Date!
   sex: USER_SEX!
-  status: USER_CIVILSTATUS!
+  civil_status: USER_CIVILSTATUS!
   nationality: String!
   religion: String!
   contactNumber: String!
   present_address: String!
   province_address: String!
+  status: UpdateStatus!
   email: String
   entityId: ID
   updated_at: Date
@@ -43,14 +45,14 @@ input userProfileUpdateInput{
   first_name: String!
   middle_name: String!
   last_name: String!
-  suffix: String!
+  suffix: String
   date_of_birth: Date!
   sex: USER_SEX!
   civil_status: USER_CIVILSTATUS!
   nationality: String!
   religion: String!
   contactNumber: String!
-  home_address: String!
+  present_address: String!
   province_address: String!
 }
 
@@ -69,6 +71,23 @@ input BranchIdentifierInput{
 input BranchIdentifierUpdateInput{
   branch: USER_BRANCH
   identifier: ID
+}
+
+enum UpdateStatus{
+    InProgress
+    Pending
+    Revision
+    RevisionSubmitted
+    Expired
+    Cancelled
+    Approved
+}
+
+enum CredentialStatus{
+  unverified
+  active
+  locked
+  disabled
 }
 
 # Queries
@@ -95,10 +114,10 @@ type Mutation {
   createPersonalRecordLog(input: userProfileUpdateInput!): userProfile
   updatePersonalRecordLog(userId: ID!, input: userProfileUpdateInput!): userProfile
 
-  createUserBranchIdentifier(input: BranchIdentifierInput!): BranchIdentifier
+  createBranchIdentifier(identifier: ID!): BranchIdentifier
   updateUserBranchIdentifier(userId: ID!, input: BranchIdentifierUpdateInput!): BranchIdentifier
 
-  SetPersonalRecordLog(userId: ID!, status: UpdateStatus!): UpdateStatus
+  setPersonalRecordLog(userId: ID!, status: UpdateStatus!): UpdateStatus
   cancelPersonalRecordLog: String
 
   reloadCredentialStatus: String
