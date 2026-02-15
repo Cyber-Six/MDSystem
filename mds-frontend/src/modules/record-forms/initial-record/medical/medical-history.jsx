@@ -52,7 +52,19 @@ const MedicalHistoryForm = ({ data, onChange }) => {
 
   const handleFamilyConditionChange = (conditionId, checked) => {
     const family = { ...data.family, [conditionId]: checked };
-    onChange({ ...data, family });
+    // Clear the "who has it" field if unchecked
+    if (!checked) {
+      const familyWhoHasIt = { ...data.familyWhoHasIt };
+      delete familyWhoHasIt[conditionId];
+      onChange({ ...data, family, familyWhoHasIt });
+    } else {
+      onChange({ ...data, family });
+    }
+  };
+
+  const handleFamilyWhoHasItChange = (conditionId, value) => {
+    const familyWhoHasIt = { ...data.familyWhoHasIt, [conditionId]: value };
+    onChange({ ...data, familyWhoHasIt });
   };
 
   const handleFamilyOtherChange = (value) => {
@@ -108,14 +120,6 @@ const MedicalHistoryForm = ({ data, onChange }) => {
                 />
               </div>
             ))}
-            {/* None Option */}
-            <div className="border border-neutral-200 rounded-lg p-4">
-              <Checkbox
-                label="None"
-                checked={data.selfNone || false}
-                onChange={(e) => onChange({ ...data, selfNone: e.target.checked })}
-              />
-            </div>
           </div>
           {/* Other Option - Separate at bottom */}
           <div className="mt-6 border-2 border-neutral-300 rounded-lg p-4">
@@ -142,7 +146,7 @@ const MedicalHistoryForm = ({ data, onChange }) => {
       {activeTab === 'family' && (
         <div>
           <p className="text-sm text-secondary-600 mb-4">
-            Check any conditions that apply to your immediate family members:
+            Check any conditions that apply to your immediate family members and specify who has it:
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {familyMedicalConditions.map((condition) => (
@@ -152,16 +156,18 @@ const MedicalHistoryForm = ({ data, onChange }) => {
                   checked={data.family?.[condition.id] || false}
                   onChange={(e) => handleFamilyConditionChange(condition.id, e.target.checked)}
                 />
+                {data.family?.[condition.id] && (
+                  <div className="mt-2 ml-6">
+                    <Input
+                      placeholder="Who has this condition? (e.g., Mother, Father, Sibling)"
+                      value={data.familyWhoHasIt?.[condition.id] || ''}
+                      onChange={(e) => handleFamilyWhoHasItChange(condition.id, e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                )}
               </div>
             ))}
-            {/* None Option */}
-            <div className="border border-neutral-200 rounded-lg p-4">
-              <Checkbox
-                label="None"
-                checked={data.familyNone || false}
-                onChange={(e) => onChange({ ...data, familyNone: e.target.checked })}
-              />
-            </div>
           </div>
           {/* Other Option - Separate at bottom */}
           <div className="mt-6 border-2 border-neutral-300 rounded-lg p-4">
@@ -171,12 +177,17 @@ const MedicalHistoryForm = ({ data, onChange }) => {
               onChange={(e) => onChange({ ...data, familyOtherChecked: e.target.checked })}
             />
             {data.familyOtherChecked && (
-              <div className="mt-3">
+              <div className="mt-3 space-y-2">
                 <Textarea
                   placeholder="Please specify other medical conditions..."
                   value={data.familyOther || ''}
                   onChange={(e) => handleFamilyOtherChange(e.target.value)}
-                  rows={3}
+                  rows={2}
+                />
+                <Input
+                  placeholder="Who has this condition?"
+                  value={data.familyOtherWhoHasIt || ''}
+                  onChange={(e) => onChange({ ...data, familyOtherWhoHasIt: e.target.value })}
                 />
               </div>
             )}

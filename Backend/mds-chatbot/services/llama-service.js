@@ -232,7 +232,7 @@ class LlamaService {
   /**
    * Generate streaming AI response
    * @param {Array} messages - Conversation history [{ role: 'user'|'assistant', content: string }]
-   * @param {Object} options - Generation options
+   * @param {Object} options - Generation options (includes optional AbortSignal)
    * @param {Function} onToken - Callback for each token chunk
    * @returns {Promise<Object>} - Final response with content, tokens, and duration
    */
@@ -283,15 +283,22 @@ class LlamaService {
       let fullContent = '';
       let tokenCount = 0;
 
-      // Make streaming request to llama.cpp server
+      // Make streaming request to llama.cpp server with abort support
+      const axiosConfig = {
+        timeout: config.llamaServer.timeout,
+        headers: { 'Content-Type': 'application/json' },
+        responseType: 'stream',
+      };
+
+      // Add abort signal if provided
+      if (options.signal) {
+        axiosConfig.signal = options.signal;
+      }
+
       const response = await axios.post(
         `${this.baseUrl}/completion`,
         requestBody,
-        {
-          timeout: config.llamaServer.timeout,
-          headers: { 'Content-Type': 'application/json' },
-          responseType: 'stream',
-        }
+        axiosConfig
       );
 
       return new Promise((resolve, reject) => {
@@ -390,6 +397,14 @@ class LlamaService {
           logger.error('Streaming error', { error: error.message });
           reject(error);
         });
+
+        // Handle abort signal
+        if (options.signal) {
+          options.signal.addEventListener('abort', () => {
+            response.data.destroy();
+            reject(new Error('AbortError'));
+          });
+        }
       });
 
     } catch (error) {

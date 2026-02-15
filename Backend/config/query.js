@@ -59,6 +59,18 @@ async function findUserByEmail(email) {
     return result.rows[0] || null;
 }
 
+async function findEmailByUserId(userId) {
+  const sql = `
+      SELECT email
+      FROM "UserCredentials"
+      WHERE id = $1
+      LIMIT 1;
+  `;
+
+  const result = await query(sql, [userId]);
+  return result.rows[0]?.email || null;
+}
+
 // ✅ Create user (final step of registration)
 async function createUser({ email, password, role, data_consent_version }) {
     // ✅ Hash password
@@ -201,7 +213,7 @@ async function setExpiredUpdateTickets(id) {
     const sql = `
       UPDATE "patientUpdateLog"
       SET status = 'Expired'
-      WHERE id = $1 AND status = 'In-progress';
+      WHERE id = $1 AND status = 'InProgress';
       `;
 
     try {
@@ -212,7 +224,22 @@ async function setExpiredUpdateTickets(id) {
     }
   }
 
-async function isPatientValidated(userId) {
+async function setExpiredPersonalTickets(id) {
+    const sql = `
+      UPDATE "UsersPersonalLog"
+      SET status = 'Expired'
+      WHERE id = $1 AND status = 'Pending';
+      `;
+
+    try {
+      const result = await query(sql, [id]);
+      logger.info(`Expired ${result.rowCount} personal update tickets.`);
+    } catch (err) {
+      logger.error("Error expiring personal update tickets:", err);
+    }
+  }
+
+async function isUserValidated(userId) {
   const sql = `
     SELECT credentials_status AS status
     FROM "UserCredentials"
@@ -242,12 +269,14 @@ module.exports = {
     queryControlled,
     countUserByEmail,
     findUserByEmail,
+    findEmailByUserId,
     createUser,
     createPatient,
     updateUserPasswordById,
     getUserConsentStateByEmail,
     updateUserConsent,
     getUserIdentity,
-    isPatientValidated,
-    setExpiredUpdateTickets
+    isUserValidated,
+    setExpiredUpdateTickets,
+    setExpiredPersonalTickets
 };

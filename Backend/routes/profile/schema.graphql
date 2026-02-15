@@ -1,3 +1,4 @@
+scalar Date
 
 
 enum USER_SEX {
@@ -13,90 +14,116 @@ enum USER_CIVILSTATUS {
     Separated
 }
 
+enum USER_BRANCH {
+  Manila
+  QuezonCity
+  Both
+}
 
-interface userProfile{
+type userProfile{
   id: ID!
   first_name: String!
   middle_name: String!
   last_name: String!
-  suffix: String!
+  suffix: String
   date_of_birth: Date!
   sex: USER_SEX!
-  status: USER_CIVILSTATUS!
+  civil_status: USER_CIVILSTATUS!
+  nationality: String!
   religion: String!
   contactNumber: String!
   present_address: String!
   province_address: String!
-  email: String!
+  status: UpdateStatus!
+  email: String
+  entityId: ID
   updated_at: Date
   created_at: Date
 }
 
-interface userProfileInput{
+input userProfileUpdateInput{
   first_name: String!
   middle_name: String!
   last_name: String!
-  suffix: String!
+  suffix: String
   date_of_birth: Date!
   sex: USER_SEX!
-  status: USER_CIVILSTATUS!
+  civil_status: USER_CIVILSTATUS!
+  nationality: String!
   religion: String!
   contactNumber: String!
   present_address: String!
   province_address: String!
-  email: String!
 }
 
 
 
-# Student profile
-type StudentProfile {
-  id: ID!
-  profile: userProfile!   # FK reference
-  program: String!
-  year: STUDENT_YEAR!
-  guardianName: String!
-  guardianRelation: String!
-  guardianContact: String!
+type BranchIdentifier{
+  branch: USER_BRANCH!
+  identifier: ID!
 }
 
-# Employee profile
-type EmployeeProfile {
-  id: ID!
-  profile: ProfileRecord!   # FK reference
-  department: String!
-  role: String!
-  position: String!
+input BranchIdentifierInput{
+  branch: USER_BRANCH!
+  identifier: ID!
+}
+
+input BranchIdentifierUpdateInput{
+  branch: USER_BRANCH
+  identifier: ID
+}
+
+enum UpdateStatus{
+    InProgress
+    Pending
+    Revision
+    RevisionSubmitted
+    Expired
+    Cancelled
+    Approved
+}
+
+enum CredentialStatus{
+  unverified
+  active
+  locked
+  disabled
 }
 
 # Queries
 type Query {
   # Student queries
-  getStudentProfile(id: ID!): StudentProfile
-  listStudentProfiles: [StudentProfile]
+  getCredentialStatus: String # get is unverified or not
+  getUserCredentialStatus(userId: ID!): String
 
-  # Employee queries
-  getEmployeeProfile(id: ID!): EmployeeProfile
-  listEmployeeProfiles: [EmployeeProfile]
+  getPersonalRecord: userProfile # get the main record of the logged in user 
+  getUserPersonalRecord(userId: ID!): userProfile
+
+  getPersonalRecordLogStatus: String # get the update status of the logged in user
+  getUserPersonalRecordLogStatus(userId: ID!): String
+
+  getUserPersonalRecordLog(userId: ID!, from: Date, offset: Int, limit: Int): [userProfile!]
+
+  getBranchIdentifier: BranchIdentifier
+  getUserBranchIdentifier(userId: ID!): BranchIdentifier
+
 }
 
 # Mutations
 type Mutation {
-  # Student mutations
-  createStudentProfile(
-    profileId: ID!
-    program: String!
-    year: StudentYear!
-    guardianName: String
-    guardianRelation: String
-    guardianContact: String
-  ): StudentProfile
+  createPersonalRecordLog(input: userProfileUpdateInput!): userProfile
+  updatePersonalRecordLog(userId: ID!, input: userProfileUpdateInput!): userProfile
 
-  # Employee mutations
-  createEmployeeProfile(
-    profileId: ID!
-    department: String!
-    role: EmployeeRole!
-    position: String!
-  ): EmployeeProfile
+  createBranchIdentifier(identifier: ID!): BranchIdentifier
+  updateUserBranchIdentifier(userId: ID!, input: BranchIdentifierUpdateInput!): BranchIdentifier
+
+  setPersonalRecordLog(userId: ID!, status: UpdateStatus!): UpdateStatus
+  cancelPersonalRecordLog: String
+
+  reloadCredentialStatus: String
+  reloadUserCredentialStatus(userId: ID!): String
+  
+  staffSetCredentialStatus(userId: ID!, status: CredentialStatus!): CredentialStatus
+
+
 }

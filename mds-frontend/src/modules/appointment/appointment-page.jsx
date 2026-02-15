@@ -69,9 +69,9 @@ const AppointmentPage = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-6">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold text-neutral-900 dark:text-white mb-2">
           Book an Appointment
         </h1>

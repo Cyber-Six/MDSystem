@@ -13,6 +13,67 @@ const logger = require('../../utils/logger');
 const isSafetyMode = modelConfig.safetyMode;
 
 class ChatController {
+  constructor() {
+    // Track active streaming sessions for cancellation support
+    this.activeSessions = new Map(); // sessionId -> { abortController, isCancelled }
+    
+    // Bind methods that use 'this' so they work as Express route handlers
+    this.cancelGeneration = this.cancelGeneration.bind(this);
+    this.sendMessageStream = this.sendMessageStream.bind(this);
+    this.sendMessage = this.sendMessage.bind(this);
+    this.createSession = this.createSession.bind(this);
+    this.getHistory = this.getHistory.bind(this);
+    this.closeSession = this.closeSession.bind(this);
+  }
+
+  /**
+   * Cancel ongoing message generation for a session
+   */
+  async cancelGeneration(req, res) {
+    const { sessionId } = req.body;
+
+    try {
+      if (!sessionId) {
+        return res.status(400).json({
+          error: 'INVALID_REQUEST',
+          message: 'Session ID is required'
+        });
+      }
+
+      const sessionData = this.activeSessions.get(sessionId);
+
+      if (!sessionData) {
+        // No active generation for this session
+        return res.json({
+          success: true,
+          message: 'No active generation to cancel'
+        });
+      }
+
+      // Mark as cancelled and abort the request
+      sessionData.isCancelled = true;
+      sessionData.abortController.abort();
+
+      logger.info('Generation cancelled by user', { sessionId });
+
+      return res.json({
+        success: true,
+        message: 'Generation cancelled successfully'
+      });
+
+    } catch (error) {
+      logger.error('Failed to cancel generation', {
+        error: error.message,
+        sessionId
+      });
+
+      return res.status(500).json({
+        error: 'CANCEL_FAILED',
+        message: 'Failed to cancel generation'
+      });
+    }
+  }
+
   /**
    * Handle new message and generate AI response
    */
@@ -203,20 +264,54 @@ class ChatController {
   /**
    * Handle new message with streaming AI response (Server-Sent Events)
    * This prevents Cloudflare 524 timeout by sending tokens in real-time
+   * Supports client-side cancellation via connection close
    */
   async sendMessageStream(req, res) {
     const { sessionId, message } = req.body;
 
     // Set up SSE headers immediately to prevent timeout
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    // Prevent compression that might buffer the stream
+    res.setHeader('Content-Encoding', 'none');
+    
     res.flushHeaders();
+
+    // Create abort controller for cancellation support
+    const abortController = new AbortController();
+    let isCancelled = false;
+
+    // Register this session for external cancellation
+    this.activeSessions.set(sessionId, {
+      abortController,
+      isCancelled: false
+    });
+
+    // Handle client disconnect/cancellation
+    req.on('close', () => {
+      // Check if cancelled via explicit cancel endpoint
+      const sessionData = this.activeSessions.get(sessionId);
+      if (sessionData && sessionData.isCancelled) {
+        isCancelled = true;
+      }
+      
+      if (!res.writableEnded) {
+        logger.info('Client disconnected, cancelling streaming response', { sessionId });
+        isCancelled = true;
+        abortController.abort();
+      }
+    });
 
     // Helper to send SSE event
     const sendEvent = (event, data) => {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (!isCancelled && !res.writableEnded) {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
     };
 
     try {
@@ -253,32 +348,36 @@ class ChatController {
 
         let fullContent = '';
 
-        // Generate streaming response
+        // Generate streaming response with abort support
         const aiResponse = await llamaService.generateStreamingResponse(
           contextMessages,
-          {},
+          { signal: abortController.signal },
           (token, isStop) => {
-            fullContent += token;
-            sendEvent('token', { token, content: fullContent });
+            if (!isCancelled) {
+              fullContent += token;
+              sendEvent('token', { token, content: fullContent });
+            }
           }
         );
 
-        // Save the complete response
-        await conversationService.addMessage(conversation.id, 'assistant', aiResponse.content, {
-          tokens: aiResponse.tokens,
-          duration: aiResponse.duration,
-          fastMode: true,
-          streamed: true,
-        });
+        // Only save the complete response if not cancelled
+        if (!isCancelled) {
+          await conversationService.addMessage(conversation.id, 'assistant', aiResponse.content, {
+            tokens: aiResponse.tokens,
+            duration: aiResponse.duration,
+            fastMode: true,
+            streamed: true,
+          });
 
-        // Send completion event
-        sendEvent('done', {
-          sessionId,
-          message: aiResponse.content,
-          role: 'assistant',
-          metadata: { tokens: aiResponse.tokens, duration: aiResponse.duration, streamed: true },
-          timestamp: new Date().toISOString(),
-        });
+          // Send completion event
+          sendEvent('done', {
+            sessionId,
+            message: aiResponse.content,
+            role: 'assistant',
+            metadata: { tokens: aiResponse.tokens, duration: aiResponse.duration, streamed: true },
+            timestamp: new Date().toISOString(),
+          });
+        }
         return res.end();
       }
 
@@ -352,13 +451,15 @@ class ChatController {
         fullContent = urgentPrefix;
       }
 
-      // Generate streaming AI response
+      // Generate streaming AI response with abort support
       const aiResponse = await llamaService.generateStreamingResponse(
         contextMessages,
-        {},
+        { signal: abortController.signal },
         (token, isStop) => {
-          fullContent += token;
-          sendEvent('token', { token, content: fullContent });
+          if (!isCancelled) {
+            fullContent += token;
+            sendEvent('token', { token, content: fullContent });
+          }
         }
       );
 
@@ -393,26 +494,40 @@ class ChatController {
         responseMetadata.urgentGuidance = true;
       }
 
-      // Save AI response
-      await conversationService.addMessage(
-        conversation.id,
-        'assistant',
-        finalResponse,
-        responseMetadata
-      );
+      // Only save AI response if not cancelled
+      if (!isCancelled) {
+        await conversationService.addMessage(
+          conversation.id,
+          'assistant',
+          finalResponse,
+          responseMetadata
+        );
 
-      // Send completion event
-      sendEvent('done', {
-        sessionId,
-        message: finalResponse,
-        role: 'assistant',
-        metadata: responseMetadata,
-        timestamp: new Date().toISOString(),
-      });
+        // Send completion event
+        sendEvent('done', {
+          sessionId,
+          message: finalResponse,
+          role: 'assistant',
+          metadata: responseMetadata,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Clean up session tracking
+      this.activeSessions.delete(sessionId);
 
       return res.end();
 
     } catch (error) {
+      // Clean up session tracking
+      this.activeSessions.delete(sessionId);
+      
+      // Don't log or send error if request was cancelled by client
+      if (error.name === 'AbortError' || isCancelled) {
+        logger.info('Streaming request cancelled by client', { sessionId });
+        return res.end();
+      }
+
       logger.error('Failed to process streaming chat message', {
         error: error.message,
         sessionId,

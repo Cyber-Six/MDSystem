@@ -74,4 +74,4 @@ function initMedicalEMRGraphQL(app) {
 }
 
 
-module.exports = { initPatientEMRGraphQL };
+module.exports = { initPatientEMRGraphQL, initMedicalEMRGraphQL };

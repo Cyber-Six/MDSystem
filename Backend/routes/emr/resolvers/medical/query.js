@@ -33,13 +33,13 @@ const Query = {
   },
 
 
-  getUserDentalPhotos: async (_, args, { user, res }) => {
+  getUserDentalPhotoRecord: async (_, args, { user, res }) => {
     if (!permit.isMedicalPermitted(user.id, permit.permitions.emr_allow_view, args.userId)) {
-      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserDentalPhotos`);
+      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserDentalPhotoRecord`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserDentalPhotos(_, args, { user, res });
+    const result = await Wrapper._getUserDentalPhotoRecord(_, args, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
