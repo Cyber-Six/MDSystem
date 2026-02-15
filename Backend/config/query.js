@@ -1,7 +1,6 @@
 const pool = require("./db.js");
 const { hashPassword } = require("../utils/security.js");
-const { detectRoleFromEmail, generateDomainCode,
-    normalizeName, normalizeNumber } = require("../utils/validator.js");
+const { deduceRoleFromEmail } = require("../utils/validator.js");
 const logger = require("../utils/logger.js");
 // ✅ Generic query wrapper
 async function query(text, params) {
@@ -106,7 +105,7 @@ async function createUser({ email, password, role, data_consent_version }) {
 
 async function createPatient({ id, email }) { 
 
-  const role = detectRoleFromEmail(email) === "Medical" ? "Employee" : detectRoleFromEmail(email);
+  const role = deduceRoleFromEmail(email);
   const sql = `
     INSERT INTO "Patients" (
         id,      

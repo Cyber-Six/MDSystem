@@ -1,6 +1,6 @@
 const express = require('express');
 
-const { isValidEmail, validatePassword, isStudentEmail } = require('../../../utils/validator.js');
+const { isValidEmail, validatePassword, PatientRoleFromEmail } = require('../../../utils/validator.js');
 const { portalBasedIpRateLimiter, ipRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const { getVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
 const query = require('../../../config/query.js');
@@ -110,7 +110,7 @@ router.post('/complete', ipRateLimiter("PatientAuthentication", "register"), asy
     const user = await query.createUser({
         email,
         password, // hashing inside service layer
-        role: isStudentEmail(email) ? "Student" : "Employee",
+        role: PatientRoleFromEmail(email),
         data_consent_version: process.env.DATA_CONSENT_VERSION,
     });
 

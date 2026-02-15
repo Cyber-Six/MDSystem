@@ -43,6 +43,8 @@ function mapRoleToProfile(role) {
       return "PatientAuthentication";
     case "Employee":
       return "PatientAuthentication";
+    case "Superior": // superior is stricted as staff
+      return "staffAuthentication";
     case "Medical":
       return "staffAuthentication";
     default:

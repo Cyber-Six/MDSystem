@@ -1,6 +1,6 @@
 const express = require('express');
 
-const { detectRoleFromEmail, isMedicalEmail, isValidEmail } = require('../../../utils/validator.js');
+const { isValidEmail } = require('../../../utils/validator.js');
 const { portalBasedIpRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const { verifyOTP, getOTPFailureCount, getOTPLockoutTTL,
         createVerificationSession,

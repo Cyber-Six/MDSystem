@@ -16,7 +16,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permitions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view credential status of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -30,7 +30,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permitions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -43,7 +43,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permitions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record log status of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -58,7 +58,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permitions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record log of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -73,7 +73,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permitions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view branch identifier of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -84,12 +84,21 @@ const Query = {
 };
 
 const Mutation = {
+  createPersonalRecordLog: async (_, { input }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    // record self update is allowed for staff
+    await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
+    return await Mutation.setPersonalRecordLog(_, { userId: user.id, status: "Approved" }, { user, res });
+  },
+
   updatePersonalRecordLog: async (_, { userId, input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permitions.profile_allow_edit, userId);  
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_edit, userId);  
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update personal record log of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -105,7 +114,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permitions.profile_allow_update_email_identifier, userId);
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_update_email_identifier, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update branch identifier of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -120,7 +129,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permitions.profile_allow_approval, userId);
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_approval, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to set personal record log of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

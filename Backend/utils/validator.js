@@ -19,12 +19,31 @@ function isMedicalEmail(email) {
   return regex.test(email);
 }
 
+function isSuperiorEmail(email) {
+  const regex = /^[a-z]+(\.[a-z]+)*\.superior@tip\.edu\.ph$/;
+  return regex.test(email);
+}
 
 function detectRoleFromEmail(email) {
   if (isStudentEmail(email)) return "Student";
   if (isEmployeeEmail(email)) return "Employee";
+  if (isSuperiorEmail(email)) return "Superior";
   if (isMedicalEmail(email)) return "Medical";
   return null;
+}
+
+function deduceRoleFromEmail(email) {
+  const role = detectRoleFromEmail(email);
+  if (!role) return role;
+  if (role === "Student") return "Student";
+  return "Employee";
+}
+
+function PatientRoleFromEmail(email) {
+  const role = detectRoleFromEmail(email);
+  if (!role) return role;
+  if (role === "Medical") return "Employee";
+  return role;
 }
 
 function isValidEmail(email) {
@@ -109,7 +128,10 @@ module.exports = {
   isStudentEmail,
   isEmployeeEmail,
   isMedicalEmail,
+  isSuperiorEmail,
   detectRoleFromEmail,
+  deduceRoleFromEmail,
+  PatientRoleFromEmail,
   getStudentBranchFromEmail,
   isValidEmail,
   validatePassword,
