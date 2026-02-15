@@ -26,14 +26,14 @@ const Query = {
         `,
       [userId]
       );
-     
+    
     const ticket = result.rows[0];
     logger.debug("Fetched Update Ticket:", ticket);
     if (ticket && ticket.status === "InProgress") {
       const cutoff = Date.now() - UPDATE_TICKET_EXPIRY_SEC * 1000;
       const createdAt = new Date(ticket.created_at).getTime();
 
-      if (createdAt >= cutoff || !(await db.isPatientValidated(userId))) {
+      if (createdAt >= cutoff || !(await db.isUserValidated(userId))) {
         return {id: ticket.id, patientId: userId, status: "InProgress", scope: ticket.scope}; 
         } // still valid until nth days or the first ticket
 
@@ -104,7 +104,7 @@ const Query = {
     });
   },
 
-  _getUserDentalPhotos: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit }, { user, res }) => {
+  _getUserDentalPhotoRecord: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit }, { user, res }) => {
     if (!user?.id) {
       throwGraphQLError(res).status(401).message("Unauthorized").throw();
     }
@@ -362,7 +362,7 @@ const Query = {
     }
 
     const query = `
-      SELECT al.*, pul.created_at, pil.status
+      SELECT al.*, pul.created_at, pul.status
       FROM "Allergy" al
       JOIN "patientUpdateLog" pul ON pul.id = al.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4

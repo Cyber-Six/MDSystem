@@ -22,7 +22,7 @@ async function upsertEmergencyNumber(input) {
   // Otherwise insert new
   const result = await query(
     `INSERT INTO "EmergencyNumber"
-      ("contactName", "relationship", "contactNumber", "isverified", "created_at")
+      ("contactName", "relationship", "contactNumber", "isVerified", "created_at")
      VALUES ($1, $2, $3, $4, NOW())
      RETURNING *;`,
     [

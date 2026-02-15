@@ -27,22 +27,16 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "student_profile" 
-        (id, program, year, guardian_name, guardian_relation, guardian_contact)
-       VALUES ($1, $2, $3, $4, $5, $6)
+        (id, program, year)
+       VALUES ($1, $2, $3)
        ON CONFLICT (id) DO UPDATE
          SET program = EXCLUDED.program,
-             year = EXCLUDED.year,
-             guardian_name = EXCLUDED.guardian_name,
-             guardian_relation = EXCLUDED.guardian_relation,
-             guardian_contact = EXCLUDED.guardian_contact
+             year = EXCLUDED.year
              RETURNING *;`,
       [
         recordId,
         args.input.program,
-        args.input.year,
-        args.input.guardian_name,
-        args.input.guardian_relation,
-        args.input.guardian_contact
+        args.input.year
       ]
     );
     logger.debug("Upserted Student Profile:", result.rows[0]);
@@ -258,9 +252,9 @@ const Mutation = {
     return {...(args.input), id: recordId, archived_at: null};
   },
 
-  _DentalPhotos: async (_, {args, recordId}, { user, res }) => {
+  _DentalPhotoRecord: async (_, {args, recordId}, { user, res }) => {
     const result = await db.query(
-      `INSERT INTO "DentalPhotos" 
+      `INSERT INTO "DentalPhotoRecord" 
         ("id", "upperTeeth", "lowerTeeth")
        VALUES ($1, $2, $3)
        ON CONFLICT (id) DO UPDATE
@@ -273,9 +267,8 @@ const Mutation = {
         args.input.lowerTeeth
       ]
     );
-
-    logger.debug("Upserted Dental Photos:", result.rows[0]);
-    return {...(args.input), id: recordId, archived_at: null};
+    const record = result.rows[0];
+    return {...record, id: recordId, isValid: result.rows[0].isValid, archived_at: null};
   },
 
   
@@ -313,7 +306,7 @@ const Mutation = {
         if (err.code === '23503') { // foreign key violation
           throwGraphQLError(res)
             .status(400)
-            .message(`Invalid acuityId: ${args.input.visualAcuity.acuityId}`)
+            .message(`Invalid tagId: ${appliance.tagId}`)
             .throw();
           }
         else throw err;
@@ -353,9 +346,9 @@ const Mutation = {
   },
 
   _VisualAcuityProfile: async (_, {args, recordId}, { user, res }) => {
-    
-    await anchor.VisualAcuity(record.id);
-    await remove.VisualAcuityRecord(record.id);
+
+    await anchor.VisualAcuity(recordId);
+    await remove.VisualAcuityRecord(recordId);
 
     if (!args.input.visualAcuity) {
        return {
@@ -364,7 +357,6 @@ const Mutation = {
          archived_at: null
        };
       }
-    
     try {
       const result = await db.queryControlled(
         `INSERT INTO "VisualAcuityRecord" 

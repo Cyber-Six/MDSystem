@@ -19,7 +19,6 @@ const patientSchema = makeExecutableSchema({
   resolvers: {
     Query: patientResolver.Query,
     Mutation: patientResolver.Mutation,
-    UserProfile: patientResolver.UserProfile, // <-- interface resolver
   },
 });
 
@@ -28,13 +27,12 @@ const medicalSchema = makeExecutableSchema({
   resolvers: {
     Query: medicalResolver.Query,
     Mutation: medicalResolver.Mutation,
-    UserProfile: medicalResolver.UserProfile, // <-- interface resolver
   },
 });
 
-function initPatientEMRGraphQL(app) {
+function initPatientProfileGraphQL(app) {
   app.use(
-    "/emr/patient",
+    "/profile/patient",
     jwtProtect("patient"),
     graphqlHTTP((req) => {
       if (!req.body || !req.body.query) {
@@ -53,9 +51,9 @@ function initPatientEMRGraphQL(app) {
 }
 
 
-function initMedicalEMRGraphQL(app) {
+function initMedicalProfileGraphQL(app) {
   app.use(
-    "/emr/medical",
+    "/profile/medical",
     jwtProtect("medical"),
     graphqlHTTP((req) => {
       if (!req.body || !req.body.query) {
@@ -74,4 +72,4 @@ function initMedicalEMRGraphQL(app) {
 }
 
 
-module.exports = { initPatientEMRGraphQL, initMedicalEMRGraphQL };
+module.exports = { initPatientProfileGraphQL, initMedicalProfileGraphQL };

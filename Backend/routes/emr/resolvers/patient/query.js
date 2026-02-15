@@ -14,7 +14,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 const Query = {
   getUpdateTicket: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserUpdateTicket(_, {userId: user.id}, { user, res });
-    console.log("Get Update Ticket:", result);
+    if (!(result?.id)) return null; // No ticket found at all
     return result; // return scalar ID
   },
 
@@ -27,8 +27,8 @@ const Query = {
   },
 
 
-  getDentalPhotos: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserDentalPhotos(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
+  getDentalPhotoRecord: async (_, __, { user, res }) => {
+    const result = await Wrapper._getUserDentalPhotoRecord(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
     else if (result[0].status === "InProgress") return result[0];
 
