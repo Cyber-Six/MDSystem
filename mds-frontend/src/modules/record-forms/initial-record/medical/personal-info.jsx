@@ -127,7 +127,6 @@ const PersonalInfoForm = ({ data, onChange }) => {
             options={[
               { value: 'Male', label: 'Male' },
               { value: 'Female', label: 'Female' },
-              { value: 'Other', label: 'Other' },
             ]}
           />
           <Select
@@ -138,8 +137,8 @@ const PersonalInfoForm = ({ data, onChange }) => {
             options={[
               { value: 'Single', label: 'Single' },
               { value: 'Married', label: 'Married' },
-              { value: 'Divorced', label: 'Divorced' },
               { value: 'Widowed', label: 'Widowed' },
+              { value: 'Separated', label: 'Separated' },
             ]}
           />
           <Input

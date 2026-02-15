@@ -17,6 +17,8 @@ const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
+const { initializeChatbot, shutdownChatbot } = require('./mds-chatbot');
+
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -59,6 +61,23 @@ app.use((err, req, res, next) => {
 initPatientEMRGraphQL(app);
 initPatientProfileGraphQL(app);
 
+// Initialize AI Medical Chatbot (routes registered synchronously, llama connection async)
+(async () => {
+  try {
+    const chatbot = await initializeChatbot(app, {
+      autoStartLlama: process.env.AUTO_START_LLAMA === 'true'
+    });
+    
+    if (chatbot) {
+      logger.info('✅ AI Medical Chatbot initialized on patient portal');
+    } else {
+      logger.warn('⚠️ AI Medical Chatbot llama service not available - routes still accessible');
+    }
+  } catch (err) {
+    logger.error('AI Chatbot initialization error', { error: err.message });
+  }
+})();
+
 app.use('/auth/register', registerRoutes);
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
@@ -88,6 +107,25 @@ app.get('*path', (req, res) => {
 // Start server
 const PORT = process.env.PATIENT_PORT || 3001;
 const HOST = process.env.HOST;
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received, shutting down gracefully...');
+  await shutdownChatbot();
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', async () => {
+  logger.info('SIGINT received, shutting down gracefully...');
+  await shutdownChatbot();
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
 });
