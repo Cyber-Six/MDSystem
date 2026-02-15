@@ -2,8 +2,6 @@ const jwt = require("jsonwebtoken");
 const path = require("path");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
-const client = require("./redis.js"); // assume you have a Redis client
-const validator = require("../utils/validator.js");
 const { saveRefreshSession, getRefreshSession, 
         saveStaffAnchor, getStaffAnchor, } = require("./redis.js");
 const logger = require("../utils/logger.js");
