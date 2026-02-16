@@ -162,10 +162,7 @@ export const createInitialMedicalRecord = async (formData) => {
         program: formData.personalInfo.program === 'Other' 
           ? formData.personalInfo.programOther 
           : formData.personalInfo.program,
-        year: mapYearLevel(formData.personalInfo.studentCategory),
-        guardian_name: formData.personalInfo.emergencyContacts[0]?.name || '',
-        guardian_relation: formData.personalInfo.emergencyContacts[0]?.relationship || '',
-        guardian_contact: formData.personalInfo.emergencyContacts[0]?.contactNumber || ''
+        year: mapYearLevel(formData.personalInfo.studentCategory)
       });
       results.studentProfile = studentProfile;
       console.log('[EMR Service] Student profile created:', studentProfile);
@@ -529,9 +526,6 @@ const createStudentProfile = async (input) => {
         id
         program
         year
-        guardian_name
-        guardian_relation
-        guardian_contact
       }
     }
   `;
