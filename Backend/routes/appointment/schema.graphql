@@ -12,7 +12,6 @@ enum SCHEDULING_STATUS {
   Scheduled
   Rejected
   Expired
-  InProgress
   Completed
   NoShow
   CancelledByPatient
@@ -23,7 +22,7 @@ type SlotScheduler {
   id: ID!
   label: String!
   location: LOCATION_DESIGNATION!
-  scheduleFlags: Int!
+  schedulePerWeek: [String!]!
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
@@ -36,7 +35,7 @@ type SlotScheduler {
 input SlotSchedulerInput {
   label: String!
   location: LOCATION_DESIGNATION!
-  scheduleFlags: Int!
+  schedulePerWeek: [String!]!
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
@@ -49,7 +48,7 @@ input SlotSchedulerInput {
 input SlotSchedulerUpdateInput {
   label: String
   location: LOCATION_DESIGNATION
-  scheduleFlags: Int
+  schedulePerWeek: [String!]!
   morningAllowed: Int
   afternoonAllowed: Int
   notes: String
@@ -70,18 +69,16 @@ input ScheduleWhitelistInput {
   patientId: ID!
 }
 
-type SlotCustomDate {
-  id: ID!
-  slotSchedulerId: ID!
-  scheduledDate: Date!
-}
+
 
 
 type ScheduleDateEntity{
   id: ID!
   slotId: ID!
   morningAllowed: Int!
+  morningRegistered: Int!
   afternoonAllowed: Int!
+  afternoonRegistered: Int!
   allowDuring: Date!
   scheduledDate: Date!
   isCustomDate: Boolean!
@@ -114,6 +111,10 @@ type patientScheduleRequirement {
   scheduleRequirementId: ID!
   filename: UUID!
   created_at: Date!
+  id: ID!
+  scheduleRequirementId: ID!
+  filename: UUID!
+  created_at: Date!
 }
 
 input patientScheduleRequirementInput {
@@ -141,17 +142,31 @@ input patientSlotInput { # for medical only
 
 # Queries
 type Query {
-  listOpenAppointments: [SlotScheduler!]! # list all open appointments
-  listAppointmentSchedules(schedulerId: ID!, date: Date!): ScheduleDateEntity! # list the dates
+  listOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]! # list all open appointments
+  listCustomDates(schedulerId: ID!, offset: Int, limit: Int): [Date!]!
+  listAppointmentSchedules(schedulerId: ID!, date: Date!): ScheduleDateEntity 
   listAppointmentRequirements(slotId: ID!): [ScheduleRequirement!]!
 
+  getAppointmentStatus: SCHEDULING_STATUS
 
+  #----------- --^ Patient and --v Medical
+  getUserAppointmentRecord(userId: ID!): patientSlot
+
+  listAllOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]!
+  listAllAppointmentSchedules(schedulerId: ID!, date: Date!): ScheduleDateEntity
+  listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]!
+
+  searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]!
 }
 
 # Mutations
 type Mutation {
-  submitAppointment(schedulerId: ID!, date:Date!, requirements: [patientScheduleRequirementInput!]!): patientSlot!  
+  submitAppointment(schedulerId: ID!, date: Date!, requirements: [patientScheduleRequirementInput!]!): patientSlot!  
   cancelAppointment: Boolean!
+
+  #----------- --^ Patient and --v Medical
+  respondAppointment(slotId: ID!, status: SCHEDULING_STATUS!, notes: String): patientSlot!
+  recordAppointmentAttendance(slotId: ID!, arrived: Boolean!): patientSlot!
 
   createScheduler(input: SlotSchedulerInput!): SlotScheduler!
   updateScheduler(schedulerId: ID!, input: SlotSchedulerUpdateInput!): SlotScheduler!
@@ -160,5 +175,11 @@ type Mutation {
   updateSchedulerRequirement(requirementId: ID!, input: ScheduleRequirementInput!): ScheduleRequirement!
   deleteSchedulerRequirement(requirementId: ID!): Boolean!
 
-  setCustomDates(schedulerId: ID!, dates: [Date!]!): SlotCustomDate!
+  setCustomDates(schedulerId: ID!, dates: [Date!]!): [Date!]!
+  unsetCustomDates(schedulerId: ID!, dates: [Date!]!): [Date!]!!
+
+  addEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]!
+  removeEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]!
+
+  updateDateIdentity(schedulerId: ID!, date: Date!, input: ScheduleDateEntityUpdate!): ScheduleDateEntity!
 }
