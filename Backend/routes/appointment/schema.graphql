@@ -1,0 +1,164 @@
+scalar Date
+scalar UUID
+
+enum LOCATION_DESIGNATION {
+  Arlegui
+  Casal
+  QuezonCity
+}
+
+enum SCHEDULING_STATUS {
+  Pending
+  Scheduled
+  Rejected
+  Expired
+  InProgress
+  Completed
+  NoShow
+  CancelledByPatient
+  CancelledByMedical
+}
+
+type SlotScheduler {
+  id: ID!
+  label: String!
+  location: LOCATION_DESIGNATION!
+  scheduleFlags: Int!
+  morningAllowed: Int!
+  afternoonAllowed: Int!
+  notes: String
+  isActive: Boolean!
+  containsCustomDates: Boolean!
+  whiteListOnly: Boolean
+  created_at: Date
+}
+
+input SlotSchedulerInput {
+  label: String!
+  location: LOCATION_DESIGNATION!
+  scheduleFlags: Int!
+  morningAllowed: Int!
+  afternoonAllowed: Int!
+  notes: String
+  isActive: Boolean!
+  slotCustomDates: [Date!]!
+  whiteLists: [ID!]!
+  whiteListOnly: Boolean!
+}
+
+input SlotSchedulerUpdateInput {
+  label: String
+  location: LOCATION_DESIGNATION
+  scheduleFlags: Int
+  morningAllowed: Int
+  afternoonAllowed: Int
+  notes: String
+  isActive: Boolean
+  whiteListOnly: Boolean
+}
+
+
+
+type ScheduleWhitelist {
+  id: ID!
+  slotSchedulerId: ID!
+  patientId: ID!
+}
+
+input ScheduleWhitelistInput {
+  slotSchedulerId: ID!
+  patientId: ID!
+}
+
+type SlotCustomDate {
+  id: ID!
+  slotSchedulerId: ID!
+  scheduledDate: Date!
+}
+
+
+type ScheduleDateEntity{
+  id: ID!
+  slotId: ID!
+  morningAllowed: Int!
+  afternoonAllowed: Int!
+  allowDuring: Date!
+  scheduledDate: Date!
+  isCustomDate: Boolean!
+}
+
+input ScheduleDateEntityUpdate {
+  morningAllowed: Int
+  afternoonAllowed: Int
+  allowDuring: Date
+  scheduledDate: Date!
+}
+
+type ScheduleRequirement {
+  id: ID!
+  slotId: ID!
+  label: String!
+  notes: String
+  isDigital: Boolean!
+  isActive: Boolean!
+}
+
+input ScheduleRequirementInput {
+  label: String!
+  notes: String
+  isDigital: Boolean!
+}
+
+type patientScheduleRequirement {
+  id: ID!
+  scheduleRequirementId: ID!
+  filename: UUID!
+  created_at: Date!
+}
+
+input patientScheduleRequirementInput {
+  scheduleRequirementId: ID!
+  filename: UUID!
+}
+
+type patientSlot {
+  id: ID!
+  patientId: ID!
+  slotEntityId: ID!
+  status: SCHEDULING_STATUS!
+  requirements: [patientScheduleRequirement!]!
+  approvedBy: ID
+  notes: String
+  arrived_at: Date
+  created_at: Date!
+}
+
+input patientSlotInput { # for medical only
+  slotEntityId: ID!
+  status: SCHEDULING_STATUS!
+  notes: String
+}
+
+# Queries
+type Query {
+  listOpenAppointments: [SlotScheduler!]! # list all open appointments
+  listAppointmentSchedules(schedulerId: ID!, date: Date!): ScheduleDateEntity! # list the dates
+  listAppointmentRequirements(slotId: ID!): [ScheduleRequirement!]!
+
+
+}
+
+# Mutations
+type Mutation {
+  submitAppointment(schedulerId: ID!, date:Date!, requirements: [patientScheduleRequirementInput!]!): patientSlot!  
+  cancelAppointment: Boolean!
+
+  createScheduler(input: SlotSchedulerInput!): SlotScheduler!
+  updateScheduler(schedulerId: ID!, input: SlotSchedulerUpdateInput!): SlotScheduler!
+  deleteScheduler(schedulerId: ID!): Boolean!
+
+  updateSchedulerRequirement(requirementId: ID!, input: ScheduleRequirementInput!): ScheduleRequirement!
+  deleteSchedulerRequirement(requirementId: ID!): Boolean!
+
+  setCustomDates(schedulerId: ID!, dates: [Date!]!): SlotCustomDate!
+}

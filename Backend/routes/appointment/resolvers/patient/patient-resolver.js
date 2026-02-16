@@ -58,20 +58,6 @@ Mutation = {
     return await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
   },
   
-  updatePatientPersonalRecordLog: async (_, { input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
-    if (latest?.status === "Pending" || latest?.status === "InProgress") {
-      throwGraphQLError(res).message("An update is already in progress. Please wait for it to complete before creating a new one.").status(400).throw();
-      }
-    if (latest?.status === "Revision" || latest?.status === "RevisionSubmitted"){
-      throwGraphQLError(res).message("Revision still pending. Please complete the revision before creating a new update.").status(400).throw();
-    }
-    return await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
-  },
-
   createBranchIdentifier: async (_, { identifier }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
