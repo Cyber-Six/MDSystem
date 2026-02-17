@@ -345,30 +345,33 @@ const Mutation = {
     };
   },
 
-  _VisualAcuityProfile: async (_, {args, recordId}, { user, res }) => {
-
+  _VisualAcuityProfile: async (_, { args, recordId }, { user, res }) => {
+    // Anchor and cleanup existing records
     await anchor.VisualAcuity(recordId);
     await remove.VisualAcuityRecord(recordId);
 
+    // If no acuity input provided, return with acuity = null
     if (!args.input.acuity) {
-       return {
-         id: recordId,
-         acuity: null,
-         archived_at: null
-       };
-      }
+      return {
+        id: recordId,
+        acuity: null,
+        archived_at: null
+      };
+    }
+
     try {
+      // Upsert the visual acuity record
       const result = await db.queryControlled(
         `INSERT INTO "VisualAcuityRecord" 
           ("id", "acuityId", "recorded_at", "left_eye", "right_eye", "notes")
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (id) DO UPDATE
-           SET "acuityId" = EXCLUDED."acuityId",
-               "recorded_at" = EXCLUDED."recorded_at",
-               "left_eye" = EXCLUDED."left_eye",
-               "right_eye" = EXCLUDED."right_eye",
-               "notes" = EXCLUDED."notes"
-               RETURNING *;`,
+           SET "acuityId"   = EXCLUDED."acuityId",
+               "recorded_at"= EXCLUDED."recorded_at",
+               "left_eye"   = EXCLUDED."left_eye",
+               "right_eye"  = EXCLUDED."right_eye",
+               "notes"      = EXCLUDED."notes"
+         RETURNING *;`,
         [
           recordId,
           args.input.acuity.acuityId,
@@ -379,20 +382,27 @@ const Mutation = {
         ]
       );
 
-    logger.debug("Upserted Visual Acuity Profile:", result.rows[0]);
-    return {...(args.input), id: recordId, archived_at: null};
+      const acuityRecord = result.rows[0];
+      logger.debug("Upserted Visual Acuity Profile:", acuityRecord);
+
+      // Return the proper shape expected by GraphQL
+      return {
+        id: recordId,
+        archived_at: null,
+        acuity: acuityRecord
+      };
     } catch (err) {
       if (err.code === '23503') { // foreign key violation
         throwGraphQLError(res)
           .status(400)
-          .message(`Invalid acuityId: ${args.input.visualAcuity.acuityId}`)
+          .message(`Invalid acuityId: ${args.input.acuity.acuityId}`)
           .throw();
-        }
-      else { throw err; }
+      } else {
+        throw err;
+      }
     }
-
-
   },
+
 
   _MedicalHistory: async (_, {args, recordId}, { user, res }) => {
     await anchor.MedicalHistory(recordId);
