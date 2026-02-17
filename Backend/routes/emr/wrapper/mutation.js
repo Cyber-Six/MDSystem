@@ -350,10 +350,10 @@ const Mutation = {
     await anchor.VisualAcuity(recordId);
     await remove.VisualAcuityRecord(recordId);
 
-    if (!args.input.visualAcuity) {
+    if (!args.input.acuity) {
        return {
          id: recordId,
-         visualAcuity: null,
+         acuity: null,
          archived_at: null
        };
       }
@@ -371,11 +371,11 @@ const Mutation = {
                RETURNING *;`,
         [
           recordId,
-          args.input.visualAcuity.acuityId,
-          args.input.visualAcuity.recorded_at,
-          args.input.visualAcuity.left_eye,
-          args.input.visualAcuity.right_eye,
-          args.input.visualAcuity.notes
+          args.input.acuity.acuityId,
+          args.input.acuity.recorded_at,
+          args.input.acuity.left_eye,
+          args.input.acuity.right_eye,
+          args.input.acuity.notes
         ]
       );
 

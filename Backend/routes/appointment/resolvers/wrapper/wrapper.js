@@ -244,6 +244,23 @@ const Query = {
       return null; // No appointments found
     }
     return result.rows[0].status;
+  },
+
+  _searchAppointmentStatuses: async (_, { status, offset, limit }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const query = `
+      SELECT ps.*
+      FROM "patientSlot" ps
+      WHERE ps.status = $1
+      ORDER BY ps.created_at DESC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [status, limit || 10, offset || 0]);
+    return result.rows;
   }
 };
 
