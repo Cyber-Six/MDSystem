@@ -378,6 +378,9 @@ const Mutation = {
           args.input.visualAcuity.notes
         ]
       );
+
+    logger.debug("Upserted Visual Acuity Profile:", result.rows[0]);
+    return {...(args.input), id: recordId, archived_at: null};
     } catch (err) {
       if (err.code === '23503') { // foreign key violation
         throwGraphQLError(res)
@@ -388,8 +391,7 @@ const Mutation = {
       else { throw err; }
     }
 
-    logger.debug("Upserted Visual Acuity Profile:", result.rows[0]);
-    return {...(args.input), id: recordId, archived_at: null};
+
   },
 
   _MedicalHistory: async (_, {args, recordId}, { user, res }) => {

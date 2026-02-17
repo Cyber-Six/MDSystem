@@ -1,0 +1,190 @@
+scalar Date
+scalar UUID
+
+enum LOCATION_DESIGNATION {
+  Arlegui
+  Casal
+  QuezonCity
+}
+
+enum SCHEDULING_STATUS {
+  Pending
+  Scheduled
+  Rejected
+  Expired
+  Completed
+  NoShow
+  CancelledByPatient
+  CancelledByMedical
+}
+
+enum SCHEDULE_SESSION {
+  Morning
+  Afternoon
+}
+
+type SlotScheduler {
+  id: ID!
+  label: String!s
+  location: LOCATION_DESIGNATION!
+  schedulePerWeek: [String!]!
+  morningAllowed: Int!
+  afternoonAllowed: Int!
+  notes: String
+  isActive: Boolean!
+  containsCustomDates: Boolean!
+  whiteListOnly: Boolean
+  created_at: Date
+}
+
+input SlotSchedulerInput {
+  label: String!
+  location: LOCATION_DESIGNATION!
+  schedulePerWeek: [String!]!
+  morningAllowed: Int!
+  afternoonAllowed: Int!
+  notes: String
+  isActive: Boolean!
+  slotCustomDates: [Date!]!
+  whiteLists: [ID!]!
+  whiteListOnly: Boolean!
+}
+
+input SlotSchedulerUpdateInput {
+  label: String
+  location: LOCATION_DESIGNATION
+  schedulePerWeek: [String!]!
+  morningAllowed: Int
+  afternoonAllowed: Int
+  notes: String
+  isActive: Boolean
+  whiteListOnly: Boolean
+}
+
+
+
+type ScheduleWhitelist {
+  id: ID!
+  slotSchedulerId: ID!
+  patientId: ID!
+}
+
+input ScheduleWhitelistInput {
+  slotSchedulerId: ID!
+  patientId: ID!
+}
+
+
+
+
+type ScheduleDateEntity{
+  id: ID!
+  slotId: ID!
+  morningAllowed: Int!
+  morningRegistered: Int!
+  morningPending: Int!
+  afternoonAllowed: Int!
+  afternoonRegistered: Int!
+  afternoonPending: Int!
+  allowDuring: Date!
+  scheduledDate: Date!
+}
+
+input ScheduleDateEntityUpdate {
+  morningAllowed: Int
+  afternoonAllowed: Int
+  allowDuring: Date
+  scheduledDate: Date!
+}
+
+type ScheduleRequirement {
+  id: ID!
+  slotId: ID!
+  label: String!
+  notes: String
+  isDigital: Boolean!
+  isActive: Boolean!
+}
+
+input ScheduleRequirementInput {
+  label: String!
+  notes: String
+  isDigital: Boolean!
+}
+
+type patientScheduleRequirement {
+  id: ID!
+  scheduleRequirementId: ID!
+  filename: UUID!
+  created_at: Date!
+}
+
+input patientScheduleRequirementInput {
+  scheduleRequirementId: ID!
+  filename: UUID!
+}
+
+type patientSlot {
+  id: ID!
+  patientId: ID!
+  slotEntityId: ID!
+  status: SCHEDULING_STATUS!
+  session: SCHEDULE_SESSION!
+  requirements: [patientScheduleRequirement!]!
+  approvedBy: ID
+  notes: String
+  arrived_at: Date
+  created_at: Date!
+}
+
+input patientSlotInput { # for medical only
+  slotEntityId: ID!
+  status: SCHEDULING_STATUS!
+  session: SCHEDULE_SESSION!
+  notes: String
+}
+
+# Queries
+type Query {
+  listOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]! # list all open appointments
+  listCustomDates(schedulerId: ID!, offset: Int, limit: Int): [Date!]!
+  listAppointmentSchedule(schedulerId: ID!, date: Date!): ScheduleDateEntity 
+  listAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]!
+
+  getAppointmentStatus: SCHEDULING_STATUS
+  getUserAppointmentStatus(userId: ID!): SCHEDULING_STATUS
+
+  #----------- --^ Patient and --v Medical
+  getUserAppointmentRecord(userId: ID!): patientSlot
+  getUserAppointmentRecords(userId: ID!, offset: Int, limit: Int): [patientSlot!]!
+
+  listAllOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]!
+  listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]!
+
+  searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]!
+}
+
+# Mutations
+type Mutation {
+  submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!): patientSlot!  
+  cancelAppointment: Boolean!
+
+  #----------- --^ Patient and --v Medical
+  respondAppointment(slotId: ID!, status: SCHEDULING_STATUS!, notes: String): patientSlot!
+  recordAppointmentAttendance(slotId: ID!, arrived: Boolean!): patientSlot!
+
+  createScheduler(input: SlotSchedulerInput!): SlotScheduler!
+  updateScheduler(schedulerId: ID!, input: SlotSchedulerUpdateInput!): SlotScheduler!
+  deleteScheduler(schedulerId: ID!): Boolean!
+
+  updateSchedulerRequirement(requirementId: ID!, input: ScheduleRequirementInput!): ScheduleRequirement!
+  deleteSchedulerRequirement(requirementId: ID!): Boolean!
+
+  setCustomDates(schedulerId: ID!, dates: [Date!]!): [Date!]!
+  unsetCustomDates(schedulerId: ID!, dates: [Date!]!): [Date!]!!
+
+  addEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]!
+  removeEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]!
+
+  updateDateIdentity(schedulerId: ID!, date: Date!, input: ScheduleDateEntityUpdate!): ScheduleDateEntity!
+}

@@ -2,6 +2,12 @@ CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);
 CREATE INDEX ON "patientUpdateLog"(status);
 
+CREATE INDEX idx_schedule_date 
+ON "ScheduleDateEntity" ("slotId","scheduledDate");
+
+CREATE INDEX idx_patientSlot_scheduler_date 
+ON "patientSlot" ("slotSchedulerId","scheduledDate");
+
 ALTER TABLE "DomainTypeCatalog"
 ADD CONSTRAINT uniq_domain_name UNIQUE (domain, name);
 
