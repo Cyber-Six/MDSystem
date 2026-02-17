@@ -1,0 +1,117 @@
+import React from 'react';
+
+const RecordChoiceModal = ({ isOpen, onSelect }) => {
+  if (!isOpen) return null;
+
+  const choices = [
+    {
+      id: 'medical',
+      title: 'Medical Update',
+      description: 'Update your medical history and health information',
+      icon: (
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      color: 'blue'
+    },
+    {
+      id: 'dental',
+      title: 'Dental Update',
+      description: 'Update your dental history and teeth records',
+      icon: (
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747 0-3 1-5 1-6.253M12 6.253L7 3m0 0l5-3m-5 3l5 3" />
+        </svg>
+      ),
+      color: 'green'
+    },
+    {
+      id: 'both',
+      title: 'Both Update',
+      description: 'Update both medical and dental information',
+      icon: (
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m7 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      color: 'purple'
+    }
+  ];
+
+  const colorStyles = {
+    blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 hover:border-blue-400 dark:hover:border-blue-500',
+    green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 hover:border-green-400 dark:hover:border-green-500',
+    purple: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 hover:border-purple-400 dark:hover:border-purple-500'
+  };
+
+  const iconStyles = {
+    blue: 'text-blue-600 dark:text-blue-400',
+    green: 'text-green-600 dark:text-green-400',
+    purple: 'text-purple-600 dark:text-purple-400'
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-auto">
+        {/* Header */}
+        <div className="bg-primary-500 dark:bg-neutral-800 rounded-t-2xl px-6 py-8">
+          <div className="flex items-center gap-4 mb-2">
+            <div className="w-10 h-12 rounded-xl bg-primary-400 dark:bg-neutral-700 flex items-center justify-center">
+              <svg className="w-6 h-6 text-white dark:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-heading font-bold text-white dark:text-white">
+                Choose Update Type
+              </h2>
+              <p className="text-white/90 dark:text-neutral-400 text-sm">
+                Select which records you'd like to update
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 md:p-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {choices.map((choice) => (
+              <button
+                key={choice.id}
+                onClick={() => onSelect(choice.id)}
+                className={`p-6 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-lg hover:scale-105 ${colorStyles[choice.color]}`}
+              >
+                <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 bg-white dark:bg-neutral-800`}>
+                  <div className={iconStyles[choice.color]}>
+                    {choice.icon}
+                  </div>
+                </div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                  {choice.title}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {choice.description}
+                </p>
+              </button>
+            ))}
+          </div>
+
+          {/* Info Box */}
+          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+            <div className="flex gap-3">
+              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <p className="text-sm text-blue-800 dark:text-blue-300">
+                Make sure to have your documents ready. You can always update other records later.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RecordChoiceModal;

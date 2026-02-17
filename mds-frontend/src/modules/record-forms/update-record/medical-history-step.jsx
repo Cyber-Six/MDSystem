@@ -1,32 +1,82 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup } from './form-elements';
+import { fetchAllCatalogsWithConditions } from './medical-history-service';
 
 const MedicalHistoryStep = ({ formData, onChange }) => {
   const [activeTab, setActiveTab] = useState('yourself');
   const [activeAccordion, setActiveAccordion] = useState('conditions');
+  const [catalogs, setCatalogs] = useState({
+    medicalConditions: [],
+    hospitalizations: [],
+    operations: [],
+    immunizations: [],
+    allergens: [],
+    isLoading: true,
+    error: null
+  });
 
-  const medicalConditions = [
-    { id: 'heartCondition', label: 'Heart Condition' },
-    { id: 'highBloodPressure', label: 'High Blood Pressure' },
-    { id: 'epilepsySeizure', label: 'Epilepsy/Seizure' },
-    { id: 'psychiatricIllness', label: 'Psychiatric Illness' },
-    { id: 'bronchialAsthma', label: 'Bronchial Asthma' },
-    { id: 'diabetesTypeI', label: 'Diabetes Type I' },
-    { id: 'diabetesTypeII', label: 'Diabetes Type II' },
-    { id: 'hepatitisA', label: 'Hepatitis A' },
-    { id: 'hepatitisB', label: 'Hepatitis B' },
-    { id: 'hepatitisC', label: 'Hepatitis C' },
-    { id: 'hepatitisD', label: 'Hepatitis D' },
-    { id: 'hepatitisE', label: 'Hepatitis E' },
-    { id: 'amoebiasis', label: 'Amoebiasis' },
-    { id: 'tuberculosis', label: 'Tuberculosis' },
-    { id: 'typhoidFever', label: 'Typhoid Fever' }
-  ];
+  // Fetch catalogs on mount
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadCatalogs = async () => {
+      try {
+        console.log('📥 Loading catalogs...');
+        const result = await fetchAllCatalogsWithConditions();
+        
+        if (isMounted) {
+          setCatalogs({
+            ...result,
+            isLoading: false,
+            error: result.error
+          });
+          console.log('✅ Catalogs loaded');
+        }
+      } catch (err) {
+        if (isMounted) {
+          console.error('❌ Failed to load catalogs:', err);
+          setCatalogs(prev => ({
+            ...prev,
+            isLoading: false,
+            error: err.message
+          }));
+        }
+      }
+    };
 
-  const immunizations = [
-    'COVID-19', 'Influenza (Flu)', 'Hepatitis B', 'MMR (Measles, Mumps, Rubella)',
-    'Tetanus/Diphtheria', 'Varicella (Chickenpox)', 'HPV', 'Meningococcal', 'Pneumococcal'
-  ];
+    loadCatalogs();
+    
+    return () => { isMounted = false; };
+  }, []);
+
+  // Use fetched catalogs or static fallback
+  const medicalConditions = catalogs.medicalConditions.length > 0
+    ? catalogs.medicalConditions.map(c => ({
+        id: c.id,
+        label: c.name || c.allergen
+      }))
+    : [
+        { id: 'heartCondition', label: 'Heart Condition' },
+        { id: 'highBloodPressure', label: 'High Blood Pressure' },
+        { id: 'epilepsySeizure', label: 'Epilepsy/Seizure' },
+        { id: 'psychiatricIllness', label: 'Psychiatric Illness' },
+        { id: 'bronchialAsthma', label: 'Bronchial Asthma' },
+        { id: 'diabetesTypeI', label: 'Diabetes Type I' },
+        { id: 'diabetesTypeII', label: 'Diabetes Type II' },
+        { id: 'hepatitisA', label: 'Hepatitis A' },
+        { id: 'hepatitisB', label: 'Hepatitis B' },
+        { id: 'hepatitisC', label: 'Hepatitis C' },
+        { id: 'hepatitisD', label: 'Hepatitis D' },
+        { id: 'hepatitisE', label: 'Hepatitis E' },
+        { id: 'amoebiasis', label: 'Amoebiasis' },
+        { id: 'tuberculosis', label: 'Tuberculosis' },
+        { id: 'typhoidFever', label: 'Typhoid Fever' }
+      ];
+
+  const immunizations = catalogs.immunizations.length > 0
+    ? catalogs.immunizations.map(i => i.name)
+    : ['COVID-19', 'Influenza (Flu)', 'Hepatitis B', 'MMR (Measles, Mumps, Rubella)',
+       'Tetanus/Diphtheria', 'Varicella (Chickenpox)', 'HPV', 'Meningococcal', 'Pneumococcal'];
 
   const handleInputChange = (field, value) => {
     onChange({ ...formData, [field]: value });
@@ -145,12 +195,27 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                     </label>
                   </div>
                   {formData.hasAllergies === 'yes' && (
-                    <Textarea
-                      label="Please specify your allergies"
-                      placeholder="Food, medication, environmental allergies..."
-                      value={formData.allergiesDetail || ''}
-                      onChange={(e) => handleInputChange('allergiesDetail', e.target.value)}
-                    />
+                    <div className="space-y-3">
+                      {catalogs.allergens.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {catalogs.allergens.map((allergen) => (
+                            <Checkbox
+                              key={allergen.id}
+                              label={`${allergen.allergen} (${allergen.type})`}
+                              checked={(formData.selectedAllergies || []).includes(allergen.id)}
+                              onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <Textarea
+                          label="Please specify your allergies"
+                          placeholder="Food, medication, environmental allergies..."
+                          value={formData.allergiesDetail || ''}
+                          onChange={(e) => handleInputChange('allergiesDetail', e.target.value)}
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
               </AccordionSection>
@@ -340,12 +405,25 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               </label>
             </div>
             {formData.hasHospitalizations === 'yes' && (
-              <Textarea
-                label="Please provide details"
-                placeholder="Year, reason, duration..."
-                value={formData.hospitalizationsDetail || ''}
-                onChange={(e) => handleInputChange('hospitalizationsDetail', e.target.value)}
-              />
+              <div className="space-y-4">
+                {catalogs.hospitalizations.length > 0 && (
+                  <Select
+                    label="Condition requiring hospitalization"
+                    options={catalogs.hospitalizations.map(h => ({
+                      value: h.id,
+                      label: h.name
+                    }))}
+                    value={formData.hospitalizationCondition || ''}
+                    onChange={(e) => handleInputChange('hospitalizationCondition', e.target.value)}
+                  />
+                )}
+                <Textarea
+                  label="Please provide details"
+                  placeholder="Year, reason, duration..."
+                  value={formData.hospitalizationsDetail || ''}
+                  onChange={(e) => handleInputChange('hospitalizationsDetail', e.target.value)}
+                />
+              </div>
             )}
           </div>
         </AccordionSection>
@@ -385,12 +463,25 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               </label>
             </div>
             {formData.hasSurgeries === 'yes' && (
-              <Textarea
-                label="Please provide details"
-                placeholder="Year, type of surgery..."
-                value={formData.surgeriesDetail || ''}
-                onChange={(e) => handleInputChange('surgeriesDetail', e.target.value)}
-              />
+              <div className="space-y-4">
+                {catalogs.operations.length > 0 && (
+                  <Select
+                    label="Type of surgery/operation"
+                    options={catalogs.operations.map(o => ({
+                      value: o.id,
+                      label: o.name
+                    }))}
+                    value={formData.surgeryType || ''}
+                    onChange={(e) => handleInputChange('surgeryType', e.target.value)}
+                  />
+                )}
+                <Textarea
+                  label="Please provide details"
+                  placeholder="Year, type of surgery..."
+                  value={formData.surgeriesDetail || ''}
+                  onChange={(e) => handleInputChange('surgeriesDetail', e.target.value)}
+                />
+              </div>
             )}
           </div>
         </AccordionSection>
