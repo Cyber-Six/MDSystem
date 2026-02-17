@@ -6,6 +6,7 @@ import DentalHistoryStep from './dental-history-step';
 import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
 import { updatePersonalInfo } from './personal-info-service';
+import { submitUpdateRecord } from './update-record-service';
 
 const RecordUpdateForm = () => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -56,23 +57,34 @@ const RecordUpdateForm = () => {
     setIsSubmitting(true);
     
     try {
-      // First, save personal information (school info and emergency contact) to database
-      console.log('[RecordUpdateForm] Saving personal information to database...');
-      await updatePersonalInfo(formData);
-      console.log('[RecordUpdateForm] Personal information saved successfully');
+      console.log('[RecordUpdateForm] ==================== STARTING SUBMISSION ====================');
+      console.log('[RecordUpdateForm] Record Type:', recordType);
+      console.log('[RecordUpdateForm] Form Data:', formData);
+
+      // Submit all records (this creates ticket FIRST, then personal info, then medical/dental)
+      console.log('[RecordUpdateForm] Submitting all records...');
+      const results = await submitUpdateRecord(formData, recordType);
+      console.log('[RecordUpdateForm] ✅ Records submitted successfully:', results);
       
-      // TODO: Replace with actual API call for medical/dental records
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('Form Data:', formData);
+      // Success!
+      alert(`✅ ${recordType === 'both' ? 'Medical and Dental' : recordType === 'medical' ? 'Medical' : 'Dental'} record updated successfully!\n\nYour update has been submitted for review.`);
       
-      alert('Record updated successfully!');
-      // Reset form or redirect
+      // Reset form and redirect to choice page
       setFormData({});
       setCurrentStep(0);
       setRecordType(null);
+      
+      console.log('[RecordUpdateForm] ==================== SUBMISSION COMPLETE ====================');
     } catch (error) {
-      console.error('Error submitting form:', error);
-      alert('Error updating record: ' + (error.message || 'Please try again.'));
+      console.error('[RecordUpdateForm] ❌ Submission failed:', error);
+      
+      let errorMessage = 'Failed to update record. Please try again.';
+      
+      if (error.message) {
+        errorMessage = `Error: ${error.message}`;
+      }
+      
+      alert(`❌ ${errorMessage}\n\nPlease check your inputs and try again. If the problem persists, contact support.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -89,7 +101,7 @@ const RecordUpdateForm = () => {
       case 'Dental History':
         return <DentalHistoryStep formData={formData} onChange={setFormData} />;
       case 'Review & Submit':
-        return <ReviewStep formData={formData} onEdit={handleEdit} />;
+        return <ReviewStep formData={formData} onEdit={handleEdit} recordType={recordType} />;
       default:
         return null;
     }

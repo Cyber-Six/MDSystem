@@ -10,6 +10,8 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
     hospitalizations: [],
     operations: [],
     immunizations: [],
+    visualAcuity: [],
+    medications: [],
     allergens: [],
     isLoading: true,
     error: null
@@ -74,9 +76,18 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
       ];
 
   const immunizations = catalogs.immunizations.length > 0
-    ? catalogs.immunizations.map(i => i.name)
-    : ['COVID-19', 'Influenza (Flu)', 'Hepatitis B', 'MMR (Measles, Mumps, Rubella)',
-       'Tetanus/Diphtheria', 'Varicella (Chickenpox)', 'HPV', 'Meningococcal', 'Pneumococcal'];
+    ? catalogs.immunizations
+    : [
+        { id: 'covid19', name: 'COVID-19' },
+        { id: 'influenza', name: 'Influenza (Flu)' },
+        { id: 'hepatitisB', name: 'Hepatitis B' },
+        { id: 'mmr', name: 'MMR (Measles, Mumps, Rubella)' },
+        { id: 'tetanus', name: 'Tetanus/Diphtheria' },
+        { id: 'varicella', name: 'Varicella (Chickenpox)' },
+        { id: 'hpv', name: 'HPV' },
+        { id: 'meningococcal', name: 'Meningococcal' },
+        { id: 'pneumococcal', name: 'Pneumococcal' }
+      ];
 
   const handleInputChange = (field, value) => {
     onChange({ ...formData, [field]: value });
@@ -195,17 +206,64 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                     </label>
                   </div>
                   {formData.hasAllergies === 'yes' && (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {catalogs.allergens.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {catalogs.allergens.map((allergen) => (
-                            <Checkbox
-                              key={allergen.id}
-                              label={`${allergen.allergen} (${allergen.type})`}
-                              checked={(formData.selectedAllergies || []).includes(allergen.id)}
-                              onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
-                            />
-                          ))}
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {catalogs.allergens.map((allergen) => (
+                              <Checkbox
+                                key={allergen.id}
+                                label={`${allergen.allergen} (${allergen.type})`}
+                                checked={(formData.selectedAllergies || []).includes(allergen.id)}
+                                onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
+                              />
+                            ))}
+                          </div>
+                          {(formData.selectedAllergies || []).length > 0 && (
+                            <div className="space-y-3">
+                              <h4 className="text-sm font-medium text-secondary-700">Allergy Details:</h4>
+                              {(formData.selectedAllergies || []).map((allergenId) => {
+                                const allergen = catalogs.allergens.find(a => a.id === allergenId);
+                                return allergen ? (
+                                  <div key={allergenId} className="bg-neutral-50 p-3 rounded-lg">
+                                    <p className="text-sm font-medium mb-2">{allergen.allergen}</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      <Select
+                                        label="Status"
+                                        required
+                                        options={[
+                                          { value: 'Active', label: 'Active' },
+                                          { value: 'Resolved', label: 'Resolved' },
+                                          { value: 'Suspected', label: 'Suspected' }
+                                        ]}
+                                        value={(formData.allergyDetails?.[allergenId]?.status) || ''}
+                                        onChange={(e) => {
+                                          const details = { ...(formData.allergyDetails || {}) };
+                                          details[allergenId] = { ...details[allergenId], status: e.target.value };
+                                          handleInputChange('allergyDetails', details);
+                                        }}
+                                      />
+                                      <Select
+                                        label="Severity"
+                                        required
+                                        options={[
+                                          { value: 'Mild', label: 'Mild' },
+                                          { value: 'Moderate', label: 'Moderate' },
+                                          { value: 'Severe', label: 'Severe' }
+                                        ]}
+                                        value={(formData.allergyDetails?.[allergenId]?.severity) || ''}
+                                        onChange={(e) => {
+                                          const details = { ...(formData.allergyDetails || {}) };
+                                          details[allergenId] = { ...details[allergenId], severity: e.target.value };
+                                          handleInputChange('allergyDetails', details);
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : null;
+                              })}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <Textarea
@@ -215,6 +273,12 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                           onChange={(e) => handleInputChange('allergiesDetail', e.target.value)}
                         />
                       )}
+                      <Textarea
+                        label="Additional Notes (Optional)"
+                        placeholder="Any additional information about your allergies, severity, reactions, etc."
+                        value={formData.allergiesNotes || ''}
+                        onChange={(e) => handleInputChange('allergiesNotes', e.target.value)}
+                      />
                     </div>
                   )}
                 </div>
@@ -263,6 +327,14 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               onChange={(e) => handleInputChange('vape', e.target.value)}
             />
           </div>
+          <div className="mt-4">
+            <Textarea
+              label="Lifestyle Notes (Optional)"
+              placeholder="Any additional information about your lifestyle, habits, or health behaviors."
+              value={formData.lifestyleNotes || ''}
+              onChange={(e) => handleInputChange('lifestyleNotes', e.target.value)}
+            />
+          </div>
         </AccordionSection>
 
         {/* Visual Acuity Section */}
@@ -273,30 +345,70 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
           isOpen={activeAccordion === 'visual'}
           onToggle={toggleAccordion}
         >
-          <div className="flex items-center gap-6">
-            <p className="text-sm text-secondary-700 mr-4">Do you wear glasses or contact lenses?</p>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="visualAcuity"
-                value="yes"
-                checked={formData.visualAcuity === 'yes'}
-                onChange={(e) => handleInputChange('visualAcuity', e.target.value)}
-                className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-              />
-              <span className="text-sm text-secondary-700">Yes</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="visualAcuity"
-                value="no"
-                checked={formData.visualAcuity === 'no'}
-                onChange={(e) => handleInputChange('visualAcuity', e.target.value)}
-                className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-              />
-              <span className="text-sm text-secondary-700">No</span>
-            </label>
+          <div className="space-y-4">
+            <div className="flex items-center gap-6">
+              <p className="text-sm text-secondary-700 mr-4">Do you wear glasses or contact lenses?</p>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="visualAcuity"
+                  value="yes"
+                  checked={formData.visualAcuity === 'yes'}
+                  onChange={(e) => handleInputChange('visualAcuity', e.target.value)}
+                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-sm text-secondary-700">Yes</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="visualAcuity"
+                  value="no"
+                  checked={formData.visualAcuity === 'no'}
+                  onChange={(e) => handleInputChange('visualAcuity', e.target.value)}
+                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-sm text-secondary-700">No</span>
+              </label>
+            </div>
+            {formData.visualAcuity === 'yes' && (
+              <div className="space-y-4">
+                {catalogs.visualAcuity.length > 0 && (
+                  <Select
+                    label="Visual Acuity Type *"
+                    required
+                    options={catalogs.visualAcuity.map(va => ({
+                      value: va.id,
+                      label: va.name
+                    }))}
+                    value={formData.acuityId || ''}
+                    onChange={(e) => handleInputChange('acuityId', e.target.value)}
+                  />
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Right Eye (OD) *"
+                    required
+                    placeholder="e.g., 20/20, -2.00"
+                    value={formData.rightEye || ''}
+                    onChange={(e) => handleInputChange('rightEye', e.target.value)}
+                  />
+                  <Input
+                    label="Left Eye (OS) *"
+                    required
+                    placeholder="e.g., 20/20, -1.75"
+                    value={formData.leftEye || ''}
+                    onChange={(e) => handleInputChange('leftEye', e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+            <Textarea
+              label="Visual Acuity Notes (Optional)"
+              placeholder="Any additional information about your vision, glasses, or eye health."
+              value={formData.visualAcuityNotes || ''}
+              onChange={(e) => handleInputChange('visualAcuityNotes', e.target.value)}
+            />
           </div>
         </AccordionSection>
 
@@ -357,16 +469,63 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
           isOpen={activeAccordion === 'immunizations'}
           onToggle={toggleAccordion}
         >
-          <p className="text-sm text-secondary-600 mb-4">Check all vaccines you have received:</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {immunizations.map((vaccine) => (
-              <Checkbox
-                key={vaccine}
-                label={vaccine}
-                checked={(formData.immunizations || []).includes(vaccine)}
-                onChange={(e) => handleCheckboxChange('immunizations', vaccine, e.target.checked)}
-              />
-            ))}
+          <div className="space-y-4">
+            <p className="text-sm text-secondary-600 mb-4">Select vaccines you have received and provide details:</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {immunizations.map((vaccine) => (
+                <Checkbox
+                  key={vaccine.id}
+                  label={vaccine.name}
+                  checked={(formData.immunizations || []).includes(vaccine.id)}
+                  onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
+                />
+              ))}
+            </div>
+            {(formData.immunizations || []).length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-secondary-700">Immunization Details:</h4>
+                {(formData.immunizations || []).map((vaccineId) => {
+                  const vaccine = immunizations.find(v => v.id === vaccineId);
+                  return vaccine ? (
+                    <div key={vaccineId} className="bg-neutral-50 p-3 rounded-lg">
+                      <p className="text-sm font-medium mb-2">{vaccine.name}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Input
+                          label="Date Received *"
+                          type="date"
+                          required
+                          value={(formData.immunizationDetails?.[vaccineId]?.date) || ''}
+                          onChange={(e) => {
+                            const details = { ...(formData.immunizationDetails || {}) };
+                            details[vaccineId] = { ...details[vaccineId], date: e.target.value };
+                            handleInputChange('immunizationDetails', details);
+                          }}
+                        />
+                        <Input
+                          label="Dose Number *"
+                          type="number"
+                          required
+                          min="1"
+                          placeholder="1, 2, 3..."
+                          value={(formData.immunizationDetails?.[vaccineId]?.doseNumber) || ''}
+                          onChange={(e) => {
+                            const details = { ...(formData.immunizationDetails || {}) };
+                            details[vaccineId] = { ...details[vaccineId], doseNumber: parseInt(e.target.value) || 1 };
+                            handleInputChange('immunizationDetails', details);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            )}
+            <Textarea
+              label="Immunization Notes (Optional)"
+              placeholder="Any additional information about your immunizations, dates, or reactions."
+              value={formData.immunizationNotes || ''}
+              onChange={(e) => handleInputChange('immunizationNotes', e.target.value)}
+            />
           </div>
         </AccordionSection>
 
@@ -408,7 +567,8 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               <div className="space-y-4">
                 {catalogs.hospitalizations.length > 0 && (
                   <Select
-                    label="Condition requiring hospitalization"
+                    label="Condition requiring hospitalization *"
+                    required
                     options={catalogs.hospitalizations.map(h => ({
                       value: h.id,
                       label: h.name
@@ -417,11 +577,26 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                     onChange={(e) => handleInputChange('hospitalizationCondition', e.target.value)}
                   />
                 )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Admission Date *"
+                    type="date"
+                    required
+                    value={formData.admissionDate || ''}
+                    onChange={(e) => handleInputChange('admissionDate', e.target.value)}
+                  />
+                  <Input
+                    label="Discharge Date"
+                    type="date"
+                    value={formData.dischargeDate || ''}
+                    onChange={(e) => handleInputChange('dischargeDate', e.target.value)}
+                  />
+                </div>
                 <Textarea
-                  label="Please provide details"
-                  placeholder="Year, reason, duration..."
-                  value={formData.hospitalizationsDetail || ''}
-                  onChange={(e) => handleInputChange('hospitalizationsDetail', e.target.value)}
+                  label="Hospitalization Notes (Optional)"
+                  placeholder="Any additional information about your hospitalizations."
+                  value={formData.hospitalizationNotes || ''}
+                  onChange={(e) => handleInputChange('hospitalizationNotes', e.target.value)}
                 />
               </div>
             )}
@@ -466,7 +641,8 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               <div className="space-y-4">
                 {catalogs.operations.length > 0 && (
                   <Select
-                    label="Type of surgery/operation"
+                    label="Type of surgery/operation *"
+                    required
                     options={catalogs.operations.map(o => ({
                       value: o.id,
                       label: o.name
@@ -475,11 +651,18 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                     onChange={(e) => handleInputChange('surgeryType', e.target.value)}
                   />
                 )}
+                <Input
+                  label="Operation Date *"
+                  type="date"
+                  required
+                  value={formData.operationDate || ''}
+                  onChange={(e) => handleInputChange('operationDate', e.target.value)}
+                />
                 <Textarea
-                  label="Please provide details"
-                  placeholder="Year, type of surgery..."
-                  value={formData.surgeriesDetail || ''}
-                  onChange={(e) => handleInputChange('surgeriesDetail', e.target.value)}
+                  label="Surgery Notes (Optional)"
+                  placeholder="Any additional information about your surgeries."
+                  value={formData.surgeryNotes || ''}
+                  onChange={(e) => handleInputChange('surgeryNotes', e.target.value)}
                 />
               </div>
             )}
@@ -521,12 +704,90 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               </label>
             </div>
             {formData.hasMedications === 'yes' && (
-              <Textarea
-                label="Please list all current medications"
-                placeholder="Medication name and dosage..."
-                value={formData.medicationsDetail || ''}
-                onChange={(e) => handleInputChange('medicationsDetail', e.target.value)}
-              />
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-secondary-700">Current Medications:</h4>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentMeds = formData.currentMedications || [];
+                        handleInputChange('currentMedications', [...currentMeds, { medicineId: '', description: '' }]);
+                      }}
+                      className="px-3 py-1 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700"
+                    >
+                      Add Medication
+                    </button>
+                  </div>
+                  {(formData.currentMedications || []).map((medication, index) => (
+                    <div key={index} className="bg-neutral-50 p-3 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Medication #{index + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const meds = [...(formData.currentMedications || [])];
+                            meds.splice(index, 1);
+                            handleInputChange('currentMedications', meds);
+                          }}
+                          className="text-error-600 text-sm hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        {catalogs.medications.length > 0 ? (
+                          <Select
+                            label="Medication *"
+                            required
+                            options={catalogs.medications.map(m => ({
+                              value: m.id,
+                              label: m.name
+                            }))}
+                            value={medication.medicineId || ''}
+                            onChange={(e) => {
+                              const meds = [...(formData.currentMedications || [])];
+                              meds[index] = { ...meds[index], medicineId: e.target.value };
+                              handleInputChange('currentMedications', meds);
+                            }}
+                          />
+                        ) : (
+                          <Input
+                            label="Medication Name *"
+                            required
+                            placeholder="e.g., Aspirin, Metformin"
+                            value={medication.medicineId || ''}
+                            onChange={(e) => {
+                              const meds = [...(formData.currentMedications || [])];
+                              meds[index] = { ...meds[index], medicineId: e.target.value };
+                              handleInputChange('currentMedications', meds);
+                            }}
+                          />
+                        )}
+                        <Textarea
+                          label="Description/Dosage"
+                          placeholder="e.g., 500mg twice daily for diabetes"
+                          value={medication.description || ''}
+                          onChange={(e) => {
+                            const meds = [...(formData.currentMedications || [])];
+                            meds[index] = { ...meds[index], description: e.target.value };
+                            handleInputChange('currentMedications', meds);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {(!formData.currentMedications || formData.currentMedications.length === 0) && (
+                    <p className="text-sm text-secondary-500 italic">No medications added yet. Click "Add Medication" to start.</p>
+                  )}
+                </div>
+                <Textarea
+                  label="Medication Notes (Optional)"
+                  placeholder="Any additional information about your medications."
+                  value={formData.medicationNotes || ''}
+                  onChange={(e) => handleInputChange('medicationNotes', e.target.value)}
+                />
+              </div>
             )}
           </div>
         </AccordionSection>

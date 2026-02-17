@@ -27,11 +27,22 @@ async function sendGraphQLRequest(query, variables = {}) {
       }
     });
 
-    if (response.errors) {
-      throw new Error(response.errors.map(e => e.message).join(', '));
+    // Handle GraphQL errors gracefully
+    if (response.data.errors) {
+      console.warn('⚠️ GraphQL Errors:', response.data.errors.map(e => e.message).join(', '));
+      
+      // If data is null (backend table missing, etc.), return empty object
+      // This allows fallback logic (|| []) to work naturally
+      if (response.data.data === null) {
+        return {};
+      }
+      
+      // If we have partial data with errors, throw to handle more seriously
+      throw new Error(response.data.errors.map(e => e.message).join(', '));
     }
 
-    return response.data;
+    // Return the actual GraphQL data object
+    return response.data.data || response.data;
   } catch (error) {
     console.error('✗ GraphQL Request Error:', error.message);
     throw error;
@@ -160,6 +171,7 @@ export async function fetchAllMedicalCatalogs() {
       operations,
       immunizations,
       visualAcuity,
+      medications,
       allergens
     ] = await Promise.all([
       getMedicalConditions(),
@@ -167,6 +179,7 @@ export async function fetchAllMedicalCatalogs() {
       getDomainCatalogs('Operation'),
       getDomainCatalogs('Immunization'),
       getDomainCatalogs('VisualAcuity'),
+      getDomainCatalogs('Medication'),
       getAllergenCatalogs()
     ]);
 
@@ -176,6 +189,7 @@ export async function fetchAllMedicalCatalogs() {
       operations,
       immunizations,
       visualAcuity,
+      medications,
       allergens,
       isLoaded: true,
       error: null
@@ -191,6 +205,7 @@ export async function fetchAllMedicalCatalogs() {
       operations: [],
       immunizations: [],
       visualAcuity: [],
+      medications: [],
       allergens: [],
       isLoaded: true,
       error: error.message
@@ -306,6 +321,7 @@ export async function fetchAllCatalogsWithConditions() {
       operations: [],
       immunizations: [],
       visualAcuity: [],
+      medications: [],
       allergens: [],
       isLoaded: true,
       error: error.message

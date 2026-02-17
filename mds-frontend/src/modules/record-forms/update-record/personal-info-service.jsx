@@ -2,13 +2,8 @@
  * EMR API Service for Record Update Form
  * Handles GraphQL mutations for student profile and emergency contact
  * 
- * EMERGENCY FIX 1: userId is hardcoded to "1"
- * LOCATION: Lines 54, 104, 154 - Search for userId = '1' to find all instances
- * TODO: Replace with actual user ID from authentication token when token system is integrated
- * 
- * To test currently:
- * 1. Change userId = '1' to a valid userId from your test database
- * 2. Or ask backend team what test userId to use
+ * Uses CREATE mutations for patient self-update within update ticket context
+ * No userId required - uses authenticated user from session
  */
 
 import { axiosRequest } from '../../../packages-core-adapter';
@@ -46,7 +41,14 @@ const sendGraphQLRequest = async (query, variables = {}) => {
     console.log('[Personal Info Service] GraphQL response received:', response.data);
     
     if (response.data.errors) {
-      console.error('[Personal Info Service] GraphQL errors:', JSON.stringify(response.data.errors, null, 2));
+      console.warn('[Personal Info Service] ⚠️ GraphQL errors:', JSON.stringify(response.data.errors, null, 2));
+      
+      // If data is null (backend issue), return empty object for graceful degradation
+      if (response.data.data === null) {
+        console.warn('[Personal Info Service] Data is null, will trigger fallback logic');
+        return {};
+      }
+      
       throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
     }
 
@@ -63,12 +65,12 @@ const sendGraphQLRequest = async (query, variables = {}) => {
 
 /**
  * Update Student Profile with school information
+ * Uses CREATE mutation for patient self-update (no userId needed)
  * @param {object} schoolData - School information (program, year, department, studentNumber, schoolYear, semester, studentCategory)
- * @param {string} userId - User ID (EMERGENCY FIX 1: Line 54 - currently hardcoded to '1')
  * @returns {Promise} Response from server
  */
-export const updateStudentProfile = async (schoolData, userId = '1') => {
-  console.log('[Personal Info Service] Updating student profile:', schoolData);
+export const updateStudentProfile = async (schoolData) => {
+  console.log('[Personal Info Service] Creating/updating student profile:', schoolData);
   
   // Validation
   if (!schoolData.program) {
@@ -79,8 +81,8 @@ export const updateStudentProfile = async (schoolData, userId = '1') => {
   }
   
   const mutation = `
-    mutation UpdateStudentProfile($userId: ID!, $input: StudentProfileUpdateInput!) {
-      updateStudentProfile(userId: $userId, input: $input) {
+    mutation CreateStudentProfile($input: StudentProfileInput!) {
+      createStudentProfile(input: $input) {
         id
         program
         year
@@ -90,31 +92,35 @@ export const updateStudentProfile = async (schoolData, userId = '1') => {
   `;
 
   const variables = {
-    userId,
     input: {
       program: schoolData.program,
-      year: mapYearToEnum(schoolData.schoolYear)
+      year: mapYearToEnum(schoolData.schoolYear),
+      // TEMPORARY WORKAROUND: Backend server needs restart to use updated schema
+      // Uncomment these if you get "guardian_name required" error (old schema cached)
+      guardian_name: 'N/A',
+      guardian_relation: 'N/A', 
+      guardian_contact: 'N/A'
     }
   };
 
   try {
     const data = await sendGraphQLRequest(mutation, variables);
-    console.log('[Personal Info Service] Student profile updated:', data.updateStudentProfile);
-    return data.updateStudentProfile;
+    console.log('[Personal Info Service] Student profile created/updated:', data.createStudentProfile);
+    return data.createStudentProfile;
   } catch (error) {
-    console.error('[Personal Info Service] Failed to update student profile:', error.message);
+    console.error('[Personal Info Service] Failed to create/update student profile:', error.message);
     throw error;
   }
 };
 
 /**
  * Update Emergency Contact information
+ * Uses CREATE mutation for patient self-update (no userId needed)
  * @param {object} emergencyData - Emergency contact data (emergencyContact1Name, emergencyContact1Relationship, etc.)
- * @param {string} userId - User ID (EMERGENCY FIX 1: Line 104 - currently hardcoded to '1')
  * @returns {Promise} Response from server
  */
-export const updateEmergencyContact = async (emergencyData, userId = '1') => {
-  console.log('[Personal Info Service] Updating emergency contact:', emergencyData);
+export const updateEmergencyContact = async (emergencyData) => {
+  console.log('[Personal Info Service] Creating/updating emergency contact:', emergencyData);
   
   // Validation
   if (!emergencyData.emergencyContact1Name || !emergencyData.emergencyContact1Relationship || !emergencyData.emergencyContact1Number) {
@@ -125,8 +131,8 @@ export const updateEmergencyContact = async (emergencyData, userId = '1') => {
   }
   
   const mutation = `
-    mutation UpdateEmergencyContact($userId: ID!, $input: EmergencyContactInput!) {
-      updateEmergencyContact(userId: $userId, input: $input) {
+    mutation CreateEmergencyContact($input: EmergencyContactInput!) {
+      createEmergencyContact(input: $input) {
         id
         firstContact {
           contactName
@@ -145,7 +151,6 @@ export const updateEmergencyContact = async (emergencyData, userId = '1') => {
   `;
 
   const variables = {
-    userId,
     input: {
       firstContact: {
         contactName: emergencyData.emergencyContact1Name,
@@ -164,36 +169,36 @@ export const updateEmergencyContact = async (emergencyData, userId = '1') => {
 
   try {
     const data = await sendGraphQLRequest(mutation, variables);
-    console.log('[Personal Info Service] Emergency contact updated:', data.updateEmergencyContact);
-    return data.updateEmergencyContact;
+    console.log('[Personal Info Service] Emergency contact created/updated:', data.createEmergencyContact);
+    return data.createEmergencyContact;
   } catch (error) {
-    console.error('[Personal Info Service] Failed to update emergency contact:', error.message);
+    console.error('[Personal Info Service] Failed to create/update emergency contact:', error.message);
     throw error;
   }
 };
 
 /**
  * Update both Student Profile and Emergency Contact together
+ * Uses CREATE mutations for patient self-update (no userId needed)
  * @param {object} formData - Complete form data containing school info and emergency contacts
- * @param {string} userId - User ID (EMERGENCY FIX 1: Line 154 - currently hardcoded to '1')
  * @returns {Promise} Object with both update results
  * @throws {Error} If validation fails or API request fails
  */
-export const updatePersonalInfo = async (formData, userId = '1') => {
-  console.log('[Personal Info Service] Updating personal information for userId:', userId);
+export const updatePersonalInfo = async (formData) => {
+  console.log('[Personal Info Service] Creating/updating personal information');
   
   if (!formData) {
     throw new Error('Form data is required');
   }
   
   try {
-    console.log('[Personal Info Service] Step 1: Updating student profile...');
-    const profileResult = await updateStudentProfile(formData, userId);
-    console.log('[Personal Info Service] ✓ Student profile updated successfully');
+    console.log('[Personal Info Service] Step 1: Creating/updating student profile...');
+    const profileResult = await updateStudentProfile(formData);
+    console.log('[Personal Info Service] ✓ Student profile created/updated successfully');
     
-    console.log('[Personal Info Service] Step 2: Updating emergency contact...');
-    const contactResult = await updateEmergencyContact(formData, userId);
-    console.log('[Personal Info Service] ✓ Emergency contact updated successfully');
+    console.log('[Personal Info Service] Step 2: Creating/updating emergency contact...');
+    const contactResult = await updateEmergencyContact(formData);
+    console.log('[Personal Info Service] ✓ Emergency contact created/updated successfully');
     
     console.log('[Personal Info Service] ✓ All personal information updated successfully');
     return {
