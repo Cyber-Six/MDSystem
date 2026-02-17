@@ -388,10 +388,27 @@ export const createInitialMedicalRecord = async (formData) => {
     results.lifestyle = lifestyle;
     console.log('[EMR Service] Lifestyle created:', lifestyle);
 
-    // 9. Skip Visual Acuity Profile
-    // Backend has a bug when acuity is null ("record is not defined")
-    // Also requires catalog ID which we don't have
-    console.log('[EMR Service] Skipping visual acuity profile - backend bug with null acuity + requires catalog IDs');
+    // 9. Create Visual Acuity Profile (only if user wears eyeglasses or contact lenses)
+    if (formData.medicalBackground.eyeglasses || formData.medicalBackground.contactLenses) {
+      console.log('[EMR Service] User wears eyeglasses or contact lenses, creating visual acuity profile...');
+      
+      const visualAcuityProfile = await createVisualAcuityProfile({
+        notes: `Eyeglasses: ${formData.medicalBackground.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.medicalBackground.contactLenses ? 'Yes' : 'No'}`,
+        acuity: {
+          acuityId: "1", // Default catalog ID - will be updated by staff during examination
+          left_eye: formData.medicalBackground.gradeOS || "N/A",
+          right_eye: formData.medicalBackground.gradeOD || "N/A",
+          notes: null,
+          recorded_at: formData.medicalBackground.visualAcuityDate 
+            ? new Date(formData.medicalBackground.visualAcuityDate).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0]
+        }
+      });
+      results.visualAcuityProfile = visualAcuityProfile;
+      console.log('[EMR Service] Visual acuity profile created:', visualAcuityProfile);
+    } else {
+      console.log('[EMR Service] User does not wear eyeglasses or contact lenses, skipping visual acuity profile');
+    }
 
     // 10. Create Dental History
     console.log('[EMR Service] Creating dental history...');
@@ -432,6 +449,15 @@ export const createInitialMedicalRecord = async (formData) => {
     });
     results.oralApplianceProfile = oralApplianceProfile;
     console.log('[EMR Service] Oral appliance profile created:', oralApplianceProfile);
+
+    // 12. Create Dental Photo Record with mock UUIDs (required by validation, photos taken by staff later)
+    console.log('[EMR Service] Creating dental photo record with mock UUIDs...');
+    const dentalPhotoRecord = await createDentalPhotoRecord({
+      upperTeeth: '00000000-0000-0000-0000-000000000000', // Mock UUID - will be replaced by staff
+      lowerTeeth: '00000000-0000-0000-0000-000000000000'  // Mock UUID - will be replaced by staff
+    });
+    results.dentalPhotoRecord = dentalPhotoRecord;
+    console.log('[EMR Service] Dental photo record created:', dentalPhotoRecord);
 
     // 13. Create OB-GYNE History (if female only)
     if (formData.personalInfo.gender === 'Female' && formData.obgyne) {
@@ -684,10 +710,12 @@ const createVisualAcuityProfile = async (input) => {
     mutation CreateVisualAcuityProfile($input: VisualAcuityProfileInput!) {
       createVisualAcuityProfile(input: $input) {
         id
+        notes
         acuity {
           id
           left_eye
           right_eye
+          recorded_at
         }
       }
     }
@@ -744,6 +772,22 @@ const createOralApplianceProfile = async (input) => {
   
   const data = await sendGraphQLRequest(mutation, { input });
   return data.createOralApplianceProfile;
+};
+
+const createDentalPhotoRecord = async (input) => {
+  const mutation = `
+    mutation CreateDentalPhotoRecord($input: DentalPhotoRecordInput!) {
+      createDentalPhotoRecord(input: $input) {
+        id
+        upperTeeth
+        lowerTeeth
+        isValid
+      }
+    }
+  `;
+  
+  const data = await sendGraphQLRequest(mutation, { input });
+  return data.createDentalPhotoRecord;
 };
 
 const createObgynHistory = async (input) => {
