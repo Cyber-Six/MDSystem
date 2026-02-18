@@ -44,7 +44,6 @@ input SlotSchedulerInput {
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
-  isActive: Boolean!
   slotCustomDates: [Date!]!
   whiteLists: [ID!]!
   whiteListOnly: Boolean!
@@ -171,7 +170,7 @@ type Mutation {
 
   #----------- --^ Patient and --v Medical
   respondAppointment(slotId: ID!, status: SCHEDULING_STATUS!, notes: String): patientSlot!
-  recordAppointmentAttendance(slotId: ID!, arrived: Boolean!): patientSlot!
+  recordAppointmentAttendance(slotId: ID!, arrived_at: Date!): patientSlot!
 
   createScheduler(input: SlotSchedulerInput!): SlotScheduler!
   updateScheduler(schedulerId: ID!, input: SlotSchedulerUpdateInput!): SlotScheduler!
