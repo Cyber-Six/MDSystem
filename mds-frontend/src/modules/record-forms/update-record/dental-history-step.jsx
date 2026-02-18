@@ -6,7 +6,6 @@ const DentalHistoryStep = ({ formData, onChange }) => {
   const [activeAccordion, setActiveAccordion] = useState('visits');
   const [catalogs, setCatalogs] = useState({
     oralAppliances: [],
-    oralFindings: [],
     dentalProcedures: [],
     isLoading: true,
     error: null

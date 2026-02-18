@@ -104,11 +104,15 @@ export async function getOralApplianceCatalogs() {
 }
 
 /**
- * Fetches oral finding catalogs
+ * DISABLED: Fetches oral finding catalogs
+ * Backend table "oralFindingCatalog" doesn't exist - causes error
+ * Commented out until backend creates the table
+ * 
  * Used for oral health findings (calculus, gingivitis, etc.)
  * 
  * @returns {Promise<Array>} Array of oral finding catalogs
  */
+/*
 export async function getOralFindingCatalogs() {
   const query = `
     query GetOralFindingCatalogs($filterIsValid: Boolean) {
@@ -154,6 +158,8 @@ export async function getOralFindingCatalogs() {
     ];
   }
 }
+*/
+
 
 /**
  * Fetches dental procedure domain catalog
@@ -222,7 +228,8 @@ export async function getDentalProcedureCatalogs() {
 
 /**
  * Fetches all required catalogs in parallel for dental history form
- * Includes: Oral Appliances, Oral Findings, Dental Procedures
+ * Includes: Oral Appliances, Dental Procedures
+ * NOTE: Removed Oral Findings - backend table doesn't exist
  * 
  * @returns {Promise<object>} Object containing all catalog arrays
  */
@@ -232,17 +239,14 @@ export async function fetchAllDentalCatalogs() {
 
     const [
       oralAppliances,
-      oralFindings,
       dentalProcedures
     ] = await Promise.all([
       getOralApplianceCatalogs(),
-      getOralFindingCatalogs(),
       getDentalProcedureCatalogs()
     ]);
 
     const catalogs = {
       oralAppliances,
-      oralFindings,
       dentalProcedures,
       isLoaded: true,
       error: null
@@ -254,7 +258,6 @@ export async function fetchAllDentalCatalogs() {
     console.error('✗ Failed to fetch dental catalogs:', error);
     return {
       oralAppliances: [],
-      oralFindings: [],
       dentalProcedures: [],
       isLoaded: true,
       error: error.message
