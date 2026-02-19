@@ -1,0 +1,5 @@
+# pending
+
+  getUserIDViaEntityId(entityId: String!, branch: DesignationBranch!): [UserProfile!]
+  getUserIdViaName(Name: String!, branch: DesignationBranch!): [UserProfile!]
+  getUserIdViaEmail(email: String!, branch: DesignationBranch!): [UserProfile!]
