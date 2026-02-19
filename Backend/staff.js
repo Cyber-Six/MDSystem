@@ -6,6 +6,9 @@ const db = require('./config/db.js');
 const redis = require('./config/redis.js');
 const logger = require('./utils/logger.js');
 
+const { initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
+const { initMedicalProfileGraphQL } = require('./routes/profile/graphql.js');
+
 const loginRoutes = require('./routes/auth/user/login.js');
 const { initializeChatbot, shutdownChatbot } = require('./mds-chatbot');
 
@@ -44,6 +47,10 @@ app.use((err, req, res, next) => {
   }
   next();
 });
+
+initMedicalEMRGraphQL(app);
+initMedicalProfileGraphQL(app);
+
 
 app.use('/auth/login', loginRoutes);
 

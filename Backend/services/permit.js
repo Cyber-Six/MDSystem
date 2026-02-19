@@ -1,9 +1,10 @@
 const query = require('../config/query.js');
 const logger = require('../utils/logger.js');
 
-const permitions = {
-  set_as_admin: "SET_AS_ADMIN",
-  set_as_staff: "SET_AS_STAFF",
+const permissions = {
+  is_admin: "IS_ADMIN",
+  is_staff: "IS_STAFF",
+  privileged_to_perform_on_superior: "PRIVILEGED_TO_PERFORM_ON_SUPERIOR",
 
   emr_allow_approval: "ALLOW_TO_APPROVE_EMR",
   emr_allow_edit: "ALLOW_TO_EDIT_EMR",
@@ -27,10 +28,21 @@ async function getMedicalpermits(personnelId) {
   return result.rows;
 }
 
+async function findMedicalPermit(personnelId, label) {
+  const result = await query(
+    `SELECT 1 FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm.rolesId = rt.id
+     WHERE rm.personnelId = $1 AND rt.label = $2
+     LIMIT 1;`,
+    [personnelId, label]
+  );
+  return result.rows.length > 0;
+}
+
 async function setMedicalPermit({ personnelId, assignedBy, roledata = [] }) {
   // Validate labels before hitting the DB
   for (const role of roledata) {
-    if (!Object.values(permitions).includes(role.label)) {
+    if (!Object.values(permissions).includes(role.label)) {
       logger.error(`❌ Invalid role label attempted: ${role.label}`);
       throw new Error(`Invalid role label: ${role.label}`);
     }
@@ -87,29 +99,53 @@ async function clearMedicalPermits(personnelId) {
   return result.rows;
 }
 
-
 async function isMedicalPermitted(userId, label, patientId) {
+  const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
+  if (isAdmin) return true; // Admin bypass
+
   const result = await query(
-    `SELECT 1
+    `SELECT uc.identity
      FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm.rolesId = rt.id
      JOIN "UsersPersonal" up ON up.id = $3   -- patientId lookup
-     JOIN "UsersCredentials" uc ON uc.id = $3
+     JOIN "UsersCredentials" uc ON uc.userId = up.id  -- safer join
      WHERE rm.personnelId = $1
        AND rt.label = $2
        AND (
          up.branch = 'Both'
          OR rm.branch = up.branch
          OR rm.branch = 'Both'
-         OR uc.credentials_status = 'unverified'  -- check if an account has branch yet
        )
      LIMIT 1;`,
     [userId, label, patientId]
   );
 
-  return result.rows.length > 0;
+  if (result.rows.length === 0) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without ${label} permission on patient ${patientId}`
+    );
+    return false;
+  }
+
+  // If patient is Superior, staff must have privileged permit
+  const { identity } = result.rows[0];
+  if (identity === "Superior") {
+    const permitted = await findMedicalPermit(
+      userId,
+      permissions.privileged_to_perform_on_superior
+    );
+    if (!permitted) {
+      logger.warn(
+        `Unauthorized access attempt by staff ${userId} lacking superior privileges for ${label} on patient ${patientId}`
+      );
+      return false;
+    }
+  }
+
+  return true;
 }
 
 
+
 module.exports = { setMedicalPermit, unsetMedicalPermit, isMedicalPermitted,
-  clearMedicalPermits, getMedicalpermits, permitions };
+  clearMedicalPermits, getMedicalpermits, permissions };
