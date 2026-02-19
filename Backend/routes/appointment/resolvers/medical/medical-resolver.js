@@ -11,139 +11,141 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 // Unless if the user is unverified where the first ticket never expires
 
 const Query = {
-  getUserCredentialStatus: async (_, { userId }, { user, res }) => { // getting the credential status of the logged in user
-    if (!user) {
+  getUserAppointmentStatus: async (_, { userId }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, userId)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to view credential status of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const result = await Wrapper.Query._getUserCredentialStatus(_, { userId }, { user, res });
-    return result;
-   },
-
-  getUserPersonalRecord: async (_, { userId }, { user, res }) => { // getting the main account record of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    return await Wrapper.Query._getUserPersonalRecord(_, { userId }, { user, res });
+    return await Wrapper.Query._getUserAppointmentStatus(_, { userId }, { user, res });
   },
 
-  getUserPersonalRecordLogStatus: async (_, { userId }, { user, res }) => { // getting the update status of the logged in user
-    if (!user) {
+  getUserAppointmentRecords: async (_, { userId, offset, limit }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, userId)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+    return await Wrapper.Query._getUserAppointmentRecords(_, { userId, offset, limit }, { user, res });
+  },
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record log status of user ${userId}`);
+  listAllOpenAppointments: async (_, { offset, limit }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+    return await Wrapper.Query._listAllOpenAppointments(_, { offset, limit }, { user, res });
+  },
 
-    const result = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId }, { user, res });
-    return result?.status;
-   },
-
-  getUserPersonalRecordLog: async (_, { userId, from, offset, limit }, { user, res }) => { // getting the update status of the logged in user
-    if (!user) {
+  listAllAppointmentRequirements: async (_, { schedulerId, offset, limit }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+    return await Wrapper.Query._listAllAppointmentRequirements(_, { schedulerId, offset, limit, isActive: null }, { user, res });
+  },
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record log of user ${userId}`);
+  searchAppointmentStatuses: async (_, { status, offset, limit }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, null)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-
-    const result = await Wrapper.Query._getUserPersonalRecordLog(_, { userId, from, offset, limit }, { user, res });
-    return result;
-   },
-
-  getBranchIdentifier: async (_, { userId }, { user, res }) => { // getting the identifier and the branch of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to view branch identifier of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    return await Wrapper.Query._getBranchIdentifier(_, { userId }, { user, res }); 
+    return await Wrapper.Query._searchAppointmentStatuses(_, { status, offset, limit }, { user, res });
   },
 };
 
 const Mutation = {
-  createPersonalRecordLog: async (_, { input }, { user, res }) => {
-    if (!user) {
+  respondAppointment: async (_, { userId, status, notes }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval, null)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    // record self update is allowed for staff
-    await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
-    return await Mutation.setPersonalRecordLog(_, { userId: user.id, status: "Approved" }, { user, res });
+    const record = await Wrapper.Query._getUserAppointmentRecords(_, { userId, offset: 0, limit: 1 }, { user, res });
+    if (!record || record.length === 0) {
+      throwGraphQLError(res).message("No appointment record found for the user").status(404).throw();
+    }
+
+    return await Wrapper.Mutation._respondAppointment(_, { userId, status, notes }, { user, res });
   },
 
-  updatePersonalRecordLog: async (_, { userId, input }, { user, res }) => {
-    if (!user) {
+  recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval, null)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_edit, userId);  
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to update personal record log of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId }, { user, res });
-    const result = await Wrapper.Mutation._StaffUpdatePersonalRecordLog(_, { userId, id: latest.id, input }, { user, res });
-    return result;
-   },
-
-  updateUserBranchIdentifier: async (_, { userId, input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_update_email_identifier, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to update branch identifier of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const result = await Wrapper.Mutation._UserBranchIdentifier(_, { userId, input }, { user, res });
-    return result;
-   },
-  
-  setPersonalRecordLog: async (_, { userId, status }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_approval, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to set personal record log of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const result = await Wrapper.Mutation._setPersonalRecordLog(_, { userId, status }, { user, res });
-    return result;
+    return await Wrapper.Mutation._recordAppointmentAttendance(_, { slotId, arrived_at }, { user, res });
   },
 
-  reloadUserCredentialStatus: async (_, { userId }, { user, res }) => {
-    if (!user) { // totally safe unction no need to set roles
+  createScheduler: async (_, { input }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    const result = await Wrapper.Mutation._reloadCredentialStatus(_, { userId }, { user, res });
-    return result;
+
+    await Wrapper.Mutation._createScheduler(_, { input }, { user, res });
+  },
+
+  updateScheduler: async (_, { schedulerId, input }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    await Wrapper.Mutation._updateScheduler(_, { schedulerId, input }, { user, res });
+  },
+
+  deleteScheduler: async (_, { schedulerId }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    await Wrapper.Mutation._deleteScheduler(_, { schedulerId }, { user, res });
+  },
+
+  updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    await Wrapper.Mutation._updateSchedulerRequirement(_, { schedulerId, input }, { user, res });
+  },
+
+  deleteSchedulerRequirement: async (_, { schedulerId, label }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    await Wrapper.Mutation._deleteSchedulerRequirement(_, { schedulerId, label }, { user, res });
+  },
+
+  setCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    await Wrapper.Mutation._setCustomDates(_, { schedulerId, dates }, { user, res });
+  },
+
+  unsetCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    await Wrapper.Mutation._unsetCustomDates(_, { schedulerId, dates }, { user, res });
+  },
+
+  addEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    await Wrapper.Mutation._addEntryWhitelist(_, { schedulerId, patientIds }, { user, res });
+  },
+
+  removeEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    await Wrapper.Mutation._removeEntryWhitelist(_, { schedulerId, patientIds }, { user, res });
+  },
+
+  updateDateIdentity: async (_, { schedulerId, date, input }, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.apppointment_allow_edit_configuration, null)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    
+    await Wrapper.Mutation._updateDateIdentity(_, { schedulerId, date, input }, { user, res });
   }
 };
 

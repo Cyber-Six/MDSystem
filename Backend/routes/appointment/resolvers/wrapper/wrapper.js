@@ -288,13 +288,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // 1. Check if user already has an active appointment
-    const userStatus = await Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res });
-    if (["Pending", "Scheduled", "InProgress"].includes(userStatus)) {
-      throwGraphQLError(res).message("User already has an active appointment").status(400).throw();
-    }
-
-    // 2. Validate scheduler/date and session availability
+    // 1. Validate scheduler/date and session availability
     const scheduleData = await Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
     if (session === "Morning" && scheduleData.morningAllowed <= scheduleData.morningRegistered) {
       throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
@@ -302,10 +296,10 @@ const Mutation = {
       throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
     }
 
-    // 3. Ensure requirements are satisfied
+    // 2. Ensure requirements are satisfied
     await validateSatisfiedAllRequirements(schedulerId, requirements, db, res);
 
-    // 4. Create patientSlot row
+    // 3. Create patientSlot row
     const psResult = await db.query(
       `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session")
        VALUES ($1, $2, 'Pending', $3)
@@ -319,7 +313,7 @@ const Mutation = {
 
     const patientSlotId = psResult.rows[0].id;
 
-    // 5. Insert patientScheduleRequirement rows (one per requirement)
+    // 4. Insert patientScheduleRequirement rows (one per requirement)
     if (requirements && requirements.length > 0) {
       const values = [];
       const placeholders = requirements.map((req, i) => {
@@ -348,18 +342,10 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-
-    // 1. Get the latest appointment record for this patient
-    const records = await Query._getUserAppointmentRecords(_, { userId: patientId, offset: 0, limit: 1 }, { user, res });
-
-    if (!records || records.length === 0 || !["Pending", "Scheduled", "InProgress"].includes(records[0].status)) {
-      throwGraphQLError(res).message("No active appointment found to cancel").status(404).throw();
-    }
-
-    // 2. Decide cancellation status
+    // 1. Decide cancellation status
     const newStatus = patientId === cancelledBy ? "CancelledByPatient" : "CancelledByMedical";
 
-    // 3. Update patientSlot
+    // 2. Get the latest appointment record for this patient
     const updateResult = await db.query(
       `UPDATE "patientSlot" SET status = $1 WHERE id = $2;`,
       [newStatus, records[0].id]
@@ -585,7 +571,293 @@ const Mutation = {
     );
 
     return result.rowCount > 0;
+  },
+
+  _updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    } 
+    const fields = [];
+    const values = [];
+    let idx = 1;
+    
+    if (input.label !== undefined && input.label !== null) {
+      fields.push(`label = $${idx++}`);
+      values.push(input.label);
+    }
+
+    if (input.notes !== undefined) {
+      fields.push(`notes = $${idx++}`);
+      values.push(input.notes);
+    }
+
+    if (input.isDigital !== undefined && input.isDigital !== null) {
+      fields.push(`"isDigital" = $${idx++}`);
+      values.push(input.isDigital);
+    }
+
+    if (input.isActive !== undefined && input.isActive !== null) {
+      fields.push(`"isActive" = $${idx++}`);
+      values.push(input.isActive);
+    }
+
+    if (fields.length === 0) {
+      throwGraphQLError(res).message("No fields to update").status(400).throw();
+    }
+
+    values.push(schedulerId);
+
+    const query = `
+      UPDATE "scheduleRequirement"
+      SET ${fields.join(", ")}
+      WHERE slotId = $${idx}
+      RETURNING *;
+    `;
+
+    const result = await db.query(query, values);
+
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to update scheduler requirement").status(500).throw();
+    }
+
+    return result.rows[0];
+  },
+
+  _deleteSchedulerRequirement: async (_, { schedulerId, label }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const result = await db.query(
+      `DELETE FROM "scheduleRequirement" WHERE slotId = $1 AND label = $2;`,
+      [schedulerId, label]
+    );
+
+    return result.rowCount > 0;
+  },
+
+  _setCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    if (!schedulerId || !Array.isArray(dates) || dates.length === 0) {
+      throwGraphQLError(res)
+        .message("Invalid schedulerId or empty dates list")
+        .status(400)
+        .throw();
+    }
+
+    // Build placeholders and values for batch insert
+    const values = [];
+    const placeholders = dates.map((date, i) => {
+      const offset = i * 2;
+      values.push(schedulerId, date);
+      return `($${offset + 1}, $${offset + 2})`;
+    });
+
+    const query = `
+      INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
+      VALUES ${placeholders.join(", ")}
+      RETURNING "scheduledDate";
+    `;
+
+    try {
+      const result = await db.query(query, values);
+      return result.rows.map(r => r.scheduledDate);
+    } catch (err) {
+      throwGraphQLError(res)
+        .message(`Failed to set custom dates: ${err.message}`)
+        .status(500)
+        .throw();
+    }
+  },
+
+  _unsetCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    if (!schedulerId || !Array.isArray(dates) || dates.length === 0) {
+      throwGraphQLError(res)
+        .message("Invalid schedulerId or empty dates list")
+        .status(400)
+        .throw();
+    }
+
+    try {
+      const result = await db.query(
+        `DELETE FROM "SlotCustomDate"
+         WHERE "slotScheduleId" = $1
+         AND "scheduledDate" = ANY($2)
+         RETURNING "scheduledDate";`,
+        [schedulerId, dates]
+      );
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res)
+          .message("No matching custom dates found to unset")
+          .status(404)
+          .throw();
+      }
+
+      // Return the list of dates that were actually deleted
+      return result.rows.map(r => r.scheduledDate);
+    } catch (err) {
+      throwGraphQLError(res)
+        .message(`Failed to unset custom dates: ${err.message}`)
+        .status(500)
+        .throw();
+    }
+  },
+
+  _addEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    if (!schedulerId || !Array.isArray(patientIds) || patientIds.length === 0) {
+      throwGraphQLError(res)
+        .message("Invalid schedulerId or empty patientIds list")
+        .status(400)
+        .throw();
+    }
+
+    try {
+      // Build placeholders and values for batch insert
+      const values = [];
+      const placeholders = patientIds.map((pid, i) => {
+        const offset = i * 2;
+        values.push(schedulerId, pid);
+        return `($${offset + 1}, $${offset + 2})`;
+      });
+
+      const query = `
+        INSERT INTO "schedulerWhitelist" ("slotSchedulerId", "patientId")
+        VALUES ${placeholders.join(", ")}
+        RETURNING "patientId";
+      `;
+
+      const result = await db.query(query, values);
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res)
+          .message("Failed to add whitelist entries")
+          .status(500)
+          .throw();
+      }
+
+      // Return the list of patient IDs that were actually inserted
+      return result.rows.map(r => r.patientId);
+    } catch (err) {
+      throwGraphQLError(res)
+        .message(`Failed to add whitelist entries: ${err.message}`)
+        .status(500)
+        .throw();
+    }
+  },
+
+  _removeEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    if (!schedulerId || !Array.isArray(patientIds) || patientIds.length === 0) {
+      throwGraphQLError(res)
+        .message("Invalid schedulerId or empty patientIds list")
+        .status(400)
+        .throw();
+    }
+
+    try {
+      const result = await db.query(
+        `DELETE FROM "schedulerWhitelist"
+         WHERE "slotSchedulerId" = $1
+         AND "patientId" = ANY($2)
+         RETURNING "patientId";`,
+        [schedulerId, patientIds]
+      );
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res)
+          .message("No matching whitelist entries found to remove")
+          .status(404)
+          .throw();
+      }
+
+      // Return the list of patient IDs that were actually removed
+      return result.rows.map(r => r.patientId);
+    } catch (err) {
+      throwGraphQLError(res)
+        .message(`Failed to remove whitelist entries: ${err.message}`)
+        .status(500)
+        .throw();
+    }
+  },
+
+  _updateDateIdentity: async (_, { schedulerId, date, input }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    try {
+      // Build dynamic update fields based on provided input
+      const fields = [];
+      const values = [];
+      let idx = 1;
+
+      if (input.morningAllowed !== undefined) {
+        fields.push(`"morningAllowed" = $${idx++}`);
+        values.push(input.morningAllowed);
+      }
+      if (input.afternoonAllowed !== undefined) {
+        fields.push(`"afternoonAllowed" = $${idx++}`);
+        values.push(input.afternoonAllowed);
+      }
+      if (input.allowDuring !== undefined) {
+        fields.push(`"allowDuring" = $${idx++}`);
+        values.push(input.allowDuring);
+      }
+      if (input.scheduledDate !== undefined) {
+        fields.push(`"scheduledDate" = $${idx++}`);
+        values.push(input.scheduledDate);
+      }
+
+      if (fields.length === 0) {
+        throwGraphQLError(res)
+          .message("No fields provided to update")
+          .status(400)
+          .throw();
+      }
+
+      // Add schedulerId and date filters
+      values.push(schedulerId);
+      values.push(date);
+
+      const query = `
+        UPDATE "ScheduleDateEntity"
+        SET ${fields.join(", ")}
+        WHERE "slotId" = $${idx++} AND "scheduledDate" = $${idx++}
+        RETURNING *;
+      `;
+
+      const result = await db.query(query, values);
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res)
+          .message("No matching schedule date entity found to update")
+          .status(404)
+          .throw();
+      }
+
+      return result.rows[0];
+    } catch (err) {
+      throwGraphQLError(res)
+        .message(`Failed to update schedule date entity: ${err.message}`)
+        .status(500)
+        .throw();
+    }
   }
+
 };  
 
 
