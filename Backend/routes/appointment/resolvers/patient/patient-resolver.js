@@ -11,97 +11,47 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 // Unless if the user is unverified where the first ticket never expires
 
 Query = {
-
-  getCredentialStatus: async (_, __, { user, res }) => { // getting the credential status of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const result = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
-    return result;
+  listOpenAppointments: async (_, { offset, limit }, { user, res }) => {
+    return await Wrapper.Query._listOpenAppointments(_, { offset, limit }, { user, res });
   },
 
-  getPersonalRecord: async (_, __, { user, res }) => { // getting the main account record of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    return await Wrapper.Query._getUserPersonalRecord(_, { userId: user.id }, { user, res });
+  listCustomDates: async (_, { schedulerId, offset, limit }, { user, res }) => {
+    return await Wrapper.Query._listCustomDates(_, { schedulerId, offset, limit }, { user, res });
   },
 
-  getPersonalRecordLogStatus: async (_, __, { user, res }) => { // getting the update status of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const result = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
-    return result?.status;
+  listAppointmentSchedule: async (_, { schedulerId, date }, { user, res }) => {
+    return await Wrapper.Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
   },
 
-  getBranchIdentifier: async (_, __, { user, res }) => { // getting the identifier and the branch of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    return await Wrapper.Query._getBranchIdentifier(_, { userId: user.id }, { user, res });
+  listAppointmentRequirements: async (_, { schedulerId, offset, limit }, { user, res }) => {
+    return await Wrapper.Query._listAllAppointmentRequirements(_, { schedulerId, offset, limit, isActive: true }, { user, res });
   },
+
+  getAppointmentStatus: async (_, __, { user, res }) => {
+  return await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id, }, { user, res });
+  }
 };
 
 Mutation = {
-  createPersonalRecordLog: async (_, { input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+  submitAppointment: async (_, { schedulerId, date, session, requirements }, { user, res }) => {
+    const userStatus = await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res });
+
+    if (!userStatus || !["Pending", "Scheduled", "InProgress"].includes(userStatus)) {
+      throwGraphQLError(res).message("User already has an active appointment").status(400).throw();
     }
-    const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
-    if (latest?.status === "Pending" || latest?.status === "InProgress") {
-      throwGraphQLError(res).message("An update is already in progress. Please wait for it to complete before creating a new one.").status(400).throw();
-      }
-    if (latest?.status === "Revision" || latest?.status === "RevisionSubmitted"){
-      throwGraphQLError(res).message("Revision still pending. Please complete the revision before creating a new update.").status(400).throw();
-    }
-    return await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
-  },
-  
-  createBranchIdentifier: async (_, { identifier }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const credentialStatus = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
-    if (credentialStatus !== "unverified") {
-      throwGraphQLError(res).message("For patients, branch and identifier can only be set for unverified users.").status(400).throw();
-      }
-   
-    const getEmail = await db.findEmailByUserId(user.id);
-    if (!getEmail) {
-      throwGraphQLError(res).message("Email not found for the user.").status(400).throw();
-    }
-    const input =  { branch: getStudentBranchFromEmail(getEmail), identifier};
-    return await Wrapper.Mutation._UserBranchIdentifier(_, { userId: user.id, input }, { user, res });
-  },
-  
-  cancelPersonalRecordLog: async (_, __, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
-    if (latest?.status !== "Pending" && latest?.status !== "InProgress") {
-      throwGraphQLError(res).message("No active update found to cancel.").status(400).throw();
-      }
-    return await Wrapper.Mutation._cancelPersonalRecordLog(_, { userId: user.id }, { user, res });
+
+    return await Wrapper.Mutation._submitAppointment(_, { schedulerId, date, session, requirements }, { user, res });
   },
 
-  reloadCredentialStatus: async (_, __, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const result = await Wrapper.Mutation._reloadCredentialStatus(_, { userId: user.id }, { user, res });
-    return result;
-  },
+  cancelAppointment: async (_, __, { user, res }) => {
+    const userStatus = await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res });
 
-  setPersonalRecordLog: async (_, { userId, status }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    if (!userStatus || !["Pending", "Scheduled", "InProgress"].includes(userStatus)) {
+      throwGraphQLError(res).message("No active appointment found to cancel").status(404).throw();
     }
-    const result = await Wrapper.Mutation._setPersonalRecordLog(_, { userId, status }, { user, res });
-    return result;
-  },
 
+    return await Wrapper.Mutation._cancelAppointment(_, { patientId: user.id, cancelledBy: user.id }, { user, res });
+  },
 };
 
 
