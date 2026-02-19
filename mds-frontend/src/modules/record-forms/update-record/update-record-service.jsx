@@ -50,6 +50,75 @@ async function sendGraphQLRequest(query, variables = {}) {
 // ==================== UPDATE TICKET MANAGEMENT ====================
 
 /**
+ * Gets the current active update ticket status
+ * @returns {Promise<object>} Ticket details {id, status} or null if no active ticket
+ */
+export async function getUpdateTicketStatus() {
+  const query = `
+    query GetUpdateTicketStatus {
+      getUpdateTicket {
+        id
+        status
+      }
+    }
+  `;
+
+  try {
+    console.log('🔍 Fetching current update ticket status...');
+    const response = await sendGraphQLRequest(query, {});
+    
+    if (response.getUpdateTicket) {
+      console.log('✓ Current ticket status:', response.getUpdateTicket);
+      return response.getUpdateTicket;
+    }
+    
+    console.log('✓ No active update ticket');
+    return null;
+  } catch (error) {
+    console.log('ℹ️ Could not fetch ticket status:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Ensures no active ticket exists by checking and cancelling if needed
+ * @returns {Promise<boolean>} true if ticket was cancelled or no ticket existed, false if ticket couldn't be cancelled
+ */
+export async function ensureNoActiveTicket() {
+  try {
+    console.log('🔍 Checking for active update ticket...');
+    const ticket = await getUpdateTicketStatus();
+    
+    if (!ticket) {
+      console.log('✓ No active ticket found');
+      return true;
+    }
+    
+    console.log('ℹ️ Found active ticket:', ticket.id, 'Status:', ticket.status);
+    
+    // Check if ticket is in a cancellable state
+    if (ticket.status === 'InProgress' || ticket.status === 'Pending') {
+      console.log('🚫 Attempting to cancel active ticket...');
+      const cancelResult = await cancelUpdateTicket();
+      
+      if (cancelResult) {
+        console.log('✅ Successfully cancelled active ticket');
+        return true;
+      } else {
+        console.error('❌ Failed to cancel active ticket');
+        return false;
+      }
+    } else {
+      console.log('ℹ️ Ticket is in final status:', ticket.status, '- no need to cancel');
+      return true;
+    }
+  } catch (error) {
+    console.error('❌ Error checking/cancelling active ticket:', error.message);
+    return false;
+  }
+}
+
+/**
  * Creates an update ticket with specified scope
  * @param {string} scope - 'Medical', 'Dental', or 'Both'
  * @returns {Promise<string>} Ticket ID
@@ -756,15 +825,15 @@ export async function submitUpdateRecord(formData, recordType) {
   let ticketId = null;
   
   try {
-    // Step 1: Try to cancel any existing ticket first (in case of previous failed attempts)
-    try {
-      console.log('🔍 Checking for existing update ticket...');
-      await cancelUpdateTicket();
-      console.log('✅ Cancelled existing ticket');
-    } catch (cancelError) {
-      // It's okay if there's no ticket to cancel
-      console.log('ℹ️ No existing ticket to cancel (or already cancelled)');
+    // Step 1: Ensure no active ticket exists (check and cancel if needed)
+    console.log('🔍 Checking for existing update ticket...');
+    const canProceed = await ensureNoActiveTicket();
+    
+    if (!canProceed) {
+      throw new Error('An update ticket is already in progress. Please cancel it or wait for it to be processed.');
     }
+    
+    console.log('✅ Ready to create new ticket');
 
     // Step 2: Create update ticket (ALWAYS "Both" scope - backend requirement for first ticket)
     // Users can still choose to fill only medical or dental, but ticket must be "Both"
@@ -772,20 +841,20 @@ export async function submitUpdateRecord(formData, recordType) {
 
     const results = { ticketId };
 
-    // Step 2: Submit personal information (requires active ticket)
+    // Step 3: Submit personal information (requires active ticket)
     console.log('📝 Submitting personal information...');
     await updatePersonalInfo(formData);
     console.log('✅ Personal information submitted');
 
-    // Step 3: Submit medical data (ALWAYS - create empty records if user didn't fill this section)
+    // Step 4: Submit medical data (ALWAYS - create empty records if user didn't fill this section)
     // Backend requires all tables for "Both" scope ticket
     results.medical = await submitMedicalUpdate(formData);
 
-    // Step 4: Submit dental data (ALWAYS - create empty records if user didn't fill this section)
+    // Step 5: Submit dental data (ALWAYS - create empty records if user didn't fill this section)
     // Backend requires all tables for "Both" scope ticket
     results.dental = await submitDentalUpdate(formData);
 
-    // Step 5: Submit the ticket for review
+    // Step 6: Submit the ticket for review
     const finalStatus = await submitUpdateTicket();
     results.finalStatus = finalStatus;
 

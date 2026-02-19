@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Input, Select, Checkbox, Textarea, AccordionSection } from './form-elements';
 import { fetchAllDentalCatalogs } from './dental-history-service';
+import { useBanner } from '../../../context/banner-context.jsx';
 
 const DentalHistoryStep = ({ formData, onChange }) => {
+  const { clearAllBanners } = useBanner();
   const [activeAccordion, setActiveAccordion] = useState('visits');
   const [catalogs, setCatalogs] = useState({
     oralAppliances: [],
@@ -11,8 +13,14 @@ const DentalHistoryStep = ({ formData, onChange }) => {
     error: null
   });
 
+  // Prevent duplicate fetch in React StrictMode (dev double-mount)
+  const hasFetched = useRef(false);
+
   // Fetch catalogs on mount
   useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+
     let isMounted = true;
     
     const loadCatalogs = async () => {
@@ -26,6 +34,7 @@ const DentalHistoryStep = ({ formData, onChange }) => {
             isLoading: false,
             error: result.error
           });
+          clearAllBanners();
           console.log('✅ Dental catalogs loaded');
         }
       } catch (err) {

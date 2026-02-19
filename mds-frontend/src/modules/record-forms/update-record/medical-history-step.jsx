@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup } from './form-elements';
-import { fetchAllCatalogsWithConditions } from './medical-history-service';
+import { fetchAllMedicalCatalogs } from './medical-history-service';
+import { useBanner } from '../../../context/banner-context.jsx';
 
 const MedicalHistoryStep = ({ formData, onChange }) => {
+  const { clearAllBanners } = useBanner();
   const [activeTab, setActiveTab] = useState('yourself');
   const [activeAccordion, setActiveAccordion] = useState('conditions');
   const [catalogs, setCatalogs] = useState({
@@ -24,7 +26,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
     const loadCatalogs = async () => {
       try {
         console.log('📥 Loading catalogs...');
-        const result = await fetchAllCatalogsWithConditions();
+        const result = await fetchAllMedicalCatalogs();
         
         if (isMounted) {
           setCatalogs({
@@ -32,6 +34,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
             isLoading: false,
             error: result.error
           });
+          clearAllBanners();
           console.log('✅ Catalogs loaded');
         }
       } catch (err) {

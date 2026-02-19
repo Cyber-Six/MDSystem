@@ -34,7 +34,99 @@ const RecordUpdateForm = () => {
 
   const steps = getSteps();
 
+  // Validate required fields before allowing Next
+  const validateCurrentStep = () => {
+    const stepName = steps[currentStep];
+
+    if (stepName === 'Medical History') {
+      // Lifestyle habits are always required
+      if (!formData.smoking || !formData.alcohol || !formData.vape) {
+        alert('Please fill in all Lifestyle Habits (Smoking, Alcohol, Vape) before proceeding.');
+        return false;
+      }
+      // If user said yes to allergies, check sub-fields
+      if (formData.hasAllergies === 'yes') {
+        const selectedAllergies = formData.selectedAllergies || [];
+        if (selectedAllergies.length > 0) {
+          for (const allergenId of selectedAllergies) {
+            const detail = formData.allergyDetails?.[allergenId];
+            if (!detail?.status || !detail?.severity) {
+              alert('Please fill in Status and Severity for all selected allergies.');
+              return false;
+            }
+          }
+        }
+      }
+      // If user said yes to hospitalizations, check sub-fields
+      if (formData.hasHospitalizations === 'yes') {
+        if (!formData.admissionDate) {
+          alert('Please fill in the Admission Date for your hospitalization.');
+          return false;
+        }
+      }
+      // If user said yes to surgeries, check sub-fields
+      if (formData.hasSurgeries === 'yes') {
+        if (!formData.operationDate) {
+          alert('Please fill in the Operation Date for your surgery.');
+          return false;
+        }
+      }
+      // If user said yes to medications, check at least one medication entry
+      if (formData.hasMedications === 'yes') {
+        const meds = formData.currentMedications || [];
+        if (meds.length === 0) {
+          alert('Please add at least one medication.');
+          return false;
+        }
+        for (const med of meds) {
+          if (!med.medicineId) {
+            alert('Please fill in the medication name/selection for all added medications.');
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    if (stepName === 'Dental History') {
+      // Dentist visit info is required
+      if (formData.seenByDentist === undefined || formData.seenByDentist === null) {
+        alert('Please indicate whether you have visited a dentist.');
+        return false;
+      }
+      if (!formData.lastDentalCleaning) {
+        alert('Please select when your last dental cleaning was.');
+        return false;
+      }
+      // Oral hygiene habits are required
+      if (!formData.brushingFrequency || !formData.flossingHabit || !formData.mouthwashUse) {
+        alert('Please fill in all Oral Hygiene Habits (Brushing, Flossing, Mouthwash) before proceeding.');
+        return false;
+      }
+      // Validate oral appliance entries if any were added
+      const appliances = formData.oralAppliances || [];
+      for (const appliance of appliances) {
+        if (!appliance.tagId || !appliance.status || !appliance.dateIssued) {
+          alert('Please fill in all required fields (Type, Status, Date Issued) for each oral appliance.');
+          return false;
+        }
+      }
+      // Validate dental procedure dates if any were selected
+      const procedures = formData.dentalProcedures || [];
+      for (const proc of procedures) {
+        if (!proc.procedureDate) {
+          alert('Please fill in the Date of Procedure for all selected dental procedures.');
+          return false;
+        }
+      }
+      return true;
+    }
+
+    return true;
+  };
+
   const handleNext = () => {
+    if (!validateCurrentStep()) return;
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
