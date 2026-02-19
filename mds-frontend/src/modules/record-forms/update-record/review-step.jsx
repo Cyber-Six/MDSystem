@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ReviewStep = ({ formData, onEdit }) => {
+const ReviewStep = ({ formData, onEdit, recordType }) => {
   const SectionHeader = ({ title, onEditClick }) => (
     <div className="flex items-center justify-between mb-4 pb-3 border-b-2 border-primary-500">
       <h4 className="text-lg font-heading font-semibold text-secondary-800 dark:text-white">{title}</h4>
@@ -89,11 +89,25 @@ const ReviewStep = ({ formData, onEdit }) => {
     'Mouthwash Use': formData.mouthwashUse
   };
 
+  // Calculate correct step indices based on recordType
+  const getStepIndex = (section) => {
+    if (section === 'personal') return 0;
+    if (section === 'medical') {
+      // Medical is always at index 1 if it exists
+      return 1;
+    }
+    if (section === 'dental') {
+      // Dental is at index 1 if recordType is 'dental', otherwise index 2
+      return recordType === 'dental' ? 1 : 2;
+    }
+    return 0;
+  };
+
   return (
     <div className="space-y-6">
       {/* Personal Information */}
       <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
-        <SectionHeader title="Personal Information" onEditClick={() => onEdit(0)} />
+        <SectionHeader title="Personal Information" onEditClick={() => onEdit(getStepIndex('personal'))} />
         <dl className="space-y-1">
           {Object.entries(personalInfo).map(([label, value]) => (
             <DataRow key={label} label={label} value={value} />
@@ -101,25 +115,29 @@ const ReviewStep = ({ formData, onEdit }) => {
         </dl>
       </div>
 
-      {/* Medical History */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
-        <SectionHeader title="Medical History" onEditClick={() => onEdit(1)} />
-        <dl className="space-y-1">
-          {Object.entries(medicalHistory).map(([label, value]) => (
-            <DataRow key={label} label={label} value={value} />
-          ))}
-        </dl>
-      </div>
+      {/* Medical History - Only show if recordType is 'medical' or 'both' */}
+      {(recordType === 'medical' || recordType === 'both') && (
+        <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
+          <SectionHeader title="Medical History" onEditClick={() => onEdit(getStepIndex('medical'))} />
+          <dl className="space-y-1">
+            {Object.entries(medicalHistory).map(([label, value]) => (
+              <DataRow key={label} label={label} value={value} />
+            ))}
+          </dl>
+        </div>
+      )}
 
-      {/* Dental History */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
-        <SectionHeader title="Dental History" onEditClick={() => onEdit(2)} />
-        <dl className="space-y-1">
-          {Object.entries(dentalHistory).map(([label, value]) => (
-            <DataRow key={label} label={label} value={value} />
-          ))}
-        </dl>
-      </div>
+      {/* Dental History - Only show if recordType is 'dental' or 'both' */}
+      {(recordType === 'dental' || recordType === 'both') && (
+        <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
+          <SectionHeader title="Dental History" onEditClick={() => onEdit(getStepIndex('dental'))} />
+          <dl className="space-y-1">
+            {Object.entries(dentalHistory).map(([label, value]) => (
+              <DataRow key={label} label={label} value={value} />
+            ))}
+          </dl>
+        </div>
+      )}
 
       <div className="p-4 bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-xl">
         <div className="flex items-start gap-3">
