@@ -1,21 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Input, Select, Checkbox, Textarea, AccordionSection } from './form-elements';
+import { fetchAllDentalCatalogs } from './dental-history-service';
+import { useBanner } from '../../../context/banner-context.jsx';
 
 const DentalHistoryStep = ({ formData, onChange }) => {
+  const { clearAllBanners } = useBanner();
   const [activeAccordion, setActiveAccordion] = useState('visits');
+  const [catalogs, setCatalogs] = useState({
+    oralAppliances: [],
+    dentalProcedures: [],
+    isLoading: true,
+    error: null
+  });
 
-  const dentalProcedures = [
-    'Tooth Extraction',
-    'Filling/Restoration',
-    'Root Canal',
-    'Crown/Bridge',
-    'Dentures',
-    'Orthodontic Treatment (Braces)',
-    'Dental Implant',
-    'Teeth Whitening',
-    'Gum Treatment',
-    'Other'
-  ];
+  // Prevent duplicate fetch in React StrictMode (dev double-mount)
+  const hasFetched = useRef(false);
+
+  // Fetch catalogs on mount
+  useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+
+    let isMounted = true;
+    
+    const loadCatalogs = async () => {
+      try {
+        console.log('📥 Loading dental catalogs...');
+        const result = await fetchAllDentalCatalogs();
+        
+        if (isMounted) {
+          setCatalogs({
+            ...result,
+            isLoading: false,
+            error: result.error
+          });
+          clearAllBanners();
+          console.log('✅ Dental catalogs loaded');
+        }
+      } catch (err) {
+        if (isMounted) {
+          console.error('❌ Failed to load dental catalogs:', err);
+          setCatalogs(prev => ({
+            ...prev,
+            isLoading: false,
+            error: err.message
+          }));
+        }
+      }
+    };
+
+    loadCatalogs();
+    
+    return () => { isMounted = false; };
+  }, []);
 
   const handleInputChange = (field, value) => {
     onChange({ ...formData, [field]: value });
@@ -60,16 +97,16 @@ const DentalHistoryStep = ({ formData, onChange }) => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-secondary-700 dark:text-primary-500 mb-2">
-                Have you visited a dentist?
+                Have you visited a dentist? *
               </label>
               <div className="flex items-center gap-6">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
-                    name="visitedDentist"
-                    value="yes"
-                    checked={formData.visitedDentist === 'yes'}
-                    onChange={(e) => handleInputChange('visitedDentist', e.target.value)}
+                    name="seenByDentist"
+                    value="true"
+                    checked={formData.seenByDentist === true}
+                    onChange={(e) => handleInputChange('seenByDentist', true)}
                     className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                   />
                   <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
@@ -77,39 +114,19 @@ const DentalHistoryStep = ({ formData, onChange }) => {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
-                    name="visitedDentist"
-                    value="no"
-                    checked={formData.visitedDentist === 'no'}
-                    onChange={(e) => handleInputChange('visitedDentist', e.target.value)}
+                    name="seenByDentist"
+                    value="false"
+                    checked={formData.seenByDentist === false}
+                    onChange={(e) => handleInputChange('seenByDentist', false)}
                     className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                   />
                   <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="visitedDentist"
-                    value="idk"
-                    checked={formData.visitedDentist === 'idk'}
-                    onChange={(e) => handleInputChange('visitedDentist', e.target.value)}
-                    className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                  />
-                  <span className="text-sm text-secondary-700 dark:text-neutral-300">I don't know</span>
-                </label>
               </div>
             </div>
             
-            {formData.visitedDentist === 'yes' && (
-              <Input
-                label="When was your last dental consultation?"
-                type="date"
-                value={formData.lastDentalConsultation || ''}
-                onChange={(e) => handleInputChange('lastDentalConsultation', e.target.value)}
-              />
-            )}
-
             <Select
-              label="When was your last dental cleaning?"
+              label="When was your last dental cleaning? *"
               required
               options={[
                 { value: 'Within last 6 months', label: 'Within last 6 months' },
@@ -122,6 +139,23 @@ const DentalHistoryStep = ({ formData, onChange }) => {
               value={formData.lastDentalCleaning || ''}
               onChange={(e) => handleInputChange('lastDentalCleaning', e.target.value)}
             />
+
+            {formData.seenByDentist === true && (
+              <>
+                <Input
+                  label="Last Visit Date"
+                  type="date"
+                  value={formData.lastVisitDate || ''}
+                  onChange={(e) => handleInputChange('lastVisitDate', e.target.value)}
+                />
+                <Input
+                  label="Purpose of Last Visit"
+                  placeholder="e.g., Regular checkup, Tooth extraction, Cleaning"
+                  value={formData.purpose || ''}
+                  onChange={(e) => handleInputChange('purpose', e.target.value)}
+                />
+              </>
+            )}
           </div>
         </AccordionSection>
 
@@ -134,52 +168,117 @@ const DentalHistoryStep = ({ formData, onChange }) => {
           onToggle={toggleAccordion}
         >
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-secondary-700 dark:text-primary-500 mb-2">
-                Do you use any intra-oral appliances? (e.g., braces, retainers, dentures)
-              </label>
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="hasIntraoralAppliances"
-                    value="yes"
-                    checked={formData.hasIntraoralAppliances === 'yes'}
-                    onChange={(e) => handleInputChange('hasIntraoralAppliances', e.target.value)}
-                    className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                  />
-                  <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="hasIntraoralAppliances"
-                    value="no"
-                    checked={formData.hasIntraoralAppliances === 'no'}
-                    onChange={(e) => handleInputChange('hasIntraoralAppliances', e.target.value)}
-                    className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                  />
-                  <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
-                </label>
-              </div>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-secondary-700">Do you use any intra-oral appliances?</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const currentAppliances = formData.oralAppliances || [];
+                  handleInputChange('oralAppliances', [...currentAppliances, { tagId: '', status: '', dateIssued: '', arch: 'None' }]);
+                }}
+                className="px-3 py-1 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700"
+              >
+                Add Appliance
+              </button>
             </div>
-            
-            {formData.hasIntraoralAppliances === 'yes' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-neutral-50 dark:bg-secondary-700 rounded-lg border border-neutral-200 dark:border-secondary-600">
-                <Input
-                  label="Type of appliance"
-                  placeholder="e.g., Braces, Retainer, Dentures"
-                  value={formData.intraoralApplianceType || ''}
-                  onChange={(e) => handleInputChange('intraoralApplianceType', e.target.value)}
-                />
-                <Input
-                  label="Location (which teeth/area)"
-                  placeholder="e.g., Upper teeth, Lower teeth, Both"
-                  value={formData.intraoralApplianceLocation || ''}
-                  onChange={(e) => handleInputChange('intraoralApplianceLocation', e.target.value)}
-                />
+
+            {(formData.oralAppliances || []).map((appliance, index) => (
+              <div key={index} className="bg-neutral-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium">Appliance #{index + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const appliances = [...(formData.oralAppliances || [])];
+                      appliances.splice(index, 1);
+                      handleInputChange('oralAppliances', appliances);
+                    }}
+                    className="text-error-600 text-sm hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {catalogs.oralAppliances.length > 0 ? (
+                    <Select
+                      label="Appliance Type *"
+                      required
+                      options={catalogs.oralAppliances.map(a => ({
+                        value: a.id,
+                        label: a.name
+                      }))}
+                      value={appliance.tagId || ''}
+                      onChange={(e) => {
+                        const appliances = [...(formData.oralAppliances || [])];
+                        appliances[index] = { ...appliances[index], tagId: e.target.value };
+                        handleInputChange('oralAppliances', appliances);
+                      }}
+                    />
+                  ) : (
+                    <Input
+                      label="Appliance Type *"
+                      required
+                      placeholder="e.g., Braces, Retainer"
+                      value={appliance.tagId || ''}
+                      onChange={(e) => {
+                        const appliances = [...(formData.oralAppliances || [])];
+                        appliances[index] = { ...appliances[index], tagId: e.target.value };
+                        handleInputChange('oralAppliances', appliances);
+                      }}
+                    />
+                  )}
+                  <Input
+                    label="Status *"
+                    required
+                    placeholder="e.g., Active, Completed"
+                    value={appliance.status || ''}
+                    onChange={(e) => {
+                      const appliances = [...(formData.oralAppliances || [])];
+                      appliances[index] = { ...appliances[index], status: e.target.value };
+                      handleInputChange('oralAppliances', appliances);
+                    }}
+                  />
+                  <Input
+                    label="Date Issued *"
+                    type="date"
+                    required
+                    value={appliance.dateIssued || ''}
+                    onChange={(e) => {
+                      const appliances = [...(formData.oralAppliances || [])];
+                      appliances[index] = { ...appliances[index], dateIssued: e.target.value };
+                      handleInputChange('oralAppliances', appliances);
+                    }}
+                  />
+                  <Select
+                    label="Arch Location *"
+                    required
+                    options={[
+                      { value: 'None', label: 'None' },
+                      { value: 'Upper', label: 'Upper' },
+                      { value: 'Lower', label: 'Lower' },
+                      { value: 'Both', label: 'Both' }
+                    ]}
+                    value={appliance.arch || 'None'}
+                    onChange={(e) => {
+                      const appliances = [...(formData.oralAppliances || [])];
+                      appliances[index] = { ...appliances[index], arch: e.target.value };
+                      handleInputChange('oralAppliances', appliances);
+                    }}
+                  />
+                </div>
               </div>
+            ))}
+
+            {(!formData.oralAppliances || formData.oralAppliances.length === 0) && (
+              <p className="text-sm text-secondary-500 italic">No appliances added yet. Click "Add Appliance" to start.</p>
             )}
+
+            <Textarea
+              label="Appliance Notes (Optional)"
+              placeholder="Any additional information about your intraoral appliances."
+              value={formData.oralApplianceNotes || ''}
+              onChange={(e) => handleInputChange('oralApplianceNotes', e.target.value)}
+            />
           </div>
         </AccordionSection>
 
@@ -192,26 +291,56 @@ const DentalHistoryStep = ({ formData, onChange }) => {
           onToggle={toggleAccordion}
         >
           <div className="space-y-4">
-            <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">Check all procedures you've had:</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {dentalProcedures.map((procedure) => (
+            <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">Select procedures you've had and provide dates:</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {catalogs.dentalProcedures.map((procedure) => (
                 <Checkbox
-                  key={procedure}
-                  label={procedure}
-                  checked={(formData.dentalProcedures || []).includes(procedure)}
-                  onChange={(e) => handleCheckboxChange('dentalProcedures', procedure, e.target.checked)}
+                  key={procedure.id}
+                  label={procedure.name}
+                  checked={(formData.dentalProcedures || []).some(p => p.procedureTypeId === procedure.id)}
+                  onChange={(e) => {
+                    const procedures = formData.dentalProcedures || [];
+                    if (e.target.checked) {
+                      handleInputChange('dentalProcedures', [...procedures, { procedureTypeId: procedure.id, procedureDate: '' }]);
+                    } else {
+                      handleInputChange('dentalProcedures', procedures.filter(p => p.procedureTypeId !== procedure.id));
+                    }
+                  }}
                 />
               ))}
             </div>
             
-            {(formData.dentalProcedures || []).includes('Other') && (
-              <Textarea
-                label="Please specify other procedure"
-                placeholder="Describe the procedure..."
-                value={formData.dentalProceduresOther || ''}
-                onChange={(e) => handleInputChange('dentalProceduresOther', e.target.value)}
-              />
+            {(formData.dentalProcedures || []).length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-secondary-700">Procedure Details:</h4>
+                {(formData.dentalProcedures || []).map((procedure, index) => {
+                  const procedureCatalog = catalogs.dentalProcedures.find(p => p.id === procedure.procedureTypeId);
+                  return procedureCatalog ? (
+                    <div key={index} className="bg-neutral-50 p-3 rounded-lg">
+                      <p className="text-sm font-medium mb-2">{procedureCatalog.name}</p>
+                      <Input
+                        label="Date of Procedure *"
+                        type="date"
+                        required
+                        value={procedure.procedureDate || ''}
+                        onChange={(e) => {
+                          const procedures = [...(formData.dentalProcedures || [])];
+                          procedures[index] = { ...procedures[index], procedureDate: e.target.value };
+                          handleInputChange('dentalProcedures', procedures);
+                        }}
+                      />
+                    </div>
+                  ) : null;
+                })}
+              </div>
             )}
+
+            <Textarea
+              label="Procedure Notes (Optional)"
+              placeholder="Any additional information about your dental procedures."
+              value={formData.dentalProcedureNotes || ''}
+              onChange={(e) => handleInputChange('dentalProcedureNotes', e.target.value)}
+            />
           </div>
         </AccordionSection>
 

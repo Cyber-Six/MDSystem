@@ -16,6 +16,11 @@ const permissions = {
   profile_allow_view: "ALLOW_TO_VIEW_PROFILE",
   profile_allow_edit: "ALLOW_TO_EDIT_PROFILE",
   profile_allow_update_email_identifier: "ALLOW_TO_UPDATE_EMAIL_IDENTIFIER",
+
+  appointment_allow_approval: "ALLOW_TO_APPROVE_APPOINTMENT",
+  appointment_allow_view_records: "ALLOW_TO_VIEW_APPOINTMENT",
+  appointment_allow_view_configuration: "ALLOW_TO_VIEW_APPOINTMENT_CONFIGURATION",
+  apppointment_allow_edit_configuration: "ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION",
 };
 
 async function getMedicalpermits(personnelId) {
@@ -103,33 +108,49 @@ async function isMedicalPermitted(userId, label, patientId) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
   if (isAdmin) return true; // Admin bypass
 
-  const result = await query(
-    `SELECT uc.identity
-     FROM "rolesMap" rm
-     JOIN "rolesTable" rt ON rm.rolesId = rt.id
-     JOIN "UsersPersonal" up ON up.id = $3   -- patientId lookup
-     JOIN "UsersCredentials" uc ON uc.userId = up.id  -- safer join
-     WHERE rm.personnelId = $1
-       AND rt.label = $2
-       AND (
-         up.branch = 'Both'
-         OR rm.branch = up.branch
-         OR rm.branch = 'Both'
-       )
-     LIMIT 1;`,
-    [userId, label, patientId]
-  );
+  let result;
+
+  if (patientId) {
+    // Case: patientId provided → join against patient branch
+    result = await query(
+      `SELECT uc.identity
+       FROM "rolesMap" rm
+       JOIN "rolesTable" rt ON rm.rolesId = rt.id
+       JOIN "UsersPersonal" up ON up.id = $3
+       JOIN "UsersCredentials" uc ON uc.id = up.id
+       WHERE rm.personnelId = $1
+         AND rt.label = $2
+         AND (
+           up.branch = 'Both'
+           OR rm.branch = up.branch
+           OR rm.branch = 'Both'
+         )
+       LIMIT 1;`,
+      [userId, label, patientId]
+    );
+  } else {
+    // Case: patientId null → skip patient join, only check role/branch
+    result = await query(
+      `SELECT uc.identity
+       FROM "rolesMap" rm
+       JOIN "rolesTable" rt ON rm.rolesId = rt.id
+       WHERE rm.personnelId = $1
+         AND rt.label = $2
+       LIMIT 1;`,
+      [userId, label]
+    );
+  }
 
   if (result.rows.length === 0) {
     logger.warn(
-      `Unauthorized access attempt by staff ${userId} without ${label} permission on patient ${patientId}`
+      `Unauthorized access attempt by staff ${userId} without ${label} permission${patientId ? ` on patient ${patientId}` : ""}`
     );
     return false;
   }
 
   // If patient is Superior, staff must have privileged permit
   const { identity } = result.rows[0];
-  if (identity === "Superior") {
+  if (identity === "Superior" && patientId) {
     const permitted = await findMedicalPermit(
       userId,
       permissions.privileged_to_perform_on_superior
@@ -144,8 +165,6 @@ async function isMedicalPermitted(userId, label, patientId) {
 
   return true;
 }
-
-
 
 module.exports = { setMedicalPermit, unsetMedicalPermit, isMedicalPermitted,
   clearMedicalPermits, getMedicalpermits, permissions };

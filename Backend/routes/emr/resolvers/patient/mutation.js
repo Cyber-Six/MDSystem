@@ -1,7 +1,5 @@
 const db  = require("../../../../config/query.js");
 
-const { upsertEmergencyNumber } = require("../../query/upsert.js");
-
 const { assertActiveUpdateTicket } = require("./helper.js");
 const Wrapper = require("../../wrapper/mutation.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
@@ -54,8 +52,12 @@ const Mutation = {
 
   cancelUpdateTicket: async (_, {}, { user, res }) => {
     const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res);
-
+    if (record.status !== "InProgress" && record.status !== "Pending") {
+      throwGraphQLError(res)
+        .status(400)  
+        .message("Cannot cancel update ticket that is not in 'InProgress' or 'Pending' status.")
+        .throw();
+      }
     let newStatus = "Cancelled";
     await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
       [newStatus, record.id]

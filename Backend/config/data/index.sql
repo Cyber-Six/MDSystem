@@ -5,6 +5,10 @@ CREATE INDEX ON "patientUpdateLog"(status);
 CREATE INDEX idx_schedule_date 
 ON "ScheduleDateEntity" ("slotId","scheduledDate");
 
+ALTER TABLE "ScheduleDateEntity"
+ADD CONSTRAINT schedule_unique_slot_date
+UNIQUE ("slotId", "scheduledDate");
+
 CREATE INDEX idx_patientSlot_scheduler_date 
 ON "patientSlot" ("slotSchedulerId","scheduledDate");
 
