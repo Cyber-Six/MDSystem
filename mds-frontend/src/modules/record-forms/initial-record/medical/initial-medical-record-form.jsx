@@ -8,8 +8,9 @@ import DentalHistoryForm from './dental-history';
 import OBGYNEForm from './obygyne';
 import ReviewForm from './review-form';
 import { Button } from './form-elements';
+import ValidationWarningModal from '../../../../components/modals/validation-warning-modal';
 import { createInitialMedicalRecord } from '../../../../services/emr-service';
-import { validateFormData, sanitizeFormData, logDataStructure } from '../../../../utils/data-transformer';
+import { sanitizeFormData, logDataStructure } from '../../../../utils/data-transformer';
 
 /**
  * Initial Medical Record Form Component
@@ -23,6 +24,8 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
   console.log('[Initial Medical Record Form] Component rendered, current step:', currentStep);
 
@@ -135,7 +138,52 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     setFormData({ ...formData, certification: data });
   };
 
-  // Static form - no validation, just free navigation
+  // Comprehensive form validation - returns array of { section, sectionIndex, message }
+  const validateAllFields = (data) => {
+    const errors = [];
+    const pi = data.personalInfo || {};
+
+    // ---- Personal Information (Step 0) ----
+    if (!pi.surname?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Surname is required' });
+    if (!pi.firstName?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First name is required' });
+    if (!pi.birthday) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Birthday is required' });
+    if (!pi.gender) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Gender is required' });
+    if (!pi.contactNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number is required' });
+
+    // Emergency contacts
+    const c1 = pi.emergencyContacts?.[0];
+    const c2 = pi.emergencyContacts?.[1];
+    if (!c1?.name?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First emergency contact name is required' });
+    if (!c1?.relationship?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First emergency contact relationship is required' });
+    if (!c1?.contactNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First emergency contact number is required' });
+    if (!c2?.name?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Second emergency contact name is required' });
+    if (!c2?.relationship?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Second emergency contact relationship is required' });
+    if (!c2?.contactNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Second emergency contact number is required' });
+
+    // ---- Medical Background (Step 2) ----
+    const mb = data.medicalBackground || {};
+    if (!mb.hasHospitalization) errors.push({ section: 'Medical Background', sectionIndex: 2, message: 'Hospitalization question is required (Yes/No)' });
+    if (!mb.hasOperation) errors.push({ section: 'Medical Background', sectionIndex: 2, message: 'Surgery/Operation question is required (Yes/No)' });
+
+    // ---- Dental History (Step 3) ----
+    const dh = data.dentalHistory || {};
+    if (!dh.firstTimeDentist) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'First time dentist question is required' });
+    if (!dh.lastDentalCleaning) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Last dental cleaning is required' });
+
+    // ---- OB-GYNE (Step 4, female only) ----
+    if (pi.gender === 'Female') {
+      const ob = data.obgyne || {};
+      if (!ob.lastMenstrualPeriod) errors.push({ section: 'OB-GYNE', sectionIndex: 4, message: 'Last menstrual period date is required' });
+    }
+
+    // ---- Certification (Review step) ----
+    const cert = data.certification || {};
+    if (!cert.verified) errors.push({ section: 'Certification', sectionIndex: 5, message: 'You must verify the certification checkbox' });
+
+    return errors;
+  };
+
+  // Static form - no validation blocking navigation, only on submit
   const validateStep = (step) => {
     return true;
   };
@@ -175,71 +223,27 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     console.log('[Initial Medical Record Form] Submit button clicked');
     console.log('[Initial Medical Record Form] Form data:', formData);
     
+    // Log the complete data structure for debugging
+    logDataStructure(formData, 'Raw Form Data');
+    
+    // Sanitize the data
+    const sanitizedData = sanitizeFormData(formData);
+    logDataStructure(sanitizedData, 'Sanitized Form Data');
+    
+    // Run comprehensive validation
+    const errors = validateAllFields(sanitizedData);
+    
+    if (errors.length > 0) {
+      console.warn('[Initial Medical Record Form] Validation errors:', errors);
+      setValidationErrors(errors);
+      setShowValidationModal(true);
+      return;
+    }
+    
+    console.log('[Initial Medical Record Form] All validations passed');
     setIsSubmitting(true);
     
     try {
-      console.log('[Initial Medical Record Form] Validating form data...');
-      
-      // Log the complete data structure for debugging
-      logDataStructure(formData, 'Raw Form Data');
-      
-      // Sanitize the data
-      const sanitizedData = sanitizeFormData(formData);
-      logDataStructure(sanitizedData, 'Sanitized Form Data');
-      
-      // Validate the data
-      const validation = validateFormData(sanitizedData);
-      
-      if (!validation.isValid) {
-        console.error('[Initial Medical Record Form] Validation failed:', validation.errors);
-        alert('Please fill in all required fields:\n\n' + validation.errors.join('\n'));
-        return;
-      }
-      
-      if (validation.warnings.length > 0) {
-        console.warn('[Initial Medical Record Form] Validation warnings:', validation.warnings);
-      }
-      
-      // Additional required field checks
-      const errors = [];
-      
-      if (!sanitizedData.personalInfo.surname) errors.push('Surname is required');
-      if (!sanitizedData.personalInfo.firstName) errors.push('First name is required');
-      if (!sanitizedData.personalInfo.birthday) errors.push('Birthday is required');
-      if (!sanitizedData.personalInfo.gender) errors.push('Gender is required');
-      if (!sanitizedData.personalInfo.contactNumber) errors.push('Contact number is required');
-      
-      if (!sanitizedData.personalInfo.emergencyContacts[0]?.name) {
-        errors.push('First emergency contact name is required');
-      }
-      if (!sanitizedData.personalInfo.emergencyContacts[0]?.relationship) {
-        errors.push('First emergency contact relationship is required');
-      }
-      if (!sanitizedData.personalInfo.emergencyContacts[0]?.contactNumber) {
-        errors.push('First emergency contact number is required');
-      }
-      
-      if (!sanitizedData.personalInfo.emergencyContacts[1]?.name) {
-        errors.push('Second emergency contact name is required');
-      }
-      if (!sanitizedData.personalInfo.emergencyContacts[1]?.relationship) {
-        errors.push('Second emergency contact relationship is required');
-      }
-      if (!sanitizedData.personalInfo.emergencyContacts[1]?.contactNumber) {
-        errors.push('Second emergency contact number is required');
-      }
-      
-      if (!sanitizedData.certification.verified) {
-        errors.push('You must verify the certification to submit');
-      }
-      
-      if (errors.length > 0) {
-        console.error('[Initial Medical Record Form] Field validation errors:', errors);
-        alert('Please fill in all required fields:\n\n' + errors.join('\n'));
-        return;
-      }
-      
-      console.log('[Initial Medical Record Form] All validations passed');
       console.log('[Initial Medical Record Form] Submitting to backend...');
       
       // Submit to backend via GraphQL service
@@ -259,19 +263,11 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
       
     } catch (error) {
       console.error('[Initial Medical Record Form] Submission error:', error);
-      console.error('[Initial Medical Record Form] Error stack:', error.stack);
-      console.error('[Initial Medical Record Form] Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        headers: error.response?.headers
-      });
       
       let errorMessage = 'Failed to submit medical record. ';
       
       if (error.response?.status === 401) {
         errorMessage += '\n\nAuthentication error. Please log in again.';
-        // You might want to redirect to login here
       } else if (error.response?.status === 403) {
         errorMessage += '\n\nAccess denied. You may not have permission to submit this form.';
       } else if (error.response?.status === 400) {
@@ -427,6 +423,14 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
           )}
         </div>
       </div>
+
+      {/* Validation Warning Modal */}
+      <ValidationWarningModal
+        isOpen={showValidationModal}
+        onClose={() => setShowValidationModal(false)}
+        errors={validationErrors}
+        onGoToSection={(stepIndex) => setCurrentStep(stepIndex)}
+      />
     </div>
   );
 };
