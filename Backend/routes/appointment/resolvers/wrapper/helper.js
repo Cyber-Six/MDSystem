@@ -56,7 +56,7 @@ async function validateSchedulerDate(schedulerId, date) {
   // First check weekly schedule flags
   const queryScheduler = `
     SELECT "scheduleFlags"
-    FROM "SlotScheduler"
+    FROM "slotScheduler"
     WHERE id = $1;
   `;
   const resultScheduler = await db.query(queryScheduler, [schedulerId]);
@@ -76,7 +76,7 @@ async function validateSchedulerDate(schedulerId, date) {
   const queryCustomDate = `
     SELECT "scheduledDate"
     FROM "SlotCustomDate"
-    WHERE "slotSchedulerId" = $1 AND "scheduledDate" = $2;
+    WHERE "slotScheduleId" = $1 AND "scheduledDate" = $2;
   `;
   const resultCustomDate = await db.query(queryCustomDate, [schedulerId, date]);
 
@@ -86,12 +86,15 @@ async function validateSchedulerDate(schedulerId, date) {
 async function getAppointmentCounts(schedulerId, date) {
   const query = `
     SELECT 
-      COALESCE(SUM(CASE WHEN "session" = 'Morning' AND status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
-      COALESCE(SUM(CASE WHEN "session" = 'Morning' AND status = 'Pending' THEN 1 ELSE 0 END), 0) AS "morningPending",
-      COALESCE(SUM(CASE WHEN "session" = 'Afternoon' AND status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
-      COALESCE(SUM(CASE WHEN "session" = 'Afternoon' AND status = 'Pending' THEN 1 ELSE 0 END), 0) AS "afternoonPending"
-    FROM "patientSlot"
-    WHERE "slotSchedulerId" = $1 AND "scheduledDate" = $2
+      COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0) AS "morningPending",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0) AS "afternoonPending"
+    FROM "patientSlot" ps
+    JOIN "ScheduleDateEntity" sde
+      ON ps."slotEntityId" = sde."id"
+    WHERE sde."slotId" = $1
+      AND sde."scheduledDate" = $2
   `;
 
   const result = await db.query(query, [schedulerId, date]);

@@ -23,10 +23,10 @@ const Query = {
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
-      WHERE ss.whitelistOnly = false
+      WHERE ss."whitelistOnly" = false
          OR EXISTS (
            SELECT 1
-           FROM "schedulerWhiteList" swl
+           FROM "schedulerWhitelist" swl
            WHERE swl."slotSchedulerId" = ss.id
              AND swl."patientId" = $1
          )
@@ -130,7 +130,7 @@ const Query = {
     // Step 2: No schedule exists → fetch defaults from SlotScheduler
     const schedulerResult = await db.query(
       `SELECT morningAllowed, afternoonAllowed
-       FROM "SlotScheduler"
+       FROM "slotScheduler"
        WHERE id = $1;`,
       [schedulerId]
     );
