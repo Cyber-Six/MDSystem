@@ -137,10 +137,11 @@ const cancelUpdateTicket = async () => {
 
 /**
  * Create a complete initial medical record
- * This orchestrates multiple mutations to create all parts of the medical record
+ * OPTIMIZED: Batches all create mutations into a single GraphQL request
+ * reducing ~17 sequential HTTP calls down to 3 (ticket + batch + submit)
  */
 export const createInitialMedicalRecord = async (formData) => {
-  console.log('[EMR Service] Starting initial medical record creation');
+  console.log('[EMR Service] Starting initial medical record creation (batched)');
   console.log('[EMR Service] Form data received:', formData);
 
   let ticketCreated = false;
@@ -148,399 +149,306 @@ export const createInitialMedicalRecord = async (formData) => {
   try {
     const results = {};
 
-    // Step 0: Create an update ticket first (required by backend)
-    console.log('[EMR Service] Step 0: Creating update ticket...');
+    // ======== REQUEST 1: Create update ticket ========
+    console.log('[EMR Service] [1/3] Creating update ticket...');
     const ticketId = await createUpdateTicket('Both');
     ticketCreated = true;
     results.ticketId = ticketId;
     console.log('[EMR Service] Update ticket created with ID:', ticketId);
 
-    // 1. Create Student Profile (if student)
-    if (formData.personalInfo.program) {
-      console.log('[EMR Service] Creating student profile...');
-      const studentProfile = await createStudentProfile({
-        program: formData.personalInfo.program === 'Other' 
-          ? formData.personalInfo.programOther 
-          : formData.personalInfo.program,
-        year: mapYearLevel(formData.personalInfo.studentCategory)
-      });
-      results.studentProfile = studentProfile;
-      console.log('[EMR Service] Student profile created:', studentProfile);
-    }
+    // ======== Prepare all input data ========
+    const inputs = buildBatchInputs(formData);
+    console.log('[EMR Service] Prepared batch inputs:', Object.keys(inputs));
 
-    // 2. Create Emergency Contacts
-    if (formData.personalInfo.emergencyContacts?.length >= 2) {
-      console.log('[EMR Service] Creating emergency contacts...');
-      const emergencyContact = await createEmergencyContact({
-        firstContact: {
-          contactName: formData.personalInfo.emergencyContacts[0].name,
-          relationship: formData.personalInfo.emergencyContacts[0].relationship,
-          contactNumber: formData.personalInfo.emergencyContacts[0].contactNumber
-        },
-        secondContact: {
-          contactName: formData.personalInfo.emergencyContacts[1].name,
-          relationship: formData.personalInfo.emergencyContacts[1].relationship,
-          contactNumber: formData.personalInfo.emergencyContacts[1].contactNumber
-        }
-      });
-      results.emergencyContact = emergencyContact;
-      console.log('[EMR Service] Emergency contacts created:', emergencyContact);
-    }
+    // ======== REQUEST 2: Batch all create mutations in one request ========
+    console.log('[EMR Service] [2/3] Sending batched create mutations...');
+    const batchResult = await sendBatchedCreateMutations(inputs, formData);
+    Object.assign(results, batchResult);
+    console.log('[EMR Service] Batch mutations completed:', Object.keys(batchResult));
 
-    // 3. Create Medical History (REQUIRED by backend)
-    console.log('[EMR Service] Creating medical history...');
-    
-    // Build notes including self conditions, family conditions with "who has it"
-    const medicalHistoryNotes = [];
-    
-    // Add self other notes
-    if (formData.medicalHistory?.selfOther) {
-      medicalHistoryNotes.push(`Self: ${formData.medicalHistory.selfOther}`);
-    }
-    
-    // Add family conditions with who has it information
-    if (formData.medicalHistory?.family) {
-      const familyConditions = Object.entries(formData.medicalHistory.family)
-        .filter(([_, checked]) => checked)
-        .map(([conditionId, _]) => {
-          const whoHasIt = formData.medicalHistory.familyWhoHasIt?.[conditionId];
-          return whoHasIt ? `${conditionId} (${whoHasIt})` : conditionId;
-        });
-      
-      if (familyConditions.length > 0) {
-        medicalHistoryNotes.push(`Family history: ${familyConditions.join(', ')}`);
-      }
-    }
-    
-    // Add family other notes with who has it
-    if (formData.medicalHistory?.familyOther) {
-      const whoHasIt = formData.medicalHistory.familyOtherWhoHasIt;
-      const otherNote = whoHasIt 
-        ? `Family other: ${formData.medicalHistory.familyOther} (${whoHasIt})`
-        : `Family other: ${formData.medicalHistory.familyOther}`;
-      medicalHistoryNotes.push(otherNote);
-    }
-    
-    const medicalHistory = await createMedicalHistory({
-      conditions: [], // Empty - catalog IDs not available in form
-      notes: medicalHistoryNotes.length > 0 ? medicalHistoryNotes.join('; ') : null
-    });
-    results.medicalHistory = medicalHistory;
-    console.log('[EMR Service] Medical history created:', medicalHistory);
-
-    // 4. Create Allergy Profile (REQUIRED by backend)
-    console.log('[EMR Service] Creating allergy profile...');
-    // Build allergy notes from form data
-    let allergyNotes = null;
-    if (formData.medicalBackground?.hasAllergies === 'Yes') {
-      const allergyList = [];
-      
-      // Get selected allergies
-      if (formData.medicalBackground.allergies) {
-        const selectedAllergies = Object.entries(formData.medicalBackground.allergies)
-          .filter(([_, checked]) => checked)
-          .map(([allergyId, _]) => allergyId);
-        
-        if (selectedAllergies.length > 0) {
-          allergyList.push(...selectedAllergies);
-        }
-      }
-      
-      // Add other allergies
-      if (formData.medicalBackground.allergyOther) {
-        allergyList.push(formData.medicalBackground.allergyOther);
-      }
-      
-      if (allergyList.length > 0) {
-        allergyNotes = `Allergies: ${allergyList.join(', ')}`;
-      }
-    }
-    
-    const allergyProfile = await createAllergyProfile({
-      allergies: [], // Empty - catalog IDs not available in form
-      notes: allergyNotes
-    });
-    results.allergyProfile = allergyProfile;
-    console.log('[EMR Service] Allergy profile created:', allergyProfile);
-
-    // 5. Create Hospitalization Profile (REQUIRED by backend)
-    console.log('[EMR Service] Creating hospitalization profile...');
-    // Build hospitalization notes from new form structure
-    const hospitalizationNotes = formData.medicalBackground?.hasHospitalization === 'Yes' ? [
-      formData.medicalBackground.hospitalizationReason 
-        ? `Reason: ${formData.medicalBackground.hospitalizationReason}` 
-        : null,
-      formData.medicalBackground.hospitalizationDate 
-        ? `Date: ${formData.medicalBackground.hospitalizationDate}` 
-        : null,
-      formData.medicalBackground.hospitalizationNotes || null
-    ].filter(Boolean).join('; ') || null : null;
-    
-    const hospitalizationProfile = await createHospitalizationProfile({
-      hospitalizations: [], // Empty - catalog IDs not available in form
-      notes: hospitalizationNotes
-    });
-    results.hospitalizationProfile = hospitalizationProfile;
-    console.log('[EMR Service] Hospitalization profile created:', hospitalizationProfile);
-
-    // 6. Create Operation Profile (REQUIRED by backend)
-    console.log('[EMR Service] Creating operation profile...');
-    // Build operation notes from new form structure
-    const operationNotes = formData.medicalBackground?.hasOperation === 'Yes' ? [
-      formData.medicalBackground.operationProcedure 
-        ? `Procedure: ${formData.medicalBackground.operationProcedure}` 
-        : null,
-      formData.medicalBackground.operationDate 
-        ? `Date: ${formData.medicalBackground.operationDate}` 
-        : null,
-      formData.medicalBackground.operationNotes || null
-    ].filter(Boolean).join('; ') || null : null;
-    
-    const operationProfile = await createOperationProfile({
-      operations: [], // Empty - catalog IDs not available in form
-      notes: operationNotes
-    });
-    results.operationProfile = operationProfile;
-    console.log('[EMR Service] Operation profile created:', operationProfile);
-
-    // 7. Create Medication Profile (REQUIRED by backend)
-    console.log('[EMR Service] Creating medication profile...');
-    // Build medication notes from new form structure
-    const medicationNotes = formData.medicalBackground?.hasMedications === 'Yes' ? [
-      formData.medicalBackground.medicationCategory 
-        ? `Category: ${formData.medicalBackground.medicationCategory}` 
-        : null,
-      formData.medicalBackground.medicationReason 
-        ? `Reason: ${formData.medicalBackground.medicationReason}` 
-        : null,
-      formData.medicalBackground.medicationDetails 
-        ? `Medications: ${formData.medicalBackground.medicationDetails}` 
-        : null
-    ].filter(Boolean).join('; ') || null : null;
-    
-    const medicationProfile = await createMedicationProfile({
-      medications: [], // Empty - catalog IDs not available in form
-      notes: medicationNotes
-    });
-    results.medicationProfile = medicationProfile;
-    console.log('[EMR Service] Medication profile created:', medicationProfile);
-
-    // 7a. Create Immunization Profile (REQUIRED by backend)
-    console.log('[EMR Service] Creating immunization profile...');
-    // Build immunization notes from form data
-    let immunizationNotes = null;
-    const immunizationList = [];
-    
-    // Get selected immunizations
-    if (formData.medicalBackground?.immunizations) {
-      const selectedImmunizations = Object.entries(formData.medicalBackground.immunizations)
-        .filter(([_, checked]) => checked)
-        .map(([immunizationId, _]) => immunizationId);
-      
-      if (selectedImmunizations.length > 0) {
-        immunizationList.push(...selectedImmunizations);
-      }
-    }
-    
-    // Get COVID vaccine types if applicable
-    if (formData.medicalBackground?.covidVaccineType) {
-      const covidTypes = Object.entries(formData.medicalBackground.covidVaccineType)
-        .filter(([_, checked]) => checked)
-        .map(([typeId, _]) => typeId);
-      
-      if (covidTypes.length > 0) {
-        immunizationList.push(`COVID vaccine types: ${covidTypes.join(', ')}`);
-      }
-    }
-    
-    // Add other immunizations
-    if (formData.medicalBackground?.immunizationOther) {
-      immunizationList.push(formData.medicalBackground.immunizationOther);
-    }
-    
-    if (immunizationList.length > 0) {
-      immunizationNotes = immunizationList.join('; ');
-    }
-    
-    const immunizationProfile = await createImmunizationProfile({
-      immunizations: [], // Empty - catalog IDs not available in form
-      notes: immunizationNotes
-    });
-    results.immunizationProfile = immunizationProfile;
-    console.log('[EMR Service] Immunization profile created:', immunizationProfile);
-
-    // 8. Create Lifestyle
-    console.log('[EMR Service] Creating lifestyle...');
-    const lifestyle = await createLifestyle({
-      smoker: formData.medicalBackground.smoker === 'yes',
-      numberOfCigarettesPerDay: formData.medicalBackground.smoker === 'yes' 
-        ? parseInt(formData.medicalBackground.smokerSticksPerDay) || null
-        : null,
-      yearsSmoked: formData.medicalBackground.smoker === 'yes'
-        ? parseInt(formData.medicalBackground.smokerYears) || null
-        : null,
-      alcoholConsumer: formData.medicalBackground.alcoholDrinker === 'yes',
-      frequencyOfAlcoholConsumption: formData.medicalBackground.alcoholDrinker === 'yes'
-        ? formData.medicalBackground.alcoholFrequency || null
-        : null,
-      notes: null
-    });
-    results.lifestyle = lifestyle;
-    console.log('[EMR Service] Lifestyle created:', lifestyle);
-
-    // 9. Create Visual Acuity Profile (only if user wears eyeglasses or contact lenses)
-    if (formData.medicalBackground.eyeglasses || formData.medicalBackground.contactLenses) {
-      console.log('[EMR Service] User wears eyeglasses or contact lenses, creating visual acuity profile...');
-      
-      const visualAcuityProfile = await createVisualAcuityProfile({
-        notes: `Eyeglasses: ${formData.medicalBackground.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.medicalBackground.contactLenses ? 'Yes' : 'No'}`,
-        acuity: {
-          acuityId: "1", // Default catalog ID - will be updated by staff during examination
-          left_eye: formData.medicalBackground.gradeOS || "N/A",
-          right_eye: formData.medicalBackground.gradeOD || "N/A",
-          notes: null,
-          recorded_at: formData.medicalBackground.visualAcuityDate 
-            ? new Date(formData.medicalBackground.visualAcuityDate).toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0]
-        }
-      });
-      results.visualAcuityProfile = visualAcuityProfile;
-      console.log('[EMR Service] Visual acuity profile created:', visualAcuityProfile);
-    } else {
-      console.log('[EMR Service] User does not wear eyeglasses or contact lenses, skipping visual acuity profile');
-    }
-
-    // 10. Create Dental History
-    console.log('[EMR Service] Creating dental history...');
-    const mappedDentalCleaning = mapDentalCleaningRange(formData.dentalHistory.lastDentalCleaning);
-    console.log('[EMR Service] Mapped dental cleaning range:', formData.dentalHistory.lastDentalCleaning, '=>', mappedDentalCleaning);
-    
-    // seenByDentist is INVERSE of firstTimeDentist
-    // firstTimeDentist='yes' means never seen a dentist before, so seenByDentist=false
-    // firstTimeDentist='no' means has been to dentist before, so seenByDentist=true
-    const seenByDentist = formData.dentalHistory.firstTimeDentist === 'no';
-    console.log('[EMR Service] firstTimeDentist:', formData.dentalHistory.firstTimeDentist, '=> seenByDentist:', seenByDentist);
-    
-    const dentalHistory = await createDentalHistory({
-      seenByDentist: seenByDentist,
-      lastDentalCleaning: mappedDentalCleaning,
-      purpose: null,
-      lastVisitDate: formData.dentalHistory.lastDentalConsultation 
-        ? new Date(formData.dentalHistory.lastDentalConsultation).toISOString().split('T')[0]
-        : null
-    });
-    results.dentalHistory = dentalHistory;
-    console.log('[EMR Service] Dental history created:', dentalHistory);
-
-    // 11. Create Dental Procedure Profile (REQUIRED by backend)
-    console.log('[EMR Service] Creating empty dental procedure profile...');
-    const dentalProcedureProfile = await createDentalProcedureProfile({
-      procedures: [], // Empty - catalog IDs not available in form
-      notes: null
-    });
-    results.dentalProcedureProfile = dentalProcedureProfile;
-    console.log('[EMR Service] Dental procedure profile created:', dentalProcedureProfile);
-
-    // 12. Create Oral Appliance Profile (REQUIRED by backend)
-    console.log('[EMR Service] Creating empty oral appliance profile...');
-    const oralApplianceProfile = await createOralApplianceProfile({
-      appliances: [], // Empty - catalog IDs not available in form
-      notes: null
-    });
-    results.oralApplianceProfile = oralApplianceProfile;
-    console.log('[EMR Service] Oral appliance profile created:', oralApplianceProfile);
-
-    // 12. Create Dental Photo Record with mock UUIDs (required by validation, photos taken by staff later)
-    console.log('[EMR Service] Creating dental photo record with mock UUIDs...');
-    const dentalPhotoRecord = await createDentalPhotoRecord({
-      upperTeeth: '00000000-0000-0000-0000-000000000000', // Mock UUID - will be replaced by staff
-      lowerTeeth: '00000000-0000-0000-0000-000000000000'  // Mock UUID - will be replaced by staff
-    });
-    results.dentalPhotoRecord = dentalPhotoRecord;
-    console.log('[EMR Service] Dental photo record created:', dentalPhotoRecord);
-
-    // 13. Create OB-GYNE History (if female only)
-    if (formData.personalInfo.gender === 'Female' && formData.obgyne) {
-      console.log('[EMR Service] Creating OB-GYNE history...');
-      
-      // Use actual lastMenstrualPeriod from form, or default to today
-      const lmpDate = formData.obgyne.lastMenstrualPeriod 
-        ? new Date(formData.obgyne.lastMenstrualPeriod).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0];
-      
-      // Build notes from menstruation duration only (removed menarcheYearAge and padsPerDay)
-      const obgyneNotes = formData.obgyne.menstruationDuration 
-        ? `Duration: ${formData.obgyne.menstruationDuration} days`
-        : null;
-      
-      const obgyneHistory = await createObgynHistory({
-        lastMenstrualPeriod: lmpDate,
-        hasDysmenorrhea: formData.obgyne.dysmenorrhea === 'Yes',
-        notes: obgyneNotes
-      });
-      results.obgyneHistory = obgyneHistory;
-      console.log('[EMR Service] OB-GYNE history created:', obgyneHistory);
-    } else if (formData.personalInfo.gender === 'Female') {
-      console.log('[EMR Service] Creating default OB-GYNE history for female user...');
-      const obgyneHistory = await createObgynHistory({
-        lastMenstrualPeriod: new Date().toISOString().split('T')[0],
-        hasDysmenorrhea: false,
-        notes: null
-      });
-      results.obgyneHistory = obgyneHistory;
-      console.log('[EMR Service] Default OB-GYNE history created:', obgyneHistory);
-    } else {
-      console.log('[EMR Service] Skipping OB-GYNE history (not female)');
-    }
-
-    // Final Step: Submit the update ticket to finalize all changes
-    console.log('[EMR Service] Submitting update ticket to finalize changes...');
-    
+    // ======== REQUEST 3: Submit the ticket ========
+    console.log('[EMR Service] [3/3] Submitting update ticket...');
     try {
       const submitStatus = await submitUpdateTicket();
       results.submitStatus = submitStatus;
       console.log('[EMR Service] Update ticket submitted with status:', submitStatus);
     } catch (submitError) {
       console.error('[EMR Service] Failed to submit update ticket:', submitError);
-      
-      // Check if error is due to missing staff-only records
-      if (submitError.message && submitError.message.includes('VitalSigns, MedicalHistory, Hospitalization')) {
-        console.error('='.repeat(80));
-        console.error('[EMR Service] BACKEND CONFIGURATION ERROR');
-        console.error('='.repeat(80));
-        console.error('The backend requires staff-only records (VitalSigns, DentalRecord, DentalPhotoRecord)');
-        console.error('for initial patient record submission. These cannot be created by patients.');
-        console.error('');
-        console.error('Backend team needs to fix this by either:');
-        console.error('1. Making these fields optional for initial records (scope="Both")');
-        console.error('2. Using separate Medical/Dental scopes for patient initial records');
-        console.error('3. Adding patient create mutations for these entities');
-        console.error('4. Auto-creating empty staff records when patient submits initial record');
-        console.error('='.repeat(80));
-      }
-      
       throw submitError;
     }
 
     console.log('[EMR Service] Initial medical record creation completed successfully');
-    console.log('[EMR Service] All results:', results);
-
-    return {
-      success: true,
-      data: results
-    };
+    return { success: true, data: results };
 
   } catch (error) {
     console.error('[EMR Service] Failed to create initial medical record:', error);
-    
-    // If ticket was created, try to cancel it
     if (ticketCreated) {
       console.log('[EMR Service] Attempting to cancel update ticket due to error...');
       await cancelUpdateTicket();
     }
-    
     throw error;
   }
+};
+
+/**
+ * Build all input objects from form data for the batched mutation
+ */
+const buildBatchInputs = (formData) => {
+  const inputs = {};
+
+  // Student Profile (conditional)
+  if (formData.personalInfo.program) {
+    inputs.studentProfile = {
+      program: formData.personalInfo.program === 'Other' 
+        ? formData.personalInfo.programOther 
+        : formData.personalInfo.program,
+      year: mapYearLevel(formData.personalInfo.studentCategory)
+    };
+  }
+
+  // Emergency Contacts
+  if (formData.personalInfo.emergencyContacts?.length >= 2) {
+    inputs.emergencyContact = {
+      firstContact: {
+        contactName: formData.personalInfo.emergencyContacts[0].name,
+        relationship: formData.personalInfo.emergencyContacts[0].relationship,
+        contactNumber: formData.personalInfo.emergencyContacts[0].contactNumber
+      },
+      secondContact: {
+        contactName: formData.personalInfo.emergencyContacts[1].name,
+        relationship: formData.personalInfo.emergencyContacts[1].relationship,
+        contactNumber: formData.personalInfo.emergencyContacts[1].contactNumber
+      }
+    };
+  }
+
+  // Medical History notes
+  const medicalHistoryNotes = [];
+  if (formData.medicalHistory?.selfOther) {
+    medicalHistoryNotes.push(`Self: ${formData.medicalHistory.selfOther}`);
+  }
+  if (formData.medicalHistory?.family) {
+    const familyConditions = Object.entries(formData.medicalHistory.family)
+      .filter(([_, checked]) => checked)
+      .map(([conditionId, _]) => {
+        const whoHasIt = formData.medicalHistory.familyWhoHasIt?.[conditionId];
+        return whoHasIt ? `${conditionId} (${whoHasIt})` : conditionId;
+      });
+    if (familyConditions.length > 0) {
+      medicalHistoryNotes.push(`Family history: ${familyConditions.join(', ')}`);
+    }
+  }
+  if (formData.medicalHistory?.familyOther) {
+    const whoHasIt = formData.medicalHistory.familyOtherWhoHasIt;
+    medicalHistoryNotes.push(whoHasIt 
+      ? `Family other: ${formData.medicalHistory.familyOther} (${whoHasIt})`
+      : `Family other: ${formData.medicalHistory.familyOther}`);
+  }
+  inputs.medicalHistory = {
+    conditions: [],
+    notes: medicalHistoryNotes.length > 0 ? medicalHistoryNotes.join('; ') : null
+  };
+
+  // Allergy Profile
+  let allergyNotes = null;
+  if (formData.medicalBackground?.hasAllergies === 'Yes') {
+    const allergyList = [];
+    if (formData.medicalBackground.allergies) {
+      allergyList.push(
+        ...Object.entries(formData.medicalBackground.allergies)
+          .filter(([_, checked]) => checked)
+          .map(([id]) => id)
+      );
+    }
+    if (formData.medicalBackground.allergyOther) {
+      allergyList.push(formData.medicalBackground.allergyOther);
+    }
+    if (allergyList.length > 0) allergyNotes = `Allergies: ${allergyList.join(', ')}`;
+  }
+  inputs.allergyProfile = { allergies: [], notes: allergyNotes };
+
+  // Hospitalization Profile
+  const hospitalizationNotes = formData.medicalBackground?.hasHospitalization === 'Yes' ? [
+    formData.medicalBackground.hospitalizationReason ? `Reason: ${formData.medicalBackground.hospitalizationReason}` : null,
+    formData.medicalBackground.hospitalizationDate ? `Date: ${formData.medicalBackground.hospitalizationDate}` : null,
+    formData.medicalBackground.hospitalizationNotes || null
+  ].filter(Boolean).join('; ') || null : null;
+  inputs.hospitalizationProfile = { hospitalizations: [], notes: hospitalizationNotes };
+
+  // Operation Profile
+  const operationNotes = formData.medicalBackground?.hasOperation === 'Yes' ? [
+    formData.medicalBackground.operationProcedure ? `Procedure: ${formData.medicalBackground.operationProcedure}` : null,
+    formData.medicalBackground.operationDate ? `Date: ${formData.medicalBackground.operationDate}` : null,
+    formData.medicalBackground.operationNotes || null
+  ].filter(Boolean).join('; ') || null : null;
+  inputs.operationProfile = { operations: [], notes: operationNotes };
+
+  // Medication Profile
+  const medicationNotes = formData.medicalBackground?.hasMedications === 'Yes' ? [
+    formData.medicalBackground.medicationCategory ? `Category: ${formData.medicalBackground.medicationCategory}` : null,
+    formData.medicalBackground.medicationReason ? `Reason: ${formData.medicalBackground.medicationReason}` : null,
+    formData.medicalBackground.medicationDetails ? `Medications: ${formData.medicalBackground.medicationDetails}` : null
+  ].filter(Boolean).join('; ') || null : null;
+  inputs.medicationProfile = { medications: [], notes: medicationNotes };
+
+  // Immunization Profile
+  let immunizationNotes = null;
+  const immunizationList = [];
+  if (formData.medicalBackground?.immunizations) {
+    immunizationList.push(
+      ...Object.entries(formData.medicalBackground.immunizations)
+        .filter(([_, checked]) => checked)
+        .map(([id]) => id)
+    );
+  }
+  if (formData.medicalBackground?.covidVaccineType) {
+    const covidTypes = Object.entries(formData.medicalBackground.covidVaccineType)
+      .filter(([_, checked]) => checked)
+      .map(([id]) => id);
+    if (covidTypes.length > 0) immunizationList.push(`COVID vaccine types: ${covidTypes.join(', ')}`);
+  }
+  if (formData.medicalBackground?.immunizationOther) {
+    immunizationList.push(formData.medicalBackground.immunizationOther);
+  }
+  if (immunizationList.length > 0) immunizationNotes = immunizationList.join('; ');
+  inputs.immunizationProfile = { immunizations: [], notes: immunizationNotes };
+
+  // Lifestyle
+  inputs.lifestyle = {
+    smoker: formData.medicalBackground.smoker === 'yes',
+    numberOfCigarettesPerDay: formData.medicalBackground.smoker === 'yes'
+      ? parseInt(formData.medicalBackground.smokerSticksPerDay) || null : null,
+    yearsSmoked: formData.medicalBackground.smoker === 'yes'
+      ? parseInt(formData.medicalBackground.smokerYears) || null : null,
+    alcoholConsumer: formData.medicalBackground.alcoholDrinker === 'yes',
+    frequencyOfAlcoholConsumption: formData.medicalBackground.alcoholDrinker === 'yes'
+      ? formData.medicalBackground.alcoholFrequency || null : null,
+    notes: null
+  };
+
+  // Visual Acuity Profile
+  const hasVisualAcuity = formData.medicalBackground.eyeglasses || formData.medicalBackground.contactLenses;
+  inputs.visualAcuityProfile = {
+    notes: hasVisualAcuity
+      ? `Eyeglasses: ${formData.medicalBackground.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.medicalBackground.contactLenses ? 'Yes' : 'No'}`
+      : null,
+    acuity: hasVisualAcuity
+      ? {
+          acuityId: "1",
+          left_eye: formData.medicalBackground.gradeOS || "N/A",
+          right_eye: formData.medicalBackground.gradeOD || "N/A",
+          notes: null,
+          recorded_at: formData.medicalBackground.visualAcuityDate
+            ? new Date(formData.medicalBackground.visualAcuityDate).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0]
+        }
+      : null
+  };
+
+  // Dental History
+  const mappedDentalCleaning = mapDentalCleaningRange(formData.dentalHistory.lastDentalCleaning);
+  const seenByDentist = formData.dentalHistory.firstTimeDentist === 'no';
+  inputs.dentalHistory = {
+    seenByDentist,
+    lastDentalCleaning: mappedDentalCleaning,
+    purpose: null,
+    lastVisitDate: formData.dentalHistory.lastDentalConsultation
+      ? new Date(formData.dentalHistory.lastDentalConsultation).toISOString().split('T')[0]
+      : null
+  };
+
+  // Dental Procedure Profile (empty)
+  inputs.dentalProcedureProfile = { procedures: [], notes: null };
+
+  // Oral Appliance Profile (empty)
+  inputs.oralApplianceProfile = { appliances: [], notes: null };
+
+  // Dental Photo Record (mock UUIDs)
+  inputs.dentalPhotoRecord = {
+    upperTeeth: '00000000-0000-0000-0000-000000000000',
+    lowerTeeth: '00000000-0000-0000-0000-000000000000'
+  };
+
+  // OB-GYNE (conditional - female only)
+  if (formData.personalInfo.gender === 'Female') {
+    if (formData.obgyne) {
+      const lmpDate = formData.obgyne.lastMenstrualPeriod
+        ? new Date(formData.obgyne.lastMenstrualPeriod).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      inputs.obgynHistory = {
+        lastMenstrualPeriod: lmpDate,
+        hasDysmenorrhea: formData.obgyne.dysmenorrhea === 'Yes',
+        notes: formData.obgyne.menstruationDuration
+          ? `Duration: ${formData.obgyne.menstruationDuration} days` : null
+      };
+    } else {
+      inputs.obgynHistory = {
+        lastMenstrualPeriod: new Date().toISOString().split('T')[0],
+        hasDysmenorrhea: false,
+        notes: null
+      };
+    }
+  }
+
+  return inputs;
+};
+
+/**
+ * Build and send a single compound GraphQL mutation with all create operations
+ */
+const sendBatchedCreateMutations = async (inputs, formData) => {
+  // Dynamically build the mutation string and variables based on which inputs are present
+  const mutationParts = [];
+  const variableDefs = [];
+  const variables = {};
+
+  // Helper to add a mutation to the batch
+  const addMutation = (alias, mutationName, inputType, inputKey, varName) => {
+    variableDefs.push(`$${varName}: ${inputType}!`);
+    mutationParts.push(`${alias}: ${mutationName}(input: $${varName}) { id }`);
+    variables[varName] = inputs[inputKey];
+  };
+
+  // Conditionally include student profile
+  if (inputs.studentProfile) {
+    addMutation('studentProfile', 'createStudentProfile', 'StudentProfileInput', 'studentProfile', 'studentInput');
+  }
+
+  // Emergency contact
+  if (inputs.emergencyContact) {
+    addMutation('emergencyContact', 'createEmergencyContact', 'EmergencyContactInput', 'emergencyContact', 'emergencyInput');
+  }
+
+  // Always-required mutations
+  addMutation('medicalHistory', 'createMedicalHistory', 'MedicalHistoryInput', 'medicalHistory', 'medHistInput');
+  addMutation('allergyProfile', 'createAllergyProfile', 'AllergyProfileInput', 'allergyProfile', 'allergyInput');
+  addMutation('hospitalizationProfile', 'createHospitalizationProfile', 'HospitalizationProfileInput', 'hospitalizationProfile', 'hospInput');
+  addMutation('operationProfile', 'createOperationProfile', 'OperationProfileInput', 'operationProfile', 'opInput');
+  addMutation('medicationProfile', 'createMedicationProfile', 'MedicationProfileInput', 'medicationProfile', 'medInput');
+  addMutation('immunizationProfile', 'createImmunizationProfile', 'ImmunizationProfileInput', 'immunizationProfile', 'immuInput');
+  addMutation('lifestyle', 'createLifestyle', 'LifestyleInput', 'lifestyle', 'lifeInput');
+  addMutation('visualAcuityProfile', 'createVisualAcuityProfile', 'VisualAcuityProfileInput', 'visualAcuityProfile', 'vaInput');
+  addMutation('dentalHistory', 'createDentalHistory', 'DentalHistoryInput', 'dentalHistory', 'dentalHistInput');
+  addMutation('dentalProcedureProfile', 'createDentalProcedureProfile', 'DentalProcedureProfileInput', 'dentalProcedureProfile', 'dentalProcInput');
+  addMutation('oralApplianceProfile', 'createOralApplianceProfile', 'OralApplianceProfileInput', 'oralApplianceProfile', 'oralAppInput');
+  addMutation('dentalPhotoRecord', 'createDentalPhotoRecord', 'DentalPhotoRecordInput', 'dentalPhotoRecord', 'dentalPhotoInput');
+
+  // OB-GYNE (female only)
+  if (inputs.obgynHistory) {
+    addMutation('obgynHistory', 'createObgynHistory', 'ObgynHistoryInput', 'obgynHistory', 'obgynInput');
+  }
+
+  const mutation = `
+    mutation BatchCreateInitialRecords(${variableDefs.join(', ')}) {
+      ${mutationParts.join('\n      ')}
+    }
+  `;
+
+  console.log('[EMR Service] Batch mutation:', mutation);
+  console.log('[EMR Service] Batch variables:', JSON.stringify(variables, null, 2));
+
+  const data = await sendGraphQLRequest(mutation, variables);
+  return data;
 };
 
 // Individual mutation functions
