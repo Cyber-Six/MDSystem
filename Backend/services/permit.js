@@ -1,6 +1,5 @@
-const query = require('../config/query.js');
 const logger = require('../utils/logger.js');
-
+const db = require('../config/db.js');
 const permissions = {
   is_admin: "IS_ADMIN",
   is_staff: "IS_STAFF",
@@ -24,20 +23,20 @@ const permissions = {
 };
 
 async function getMedicalpermits(personnelId) {
-  const result = await query(
+  const result = await db.query(
     `SELECT rt.label, rm.branch FROM "rolesMap" rm
-     JOIN "rolesTable" rt ON rm.rolesId = rt.id
-     WHERE rm.personnelId = $1;`,
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1;`,
     [personnelId]
   );
   return result.rows;
 }
 
 async function findMedicalPermit(personnelId, label) {
-  const result = await query(
+  const result = await db.query(
     `SELECT 1 FROM "rolesMap" rm
-     JOIN "rolesTable" rt ON rm.rolesId = rt.id
-     WHERE rm.personnelId = $1 AND rt.label = $2
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1 AND rt.label = $2
      LIMIT 1;`,
     [personnelId, label]
   );
@@ -64,14 +63,14 @@ async function setMedicalPermit({ personnelId, assignedBy, roledata = [] }) {
     i += 2;
   }
 
-  const result = await query(
-    `INSERT INTO "rolesMap" (personnelId, rolesId, branch, assignedBy)
+  const result = await db.query(
+    `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
      SELECT $1, r.id, v.branch, $2
      FROM (VALUES ${values.join(",")}) AS v(label, branch)
      JOIN "rolesTable" r ON r.label = v.label
-     ON CONFLICT (personnelId, rolesId) DO UPDATE
+     ON CONFLICT ("personnelId", "rolesId") DO UPDATE
        SET branch = EXCLUDED.branch,
-           assignedBy = EXCLUDED.assignedBy
+           "assignedBy" = EXCLUDED."assignedBy"
      RETURNING *;`,
     params
   );
@@ -80,11 +79,11 @@ async function setMedicalPermit({ personnelId, assignedBy, roledata = [] }) {
 }
 
 async function unsetMedicalPermit({ personnelId, labels = [] }) {
-  const result = await query(
+  const result = await db.query(
     `DELETE FROM "rolesMap" rm
      USING "rolesTable" rt
-     WHERE rm.rolesId = rt.id
-       AND rm.personnelId = $1
+     WHERE rm."rolesId" = rt.id
+       AND rm."personnelId" = $1
        AND rt.label = ANY($2)
      RETURNING *;`,
     [personnelId, labels] // labels is an array of strings
@@ -95,9 +94,9 @@ async function unsetMedicalPermit({ personnelId, labels = [] }) {
 
 
 async function clearMedicalPermits(personnelId) {
-  const result = await query(
+  const result = await db.query(
     `DELETE FROM "rolesMap"
-     WHERE personnelId = $1
+     WHERE "personnelId" = $1
      RETURNING *;`,
     [personnelId]
   );
@@ -112,13 +111,13 @@ async function isMedicalPermitted(userId, label, patientId) {
 
   if (patientId) {
     // Case: patientId provided → join against patient branch
-    result = await query(
+    result = await db.query(
       `SELECT uc.identity
        FROM "rolesMap" rm
-       JOIN "rolesTable" rt ON rm.rolesId = rt.id
+       JOIN "rolesTable" rt ON rm."rolesId" = rt.id
        JOIN "UsersPersonal" up ON up.id = $3
-       JOIN "UsersCredentials" uc ON uc.id = up.id
-       WHERE rm.personnelId = $1
+       JOIN "UserCredentials" uc ON uc.id = up.id
+       WHERE rm."personnelId" = $1
          AND rt.label = $2
          AND (
            up.branch = 'Both'
@@ -130,11 +129,11 @@ async function isMedicalPermitted(userId, label, patientId) {
     );
   } else {
     // Case: patientId null → skip patient join, only check role/branch
-    result = await query(
+    result = await db.query(
       `SELECT uc.identity
        FROM "rolesMap" rm
-       JOIN "rolesTable" rt ON rm.rolesId = rt.id
-       WHERE rm.personnelId = $1
+       JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+       WHERE rm."personnelId" = $1
          AND rt.label = $2
        LIMIT 1;`,
       [userId, label]

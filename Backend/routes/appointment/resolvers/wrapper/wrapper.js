@@ -23,10 +23,10 @@ const Query = {
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
-      WHERE ss.whitelistOnly = false
+      WHERE ss."whitelistOnly" = false
          OR EXISTS (
            SELECT 1
-           FROM "schedulerWhiteList" swl
+           FROM "schedulerWhitelist" swl
            WHERE swl."slotSchedulerId" = ss.id
              AND swl."patientId" = $1
          )
@@ -72,10 +72,10 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     const query = `
-      SELECT scd.scheduledDate
+      SELECT scd."scheduledDate"
       FROM "SlotCustomDate" scd
-      WHERE scd."slotSchedulerId" = $1
-      ORDER BY scd.scheduledDate ASC
+      WHERE scd."slotScheduleId" = $1
+      ORDER BY scd."scheduledDate" ASC
       LIMIT $2 OFFSET $3;
     `;
 
@@ -129,8 +129,8 @@ const Query = {
 
     // Step 2: No schedule exists → fetch defaults from SlotScheduler
     const schedulerResult = await db.query(
-      `SELECT morningAllowed, afternoonAllowed
-       FROM "SlotScheduler"
+      `SELECT "morningAllowed", "afternoonAllowed"
+       FROM "slotScheduler"
        WHERE id = $1;`,
       [schedulerId]
     );
@@ -175,7 +175,7 @@ const Query = {
       SELECT *
       FROM "scheduleRequirement" sr
       WHERE sr."slotId" = $1
-        AND ($4 IS NULL OR sr."isActive" = $4)
+        AND (COALESCE($4::boolean, sr."isActive") = sr."isActive")
       ORDER BY sr.label ASC
       LIMIT $2 OFFSET $3;
     `;
@@ -272,7 +272,7 @@ const Query = {
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
 
-      WHERE ps.status = $1 and 
+      WHERE ps.status = $1  
       ORDER BY ps.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -335,10 +335,10 @@ const Mutation = {
       );
     }
 
-    return { success: true, patientSlotId };
+    return psResult.rows[0];
   },
 
-  _cancelAppointment: async (_, { patientId, cancelledBy }, { user, res }) => {
+  _cancelAppointment: async (_, { patientId, cancelledBy, slotId }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -348,7 +348,7 @@ const Mutation = {
     // 2. Get the latest appointment record for this patient
     const updateResult = await db.query(
       `UPDATE "patientSlot" SET status = $1 WHERE id = $2;`,
-      [newStatus, records[0].id]
+      [newStatus, slotId]
     );
 
     if (updateResult.rowCount === 0) {
@@ -444,7 +444,7 @@ const Mutation = {
 
       const result = await client.query(
         `INSERT INTO "slotScheduler"
-          (label, location, scheduleFlags, morningAllowed, afternoonAllowed, whitelistOnly, containsCustomDates, notes)
+          (label, location, "scheduleFlags", "morningAllowed", "afternoonAllowed", "whitelistOnly", "containsCustomDates", notes)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           RETURNING *;`,
         [
@@ -512,22 +512,22 @@ const Mutation = {
     }
 
     if (input.morningAllowed !== undefined && input.morningAllowed !== null) {
-      fields.push(`morningAllowed = $${idx++}`);
+      fields.push(`"morningAllowed" = $${idx++}`);
       values.push(input.morningAllowed);
     }
 
     if (input.afternoonAllowed !== undefined && input.afternoonAllowed !== null) {
-      fields.push(`afternoonAllowed = $${idx++}`);
+      fields.push(`"afternoonAllowed" = $${idx++}`);
       values.push(input.afternoonAllowed);
     }
 
     if (input.whitelistOnly !== undefined && input.whitelistOnly !== null) {
-      fields.push(`whitelistOnly = $${idx++}`);
+      fields.push(`"whitelistOnly" = $${idx++}`);
       values.push(input.whitelistOnly);
     }
 
     if (input.isActive !== undefined && input.isActive !== null) {
-      fields.push(`isActive = $${idx++}`);
+      fields.push(`"isActive" = $${idx++}`);
       values.push(input.isActive);
     }
 
