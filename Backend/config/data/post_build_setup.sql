@@ -1,5 +1,3 @@
-# indexes and constraints for performance optimization and data integrity
-
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);
 CREATE INDEX ON "patientUpdateLog"(status);
@@ -22,6 +20,10 @@ ON "AllergenCatalog"(allergen, type);
 
 ALTER TABLE "oralApplianceCatalog"
 ADD CONSTRAINT uniq_oral_appliance_name UNIQUE (name);
+
+ALTER TABLE "slotScheduler"
+ADD CONSTRAINT slot_label_location_unique
+UNIQUE (label, location);
 
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
@@ -200,10 +202,10 @@ VALUES
 
 INSERT INTO "slotScheduler" (label, location, "scheduleFlags", "morningAllowed", "afternoonAllowed", notes, "isActive", "containsCustomDates", "whitelistOnly")
 VALUES
-('Medical Consultation', 'Arlegui', 62, 20, 15, 'Weekly medical consultation, Mon-Sat', true, false, false),
-('Medical Consultation', 'Casal', 62, 25, 20, 'Weekly medical consultation, Mon-Sat', true, false, false),
-('Medical Consultation', 'QuezonCity', 62, 30, 25, 'Weekly medical consultation, Mon-Sat', true, false, false),
-('Dental Consultation', 'Arlegui', 62, 15, 10, 'Weekly dental consultation, Mon-Sat', true, false, false),
-('Dental Consultation', 'Casal', 62, 20, 15, 'Weekly dental consultation, Mon-Sat', true, false, false),
-('Dental Consultation', 'QuezonCity', 62, 25, 20, 'Weekly dental consultation, Mon-Sat', true, false, false);
+('Medical Consultation', 'Arlegui', 63, 20, 15, 'Weekly medical consultation, Mon-Sat', true, false, false),
+('Medical Consultation', 'Casal', 63, 25, 20, 'Weekly medical consultation, Mon-Sat', true, false, false),
+('Medical Consultation', 'QuezonCity', 63, 30, 25, 'Weekly medical consultation, Mon-Sat', true, false, false),
+('Dental Consultation', 'Arlegui', 63, 15, 10, 'Weekly dental consultation, Mon-Sat', true, false, false),
+('Dental Consultation', 'Casal', 63, 20, 15, 'Weekly dental consultation, Mon-Sat', true, false, false),
+('Dental Consultation', 'QuezonCity', 63, 25, 20, 'Weekly dental consultation, Mon-Sat', true, false, false);
 

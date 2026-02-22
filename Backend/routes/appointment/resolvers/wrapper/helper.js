@@ -52,7 +52,7 @@ function encodeSchedulingFlags(days) {
 async function validateSchedulerDate(schedulerId, date) {
   // Derive the weekday name from the given date
   const dayName = new Date(date).toLocaleDateString("en-US", { weekday: "long" });
-
+  console.log(`Validating scheduler date: Scheduler ID ${schedulerId}, Date ${date} (${dayName})`);
   // First check weekly schedule flags
   const queryScheduler = `
     SELECT "scheduleFlags"
@@ -67,6 +67,7 @@ async function validateSchedulerDate(schedulerId, date) {
 
   const dayPerWeek = decodeSchedulingFlags(resultScheduler.rows[0].scheduleFlags); 
   // Example: ["Monday", "Wednesday", "Friday"]
+  console.log(`Decoded schedule flags for scheduler ${schedulerId}: ${dayPerWeek.join(", ")}`);
 
   if (dayPerWeek.includes(dayName)) {
     return true; // matches weekly schedule
@@ -120,7 +121,7 @@ async function validateSatisfiedAllRequirements(scheduleId, requirements, res) {
   // Fetch required IDs from DB
   const result = await db.query(
     `SELECT sr.id
-     FROM "ScheduleRequirement" sr
+     FROM "scheduleRequirement" sr
      WHERE sr."slotId" = $1;`,
     [scheduleId]
   );
