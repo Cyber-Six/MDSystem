@@ -64,7 +64,6 @@ async function enqueueEmailVerification(userEmail, portal="patient") {
 
 async function enqueueResetPassword(userEmail, portal="patient") {
   logger.debug(`Enqueued password reset email for ${userEmail} in portal ${portal}, job ID: ${job.id}`);
-  console.log("NIGGA");
   // verifcation token would be created when th email is preparing to be sent
   job = await emailQueue.add("sendPasswordResetLink", {userEmail, data: { undefined }, portal}, {
       attempts: 5,

@@ -3,6 +3,7 @@ const logger = require("../../utils/logger.js");
 const { getStaffAnchor } = require("../redis.js");
 const { getUserIdentity } = require("../query.js");
 const { convertIdentity } = require("../../utils/converter.js");
+const { required } = require("joi");
 
 function jwtProtect(requiredRole = "patient") {
   return async (req, res, next) => {
@@ -43,7 +44,7 @@ function jwtProtect(requiredRole = "patient") {
         }
 
        // 🔍 Role enforcement
-      if (requiredRole && role !== requiredRole.toLowerCase()) {
+      if (requiredRole && role !== requiredRole.toLowerCase() && requiredRole !== "") {
         logger.warn(`[AUTH] Role mismatch userId=${decoded.id}, required=${requiredRole}, got=${role}, route=${req.path}, ip=${req.ip}`);
         return res.status(403).json({
           error: "FORBIDDEN",
