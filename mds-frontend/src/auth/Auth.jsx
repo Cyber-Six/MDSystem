@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Login from './login/login';
 import Register from './register';
 import AuthSlides from './auth-slides';
-import { useRole } from '@shared/hooks/use-role';
+import { useRole } from '@core/hooks/use-role';
 
 const Auth = () => {
   const navigate = useNavigate();

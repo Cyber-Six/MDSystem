@@ -1,5 +1,5 @@
 import { Monitor, Smartphone, MapPin, Calendar } from 'lucide-react';
-import Modal from '@shared/components/modals/modal';
+import Modal from '@core/components/modals/modal';
 
 const LoginActivityModal = ({ isOpen, onClose }) => {
   // Mock login activity data

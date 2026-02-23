@@ -1,5 +1,5 @@
 import React from 'react';
-import { useBanner } from '@shared/context/banner-context.jsx';
+import { useBanner } from '@core/context/banner-context.jsx';
 import styles from './banner.module.css';
 
 const Banner = () => {

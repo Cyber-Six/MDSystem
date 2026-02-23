@@ -8,9 +8,9 @@ import DentalHistoryForm from './dental-history';
 import OBGYNEForm from './obygyne';
 import ReviewForm from './review-form';
 import { Button } from './form-elements';
-import ValidationWarningModal from '@shared/components/modals/validation-warning-modal';
-import { createInitialMedicalRecord } from '@shared/services/emr-service';
-import { sanitizeFormData, logDataStructure } from '@shared/utils/data-transformer';
+import ValidationWarningModal from '@core/components/modals/validation-warning-modal';
+import { createInitialMedicalRecord } from '@core/services/emr-service';
+import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer';
 
 /**
  * Initial Medical Record Form Component

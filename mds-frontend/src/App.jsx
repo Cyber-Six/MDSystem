@@ -1,9 +1,9 @@
 import { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import PrivateRoute from '@shared/routes/private-route.jsx';
+import PrivateRoute from '@core/routes/private-route.jsx';
 import Auth from './auth/Auth.jsx';
-import { BannerProvider, useBanner } from '@shared/context/banner-context.jsx';
-import Banner from '@shared/components/banner/banner.jsx';
+import { BannerProvider, useBanner } from '@core/context/banner-context.jsx';
+import Banner from '@core/components/banner/banner.jsx';
 import ResetPassword from './auth/resetpassword.jsx';
 import { detectRoleFromHostname } from '@mdsystem/core/utils/role-detection';
 

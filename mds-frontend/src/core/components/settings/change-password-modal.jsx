@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import Modal from '@shared/components/modals/modal';
+import Modal from '@core/components/modals/modal';
 import { validatePassword, passwordsMatch, getPasswordError } from '@mdsystem/core/validation/password-validation';
 
 const ChangePasswordModal = ({ isOpen, onClose }) => {

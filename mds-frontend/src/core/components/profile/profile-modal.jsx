@@ -1,5 +1,5 @@
 import { User, Mail, Phone, UserCircle, IdCard } from 'lucide-react';
-import Modal from '@shared/components/modals/modal';
+import Modal from '@core/components/modals/modal';
 
 const ProfileModal = ({ isOpen, onClose }) => {
   // Mock data - replace with actual user data from context/props

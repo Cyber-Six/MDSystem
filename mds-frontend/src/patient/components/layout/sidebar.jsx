@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import logo from '@shared/assets/MDSystem.png';
+import logo from '@core/assets/MDSystem.png';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();

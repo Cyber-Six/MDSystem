@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Input, Select, Checkbox, Textarea, AccordionSection } from './form-elements';
 import { fetchAllDentalCatalogs } from './dental-history-service';
-import { useBanner } from '@shared/context/banner-context.jsx';
+import { useBanner } from '@core/context/banner-context.jsx';
 
 const DentalHistoryStep = ({ formData, onChange }) => {
   const { clearAllBanners } = useBanner();

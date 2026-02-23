@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import UserMenu from '@shared/components/user-menu/user-menu';
+import UserMenu from '@core/components/user-menu/user-menu';
 import { logout } from '../../../packages-core-adapter';
 
 const TopBar = ({ onMenuClick, isSidebarOpen }) => {

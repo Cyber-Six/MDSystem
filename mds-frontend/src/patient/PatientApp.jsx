@@ -6,8 +6,8 @@ import RecordUpdateForm from './modules/record-forms/update-record/record-update
 import PatientAppointment from './modules/appointment/patient-appointment.jsx';
 import MedicineRequestPage from './modules/medicine-request/medicine-request-page.jsx';
 import EConsultation from './modules/e-consultation/e-consultation.jsx';
-import { useDetectRoleFromSubdomain } from '@shared/hooks/use-role.js';
-import { checkInitialRecordStatus } from '@shared/services/emr-service.js';
+import { useDetectRoleFromSubdomain } from '@core/hooks/use-role.js';
+import { checkInitialRecordStatus } from '@core/services/emr-service.js';
 import InitialRecordModal from './components/modals/initial-record-modal.jsx';
 import InitialMedicalRecordForm from './modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 

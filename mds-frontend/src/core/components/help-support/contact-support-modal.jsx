@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Mail, Phone, Paperclip, X } from 'lucide-react';
-import Modal from '@shared/components/modals/modal';
+import Modal from '@core/components/modals/modal';
 
 const ContactSupportModal = ({ isOpen, onClose }) => {
   const [formData, setFormData] = useState({

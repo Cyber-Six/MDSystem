@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { User, Settings, Moon, Sun, Monitor, HelpCircle, LogOut, ChevronRight, ChevronLeft, Lock, ShieldCheck, Activity, MessageSquare, Send } from 'lucide-react';
-import ProfileModal from '@shared/components/profile/profile-modal';
-import ChangePasswordModal from '@shared/components/settings/change-password-modal';
-import TwoFactorAuthModal from '@shared/components/settings/two-factor-auth-modal';
-import LoginActivityModal from '@shared/components/settings/login-activity-modal';
-import FAQsModal from '@shared/components/help-support/faqs-modal';
-import ContactSupportModal from '@shared/components/help-support/contact-support-modal';
-import FeedbackModal from '@shared/components/help-support/feedback-modal';
+import ProfileModal from '@core/components/profile/profile-modal';
+import ChangePasswordModal from '@core/components/settings/change-password-modal';
+import TwoFactorAuthModal from '@core/components/settings/two-factor-auth-modal';
+import LoginActivityModal from '@core/components/settings/login-activity-modal';
+import FAQsModal from '@core/components/help-support/faqs-modal';
+import ContactSupportModal from '@core/components/help-support/contact-support-modal';
+import FeedbackModal from '@core/components/help-support/feedback-modal';
 
 const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
   const [isOpen, setIsOpen] = useState(false);

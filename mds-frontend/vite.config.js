@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
   return {
     resolve: {
       alias: {
-        '@shared': resolve(__dirname, 'src/shared'),
+        '@core': resolve(__dirname, 'src/core'),
         '@patient': resolve(__dirname, 'src/patient'),
         '@staff': resolve(__dirname, 'src/staff'),
         '@auth': resolve(__dirname, 'src/auth'),

@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
-import Modal from '@shared/components/modals/modal';
+import Modal from '@core/components/modals/modal';
 
 const FAQsModal = ({ isOpen, onClose }) => {
   const [openIndex, setOpenIndex] = useState(null);

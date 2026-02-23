@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Shield, Smartphone, QrCode } from 'lucide-react';
-import Modal from '@shared/components/modals/modal';
+import Modal from '@core/components/modals/modal';
 
 const TwoFactorAuthModal = ({ isOpen, onClose }) => {
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
