@@ -72,7 +72,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
 
   const statusColors = {
     open: 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-400 hover:bg-success-100 dark:hover:bg-success-900/30',
-    partial: 'bg-warning-50 dark:bg-warning-900/20 text-warning-700 dark:text-warning-400 hover:bg-warning-100 dark:hover:bg-warning-900/30',
+    partial: 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30',
     full: 'bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/30',
     suspended: 'bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400 line-through hover:bg-error-200',
     event: 'bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-900/30',
@@ -82,7 +82,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
 
   const statusDots = {
     open: 'bg-success-500',
-    partial: 'bg-warning-500',
+    partial: 'bg-primary-500',
     full: 'bg-error-500',
     suspended: 'bg-error-500',
     event: 'bg-accent-500',
@@ -204,7 +204,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       <div className="p-2 border-t border-neutral-200 dark:border-neutral-700 flex flex-wrap gap-3">
         {[
           { color: 'bg-success-500', label: 'Open' },
-          { color: 'bg-warning-500', label: '>70% Booked' },
+          { color: 'bg-primary-500', label: '>70% Booked' },
           { color: 'bg-error-500', label: 'Full / Suspended' },
           { color: 'bg-accent-500', label: 'Event Override' },
         ].map(({ color, label }) => (

@@ -42,11 +42,11 @@ const SearchPatient = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {/* Search Form */}
-      <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
-        <form onSubmit={handleSearch} className="space-y-3">
-          <div className="flex flex-col sm:flex-row gap-3">
+      <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-2.5">
+        <form onSubmit={handleSearch}>
+          <div className="flex flex-col sm:flex-row gap-2">
             {/* Search Input */}
             <div className="flex-1 relative">
               <svg 
@@ -62,7 +62,7 @@ const SearchPatient = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by name, ID, or email..."
-                className="w-full pl-9 pr-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full pl-9 pr-3 py-1.5 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
             
@@ -70,7 +70,7 @@ const SearchPatient = () => {
             <select
               value={searchType}
               onChange={(e) => setSearchType(e.target.value)}
-              className="px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="px-3 py-1.5 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="all">All Types</option>
               <option value="student">Students</option>
@@ -81,7 +81,7 @@ const SearchPatient = () => {
             <button
               type="submit"
               disabled={isSearching}
-              className="px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-400 text-white text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2"
+              className="px-4 py-1.5 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-400 text-white text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2"
             >
               {isSearching ? (
                 <>

@@ -42,7 +42,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
     if (path.includes('/staff/appointments')) return 'Appointments';
     if (path.includes('/staff/analytics')) return 'Analytics';
     if (path.includes('/staff/inventory')) return 'Inventory';
-    if (path.includes('/staff/settings')) return 'Settings';
+    if (path.includes('/staff/settings')) return 'Role Management';
     return 'Staff Portal';
   };
 
@@ -113,7 +113,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
           </svg>
         </button>
         
-        <h1 className="text-base font-semibold text-secondary-800 dark:text-white">
+        <h1 className="text-base font-semibold text-secondary-800 dark:text-white leading-none m-0">
           {getPageTitle()}
         </h1>
       </div>
