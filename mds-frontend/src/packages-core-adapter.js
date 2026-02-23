@@ -42,4 +42,4 @@ export const axiosRequest = createAxiosRequestHandler({
 
 // Export convenience methods
 export const { getApiBaseUrl, getDevSubdomain } = apiBaseUrlProvider;
-export const { TokenStorage, refreshAccessToken, logout, isAuthenticated } = tokenService;
+export const { TokenStorage, refreshAccessToken, isAccessTokenExpired, logout, isAuthenticated } = tokenService;
