@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { TokenStorage, refreshAccessToken } from '../packages-core-adapter';
+import { TokenStorage, refreshAccessToken, isAccessTokenExpired } from '../packages-core-adapter';
 import { useState, useEffect } from 'react';
 
 const PrivateRoute = ({ children }) => {
@@ -42,11 +42,22 @@ const PrivateRoute = ({ children }) => {
         return;
       }
 
+      // Check if access token is still valid (not expired)
+      const expired = await isAccessTokenExpired(60); // 60s buffer before actual expiry
+
+      if (!expired) {
+        // Access token is still valid — no need to hit the refresh endpoint
+        setIsAuthenticated(true);
+        setIsChecking(false);
+        return;
+      }
+
+      // Access token expired or about to expire — attempt refresh
       try {
         await refreshAccessToken();
         setIsAuthenticated(true);
       } catch (error) {
-        console.warn('[PrivateRoute] Session validation failed — tokens expired or invalid:', error.message);
+        console.warn('[PrivateRoute] Session expired — refresh failed:', error.message);
         TokenStorage.clearTokens();
         setIsAuthenticated(false);
       } finally {

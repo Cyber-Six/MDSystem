@@ -202,6 +202,35 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
   };
 
   /**
+   * Check if the access token JWT is expired (client-side decode, no signature verification)
+   * 
+   * This avoids unnecessary refresh calls when the access token is still valid.
+   * 
+   * @param {number} bufferSeconds - Treat token as expired this many seconds before actual expiry (default: 60)
+   * @returns {Promise<boolean>} True if token is expired, missing, or invalid
+   */
+  const isAccessTokenExpired = async (bufferSeconds = 60) => {
+    try {
+      const token = await Promise.resolve(TokenStorage.getAccessToken());
+      if (!token) return true;
+
+      const parts = token.split('.');
+      if (parts.length !== 3) return true;
+
+      // Decode base64url payload → JSON
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(base64));
+
+      if (!payload.exp || typeof payload.exp !== 'number') return true;
+
+      const now = Math.floor(Date.now() / 1000);
+      return now >= (payload.exp - bufferSeconds);
+    } catch {
+      return true; // If decoding fails, treat as expired
+    }
+  };
+
+  /**
    * Logout user and clear all tokens
    * 
    * SECURITY: Ensures complete session cleanup
@@ -248,6 +277,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
   return {
     TokenStorage,
     refreshAccessToken,
+    isAccessTokenExpired,
     logout,
     isAuthenticated
   };
