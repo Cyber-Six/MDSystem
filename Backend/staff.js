@@ -11,6 +11,7 @@ const { initMedicalProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
+const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 const { initializeChatbot, shutdownChatbot } = require('./mds-chatbot');
 
 
@@ -55,6 +56,7 @@ initMedicalAppointmentGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
+app.use('/auth/password', passwordResetRoutes);
 
 // ======================================
 // Initialize AI Medical Chatbot BEFORE static files
