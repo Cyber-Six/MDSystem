@@ -199,7 +199,7 @@ const Query = {
       SELECT ps.*
       FROM "patientSlot" ps
       WHERE ps."patientId" = $1
-      ORDER BY ps.created_at DESC
+      ORDER BY ps.id DESC
       LIMIT $2 OFFSET $3;
     `;
     const slotResult = await db.query(querySlots, [userId, limit || 10, offset || 0]);
@@ -250,7 +250,7 @@ const Query = {
       SELECT ps.status
       FROM "patientSlot" ps
       WHERE ps."patientId" = $1
-      ORDER BY ps.created_at DESC
+      ORDER BY ps.id DESC
       LIMIT 1;
     `;
 
@@ -272,8 +272,8 @@ const Query = {
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
 
-      WHERE ps.status = $1  
-      ORDER BY ps.created_at DESC
+      WHERE ps.status = $1
+      ORDER BY ps.id DESC
       LIMIT $2 OFFSET $3;
     `;
 
