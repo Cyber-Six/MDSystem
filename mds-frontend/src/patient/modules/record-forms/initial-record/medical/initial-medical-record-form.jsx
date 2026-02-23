@@ -148,7 +148,14 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     if (!pi.firstName?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First name is required' });
     if (!pi.birthday) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Birthday is required' });
     if (!pi.gender) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Gender is required' });
+    if (!pi.civilStatus) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Civil status is required' });
+    if (!pi.nationality?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Nationality is required' });
     if (!pi.contactNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number is required' });
+    if (!pi.address?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Address is required' });
+    if (!pi.program) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Program is required' });
+    if (pi.program === 'Other' && !pi.programOther?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Please specify your program' });
+    if (!pi.studentNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number is required' });
+    if (!pi.studentCategory) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student category is required' });
 
     // Emergency contacts
     const c1 = pi.emergencyContacts?.[0];
@@ -169,6 +176,11 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     const dh = data.dentalHistory || {};
     if (!dh.firstTimeDentist) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'First time dentist question is required' });
     if (!dh.lastDentalCleaning) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Last dental cleaning is required' });
+    if (!dh.hasIntraOralAppliance) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Intra-oral appliance question is required (Yes/No)' });
+    if (!dh.toothExtraction) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Tooth extraction question is required (Yes/No)' });
+    if (!dh.dentalFilling) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Dental filling question is required (Yes/No)' });
+    if (!dh.upperTeethPhoto) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Upper teeth photo is required' });
+    if (!dh.lowerTeethPhoto) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Lower teeth photo is required' });
 
     // ---- OB-GYNE (Step 4, female only) ----
     if (pi.gender === 'Female') {

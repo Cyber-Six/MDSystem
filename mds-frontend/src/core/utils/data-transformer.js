@@ -53,13 +53,30 @@ export const validateFormData = (formData) => {
 };
 
 /**
+ * Deep clone that preserves File/Blob objects (not JSON-serializable).
+ * Falls back to structuredClone where available, otherwise walks the tree manually.
+ */
+const deepClonePreservingFiles = (obj) => {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof File || obj instanceof Blob) return obj;
+  if (obj instanceof Date) return new Date(obj);
+  if (Array.isArray(obj)) return obj.map(deepClonePreservingFiles);
+
+  const clone = {};
+  for (const key of Object.keys(obj)) {
+    clone[key] = deepClonePreservingFiles(obj[key]);
+  }
+  return clone;
+};
+
+/**
  * Sanitizes and prepares data for submission
  */
 export const sanitizeFormData = (formData) => {
   console.log('[Data Transformer] Sanitizing form data...');
   
-  // Deep clone to avoid mutations
-  const sanitized = JSON.parse(JSON.stringify(formData));
+  // Deep clone to avoid mutations – preserves File objects that JSON.parse/stringify would destroy
+  const sanitized = deepClonePreservingFiles(formData);
 
   // Ensure all required fields have values (even if empty)
   if (!sanitized.personalInfo) sanitized.personalInfo = {};

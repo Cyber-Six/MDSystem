@@ -140,6 +140,29 @@ const cancelUpdateTicket = async () => {
  * OPTIMIZED: Batches all create mutations into a single GraphQL request
  * reducing ~17 sequential HTTP calls down to 3 (ticket + batch + submit)
  */
+/**
+ * Upload a file to the media staging REST API
+ * @param {File|null} file - Browser File object (from an <input type="file">)
+ * @returns {Promise<string|null>} Staged fileId UUID returned by the REST API, or null if no file provided
+ */
+const uploadMediaFile = async (file) => {
+  if (!file) return null;
+
+  const body = new FormData();
+  body.append('file', file);
+
+  try {
+    const response = await axiosRequest.post('/media', body, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    console.log('[EMR Service] Media file staged, fileId:', response.data.fileId);
+    return response.data.fileId;
+  } catch (error) {
+    console.error('[EMR Service] Failed to stage media file:', error.message);
+    throw error;
+  }
+};
+
 export const createInitialMedicalRecord = async (formData) => {
   console.log('[EMR Service] Starting initial medical record creation (batched)');
   console.log('[EMR Service] Form data received:', formData);
@@ -150,24 +173,30 @@ export const createInitialMedicalRecord = async (formData) => {
     const results = {};
 
     // ======== REQUEST 1: Create update ticket ========
-    console.log('[EMR Service] [1/3] Creating update ticket...');
+    console.log('[EMR Service] [1/4] Creating update ticket...');
     const ticketId = await createUpdateTicket('Both');
     ticketCreated = true;
     results.ticketId = ticketId;
     console.log('[EMR Service] Update ticket created with ID:', ticketId);
 
+    // ======== Upload dental photos via REST API before building inputs ========
+    console.log('[EMR Service] [2/4] Uploading dental photos...');
+    const upperTeethFileId = await uploadMediaFile(formData.dentalHistory?.upperTeethPhoto?.file ?? null);
+    const lowerTeethFileId = await uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null);
+    console.log('[EMR Service] Dental photos staged:', { upperTeethFileId, lowerTeethFileId });
+
     // ======== Prepare all input data ========
-    const inputs = buildBatchInputs(formData);
+    const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId });
     console.log('[EMR Service] Prepared batch inputs:', Object.keys(inputs));
 
-    // ======== REQUEST 2: Batch all create mutations in one request ========
-    console.log('[EMR Service] [2/3] Sending batched create mutations...');
+    // ======== REQUEST 3: Batch all create mutations in one request ========
+    console.log('[EMR Service] [3/4] Sending batched create mutations...');
     const batchResult = await sendBatchedCreateMutations(inputs, formData);
     Object.assign(results, batchResult);
     console.log('[EMR Service] Batch mutations completed:', Object.keys(batchResult));
 
-    // ======== REQUEST 3: Submit the ticket ========
-    console.log('[EMR Service] [3/3] Submitting update ticket...');
+    // ======== REQUEST 4: Submit the ticket ========
+    console.log('[EMR Service] [4/4] Submitting update ticket...');
     try {
       const submitStatus = await submitUpdateTicket();
       results.submitStatus = submitStatus;
@@ -192,8 +221,12 @@ export const createInitialMedicalRecord = async (formData) => {
 
 /**
  * Build all input objects from form data for the batched mutation
+ * @param {object} formData - Form data from the initial record form
+ * @param {object} photoIds - Staged fileIds from the media REST API
+ * @param {string|null} photoIds.upperTeethFileId - Staged fileId for the upper teeth photo
+ * @param {string|null} photoIds.lowerTeethFileId - Staged fileId for the lower teeth photo
  */
-const buildBatchInputs = (formData) => {
+const buildBatchInputs = (formData, photoIds = {}) => {
   const inputs = {};
 
   // Student Profile (conditional)
@@ -363,10 +396,10 @@ const buildBatchInputs = (formData) => {
   // Oral Appliance Profile (empty)
   inputs.oralApplianceProfile = { appliances: [], notes: null };
 
-  // Dental Photo Record (mock UUIDs)
+  // Dental Photo Record – use real staged fileIds from the media REST API
   inputs.dentalPhotoRecord = {
-    upperTeeth: '00000000-0000-0000-0000-000000000000',
-    lowerTeeth: '00000000-0000-0000-0000-000000000000'
+    upperTeeth: photoIds.upperTeethFileId ?? null,
+    lowerTeeth: photoIds.lowerTeethFileId ?? null
   };
 
   // OB-GYNE (conditional - female only)
