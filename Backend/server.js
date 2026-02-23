@@ -17,7 +17,7 @@ const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
-const { initPatientAppointmentGraphQL } = require('./routes/appointment/graphql.js');
+const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { initializeChatbot, shutdownChatbot } = require('./mds-chatbot');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
@@ -62,6 +62,8 @@ app.use((err, req, res, next) => {
 initPatientEMRGraphQL(app);
 initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
+//initMedicalAppointmentGraphQL(app);
+
 // Initialize AI Medical Chatbot (routes registered synchronously, llama connection async)
 (async () => {
   try {

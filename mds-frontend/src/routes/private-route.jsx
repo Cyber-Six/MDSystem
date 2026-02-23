@@ -1,21 +1,13 @@
 import { Navigate } from 'react-router-dom';
-import { TokenStorage, refreshAccessToken } from '../packages-core-adapter';
+import { TokenStorage, refreshAccessToken, isAccessTokenExpired } from '../packages-core-adapter';
 import { useState, useEffect } from 'react';
 
-/**
- * PrivateRoute Component
- * SECURITY: Validates authentication by checking refresh token validity
- * If refresh token is valid, attempts to refresh access token
- * If authentication fails, redirects to /auth
- * 
- * DEV MODE: Set VITE_BYPASS_PRIVATE_ROUTE_AUTH=true in .env.local to bypass authentication
- */
 const PrivateRoute = ({ children }) => {
   const [isChecking, setIsChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   useEffect(() => {
-    const checkAuth = () => {
-      // DEV MODE: Bypass authentication if environment variable is set
+    const checkAuth = async () => {
+      // DEV MODE: Set VITE_BYPASS_PRIVATE_ROUTE_AUTH=true in .env.local to bypass authentication
       if (import.meta.env.VITE_BYPASS_PRIVATE_ROUTE_AUTH === 'true') {
         console.warn('⚠️ DEV MODE: Authentication bypassed. Remove VITE_BYPASS_PRIVATE_ROUTE_AUTH in production!');
         setIsAuthenticated(true);
@@ -50,10 +42,27 @@ const PrivateRoute = ({ children }) => {
         return;
       }
 
-      // Tokens exist and are valid format - user is authenticated
-      // The axios interceptor will handle refreshing if access token is expired
-      setIsAuthenticated(true);
-      setIsChecking(false);
+      // Check if access token is still valid (not expired)
+      const expired = await isAccessTokenExpired(60); // 60s buffer before actual expiry
+
+      if (!expired) {
+        // Access token is still valid — no need to hit the refresh endpoint
+        setIsAuthenticated(true);
+        setIsChecking(false);
+        return;
+      }
+
+      // Access token expired or about to expire — attempt refresh
+      try {
+        await refreshAccessToken();
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.warn('[PrivateRoute] Session expired — refresh failed:', error.message);
+        TokenStorage.clearTokens();
+        setIsAuthenticated(false);
+      } finally {
+        setIsChecking(false);
+      }
     };
 
     checkAuth();

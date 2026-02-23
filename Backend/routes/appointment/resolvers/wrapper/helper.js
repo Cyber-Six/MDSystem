@@ -52,11 +52,11 @@ function encodeSchedulingFlags(days) {
 async function validateSchedulerDate(schedulerId, date) {
   // Derive the weekday name from the given date
   const dayName = new Date(date).toLocaleDateString("en-US", { weekday: "long" });
-
+  console.log(`Validating scheduler date: Scheduler ID ${schedulerId}, Date ${date} (${dayName})`);
   // First check weekly schedule flags
   const queryScheduler = `
     SELECT "scheduleFlags"
-    FROM "SlotScheduler"
+    FROM "slotScheduler"
     WHERE id = $1;
   `;
   const resultScheduler = await db.query(queryScheduler, [schedulerId]);
@@ -67,6 +67,7 @@ async function validateSchedulerDate(schedulerId, date) {
 
   const dayPerWeek = decodeSchedulingFlags(resultScheduler.rows[0].scheduleFlags); 
   // Example: ["Monday", "Wednesday", "Friday"]
+  console.log(`Decoded schedule flags for scheduler ${schedulerId}: ${dayPerWeek.join(", ")}`);
 
   if (dayPerWeek.includes(dayName)) {
     return true; // matches weekly schedule
@@ -76,7 +77,7 @@ async function validateSchedulerDate(schedulerId, date) {
   const queryCustomDate = `
     SELECT "scheduledDate"
     FROM "SlotCustomDate"
-    WHERE "slotSchedulerId" = $1 AND "scheduledDate" = $2;
+    WHERE "slotScheduleId" = $1 AND "scheduledDate" = $2;
   `;
   const resultCustomDate = await db.query(queryCustomDate, [schedulerId, date]);
 
@@ -86,12 +87,15 @@ async function validateSchedulerDate(schedulerId, date) {
 async function getAppointmentCounts(schedulerId, date) {
   const query = `
     SELECT 
-      COALESCE(SUM(CASE WHEN "session" = 'Morning' AND status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
-      COALESCE(SUM(CASE WHEN "session" = 'Morning' AND status = 'Pending' THEN 1 ELSE 0 END), 0) AS "morningPending",
-      COALESCE(SUM(CASE WHEN "session" = 'Afternoon' AND status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
-      COALESCE(SUM(CASE WHEN "session" = 'Afternoon' AND status = 'Pending' THEN 1 ELSE 0 END), 0) AS "afternoonPending"
-    FROM "patientSlot"
-    WHERE "slotSchedulerId" = $1 AND "scheduledDate" = $2
+      COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0) AS "morningPending",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0) AS "afternoonPending"
+    FROM "patientSlot" ps
+    JOIN "ScheduleDateEntity" sde
+      ON ps."slotEntityId" = sde."id"
+    WHERE sde."slotId" = $1
+      AND sde."scheduledDate" = $2
   `;
 
   const result = await db.query(query, [schedulerId, date]);
@@ -117,7 +121,7 @@ async function validateSatisfiedAllRequirements(scheduleId, requirements, res) {
   // Fetch required IDs from DB
   const result = await db.query(
     `SELECT sr.id
-     FROM "ScheduleRequirement" sr
+     FROM "scheduleRequirement" sr
      WHERE sr."slotId" = $1;`,
     [scheduleId]
   );

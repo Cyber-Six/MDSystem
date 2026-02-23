@@ -36,21 +36,23 @@ Mutation = {
   submitAppointment: async (_, { schedulerId, date, session, requirements }, { user, res }) => {
     const userStatus = await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res });
 
-    if (!userStatus || !["Pending", "Scheduled", "InProgress"].includes(userStatus)) {
+    if (userStatus && ["Pending", "Scheduled", "InProgress"].includes(userStatus)) {
       throwGraphQLError(res).message("User already has an active appointment").status(400).throw();
     }
 
-    return await Wrapper.Mutation._submitAppointment(_, { schedulerId, date, session, requirements }, { user, res });
+    const result = await Wrapper.Mutation._submitAppointment(_, { schedulerId, date, session, requirements }, { user, res });
+    return result;
   },
 
   cancelAppointment: async (_, __, { user, res }) => {
-    const userStatus = await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res });
+    const userRecord = await Wrapper.Query._getUserAppointmentRecords(_, { userId: user.id, offset: 0, limit: 1 }, { user, res });
 
-    if (!userStatus || !["Pending", "Scheduled", "InProgress"].includes(userStatus)) {
+    if (!userRecord || !["Pending", "Scheduled", "InProgress"].includes(userRecord[0].status)) {
       throwGraphQLError(res).message("No active appointment found to cancel").status(404).throw();
     }
 
-    return await Wrapper.Mutation._cancelAppointment(_, { patientId: user.id, cancelledBy: user.id }, { user, res });
+    const result = await Wrapper.Mutation._cancelAppointment(_, { patientId: user.id, cancelledBy: user.id, slotId: userRecord[0].id }, { user, res });
+    return result.success;
   },
 };
 

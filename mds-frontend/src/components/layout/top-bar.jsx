@@ -84,10 +84,8 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   const handleLogout = async () => {
     try {
       // Call the proper logout function from token service
-      // This clears tokens, calls backend logout, and redirects
+      // This clears tokens, calls backend logout, and navigates to /auth
       await logout(true);
-      // Force a full page reload to ensure clean state
-      window.location.reload();
     } catch (error) {
       console.error('Logout error:', error);
       window.location.href = '/auth';
