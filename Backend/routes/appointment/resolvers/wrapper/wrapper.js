@@ -6,7 +6,6 @@ const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
-const { promoteFile, deleteFile } = require("../../../../config/multer.js");
 const { encodeSchedulingFlags, decodeSchedulingFlags, validateSchedulerDate,
   getAppointmentCounts, isWithinFutureTimeframe,
   validateSatisfiedAllRequirements,
@@ -300,9 +299,6 @@ const Mutation = {
     // 2. Ensure requirements are satisfied
     await validateSatisfiedAllRequirements(schedulerId, requirements, db, res);
 
-    for (const requirement of requirements) {
-      if (requirement.filename) await promoteFile(user.id, requirement.filename, "appointmentRequirement");  
-    }
     // 3. Create patientSlot row
     const psResult = await db.query(
       `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session")

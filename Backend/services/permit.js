@@ -20,8 +20,6 @@ const permissions = {
   appointment_allow_view_records: "ALLOW_TO_VIEW_APPOINTMENT",
   appointment_allow_view_configuration: "ALLOW_TO_VIEW_APPOINTMENT_CONFIGURATION",
   apppointment_allow_edit_configuration: "ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION",
-
-  announcement_allow_crud: "ALLOW_TO_CREATE_ANNOUNCEMENT",
 };
 
 async function getMedicalpermits(personnelId) {

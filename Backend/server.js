@@ -15,10 +15,6 @@ const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js'
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
-
-const mediaRoutes = require('./routes/media/media.js');
-const AnnouncementRoutes = require('./routes/announcement/announcement.js');
-
 const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
@@ -92,8 +88,8 @@ app.use('/auth/email', emailAuthRoutes);
 app.use('/auth/refresh', refreshAuthRoutes);
 
 app.use('/info/consent', consentRoutes);
-app.use('/media', mediaRoutes);
-app.use('/announcement', AnnouncementRoutes);
+
+
 // ======================================
 
 // Serve static assets for the React app

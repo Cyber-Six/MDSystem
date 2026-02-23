@@ -63,14 +63,15 @@ async function enqueueEmailVerification(userEmail, portal="patient") {
   }
 
 async function enqueueResetPassword(userEmail, portal="patient") {
-  logger.debug(`Enqueued password reset email for ${userEmail} in portal ${portal}, job ID: ${job.id}`);
-  // verifcation token would be created when th email is preparing to be sent
-  job = await emailQueue.add("sendPasswordResetLink", {userEmail, data: { undefined }, portal}, {
+  console.log("NIGGA");
+  // verification token would be created when the email is preparing to be sent
+  const job = await emailQueue.add("sendPasswordResetLink", {userEmail, data: {}, portal}, {
       attempts: 5,
       backoff: { type: "exponential", delay: 1000 },
       removeOnComplete: true,
     }
   );
+  logger.debug(`Enqueued password reset email for ${userEmail} in portal ${portal}, job ID: ${job.id}`);
 
   const waitingCount = await emailQueue.getWaitingCount();
   return {

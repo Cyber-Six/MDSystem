@@ -1,5 +1,5 @@
 const db  = require("../../../config/query.js");
-const { promoteFile, deleteFile } = require("../../../config/multer.js");
+
 const { upsertEmergencyNumber } = require("../query/upsert.js");
 
 const anchor = require("../query/anchor.js");
@@ -253,35 +253,20 @@ const Mutation = {
   },
 
   _DentalPhotoRecord: async (_, {args, recordId}, { user, res }) => {
-    const upperUUID = (args.input.upperTeeth) ? await promoteFile(user.id, args.input.upperTeeth, "dentalPhoto") : null;
-    const lowerUUID = (args.input.lowerTeeth) ? await promoteFile(user.id, args.input.lowerTeeth, "dentalPhoto") : null;
-
-    // check existing
-    const existing = await db.query(
-      `SELECT "id", "upperTeeth", "lowerTeeth" FROM "DentalPhotoRecord" WHERE "id" = $1;`,
-      [recordId]
-      );
-
-    if (existing.rows.length > 0) {
-      if (upperUUID && existing.rows[0].upperTeeth) await deleteFile("dentalPhoto", existing.rows[0].upperTeeth);
-      if (lowerUUID && existing.rows[0].lowerTeeth) await deleteFile("dentalPhoto", existing.rows[0].lowerTeeth);
-    }
-
-    // insert
     const result = await db.query(
-      `INSERT INTO "DentalPhotoRecord" ("id", "upperTeeth", "lowerTeeth")
-        VALUES ($1, $2, $3)
-        ON CONFLICT (id) DO UPDATE
-          SET "upperTeeth" = COALESCE(EXCLUDED."upperTeeth", "DentalPhotoRecord"."upperTeeth"),
-              "lowerTeeth" = COALESCE(EXCLUDED."lowerTeeth", "DentalPhotoRecord"."lowerTeeth")
-        RETURNING *;
-`,
+      `INSERT INTO "DentalPhotoRecord" 
+        ("id", "upperTeeth", "lowerTeeth")
+       VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE
+         SET "upperTeeth" = EXCLUDED."upperTeeth",
+             "lowerTeeth" = EXCLUDED."lowerTeeth"
+             RETURNING *;`,
       [
         recordId,
-        upperUUID,
-        lowerUUID
-        ]
-      );
+        args.input.upperTeeth,
+        args.input.lowerTeeth
+      ]
+    );
     const record = result.rows[0];
     return {...record, id: recordId, isValid: result.rows[0].isValid, archived_at: null};
   },
