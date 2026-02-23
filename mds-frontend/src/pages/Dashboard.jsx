@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/layout/layout.jsx';
 import DashboardHome from '../modules/dashboard/dashboard-home.jsx';
 import RecordUpdateForm from '../modules/record-forms/update-record/record-update-form.jsx';
-import AppointmentPage from '../modules/appointment/appointment-page.jsx';
+import AppointmentPage from '../modules/appointment/appointment-router.jsx';
 import MedicineRequestPage from '../modules/medicine-request/medicine-request-page.jsx';
 import EConsultation from '../modules/e-consultation/e-consultation.jsx';
 import { useDetectRoleFromSubdomain } from '../hooks/use-role.js';
