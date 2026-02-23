@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { axiosRequest } from '../../../packages-core-adapter';
 import { TokenStorage } from '../../../packages-core-adapter';
 import ForgetPassword from './forget-password';
 import DataConsent from '../data-consent';
+import { useRole } from '../../../hooks/use-role';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -17,6 +18,8 @@ const Login = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   
   const navigate = useNavigate();
+  const { role } = useRole();
+  const isStaff = role === 'medical';
 
   const handleSend2FA = async () => {
     try {
@@ -47,11 +50,15 @@ const Login = () => {
       });
       
       if (response.data.ok) {
-        setVerificationKey(response.data.LoginKey);
+        const loginKey = response.data.LoginKey;
+        setVerificationKey(loginKey);
         
         if (response.data.requires2FA) {
           await handleSend2FA();
           setShowTwoFactor(true);
+        } else if (isStaff) {
+          // Staff skip consent — go straight to login complete
+          await completeLoginWithKey(loginKey);
         } else {
           setShowConsent(true);
         }
@@ -97,10 +104,15 @@ const Login = () => {
       });
       
       if (response.data.ok) {
-        // Update verification key with the one returned from backend (always update to ensure sync)
-        setVerificationKey(response.data.verificationKey);
+        const newKey = response.data.verificationKey;
+        setVerificationKey(newKey);
         setShowTwoFactor(false);
-        setShowConsent(true);
+        if (isStaff) {
+          // Staff skip consent — go straight to login complete
+          await completeLoginWithKey(newKey);
+        } else {
+          setShowConsent(true);
+        }
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || '2FA verification failed.';
@@ -157,23 +169,20 @@ const Login = () => {
     }
   };
 
-  // Called when user accepts consent in the DataConsent modal
-  const handleConsentAccept = async () => {
+  // Core login-complete call, accepts key directly to avoid stale-state issues
+  const completeLoginWithKey = async (key) => {
     setError('');
     setIsLoading(true);
 
     try {
-      // Complete login after consent is recorded
       const response = await axiosRequest.post('/auth/login/complete', { 
-        LoginKey: verificationKey 
+        LoginKey: key 
       });
       
       if (response.data.ok) {
         if (response.data.accessToken && response.data.refreshToken) {
           TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
         }
-        
-        // Always navigate to dashboard - the dashboard will show the initial record modal if needed
         navigate('/');
       }
     } catch (err) {
@@ -206,6 +215,9 @@ const Login = () => {
       setShowConsent(false);
     }
   };
+
+  // Called when user accepts consent in the DataConsent modal
+  const handleConsentAccept = () => completeLoginWithKey(verificationKey);
 
   // Called when user cancels consent in the DataConsent modal
   const handleConsentCancel = () => {

@@ -26,7 +26,7 @@ const ForgetPassword = ({ onBackToLogin }) => {
     setSuccessMessage('');
 
     try {
-      const recaptchaToken = 'no-recaptcha-token';
+      const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
 
       await axiosRequest.post('/auth/password/forget-password', {
         email: formData.email,

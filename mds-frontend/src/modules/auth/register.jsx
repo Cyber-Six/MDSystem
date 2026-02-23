@@ -5,7 +5,7 @@ import { TokenStorage } from '../../packages-core-adapter';
 import { validatePassword, passwordsMatch } from '@mdsystem/core/validation/password-validation';
 import DataConsent from './data-consent';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 
 const Register = ({ onBackToLogin }) => {
   const navigate = useNavigate();
@@ -77,7 +77,19 @@ const Register = ({ onBackToLogin }) => {
       });
 
       if (response.data.ok) {
-        goToNextStep();
+        // Auto-send OTP immediately after successful registration
+        try {
+          const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
+          await axiosRequest.post('/auth/email/verification', {
+            email: formData.email,
+            recaptchaToken
+          });
+          setSuccessMessage('Verification code sent to your email!');
+        } catch (otpErr) {
+          // OTP send failed but registration succeeded — show warning, still advance
+          setError(otpErr.response?.data?.message || 'Account created but failed to send verification code. Use resend below.');
+        }
+        setCurrentStep(2);
       }
     } catch (err) {
       const errorCode = err.response?.data?.error;
@@ -97,32 +109,7 @@ const Register = ({ onBackToLogin }) => {
     }
   };
 
-  // Step 2: Send Email Verification OTP
-  const handleSendOTP = async () => {
-    setError('');
-    setLoading(true);
-
-    try {
-      const recaptchaToken = 'RECAPTCHA_TOKEN_PLACEHOLDER';
-
-      const response = await axiosRequest.post('/auth/email/verification', {
-        email: formData.email,
-        recaptchaToken
-      });
-
-      if (response.data.ok) {
-        setSuccessMessage('Verification code sent to your email!');
-        goToNextStep();
-      }
-    } catch (err) {
-      const errorMessage = err.response?.data?.message;
-      setError(errorMessage || 'Failed to send verification code. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Step 3: Verify OTP
+  // Step 2: Verify OTP
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     setError('');
@@ -169,7 +156,7 @@ const Register = ({ onBackToLogin }) => {
     setLoading(true);
 
     try {
-      const recaptchaToken = 'RECAPTCHA_TOKEN_PLACEHOLDER';
+      const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
 
       const response = await axiosRequest.post('/auth/email/verification', {
         email: formData.email,
@@ -195,7 +182,7 @@ const Register = ({ onBackToLogin }) => {
     }
   };
 
-  // Step 4: Handle consent acceptance from DataConsent modal
+  // Step 3: Handle consent acceptance from DataConsent modal
   const handleConsentAccept = async () => {
     setError('');
     setLoading(true);
@@ -209,16 +196,8 @@ const Register = ({ onBackToLogin }) => {
       });
 
       if (response.data.ok) {
-        // Store tokens
-        console.log("📦 Registration response:", { 
-          hasAccessToken: !!response.data.accessToken, 
-          hasRefreshToken: !!response.data.refreshToken,
-          message: response.data.message 
-        });
-        
         if (response.data.accessToken && response.data.refreshToken) {
           TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
-          console.log("✅ Tokens stored successfully");
           
           goToNextStep();
           
@@ -228,7 +207,6 @@ const Register = ({ onBackToLogin }) => {
           }, 2000);
         } else {
           // Account already exists - redirect to login
-          console.warn("⚠️ Account already exists, redirecting to login");
           setError('Account already exists. Redirecting to login...');
           setTimeout(() => {
             navigate('/auth/login', { replace: true });
@@ -236,7 +214,6 @@ const Register = ({ onBackToLogin }) => {
         }
       }
     } catch (err) {
-      console.error('Registration error:', err);
       const errorCode = err.response?.data?.error;
       const errorMessage = err.response?.data?.message;
 
@@ -368,53 +345,7 @@ const Register = ({ onBackToLogin }) => {
     </div>
   );
 
-  // Step 2: Send OTP
-  const renderSendOtpStep = () => (
-    <div className="w-full max-w-md mx-auto text-center">
-      <div className="bg-primary-100 dark:bg-primary-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
-        <svg className="w-10 h-10 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
-      </div>
-      
-      <h2 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary mb-3">
-        Verify Your Email
-      </h2>
-      <p className="text-sm text-neutral-600 dark:text-dark-text-secondary mb-2">
-        We'll send a verification code to
-      </p>
-      <p className="font-semibold text-secondary-900 dark:text-dark-text-primary mb-6">
-        {formData.email}
-      </p>
-
-      {error && (
-        <div className="mb-5 p-3 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
-          <p className="text-error-600 dark:text-error-400 text-xs text-center">{error}</p>
-        </div>
-      )}
-
-      {successMessage && (
-        <div className="mb-5 p-3 bg-success-50 dark:bg-success-900/20 border border-success-300 dark:border-success-700 rounded-lg">
-          <p className="text-success-600 dark:text-success-400 text-xs text-center">{successMessage}</p>
-        </div>
-      )}
-
-      <button
-        onClick={handleSendOTP}
-        disabled={loading}
-        className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
-                 dark:bg-primary-600 dark:hover:bg-primary-700
-                 text-white font-semibold py-2.5 rounded-md text-sm
-                 transition-all duration-200 
-                 disabled:opacity-50 disabled:cursor-not-allowed
-                 flex items-center justify-center shadow-md hover:shadow-lg"
-      >
-        {loading ? 'Sending...' : 'Send Verification Code'}
-      </button>
-    </div>
-  );
-
-  // Step 3: Verify OTP
+  // Step 2: Verify OTP
   const renderVerifyOtpStep = () => (
     <div className="w-full max-w-md mx-auto">
       <div className="text-center mb-8">
@@ -495,7 +426,7 @@ const Register = ({ onBackToLogin }) => {
     </div>
   );
 
-  // Step 4: Consent - Now uses the DataConsent modal
+  // Step 3: Consent - Now uses the DataConsent modal
   const renderConsentStep = () => (
     <div className="w-full max-w-lg mx-auto">
       <div className="text-center mb-6">
@@ -525,7 +456,7 @@ const Register = ({ onBackToLogin }) => {
     </div>
   );
 
-  // Step 5: Success
+  // Step 4: Success
   const renderSuccessStep = () => (
     <div className="w-full max-w-md mx-auto text-center">
       <div className="bg-success-100 dark:bg-success-900/30 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -556,12 +487,10 @@ const Register = ({ onBackToLogin }) => {
       case 1:
         return renderAccountStep();
       case 2:
-        return renderSendOtpStep();
-      case 3:
         return renderVerifyOtpStep();
-      case 4:
+      case 3:
         return renderConsentStep();
-      case 5:
+      case 4:
         return renderSuccessStep();
       default:
         return null;
@@ -596,7 +525,7 @@ const Register = ({ onBackToLogin }) => {
 
     {/* Data Consent Modal - Rendered when on consent step */}
     <DataConsent
-      isOpen={currentStep === 4}
+      isOpen={currentStep === 3}
       verificationKey={verificationKey}
       purpose="register"
       onAccept={handleConsentAccept}

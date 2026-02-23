@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { axiosRequest } from '../../../packages-core-adapter';
 
 /**
@@ -33,6 +33,7 @@ const DataConsent = ({
   const [showExitWarning, setShowExitWarning] = useState(false);
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
   const [showEmailExistsDialog, setShowEmailExistsDialog] = useState(false);
+  const scrollContainerRef = useRef(null);
 
   // Load consent data when modal opens
   useEffect(() => {
@@ -47,8 +48,20 @@ const DataConsent = ({
       setAgreed(false);
       setError('');
       setShowExitWarning(false);
+      setHasScrolledToBottom(false);
     }
   }, [isOpen]);
+
+  // Auto-enable checkbox if content doesn't need scrolling
+  useEffect(() => {
+    if (!loading && consentData && scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      // If content fits without scrolling, no need to require scroll-to-bottom
+      if (el.scrollHeight <= el.clientHeight + 10) {
+        setHasScrolledToBottom(true);
+      }
+    }
+  }, [loading, consentData]);
 
   const loadConsentData = async () => {
     setLoading(true);
@@ -61,6 +74,10 @@ const DataConsent = ({
 
       if (response.data.ok) {
         setConsentData(response.data);
+      } else {
+        // API returned ok: false — still set data so footer renders
+        setConsentData(response.data);
+        setError(response.data.message || 'Unexpected response from server.');
       }
     } catch (err) {
       const errorCode = err.response?.data?.error;
@@ -229,7 +246,7 @@ const DataConsent = ({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 py-5" onScroll={handleScroll}>
+          <div className="flex-1 overflow-y-auto px-6 py-5" ref={scrollContainerRef} onScroll={handleScroll}>
             {loading ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <svg className="animate-spin h-10 w-10 text-primary-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -403,7 +420,7 @@ const DataConsent = ({
 
           {/* Footer */}
           {!loading && consentData && (
-            <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-700 
+            <div className="flex-shrink-0 px-6 py-4 border-t border-neutral-200 dark:border-neutral-700 
                           bg-neutral-50 dark:bg-neutral-800/50">
               <form onSubmit={handleSubmit}>
                 {/* Checkbox */}
@@ -546,6 +563,12 @@ const DataConsent = ({
                          text-white font-semibold rounded-lg
                          transition-colors text-sm"
               >
+                Continue Review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Email Already Exists Dialog */}
       {showEmailExistsDialog && (
@@ -599,12 +622,6 @@ const DataConsent = ({
               </svg>
               Go to Login Page
             </button>
-          </div>
-        </div>
-      )}
-                Continue Review
-              </button>
-            </div>
           </div>
         </div>
       )}
