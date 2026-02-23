@@ -9,278 +9,78 @@ const PatientRecord = () => {
   const { patientId } = useParams();
   const [activeTab, setActiveTab] = useState('personal');
 
-  // Mock patient data - Comprehensive test student
+  // TODO: Load from API — join UsersPersonal + student_profile/employee_profile + UserCredentials by patientId
+  // ─── API field name mapping notes ─────────────────────────────────────────────
+  // personal.lastName  ← API: surname        (initial form key)
+  // personal.birthDate ← API: birthday       (initial form key)
+  // personal.sex       ← API: gender         (initial form key)
+  // emergencyContacts.first.contact  ← API: emergencyContacts[0].contactNumber
+  // medical.lifestyle.tattoo         ← API: tattooLocation
+  // medical.lifestyle.piercing       ← API: piercingLocation
+  // dental.lastConsultation          ← API: lastDentalConsultation
+  // dental.lastCleaning              ← API: lastDentalCleaning
+  // dental.hasAppliance              ← API: hasIntraOralAppliance
+  // obgyne fields only populated for female patients (gender === 'Female')
+  // ─────────────────────────────────────────────────────────────────────────────
   const patient = {
-    id: patientId || '2020202',
-    name: 'Juan Santos Dela Cruz',
-    email: 'juan.delacruz@tip.edu.ph',
-    program: 'BS Computer Science (CCS)',
-    year: 'Junior',
-    status: 'Active',
+    id: patientId || '',
+    name: '',
+    email: '',
+    program: '',
+    year: '',           // from update record: schoolYear
+    department: '',     // from update record: department
+    semester: '',       // from update record: semester
+    status: '',
     type: 'Student',
     avatar: null,
-    
-    // Personal Info - Complete profile
     personal: {
-      firstName: 'Juan',
-      middleName: 'Santos',
-      lastName: 'Dela Cruz',
-      suffix: '',
-      birthDate: '2003-05-15',
-      age: 22,
-      sex: 'Male',
-      civilStatus: 'Single',
-      nationality: 'Filipino',
-      religion: 'Roman Catholic',
-      address: '123 Mabini St., Brgy. San Antonio, Quezon City, Metro Manila 1105',
-      contactNumber: '09123456789',
-      studentNumber: '2020202',
-      studentCategory: 'Old Student',
-      lastSchoolAttended: 'Manila Science High School',
-      drugTestDone: 'Yes',
+      firstName: '', middleName: '', lastName: '', suffix: '',
+      birthDate: '', age: '', sex: '', civilStatus: '',
+      nationality: '', religion: '', address: '', contactNumber: '',
+      studentNumber: patientId || '', studentCategory: '',
+      lastSchoolAttended: '', drugTestDone: '',
     },
-    
-    // Emergency Contacts
     emergencyContacts: {
-      first: { 
-        name: 'Maria Santos Dela Cruz', 
-        relationship: 'Mother', 
-        contact: '09187654321',
-        address: '123 Mabini St., Brgy. San Antonio, Quezon City'
-      },
-      second: { 
-        name: 'Jose Dela Cruz', 
-        relationship: 'Father', 
-        contact: '09198765432',
-        address: '123 Mabini St., Brgy. San Antonio, Quezon City'
-      },
+      first:  { name: '', relationship: '', contact: '', address: '' },
+      second: { name: '', relationship: '', contact: '', address: '' },
     },
-    
-    // Medical History - Self conditions
-    medicalHistory: {
-      self: ['COVID-19 (Recovered)', 'Bronchial Asthma (Mild)'],
-      selfDetails: 'Had COVID-19 in 2024, fully recovered. Asthma diagnosed at age 12.',
-      family: ['Hypertension', 'Diabetes'],
-      familyDetails: 'Father has hypertension. Mother has Type 2 diabetes.',
-    },
-    
-    // Medical Record - Complete medical background
+    medicalHistory: { self: [], selfDetails: '', family: [], familyDetails: '' },
     medical: {
-      // Vital Signs
-      vitalSigns: { 
-        height: 175, 
-        weight: 70, 
-        bmi: 22.9,
-        bp: '120/80', 
-        heartRate: 72, 
-        temperature: 36.5,
-        lastChecked: '2026-01-15'
-      },
-      
-      // Blood Type
-      bloodType: 'O+',
-      
-      // Allergies
-      allergies: {
-        drug: 'Penicillin',
-        food: 'Shellfish, Peanuts',
-        other: 'Dust mites'
-      },
-      
-      // Medical Conditions
-      conditions: ['Bronchial Asthma (Mild)'],
-      
-      // Current Medications
-      medications: ['Salbutamol Inhaler (as needed)'],
-      
-      // Immunizations
-      immunizations: [
-        'COVID-19 (Pfizer - 2 doses + 1 booster)',
-        'Hepatitis B',
-        'MMR',
-        'Tetanus',
-        'Influenza (2025)'
-      ],
-      
-      // Hospitalizations
-      hospitalizations: [
-        { year: '2024', reason: 'COVID-19', hospital: 'TIP Medical Center', duration: '5 days' }
-      ],
-      
-      // Operations
-      operations: 'None',
-      
-      // Lifestyle
-      lifestyle: {
-        smoker: 'No',
-        alcoholDrinker: 'Occasionally (Social events only)',
-        tattoo: 'None',
-        piercing: 'None',
-      },
-      
-      // Vision
-      vision: {
-        hasEyeglasses: true,
-        hasContactLenses: false,
-        gradeOD: '-1.50',
-        gradeOS: '-1.75',
-        lastExam: '2025-06-10'
-      },
+      vitalSigns: { height: '', weight: '', bmi: '', bp: '', heartRate: '', temperature: '', lastChecked: '' },
+      bloodType: '',
+      allergies: { drug: '', food: '', other: '' },  // drug←drugAllergy, food←foodAllergy, other←otherAllergy
+      conditions: [],
+      medications: [],
+      immunizations: [],
+      hospitalizations: [],
+      operations: '',
+      lifestyle: { smoker: '', alcoholDrinker: '', tattoo: '', piercing: '' },
+      vision: { hasEyeglasses: false, hasContactLenses: false, gradeOD: '', gradeOS: '', lastExam: '' },
     },
-    
-    // Dental Record - Complete dental history
     dental: {
-      firstTimeDentist: '2010',
-      lastConsultation: '2025-11-20',
-      lastCleaning: '2025-08-15',
-      
-      // Oral Findings
-      oralFindings: [
-        'Calculus Present (Minimal)',
-        'Gingivitis (Mild)',
-        'Dental Caries (Tooth #14)',
-        'Missing Tooth (#18 - Wisdom tooth extracted)'
-      ],
-      
-      // Treatments Received
-      treatments: [
-        { date: '2025-11-20', treatment: 'Routine Checkup', dentist: 'Dr. Garcia' },
-        { date: '2025-08-15', treatment: 'Dental Cleaning & Fluoride Application', dentist: 'Dr. Garcia' },
-        { date: '2025-03-10', treatment: 'Tooth Extraction (#18)', dentist: 'Dr. Santos' },
-        { date: '2024-11-05', treatment: 'Dental Filling (#14)', dentist: 'Dr. Garcia' },
-      ],
-      
-      // Appliances
-      hasAppliance: 'No',
+      firstTimeDentist: '',
+      lastConsultation: '',
+      lastCleaning: '',
+      toothExtraction: '',  // from initial form: dentalHistory.toothExtraction
+      dentalFilling: '',    // from initial form: dentalHistory.dentalFilling
+      oralFindings: [],
+      treatments: [],
+      hasAppliance: '',
       applianceType: null,
-      
-      // Tooth Chart Status
-      toothChart: {
-        missing: ['#18'],
-        filled: ['#14'],
-        decayed: [],
-        notes: 'Good oral hygiene. Regular dental visits recommended.'
-      }
+      toothChart: { missing: [], filled: [], decayed: [], notes: '' },
     },
-    
-    // Consultation History
+    obgyne: {
+      // Only populated for female patients
+      lastMenstrualPeriod: '',     // from initial form: obgyne.lastMenstrualPeriod
+      menstruationDuration: '',    // from initial form: obgyne.menstruationDuration
+      dysmenorrhea: '',            // from initial form: obgyne.dysmenorrhea
+    },
     history: {
-      consultations: [
-        { 
-          id: 'CONS-2026-015',
-          date: '2026-01-15', 
-          time: '10:30 AM',
-          type: 'Medical', 
-          doctor: 'Dr. Elena Smith', 
-          diagnosis: 'Upper Respiratory Infection', 
-          treatment: 'Prescribed Amoxicillin 500mg (3x daily for 7 days)',
-          notes: 'Patient presented with cough and fever. Advised rest and hydration.',
-          status: 'Completed',
-          vitalSigns: { bp: '120/80', temp: 37.8, heartRate: 78 }
-        },
-        { 
-          id: 'CONS-2025-142',
-          date: '2025-11-20', 
-          time: '2:00 PM',
-          type: 'Dental', 
-          doctor: 'Dr. Maria Garcia', 
-          diagnosis: 'Routine Dental Checkup', 
-          treatment: 'Oral prophylaxis recommended',
-          notes: 'Good oral hygiene maintained. No cavities found.',
-          status: 'Completed'
-        },
-        { 
-          id: 'CONS-2025-098',
-          date: '2025-08-15', 
-          time: '9:00 AM',
-          type: 'Dental', 
-          doctor: 'Dr. Maria Garcia', 
-          diagnosis: 'Dental Cleaning', 
-          treatment: 'Scaling, polishing, and fluoride application',
-          notes: 'Mild calculus buildup removed. Patient advised to brush twice daily.',
-          status: 'Completed'
-        },
-        { 
-          id: 'CONS-2025-045',
-          date: '2025-03-10', 
-          time: '11:00 AM',
-          type: 'Dental', 
-          doctor: 'Dr. Carlos Santos', 
-          diagnosis: 'Impacted Wisdom Tooth', 
-          treatment: 'Tooth extraction (#18)',
-          notes: 'Surgical extraction performed. Post-op care instructions given.',
-          status: 'Completed'
-        },
-      ],
-      
-      // Upcoming Appointments
-      appointments: [
-        { 
-          id: 'APPT-2026-045',
-          date: '2026-02-10', 
-          time: '10:00 AM',
-          type: 'Medical Clearance', 
-          doctor: 'Dr. Elena Smith',
-          purpose: 'Required for OJT clearance',
-          status: 'Scheduled',
-          notes: 'Bring previous medical records'
-        },
-        { 
-          id: 'APPT-2026-078',
-          date: '2026-03-15', 
-          time: '2:00 PM',
-          type: 'Dental Checkup', 
-          doctor: 'Dr. Maria Garcia',
-          purpose: 'Routine 6-month checkup',
-          status: 'Scheduled',
-          notes: ''
-        },
-      ],
-      
-      // Past Appointments
-      pastAppointments: [
-        { date: '2026-01-15', type: 'Medical Consultation', status: 'Completed' },
-        { date: '2025-11-20', type: 'Dental Checkup', status: 'Completed' },
-        { date: '2025-08-15', type: 'Dental Cleaning', status: 'Completed' },
-      ],
-      
-      // Medicine Requests
-      medicineRequests: [
-        {
-          id: 'MED-2026-089',
-          date: '2026-01-20',
-          medicine: 'Paracetamol 500mg',
-          quantity: '10 tablets',
-          reason: 'Headache relief',
-          prescribedBy: 'Dr. Elena Smith',
-          status: 'Dispensed',
-          dispensedDate: '2026-01-20'
-        },
-        {
-          id: 'MED-2025-234',
-          date: '2025-12-05',
-          medicine: 'Salbutamol Inhaler',
-          quantity: '1 piece',
-          reason: 'Asthma maintenance',
-          prescribedBy: 'Dr. Elena Smith',
-          status: 'Dispensed',
-          dispensedDate: '2025-12-05'
-        },
-      ],
-      
-      // Record Update Requests
-      updateRequests: [
-        {
-          id: 'UPD-2026-012',
-          date: '2026-01-30',
-          type: 'Medical Record Update',
-          description: 'Updated allergy information',
-          requestedBy: 'Juan Dela Cruz',
-          status: 'Approved',
-          approvedBy: 'Dr. Elena Smith',
-          approvedDate: '2026-02-01'
-        },
-      ],
+      consultations: [],
+      appointments: [],
+      pastAppointments: [],
+      medicineRequests: [],
+      updateRequests: [],
     },
   };
 
@@ -288,6 +88,8 @@ const PatientRecord = () => {
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Record' },
     { id: 'dental', label: 'Dental Record' },
+    // OB-GYN tab only shown for female patients (conditionally rendered below)
+    ...(patient.personal.sex === 'Female' || patient.personal.sex === '' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
     { id: 'appointments', label: 'Appointments' },
     { id: 'medicines', label: 'Medicine Requests' },
@@ -570,15 +372,30 @@ const PatientRecord = () => {
               <h4 className="text-sm font-semibold text-secondary-800 dark:text-white mb-3">Dental Visit History</h4>
               <div className="grid md:grid-cols-3 gap-3">
                 {Object.entries({
-                  'First Time Dentist': patient.dental.firstTimeDentist,
-                  'Last Consultation': patient.dental.lastConsultation,
-                  'Last Cleaning': patient.dental.lastCleaning,
+                  'First Time Dentist': patient.dental.firstTimeDentist || 'N/A',
+                  'Last Consultation': patient.dental.lastConsultation || 'N/A',
+                  'Last Cleaning': patient.dental.lastCleaning || 'N/A',
                 }).map(([label, value]) => (
                   <div key={label}>
                     <p className="text-xs text-secondary-500 dark:text-neutral-400">{label}</p>
                     <p className="text-sm font-medium text-secondary-800 dark:text-white">{value}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Tooth Extraction & Dental Filling History */}
+            <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-secondary-800 dark:text-white mb-3">Dental Procedure History</h4>
+              <div className="grid md:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400">Tooth Extraction (past 2 years)</p>
+                  <p className="text-sm font-medium text-secondary-800 dark:text-white capitalize">{patient.dental.toothExtraction || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400">Dental Filling (past 2 years)</p>
+                  <p className="text-sm font-medium text-secondary-800 dark:text-white capitalize">{patient.dental.dentalFilling || 'N/A'}</p>
+                </div>
               </div>
             </div>
 
@@ -789,6 +606,34 @@ const PatientRecord = () => {
           </div>
         );
 
+      case 'obgyne':
+        return (
+          <div className="space-y-4">
+            <div className="bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-pink-800 dark:text-pink-300 mb-4 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                OB-GYN History <span className="text-xs font-normal text-pink-600 dark:text-pink-400">(Female Patients Only)</span>
+              </h4>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5">Last Menstrual Period</p>
+                  <p className="text-sm font-semibold text-secondary-900 dark:text-white">{patient.obgyne.lastMenstrualPeriod || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5">Menstruation Duration</p>
+                  <p className="text-sm font-semibold text-secondary-900 dark:text-white">{patient.obgyne.menstruationDuration || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5">Dysmenorrhea</p>
+                  <p className="text-sm font-semibold text-secondary-900 dark:text-white capitalize">{patient.obgyne.dysmenorrhea || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
       case 'documents':
         return (
           <div className="p-8 text-center">
@@ -796,7 +641,7 @@ const PatientRecord = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <p className="text-sm text-secondary-500 dark:text-neutral-400">Documents feature coming soon</p>
-            <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">Medical certificates, lab results, and uploaded documents will appear here</p>
+            <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">Medical certificates, lab results, dental photos (upper/lower teeth), and uploaded documents will appear here</p>
           </div>
         );
 

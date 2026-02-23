@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import AppointmentDetailsModal from '../components/modals/AppointmentDetailsModal';
 import RecordUpdateDetailsModal from '../components/modals/RecordUpdateDetailsModal';
 import MedicineRequestDetailsModal from '../components/modals/MedicineRequestDetailsModal';
@@ -15,8 +14,10 @@ const PendingRequests = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [modalType, setModalType] = useState(null);
 
-  // Mock pending requests data
-  const allRequests = [
+  // TODO: Load from API — patientSlot (Pending), patientUpdateLog, MedicineTransactionLog
+  const allRequests = [ // eslint-disable-line no-unused-vars
+  // Remove this comment block when API is wired
+  /*
     { 
       id: 1, 
       patientId: '2021-00001', 
@@ -177,7 +178,7 @@ const PendingRequests = () => {
       ],
       notes: 'Please provide proof of dental treatment records.'
     },
-  ];
+  */ ].filter(Boolean);
 
   // Handler functions for modals
   const handleViewRequest = (request) => {
@@ -361,19 +362,20 @@ const PendingRequests = () => {
                       className="w-4 h-4 rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500"
                     />
                   </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Patient</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Name</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Student ID</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden sm:table-cell">Type</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden md:table-cell">Category</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden lg:table-cell">Submitted</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden lg:table-cell">Expires</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+                {/* Row height: adjust py-2.5 on each <td> inside the map below to increase/decrease row height */}
                 {filteredRequests.map((request) => (
-                  <tr key={request.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50">
-                    <td className="px-3 py-2">
+                  <tr key={request.id} onClick={() => handleViewRequest(request)} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50 cursor-pointer">
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedRequests.includes(request.id)}
@@ -381,55 +383,27 @@ const PendingRequests = () => {
                         className="w-4 h-4 rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-xs font-medium text-secondary-600 dark:text-neutral-300 flex-shrink-0">
+                        <div className="w-6 h-6 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-[10px] font-medium text-secondary-600 dark:text-neutral-300 flex-shrink-0">
                           {request.name.split(' ').map(n => n[0]).join('')}
                         </div>
-                        <div className="min-w-0">
-                          <Link to={`/staff/patient/${request.patientId}`} className="font-medium text-secondary-800 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 truncate block">
-                            {request.name}
-                          </Link>
-                          <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">{request.patientId}</p>
-                        </div>
+                        <span className="text-xs font-medium text-secondary-800 dark:text-white truncate">{request.name}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-secondary-600 dark:text-neutral-300 hidden sm:table-cell">{request.type}</td>
-                    <td className="px-3 py-2 hidden md:table-cell">
+                    <td className="px-3 py-2.5 text-xs text-secondary-500 dark:text-neutral-400">{request.patientId}</td>
+                    <td className="px-3 py-2.5 text-xs text-secondary-600 dark:text-neutral-300 hidden sm:table-cell">{request.type}</td>
+                    <td className="px-3 py-2.5 hidden md:table-cell">
                       <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${getCategoryColor(request.category)}`}>
                         {request.category}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-secondary-600 dark:text-neutral-300 hidden lg:table-cell">{request.submitted}</td>
-                    <td className="px-3 py-2 text-secondary-600 dark:text-neutral-300 hidden lg:table-cell">{request.expires}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 text-xs text-secondary-600 dark:text-neutral-300 hidden lg:table-cell">{request.submitted}</td>
+                    <td className="px-3 py-2.5 text-xs text-secondary-600 dark:text-neutral-300 hidden lg:table-cell">{request.expires}</td>
+                    <td className="px-3 py-2.5">
                       <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${getStatusColor(request.status)}`}>
                         {request.status}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button 
-                          onClick={() => handleViewRequest(request)}
-                          className="p-1 text-secondary-400 hover:text-accent-600 dark:text-neutral-500 dark:hover:text-accent-400" 
-                          title="View Details"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                        <button className="p-1 text-secondary-400 hover:text-success-600 dark:text-neutral-500 dark:hover:text-success-400" title="Approve">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </button>
-                        <button className="p-1 text-secondary-400 hover:text-error-600 dark:text-neutral-500 dark:hover:text-error-400" title="Reject">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 ))}
