@@ -122,7 +122,7 @@ const StaffAppointment = () => {
   ];
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {/* Feedback banners */}
       {error && (
         <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-xs rounded-lg">
@@ -138,7 +138,7 @@ const StaffAppointment = () => {
       {/* Page Header + Section Switcher */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-tight">Appointments</h1>
+          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Appointments</h1>
           <p className="text-[11px] text-secondary-500 dark:text-neutral-400">Manage appointment queue and slot availability</p>
         </div>
         <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
@@ -148,7 +148,7 @@ const StaffAppointment = () => {
             onClick={() => setActiveSection(section.key)}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
               activeSection === section.key
-                ? 'bg-white dark:bg-neutral-800 text-secondary-800 dark:text-white shadow-sm'
+                ? 'bg-primary-500 text-white shadow-sm'
                 : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
             }`}
           >
