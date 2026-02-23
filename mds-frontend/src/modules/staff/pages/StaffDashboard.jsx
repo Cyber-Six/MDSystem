@@ -6,25 +6,28 @@ import { Link } from 'react-router-dom';
  * Overview of key metrics and quick actions
  */
 const StaffDashboard = () => {
-  // Mock data for dashboard
+  // TODO: Load all stats from API
   const stats = [
-    { label: 'Pending Requests', value: 12, change: '+3', color: 'warning', icon: 'pending' },
-    { label: 'Today\'s Appointments', value: 8, change: '2 remaining', color: 'accent', icon: 'calendar' },
-    { label: 'Active Consultations', value: 2, change: 'Online', color: 'success', icon: 'chat' },
-    { label: 'Low Stock Items', value: 5, change: 'Alert', color: 'error', icon: 'alert' },
+    { label: 'Pending Requests', value: 0, change: '—', color: 'warning', icon: 'pending' },
+    { label: "Today's Appointments", value: 0, change: '0 remaining', color: 'accent', icon: 'calendar', link: '/staff/appointments' },
+    { label: 'Active Consultations', value: 0, change: '—', color: 'success', icon: 'chat' },
+    { label: 'Low Stock Items', value: 0, change: '—', color: 'error', icon: 'alert' },
   ];
 
-  const recentPatients = [
-    { id: '2021-00001', name: 'Juan Dela Cruz', program: 'BSCS', year: 'Junior', lastVisit: '2026-02-04' },
-    { id: '2021-00002', name: 'Maria Santos', program: 'BSIT', year: 'Senior', lastVisit: '2026-02-03' },
-    { id: '2021-00003', name: 'Pedro Reyes', program: 'BSCE', year: 'Sophomore', lastVisit: '2026-02-02' },
-  ];
+  // TODO: Load from patientSlot (today's date) + ScheduleDateEntity (tomorrow)
+  const appointmentStats = {
+    todayTotal: 0,
+    todayRemaining: 0,
+    ojtMissingDocs: 0,
+    tomorrowMedical: { open: 0, total: 0 },
+    tomorrowDental: { open: 0, total: 0 },
+  };
 
-  const pendingRequests = [
-    { id: 1, name: 'Ana Garcia', type: 'Record Update', submitted: '2026-02-04', status: 'Pending' },
-    { id: 2, name: 'Carlos Tan', type: 'Appointment', submitted: '2026-02-04', status: 'Pending' },
-    { id: 3, name: 'Lisa Wong', type: 'Medicine Request', submitted: '2026-02-03', status: 'Pending' },
-  ];
+  // TODO: Load recent patients from ClinicVisitation joined to UsersPersonal
+  const recentPatients = [];
+
+  // TODO: Load from patientUpdateLog + patientSlot (Pending status)
+  const pendingRequests = [];
 
   const icons = {
     pending: (
@@ -102,6 +105,64 @@ const StaffDashboard = () => {
             </svg>
             New Consultation
           </button>
+        </div>
+      </div>
+
+      {/* Appointment & Availability Widgets */}
+      <div className="grid sm:grid-cols-2 gap-3">
+        {/* Today's Appointments Widget */}
+        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Today's Appointments</h3>
+            <Link to="/staff/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">View Queue</Link>
+          </div>
+          <div className="flex items-baseline gap-1 mb-1">
+            <span className="text-2xl font-bold text-secondary-800 dark:text-white">{appointmentStats.todayTotal}</span>
+            <span className="text-xs text-secondary-500 dark:text-neutral-400">total</span>
+            <span className="text-xs text-accent-600 dark:text-accent-400 ml-2">{appointmentStats.todayRemaining} remaining</span>
+          </div>
+          {appointmentStats.ojtMissingDocs > 0 && (
+            <div className="flex items-center gap-1.5 mt-2 p-1.5 bg-warning-50 dark:bg-warning-900/20 rounded text-xs text-warning-700 dark:text-warning-400">
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              {appointmentStats.ojtMissingDocs} OJT appointment{appointmentStats.ojtMissingDocs > 1 ? 's' : ''} missing documents
+            </div>
+          )}
+        </div>
+
+        {/* Tomorrow's Availability Widget */}
+        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Tomorrow's Availability</h3>
+            <Link to="/staff/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline" onClick={() => {}}>Manage Slots</Link>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-secondary-500 dark:text-neutral-400">Medical</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-accent-500 rounded-full" 
+                    style={{ width: `${((appointmentStats.tomorrowMedical.total - appointmentStats.tomorrowMedical.open) / appointmentStats.tomorrowMedical.total) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{appointmentStats.tomorrowMedical.open}/{appointmentStats.tomorrowMedical.total}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-secondary-500 dark:text-neutral-400">Dental</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-purple-500 rounded-full" 
+                    style={{ width: `${((appointmentStats.tomorrowDental.total - appointmentStats.tomorrowDental.open) / appointmentStats.tomorrowDental.total) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{appointmentStats.tomorrowDental.open}/{appointmentStats.tomorrowDental.total}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

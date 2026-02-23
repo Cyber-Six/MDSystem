@@ -5,6 +5,7 @@ import StaffDashboard from './pages/StaffDashboard';
 import SearchPatient from './pages/SearchPatient';
 import PatientRecord from './pages/PatientRecord';
 import PendingRequests from './pages/PendingRequests';
+import StaffAppointment from '../appointment/staff/staff-appointment';
 
 /**
  * Staff Module Entry Point
@@ -18,6 +19,7 @@ const StaffModule = () => {
         <Route path="/search" element={<SearchPatient />} />
         <Route path="/patient/:patientId" element={<PatientRecord />} />
         <Route path="/pending" element={<PendingRequests />} />
+        <Route path="/appointments" element={<StaffAppointment />} />
         <Route path="*" element={<Navigate to="/staff" replace />} />
       </Routes>
     </StaffLayout>

@@ -12,16 +12,10 @@ const SearchPatient = () => {
   const [results, setResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // Mock search results - Test patients with complete data
-  const mockPatients = [
-    { id: '2021-00001', name: 'Juan Santos Dela Cruz', email: 'juan.delacruz@tip.edu.ph', program: 'BS Computer Science (CCS)', year: 'Junior', status: 'Active', type: 'Student', hasCompleteRecord: true },
-    { id: '2021-00002', name: 'Maria Santos', email: 'maria.santos@tip.edu.ph', program: 'BS Information Technology (CCS)', year: 'Senior', status: 'Active', type: 'Student', hasCompleteRecord: false },
-    { id: '2021-00003', name: 'Pedro Reyes', email: 'pedro.reyes@tip.edu.ph', program: 'BS Civil Engineering (CEA)', year: 'Sophomore', status: 'Active', type: 'Student', hasCompleteRecord: false },
-    { id: '2021-00004', name: 'Ana Garcia', email: 'ana.garcia@tip.edu.ph', program: 'BS Accountancy (CBE)', year: 'Freshman', status: 'Active', type: 'Student', hasCompleteRecord: false },
-    { id: '2022-00015', name: 'Carlos Tan', email: 'carlos.tan@tip.edu.ph', program: 'BS Mechanical Engineering (CEA)', year: 'Sophomore', status: 'Active', type: 'Student', hasCompleteRecord: false },
-    { id: '2023-00042', name: 'Lisa Wong', email: 'lisa.wong@tip.edu.ph', program: 'BS Architecture (CEA)', year: 'Freshman', status: 'Active', type: 'Student', hasCompleteRecord: false },
-    { id: 'EMP-0001', name: 'Dr. Elena Cruz', email: 'elena.cruz@tip.edu.ph', program: 'College of Engineering', year: '-', status: 'Active', type: 'Employee', hasCompleteRecord: false },
-  ];
+  // TODO: Replace filter with real API call to search patients
+  // Patient info maps from: UsersPersonal (name, contact) + student_profile (program, year)
+  //   + employee_profile (position) + UserCredentials (email, identifier)
+  const mockPatients = [];
 
   const handleSearch = (e) => {
     e.preventDefault();
