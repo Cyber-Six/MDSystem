@@ -1,7 +1,10 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { existsSync, readFileSync } from 'fs'
-import { resolve } from 'path'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -44,6 +47,14 @@ export default defineConfig(({ mode }) => {
   console.log(`🔗 Backend proxy target: ${BACKEND_URL} (DEV_PORTAL=${DEV_PORTAL})`);
 
   return {
+    resolve: {
+      alias: {
+        '@core': resolve(__dirname, 'src/core'),
+        '@patient': resolve(__dirname, 'src/patient'),
+        '@staff': resolve(__dirname, 'src/staff'),
+        '@auth': resolve(__dirname, 'src/auth'),
+      },
+    },
     plugins: [
       react({
         babel: {
@@ -106,6 +117,11 @@ export default defineConfig(({ mode }) => {
         secure: true,
       },
       '/appointment': {
+        target: BACKEND_URL,
+        changeOrigin: true,
+        secure: true,
+      },
+      '/media': {
         target: BACKEND_URL,
         changeOrigin: true,
         secure: true,

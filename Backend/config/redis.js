@@ -551,6 +551,50 @@ async function clearRefreshTokenFailures(ip) {
   return clearFailures("rt", ip);
 }
 
+// Media staging limiter (per user, not IP-based)
+
+async function incrementMediaStagingCount(userId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `media:staging:${userId}`;
+  const count = await client.incr(key);
+
+  if (count === 1) {
+    await client.expire(key, Number(process.env.MEDIA_MAX_FILES_STAGING_EXP));
+  }
+
+  const maxFiles = Number(process.env.MEDIA_MAX_FILES_STAGING);
+  if (count > maxFiles) {
+    logger.warn("Media staging limit exceeded", { userId, count, maxFiles });
+    return false; // over limit
+  }
+
+  return true; // allowed
+}
+
+async function decrementMediaStagingCount(userId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `media:staging:${userId}`;
+
+  // Get current count
+  const current = await client.get(key);
+  const count = Number(current) || 0;
+
+  if (count <= 1) {
+    // If count is 1 or less, delete the key entirely
+    await client.del(key);
+    logger.info("Media staging counter reset", { userId });
+    return 0;
+  }
+
+  // Otherwise, decrement
+  const newCount = await client.decr(key);
+  logger.info("Media staging counter decremented", { userId, newCount });
+  return newCount;
+}
+
+
 // ------------------------------------------------
 
 module.exports = {
@@ -592,4 +636,7 @@ module.exports = {
   getRefreshTokenFailures,
   isRefreshTokenLocked,
   clearRefreshTokenFailures,
+  
+  incrementMediaStagingCount,
+  decrementMediaStagingCount,
 };
