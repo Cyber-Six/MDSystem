@@ -17,7 +17,7 @@ const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const mediaRoutes = require('./routes/media/media.js');
-const AnnouncementRoutes = require('./routes/announcement/announcement.js');
+const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
 
 const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
