@@ -180,9 +180,12 @@ export const createInitialMedicalRecord = async (formData) => {
     console.log('[EMR Service] Update ticket created with ID:', ticketId);
 
     // ======== Upload dental photos via REST API before building inputs ========
-    console.log('[EMR Service] [2/4] Uploading dental photos...');
-    const upperTeethFileId = await uploadMediaFile(formData.dentalHistory?.upperTeethPhoto?.file ?? null);
-    const lowerTeethFileId = await uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null);
+    // Both uploads are independent – run in parallel to halve the wait time
+    console.log('[EMR Service] [2/4] Uploading dental photos (parallel)...');
+    const [upperTeethFileId, lowerTeethFileId] = await Promise.all([
+      uploadMediaFile(formData.dentalHistory?.upperTeethPhoto?.file ?? null),
+      uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null)
+    ]);
     console.log('[EMR Service] Dental photos staged:', { upperTeethFileId, lowerTeethFileId });
 
     // ======== Prepare all input data ========
