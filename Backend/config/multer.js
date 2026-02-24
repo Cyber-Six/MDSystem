@@ -93,30 +93,21 @@ async function unstageFile(userId, uuid) {
 
 // Promote staged file into MEDIA_PATH/<type>
 async function promoteFile(userId, stagedFileName, type) {
-  const stagedPath = safeResolve(MEDIA_PATH.staging, stagedFileName);
+  const fullStagedName = await checkFileByUuid("staging", stagedFileName);
+  if (!fullStagedName) throw new Error("FILE_NOT_FOUND");                  // ← null check
+  const stagedPath = safeResolve(MEDIA_PATH.staging, fullStagedName);
 
-  try {
-    await fs.access(stagedPath);
-  } catch {
-    throw new Error("FILE_NOT_FOUND");
-  }
+  if (!MEDIA_PATH[type]) throw new Error("INVALID_TYPE");
 
-  // Validate type against MEDIA_PATH keys
-  if (!MEDIA_PATH[type]) {
-    throw new Error("INVALID_TYPE");
-  }
-
-  const typeDir = MEDIA_PATH[type]; // use predefined directory
-  await fs.mkdir(typeDir, { recursive: true }); // safe, but redundant if pre-created
+  const typeDir = MEDIA_PATH[type];
+  await fs.mkdir(typeDir, { recursive: true });
 
   const uniqueId = uuidv4();
-  const extension = path.extname(stagedFileName);
+  const extension = path.extname(fullStagedName);  // ← use fullStagedName, not stagedFileName
   const promotedName = `${uniqueId}${extension}`;
   const targetPath = safeResolve(typeDir, promotedName);
 
-  // Atomic move instead of link+unlink
   await fs.rename(stagedPath, targetPath);
-
   await decrementMediaStagingCount(userId);
 
   logger.info("File promoted", { userId, type, stagedPath, targetPath, promotedName });
