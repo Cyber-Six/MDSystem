@@ -17,6 +17,10 @@ Backend/node_modules/
 Backend/Patients/node_modules/
 Backend/.env
 
+/media
+media/promoted/
+media/staging/
+
 ### Frontend (mds-frontend) specific ###
 # Logs
 mds-frontend/logs/
