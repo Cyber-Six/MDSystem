@@ -64,17 +64,13 @@ const PatientApp = () => {
   }, [role]);
 
   // Handle successful completion of initial record
-  const handleInitialRecordComplete = async (result) => {
+  const handleInitialRecordComplete = (result) => {
     console.log('[PatientApp] Initial record completed:', result);
     setShowInitialRecordModal(false);
-    
-    // Refresh the status to show pending approval screen
-    try {
-      const { status } = await checkInitialRecordStatus();
-      setRecordStatus(status);
-    } catch (error) {
-      console.error('[PatientApp] Error refreshing status after completion:', error);
-    }
+
+    // Status is already known from the submission result – no extra HTTP call needed
+    const status = result?.data?.submitStatus ?? 'Pending';
+    setRecordStatus(status);
   };
 
   // Show loading state while checking
