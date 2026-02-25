@@ -32,17 +32,17 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
     localStorage.setItem('themeMode', themeMode);
   }, [themeMode]);
 
-  // Get page title
+  // Get page title - Dashboard shows "Staff Portal", other pages show their name
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === '/staff') return 'Dashboard';
+    if (path === '/' || path === '') return 'Staff Portal';
     if (path.includes('/search')) return 'Search Patient';
     if (path.includes('/patient')) return 'Patient Record';
     if (path.includes('/pending')) return 'Pending Requests';
     if (path.includes('/appointments')) return 'Appointments';
     if (path.includes('/analytics')) return 'Analytics';
-    if (path.includes('/staff/inventory')) return 'Inventory';
-    if (path.includes('/staff/settings')) return 'Role Management';
+    if (path.includes('/inventory')) return 'Inventory';
+    if (path.includes('/settings')) return 'Role Management';
     return 'Staff Portal';
   };
 

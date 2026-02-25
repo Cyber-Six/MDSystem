@@ -33,131 +33,113 @@ const DentalHistoryForm = ({ data, onChange }) => {
   };
 
   return (
-    <div className="form-section">
-      <h3 className="text-xl font-heading font-semibold text-secondary-900 mb-6 flex items-center">
-        <svg className="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        Dental History
-      </h3>
+    <div className="space-y-6">
+      {/* ── Dental Visit History Card ── */}
+      <div className="form-section">
+        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100 text-blue-600">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </span>
+          Dental Visit History
+        </h3>
 
-      <div className="space-y-6">
-        {/* First Time to See Dentist */}
-        <div>
-          <label className="form-label">
-            IS THIS YOUR FIRST TIME TO BE SEEN BY A DENTIST ? <span className="text-error-500">*</span>
-          </label>
-          <div className="flex gap-6 mt-2 ml-6">
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="firstTimeDentist"
-                value="yes"
-                checked={data.firstTimeDentist === 'yes'}
-                onChange={(e) => handleChange('firstTimeDentist', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">Yes</span>
-            </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="firstTimeDentist"
-                value="no"
-                checked={data.firstTimeDentist === 'no'}
-                onChange={(e) => handleChange('firstTimeDentist', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">No</span>
-            </label>
-          </div>
-        </div>
-
-        {/* Last Dental Consultation */}
-        {data.firstTimeDentist === 'no' && (
+        <div className="space-y-5">
+          {/* First Time to See Dentist */}
           <div>
-            <label className="form-label">IF "NO"... WHEN WAS YOUR LAST DENTAL CONSULTATION ?</label>
-            <p className="text-xs text-secondary-500 mb-2">Indicate Month and Year</p>
-            <Input
-              placeholder="Your answer"
-              value={data.lastDentalConsultation || ''}
-              onChange={(e) => handleChange('lastDentalConsultation', e.target.value)}
-            />
+            <label className="form-label">
+              IS THIS YOUR FIRST TIME TO BE SEEN BY A DENTIST ? <span className="text-error-500">*</span>
+            </label>
+            <div className="flex gap-6 mt-2 ml-6">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="firstTimeDentist"
+                  value="yes"
+                  checked={data.firstTimeDentist === 'yes'}
+                  onChange={(e) => handleChange('firstTimeDentist', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">Yes</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="firstTimeDentist"
+                  value="no"
+                  checked={data.firstTimeDentist === 'no'}
+                  onChange={(e) => handleChange('firstTimeDentist', e.target.value)}
+                  className="form-checkbox"
+                />
+                <span className="ml-2 text-secondary-700">No</span>
+              </label>
+            </div>
           </div>
-        )}
 
-        {/* Last Dental Cleaning */}
-        <div>
-          <label className="form-label">
-            WHEN WAS YOUR LAST DENTAL CLEANING? <span className="text-error-500">*</span>
-          </label>
-          <div className="space-y-2 mt-2 ml-6">
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="lastDentalCleaning"
-                value="0 to 6 months ago"
-                checked={data.lastDentalCleaning === '0 to 6 months ago'}
-                onChange={(e) => handleChange('lastDentalCleaning', e.target.value)}
-                className="form-checkbox"
+          {/* Last Dental Consultation */}
+          {data.firstTimeDentist === 'no' && (
+            <div>
+              <label className="form-label">IF "NO"... WHEN WAS YOUR LAST DENTAL CONSULTATION ?</label>
+              <p className="text-xs text-secondary-500 mb-2">Indicate Month and Year</p>
+              <Input
+                placeholder="Your answer"
+                value={data.lastDentalConsultation || ''}
+                onChange={(e) => handleChange('lastDentalConsultation', e.target.value)}
               />
-              <span className="ml-2 text-secondary-700">0 to 6 months ago</span>
+            </div>
+          )}
+
+          {/* Last Dental Cleaning */}
+          <div>
+            <label className="form-label">
+              WHEN WAS YOUR LAST DENTAL CLEANING? <span className="text-error-500">*</span>
             </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="lastDentalCleaning"
-                value="7 to 11 months ago"
-                checked={data.lastDentalCleaning === '7 to 11 months ago'}
-                onChange={(e) => handleChange('lastDentalCleaning', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">7 to 11 months ago</span>
-            </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="lastDentalCleaning"
-                value="1 year or more"
-                checked={data.lastDentalCleaning === '1 year or more'}
-                onChange={(e) => handleChange('lastDentalCleaning', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">1 year or more</span>
-            </label>
+            <div className="space-y-2 mt-2 ml-6">
+              <label className="flex items-center">
+                <input type="radio" name="lastDentalCleaning" value="0 to 6 months ago" checked={data.lastDentalCleaning === '0 to 6 months ago'} onChange={(e) => handleChange('lastDentalCleaning', e.target.value)} className="form-checkbox" />
+                <span className="ml-2 text-secondary-700">0 to 6 months ago</span>
+              </label>
+              <label className="flex items-center">
+                <input type="radio" name="lastDentalCleaning" value="7 to 11 months ago" checked={data.lastDentalCleaning === '7 to 11 months ago'} onChange={(e) => handleChange('lastDentalCleaning', e.target.value)} className="form-checkbox" />
+                <span className="ml-2 text-secondary-700">7 to 11 months ago</span>
+              </label>
+              <label className="flex items-center">
+                <input type="radio" name="lastDentalCleaning" value="1 year or more" checked={data.lastDentalCleaning === '1 year or more'} onChange={(e) => handleChange('lastDentalCleaning', e.target.value)} className="form-checkbox" />
+                <span className="ml-2 text-secondary-700">1 year or more</span>
+              </label>
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Intra-Oral Appliance */}
-        <div>
-          <label className="form-label">
-            ARE YOU WEARING ANY INTRA-ORAL APPLIANCE (e.g. braces, dentures, etc.) <span className="text-error-500">*</span>
-          </label>
-          <div className="flex gap-6 mt-2 ml-6">
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="hasIntraOralAppliance"
-                value="yes"
-                checked={data.hasIntraOralAppliance === 'yes'}
-                onChange={(e) => handleChange('hasIntraOralAppliance', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">Yes</span>
+      {/* ── Intra-Oral Appliances Card ── */}
+      <div className="form-section">
+        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-100 text-purple-600">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+            </svg>
+          </span>
+          Intra-Oral Appliances
+        </h3>
+
+        <div className="space-y-5">
+          <div>
+            <label className="form-label">
+              ARE YOU WEARING ANY INTRA-ORAL APPLIANCE (e.g. braces, dentures, etc.) <span className="text-error-500">*</span>
             </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="hasIntraOralAppliance"
-                value="no"
-                checked={data.hasIntraOralAppliance === 'no'}
-                onChange={(e) => handleChange('hasIntraOralAppliance', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">No</span>
-            </label>
+            <div className="flex gap-6 mt-2 ml-6">
+              <label className="flex items-center">
+                <input type="radio" name="hasIntraOralAppliance" value="yes" checked={data.hasIntraOralAppliance === 'yes'} onChange={(e) => handleChange('hasIntraOralAppliance', e.target.value)} className="form-checkbox" />
+                <span className="ml-2 text-secondary-700">Yes</span>
+              </label>
+              <label className="flex items-center">
+                <input type="radio" name="hasIntraOralAppliance" value="no" checked={data.hasIntraOralAppliance === 'no'} onChange={(e) => handleChange('hasIntraOralAppliance', e.target.value)} className="form-checkbox" />
+                <span className="ml-2 text-secondary-700">No</span>
+              </label>
+            </div>
           </div>
-        </div>
 
         {/* Appliance Types */}
         {data.hasIntraOralAppliance === 'yes' && (
@@ -291,6 +273,21 @@ const DentalHistoryForm = ({ data, onChange }) => {
         )}
 
         {/* Tooth Extraction */}
+        </div>
+      </div>
+
+      {/* ── Dental Procedures Card ── */}
+      <div className="form-section">
+        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-100 text-amber-600">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          </span>
+          Dental Procedures
+        </h3>
+
+        <div className="space-y-5">
         <div>
           <label className="form-label">
             HAVE YOU HAD TOOTH EXTRACTION FOR THE PAST 24 MONTHS (2 YEARS ) OR MORE ? <span className="text-error-500">*</span>
@@ -352,7 +349,22 @@ const DentalHistoryForm = ({ data, onChange }) => {
           </div>
         </div>
 
-        {/* Upload Upper Teeth Photo */}
+        </div>
+      </div>
+
+      {/* ── Dental Photos Card ── */}
+      <div className="form-section">
+        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 text-green-600">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </span>
+          Dental Photos
+        </h3>
+
+        <div className="space-y-5">
         <div className="border-2 border-dashed border-secondary-300 rounded-lg p-6">
           <label className="form-label">
             UPLOAD PHOTO OF UPPER TEETH <span className="text-error-500">*</span>
@@ -422,6 +434,7 @@ const DentalHistoryForm = ({ data, onChange }) => {
           {data.lowerTeethPhoto?.name && (
             <p className="text-sm text-secondary-700 mt-2">{data.lowerTeethPhoto.name}</p>
           )}
+        </div>
         </div>
       </div>
     </div>

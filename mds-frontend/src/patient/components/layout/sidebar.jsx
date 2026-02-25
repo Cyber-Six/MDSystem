@@ -80,7 +80,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                         : 'flex-col justify-center space-y-1.5 py-4'
                     } ${
                       isActive
-                        ? 'bg-white dark:bg-neutral-800 text-black dark:text-white border-l-4 border-primary-600 dark:border-yellow-400 font-semibold'
+                        ? 'bg-white dark:bg-neutral-800 text-primary-500 dark:text-yellow-400 border-l-4 border-primary-500 dark:border-yellow-400 font-semibold'
                         : 'text-white dark:text-white/70 hover:bg-white/10 dark:hover:bg-neutral-800 hover:text-white dark:hover:text-white'
                     }`}
                   >

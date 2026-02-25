@@ -116,21 +116,26 @@ const MedicineRequestPage = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-neutral-900 dark:text-white mb-2">
-          Medicine Request
-        </h1>
-        <p className="text-neutral-600 dark:text-neutral-400">
-          Request medicines from the clinic
-        </p>
+      {/* Header Banner */}
+      <div className="rounded-2xl p-6 mb-6" style={{ backgroundColor: '#F1C526' }}>
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-3xl font-heading font-bold text-white" style={{ margin: 0 }}>Medicine Request</h1>
+            <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>Request medicines from the clinic</p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Request Form */}
         <div className="lg:col-span-2">
-          <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-6">
+          <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-6">
+            <h2 className="text-xl font-semibold text-secondary-900 dark:text-white mb-6" style={{ margin: 0 }}>
               New Medicine Request
             </h2>
 
@@ -251,11 +256,11 @@ const MedicineRequestPage = () => {
 
         {/* Info Card */}
         <div>
-          <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-primary-900 dark:text-primary-100 mb-4">
+          <div className="bg-white dark:bg-primary-900/20 border border-stone-200 dark:border-primary-800 border-l-4 border-l-primary-500 rounded-xl p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-secondary-900 dark:text-primary-100 mb-4" style={{ margin: 0 }}>
               Request Guidelines
             </h3>
-            <ul className="space-y-3 text-sm text-primary-700 dark:text-primary-300">
+            <ul className="space-y-3 text-sm text-secondary-600 dark:text-primary-300">
               <li className="flex items-start space-x-2">
                 <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -292,10 +297,13 @@ const MedicineRequestPage = () => {
       </div>
 
       {/* Request History */}
-      <div className="mt-8 bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
-        <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-6">
-          Request History
-        </h2>
+      <div className="mt-8 bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 rounded-full bg-primary-500"></div>
+          <h2 className="text-xl font-semibold text-secondary-900 dark:text-white" style={{ margin: 0 }}>
+            Request History
+          </h2>
+        </div>
 
         {requests.length > 0 ? (
           <div className="overflow-x-auto">

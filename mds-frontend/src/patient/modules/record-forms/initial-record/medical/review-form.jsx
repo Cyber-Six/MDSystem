@@ -47,7 +47,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange }) 
       <div className="form-section">
         <SectionHeader title="Personal Information" onEditClick={() => onEdit(0)} />
         <dl className="space-y-1">
-          <DataRow label="Full Name" value={`${formData.personalInfo?.surname || ''} ${formData.personalInfo?.firstName || ''} ${formData.personalInfo?.middleName || ''}`.trim()} />
+          <DataRow label="Full Name" value={`${formData.personalInfo?.surname || ''}${formData.personalInfo?.surname ? ', ' : ''}${formData.personalInfo?.firstName || ''} ${formData.personalInfo?.middleName || ''}`.trim()} />
           <DataRow label="Birthday" value={formatDate(formData.personalInfo?.birthday)} />
           <DataRow label="Age" value={formData.personalInfo?.age} />
           <DataRow label="Gender" value={formData.personalInfo?.gender} />
@@ -219,7 +219,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange }) 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Full Name"
-            value={certification.fullName || `${formData.personalInfo?.firstName || ''} ${formData.personalInfo?.surname || ''}`.trim()}
+            value={certification.fullName || `${formData.personalInfo?.surname || ''}${formData.personalInfo?.surname ? ', ' : ''}${formData.personalInfo?.firstName || ''} ${formData.personalInfo?.middleName || ''}`.trim()}
             onChange={(e) => handleCertificationChange('fullName', e.target.value)}
             placeholder="Enter your full name"
           />

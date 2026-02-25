@@ -353,88 +353,126 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     }
   };
 
-  return (
-    <div className={`${isModal ? 'bg-gradient-to-br from-primary-50 via-white to-accent-50 p-6' : 'min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 py-8 px-4'}`}>
-      <div className={`${isModal ? 'w-full' : 'max-w-5xl mx-auto'}`}>
-        {/* Header - Only show in standalone mode, modal has its own header */}
-        {!isModal && (
-          <div className="text-center mb-8">
-            <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 mb-2">
-              Initial Medical Record
-            </h1>
-            <p className="text-secondary-600">
-              Please complete your medical information to access the system
-            </p>
-          </div>
-        )}
+  const renderNavButtons = () => (
+    <>
+      <Button
+        variant="outline"
+        onClick={handleBack}
+        disabled={currentStep === 0}
+      >
+        <svg className="w-4 h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+      </Button>
 
-        {/* Progress Stepper */}
-        <ProgressStepper 
-          currentStep={currentStep} 
-          steps={formData.personalInfo.gender !== 'Female' && currentStep > 2 
-            ? steps.filter((_, idx) => idx !== 4) 
-            : steps
-          } 
-        />
+      <div className="text-xs sm:text-sm text-secondary-600">
+        Step {currentStep + 1} of {formData.personalInfo.gender !== 'Female' ? steps.length - 1 : steps.length}
+      </div>
 
-        {/* Form Content */}
-        <div className={`bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-6 ${isModal ? 'shadow-none border border-gray-200' : ''}`}>
-          {renderStepContent()}
-        </div>
-
-        {/* Navigation Buttons */}
-        <div className={`flex justify-between items-center bg-white rounded-2xl shadow-xl p-6 ${isModal ? 'shadow-none border border-gray-200 sticky bottom-0' : ''}`}>
-          <Button
-            variant="outline"
-            onClick={handleBack}
-            disabled={currentStep === 0}
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </Button>
-
-          <div className="text-sm text-secondary-600">
-            Step {currentStep + 1} of {formData.personalInfo.gender !== 'Female' ? steps.length - 1 : steps.length}
-          </div>
-
-          {currentStep < steps.length - 1 ? (
-            <Button
-              variant="primary"
-              onClick={handleNext}
-            >
-              Next
-              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      {currentStep < steps.length - 1 ? (
+        <Button
+          variant="primary"
+          onClick={handleNext}
+        >
+          Next
+          <svg className="w-4 h-4 ml-1 sm:ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </Button>
+      ) : (
+        <Button
+          variant="primary"
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-secondary-900" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-            </Button>
+              Submitting...
+            </>
           ) : (
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  Submit
-                  <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </>
-              )}
-            </Button>
+            <>
+              Submit
+              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </>
+          )}
+        </Button>
+      )}
+    </>
+  );
+
+  return (
+    <div className={`${
+      isModal
+        ? 'flex-1 flex flex-col min-h-0'
+        : 'min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 py-8 px-4'
+    }`}>
+
+      {/* Scrollable content area */}
+      <div className={`${
+        isModal
+          ? 'flex-1 overflow-y-auto min-h-0 bg-stone-100 p-4 sm:p-5'
+          : 'max-w-5xl mx-auto'
+      }`}>
+        <div className={isModal ? '' : 'w-full'}>
+          {/* Header - Only show in standalone mode, modal has its own header */}
+          {!isModal && (
+            <div className="text-center mb-8">
+              <h1 className="text-3xl md:text-4xl font-heading font-bold text-secondary-900 mb-2">
+                Initial Medical Record
+              </h1>
+              <p className="text-secondary-600">
+                Please complete your medical information to access the system
+              </p>
+            </div>
+          )}
+
+          {/* Progress Stepper */}
+          <ProgressStepper
+            currentStep={
+              formData.personalInfo.gender !== 'Female' && currentStep >= 5
+                ? currentStep - 1
+                : currentStep
+            }
+            steps={formData.personalInfo.gender !== 'Female'
+              ? steps.filter((_, idx) => idx !== 4)
+              : steps
+            }
+          />
+
+          {/* Form Content */}
+          <div className={`bg-white rounded-2xl p-4 sm:p-6 md:p-8 ${
+            isModal
+              ? 'border border-gray-200 shadow-sm'
+              : 'shadow-xl mb-8'
+          }`}>
+            {renderStepContent()}
+          </div>
+
+          {/* Nav buttons - standalone mode only */}
+          {!isModal && (
+            <div className="flex justify-between items-center bg-white rounded-xl shadow-xl px-4 py-3 sm:px-6 sm:py-4 mt-4">
+              {renderNavButtons()}
+            </div>
           )}
         </div>
       </div>
+
+      {/* Nav bar - modal mode only, fixed outside scroll area */}
+      {isModal && (
+        <div
+          className="shrink-0 flex justify-between items-center bg-white border-t border-stone-200 px-4 py-3 sm:px-6 sm:py-4"
+          style={{ boxShadow: '0 -2px 10px rgba(0,0,0,0.06)' }}
+        >
+          {renderNavButtons()}
+        </div>
+      )}
 
       {/* Validation Warning Modal */}
       <ValidationWarningModal

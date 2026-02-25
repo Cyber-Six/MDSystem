@@ -13,9 +13,9 @@
 
 /* Individual Banner */
 .banner {
-  background: white;
+  background: #fdfcfa;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px rgba(28, 25, 23, 0.12);
   padding: 16px;
   pointer-events: all;
   animation: slideInRight 0.3s ease-out;
@@ -26,17 +26,17 @@
 /* Banner Types */
 .banner.success {
   border-left-color: #10b981;
-  background: #f0fdf4;
+  background: #f0faf5;
 }
 
 .banner.error {
   border-left-color: #ef4444;
-  background: #fef2f2;
+  background: #fef5f5;
 }
 
 .banner.info {
-  border-left-color: #6b7280;
-  background: #f9fafb;
+  border-left-color: #78716c;
+  background: #faf9f7;
 }
 
 /* Banner Content Layout */
@@ -70,7 +70,7 @@
 }
 
 .info .icon {
-  background: #6b7280;
+  background: #78716c;
   color: white;
 }
 
@@ -97,7 +97,7 @@
 }
 
 .info .errorCode {
-  color: #4b5563;
+  color: #57534e;
 }
 
 .message {
@@ -115,7 +115,7 @@
 }
 
 .info .message {
-  color: #374151;
+  color: #44403c;
 }
 
 /* Close Button */
@@ -126,7 +126,7 @@
   font-size: 24px;
   line-height: 1;
   cursor: pointer;
-  color: #9ca3af;
+  color: #a19b93;
   padding: 0;
   width: 24px;
   height: 24px;
@@ -138,8 +138,8 @@
 }
 
 .closeButton:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: #4b5563;
+  background: rgba(28, 25, 23, 0.06);
+  color: #57534e;
 }
 
 /* Animations */

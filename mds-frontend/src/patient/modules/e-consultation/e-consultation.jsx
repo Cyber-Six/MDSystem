@@ -424,14 +424,19 @@ const EConsultation = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-neutral-900 dark:text-white mb-2">
-          AI Medical Consultation
-        </h1>
-        <p className="text-neutral-600 dark:text-neutral-400">
-          Chat with our AI assistant about your health concerns
-        </p>
+      {/* Header Banner */}
+      <div className="rounded-2xl p-6 mb-6" style={{ backgroundColor: '#F1C526' }}>
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-3xl font-heading font-bold text-white" style={{ margin: 0 }}>AI Medical Consultation</h1>
+            <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>Chat with our AI assistant about your health concerns</p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

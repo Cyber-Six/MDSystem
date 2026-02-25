@@ -14,7 +14,7 @@ const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
   const [activeModal, setActiveModal] = useState(null);
   const menuRef = useRef(null);
 
-  // Mock user data - replace with actual user data from context/props
+  // Mock user data
   const userData = {
     name: 'Student Name',
     email: 'student@tip.edu.ph'
@@ -167,7 +167,7 @@ const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
           aria-expanded={isOpen}
         >
           <img
-            src="https://ui-avatars.com/api/?name=Student&background=F1C526&color=fff"
+            src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name)}&background=F1C526&color=fff`}
             alt="User Avatar"
             className="w-8 h-8 rounded-full"
           />

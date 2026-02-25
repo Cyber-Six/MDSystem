@@ -28,14 +28,48 @@ const PatientApp = lazy(() => _patientChunk ?? import('./patient/PatientApp.jsx'
 
 // Loading fallback for lazy-loaded portals
 const PortalLoader = ({ label }) => (
-  <div className="flex items-center justify-center h-screen bg-neutral-100 dark:bg-neutral-900">
-    <div className="flex items-center gap-2 text-secondary-500 dark:text-neutral-400">
-      <svg className="animate-spin w-6 h-6" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-      <span>Loading {label}...</span>
+  <div className="flex items-center justify-center h-screen bg-neutral-50 dark:bg-neutral-900">
+    <div className="flex flex-col items-center gap-8">
+
+      {/* Staggered bar loader */}
+      <div className="flex items-end gap-1">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            style={{
+              animation: 'loader-bar 1.2s ease-in-out infinite',
+              animationDelay: `${i * 0.1}s`,
+            }}
+            className="w-1 rounded-full bg-primary-500"
+          />
+        ))}
+      </div>
+
+      {/* Label + shimmer line */}
+      <div className="flex flex-col items-center gap-3">
+        <span className="text-xs font-semibold tracking-[0.2em] uppercase text-secondary-400 dark:text-neutral-500">
+          {label}
+        </span>
+        <div className="relative h-px w-40 bg-neutral-200 dark:bg-neutral-700 overflow-hidden rounded-full">
+          <div
+            className="absolute inset-y-0 w-20 rounded-full bg-gradient-to-r from-transparent via-primary-400 to-transparent"
+            style={{ animation: 'loader-shimmer 1.6s ease-in-out infinite' }}
+          />
+        </div>
+      </div>
+
     </div>
+
+    <style>{`
+      @keyframes loader-bar {
+        0%, 100% { height: 8px; opacity: 0.35; }
+        50%       { height: 28px; opacity: 1; }
+      }
+      @keyframes loader-shimmer {
+        0%   { transform: translateX(-80px); }
+        100% { transform: translateX(160px); }
+      }
+    `}</style>
   </div>
 );
 
