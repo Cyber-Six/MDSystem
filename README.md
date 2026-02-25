@@ -31,55 +31,45 @@ MDSystem/
 │   │   ├── patient/         # Patient data & consent management
 │   │   └── utils/           # Utility routes (portal detection, auth sessions)
 │   ├── services/            # Email service, reCAPTCHA validation
-│   └── server.js            # Main server entry point
+│   ├── server.js            # Patient backend entry point (port 3001)
+│   └── staff.js             # Staff backend entry point (port 3002)
 │
-├── mds-frontend/            # React 19 + Vite web frontend
-│   ├── scripts/             # Build & automation scripts
-│   │   └── generated/       # Auto-generated config files
+├── mds-patient/             # React 19 + Vite — Patient portal
 │   ├── src/
-│   │   ├── components/      # Reusable UI components
-│   │   │   ├── banner/      # Global notification banners
-│   │   │   ├── data-consent/# Data consent forms
-│   │   │   ├── layout/      # Layout components
-│   │   │   ├── modals/      # Modal dialogs
-│   │   │   ├── profile/     # User profile components
-│   │   │   └── settings/    # Settings components
-│   │   ├── config/          # App configuration
+│   │   ├── components/      # Reusable UI components (banner, layout, modals)
 │   │   ├── context/         # React Context providers
-│   │   ├── docs/            # API integration documentation
 │   │   ├── hooks/           # Custom React hooks
-│   │   ├── modules/         # Feature modules
-│   │   │   ├── appointment/ # Appointment scheduling
-│   │   │   ├── auth/        # Authentication module
-│   │   │   ├── dashboard/   # Dashboard views
-│   │   │   ├── medicine-request/ # Medicine requests
-│   │   │   └── record-forms/# Medical record forms
-│   │   ├── pages/           # Page components
-│   │   ├── routes/          # Route configuration
+│   │   ├── modules/         # Feature modules (auth, appointment, records)
+│   │   ├── pages/           # Page components (Auth, Dashboard)
+│   │   ├── services/        # API service layer
+│   │   ├── styles/          # Global CSS & design system
+│   │   └── utils/           # Utility functions
+│   └── public/              # Static assets
+│
+├── mds-staff/               # React 19 + Vite — Staff portal
+│   ├── src/
+│   │   ├── components/      # Reusable UI components (banner, layout, modals)
+│   │   ├── context/         # React Context providers
+│   │   ├── hooks/           # Custom React hooks
+│   │   ├── modules/         # Feature modules (auth, appointment, dashboard)
+│   │   ├── pages/           # Page components (Auth, Dashboard, etc.)
 │   │   └── styles/          # Global CSS & design system
 │   └── public/              # Static assets
 │
 ├── mds-mobile/              # React Native + Expo mobile app
 │   ├── src/
 │   │   ├── components/      # Mobile UI components
-│   │   │   └── ui/          # Base UI components
 │   │   ├── context/         # React Native contexts
-│   │   │   ├── AuthContext  # Authentication state
-│   │   │   ├── BannerContext# Notification banners
-│   │   │   └── ThemeContext # Theme management
-│   │   └── screens/         # App screens
-│   │       ├── auth/        # Login, register screens
-│   │       └── dashboard/   # Dashboard screens
+│   │   └── screens/         # App screens (auth, dashboard)
 │   └── assets/              # Mobile assets (images, fonts)
 │
 ├── packages/
-│   └── core/                # @mdsystem/core - Shared business logic
+│   └── core/                # @mdsystem/core — Shared business logic
 │       └── src/
 │           ├── config/      # Banner configuration
 │           ├── services/    # API, token, banner services
 │           ├── utils/       # Role detection utilities
-│           ├── validation/  # Email, password validation
-│           └── types/       # Type definitions
+│           └── validation/  # Email, password validation
 │
 ├── LICENSE                  # Proprietary license (Cyber-Six)
 └── README.md                # This file
@@ -125,22 +115,19 @@ npm start                    # Production mode
 
 ### Web Frontend Setup
 
+**Patient Portal:**
 ```bash
-cd mds-frontend
-npm install
-
-# Configure environment
-cp .env.example .env.local
-# Edit .env.local with your API URLs and Google Sheets URL
-
-# Fetch API documentation from Google Sheets
-npm run fetch-config
-
-# Start development server
+cd mds-patient
 npm run dev
 ```
+**Patient portal runs on:** `http://localhost:5173`
 
-**Web Frontend runs on:** `http://localhost:5173`
+**Staff Portal:**
+```bash
+cd mds-staff
+npm run dev
+```
+**Staff portal runs on:** `http://localhost:5174`
 
 ### Mobile App Setup
 
@@ -229,7 +216,7 @@ The application automatically detects the subdomain and adjusts:
 ## 📚 Documentation
 
 ### Web Frontend Documentation
-Located in `mds-frontend/src/docs/`:
+Located in `mds-frontend/src/docs/` (legacy reference docs):
 - **[API_INTEGRATION_GUIDE.md](mds-frontend/src/docs/API_INTEGRATION_GUIDE.md)** - API integration patterns
 - **[BANNER_SYSTEM.md](mds-frontend/src/docs/BANNER_SYSTEM.md)** - Global banner notification system
 - **[TOKEN_SERVICE.md](mds-frontend/src/docs/TOKEN_SERVICE.md)** - Token management details
@@ -251,13 +238,19 @@ Located in `packages/core/`:
 
 ### Web Frontend Development
 ```bash
-cd mds-frontend
-
-npm run dev              # Start dev server (auto-fetches Google Sheets)
+# Patient portal
+cd mds-patient
+npm run dev              # Start dev server
 npm run build            # Production build
 npm run preview          # Preview production build
 npm run lint             # Run ESLint
-npm run fetch-config     # Manually fetch Google Sheets data
+
+# Staff portal
+cd mds-staff
+npm run dev              # Start dev server
+npm run build            # Production build
+npm run preview          # Preview production build
+npm run lint             # Run ESLint
 ```
 
 ### Mobile Development
@@ -281,9 +274,7 @@ npm start                # Production server
 ```bash
 cd packages/core
 
-# After making changes, reinstall in consuming packages:
-cd ../mds-frontend && npm install
-cd ../mds-mobile && npm install
+# Changes auto-resolve via npm workspaces — no reinstall needed
 ```
 
 ### Environment Variables
@@ -330,7 +321,10 @@ HOST=localhost
 
 ### Web Frontend Testing
 ```bash
-cd mds-frontend
+cd mds-patient
+npm run lint             # Code quality checks
+
+cd mds-staff
 npm run lint             # Code quality checks
 ```
 
@@ -346,11 +340,16 @@ npm test                 # Run test suite
 
 ### Web Frontend (Vite Build)
 ```bash
-cd mds-frontend
+# Patient portal
+cd mds-patient
+npm run build            # Creates optimized build in dist/
+
+# Staff portal
+cd mds-staff
 npm run build            # Creates optimized build in dist/
 ```
 
-Deploy the `dist/` folder to your hosting service (Vercel, Netlify, etc.).
+Deploy the `dist/` folders to your hosting service or let the backend serve them.
 
 ### Mobile App (Expo)
 ```bash
@@ -442,6 +441,7 @@ Unauthorized copying, modification, distribution, or use of this software is str
 ## 📝 Changelog
 
 ### Latest Updates
+- ✅ **Split Web Apps** - Separate `mds-patient` and `mds-staff` portals
 - ✅ **Monorepo Architecture** - Unified workspace with shared packages
 - ✅ **@mdsystem/core Package** - Platform-agnostic business logic
 - ✅ **Mobile App (mds-mobile)** - React Native + Expo implementation
@@ -463,25 +463,31 @@ Unauthorized copying, modification, distribution, or use of this software is str
 │                        MDSystem Monorepo                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────────────┐ │
-│  │ mds-frontend │   │  mds-mobile  │   │       Backend        │ │
-│  │  (React 19)  │   │   (Expo)     │   │   (Express.js 5)     │ │
-│  │   + Vite     │   │   + RN       │   │   + PostgreSQL       │ │
-│  └──────┬───────┘   └──────┬───────┘   │   + Redis            │ │
-│         │                  │           └──────────────────────┘ │
-│         │                  │                      ▲              │
-│         ▼                  ▼                      │              │
-│  ┌─────────────────────────────────┐              │              │
-│  │       @mdsystem/core            │◄─────────────┘              │
-│  │   (Shared Business Logic)       │        REST API             │
-│  ├─────────────────────────────────┤                             │
-│  │ • Token Service (Factory)       │                             │
-│  │ • API Base URL Provider         │                             │
-│  │ • Axios Request Handler         │                             │
-│  │ • Banner Service                │                             │
-│  │ • Validation Utilities          │                             │
-│  │ • Role Detection                │                             │
-│  └─────────────────────────────────┘                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ mds-patient  │  │  mds-staff   │  │     mds-mobile       │  │
+│  │  (React 19)  │  │  (React 19)  │  │     (Expo)           │  │
+│  │   + Vite     │  │   + Vite     │  │     + RN             │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────────────┘  │
+│         │                  │                 │                   │
+│         ▼                  ▼                 ▼                   │
+│  ┌─────────────────────────────────────────────────┐            │
+│  │             @mdsystem/core                      │            │
+│  │          (Shared Business Logic)                │            │
+│  ├─────────────────────────────────────────────────┤            │
+│  │ • Token Service (Factory)                       │            │
+│  │ • API Base URL Provider                         │            │
+│  │ • Axios Request Handler                         │            │
+│  │ • Banner Service                                │            │
+│  │ • Validation Utilities                          │            │
+│  │ • Role Detection                                │            │
+│  └─────────────────────────────────────────────────┘            │
+│                       ▲                                          │
+│                       │ REST API                                 │
+│  ┌────────────────────┴─────────────────────────────┐           │
+│  │                Backend                            │           │
+│  │  server.js (Patient :3001) │ staff.js (Staff :3002)│          │
+│  │  Express.js 5 + PostgreSQL + Redis                │           │
+│  └───────────────────────────────────────────────────┘           │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
