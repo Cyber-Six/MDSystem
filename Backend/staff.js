@@ -80,11 +80,11 @@ app.use('/auth/password', passwordResetRoutes);
 // ======================================
 
 // Serve static assets for the React app (AFTER API routes)
-app.use(express.static(path.join(__dirname, '../Frontend-Staff/dist')));
+app.use(express.static(path.join(__dirname, '../mds-staff/dist')));
 
 // Handle all other routes for the React app by serving the index.html
 app.get('*path', (req, res) => {
-  res.sendFile(path.join(__dirname, '../Frontend-Staff/dist', 'index.html'));
+  res.sendFile(path.join(__dirname, '../mds-staff/dist', 'index.html'));
 });
 
 
