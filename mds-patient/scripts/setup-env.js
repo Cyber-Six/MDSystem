@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Environment Setup Script
- * 
- * Automatically creates .env file from .env.example if it doesn't exist.
+ * Environment Setup Script — mds-patient
+ *
+ * Automatically syncs .env from .env.example on every run.
  * Runs before dev server starts to ensure environment is configured.
  */
 
