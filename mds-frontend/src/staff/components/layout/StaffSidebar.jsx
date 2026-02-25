@@ -10,7 +10,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/staff', icon: 'dashboard', label: 'Dashboard', exact: true },
+    { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
     { path: '/search', icon: 'search', label: 'Search Patient' },
     { path: '/pending', icon: 'pending', label: 'Pending Requests' },
     { path: '/appointments', icon: 'calendar', label: 'Appointments' },
@@ -59,7 +59,8 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
 
   const isActive = (item) => {
     if (item.exact) {
-      return location.pathname === item.path;
+      // Handle both /staff and /staff/ (trailing slash)
+      return location.pathname === item.path || location.pathname === item.path + '/';
     }
     return location.pathname.startsWith(item.path);
   };
@@ -114,10 +115,10 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
                   to={item.path}
                   onClick={onClose}
                   title={item.label}
-                  className={`flex items-center gap-3 px-2 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-3 px-2 py-2 rounded-md text-sm font-medium transition-colors no-underline hover:no-underline ${
                     isActive(item)
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
-                      : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-secondary-700 dark:text-primary-400 hover:text-secondary-700 dark:hover:text-primary-400'
+                      : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-secondary-600 dark:hover:text-neutral-300'
                   }`}
                 >
                   <span className="flex-shrink-0">{icons[item.icon]}</span>

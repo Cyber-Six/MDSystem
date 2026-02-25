@@ -8,6 +8,9 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Override white to warm off-white (reduces eye strain in light mode)
+        white: '#fdfcfa',
+        
         // Primary - TIP Yellow/Gold Brand Color
         primary: {
           50: '#FFFBEB',
@@ -21,22 +24,22 @@ export default {
           800: '#B58D1A',    
           900: '#8B6914',
           950: '#6B520F',
-          DEFAULT: '#F1C526',
+          DEFAULT: '#FFD940',
         },
-        // Secondary - Dark Gray/Black for headers and text
+        // Secondary - Warm Dark Gray for headers and text
         secondary: {
-          50: '#f8f9fa',
-          100: '#e9ecef',
-          200: '#dee2e6',
-          300: '#ced4da',
-          400: '#adb5bd',
-          500: '#6c757d',
-          600: '#495057',
-          700: '#343a40',
-          800: '#212529',
-          900: '#1a1d20',
-          950: '#0d0f10',
-          DEFAULT: '#343a40',
+          50: '#faf9f7',
+          100: '#f0eeeb',
+          200: '#e2dfd9',
+          300: '#cec9c2',
+          400: '#a8a29e',
+          500: '#6e6a64',
+          600: '#4d4944',
+          700: '#3a3733',
+          800: '#28251f',
+          900: '#1c1a17',
+          950: '#0f0d0b',
+          DEFAULT: '#3a3733',
         },
         // Accent - Blue for links and interactive elements
         accent: {
@@ -95,20 +98,20 @@ export default {
           900: '#7f1d1d',
           DEFAULT: '#ef4444',
         },
-        // Neutral - For backgrounds and borders
+        // Neutral - Warm Stone tones for backgrounds and borders (easy on the eyes)
         neutral: {
-          50: '#fafafa',
-          100: '#f5f5f5',
-          200: '#e5e5e5',
-          300: '#d4d4d4',
-          400: '#a3a3a3',
-          500: '#737373',
-          600: '#525252',
-          700: '#404040',
-          800: '#262626',
-          900: '#171717',
-          950: '#0a0a0a',
-          DEFAULT: '#737373',
+          50: '#faf9f7',
+          100: '#f4f2ef',
+          200: '#e8e5e0',
+          300: '#d5d1cb',
+          400: '#a19b93',
+          500: '#78716c',
+          600: '#57534e',
+          700: '#44403c',
+          800: '#292524',
+          900: '#1c1917',
+          950: '#0c0a09',
+          DEFAULT: '#78716c',
         },
         // Dark mode specific colors
         dark: {
@@ -166,13 +169,13 @@ export default {
         'full': '9999px',
       },
       boxShadow: {
-        'sm': '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-        DEFAULT: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
-        'md': '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-        'lg': '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
-        'xl': '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
-        '2xl': '0 25px 50px -12px rgb(0 0 0 / 0.25)',
-        'inner': 'inset 0 2px 4px 0 rgb(0 0 0 / 0.05)',
+        'sm': '0 1px 2px 0 rgb(28 25 23 / 0.05)',
+        DEFAULT: '0 1px 3px 0 rgb(28 25 23 / 0.08), 0 1px 2px -1px rgb(28 25 23 / 0.06)',
+        'md': '0 4px 6px -1px rgb(28 25 23 / 0.08), 0 2px 4px -2px rgb(28 25 23 / 0.06)',
+        'lg': '0 10px 15px -3px rgb(28 25 23 / 0.08), 0 4px 6px -4px rgb(28 25 23 / 0.05)',
+        'xl': '0 20px 25px -5px rgb(28 25 23 / 0.08), 0 8px 10px -6px rgb(28 25 23 / 0.06)',
+        '2xl': '0 25px 50px -12px rgb(28 25 23 / 0.2)',
+        'inner': 'inset 0 2px 4px 0 rgb(28 25 23 / 0.04)',
         'tip': '0 4px 14px 0 rgba(245, 158, 11, 0.25)',
         'tip-lg': '0 10px 30px 0 rgba(245, 158, 11, 0.3)',
         // Dark mode shadows

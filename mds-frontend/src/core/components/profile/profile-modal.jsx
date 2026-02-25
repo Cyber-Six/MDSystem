@@ -2,7 +2,7 @@ import { User, Mail, Phone, UserCircle, IdCard } from 'lucide-react';
 import Modal from '@core/components/modals/modal';
 
 const ProfileModal = ({ isOpen, onClose }) => {
-  // Mock data - replace with actual user data from context/props
+  // Mock data
   const userProfile = {
     name: 'Rey Mark Endaya Samarita',
     email: 'student@tip.edu.ph',

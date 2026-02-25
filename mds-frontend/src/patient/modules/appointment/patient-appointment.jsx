@@ -242,10 +242,19 @@ const PatientAppointment = () => {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-neutral-900 dark:text-white mb-2">Appointments</h1>
-        <p className="text-neutral-600 dark:text-neutral-400">Schedule and manage your medical appointments</p>
+      {/* Header Banner */}
+      <div className="rounded-2xl p-6 mb-6" style={{ backgroundColor: '#F1C526' }}>
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-3xl font-heading font-bold text-white" style={{ margin: 0 }}>Appointments</h1>
+            <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>Schedule and manage your medical appointments</p>
+          </div>
+        </div>
       </div>
 
       {/* Messages */}
@@ -294,7 +303,7 @@ const PatientAppointment = () => {
               {STEP_LABELS.map((label, i) => (
                 <div key={i} className="flex items-center flex-1">
                   <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold
-                    ${i < step ? 'bg-primary-600 text-white' : i === step ? 'bg-primary-600 text-white ring-4 ring-primary-200 dark:ring-primary-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400'}`}>
+                    ${i < step ? 'bg-primary-500 text-secondary-900' : i === step ? 'bg-primary-500 text-secondary-900 ring-4 ring-primary-300 dark:ring-primary-800' : 'bg-stone-200 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'}`}>
                     {i < step ? '✓' : i + 1}
                   </div>
                   <span className={`ml-2 text-sm hidden sm:inline ${i <= step ? 'text-primary-700 dark:text-primary-300 font-medium' : 'text-neutral-500 dark:text-neutral-400'}`}>
@@ -310,10 +319,17 @@ const PatientAppointment = () => {
 
           {/* Step 0 — Select Appointment Type */}
           {step === 0 && (
-            <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-6">Select Appointment Type</h2>
+            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-6">
+              <h2 className="text-xl font-semibold text-secondary-900 dark:text-white mb-6" style={{ margin: 0 }}>Select Appointment Type</h2>
               {schedulers.length === 0 ? (
-                <p className="text-neutral-600 dark:text-neutral-400">No appointment types are currently available.</p>
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-stone-100 dark:bg-neutral-800 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-secondary-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-secondary-500 dark:text-neutral-400">No appointment types are currently available.</p>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {schedulers.map((s) => (
@@ -542,9 +558,9 @@ const PatientAppointment = () => {
       )}
 
       {/* ── Info Card ───────────────────────────────────────────────────────── */}
-      <div className="mt-8 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-primary-900 dark:text-primary-100 mb-4">Important Information</h3>
-        <ul className="space-y-3 text-sm text-primary-700 dark:text-primary-300">
+      <div className="mt-8 bg-white dark:bg-primary-900/20 border border-stone-200 dark:border-primary-800 border-l-4 border-l-primary-500 rounded-xl p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-secondary-900 dark:text-primary-100 mb-4" style={{ margin: 0 }}>Important Information</h3>
+        <ul className="space-y-3 text-sm text-secondary-600 dark:text-primary-300">
           <li className="flex items-start space-x-2">
             <span className="mt-0.5">•</span>
             <span>Appointments are subject to availability and confirmation</span>

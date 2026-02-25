@@ -14,7 +14,7 @@ const Layout = ({ children }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-neutral-800">
+    <div className="flex h-screen bg-stone-100 dark:bg-neutral-800">
       {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
