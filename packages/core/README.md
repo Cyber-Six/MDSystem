@@ -7,15 +7,15 @@ Shared core business logic for MDSystem web and mobile applications. This packag
 ### For React Web (Vite)
 
 ```bash
-# From the mds-frontend directory
-npm install file:../packages/core
+# Resolved automatically via npm workspaces
+npm install   # from root MDSystem/
 ```
 
 ### For React Native
 
 ```bash
-# From your React Native project
-npm install file:../packages/core
+# Resolved automatically via npm workspaces
+npm install   # from root MDSystem/
 
 # Install peer dependencies
 npm install @react-native-async-storage/async-storage
@@ -508,7 +508,7 @@ isValidStatus('Invalid')                         // → false
 ## 🧪 Testing
 
 ### Role Detection Tests
-You can move existing tests from `mds-frontend/src/context/__tests__/roleDetection.test.js` to `packages/core/__tests__/`.
+You can move existing tests from the app directories to `packages/core/__tests__/`.
 
 ```javascript
 // __tests__/role-detection.test.js
@@ -534,13 +534,13 @@ describe('detectRoleFromHostname', () => {
 
 1. **Install the package:**
    ```bash
-   cd mds-frontend
-   npm install file:../packages/core
+   # Resolved automatically via npm workspaces
+   npm install   # from root MDSystem/
    ```
 
 2. **Create adapter file:**
    ```javascript
-   // mds-frontend/src/services/core-adapters.js
+   // src/packages-core-adapter.js
    import { createApiBaseUrlProvider } from '@mdsystem/core/services/api-base-url-provider';
    // ... (see Quick Start above)
    ```
@@ -622,12 +622,13 @@ The token service handles both by using `Promise.resolve()` wrapper.
 If you get `Cannot find module '@mdsystem/core'`:
 ```bash
 # Reinstall the package
-npm install file:../packages/core
+# Resolved automatically via npm workspaces
+npm install   # from root MDSystem/
 
 # Or use npm link
 cd packages/core
 npm link
-cd ../../mds-frontend
+cd ../../mds-patient
 npm link @mdsystem/core
 ```
 
