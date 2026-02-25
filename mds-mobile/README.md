@@ -55,7 +55,7 @@ The app uses the shared Tailwind configuration from the web app:
 // tailwind.config.js
 module.exports = {
   content: ["./App.{js,jsx,ts,tsx}", "./src/**/*.{js,jsx,ts,tsx}"],
-  presets: [require('../mds-frontend/tailwind.config.js')],
+  presets: [require('../mds-patient/tailwind.config.js')],
 };
 ```
 

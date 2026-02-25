@@ -97,7 +97,7 @@ app.use('/announcement', AnnouncementRoutes);
 // ======================================
 
 // Serve static assets for the React app
-app.use(express.static(path.join(__dirname, '../mds-frontend/dist')));
+app.use(express.static(path.join(__dirname, '../mds-patient/dist')));
 
 // Redirect the root URL to '/app'
 
@@ -106,7 +106,7 @@ app.use(express.static(path.join(__dirname, '../mds-frontend/dist')));
 // Serve index.html for all non-API routes
 
 app.get('*path', (req, res) => {
-  res.sendFile(path.join(__dirname, '../mds-frontend/dist', 'index.html'));
+  res.sendFile(path.join(__dirname, '../mds-patient/dist', 'index.html'));
 });
 
 

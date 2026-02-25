@@ -9,7 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@mdsystem/core": "file:../packages/core",
+    "@mdsystem/core": "*",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "axios": "^1.13.2",
     "babel-preset-expo": "^54.0.9",
