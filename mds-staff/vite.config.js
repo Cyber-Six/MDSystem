@@ -1,16 +1,26 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+// Portal → backend URL mapping
+const PORTAL_URLS = {
+  staff:  'https://staff.mdsystemtip.space',
+  staff2: 'https://staff2.mdsystemtip.space',
+  local:  'http://localhost:3002',
+};
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  // Staff portal always targets the staff backend
-  const BACKEND_URL = process.env.VITE_BACKEND_URL || 'http://localhost:3002';
-  
-  console.log(`🔗 Staff Portal — Backend proxy target: ${BACKEND_URL}`);
+  const env = loadEnv(mode, process.cwd(), '');
+
+  const DEV_PORTAL = env.VITE_DEV_PORTAL || 'staff';
+  // Explicit VITE_BACKEND_URL overrides the auto-derived URL
+  const BACKEND_URL = env.VITE_BACKEND_URL || PORTAL_URLS[DEV_PORTAL] || PORTAL_URLS['staff'];
+
+  console.log(`🔗 Staff Portal — DEV_PORTAL=${DEV_PORTAL}  Backend proxy: ${BACKEND_URL}`);
 
   return {
     resolve: {

@@ -6,13 +6,11 @@ import RecordUpdateForm from '../modules/record-forms/update-record/record-updat
 import AppointmentPage from '../modules/appointment/appointment-router.jsx';
 import MedicineRequestPage from '../modules/medicine-request/medicine-request-page.jsx';
 import EConsultation from '../modules/e-consultation/e-consultation.jsx';
-import { useDetectRoleFromSubdomain } from '../hooks/use-role.js';
 import { checkInitialRecordStatus } from '../services/emr-service.js';
 import InitialRecordModal from '../components/modals/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 
 const Dashboard = () => {
-  const { role } = useDetectRoleFromSubdomain();
   const [showInitialRecordModal, setShowInitialRecordModal] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [recordStatus, setRecordStatus] = useState(null);
@@ -24,13 +22,6 @@ const Dashboard = () => {
       const bypassInitialRecord = import.meta.env.VITE_BYPASS_INITIAL_RECORD === 'true';
       if (bypassInitialRecord) {
         console.log('[Dashboard] Bypass enabled - skipping initial record requirement');
-        setIsCheckingStatus(false);
-        return;
-      }
-
-      // Only check for students, not staff
-      if (role === 'staff' || role === 'admin') {
-        console.log('[Dashboard] Staff/admin user - skipping initial record check');
         setIsCheckingStatus(false);
         return;
       }
@@ -56,7 +47,7 @@ const Dashboard = () => {
     };
 
     checkRecordStatus();
-  }, [role]);
+  }, []);
 
   // Handle successful completion of initial record
   const handleInitialRecordComplete = async (result) => {
@@ -87,7 +78,7 @@ const Dashboard = () => {
   }
 
   // Show pending approval screen when initial record is awaiting staff verification
-  if (recordStatus === 'Pending' && role !== 'staff' && role !== 'admin') {
+  if (recordStatus === 'Pending') {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
