@@ -63,7 +63,7 @@ const InitialRecordModal = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Banner */}
-        <div className="shrink-0 px-5 py-3 sm:px-6 sm:py-4 rounded-t-2xl" style={{ backgroundColor: '#F1C526' }}>
+        <div className="shrink-0 px-5 py-3 sm:px-6 sm:py-4 rounded-t-2xl bg-primary-500">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-1.5 bg-white/25 rounded-lg">

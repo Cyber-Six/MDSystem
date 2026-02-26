@@ -72,7 +72,7 @@ const DentalHistoryStep = ({ formData, onChange }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
+    <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6 pb-4 border-b border-neutral-200 dark:border-neutral-700">
         <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-500/20 flex items-center justify-center">
@@ -80,7 +80,7 @@ const DentalHistoryStep = ({ formData, onChange }) => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
         </div>
-        <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white">
+        <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white" style={{ margin: 0 }}>
           Dental History
         </h3>
       </div>

@@ -106,7 +106,7 @@ const ReviewStep = ({ formData, onEdit, recordType }) => {
   return (
     <div className="space-y-6">
       {/* Personal Information */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
+      <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
         <SectionHeader title="Personal Information" onEditClick={() => onEdit(getStepIndex('personal'))} />
         <dl className="space-y-1">
           {Object.entries(personalInfo).map(([label, value]) => (
@@ -117,7 +117,7 @@ const ReviewStep = ({ formData, onEdit, recordType }) => {
 
       {/* Medical History - Only show if recordType is 'medical' or 'both' */}
       {(recordType === 'medical' || recordType === 'both') && (
-        <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
+        <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
           <SectionHeader title="Medical History" onEditClick={() => onEdit(getStepIndex('medical'))} />
           <dl className="space-y-1">
             {Object.entries(medicalHistory).map(([label, value]) => (
@@ -129,7 +129,7 @@ const ReviewStep = ({ formData, onEdit, recordType }) => {
 
       {/* Dental History - Only show if recordType is 'dental' or 'both' */}
       {(recordType === 'dental' || recordType === 'both') && (
-        <div className="bg-white dark:bg-neutral-900 rounded-xl p-6">
+        <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
           <SectionHeader title="Dental History" onEditClick={() => onEdit(getStepIndex('dental'))} />
           <dl className="space-y-1">
             {Object.entries(dentalHistory).map(([label, value]) => (

@@ -218,18 +218,18 @@ const RecordUpdateForm = () => {
       ) : (
         <div className="max-w-5xl mx-auto px-4 py-6">
           {/* Header Section */}
-          <div className="bg-primary-500 dark:bg-neutral-900 rounded-2xl p-6 mb-6">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-10 h-12 rounded-xl bg-primary-400 dark:bg-neutral-800 flex items-center justify-center">
-                <svg className="w-6 h-6 text-white dark:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="rounded-2xl p-6 mb-6 bg-primary-500">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
               <div className="flex-1">
-                <h1 className="text-2xl font-heading font-bold text-white dark:text-white">
+                <h1 className="text-3xl font-heading font-bold text-white" style={{ margin: 0 }}>
                   Update {recordType === 'medical' ? 'Medical Record' : recordType === 'dental' ? 'Dental Record' : 'Medical & Dental Record'}
                 </h1>
-                <p className="text-white/90 dark:text-neutral-400 text-sm">
+                <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>
                   Keep your health information up-to-date
                 </p>
               </div>
@@ -245,20 +245,17 @@ const RecordUpdateForm = () => {
           </div>
 
           {/* Progress Stepper */}
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 mb-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
+          <div className="mb-6">
             <ProgressStepper currentStep={currentStep} steps={steps} />
           </div>
 
           {/* Form Content */}
           <div className="mb-6">
-            {/* Add shadow to all step cards */}
-            <div className="shadow-lg border border-neutral-200 dark:border-neutral-700 rounded-2xl">
-              {renderStep()}
-            </div>
+            {renderStep()}
           </div>
 
           {/* Navigation Buttons */}
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6">
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl px-6 py-3 shadow-md border border-neutral-200 dark:border-neutral-700">
             <div className="flex justify-between items-center">
               <button
                 onClick={handleBack}

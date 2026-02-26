@@ -14,10 +14,10 @@ const DashboardHome = () => {
   ];
 
   const stats = [
-    { title: 'Pending Requests', value: '3', icon: 'clock' },
-    { title: 'Upcoming Appointments', value: '2', icon: 'calendar' },
-    { title: 'Medicine Requests', value: '5', icon: 'medication' },
-    { title: 'Consultations', value: '8', icon: 'chat' },
+    { title: 'Pending Requests', value: '3', icon: 'clock', color: 'yellow' },
+    { title: 'Upcoming Appointments', value: '2', icon: 'calendar', color: 'blue' },
+    { title: 'Medicine Requests', value: '5', icon: 'medication', color: 'green' },
+    { title: 'Consultations', value: '8', icon: 'chat', color: 'purple' },
   ];
 
   const icons = {
@@ -43,31 +43,31 @@ const DashboardHome = () => {
     ),
   };
 
-  const statusBadgeColors = {
-    blue: 'bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-200',
+  const statusColors = {
+    blue: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
     green: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    yellow: 'bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-200',
-    purple: 'bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-200',
+    yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+    purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   };
 
   return (
     <div className="space-y-6 py-6">
       {/* Welcome Section */}
-      <div className="rounded-xl p-6" style={{ backgroundColor: '#F1C526' }}>
-        <h1 className="text-3xl font-bold mb-1 text-white" style={{ margin: 0 }}>Welcome back, Student!</h1>
-        <p className="text-white/80" style={{ margin: 0 }}>Here's what's happening with your health records today.</p>
+      <div className="bg-primary-500 dark:bg-neutral-900 rounded-lg p-6 text-white">
+        <h1 className="text-3xl font-bold mb-2 text-white">Welcome back, Student!</h1>
+        <p className="text-white/80 dark:text-neutral-300">Here's what's happening with your health records today.</p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white dark:bg-neutral-900 rounded-xl p-6 border border-stone-200 dark:border-neutral-700 shadow-sm hover:shadow-md transition-shadow">
+          <div key={index} className="bg-white dark:bg-neutral-900 rounded-lg p-6 border border-gray-200 dark:border-neutral-700">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-secondary-500 dark:text-gray-400">{stat.title}</p>
-                <p className="text-3xl font-bold text-secondary-900 dark:text-white mt-1">{stat.value}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{stat.title}</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
               </div>
-              <div className="p-3 rounded-xl bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300">
+              <div className={`p-3 rounded-lg ${statusColors[stat.color]}`}>
                 {icons[stat.icon]}
               </div>
             </div>
@@ -76,10 +76,9 @@ const DashboardHome = () => {
       </div>
 
       {/* Pending Requests Section */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl border border-stone-200 dark:border-neutral-700 shadow-sm">
-        <div className="px-6 py-4 border-b border-stone-200 dark:border-neutral-700 flex items-center gap-3">
-          <div className="w-1 h-6 rounded-full bg-primary-500"></div>
-          <h2 className="text-xl font-semibold text-secondary-900 dark:text-white" style={{ margin: 0 }}>Pending Requests</h2>
+      <div className="bg-white dark:bg-neutral-900 rounded-lg border border-gray-200 dark:border-neutral-700">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-neutral-700">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Pending Requests</h2>
         </div>
         <div className="p-6">
           {pendingRequests.length > 0 ? (
@@ -87,14 +86,14 @@ const DashboardHome = () => {
               {pendingRequests.map((request) => (
                 <div
                   key={request.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-stone-50 dark:bg-neutral-800 rounded-xl border border-stone-200 dark:border-neutral-700 gap-4"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 gap-4"
                 >
                   <div className="flex-1">
                     <div className="flex items-center flex-wrap gap-2 mb-2">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusBadgeColors[request.color]}`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[request.color]}`}>
                         {request.type}
                       </span>
-                      <h3 className="font-medium text-secondary-900 dark:text-white">{request.title}</h3>
+                      <h3 className="font-medium text-gray-900 dark:text-white">{request.title}</h3>
                     </div>
                     <div className="flex items-center flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
                       <span className="flex items-center">
@@ -131,12 +130,9 @@ const DashboardHome = () => {
       </div>
 
       {/* Upcoming Appointments */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl border border-stone-200 dark:border-neutral-700 shadow-sm">
-        <div className="px-6 py-4 border-b border-stone-200 dark:border-neutral-700 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-1 h-6 rounded-full bg-primary-500"></div>
-            <h2 className="text-xl font-semibold text-secondary-900 dark:text-white" style={{ margin: 0 }}>Upcoming Appointments</h2>
-          </div>
+      <div className="bg-white dark:bg-neutral-900 rounded-lg border border-gray-200 dark:border-neutral-700">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-secondary-700 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Upcoming Appointments</h2>
           <Link
             to="/appointments"
             className="text-sm font-medium text-primary-600 dark:text-primary-500 hover:text-primary-700 dark:hover:text-primary-400"
@@ -150,7 +146,7 @@ const DashboardHome = () => {
               {upcomingAppointments.map((appointment) => (
                 <div
                   key={appointment.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-primary-50 dark:bg-primary-500/10 rounded-xl border border-primary-200 dark:border-primary-500/30 gap-4"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-primary-50 dark:bg-primary-500/10 rounded-lg border border-primary-200 dark:border-primary-500/30 gap-4"
                 >
                   <div className="flex items-center space-x-4">
                     <div className="w-12 h-12 bg-primary-500 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -159,9 +155,9 @@ const DashboardHome = () => {
                       </svg>
                     </div>
                     <div>
-                      <h3 className="font-medium text-secondary-900 dark:text-white">{appointment.service}</h3>
-                      <p className="text-sm text-secondary-600 dark:text-gray-400">{appointment.doctor}</p>
-                      <p className="text-sm text-secondary-500 dark:text-gray-500 mt-1">
+                      <h3 className="font-medium text-gray-900 dark:text-white">{appointment.service}</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{appointment.doctor}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
                         {appointment.date} at {appointment.time}
                       </p>
                     </div>
@@ -182,51 +178,51 @@ const DashboardHome = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           to="/record-update"
-          className="bg-white dark:bg-neutral-900 rounded-xl p-6 border border-stone-200 dark:border-neutral-700 shadow-sm hover:border-primary-400 hover:shadow-md transition-all group"
+          className="bg-white dark:bg-neutral-900 rounded-lg p-6 border border-gray-200 dark:border-neutral-700 hover:border-primary-500 transition-colors group"
         >
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-primary-100 dark:bg-primary-500/20 rounded-xl flex items-center justify-center group-hover:bg-primary-500 transition-colors flex-shrink-0">
-              <svg className="w-6 h-6 text-primary-700 dark:text-primary-500 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-primary-100 dark:bg-primary-500/20 rounded-lg flex items-center justify-center group-hover:bg-primary-500 transition-colors flex-shrink-0">
+              <svg className="w-6 h-6 text-primary-600 dark:text-primary-500 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
             </div>
             <div>
-              <h3 className="font-medium text-secondary-900 dark:text-white">Update Records</h3>
-              <p className="text-sm text-secondary-500 dark:text-gray-400">Update medical & dental info</p>
+              <h3 className="font-medium text-gray-900 dark:text-white">Update Records</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Update medical & dental info</p>
             </div>
           </div>
         </Link>
 
         <Link
           to="/appointments"
-          className="bg-white dark:bg-neutral-900 rounded-xl p-6 border border-stone-200 dark:border-neutral-700 shadow-sm hover:border-primary-400 hover:shadow-md transition-all group"
+          className="bg-white dark:bg-neutral-900 rounded-lg p-6 border border-gray-200 dark:border-neutral-700 hover:border-green-500 transition-colors group"
         >
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-primary-100 dark:bg-primary-500/20 rounded-xl flex items-center justify-center group-hover:bg-primary-500 transition-colors flex-shrink-0">
-              <svg className="w-6 h-6 text-primary-700 dark:text-primary-500 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center group-hover:bg-green-500 transition-colors flex-shrink-0">
+              <svg className="w-6 h-6 text-green-600 dark:text-green-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </div>
             <div>
-              <h3 className="font-medium text-secondary-900 dark:text-white">Book Appointment</h3>
-              <p className="text-sm text-secondary-500 dark:text-gray-400">Schedule a consultation</p>
+              <h3 className="font-medium text-gray-900 dark:text-white">Book Appointment</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Schedule a consultation</p>
             </div>
           </div>
         </Link>
 
         <Link
           to="/medicine-request"
-          className="bg-white dark:bg-neutral-900 rounded-xl p-6 border border-stone-200 dark:border-neutral-700 shadow-sm hover:border-primary-400 hover:shadow-md transition-all group"
+          className="bg-white dark:bg-neutral-900 rounded-lg p-6 border border-gray-200 dark:border-neutral-700 hover:border-purple-500 transition-colors group"
         >
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-primary-100 dark:bg-primary-500/20 rounded-xl flex items-center justify-center group-hover:bg-primary-500 transition-colors flex-shrink-0">
-              <svg className="w-6 h-6 text-primary-700 dark:text-primary-500 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center group-hover:bg-purple-500 transition-colors flex-shrink-0">
+              <svg className="w-6 h-6 text-purple-600 dark:text-purple-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
               </svg>
             </div>
             <div>
-              <h3 className="font-medium text-secondary-900 dark:text-white">Request Medicine</h3>
-              <p className="text-sm text-secondary-500 dark:text-gray-400">Submit medicine request</p>
+              <h3 className="font-medium text-gray-900 dark:text-white">Request Medicine</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Submit medicine request</p>
             </div>
           </div>
         </Link>

@@ -243,7 +243,7 @@ const PatientAppointment = () => {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       {/* Header Banner */}
-      <div className="rounded-2xl p-6 mb-6" style={{ backgroundColor: '#F1C526' }}>
+      <div className="rounded-2xl p-6 mb-6 bg-primary-500">
         <div className="flex items-center gap-4">
           <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -299,27 +299,29 @@ const PatientAppointment = () => {
 
           {/* Stepper */}
           <div className="mb-8">
-            <div className="flex items-center justify-between">
+            <div className="max-w-2xl mx-auto flex items-start">
               {STEP_LABELS.map((label, i) => (
-                <div key={i} className="flex items-center flex-1">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold
-                    ${i < step ? 'bg-primary-500 text-secondary-900' : i === step ? 'bg-primary-500 text-secondary-900 ring-4 ring-primary-300 dark:ring-primary-800' : 'bg-stone-200 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'}`}>
-                    {i < step ? '✓' : i + 1}
+                <React.Fragment key={i}>
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold
+                      ${i < step ? 'bg-green-500 text-white' : i === step ? 'bg-primary-500 text-secondary-900 ring-4 ring-primary-300 dark:ring-primary-800' : 'bg-stone-200 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'}`}>
+                      {i < step ? '✓' : i + 1}
+                    </div>
+                    <span className={`mt-1.5 text-xs text-center hidden sm:block whitespace-nowrap ${i <= step ? 'text-primary-700 dark:text-primary-300 font-medium' : 'text-neutral-500 dark:text-neutral-400'}`}>
+                      {label}
+                    </span>
                   </div>
-                  <span className={`ml-2 text-sm hidden sm:inline ${i <= step ? 'text-primary-700 dark:text-primary-300 font-medium' : 'text-neutral-500 dark:text-neutral-400'}`}>
-                    {label}
-                  </span>
                   {i < STEP_LABELS.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-3 ${i < step ? 'bg-primary-500' : 'bg-neutral-200 dark:bg-neutral-700'}`} />
+                    <div className={`flex-1 h-0.5 mx-2 mt-4 ${i < step ? 'bg-green-500' : 'bg-neutral-200 dark:bg-neutral-700'}`} />
                   )}
-                </div>
+                </React.Fragment>
               ))}
             </div>
           </div>
 
           {/* Step 0 — Select Appointment Type */}
           {step === 0 && (
-            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-6">
+            <div className="bg-stone-50 dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-6">
               <h2 className="text-xl font-semibold text-secondary-900 dark:text-white mb-6" style={{ margin: 0 }}>Select Appointment Type</h2>
               {schedulers.length === 0 ? (
                 <div className="text-center py-8">
@@ -336,7 +338,7 @@ const PatientAppointment = () => {
                     <button
                       key={s.id}
                       onClick={() => handleSelectScheduler(s)}
-                      className="text-left p-5 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:border-primary-400 dark:hover:border-primary-600 hover:shadow-md transition-all group"
+                      className="text-left p-5 border border-stone-200 dark:border-neutral-700 rounded-xl shadow-md bg-white dark:bg-neutral-800 hover:border-primary-400 dark:hover:border-primary-600 hover:shadow-lg transition-all group"
                     >
                       <h3 className="font-semibold text-neutral-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 mb-1">
                         {s.label}
@@ -441,8 +443,9 @@ const PatientAppointment = () => {
 
               {/* Navigation */}
               <div className="flex justify-between pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                <button onClick={handleBack} className="px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                  &larr; Back
+                <button onClick={handleBack} className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  Back
                 </button>
                 <button
                   disabled={!selectedDate || !selectedSession || !isDateAllowed(selectedDate)}
@@ -486,8 +489,9 @@ const PatientAppointment = () => {
 
               {/* Navigation */}
               <div className="flex justify-between pt-6 mt-6 border-t border-neutral-200 dark:border-neutral-700">
-                <button onClick={handleBack} className="px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                  &larr; Back
+                <button onClick={handleBack} className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  Back
                 </button>
                 <button
                   disabled={requirements.some((r) => !uploadedFiles[r.id])}
@@ -540,8 +544,9 @@ const PatientAppointment = () => {
 
               {/* Navigation */}
               <div className="flex justify-between pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                <button onClick={handleBack} className="px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                  &larr; Back
+                <button onClick={handleBack} className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all duration-200 bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  Back
                 </button>
                 <button
                   onClick={handleSubmit}
@@ -558,23 +563,31 @@ const PatientAppointment = () => {
       )}
 
       {/* ── Info Card ───────────────────────────────────────────────────────── */}
-      <div className="mt-8 bg-white dark:bg-primary-900/20 border border-stone-200 dark:border-primary-800 border-l-4 border-l-primary-500 rounded-xl p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-secondary-900 dark:text-primary-100 mb-4" style={{ margin: 0 }}>Important Information</h3>
-        <ul className="space-y-3 text-sm text-secondary-600 dark:text-primary-300">
+      <div className="mt-8 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-primary-900 dark:text-primary-100 mb-4" style={{ margin: 0 }}>Important Information</h3>
+        <ul className="space-y-3 text-sm text-primary-700 dark:text-primary-300">
           <li className="flex items-start space-x-2">
-            <span className="mt-0.5">•</span>
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
             <span>Appointments are subject to availability and confirmation</span>
           </li>
           <li className="flex items-start space-x-2">
-            <span className="mt-0.5">•</span>
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
             <span>You will receive a confirmation once your appointment is approved</span>
           </li>
           <li className="flex items-start space-x-2">
-            <span className="mt-0.5">•</span>
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
             <span>Please arrive 10 minutes before your scheduled time</span>
           </li>
           <li className="flex items-start space-x-2">
-            <span className="mt-0.5">•</span>
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
             <span>Bring your student ID and any relevant medical documents</span>
           </li>
         </ul>
