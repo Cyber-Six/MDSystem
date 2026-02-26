@@ -83,6 +83,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
+        '/info': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
       },
     }
   }
