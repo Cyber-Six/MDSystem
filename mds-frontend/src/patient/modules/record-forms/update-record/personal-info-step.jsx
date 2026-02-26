@@ -50,7 +50,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
-          <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white">
+          <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white" style={{ margin: 0 }}>
             School Information
           </h3>
         </div>
@@ -127,13 +127,13 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white">
+          <h3 className="text-xl font-heading font-semibold text-secondary-800 dark:text-white" style={{ margin: 0 }}>
             Emergency Contact
           </h3>
         </div>
 
         {/* Primary Emergency Contact */}
-        <div className="border border-neutral-200 dark:border-neutral-700 rounded-xl p-5 mb-4 bg-white dark:bg-neutral-800/50 hover:border-primary-400 dark:hover:border-primary-500 transition-colors duration-200">
+        <div className="border border-neutral-200 dark:border-neutral-700 rounded-xl p-5 mb-4 bg-white dark:bg-neutral-800/50">
           <h5 className="font-semibold text-secondary-700 dark:text-neutral-300 mb-4 text-sm uppercase tracking-wide">Primary Emergency Contact</h5>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
@@ -162,7 +162,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
         </div>
 
         {/* Secondary Emergency Contact */}
-        <div className="border border-neutral-200 dark:border-neutral-700 rounded-xl p-5 bg-white dark:bg-neutral-800/50 hover:border-primary-400 dark:hover:border-primary-500 transition-colors duration-200">
+        <div className="border border-neutral-200 dark:border-neutral-700 rounded-xl p-5 bg-white dark:bg-neutral-800/50">
           <h5 className="font-semibold text-secondary-700 dark:text-neutral-300 mb-4 text-sm uppercase tracking-wide">Secondary Emergency Contact</h5>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input

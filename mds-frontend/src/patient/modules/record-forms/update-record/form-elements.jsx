@@ -159,7 +159,7 @@ export const AccordionSection = ({
                    : 'bg-neutral-50 dark:bg-neutral-800 hover:bg-primary-50/50 dark:hover:bg-primary-500/5'}`}
     >
       <div className="flex items-center gap-3">
-        <span className="text-xl">{icon}</span>
+        <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{icon}</span>
         <span className="font-heading font-semibold text-secondary-800 dark:text-white">{title}</span>
       </div>
       <svg 

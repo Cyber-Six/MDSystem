@@ -425,7 +425,7 @@ const EConsultation = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
       {/* Header Banner */}
-      <div className="rounded-2xl p-6 mb-6" style={{ backgroundColor: '#F1C526' }}>
+      <div className="rounded-2xl p-6 mb-6 bg-primary-500">
         <div className="flex items-center gap-4">
           <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
