@@ -83,7 +83,7 @@ const ValidationWarningModal = ({ isOpen, onClose, errors = [], onGoToSection })
               Incomplete Form
             </h3>
             <p className="text-sm text-amber-700">
-              Please complete the following {errors.length} required {errors.length === 1 ? 'field' : 'fields'}
+              Please fix the following {errors.length} {errors.length === 1 ? 'issue' : 'issues'} before submitting
             </p>
           </div>
           <button 

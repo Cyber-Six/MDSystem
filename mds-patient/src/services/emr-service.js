@@ -416,8 +416,9 @@ const buildBatchInputs = (formData, photoIds = {}) => {
     seenByDentist,
     lastDentalCleaning: mappedDentalCleaning,
     purpose: null,
+    // type="month" gives YYYY-MM — append -01 to make it a valid full date
     lastVisitDate: formData.dentalHistory.lastDentalConsultation
-      ? new Date(formData.dentalHistory.lastDentalConsultation).toISOString().split('T')[0]
+      ? new Date(formData.dentalHistory.lastDentalConsultation + '-01').toISOString().split('T')[0]
       : null
   };
 
