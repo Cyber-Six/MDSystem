@@ -6,6 +6,11 @@ const PersonalInfoForm = ({ data, onChange }) => {
     onChange({ ...data, [field]: value });
   };
 
+  // Strip any character that is not a digit, +, -, space, or parenthesis
+  const filterPhone = (val) => val.replace(/[^\d+\-\s()]/g, '');
+  // Strip any character that is not alphanumeric or a dash
+  const filterStudentNumber = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
+
   const handleEmergencyContactChange = (index, field, value) => {
     const contacts = [...data.emergencyContacts];
     contacts[index] = { ...contacts[index], [field]: value };
@@ -161,7 +166,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
             type="tel"
             required
             value={data.contactNumber || ''}
-            onChange={(e) => handleChange('contactNumber', e.target.value)}
+            onChange={(e) => handleChange('contactNumber', filterPhone(e.target.value))}
             placeholder="+63 XXX XXX XXXX"
           />
         </div>
@@ -211,7 +216,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
             label="Student Number"
             required
             value={data.studentNumber || ''}
-            onChange={(e) => handleChange('studentNumber', e.target.value)}
+            onChange={(e) => handleChange('studentNumber', filterStudentNumber(e.target.value))}
             placeholder="Enter student number"
           />
         </div>
@@ -310,7 +315,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
                 type="tel"
                 required
                 value={data.emergencyContacts[index]?.contactNumber || ''}
-                onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', e.target.value)}
+                onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', filterPhone(e.target.value))}
                 placeholder="+63 XXX XXX XXXX"
               />
             </div>

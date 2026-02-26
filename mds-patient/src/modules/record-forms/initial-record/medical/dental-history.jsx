@@ -81,9 +81,8 @@ const DentalHistoryForm = ({ data, onChange }) => {
           {data.firstTimeDentist === 'no' && (
             <div>
               <label className="form-label">IF "NO"... WHEN WAS YOUR LAST DENTAL CONSULTATION ?</label>
-              <p className="text-xs text-secondary-500 mb-2">Indicate Month and Year</p>
               <Input
-                placeholder="Your answer"
+                type="month"
                 value={data.lastDentalConsultation || ''}
                 onChange={(e) => handleChange('lastDentalConsultation', e.target.value)}
               />

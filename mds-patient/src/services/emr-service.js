@@ -163,11 +163,29 @@ const uploadMediaFile = async (file) => {
   }
 };
 
+/**
+ * Delete a previously staged media file to free the per-user staging quota
+ * @param {string|null} fileId - UUID returned by uploadMediaFile
+ */
+const unstageMediaFile = async (fileId) => {
+  if (!fileId) return;
+  try {
+    await axiosRequest.delete(`/media/${fileId}`);
+    console.log('[EMR Service] Staged media file removed, fileId:', fileId);
+  } catch (error) {
+    // Non-fatal — staging TTL will eventually free the slot
+    console.warn('[EMR Service] Failed to remove staged media file:', fileId, error.message);
+  }
+};
+
 export const createInitialMedicalRecord = async (formData) => {
   console.log('[EMR Service] Starting initial medical record creation (batched)');
   console.log('[EMR Service] Form data received:', formData);
 
   let ticketCreated = false;
+  // Track staged file IDs so they can be cleaned up if the submission fails
+  let upperTeethFileId = null;
+  let lowerTeethFileId = null;
 
   try {
     const results = {};
@@ -182,7 +200,7 @@ export const createInitialMedicalRecord = async (formData) => {
     // ======== Upload dental photos via REST API before building inputs ========
     // Both uploads are independent – run in parallel to halve the wait time
     console.log('[EMR Service] [2/4] Uploading dental photos (parallel)...');
-    const [upperTeethFileId, lowerTeethFileId] = await Promise.all([
+    [upperTeethFileId, lowerTeethFileId] = await Promise.all([
       uploadMediaFile(formData.dentalHistory?.upperTeethPhoto?.file ?? null),
       uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null)
     ]);
@@ -214,6 +232,16 @@ export const createInitialMedicalRecord = async (formData) => {
 
   } catch (error) {
     console.error('[EMR Service] Failed to create initial medical record:', error);
+
+    // Clean up any staged media files to free the per-user staging quota
+    if (upperTeethFileId || lowerTeethFileId) {
+      console.log('[EMR Service] Cleaning up staged media files...');
+      await Promise.all([
+        unstageMediaFile(upperTeethFileId),
+        unstageMediaFile(lowerTeethFileId),
+      ]);
+    }
+
     if (ticketCreated) {
       console.log('[EMR Service] Attempting to cancel update ticket due to error...');
       await cancelUpdateTicket();
@@ -388,8 +416,9 @@ const buildBatchInputs = (formData, photoIds = {}) => {
     seenByDentist,
     lastDentalCleaning: mappedDentalCleaning,
     purpose: null,
+    // type="month" gives YYYY-MM — append -01 to make it a valid full date
     lastVisitDate: formData.dentalHistory.lastDentalConsultation
-      ? new Date(formData.dentalHistory.lastDentalConsultation).toISOString().split('T')[0]
+      ? new Date(formData.dentalHistory.lastDentalConsultation + '-01').toISOString().split('T')[0]
       : null
   };
 
