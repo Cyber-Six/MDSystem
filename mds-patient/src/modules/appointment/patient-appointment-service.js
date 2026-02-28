@@ -4,7 +4,7 @@
  * Endpoint: POST /appointment/patient (JWT guard: patient)
  */
 
-import { axiosRequest } from '../../packages-core-adapter';
+import { sendGraphQLRequest } from '../../utils/graphql-client';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -30,16 +30,7 @@ export const ACTIVE_STATUSES = [STATUS.PENDING, STATUS.SCHEDULED];
 // ── Internal helper ──────────────────────────────────────────────────────────
 
 const sendGraphQL = async (query, variables = {}) => {
-  const response = await axiosRequest.post('/appointment/patient', {
-    query,
-    variables,
-  });
-
-  if (response.data.errors) {
-    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
-  }
-
-  return response.data.data;
+  return sendGraphQLRequest(query, variables, { endpoint: '/appointment/patient' });
 };
 
 // ── Queries ──────────────────────────────────────────────────────────────────

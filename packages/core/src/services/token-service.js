@@ -83,23 +83,25 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
      * @param {string} accessToken - New access token
      * @param {string} refreshToken - New refresh token
      * @throws {Error} If tokens are invalid
+     * @returns {Promise<void>} Resolves when both tokens are stored
      */
-    setTokens: (accessToken, refreshToken) => {
+    setTokens: async (accessToken, refreshToken) => {
       if (!accessToken || !refreshToken) {
         throw new Error('Both tokens are required');
       }
-      storage.setItem('accessToken', accessToken);
-      storage.setItem('refreshToken', refreshToken);
+      await Promise.resolve(storage.setItem('accessToken', accessToken));
+      await Promise.resolve(storage.setItem('refreshToken', refreshToken));
     },
 
     /**
      * Clear all authentication tokens
      * 
      * SECURITY: Should be called on logout, token refresh failure, or session expiry
+     * @returns {Promise<void>} Resolves when both tokens are removed
      */
-    clearTokens: () => {
-      storage.removeItem('accessToken');
-      storage.removeItem('refreshToken');
+    clearTokens: async () => {
+      await Promise.resolve(storage.removeItem('accessToken'));
+      await Promise.resolve(storage.removeItem('refreshToken'));
     },
 
     /**
