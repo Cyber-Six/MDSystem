@@ -127,8 +127,8 @@ MDSystem/
 │   │       └── emr/
 │   │           └── emr.graphql        # Shared EMR GraphQL schema fragments
 │   │
-│   ├── mds-chatbot/                   # AI Medical Chatbot module (Llama-based)
-│   │   ├── index.js                   # Chatbot entry — initializes Llama, conversation service, routes
+│   ├── MDS-AI-Chatbot/                # AI Medical Chatbot module (Llama-based)
+│   │   ├── server.js                  # Chatbot entry — initializes Llama, conversation service, routes
 │   │   ├── config/
 │   │   │   ├── model-config.js        # Llama model paths, timeouts, server configuration
 │   │   │   └── safety-rules.js        # Medical safety guardrails and content rules

@@ -22,7 +22,7 @@ const AnnouncementRoutes = require('./routes/info/announcement/announcement.js')
 const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
-const { initializeChatbot, shutdownChatbot } = require('./mds-chatbot');
+const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
 
@@ -68,22 +68,10 @@ initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
 //initMedicalAppointmentGraphQL(app);
 
-// Initialize AI Medical Chatbot (routes registered synchronously, llama connection async)
-(async () => {
-  try {
-    const chatbot = await initializeChatbot(app, {
-      autoStartLlama: process.env.AUTO_START_LLAMA === 'true'
-    });
-    
-    if (chatbot) {
-      logger.info('✅ AI Medical Chatbot initialized on patient portal');
-    } else {
-      logger.warn('⚠️ AI Medical Chatbot llama service not available - routes still accessible');
-    }
-  } catch (err) {
-    logger.error('AI Chatbot initialization error', { error: err.message });
-  }
-})();
+// AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice
+// Requests to /econsultation/chat/* are forwarded to CHATBOT_URL (localhost or remote)
+app.use('/econsultation/chat', chatbotProxy);
+logger.info(`✅ Chatbot proxy registered at /econsultation/chat → ${process.env.CHATBOT_URL || '(not configured)'}`);
 
 app.use('/auth/register', registerRoutes);
 app.use('/auth/login', loginRoutes);
@@ -121,7 +109,6 @@ const server = app.listen(PORT, HOST, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully...');
-  await shutdownChatbot();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
@@ -130,7 +117,6 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully...');
-  await shutdownChatbot();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
