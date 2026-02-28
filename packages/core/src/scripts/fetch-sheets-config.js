@@ -13,8 +13,8 @@ import { config } from 'dotenv';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables from .env file
-config({ path: path.join(__dirname, '../.env') });
+// Load environment variables from .env file (two levels up: scripts/ → src/ → core/)
+config({ path: path.join(__dirname, '../../.env') });
 
 // Configuration
 const SHEET_URL = process.env.VITE_LAYOUT_ROUTES_SHEET_URL;

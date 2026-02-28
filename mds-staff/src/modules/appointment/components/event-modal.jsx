@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
  * Event Modal Component
@@ -10,17 +10,14 @@ import React, { useState } from 'react';
 const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
   const isEditing = !!editingEvent;
 
-  const [formData, setFormData] = useState({
-    name: editingEvent?.name || '',
-    startDate: editingEvent?.startDate || initialDate || '',
-    endDate: editingEvent?.endDate || initialDate || '',
-    affects: editingEvent?.affects || 'All',
-    effect: editingEvent?.effect || 'Suspend',
-    morningSlots: editingEvent?.morningSlots ?? 30,
-    afternoonSlots: editingEvent?.afternoonSlots ?? 30,
-    recurrence: editingEvent?.recurrence || 'None',
-    notes: editingEvent?.notes || '',
-  });
+  const [formData, setFormData] = useState(() => getInitialFormData(editingEvent, initialDate));
+
+  // Sync form state when props change (e.g., opening modal with different event/date)
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(getInitialFormData(editingEvent, initialDate));
+    }
+  }, [isOpen, editingEvent, initialDate]);
 
   if (!isOpen) return null;
 
@@ -213,5 +210,20 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
     </div>
   );
 };
+
+/** Build initial form data from editing event or defaults */
+function getInitialFormData(editingEvent, initialDate) {
+  return {
+    name: editingEvent?.name || '',
+    startDate: editingEvent?.startDate || initialDate || '',
+    endDate: editingEvent?.endDate || initialDate || '',
+    affects: editingEvent?.affects || 'All',
+    effect: editingEvent?.effect || 'Suspend',
+    morningSlots: editingEvent?.morningSlots ?? 30,
+    afternoonSlots: editingEvent?.afternoonSlots ?? 30,
+    recurrence: editingEvent?.recurrence || 'None',
+    notes: editingEvent?.notes || '',
+  };
+}
 
 export default EventModal;

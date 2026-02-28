@@ -144,7 +144,7 @@ const StaffDashboard = () => {
                 <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-accent-500 rounded-full" 
-                    style={{ width: `${((appointmentStats.tomorrowMedical.total - appointmentStats.tomorrowMedical.open) / appointmentStats.tomorrowMedical.total) * 100}%` }}
+                    style={{ width: `${appointmentStats.tomorrowMedical.total > 0 ? ((appointmentStats.tomorrowMedical.total - appointmentStats.tomorrowMedical.open) / appointmentStats.tomorrowMedical.total) * 100 : 0}%` }}
                   />
                 </div>
                 <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{appointmentStats.tomorrowMedical.open}/{appointmentStats.tomorrowMedical.total}</span>
@@ -156,7 +156,7 @@ const StaffDashboard = () => {
                 <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-purple-500 rounded-full" 
-                    style={{ width: `${((appointmentStats.tomorrowDental.total - appointmentStats.tomorrowDental.open) / appointmentStats.tomorrowDental.total) * 100}%` }}
+                    style={{ width: `${appointmentStats.tomorrowDental.total > 0 ? ((appointmentStats.tomorrowDental.total - appointmentStats.tomorrowDental.open) / appointmentStats.tomorrowDental.total) * 100 : 0}%` }}
                   />
                 </div>
                 <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{appointmentStats.tomorrowDental.open}/{appointmentStats.tomorrowDental.total}</span>

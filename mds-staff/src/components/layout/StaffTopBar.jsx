@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { logout } from '../../packages-core-adapter';
 
 /**
  * Staff Top Bar Component
@@ -202,7 +203,12 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                 Settings
               </button>
               <div className="border-t border-neutral-200 dark:border-neutral-700 mt-1 pt-1">
-                <button className="w-full px-3 py-2 text-left text-sm text-error-600 dark:text-error-400 hover:bg-neutral-50 dark:hover:bg-neutral-700">
+                <button 
+                  onClick={async () => {
+                    try { await logout(true); } catch { window.location.href = '/auth'; }
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-error-600 dark:text-error-400 hover:bg-neutral-50 dark:hover:bg-neutral-700"
+                >
                   Logout
                 </button>
               </div>

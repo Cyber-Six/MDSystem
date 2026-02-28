@@ -7,7 +7,10 @@ import React, { useState, useMemo } from 'react';
  * SRS §3.4.2
  */
 const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults }) => {
-  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 1)); // Feb 2026
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth()); // Current month
+  });
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();

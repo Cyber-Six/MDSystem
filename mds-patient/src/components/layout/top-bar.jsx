@@ -83,6 +83,10 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   // Handle logout
   const handleLogout = async () => {
     try {
+      // Clear e-consultation session data to prevent session leakage across users
+      localStorage.removeItem('econsultation_session_id');
+      sessionStorage.removeItem('econsultation_initialized');
+
       // Call the proper logout function from token service
       // This clears tokens, calls backend logout, and navigates to /auth
       await logout(true);

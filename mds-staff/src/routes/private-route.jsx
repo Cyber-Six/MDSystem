@@ -6,12 +6,13 @@ const PrivateRoute = ({ children }) => {
   const [isChecking, setIsChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   useEffect(() => {
+    let isMounted = true;
+
     const checkAuth = async () => {
       // DEV MODE: Set VITE_BYPASS_PRIVATE_ROUTE_AUTH=true in .env.local to bypass authentication
       if (import.meta.env.VITE_BYPASS_PRIVATE_ROUTE_AUTH === 'true') {
         console.warn('⚠️ DEV MODE: Authentication bypassed. Remove VITE_BYPASS_PRIVATE_ROUTE_AUTH in production!');
-        setIsAuthenticated(true);
-        setIsChecking(false);
+        if (isMounted) { setIsAuthenticated(true); setIsChecking(false); }
         return;
       }
 
@@ -20,16 +21,14 @@ const PrivateRoute = ({ children }) => {
       const refreshToken = TokenStorage.getRefreshToken();
 
       if (!accessToken || !refreshToken) {
-        setIsAuthenticated(false);
-        setIsChecking(false);
+        if (isMounted) { setIsAuthenticated(false); setIsChecking(false); }
         return;
       }
 
       // SECURITY: Validate token format
       if (!TokenStorage.validateToken(accessToken) || !TokenStorage.validateToken(refreshToken)) {
         TokenStorage.clearTokens();
-        setIsAuthenticated(false);
-        setIsChecking(false);
+        if (isMounted) { setIsAuthenticated(false); setIsChecking(false); }
         return;
       }
 
@@ -37,8 +36,7 @@ const PrivateRoute = ({ children }) => {
       const parts = refreshToken.split(':');
       if (parts.length !== 3) {
         TokenStorage.clearTokens();
-        setIsAuthenticated(false);
-        setIsChecking(false);
+        if (isMounted) { setIsAuthenticated(false); setIsChecking(false); }
         return;
       }
 
@@ -47,25 +45,26 @@ const PrivateRoute = ({ children }) => {
 
       if (!expired) {
         // Access token is still valid — no need to hit the refresh endpoint
-        setIsAuthenticated(true);
-        setIsChecking(false);
+        if (isMounted) { setIsAuthenticated(true); setIsChecking(false); }
         return;
       }
 
       // Access token expired or about to expire — attempt refresh
       try {
         await refreshAccessToken();
-        setIsAuthenticated(true);
+        if (isMounted) setIsAuthenticated(true);
       } catch (error) {
         console.warn('[PrivateRoute] Session expired — refresh failed:', error.message);
         TokenStorage.clearTokens();
-        setIsAuthenticated(false);
+        if (isMounted) setIsAuthenticated(false);
       } finally {
-        setIsChecking(false);
+        if (isMounted) setIsChecking(false);
       }
     };
 
     checkAuth();
+
+    return () => { isMounted = false; };
   }, []);
 
   // Show loading state while checking authentication

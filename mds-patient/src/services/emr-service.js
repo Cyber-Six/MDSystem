@@ -3,59 +3,7 @@
  */
 
 import { axiosRequest } from '../packages-core-adapter';
-
-/**
- * Send a GraphQL request to the patient EMR endpoint
- * @param {string} query - GraphQL query/mutation string
- * @param {object} variables - Variables for the GraphQL operation
- * @returns {Promise} Response from the server
- */
-const sendGraphQLRequest = async (query, variables = {}) => {
-  console.log('[EMR Service] Sending GraphQL request:', {
-    query: query,
-    variables: JSON.stringify(variables, null, 2)
-  });
-
-  try {
-    const response = await axiosRequest.post('/emr/patient', {
-      query,
-      variables
-    });
-
-    console.log('[EMR Service] GraphQL response received:', response.data);
-    
-    if (response.data.errors) {
-      console.error('[EMR Service] GraphQL errors:', JSON.stringify(response.data.errors, null, 2));
-      response.data.errors.forEach((err, i) => {
-        console.error(`[EMR Service] Error ${i + 1}:`, err.message);
-        if (err.locations) console.error(`[EMR Service] Location:`, err.locations);
-        if (err.path) console.error(`[EMR Service] Path:`, err.path);
-        if (err.extensions) console.error(`[EMR Service] Extensions:`, err.extensions);
-      });
-      throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
-    }
-
-    return response.data.data;
-  } catch (error) {
-    // If the error response contains GraphQL errors, log them
-    if (error.response?.data?.errors) {
-      console.error('[EMR Service] GraphQL Errors from response:');
-      error.response.data.errors.forEach((err, i) => {
-        console.error(`[EMR Service] Error ${i + 1}:`, err.message);
-        if (err.locations) console.error(`[EMR Service] Location:`, err.locations);
-        if (err.path) console.error(`[EMR Service] Path:`, err.path);
-        if (err.extensions) console.error(`[EMR Service] Extensions:`, err.extensions);
-      });
-    }
-    
-    console.error('[EMR Service] Request failed:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    });
-    throw error;
-  }
-};
+import { sendGraphQLRequest } from '../utils/graphql-client';
 
 /**
  * Create an update ticket (required before making any profile mutations)

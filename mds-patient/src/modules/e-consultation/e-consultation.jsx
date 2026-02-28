@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { axiosRequest, getApiBaseUrl } from '../../packages-core-adapter';
+import { axiosRequest, getApiBaseUrl, TokenStorage } from '../../packages-core-adapter';
 import GuidelinesCard from './components/GuidelinesCard';
 import ChatBox from './components/ChatBox';
 
@@ -273,10 +273,12 @@ const EConsultation = () => {
       const streamUrl = `${baseUrl}/econsultation/chat/message/stream`;
       
       // Use fetch for SSE streaming (axios doesn't properly support SSE in browsers)
+      const accessToken = TokenStorage.getAccessToken();
       const response = await fetch(streamUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
           sessionId: sessionId,

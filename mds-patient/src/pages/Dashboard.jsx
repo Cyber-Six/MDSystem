@@ -1,14 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/layout/layout.jsx';
-import DashboardHome from '../modules/dashboard/dashboard-home.jsx';
-import RecordUpdateForm from '../modules/record-forms/update-record/record-update-form.jsx';
-import AppointmentPage from '../modules/appointment/appointment-router.jsx';
-import MedicineRequestPage from '../modules/medicine-request/medicine-request-page.jsx';
-import EConsultation from '../modules/e-consultation/e-consultation.jsx';
+import ErrorBoundary from '../components/error-boundary.jsx';
 import { checkInitialRecordStatus } from '../services/emr-service.js';
 import InitialRecordModal from '../components/modals/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
+
+// Lazy-loaded route modules for code splitting
+const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx'));
+const RecordUpdateForm = lazy(() => import('../modules/record-forms/update-record/record-update-form.jsx'));
+const AppointmentPage = lazy(() => import('../modules/appointment/appointment-router.jsx'));
+const MedicineRequestPage = lazy(() => import('../modules/medicine-request/medicine-request-page.jsx'));
+const EConsultation = lazy(() => import('../modules/e-consultation/e-consultation.jsx'));
+
+const RouteLoader = () => (
+  <div className="flex items-center justify-center min-h-[50vh]">
+    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+  </div>
+);
 
 const Dashboard = () => {
   const [showInitialRecordModal, setShowInitialRecordModal] = useState(false);
@@ -159,14 +168,18 @@ const Dashboard = () => {
       </InitialRecordModal>
 
       <Layout>
-        <Routes>
-          <Route path="/" element={<DashboardHome />} />
-          <Route path="/record-update" element={<RecordUpdateForm />} />
-          <Route path="/appointments" element={<AppointmentPage />} />
-          <Route path="/medicine-request" element={<MedicineRequestPage />} />
-          <Route path="/e-consultation" element={<EConsultation />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Suspense fallback={<RouteLoader />}>
+            <Routes>
+              <Route path="/" element={<DashboardHome />} />
+              <Route path="/record-update" element={<RecordUpdateForm />} />
+              <Route path="/appointments" element={<AppointmentPage />} />
+              <Route path="/medicine-request" element={<MedicineRequestPage />} />
+              <Route path="/e-consultation" element={<EConsultation />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </Layout>
     </>
   );
