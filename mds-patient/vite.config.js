@@ -27,6 +27,11 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@core': resolve(__dirname, 'src'),
       },
+      // Force a single copy of React regardless of how many packages import it.
+      // Without this, workspace packages (e.g. @mdsystem/core) or pre-bundled
+      // deps can resolve to a different React instance, causing the
+      // "Cannot read properties of null (reading 'useRef')" hook error.
+      dedupe: ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
     },
     plugins: [
       react({

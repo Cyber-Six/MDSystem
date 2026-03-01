@@ -27,6 +27,7 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@core': resolve(__dirname, 'src'),
       },
+      dedupe: ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
     },
     plugins: [
       react({
