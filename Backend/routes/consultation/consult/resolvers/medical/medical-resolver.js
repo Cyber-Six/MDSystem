@@ -1,8 +1,8 @@
 const path = require("path");
 const dotenv = require("dotenv");
 const Wrapper = require("../wrapper/wrapper.js");
-const { throwGraphQLError } = require("../../../../../../utils/graphql-helper.js");
-const permit = require("../../../../../../services/permit.js");
+const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
+const permit = require("../../../../../services/permit.js");
 
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 

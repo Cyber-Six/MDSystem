@@ -1,7 +1,7 @@
-const db  = require("../../../../../../config/query.js");
+const db  = require("../../../../../config/query.js");
 
-const { throwGraphQLError } = require("../../../../../../utils/graphql-helper.js");
-const logger = require("../../../../../../utils/logger.js");
+const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
+const logger = require("../../../../../utils/logger.js");
 const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
