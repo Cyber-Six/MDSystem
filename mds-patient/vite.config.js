@@ -27,6 +27,11 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@core': resolve(__dirname, 'src'),
       },
+      // Force a single copy of React regardless of how many packages import it.
+      // Without this, workspace packages (e.g. @mdsystem/core) or pre-bundled
+      // deps can resolve to a different React instance, causing the
+      // "Cannot read properties of null (reading 'useRef')" hook error.
+      dedupe: ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
     },
     plugins: [
       react({
@@ -67,6 +72,19 @@ export default defineConfig(({ mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: true,
+          // SSE streaming support: disable response buffering and extend
+          // timeout so the proxy doesn't kill the connection while LLaMA generates
+          timeout: 300000,    // 5 minutes (matches backend CHATBOT_PROXY_TIMEOUT_MS)
+          proxyTimeout: 300000,
+          configure: (proxy) => {
+            proxy.on('proxyRes', (proxyRes) => {
+              if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+                // Disable response buffering for SSE
+                proxyRes.headers['cache-control'] = 'no-cache, no-transform';
+                proxyRes.headers['x-accel-buffering'] = 'no';
+              }
+            });
+          },
         },
         '/appointment': {
           target: BACKEND_URL,

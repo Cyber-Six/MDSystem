@@ -4,15 +4,12 @@
  * Proxies /econsultation/chat/* requests to the MDS-AI-Chatbot microservice.
  * 
  * Configuration:
- *   CHATBOT_URL — Base URL of the chatbot service
- *     - http://localhost:4000  (when chatbot is co-located — fast, no internet)
- *     - https://ai.mdsystemtip.space (when chatbot is on a remote server)
- * 
+ *   CHATBOT_URL     — Base URL of the chatbot service (set in .env)
  *   CHATBOT_API_KEY — Shared secret for service-to-service auth
  * 
  * Behavior:
  *   Patient routes:  /econsultation/chat/* → CHATBOT_URL/api/patient/*
- *   Staff routes:    /econsultation/chat/staff/* → CHATBOT_URL/api/staff/* (+ X-Staff-Id/Role headers)
+ *   Staff routes:    /econsultation/chat/staff/* → CHATBOT_URL/api/staff/*
  *   Health:          /econsultation/chat/health → CHATBOT_URL/api/health
  * 
  * SSE Streaming:
@@ -32,19 +29,15 @@ const CHATBOT_URL = process.env.CHATBOT_URL;
 const CHATBOT_API_KEY = process.env.CHATBOT_API_KEY;
 
 if (!CHATBOT_URL) {
-  logger.warn('⚠️ CHATBOT_URL not set — chatbot proxy will return 503 for all requests');
+  logger.warn('CHATBOT_URL not set — chatbot proxy will return 503 for all requests');
 }
 
 if (!CHATBOT_API_KEY) {
-  logger.warn('⚠️ CHATBOT_API_KEY not set — chatbot proxy will return 503 for all requests');
+  logger.warn('CHATBOT_API_KEY not set — chatbot proxy will return 503 for all requests');
 }
 
 /**
  * Map incoming path to chatbot microservice path
- * 
- * /econsultation/chat/staff/*  →  /api/staff/*
- * /econsultation/chat/health   →  /api/health
- * /econsultation/chat/*        →  /api/patient/*
  */
 function mapPath(originalPath) {
   // Strip the mount prefix (handled by Express routing)
