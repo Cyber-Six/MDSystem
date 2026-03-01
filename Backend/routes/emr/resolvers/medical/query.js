@@ -10,7 +10,8 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 const Query = {
   getUserUpdateTicket: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserUpdateTicket`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -20,7 +21,8 @@ const Query = {
   },
 
   getUserProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -34,7 +36,8 @@ const Query = {
 
 
   getUserDentalPhotoRecord: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserDentalPhotoRecord`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -47,7 +50,8 @@ const Query = {
   },
 
   getUserObgynHistory: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserObgynHistory`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -60,7 +64,8 @@ const Query = {
   },
 
   getUserLifestyle: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserLifestyle`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -73,7 +78,8 @@ const Query = {
   },
 
   getUserDentalHistory: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserDentalHistory`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -86,7 +92,8 @@ const Query = {
   },
 
   getUserDentalRecord: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserDentalRecord`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -99,7 +106,8 @@ const Query = {
   },
 
   getUserVitalSigns: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserVitalSigns`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -112,7 +120,8 @@ const Query = {
   },
   
   getUserOralApplianceProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserOralApplianceProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -125,7 +134,8 @@ const Query = {
   },
 
   getUserEmergencyContact: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserEmergencyContact`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -138,7 +148,8 @@ const Query = {
   },
 
   getUserAllergyProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserAllergyProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -151,7 +162,8 @@ const Query = {
   },
 
   getUserMedicationProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserMedicationProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -164,7 +176,8 @@ const Query = {
   },
 
   getUserDentalProcedureProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserDentalProcedureProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -177,7 +190,8 @@ const Query = {
   },
 
   getUserImmunizationProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserImmunizationProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -190,7 +204,8 @@ const Query = {
   },
 
   getUserOperationProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserOperationProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -203,7 +218,8 @@ const Query = {
   },
 
   getUserHospitalizationProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserHospitalizationProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -216,7 +232,8 @@ const Query = {
   },
 
   getUserMedicalHistory: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserMedicalHistory`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -229,7 +246,8 @@ const Query = {
   },
 
   getUserVisualAcuityProfile: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserVisualAcuityProfile`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -282,7 +300,8 @@ const Query = {
   },
 
   getStatusUpdateTickets: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval);
+    if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getStatusUpdateTickets`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }

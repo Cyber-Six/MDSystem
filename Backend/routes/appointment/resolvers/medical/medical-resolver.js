@@ -13,8 +13,6 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 const Query = {
   getUserAppointmentStatus: async (_, { userId }, { user, res }) => {
     const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, userId);
-    console.log("permitted:", permitted);
-
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }

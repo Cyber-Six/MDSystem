@@ -9,6 +9,9 @@ const logger = require('./utils/logger.js');
 const { initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initMedicalProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
+const { initMedicalConsultationGraphQL } = require('./routes/services/consultation/consult/graphql.js');
+
+const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
@@ -53,10 +56,12 @@ app.use((err, req, res, next) => {
 initMedicalEMRGraphQL(app);
 initMedicalProfileGraphQL(app);
 initMedicalAppointmentGraphQL(app);
+initMedicalConsultationGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
+app.use('/info/consent', consentRoutes);
 
 // ======================================
 // Initialize AI Medical Chatbot BEFORE static files

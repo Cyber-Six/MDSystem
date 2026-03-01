@@ -21,7 +21,7 @@ const AnnouncementRoutes = require('./routes/info/announcement/announcement.js')
 
 const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
-const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
+const { initPatientAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { initializeChatbot, shutdownChatbot } = require('./mds-chatbot');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
@@ -66,7 +66,7 @@ app.use((err, req, res, next) => {
 initPatientEMRGraphQL(app);
 initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
-//initMedicalAppointmentGraphQL(app);
+initMedicalConsultationGraphQL(app);
 
 // Initialize AI Medical Chatbot (routes registered synchronously, llama connection async)
 (async () => {
