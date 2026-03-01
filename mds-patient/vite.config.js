@@ -72,6 +72,19 @@ export default defineConfig(({ mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: true,
+          // SSE streaming support: disable response buffering and extend
+          // timeout so the proxy doesn't kill the connection while LLaMA generates
+          timeout: 300000,    // 5 minutes (matches backend CHATBOT_PROXY_TIMEOUT_MS)
+          proxyTimeout: 300000,
+          configure: (proxy) => {
+            proxy.on('proxyRes', (proxyRes) => {
+              if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+                // Disable response buffering for SSE
+                proxyRes.headers['cache-control'] = 'no-cache, no-transform';
+                proxyRes.headers['x-accel-buffering'] = 'no';
+              }
+            });
+          },
         },
         '/appointment': {
           target: BACKEND_URL,
