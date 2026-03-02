@@ -726,6 +726,29 @@ type UpdateTicket {
   id: ID!
   patientId: ID!
   status: UpdateStatus!
+  scope: UpdateScope
+}
+
+## -------- Patient Search -------- ##
+
+type PatientSearchResult {
+  id: ID!
+  identifier: String
+  branch: String
+  sex: String
+  first_name: String
+  last_name: String
+  middle_name: String
+  suffix: String
+  profile_type: String
+  program: String
+  year: String
+  department: String
+  role: String
+  latest_ticket_id: ID
+  latest_status: UpdateStatus
+  latest_scope: UpdateScope
+  latest_updated_at: Date
 }
 
 
@@ -753,6 +776,10 @@ type Query {
   getUserIDViaEntityId(entityId: String!, branch: DesignationBranch!): [UserProfile!]
   getUserIdViaName(Name: String!, branch: DesignationBranch!): [UserProfile!]
   getUserIdViaEmail(email: String!, branch: DesignationBranch!): [UserProfile!]
+
+  # Patient Search (real-time, medical staff only)
+  searchPatients(searchTerm: String!, branch: DesignationBranch, offset: Int, limit: Int): [PatientSearchResult!]!
+  getPatientBasicInfo(userId: ID!): PatientSearchResult
 
 
   # Categories

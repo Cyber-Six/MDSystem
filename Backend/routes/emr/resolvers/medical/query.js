@@ -309,6 +309,23 @@ const Query = {
     const result = await Wrapper._getStatusUpdateTickets(_, args, { user, res });
     return result;
   },
+
+  // ─── Patient Search ───────────────────────────────────────────────────────
+  getPatientBasicInfo: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+    return await Wrapper._getPatientBasicInfo(_, args, { user, res });
+  },
+
+  searchPatients: async (_, args, { user, res }) => {
+    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view)) {
+      logger.warn(`Unauthorized search attempt by user ID ${user.id}`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    if (!args.searchTerm || args.searchTerm.trim().length < 2) return [];
+    return await Wrapper._searchPatients(_, args, { user, res });
+  },
   
 };
 
