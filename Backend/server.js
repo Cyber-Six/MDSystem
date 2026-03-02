@@ -18,7 +18,6 @@ const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const mediaRoutes = require('./routes/media/media.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
-const staffRoutes = require('./routes/staff/staff.js');
 
 const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
@@ -82,7 +81,6 @@ app.use('/auth/refresh', refreshAuthRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
-app.use('/staff', staffRoutes);
 // ======================================
 
 // Serve static assets for the React app

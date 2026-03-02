@@ -15,6 +15,9 @@ const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
+const staffRoutes = require('./routes/staff/staff.js');
+
+
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
 
@@ -63,6 +66,7 @@ initMedicalConsultationGraphQL(app);
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/info/consent', consentRoutes);
+app.use('/staff', staffRoutes);
 
 // ======================================
 // AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice
