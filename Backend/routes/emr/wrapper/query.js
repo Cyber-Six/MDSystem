@@ -749,7 +749,7 @@ const Query = {
         JOIN "UsersPersonal" up ON up.id = pul."patientId"
         ORDER BY pul."patientId", pul.created_at DESC, pul.id DESC
       ) latest
-      WHERE latest.branch = $1
+      WHERE ($1 = 'Both' OR latest.branch = $1)
         AND latest.status = ANY(COALESCE($2, ARRAY[latest.status]))
       ORDER BY latest.created_at DESC
       LIMIT $3 OFFSET $4;

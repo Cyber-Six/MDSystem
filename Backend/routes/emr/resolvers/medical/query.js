@@ -312,14 +312,16 @@ const Query = {
 
   // ─── Patient Search ───────────────────────────────────────────────────────
   getPatientBasicInfo: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
       throwGraphQLError(res).message('Unauthorized').status(401).throw();
     }
     return await Wrapper._getPatientBasicInfo(_, args, { user, res });
   },
 
   searchPatients: async (_, args, { user, res }) => {
-    if (!permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view)) {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
+    if (!isPermitted) {
       logger.warn(`Unauthorized search attempt by user ID ${user.id}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
