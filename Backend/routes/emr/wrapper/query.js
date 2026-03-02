@@ -26,7 +26,7 @@ const Query = {
         `,
       [userId]
       );
-    
+
     const ticket = result.rows[0];
     logger.debug("Fetched Update Ticket:", ticket);
     if (ticket && ticket.status === "InProgress") {
@@ -733,27 +733,34 @@ const Query = {
       throwGraphQLError(res).status(403).message("Forbidden").throw();
     }
 
-    const query = `
-      SELECT *
-      FROM (
-        SELECT DISTINCT ON (pul."patientId")
-          pul.id            AS id,
-          pul."patientId"   AS "patientId",
-          pul.status        AS status,
-          pul.scope         AS scope,
-          pul.created_at    AS created_at,
-          up.first_name     AS first_name,
-          up.last_name      AS last_name,
-          up.branch         AS branch
-        FROM "patientUpdateLog" pul
-        JOIN "UsersPersonal" up ON up.id = pul."patientId"
-        ORDER BY pul."patientId", pul.created_at DESC, pul.id DESC
-      ) latest
-      WHERE ($1 = 'Both' OR latest.branch = $1)
-        AND latest.status = ANY(COALESCE($2, ARRAY[latest.status]))
-      ORDER BY latest.created_at DESC
-      LIMIT $3 OFFSET $4;
-    `;
+  const query =`
+        SELECT *
+        FROM (
+          SELECT DISTINCT ON (pul."patientId")
+            pul.id            AS id,
+            pul."patientId"   AS "patientId",
+            pul.status        AS status,
+            pul.scope         AS scope,
+            pul.created_at    AS created_at,
+            COALESCE(up.first_name, upl.first_name)   AS first_name,
+            COALESCE(up.last_name,  upl.last_name)    AS last_name,
+            up.branch         AS branch
+          FROM "patientUpdateLog" pul
+          JOIN "UsersPersonal" up ON up.id = pul."patientId"
+          LEFT JOIN LATERAL (
+            SELECT first_name, last_name
+            FROM "UsersPersonalLog"
+            WHERE user_id = pul."patientId"
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) upl ON true
+          ORDER BY pul."patientId", pul.created_at DESC, pul.id DESC
+        ) latest
+        WHERE ($1 = 'Both' OR latest.branch::text = $1)
+          AND latest.status::text = ANY(COALESCE($2, ARRAY[latest.status::text]))
+        ORDER BY latest.created_at DESC
+        LIMIT $3 OFFSET $4;
+      `;
 
     const result = await db.query(query, [
       branch,
