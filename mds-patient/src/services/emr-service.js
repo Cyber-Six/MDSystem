@@ -155,6 +155,59 @@ const registerBranchIdentifier = async (identifier) => {
   }
 };
 
+/**
+ * Batch both profile setup mutations (branch identifier + personal info)
+ * into a single POST /profile/patient request.
+ *
+ * @param {string} identifier - Student/employee number
+ * @param {object} personalInfo - formData.personalInfo
+ */
+const registerProfileSetup = async (identifier, personalInfo) => {
+  const pi = personalInfo || {};
+  const hasIdentifier = !!identifier?.trim();
+
+  const personalInput = {
+    first_name:       pi.firstName?.trim()        || '',
+    middle_name:      pi.middleName?.trim()       || '',
+    last_name:        pi.surname?.trim()          || '',
+    suffix:           pi.suffix?.trim()           || null,
+    date_of_birth:    pi.birthday                || null,
+    sex:              pi.gender                  || null,
+    civil_status:     pi.civilStatus             || null,
+    nationality:      pi.nationality?.trim()     || '',
+    religion:         pi.religion?.trim()        || '',
+    contactNumber:    pi.contactNumber?.trim()   || '',
+    present_address:  pi.address?.trim()         || '',
+    province_address: pi.provinceAddress?.trim() || pi.address?.trim() || '',
+  };
+
+  // Build a compound mutation so both ops travel in one HTTP request.
+  // createBranchIdentifier is conditional — skip it if no identifier is available.
+  const mutation = hasIdentifier
+    ? `mutation ProfileSetup($identifier: ID!, $input: userProfileInput!) {
+        createBranchIdentifier(identifier: $identifier) { branch identifier }
+        createPersonalRecordLog(input: $input) { first_name last_name }
+      }`
+    : `mutation ProfileSetup($input: userProfileInput!) {
+        createPersonalRecordLog(input: $input) { first_name last_name }
+      }`;
+
+  const variables = hasIdentifier
+    ? { identifier: identifier.trim(), input: personalInput }
+    : { input: personalInput };
+
+  try {
+    const result = await sendGraphQLRequest(mutation, variables, { endpoint: '/profile/patient' });
+    console.log('[EMR Service] Profile setup complete:', {
+      branch: result?.createBranchIdentifier?.branch,
+      name: `${result?.createPersonalRecordLog?.first_name} ${result?.createPersonalRecordLog?.last_name}`,
+    });
+  } catch (error) {
+    console.error('[EMR Service] Failed to register profile setup:', error);
+    throw error;
+  }
+};
+
 export const createInitialMedicalRecord = async (formData) => {
   console.log('[EMR Service] Starting initial medical record creation (batched)');
   console.log('[EMR Service] Form data received:', formData);
@@ -167,49 +220,41 @@ export const createInitialMedicalRecord = async (formData) => {
   try {
     const results = {};
 
-    // ======== REQUEST 0: Register branch identifier ========
-    // Sets UsersPersonal.branch so staff can filter this ticket by branch.
-    // Must run before ticket creation. Soft-fails if branch is already set.
-    console.log('[EMR Service] [0/4] Registering branch identifier...');
-    await registerBranchIdentifier(formData.personalInfo?.studentNumber);
+    // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
+    // Both mutations go to /profile/patient — batched into ONE request.
+    // Must complete before ticket creation so the branch is already set.
+    console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
+    await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo);
 
-    // ======== REQUEST 1: Create update ticket ========
-    console.log('[EMR Service] [1/4] Creating update ticket...');
-    const ticketId = await createUpdateTicket('Both');
-    ticketCreated = true;
-    results.ticketId = ticketId;
-    console.log('[EMR Service] Update ticket created with ID:', ticketId);
-
-    // ======== Upload dental photos via REST API before building inputs ========
-    // Both uploads are independent – run in parallel to halve the wait time
-    console.log('[EMR Service] [2/4] Uploading dental photos (parallel)...');
-    [upperTeethFileId, lowerTeethFileId] = await Promise.all([
+    // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========
+    // createUpdateTicket and both photo uploads are independent of each other
+    // so all three fire simultaneously.
+    console.log('[EMR Service] [2/3] Creating ticket & uploading photos (parallel)...');
+    const [ticketResult, upperResult, lowerResult] = await Promise.allSettled([
+      createUpdateTicket('Both'),
       uploadMediaFile(formData.dentalHistory?.upperTeethPhoto?.file ?? null),
-      uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null)
+      uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null),
     ]);
-    console.log('[EMR Service] Dental photos staged:', { upperTeethFileId, lowerTeethFileId });
 
-    // ======== Prepare all input data ========
+    // Capture partial results so cleanup always works even if one operation fails
+    if (ticketResult.status === 'fulfilled') { ticketCreated = true; results.ticketId = ticketResult.value; }
+    upperTeethFileId = upperResult.status === 'fulfilled' ? upperResult.value : null;
+    lowerTeethFileId = lowerResult.status === 'fulfilled' ? lowerResult.value : null;
+
+    // Re-throw the first failure (cleanup in catch will now have correct state)
+    const parallelError = [ticketResult, upperResult, lowerResult].find(r => r.status === 'rejected');
+    if (parallelError) throw parallelError.reason;
+
+    console.log('[EMR Service] Ticket + photos ready:', { ticketId: results.ticketId, upperTeethFileId, lowerTeethFileId });
+
+    // ======== REQUEST 3: Batch all create mutations + submit in one request ========
+    // submitUpdateTicket is appended as the last field in the same mutation document
+    // so the server processes it after all creates complete (GraphQL serial execution).
+    console.log('[EMR Service] [3/3] Sending batched create mutations + submit...');
     const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId });
-    console.log('[EMR Service] Prepared batch inputs:', Object.keys(inputs));
-
-    // ======== REQUEST 3: Batch all create mutations in one request ========
-    console.log('[EMR Service] [3/4] Sending batched create mutations...');
     const batchResult = await sendBatchedCreateMutations(inputs, formData);
     Object.assign(results, batchResult);
-    console.log('[EMR Service] Batch mutations completed:', Object.keys(batchResult));
-
-    // ======== REQUEST 4: Submit the ticket ========
-    console.log('[EMR Service] [4/4] Submitting update ticket...');
-    try {
-      const submitStatus = await submitUpdateTicket();
-      results.submitStatus = submitStatus;
-      console.log('[EMR Service] Update ticket submitted with status:', submitStatus);
-    } catch (submitError) {
-      console.error('[EMR Service] Failed to submit update ticket:', submitError);
-      throw submitError;
-    }
-
+    results.submitStatus = batchResult.submitTicket;
     console.log('[EMR Service] Initial medical record creation completed successfully');
     return { success: true, data: results };
 
@@ -485,6 +530,10 @@ const sendBatchedCreateMutations = async (inputs, formData) => {
   if (inputs.obgynHistory) {
     addMutation('obgynHistory', 'createObgynHistory', 'ObgynHistoryInput', 'obgynHistory', 'obgynInput');
   }
+
+  // Submit ticket as the final field — GraphQL executes mutations serially
+  // so this runs only after all creates above have completed.
+  mutationParts.push('submitTicket: submitUpdateTicket');
 
   const mutation = `
     mutation BatchCreateInitialRecords(${variableDefs.join(', ')}) {

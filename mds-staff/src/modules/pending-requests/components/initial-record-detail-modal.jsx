@@ -114,6 +114,16 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction }) => {
               </h3>
             </div>
             <div className="p-4 grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+                  Patient Name
+                </p>
+                <p className="text-sm font-semibold text-secondary-900 dark:text-white">
+                  {ticket.first_name || ticket.last_name
+                    ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
+                    : <span className="italic text-secondary-400 dark:text-neutral-500">— not available —</span>}
+                </p>
+              </div>
               <div>
                 <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                   Patient ID
@@ -130,12 +140,34 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction }) => {
                   {ticket.status}
                 </span>
               </div>
-              {/* scope / created_at would render here once backend exposes them */}
-              <div className="col-span-2">
-                <p className="text-xs text-secondary-400 dark:text-neutral-500 italic">
-                  Note: patient name and submission date are not yet returned by the backend (see backend issues).
+              <div>
+                <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+                  Submitted
+                </p>
+                <p className="text-sm text-secondary-700 dark:text-neutral-300">
+                  {ticket.created_at
+                    ? new Date(ticket.created_at).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : '—'}
                 </p>
               </div>
+              <div>
+                <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+                  Branch
+                </p>
+                <p className="text-sm text-secondary-700 dark:text-neutral-300">
+                  {ticket.branch === 'QuezonCity' ? 'Quezon City' : ticket.branch ?? '—'}
+                </p>
+              </div>
+              {ticket.scope && (
+                <div className="col-span-2">
+                  <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+                    Scope
+                  </p>
+                  <p className="text-sm text-secondary-700 dark:text-neutral-300">
+                    {ticket.scope}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

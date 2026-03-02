@@ -76,6 +76,11 @@ export const getStatusUpdateTickets = async (statuses, branch, offset = 0, limit
          id
          patientId
          status
+         scope
+         created_at
+         first_name
+         last_name
+         branch
        }
      }`,
     { statuses, branch, offset, limit },

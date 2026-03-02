@@ -17,10 +17,7 @@ import InitialRecordDetailModal from './initial-record-detail-modal';
  *  • Click-to-review modal (InitialRecordDetailModal)
  *
  * The component reflects the backend's UpdateTicket shape:
- *   { id, patientId, status }
- *
- * Additional fields (scope, created_at, patient name) will be displayed
- * once the backend exposes them on UpdateTicket — see backend issues table.
+ *   { id, patientId, status, scope, created_at, first_name, last_name, branch }
  */
 const InitialRecordList = () => {
   const [branch, setBranch] = useState(BRANCH.BOTH);
@@ -170,9 +167,11 @@ const InitialRecordList = () => {
                     Ticket ID
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
-                    Patient ID
+                    Patient
                   </th>
-                  {/* Scope / Date columns require backend UpdateTicket schema update */}
+                  <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
+                    Submitted
+                  </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
                     Status
                   </th>
@@ -190,7 +189,14 @@ const InitialRecordList = () => {
                       #{ticket.id}
                     </td>
                     <td className="px-4 py-3 text-xs text-secondary-700 dark:text-neutral-300">
-                      {ticket.patientId}
+                      {ticket.first_name || ticket.last_name
+                        ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
+                        : <span className="italic text-secondary-400 dark:text-neutral-500">ID&nbsp;{ticket.patientId}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-secondary-500 dark:text-neutral-400">
+                      {ticket.created_at
+                        ? new Date(ticket.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+                        : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${statusBadge(ticket.status)}`}>
