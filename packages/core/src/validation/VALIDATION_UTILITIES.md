@@ -29,7 +29,7 @@ import {
 
 **Implementation Examples:**
 
-#### Registration Form ([register.jsx](../../../mds-frontend/src/modules/auth/register.jsx#L78-L95))
+#### Registration Form ([register.jsx](../../../mds-patient/src/modules/auth/register.jsx#L78-L95))
 ```javascript
 const handleInitialRegistration = async (e) => {
   e.preventDefault();
@@ -50,7 +50,7 @@ const handleInitialRegistration = async (e) => {
 };
 ```
 
-#### Change Password Modal ([change-password-modal.jsx](../../../mds-frontend/src/components/settings/change-password-modal.jsx))
+#### Change Password Modal ([change-password-modal.jsx](../../../mds-patient/src/components/settings/change-password-modal.jsx))
 ```javascript
 const handleSubmit = async (e) => {
   e.preventDefault();
@@ -279,7 +279,7 @@ describe('Password Validation', () => {
 ### Recommended Implementation Areas
 
 1. **Add Email Validation to Registration**
-   - Use `isValidTipEmail()` in [register.jsx](../../../mds-frontend/src/modules/auth/register.jsx)
+   - Use `isValidTipEmail()` in [register.jsx](../../../mds-patient/src/modules/auth/register.jsx)
    - Provide specific error messages based on email format
 
 2. **Integrate Role Detection**

@@ -4,7 +4,7 @@
 
 ### 1. TypeScript Declaration File - COMPLETED ✅
 
-Created [mds-frontend/src/types/mdsystem__core.d.ts](mds-frontend/src/types/mdsystem__core.d.ts) to resolve TypeScript warnings for the JavaScript-based `@mdsystem/core` package.
+Created [mds-patient/src/types/mdsystem__core.d.ts](mds-patient/src/types/mdsystem__core.d.ts) to resolve TypeScript warnings for the JavaScript-based `@mdsystem/core` package.
 
 **What it does:**
 - Provides type declarations for all @mdsystem/core modules
@@ -56,19 +56,19 @@ mds-mobile/
 
 ## 🎯 Key Differences: Web vs Mobile
 
-| Feature | Web (mds-frontend) | Mobile (mds-mobile) |
+| Feature | Web (mds-patient) | Mobile (mds-mobile) |
 |---------|-------------------|---------------------|
 | **Storage** | `localStorage` (sync) | `AsyncStorage` (async) |
 | **Navigation** | `window.location.href` | React Navigation |
 | **Environment** | `import.meta.env.VITE_*` | `react-native-config` or `__DEV__` |
 | **Hostname** | `window.location.hostname` | Fixed config or environment |
-| **Core Adapter** | [src/core.js](mds-frontend/src/core.js) | [src/core.js](mds-mobile/src/core.js) |
+| **Core Adapter** | [src/core.js](mds-patient/src/core.js) | [src/core.js](mds-mobile/src/core.js) |
 
 ## 🚀 Running the Projects
 
 ### Web Application
 ```bash
-cd mds-frontend
+cd mds-patient
 npm run dev          # Development server
 npm run build        # Production build
 ```
@@ -200,8 +200,8 @@ All validators **match perfectly**:
 ## 📁 Project Files Overview
 
 ### Web Application
-- **[mds-frontend/src/core.js](mds-frontend/src/core.js)** - Web adapter
-- **[mds-frontend/src/types/mdsystem__core.d.ts](mds-frontend/src/types/mdsystem__core.d.ts)** - TypeScript declarations
+- **[mds-patient/src/core.js](mds-patient/src/core.js)** - Web adapter
+- **[mds-patient/src/types/mdsystem__core.d.ts](mds-patient/src/types/mdsystem__core.d.ts)** - TypeScript declarations
 
 ### Mobile Application  
 - **[mds-mobile/src/core.js](mds-mobile/src/core.js)** - React Native adapter

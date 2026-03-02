@@ -10,16 +10,16 @@
 /**
  * Status codes that should display SUCCESS banners (green)
  */
-export const SUCCESS_STATUS_CODES = [
+export const SUCCESS_STATUS_CODES = new Set([
   200, // OK
   201, // Created
   // Add more success codes here as needed
-];
+]);
 
 /**
  * Status codes that should display ERROR banners (red)
  */
-export const ERROR_STATUS_CODES = [
+export const ERROR_STATUS_CODES = new Set([
   400, // Bad Request
   // 401 excluded - handled by token refresh flow, not shown to user
   403, // Forbidden
@@ -31,24 +31,24 @@ export const ERROR_STATUS_CODES = [
   502, // Bad Gateway
   503, // Service Unavailable
   // Add more error codes here as needed
-];
+]);
 
 /**
  * Status codes that should display INFO banners (grey)
  */
-export const INFO_STATUS_CODES = [
+export const INFO_STATUS_CODES = new Set([
   // Add info codes here if needed
   // Example: 202, // Accepted (processing)
-];
+]);
 
 /**
  * Status codes that should NEVER display banners (silent)
  * These are typically handled programmatically or are part of normal flow
  */
-export const SILENT_STATUS_CODES = [
+export const SILENT_STATUS_CODES = new Set([
   // Token refresh 401 is handled separately in interceptor
   // Add other codes that should be silent
-];
+]);
 
 /**
  * Check if a status code should display a banner
@@ -57,9 +57,9 @@ export const SILENT_STATUS_CODES = [
  */
 export const shouldShowBanner = (statusCode) => {
   return (
-    SUCCESS_STATUS_CODES.includes(statusCode) ||
-    ERROR_STATUS_CODES.includes(statusCode) ||
-    INFO_STATUS_CODES.includes(statusCode)
+    SUCCESS_STATUS_CODES.has(statusCode) ||
+    ERROR_STATUS_CODES.has(statusCode) ||
+    INFO_STATUS_CODES.has(statusCode)
   );
 };
 
@@ -69,9 +69,9 @@ export const shouldShowBanner = (statusCode) => {
  * @returns {'success'|'error'|'info'} Banner type
  */
 export const getBannerType = (statusCode) => {
-  if (SUCCESS_STATUS_CODES.includes(statusCode)) return 'success';
-  if (ERROR_STATUS_CODES.includes(statusCode)) return 'error';
-  if (INFO_STATUS_CODES.includes(statusCode)) return 'info';
+  if (SUCCESS_STATUS_CODES.has(statusCode)) return 'success';
+  if (ERROR_STATUS_CODES.has(statusCode)) return 'error';
+  if (INFO_STATUS_CODES.has(statusCode)) return 'info';
   return 'info'; // default
 };
 

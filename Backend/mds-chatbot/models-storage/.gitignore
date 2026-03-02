@@ -1,7 +1,0 @@
-# Ignore model files (they're large binary files)
-*.gguf
-*.bin
-*.safetensors
-
-# Keep directory structure
-!.gitkeep

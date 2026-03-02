@@ -15,7 +15,8 @@ const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
-const { initializeChatbot, shutdownChatbot } = require('./mds-chatbot');
+const { chatbotProxy } = require('./config/middleware/chatbotProxy');
+const { jwtProtect } = require('./config/middleware/jwtProtect');
 
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -64,32 +65,26 @@ app.use('/auth/password', passwordResetRoutes);
 app.use('/info/consent', consentRoutes);
 
 // ======================================
-// Initialize AI Medical Chatbot BEFORE static files
-// This ensures API routes are registered first
-(async () => {
-  try {
-    const chatbot = await initializeChatbot(app, {
-      autoStartLlama: process.env.AUTO_START_LLAMA === 'true'
-    });
-    
-    if (chatbot) {
-      logger.info('✅ AI Medical Chatbot initialized on staff portal');
-    } else {
-      logger.warn('⚠️ AI Medical Chatbot not available - staff portal running without AI');
-    }
-  } catch (err) {
-    logger.error('Failed to initialize chatbot on staff portal', { error: err.message });
+// AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice
+// Staff routes: JWT validated first, then forwarded with staff identity
+// Patient routes on staff portal are also proxied (for staff-side patient chat views)
+// IMPORTANT: Single mount point so Express doesn't strip the /staff prefix
+app.use('/econsultation/chat', (req, res, next) => {
+  if (req.path.startsWith('/staff')) {
+    return jwtProtect('medical')(req, res, next);
   }
-})();
+  next();
+}, chatbotProxy);
+logger.info(`✅ Chatbot proxy registered at /econsultation/chat → ${process.env.CHATBOT_URL || '(not configured)'}`);
 
 // ======================================
 
 // Serve static assets for the React app (AFTER API routes)
-app.use(express.static(path.join(__dirname, '../mds-frontend/dist')));
+app.use(express.static(path.join(__dirname, '../mds-staff/dist')));
 
 // Handle all other routes for the React app by serving the index.html
 app.get('*path', (req, res) => {
-  res.sendFile(path.join(__dirname, '../mds-frontend/dist', 'index.html'));
+  res.sendFile(path.join(__dirname, '../mds-staff/dist', 'index.html'));
 });
 
 
@@ -105,7 +100,6 @@ const server = app.listen(PORT, HOST, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down staff server gracefully...');
-  await shutdownChatbot();
   server.close(() => {
     logger.info('Staff server closed');
     process.exit(0);
@@ -114,7 +108,6 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down staff server gracefully...');
-  await shutdownChatbot();
   server.close(() => {
     logger.info('Staff server closed');
     process.exit(0);

@@ -45,6 +45,10 @@ export const MEDICAL_SUBDOMAINS = ['staff', 'staff2'];
  * detectRoleFromHostname('localhost')                 // → 'patient'
  */
 export const detectRoleFromHostname = (hostname) => {
+  if (!hostname || typeof hostname !== 'string') {
+    return 'patient'; // Default to patient role for invalid input
+  }
+
   // Normalize to lowercase for case-insensitive comparison
   const lowerHostname = hostname.toLowerCase();
   

@@ -131,6 +131,9 @@ export const createAxiosRequestHandler = ({
   // Response interceptor - handle token refresh and error notifications
   axiosRequest.interceptors.response.use(
     (response) => {
+      // Log response for debugging
+      requestLogger.logResponse(response);
+
       // Show banner notification for configured status codes
       if (onShowBanner && bannerConfig.shouldShowBanner(response.status)) {
         const { error, message } = bannerConfig.extractBannerData(response);
@@ -143,6 +146,9 @@ export const createAxiosRequestHandler = ({
       return response;
     },
     async (error) => {
+      // Log error for debugging
+      requestLogger.logError(error);
+
       const originalRequest = error.config;
       const isRefreshEndpoint = originalRequest?.url?.includes('/auth/refresh');
       

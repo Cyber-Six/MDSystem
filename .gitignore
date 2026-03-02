@@ -16,34 +16,40 @@ Database/setup.psql
 Backend/node_modules/
 Backend/Patients/node_modules/
 Backend/.env
+Backend/commands/
 
 /media
 media/promoted/
 media/staging/
 
-### Frontend (mds-frontend) specific ###
+### Frontend (mds-patient & mds-staff) specific ###
 # Logs
-mds-frontend/logs/
-mds-frontend/*.log
-mds-frontend/npm-debug.log*
-mds-frontend/yarn-debug.log*
-mds-frontend/yarn-error.log*
-mds-frontend/pnpm-debug.log*
-mds-frontend/lerna-debug.log*
+mds-patient/logs/
+mds-patient/*.log
+mds-staff/logs/
+mds-staff/*.log
 
 # Build outputs
-mds-frontend/node_modules/
-mds-frontend/dist/
-mds-frontend/dist-ssr/
-mds-frontend/*.local
+mds-patient/node_modules/
+mds-patient/dist/
+mds-patient/dist-ssr/
+mds-patient/*.local
+mds-staff/node_modules/
+mds-staff/dist/
+mds-staff/dist-ssr/
+mds-staff/*.local
 
 # Generated files
-mds-frontend/scripts/generated/
+mds-patient/scripts/generated/
+mds-staff/scripts/generated/
 
 # Environment variables
-mds-frontend/.env
-mds-frontend/.env.local
-mds-frontend/.env.*.local
+mds-patient/.env
+mds-patient/.env.local
+mds-patient/.env.*.local
+mds-staff/.env
+mds-staff/.env.local
+mds-staff/.env.*.local
 
 ### Mobile (mds-mobile) specific ###
 # Dependencies
@@ -123,3 +129,5 @@ dist-ssr/
 *.sln
 *.sw?
 Backend/config/data/initialadmin.sql
+
+MDS-AI-Chatbot

@@ -1,10 +1,20 @@
 {
-  "dependencies": {
-    "axios": "^1.13.4",
-    "bullmq": "^5.65.0",
-    "express": "^5.2.1",
-    "express-graphql": "^0.12.0",
-    "graphql": "^15.10.1",
-    "winston": "^3.19.0"
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "mds-patient",
+    "mds-staff",
+    "mds-mobile"
+  ],
+  "scripts": {
+    "postinstall": "cd Backend && npm install",
+    "build": "npm run build:patient && npm run build:staff",
+    "build:patient": "npm run build --workspace=mds-patient",
+    "build:staff": "npm run build --workspace=mds-staff",
+    "dev:patient": "npm run dev --workspace=mds-patient",
+    "dev:staff": "npm run dev --workspace=mds-staff",
+    "dev:mobile": "npm run start --workspace=mds-mobile",
+    "start:patient": "node Backend/server.js",
+    "start:staff": "node Backend/staff.js"
   }
 }

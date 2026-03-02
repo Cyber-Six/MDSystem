@@ -38,10 +38,10 @@
  */
 export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL = '', getDevSubdomain = null }) => {
   /**
-   * Check if logging should be enabled based on environment
-   * @returns {boolean}
+   * Determine logging state once at creation time (hostname doesn't change at runtime)
+   * @type {boolean}
    */
-  const shouldLog = () => {
+  const _loggingEnabled = (() => {
     // Manual override takes precedence
     if (forceEnabled === true) return true;
     if (forceEnabled === false) return false;
@@ -54,7 +54,13 @@ export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL 
     
     // Non-browser environment: disable by default
     return false;
-  };
+  })();
+
+  /**
+   * Check if logging should be enabled (cached result)
+   * @returns {boolean}
+   */
+  const shouldLog = () => _loggingEnabled;
   /**
    * Log request details to console for debugging
    * Shows the actual URL that will be hit, including protocol and hostname
