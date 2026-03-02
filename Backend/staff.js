@@ -9,7 +9,7 @@ const logger = require('./utils/logger.js');
 const { initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initMedicalProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
-const { initMedicalConsultationGraphQL } = require('./routes/services/consultation/consult/graphql.js');
+const { initMedicalConsultationGraphQL } = require('./routes/consultation/consult/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 

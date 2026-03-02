@@ -66,7 +66,6 @@ app.use((err, req, res, next) => {
 initPatientEMRGraphQL(app);
 initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
-initMedicalConsultationGraphQL(app);
 
 // AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice
 // Requests to /econsultation/chat/* are forwarded to CHATBOT_URL (localhost or remote)
