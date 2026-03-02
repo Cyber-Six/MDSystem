@@ -736,7 +736,15 @@ const Query = {
     const query = `
       SELECT *
       FROM (
-        SELECT DISTINCT ON (pul."patientId") pul.*, up.*
+        SELECT DISTINCT ON (pul."patientId")
+          pul.id            AS id,
+          pul."patientId"   AS "patientId",
+          pul.status        AS status,
+          pul.scope         AS scope,
+          pul.created_at    AS created_at,
+          up.first_name     AS first_name,
+          up.last_name      AS last_name,
+          up.branch         AS branch
         FROM "patientUpdateLog" pul
         JOIN "UsersPersonal" up ON up.id = pul."patientId"
         ORDER BY pul."patientId", pul.created_at DESC, pul.id DESC

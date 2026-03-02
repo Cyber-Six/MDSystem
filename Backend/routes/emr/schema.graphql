@@ -717,6 +717,7 @@ enum UpdateStatus{
     Pending
     Revision
     RevisionSubmitted
+    Rejected
     Expired
     Cancelled
     Approved
