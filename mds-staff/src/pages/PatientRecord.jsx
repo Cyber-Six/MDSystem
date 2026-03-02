@@ -1,95 +1,420 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { axiosRequest } from '../packages-core-adapter';
+
+// ── Queries ───────────────────────────────────────────────────────────────────
+const GQL_BASIC_INFO = `
+  query GetBasicInfo($userId: ID!) {
+    getPatientBasicInfo(userId: $userId) {
+      id identifier branch sex
+      first_name last_name middle_name suffix
+      profile_type program year department role
+      latest_ticket_id latest_status latest_scope latest_updated_at
+    }
+  }
+`;
+
+const GQL_UPDATE_TICKET = `
+  query GetTicket($userId: ID!) {
+    getUserUpdateTicket(userId: $userId) { id patientId status scope }
+  }
+`;
+
+const GQL_VITAL_SIGNS = `
+  query GetVitals($userId: ID!) {
+    getUserVitalSigns(userId: $userId, limit: 1) {
+      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at status
+    }
+  }
+`;
+
+const GQL_MEDICAL_HISTORY = `
+  query GetMedHist($userId: ID!) {
+    getUserMedicalHistory(userId: $userId, limit: 1) {
+      id notes status created_at
+      conditions { id conditionId description diagnosedDate relationship }
+    }
+  }
+`;
+
+const GQL_ALLERGY = `
+  query GetAllergy($userId: ID!) {
+    getUserAllergyProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      allergies { id allergenCatalogId status severity notes dateIdentified }
+    }
+  }
+`;
+
+const GQL_IMMUNIZATION = `
+  query GetImmunization($userId: ID!) {
+    getUserImmunizationProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      immunizations { id vaccineTypeId immunizationDate doseNumber }
+    }
+  }
+`;
+
+const GQL_LIFESTYLE = `
+  query GetLifestyle($userId: ID!) {
+    getUserLifestyle(userId: $userId, limit: 1) {
+      id smoker numberOfCigarettesPerDay yearsSmoked
+      alcoholConsumer frequencyOfAlcoholConsumption notes status created_at
+    }
+  }
+`;
+
+const GQL_OBGYN = `
+  query GetObgyn($userId: ID!) {
+    getUserObgynHistory(userId: $userId, limit: 1) {
+      id lastMenstrualPeriod hasDysmenorrhea notes status created_at
+    }
+  }
+`;
+
+const GQL_EMERGENCY = `
+  query GetEmergency($userId: ID!) {
+    getUserEmergencyContact(userId: $userId, limit: 1) {
+      id status created_at
+      firstContact  { id contactName relationship contactNumber }
+      secondContact { id contactName relationship contactNumber }
+    }
+  }
+`;
+
+const GQL_MEDICATION = `
+  query GetMedication($userId: ID!) {
+    getUserMedicationProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      medications { id medicineId description }
+    }
+  }
+`;
+
+const GQL_DENTAL_HISTORY = `
+  query GetDentalHist($userId: ID!) {
+    getUserDentalHistory(userId: $userId, limit: 1) {
+      id seenByDentist lastDentalCleaning purpose lastVisitDate status created_at
+    }
+  }
+`;
+
+const GQL_VISUAL_ACUITY = `
+  query GetVision($userId: ID!) {
+    getUserVisualAcuityProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      acuity { id acuityId left_eye right_eye notes recorded_at }
+    }
+  }
+`;
+
+const GQL_HOSPITALIZATION = `
+  query GetHosp($userId: ID!) {
+    getUserHospitalizationProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      hospitalizations { id conditionId admissionDate dischargeDate notes }
+    }
+  }
+`;
+
+const GQL_OPERATION = `
+  query GetOp($userId: ID!) {
+    getUserOperationProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      operations { id procedureId operationDate notes }
+    }
+  }
+`;
+
+// ── Single compound query — all sections in one HTTP request ────────────────
+const GQL_FULL_RECORD = `
+  query GetFullPatientRecord($userId: ID!) {
+    getPatientBasicInfo(userId: $userId) {
+      id identifier branch sex
+      first_name last_name middle_name suffix
+      profile_type program year department role
+      latest_ticket_id latest_status latest_scope latest_updated_at
+    }
+    getUserUpdateTicket(userId: $userId) { id patientId status scope }
+    getUserVitalSigns(userId: $userId, limit: 1) {
+      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at status
+    }
+    getUserMedicalHistory(userId: $userId, limit: 1) {
+      id notes status created_at
+      conditions { id conditionId description diagnosedDate relationship }
+    }
+    getUserAllergyProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      allergies { id allergenCatalogId status severity notes dateIdentified }
+    }
+    getUserImmunizationProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      immunizations { id vaccineTypeId immunizationDate doseNumber }
+    }
+    getUserLifestyle(userId: $userId, limit: 1) {
+      id smoker numberOfCigarettesPerDay yearsSmoked
+      alcoholConsumer frequencyOfAlcoholConsumption notes status created_at
+    }
+    getUserObgynHistory(userId: $userId, limit: 1) {
+      id lastMenstrualPeriod hasDysmenorrhea notes status created_at
+    }
+    getUserEmergencyContact(userId: $userId, limit: 1) {
+      id status created_at
+      firstContact  { id contactName relationship contactNumber }
+      secondContact { id contactName relationship contactNumber }
+    }
+    getUserMedicationProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      medications { id medicineId description }
+    }
+    getUserDentalHistory(userId: $userId, limit: 1) {
+      id seenByDentist lastDentalCleaning purpose lastVisitDate status created_at
+    }
+    getUserVisualAcuityProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      acuity { id acuityId left_eye right_eye notes recorded_at }
+    }
+    getUserHospitalizationProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      hospitalizations { id conditionId admissionDate dischargeDate notes }
+    }
+    getUserOperationProfile(userId: $userId, limit: 1) {
+      id notes status created_at
+      operations { id procedureId operationDate notes }
+    }
+  }
+`;
+
+// ── Status ticket banner ───────────────────────────────────────────────────────
+const STATUS_BANNER = {
+  InProgress:        { cls: 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300',   label: 'Record update in progress' },
+  Pending:           { cls: 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-300', label: 'Awaiting staff approval' },
+  Revision:          { cls: 'bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-300', label: 'Revision requested' },
+  RevisionSubmitted: { cls: 'bg-purple-50 border-purple-200 text-purple-800 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-300', label: 'Revision submitted — awaiting review' },
+  Approved:          { cls: 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300',  label: 'Record is up to date' },
+};
 
 /**
  * Patient Record View Page
- * Displays comprehensive patient information in tabs
+ * Displays comprehensive patient information in tabs, loaded from /emr/medical GraphQL.
  */
 const PatientRecord = () => {
   const { patientId } = useParams();
   const [activeTab, setActiveTab] = useState('personal');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
-  // TODO: Load from API — join UsersPersonal + student_profile/employee_profile + UserCredentials by patientId
-  // ─── API field name mapping notes ─────────────────────────────────────────────
-  // personal.lastName  ← API: surname        (initial form key)
-  // personal.birthDate ← API: birthday       (initial form key)
-  // personal.sex       ← API: gender         (initial form key)
-  // emergencyContacts.first.contact  ← API: emergencyContacts[0].contactNumber
-  // medical.lifestyle.tattoo         ← API: tattooLocation
-  // medical.lifestyle.piercing       ← API: piercingLocation
-  // dental.lastConsultation          ← API: lastDentalConsultation
-  // dental.lastCleaning              ← API: lastDentalCleaning
-  // dental.hasAppliance              ← API: hasIntraOralAppliance
-  // obgyne fields only populated for female patients (gender === 'Female')
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ── Data state ─────────────────────────────────────────────────────────────
+  const [basicInfo,       setBasicInfo]       = useState(null);
+  const [updateTicket,    setUpdateTicket]     = useState(null);
+  const [vitalSigns,      setVitalSigns]       = useState(null);
+  const [medicalHistory,  setMedicalHistory]   = useState(null);
+  const [allergyData,     setAllergyData]      = useState(null);
+  const [immunizationData, setImmunizationData] = useState(null);
+  const [lifestyleData,   setLifestyleData]    = useState(null);
+  const [obgynData,       setObgynData]        = useState(null);
+  const [emergencyData,   setEmergencyData]    = useState(null);
+  const [medicationData,  setMedicationData]   = useState(null);
+  const [dentalHistory,   setDentalHistory]    = useState(null);
+  const [visionData,      setVisionData]       = useState(null);
+  const [hospData,        setHospData]         = useState(null);
+  const [opData,          setOpData]           = useState(null);
+
+  // ── Load entire record in a single request ────────────────────────────────
+  useEffect(() => {
+    if (!patientId) return;
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError(null);
+
+    axiosRequest
+      .post('/emr/medical', { query: GQL_FULL_RECORD, variables: { userId: patientId } })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const d = data.data;
+        if (!d?.getPatientBasicInfo) {
+          throw new Error(data.errors?.[0]?.message || 'Patient not found');
+        }
+        setBasicInfo(d.getPatientBasicInfo);
+        setUpdateTicket(d.getUserUpdateTicket || null);
+        setVitalSigns(d.getUserVitalSigns?.[0] || null);
+        setMedicalHistory(d.getUserMedicalHistory?.[0] || null);
+        setAllergyData(d.getUserAllergyProfile?.[0] || null);
+        setImmunizationData(d.getUserImmunizationProfile?.[0] || null);
+        setLifestyleData(d.getUserLifestyle?.[0] || null);
+        setObgynData(d.getUserObgynHistory?.[0] || null);
+        setEmergencyData(d.getUserEmergencyContact?.[0] || null);
+        setMedicationData(d.getUserMedicationProfile?.[0] || null);
+        setDentalHistory(d.getUserDentalHistory?.[0] || null);
+        setVisionData(d.getUserVisualAcuityProfile?.[0] || null);
+        setHospData(d.getUserHospitalizationProfile?.[0] || null);
+        setOpData(d.getUserOperationProfile?.[0] || null);
+      })
+      .catch(err => { if (!cancelled) setLoadError(err.message || 'Failed to load patient.'); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [patientId]);
+
+  // ── Derive the display-shape that the existing render code expects ─────────
   const patient = {
     id: patientId || '',
-    name: '',
+    name: basicInfo ? `${basicInfo.first_name || ''} ${basicInfo.last_name || ''}`.trim() : '',
     email: '',
-    program: '',
-    year: '',           // from update record: schoolYear
-    department: '',     // from update record: department
-    semester: '',       // from update record: semester
-    status: '',
-    type: 'Student',
-    avatar: null,
+    program: basicInfo?.program || basicInfo?.department || '',
+    year:    basicInfo?.year    || basicInfo?.role       || '',
+    department: basicInfo?.department || '',
+    semester: '',
+    status:  updateTicket?.status || basicInfo?.latest_status || '',
+    type:    basicInfo?.profile_type || 'Student',
+    avatar:  null,
     personal: {
-      firstName: '', middleName: '', lastName: '', suffix: '',
-      birthDate: '', age: '', sex: '', civilStatus: '',
-      nationality: '', religion: '', address: '', contactNumber: '',
-      studentNumber: patientId || '', studentCategory: '',
-      lastSchoolAttended: '', drugTestDone: '',
+      firstName:         basicInfo?.first_name   || '',
+      middleName:        basicInfo?.middle_name  || '',
+      lastName:          basicInfo?.last_name    || '',
+      suffix:            basicInfo?.suffix       || '',
+      birthDate:         '',
+      age:               '',
+      sex:               basicInfo?.sex          || '',
+      civilStatus:       '',
+      nationality:       '',
+      religion:          '',
+      address:           '',
+      contactNumber:     '',
+      studentNumber:     basicInfo?.identifier   || '',
+      studentCategory:   '',
+      lastSchoolAttended:'',
+      drugTestDone:      '',
     },
     emergencyContacts: {
-      first:  { name: '', relationship: '', contact: '', address: '' },
-      second: { name: '', relationship: '', contact: '', address: '' },
+      first:  {
+        name:         emergencyData?.firstContact?.contactName   || '',
+        relationship: emergencyData?.firstContact?.relationship  || '',
+        contact:      emergencyData?.firstContact?.contactNumber || '',
+        address:      '',
+      },
+      second: {
+        name:         emergencyData?.secondContact?.contactName   || '',
+        relationship: emergencyData?.secondContact?.relationship  || '',
+        contact:      emergencyData?.secondContact?.contactNumber || '',
+        address:      '',
+      },
     },
-    medicalHistory: { self: [], selfDetails: '', family: [], familyDetails: '' },
+    medicalHistory: {
+      self:         (medicalHistory?.conditions || []).filter(c => !c.relationship || c.relationship === 'self').map(c => c.description || `Condition #${c.conditionId}`),
+      selfDetails:  medicalHistory?.notes || '',
+      family:       (medicalHistory?.conditions || []).filter(c => c.relationship && c.relationship !== 'self').map(c => `${c.description || `Condition #${c.conditionId}`} (${c.relationship})`),
+      familyDetails:'',
+    },
     medical: {
-      vitalSigns: { height: '', weight: '', bmi: '', bp: '', heartRate: '', temperature: '', lastChecked: '' },
+      vitalSigns: {
+        height:      vitalSigns?.height_cm    || '',
+        weight:      vitalSigns?.weight_kg    || '',
+        bmi:         vitalSigns?.height_cm && vitalSigns?.weight_kg
+                       ? (vitalSigns.weight_kg / ((vitalSigns.height_cm / 100) ** 2)).toFixed(1)
+                       : '',
+        bp:          vitalSigns?.blood_pressure || '',
+        heartRate:   vitalSigns?.heart_rate     || '',
+        temperature: vitalSigns?.temperature    || '',
+        lastChecked: vitalSigns?.created_at ? new Date(vitalSigns.created_at).toLocaleDateString('en-PH') : '',
+      },
       bloodType: '',
-      allergies: { drug: '', food: '', other: '' },  // drug←drugAllergy, food←foodAllergy, other←otherAllergy
-      conditions: [],
-      medications: [],
-      immunizations: [],
-      hospitalizations: [],
-      operations: '',
-      lifestyle: { smoker: '', alcoholDrinker: '', tattoo: '', piercing: '' },
-      vision: { hasEyeglasses: false, hasContactLenses: false, gradeOD: '', gradeOS: '', lastExam: '' },
+      allergies: {
+        drug:  (allergyData?.allergies || []).filter(a => a.allergenCatalogId).map(a => `#${a.allergenCatalogId}`).join(', ') || '',
+        food:  '',
+        other: '',
+      },
+      conditions:      [],
+      medications:     (medicationData?.medications || []).map(m => m.description || `Medicine #${m.medicineId}`),
+      immunizations:   (immunizationData?.immunizations || []).map(i => `#${i.vaccineTypeId} (Dose ${i.doseNumber})`),
+      hospitalizations:(hospData?.hospitalizations || []).map(h => ({
+        reason:   `Condition #${h.conditionId}`,
+        year:     h.admissionDate ? new Date(h.admissionDate).getFullYear() : '',
+        hospital: '',
+        duration: h.dischargeDate ? `until ${new Date(h.dischargeDate).toLocaleDateString('en-PH')}` : 'ongoing',
+      })),
+      operations: (opData?.operations || []).map(o => `Procedure #${o.procedureId}`).join(', '),
+      lifestyle: {
+        smoker:        lifestyleData?.smoker ? `Yes (${lifestyleData.numberOfCigarettesPerDay || '?'} sticks/day, ${lifestyleData.yearsSmoked || '?'} yrs)` : 'No',
+        alcoholDrinker:lifestyleData?.alcoholConsumer ? `Yes (${lifestyleData.frequencyOfAlcoholConsumption || 'occasional'})` : 'No',
+        tattoo:        lifestyleData?.notes || '',
+        piercing:      '',
+      },
+      vision: {
+        hasEyeglasses:   !!(visionData?.acuity),
+        hasContactLenses:false,
+        gradeOD:         visionData?.acuity?.right_eye || '',
+        gradeOS:         visionData?.acuity?.left_eye  || '',
+        lastExam:        visionData?.acuity?.recorded_at
+                           ? new Date(visionData.acuity.recorded_at).toLocaleDateString('en-PH') : '',
+      },
     },
     dental: {
-      firstTimeDentist: '',
-      lastConsultation: '',
-      lastCleaning: '',
-      toothExtraction: '',  // from initial form: dentalHistory.toothExtraction
-      dentalFilling: '',    // from initial form: dentalHistory.dentalFilling
-      oralFindings: [],
-      treatments: [],
-      hasAppliance: '',
-      applianceType: null,
-      toothChart: { missing: [], filled: [], decayed: [], notes: '' },
+      firstTimeDentist: dentalHistory?.seenByDentist === false ? 'Yes (first time)' : dentalHistory?.seenByDentist ? 'No' : '',
+      lastConsultation: dentalHistory?.lastVisitDate ? new Date(dentalHistory.lastVisitDate).toLocaleDateString('en-PH') : '',
+      lastCleaning:     dentalHistory?.lastDentalCleaning || '',
+      toothExtraction:  dentalHistory?.purpose || '',
+      dentalFilling:    '',
+      oralFindings:     [],
+      treatments:       [],
+      hasAppliance:     '',
+      applianceType:    null,
+      toothChart:       { missing: [], filled: [], decayed: [], notes: '' },
     },
     obgyne: {
-      // Only populated for female patients
-      lastMenstrualPeriod: '',     // from initial form: obgyne.lastMenstrualPeriod
-      menstruationDuration: '',    // from initial form: obgyne.menstruationDuration
-      dysmenorrhea: '',            // from initial form: obgyne.dysmenorrhea
+      lastMenstrualPeriod:  obgynData?.lastMenstrualPeriod ? new Date(obgynData.lastMenstrualPeriod).toLocaleDateString('en-PH') : '',
+      menstruationDuration: '',
+      dysmenorrhea:         obgynData?.hasDysmenorrhea ? 'Yes' : obgynData?.hasDysmenorrhea === false ? 'No' : '',
     },
     history: {
-      consultations: [],
-      appointments: [],
+      consultations:    [],
+      appointments:     [],
       pastAppointments: [],
       medicineRequests: [],
-      updateRequests: [],
+      updateRequests:   [],
     },
   };
+
+  // ── Loading screen ─────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
+        <svg className="animate-spin w-8 h-8 text-primary-500" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <p className="text-sm text-secondary-500 dark:text-neutral-400">Loading patient record…</p>
+      </div>
+    );
+  }
+
+  // ── Error screen ───────────────────────────────────────────────────────────
+  if (loadError || !basicInfo) {
+    return (
+      <div className="space-y-4">
+        <Link to="/search" className="inline-flex items-center gap-1 text-sm text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          Back to Search
+        </Link>
+        <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg p-6 text-center">
+          <p className="text-sm font-medium text-error-700 dark:text-error-400">{loadError || 'Patient not found.'}</p>
+          <p className="text-xs text-error-500 dark:text-error-500 mt-1">ID: {patientId}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Ticket status banner ───────────────────────────────────────────────────
+  const ticketStatus = updateTicket?.status;
+  const bannerCfg    = ticketStatus ? STATUS_BANNER[ticketStatus] : null;
+
 
   const tabs = [
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Record' },
     { id: 'dental', label: 'Dental Record' },
-    // OB-GYN tab only shown for female patients (conditionally rendered below)
-    ...(patient.personal.sex === 'Female' || patient.personal.sex === '' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
+    // OB-GYN tab only shown for female patients
+    ...(basicInfo?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
     { id: 'appointments', label: 'Appointments' },
     { id: 'medicines', label: 'Medicine Requests' },
@@ -663,7 +988,18 @@ const PatientRecord = () => {
         Back to Search
       </Link>
 
-      {/* Patient Header */}
+      {/* Record Status Banner */}
+      {bannerCfg && (
+        <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium ${bannerCfg.cls}`}>
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{bannerCfg.label}</span>
+          {updateTicket?.scope && (
+            <span className="ml-1 opacity-70">· {updateTicket.scope} scope</span>
+          )}
+        </div>
+      )}
       <div className="bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-6 shadow-sm">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
