@@ -728,6 +728,10 @@ type UpdateTicket {
   patientId: ID!
   status: UpdateStatus!
   scope: UpdateScope
+  first_name: String
+  last_name: String
+  branch: DesignationBranch
+  created_at: Date
 }
 
 ## -------- Patient Search -------- ##
@@ -735,7 +739,7 @@ type UpdateTicket {
 type PatientSearchResult {
   id: ID!
   identifier: String
-  branch: String
+  branch: DesignationBranch
   sex: String
   first_name: String
   last_name: String
