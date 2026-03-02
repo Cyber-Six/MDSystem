@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import AppointmentDetailsModal from '../components/modals/AppointmentDetailsModal';
 import RecordUpdateDetailsModal from '../components/modals/RecordUpdateDetailsModal';
 import MedicineRequestDetailsModal from '../components/modals/MedicineRequestDetailsModal';
+import InitialRecordList from '../modules/pending-requests/components/initial-record-list';
 
 /**
  * Pending Requests Page
  * Staff can view and manage pending requests with filters
  */
 const PendingRequests = () => {
-  const [filterType, setFilterType] = useState('all');
+  const [filterType, setFilterType] = useState('Initial Record');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedRequests, setSelectedRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -299,6 +300,7 @@ const PendingRequests = () => {
               className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               <option value="all">All Types</option>
+              <option value="Initial Record">Initial Record</option>
               <option value="Record Update">Record Update</option>
               <option value="Appointment">Appointment</option>
               <option value="Medicine Request">Medicine Request</option>
@@ -334,7 +336,13 @@ const PendingRequests = () => {
         </div>
       </div>
 
-      {/* Requests Table */}
+      {/* Initial Record Submissions — powered by the real backend */}
+      {filterType === 'Initial Record' && (
+        <InitialRecordList />
+      )}
+
+      {/* Requests Table (Appointment / Record Update / Medicine Request) */}
+      {filterType !== 'Initial Record' && (
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
         <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
@@ -412,6 +420,7 @@ const PendingRequests = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* Modals - Conditionally render based on request type */}
       {modalType === 'Appointment' && selectedRequest && (
