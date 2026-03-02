@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/layout/layout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
-import { checkInitialRecordStatus } from '../services/emr-service.js';
+import { checkInitialRecordStatus, getMyBranchIdentifier } from '../services/emr-service.js';
 import InitialRecordModal from '../components/modals/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 
@@ -37,9 +37,13 @@ const Dashboard = () => {
 
       try {
         console.log('[Dashboard] Checking initial record status for student...');
-        const { needsInitialRecord, status } = await checkInitialRecordStatus();
+        const [{ needsInitialRecord, status }, branchInfo] = await Promise.all([
+          checkInitialRecordStatus(),
+          getMyBranchIdentifier(),
+        ]);
         
         console.log('[Dashboard] Initial record check result:', { needsInitialRecord, status });
+        console.log('[Dashboard] Patient branch:', branchInfo?.branch ?? 'not set', '| identifier:', branchInfo?.identifier ?? 'not set');
         
         setRecordStatus(status);
         

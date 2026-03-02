@@ -23,7 +23,7 @@ import InitialRecordDetailModal from './initial-record-detail-modal';
  * once the backend exposes them on UpdateTicket — see backend issues table.
  */
 const InitialRecordList = () => {
-  const [branch, setBranch] = useState(BRANCH.MANILA);
+  const [branch, setBranch] = useState(BRANCH.BOTH);
   const [statusFilter, setStatusFilter] = useState(TICKET_STATUS.PENDING);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);

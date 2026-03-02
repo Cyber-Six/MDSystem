@@ -126,6 +126,35 @@ const unstageMediaFile = async (fileId) => {
   }
 };
 
+/**
+ * Register the patient's branch by setting their student/employee ID (identifier).
+ * This populates UsersPersonal.branch (derived from email prefix: m→Manila, q→QuezonCity)
+ * so staff can filter tickets by branch.
+ *
+ * Endpoint: POST /profile/patient  (JWT guard: patient)
+ * Only succeeds for unverified users — silently ignored if already set.
+ *
+ * @param {string} identifier - Student/employee number (e.g. "2022-12345")
+ */
+const registerBranchIdentifier = async (identifier) => {
+  if (!identifier?.trim()) return;
+  const mutation = `
+    mutation CreateBranchIdentifier($identifier: ID!) {
+      createBranchIdentifier(identifier: $identifier) {
+        branch
+        identifier
+      }
+    }
+  `;
+  try {
+    const result = await sendGraphQLRequest(mutation, { identifier: identifier.trim() }, { endpoint: '/profile/patient' });
+    console.log('[EMR Service] Branch identifier registered:', identifier, '→ branch:', result?.createBranchIdentifier?.branch);
+  } catch (error) {
+    // Non-fatal: user may already be verified (re-submission) or branch already set.
+    console.warn('[EMR Service] Branch identifier not set (may already exist):', error.message);
+  }
+};
+
 export const createInitialMedicalRecord = async (formData) => {
   console.log('[EMR Service] Starting initial medical record creation (batched)');
   console.log('[EMR Service] Form data received:', formData);
@@ -137,6 +166,12 @@ export const createInitialMedicalRecord = async (formData) => {
 
   try {
     const results = {};
+
+    // ======== REQUEST 0: Register branch identifier ========
+    // Sets UsersPersonal.branch so staff can filter this ticket by branch.
+    // Must run before ticket creation. Soft-fails if branch is already set.
+    console.log('[EMR Service] [0/4] Registering branch identifier...');
+    await registerBranchIdentifier(formData.personalInfo?.studentNumber);
 
     // ======== REQUEST 1: Create update ticket ========
     console.log('[EMR Service] [1/4] Creating update ticket...');
@@ -758,6 +793,28 @@ const mapDentalCleaningRange = (frontendValue) => {
  * Returns true if user needs to fill out the form (no approved record exists)
  * Returns false if user has already completed their initial record
  */
+/**
+ * Fetch the current patient's branch identifier from the profile endpoint.
+ * Returns { branch, identifier } or null if not yet set.
+ */
+export const getMyBranchIdentifier = async () => {
+  const query = `
+    query GetBranchIdentifier {
+      getBranchIdentifier {
+        branch
+        identifier
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(query, {}, { endpoint: '/profile/patient' });
+    return data?.getBranchIdentifier || null;
+  } catch (error) {
+    console.warn('[EMR Service] Could not fetch branch identifier:', error.message);
+    return null;
+  }
+};
+
 export const checkInitialRecordStatus = async () => {
   console.log('[EMR Service] Checking initial record status...');
   

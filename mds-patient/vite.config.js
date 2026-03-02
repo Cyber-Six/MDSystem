@@ -96,6 +96,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
+        '/profile': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
       },
     }
   }
