@@ -55,9 +55,10 @@ function jwtProtect(requiredRole = "patient") {
       // 🩺 Extra validation for medical role only
       if (role === "medical") {
         const rawUser = await getUserIdentity(decoded.id);
-        const user = convertIdentity(rawUser);
+        // rawUser = ['Student', 'Employee', 'Superior', 'Medical']
+        const identity = convertIdentity(rawUser);
 
-        if (!user || user.role?.toLowerCase() !== "medical") {
+        if (!identity || identity !== "medical") {
           logger.warn(`[AUTH] Medical role validation failed userId=${decoded.id}, route=${req.path}, ip=${req.ip}`);
           return res.status(403).json({
             error: "FORBIDDEN",
