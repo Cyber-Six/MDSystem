@@ -3,6 +3,18 @@ const { hashPassword } = require("../utils/security.js");
 const { deduceRoleFromEmail } = require("../utils/validator.js");
 const logger = require("../utils/logger.js");
 // ✅ Generic query wrapper
+
+async function connect() {
+    try {
+        const result = await pool.connect();
+        logger.info("Database connection established.");
+        return result;
+    } catch (err) {
+        logger.error("Database connection error:", err);
+        throw err;
+    }
+}
+
 async function query(text, params) {
     try {
         const result = await pool.query(text, params);
@@ -264,6 +276,7 @@ async function isUserValidated(userId) {
 
 
 module.exports = {
+    connect,
     query,
     queryControlled,
     countUserByEmail,

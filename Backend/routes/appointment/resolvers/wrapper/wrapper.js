@@ -474,12 +474,14 @@ const Mutation = {
       await insertSchedulerWhitelist(schedulerId, input.whiteLists || [], client);
 
       await client.query("COMMIT");
+      logger.info(`Created new scheduler with ID ${schedulerId} by user ${user.id}`);
 
       const scheduler = result.rows[0];
       scheduler.schedulePerWeek = decodeSchedulingFlags(scheduler.scheduleFlags);
       return scheduler;
     } catch (err) {
       await client.query("ROLLBACK");
+      logger.error("Error in _createScheduler transaction:", err);
       throwGraphQLError(res).message("Transaction failed: " + err.message).status(500).throw();
     } finally {
       client.release();

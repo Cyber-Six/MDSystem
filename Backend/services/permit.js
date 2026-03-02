@@ -21,7 +21,11 @@ const permissions = {
   appointment_allow_view_configuration: "ALLOW_TO_VIEW_APPOINTMENT_CONFIGURATION",
   apppointment_allow_edit_configuration: "ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION",
 
-  announcement_allow_crud: "ALLOW_TO_CREATE_ANNOUNCEMENT",
+  announcement_allow_crud: "ALLOW_TO_CRUD_ANNOUNCEMENT",
+  
+  consultation_allow_view: "ALLOW_TO_VIEW_CONSULTATION",
+  consultation_allow_edit: "ALLOW_TO_EDIT_CONSULTATION",
+
 };
 
 async function getMedicalpermits(personnelId) {
@@ -107,7 +111,10 @@ async function clearMedicalPermits(personnelId) {
 
 async function isMedicalPermitted(userId, label, patientId) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
-  if (isAdmin) return true; // Admin bypass
+  if (isAdmin) {
+    logger.info(`Admin bypass granted for userId=${userId} on permission ${label}${patientId ? ` with patient context ${patientId}` : ""}`);
+    return true;
+  } // Admin bypass
 
   let result;
 
@@ -143,6 +150,7 @@ async function isMedicalPermitted(userId, label, patientId) {
   }
 
   if (result.rows.length === 0) {
+    console.log("userId, label, patientId", userId, label, patientId);
     logger.warn(
       `Unauthorized access attempt by staff ${userId} without ${label} permission${patientId ? ` on patient ${patientId}` : ""}`
     );
