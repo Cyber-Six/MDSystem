@@ -3,6 +3,18 @@ const { hashPassword } = require("../utils/security.js");
 const { deduceRoleFromEmail } = require("../utils/validator.js");
 const logger = require("../utils/logger.js");
 // ✅ Generic query wrapper
+
+async function connect() {
+    try {
+        const result = await pool.connect();
+        logger.info("Database connection established.");
+        return result;
+    } catch (err) {
+        logger.error("Database connection error:", err);
+        throw err;
+    }
+}
+
 async function query(text, params) {
     try {
         const result = await pool.query(text, params);
@@ -261,9 +273,30 @@ async function isUserValidated(userId) {
   }
 }
 
+async function getUserBranch(userId) {
+  const sql = `
+    SELECT branch
+    FROM "UsersPersonal"
+    WHERE id = $1
+    LIMIT 1;
+  `;
 
+  try {
+    const result = await query(sql, [userId]);
+    if (result.rows.length === 0) {
+      console.log(`No branch found for userId=${userId}`);
+      return null; // patient not found
+    }
+    console.log(result.rows[0]);
+    return result.rows[0].branch; 
+  } catch (err) {
+    logger.error(`Error fetching branch for userId=${userId}:`, err);
+    throw err;
+  }
+}
 
 module.exports = {
+    connect,
     query,
     queryControlled,
     countUserByEmail,
@@ -277,5 +310,6 @@ module.exports = {
     getUserIdentity,
     isUserValidated,
     setExpiredUpdateTickets,
-    setExpiredPersonalTickets
+    setExpiredPersonalTickets,
+    getUserBranch
 };

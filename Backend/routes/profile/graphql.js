@@ -64,7 +64,7 @@ function initMedicalProfileGraphQL(app) {
         graphiql: true,
         context: {
           user: req.user || null,
-          db: req.db,
+          res: req.res,
         },
       };
     })

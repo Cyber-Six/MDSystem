@@ -1,0 +1,170 @@
+scalar Date
+scalar UUID
+scalar JSON
+
+enum CONSULTATION_MODE{
+  Onsite
+  Virtual
+}
+
+enum CONSULTATION_TYPE{
+  Medical
+  Dental
+}
+
+enum CONSULTATION_STATUS{
+  Created
+  Open
+  ReOpen
+  Completed
+  Referred
+  Monitored
+}
+
+enum CONSULTATION_STATUS_INPUT{
+  Completed
+  Referred
+  Monitored
+}
+
+enum DIAGNOSIS_TYPE{
+  Primary
+  Secondary
+  Differential
+  RuledOut
+  Provisional  
+  Complication 
+  Chronic
+  FollowUp
+}
+
+type Consultation{
+  id: ID!  
+  followUpId: ID
+  patientId: ID!
+  mode: CONSULTATION_MODE!
+  type: CONSULTATION_TYPE!
+  status: CONSULTATION_STATUS!
+  notes: String
+  updatedAt: Date!
+  createdAt: Date!
+}
+
+input ConsultationInput{
+  patientId: ID!
+  followUpId: ID
+  mode: CONSULTATION_MODE!
+  type: CONSULTATION_TYPE!
+  notes: String
+}
+
+type ConsultationOutcome{
+  id: ID!
+  consultationId: ID!
+  remarks: String
+  
+  complaints: [ConsultationComplaints!]!
+  peFindings: [ConsultationPEFindings!]!
+  treatments: [ConsultationTreatment!]!
+  diagnoses: [ConsultationDiagnosis!]!
+
+  recordedBy: ID!
+  recordedAt: Date!
+}
+
+input ConsultationOutcomeInput{
+  consultationId: ID!
+  remarks: String
+  complaints: [String!]!
+  peFindings: [String!]!
+  treatments: [String!]!
+  diagnoses: [ConsultationDiagnosisInput!]!
+}
+
+type ConsultationComplaints{
+  id: ID!
+  outcomeId: ID!
+  complaint: String!
+}
+
+type ConsultationPEFindings{
+  id: ID!
+  outcomeId: ID!
+  finding: String!
+}
+
+type ConsultationTreatment{
+  id: ID!
+  outcomeId: ID!
+  treatment: String!
+
+}
+
+type ConsultationDiagnosis{
+  id: ID!
+  outcomeId: ID!
+  diagnosisName: String!
+  icdId: ID!
+  type: DIAGNOSIS_TYPE!
+  notes: String
+}
+
+input ConsultationDiagnosisInput{
+  outcomeId: ID!
+  diagnosisName: String!
+  icdId: ID!
+  type: DIAGNOSIS_TYPE!
+  notes: String
+}
+
+type ICDrecord{
+  id: ID!
+  code: String!
+  title: String!
+}
+
+type ICDFullRecord{
+  id: ID!
+  code: String!
+  title: String!
+  
+  stemData: String!
+  release: String!
+  updated_at: Date!
+  created_at: Date!
+}
+
+type Query {
+  getConsultations(patientId: ID!, offset: Int, limit: Int): [Consultation!]!
+  getOutcomes(consultationId: ID!, offset: Int, limit: Int): [ConsultationOutcome!]!
+
+  getComplaints(outcomeId: ID!, offset: Int, limit: Int): [ConsultationComplaints!]!
+  getPEFindings(outcomeId: ID!, offset: Int, limit: Int): [ConsultationPEFindings!]!
+  getTreatments(outcomeId: ID!, offset: Int, limit: Int): [ConsultationTreatment!]!
+  getDiagnoses(outcomeId: ID!, offset: Int, limit: Int): [ConsultationDiagnosis!]!
+
+  getIcdViaCode(code: String!): [ICDrecord!]!
+  getIcdViaTitle(title: String!): [ICDrecord!]!
+  getIcdDetails(id: ID!): JSON
+}
+
+type Mutation {
+  createConsultation(input: ConsultationInput): Consultation!
+  openConsultation(input: ConsultationOutcomeInput!): ConsultationOutcome!
+  # allow only when Consulation.status in [ Created, Completed, Referred, Monitored ]
+
+  submitConsultation(consultationId: ID!, status: CONSULTATION_STATUS_INPUT!): Boolean!
+  reOpenConsultation(input: ConsultationOutcomeInput!): ConsultationOutcome!
+  # allow only when Consulation.status in [ Completed, Referred, Monitored ]
+
+  updateConsultationNotes(consultationId: ID!, notes: String!): Boolean!
+  updateConsultationFollowUpId(consultationId: ID!, followUpId: ID!): Boolean!
+  updateOutcomeRemarks(consultationId: ID!, remarks: String!): Boolean!
+  # allow changes only to followUpId and notes. Changes to mode, type, status are not allowed after creation.
+
+  updateComplaints(consultationId: ID!, complaints: [String!]!): [ConsultationComplaints!]!
+  updatePEFindings(consultationId: ID!, findings: [String!]!): [ConsultationPEFindings!]!
+  updateTreatments(consultationId: ID!, treatments: [String!]!): [ConsultationTreatment!]!
+  updateDiagnoses(consultationId: ID!, diagnoses: [ConsultationDiagnosisInput!]!): [ConsultationDiagnosis!]!
+}
+

@@ -9,9 +9,15 @@ const logger = require('./utils/logger.js');
 const { initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initMedicalProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
+const { initMedicalConsultationGraphQL } = require('./routes/consultation/consult/graphql.js');
+
+const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
+const staffRoutes = require('./routes/staff/staff.js');
+
+
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
 
@@ -54,10 +60,13 @@ app.use((err, req, res, next) => {
 initMedicalEMRGraphQL(app);
 initMedicalProfileGraphQL(app);
 initMedicalAppointmentGraphQL(app);
+initMedicalConsultationGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
+app.use('/info/consent', consentRoutes);
+app.use('/staff', staffRoutes);
 
 // ======================================
 // AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice

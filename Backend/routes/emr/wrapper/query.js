@@ -736,12 +736,20 @@ const Query = {
     const query = `
       SELECT *
       FROM (
-        SELECT DISTINCT ON (pul."patientId") pul.*, up.*
+        SELECT DISTINCT ON (pul."patientId")
+          pul.id            AS id,
+          pul."patientId"   AS "patientId",
+          pul.status        AS status,
+          pul.scope         AS scope,
+          pul.created_at    AS created_at,
+          up.first_name     AS first_name,
+          up.last_name      AS last_name,
+          up.branch         AS branch
         FROM "patientUpdateLog" pul
         JOIN "UsersPersonal" up ON up.id = pul."patientId"
         ORDER BY pul."patientId", pul.created_at DESC, pul.id DESC
       ) latest
-      WHERE latest.branch = $1
+      WHERE ($1 = 'Both' OR latest.branch = $1)
         AND latest.status = ANY(COALESCE($2, ARRAY[latest.status]))
       ORDER BY latest.created_at DESC
       LIMIT $3 OFFSET $4;
@@ -811,6 +819,143 @@ const Query = {
     ]);
 
     logger.debug("Searched Oral Appliance Catalogs Query Result:", result.rows);
+    return result.rows;
+  },
+
+  // ─── Patient Search ───────────────────────────────────────────────────────
+  _getPatientBasicInfo: async (_, { userId }, { user, res }) => {
+    const query = `
+      SELECT
+        up.id,
+        up.identifier,
+        up.branch,
+        up.sex,
+        upl.first_name,
+        upl.last_name,
+        upl.middle_name,
+        upl.suffix,
+        pr.profile_type,
+        sp.program,
+        sp.year,
+        ep.department,
+        ep.role,
+        latest.id           AS latest_ticket_id,
+        latest.status       AS latest_status,
+        latest.scope        AS latest_scope,
+        latest.created_at   AS latest_updated_at
+      FROM "UsersPersonal" up
+      JOIN "Patients" p ON p.id = up.id
+      LEFT JOIN LATERAL (
+        SELECT l.first_name, l.last_name, l.middle_name, l.suffix
+        FROM "UsersPersonalLog" l
+        WHERE l.user_id = up.id
+        ORDER BY l.created_at DESC
+        LIMIT 1
+      ) upl ON true
+      LEFT JOIN LATERAL (
+        SELECT pul.id, pul.status, pul.scope, pul.created_at
+        FROM "patientUpdateLog" pul
+        WHERE pul."patientId" = up.id
+        ORDER BY pul.created_at DESC
+        LIMIT 1
+      ) latest ON true
+      LEFT JOIN LATERAL (
+        SELECT pr2.id, pr2.profile_type
+        FROM "profileRecord" pr2
+        JOIN "patientUpdateLog" pul2 ON pul2.id = pr2.id
+        WHERE pul2."patientId" = up.id
+        ORDER BY pul2.created_at DESC
+        LIMIT 1
+      ) pr ON true
+      LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+      LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
+      WHERE up.id = $1
+      LIMIT 1;
+    `;
+    const result = await db.query(query, [userId]);
+    logger.debug('getPatientBasicInfo result:', result.rows[0]);
+    return result.rows[0] || null;
+  },
+
+  _searchPatients: async (_, { searchTerm, branch, offset, limit }, { user, res }) => {
+    if (!searchTerm || searchTerm.trim().length < 2) return [];
+
+    const term = searchTerm.trim();
+    const prefixTerm = term + '%';          // for identifier prefix match
+    const anyTerm   = '%' + term + '%';     // for name contains match
+
+    const query = `
+      SELECT
+        up.id,
+        up.identifier,
+        up.branch,
+        up.sex,
+        upl.first_name,
+        upl.last_name,
+        upl.middle_name,
+        upl.suffix,
+        pr.profile_type,
+        sp.program,
+        sp.year,
+        ep.department,
+        ep.role,
+        latest.id           AS latest_ticket_id,
+        latest.status       AS latest_status,
+        latest.scope        AS latest_scope,
+        latest.created_at   AS latest_updated_at
+      FROM "UsersPersonal" up
+      JOIN "Patients" p ON p.id = up.id
+      -- latest personal name snapshot
+      LEFT JOIN LATERAL (
+        SELECT l.first_name, l.last_name, l.middle_name, l.suffix
+        FROM "UsersPersonalLog" l
+        WHERE l.user_id = up.id
+        ORDER BY l.created_at DESC
+        LIMIT 1
+      ) upl ON true
+      -- latest update ticket
+      LEFT JOIN LATERAL (
+        SELECT pul.id, pul.status, pul.scope, pul.created_at
+        FROM "patientUpdateLog" pul
+        WHERE pul."patientId" = up.id
+        ORDER BY pul.created_at DESC
+        LIMIT 1
+      ) latest ON true
+      -- latest profile record
+      LEFT JOIN LATERAL (
+        SELECT pr2.id, pr2.profile_type
+        FROM "profileRecord" pr2
+        JOIN "patientUpdateLog" pul2 ON pul2.id = pr2.id
+        WHERE pul2."patientId" = up.id
+        ORDER BY pul2.created_at DESC
+        LIMIT 1
+      ) pr ON true
+      LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+      LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
+      WHERE
+        ($1::text IS NULL OR up.branch::text = $1::text)
+        AND (
+          up.identifier ILIKE $2
+          OR (upl.first_name || ' ' || upl.last_name) ILIKE $3
+          OR (upl.last_name  || ', ' || upl.first_name) ILIKE $3
+          OR upl.first_name ILIKE $3
+          OR upl.last_name  ILIKE $3
+        )
+      ORDER BY
+        CASE WHEN up.identifier ILIKE $2 THEN 0 ELSE 1 END,
+        upl.last_name, upl.first_name
+      LIMIT $4 OFFSET $5;
+    `;
+
+    const result = await db.query(query, [
+      branch || null,
+      prefixTerm,
+      anyTerm,
+      limit || 15,
+      offset || 0,
+    ]);
+
+    logger.debug(`Patient search for "${term}" returned ${result.rows.length} results`);
     return result.rows;
   },
 };

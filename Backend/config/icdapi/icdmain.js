@@ -1,4 +1,5 @@
-const { getIcdToTitle, getTitleToIcd, createICDLookup, updateICDLookup } = require('./icddb.js');
+const { getIcdToTitle, getTitleToIcd, createICDLookup,
+    updateICDLookup, getICDLookupById } = require('./icddb.js');
 const { icdFetch, titleToicdCode, icdCodeToTitle } = require('./icdapi.js');
 const path = require("path");
 const dotenv = require("dotenv");
@@ -82,5 +83,19 @@ async function GetTitle(icdCode) {
     }
 }
 
+async function getIcdDetails(id) {
+    try {
+        const dbRecord = await getICDLookupById(id);
+        if (!dbRecord) {
+            console.log(`No record found in DB for ID: ${id}`);
+            return null;
+        }
 
-module.exports = { GetIcd, GetTitle };
+        return await icdFetch(dbRecord.stemData);
+    } catch (error) {
+        console.error('getIcdDetails error:', error);
+        return null;
+    }
+}
+
+module.exports = { GetIcd, GetTitle, getIcdDetails };
