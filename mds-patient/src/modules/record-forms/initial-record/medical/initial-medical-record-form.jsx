@@ -26,6 +26,8 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
   const [showValidationModal, setShowValidationModal] = useState(false);
+  const [dbErrors, setDbErrors] = useState([]);
+  const [showDbErrorModal, setShowDbErrorModal] = useState(false);
 
   console.log('[Initial Medical Record Form] Component rendered, current step:', currentStep);
 
@@ -199,6 +201,85 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     return errors;
   };
 
+  /**
+   * Converts a backend/network error into a list of { section, sectionIndex, message }
+   * objects suitable for the ValidationWarningModal.
+   */
+  const parseSubmissionError = (error) => {
+    const errors = [];
+
+    // Collect all GraphQL error messages (may be multiple)
+    const gqlMessages = (
+      error.graphQLErrors ??
+      error.response?.data?.errors ??
+      []
+    ).map(e => e?.message).filter(Boolean);
+
+    if (gqlMessages.length > 0) {
+      gqlMessages.forEach(msg => {
+        const lower = msg.toLowerCase();
+
+        // Enum / invalid value errors — find the bad field and point to its section
+        if (lower.includes('invalid input value for enum') || lower.includes('invalid value')) {
+          if (lower.includes('sex') || lower.includes('gender')) {
+            errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Gender contains an invalid value. Please re-select your gender.' });
+          } else if (lower.includes('civil_status') || lower.includes('civilstatus')) {
+            errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Civil status contains an invalid value. Please re-select your civil status.' });
+          } else if (lower.includes('branch') || lower.includes('identifier')) {
+            errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student/employee number contains an invalid value. Please check and re-enter it.' });
+          } else if (lower.includes('year') || lower.includes('program')) {
+            errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Program or year level contains an invalid value. Please re-select.' });
+          } else if (lower.includes('updatescope') || lower.includes('scope')) {
+            errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Submission configuration error. Please refresh the page and try again.' });
+          } else {
+            errors.push({ section: 'Submission Error', sectionIndex: null, message: `One or more fields contain an invalid value: ${msg}` });
+          }
+
+        // Not-null / missing required field constraint
+        } else if (lower.includes('null value') || lower.includes('not-null') || lower.includes('violates not-null')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'A required field is missing. Please review all sections and ensure nothing is left blank.' });
+
+        // Unique constraint (duplicate record)
+        } else if (lower.includes('unique constraint') || lower.includes('duplicate')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'This record already exists. Your medical record may have already been submitted.' });
+
+        // Date / type conversion
+        } else if (lower.includes('invalid input syntax') || lower.includes('date') || lower.includes('timestamp')) {
+          errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'A date field contains an invalid value. Please re-enter your date of birth or other date fields.' });
+
+        // Auth errors
+        } else if (lower.includes('unauthorized') || error.status === 401 || error.response?.status === 401) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Your session has expired. Please log out and log back in, then try again.' });
+
+        // Skip raw generic backend messages that give no useful guidance to the user
+        } else if (lower === 'database error' || lower.startsWith('database error') || lower.includes('internal server error')) {
+          // Suppress — a more specific error from the same batch will already be shown
+        // Passthrough — show the server message directly only when it is genuinely useful
+        } else {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: msg });
+        }
+      });
+    } else if (error.response?.status === 401) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Your session has expired. Please log out and log back in, then try again.' });
+    } else if (error.response?.status === 403) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Access denied. You may not have permission to submit this form.' });
+    } else if (error.response?.status >= 500) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'The server encountered an unexpected error. Please try again in a moment.' });
+    } else if (error.message) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: error.message });
+    } else {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'An unexpected error occurred. Please check your inputs and try again.' });
+    }
+
+    // If all messages were suppressed (e.g. only a raw "Database error" was returned)
+    // but we do have more specific entries, that's fine. If errors is still empty, add a fallback.
+    if (errors.length === 0) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Your submission could not be completed. Please review your inputs and try again.' });
+    }
+
+    return errors;
+  };
+
   // Static form - no validation blocking navigation, only on submit
   const validateStep = (step) => {
     return true;
@@ -280,26 +361,9 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     } catch (error) {
       console.error('[Initial Medical Record Form] Submission error:', error);
       
-      let errorMessage = 'Failed to submit medical record. ';
-      
-      if (error.response?.status === 401) {
-        errorMessage += '\n\nAuthentication error. Please log in again.';
-      } else if (error.response?.status === 403) {
-        errorMessage += '\n\nAccess denied. You may not have permission to submit this form.';
-      } else if (error.response?.status === 400) {
-        errorMessage += '\n\nInvalid data. Please check all fields and try again.';
-      } else if (error.response?.status >= 500) {
-        errorMessage += '\n\nServer error. Please try again later.';
-      } else if (error.response?.data?.errors) {
-        errorMessage += '\n\nServer errors:\n' + 
-          error.response.data.errors.map(e => `- ${e.message}`).join('\n');
-      } else if (error.message) {
-        errorMessage += '\n\nError: ' + error.message;
-      } else {
-        errorMessage += '\n\nPlease check the console for more details and try again.';
-      }
-      
-      alert(errorMessage);
+      const parsedErrors = parseSubmissionError(error);
+      setDbErrors(parsedErrors);
+      setShowDbErrorModal(true);
     } finally {
       setIsSubmitting(false);
       console.log('[Initial Medical Record Form] Submission process completed');
@@ -484,6 +548,17 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
         onClose={() => setShowValidationModal(false)}
         errors={validationErrors}
         onGoToSection={(stepIndex) => setCurrentStep(stepIndex)}
+      />
+
+      {/* Database / Submission Error Modal */}
+      <ValidationWarningModal
+        isOpen={showDbErrorModal}
+        onClose={() => setShowDbErrorModal(false)}
+        errors={dbErrors}
+        onGoToSection={(stepIndex) => { setCurrentStep(stepIndex); setShowDbErrorModal(false); }}
+        variant="error"
+        title="Submission Failed"
+        subtitle="The server rejected your submission. Please fix the issue below and try again."
       />
     </div>
   );
