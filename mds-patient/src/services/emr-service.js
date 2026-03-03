@@ -18,9 +18,22 @@ const createUpdateTicket = async (scope = 'Both') => {
     }
   `;
   
-  const data = await sendGraphQLRequest(mutation, { scope });
-  console.log('[EMR Service] Update ticket created:', data.createUpdateTicket);
-  return data.createUpdateTicket;
+  try {
+    const data = await sendGraphQLRequest(mutation, { scope });
+    console.log('[EMR Service] Update ticket created:', data.createUpdateTicket);
+    return data.createUpdateTicket;
+  } catch (error) {
+    // If a stale ticket is blocking, cancel it and retry once
+    const isStaleTicket = error.message?.toLowerCase().includes('already in progress');
+    if (isStaleTicket) {
+      console.warn('[EMR Service] Stale update ticket detected — cancelling and retrying...');
+      await cancelUpdateTicket();
+      const retryData = await sendGraphQLRequest(mutation, { scope });
+      console.log('[EMR Service] Update ticket created (after stale-ticket recovery):', retryData.createUpdateTicket);
+      return retryData.createUpdateTicket;
+    }
+    throw error;
+  }
 };
 
 /**
@@ -227,6 +240,25 @@ const registerProfileSetup = async (identifier, personalInfo) => {
       name: `${result?.createPersonalRecordLog?.first_name} ${result?.createPersonalRecordLog?.last_name}`,
     });
   } catch (error) {
+    // If a stale record log is blocking the submission, auto-cancel it and retry
+    // (this can happen when a previous submission failed mid-way and left a stuck log)
+    const isStaleLog = error.message?.toLowerCase().includes('already in progress');
+    if (isStaleLog) {
+      console.warn('[EMR Service] Stale personal record log detected — cancelling and retrying...');
+      await cancelPersonalRecordLog();
+
+      // On retry, createBranchIdentifier may already be set from the first attempt,
+      // so only re-run createPersonalRecordLog to avoid a duplicate-identifier error.
+      const retryMutation = `mutation ProfileSetupRetry($input: userProfileInput!) {
+        createPersonalRecordLog(input: $input) { first_name last_name }
+      }`;
+      const retryResult = await sendGraphQLRequest(retryMutation, { input: personalInput }, { endpoint: '/profile/patient' });
+      console.log('[EMR Service] Profile setup complete (after stale-log recovery):', {
+        name: `${retryResult?.createPersonalRecordLog?.first_name} ${retryResult?.createPersonalRecordLog?.last_name}`,
+      });
+      return;
+    }
+
     console.error('[EMR Service] Failed to register profile setup:', error);
     throw error;
   }
