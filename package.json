@@ -16,5 +16,8 @@
     "dev:mobile": "npm run start --workspace=mds-mobile",
     "start:patient": "node Backend/server.js",
     "start:staff": "node Backend/staff.js"
+  },
+  "dependencies": {
+    "tailwindcss": "^4.2.1"
   }
 }
