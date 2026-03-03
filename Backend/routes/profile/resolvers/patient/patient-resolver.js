@@ -2,10 +2,10 @@ const Wrapper = require("../wrapper/wrapper.js");
 const path = require("path");
 const dotenv = require("dotenv");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
-const { getStudentBranchFromEmail } = require("../../../../utils/validator.js");
+const { getStudentBranchFromEmail, isStudentEmail } = require("../../../../utils/validator.js");
 const db = require("../../../../config/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
-
+const logger = require("../../../../utils/logger.js");
 // creating of updateTicket
 // In-progress do expire after nth time
 // Unless if the user is unverified where the first ticket never expires
@@ -72,7 +72,7 @@ Mutation = {
     return await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
   },
 
-  createBranchIdentifier: async (_, { identifier }, { user, res }) => {
+  createBranchIdentifier: async (_, { input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -85,7 +85,14 @@ Mutation = {
     if (!getEmail) {
       throwGraphQLError(res).message("Email not found for the user.").status(400).throw();
     }
-    const input =  { branch: getStudentBranchFromEmail(getEmail), identifier};
+    
+    if (isStudentEmail(getEmail)) { // if email get the branch from email
+      input.branch = getStudentBranchFromEmail(getEmail);
+      if (!input.branch) {
+        throwGraphQLError(res).message("Unable to determine branch from email. Please provide a valid student email.").status(400).throw();
+        }
+      }
+
     return await Wrapper.Mutation._UserBranchIdentifier(_, { userId: user.id, input }, { user, res });
   },
   

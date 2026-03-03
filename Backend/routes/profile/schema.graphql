@@ -133,7 +133,7 @@ type Mutation {
 
   updatePersonalRecordLog(userId: ID!, input: userProfileUpdateInput!): userProfile
 
-  createBranchIdentifier(identifier: ID!): BranchIdentifier
+  createBranchIdentifier(input: BranchIdentifierUpdateInput!): BranchIdentifier 
   updateUserBranchIdentifier(userId: ID!, input: BranchIdentifierUpdateInput!): BranchIdentifier
 
   setPersonalRecordLog(userId: ID!, status: UpdateStatus!): UpdateStatus
