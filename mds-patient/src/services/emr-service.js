@@ -84,6 +84,30 @@ const cancelUpdateTicket = async () => {
 };
 
 /**
+ * Cancel the personal record log (in case of errors during initial submission)
+ * This must be called when registerProfileSetup succeeds but a later step fails,
+ * to prevent the "An update is already in progress" error on retry.
+ */
+const cancelPersonalRecordLog = async () => {
+  console.log('[EMR Service] Cancelling personal record log...');
+
+  const mutation = `
+    mutation CancelPersonalRecordLog {
+      cancelPersonalRecordLog
+    }
+  `;
+
+  try {
+    const data = await sendGraphQLRequest(mutation, {}, { endpoint: '/profile/patient' });
+    console.log('[EMR Service] Personal record log cancelled:', data.cancelPersonalRecordLog);
+    return data.cancelPersonalRecordLog;
+  } catch (error) {
+    console.warn('[EMR Service] Failed to cancel personal record log:', error.message);
+    return null;
+  }
+};
+
+/**
  * Create a complete initial medical record
  * OPTIMIZED: Batches all create mutations into a single GraphQL request
  * reducing ~17 sequential HTTP calls down to 3 (ticket + batch + submit)
@@ -213,6 +237,7 @@ export const createInitialMedicalRecord = async (formData) => {
   console.log('[EMR Service] Form data received:', formData);
 
   let ticketCreated = false;
+  let profileLogCreated = false;
   // Track staged file IDs so they can be cleaned up if the submission fails
   let upperTeethFileId = null;
   let lowerTeethFileId = null;
@@ -225,6 +250,7 @@ export const createInitialMedicalRecord = async (formData) => {
     // Must complete before ticket creation so the branch is already set.
     console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
     await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo);
+    profileLogCreated = true;
 
     // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========
     // createUpdateTicket and both photo uploads are independent of each other
@@ -270,10 +296,19 @@ export const createInitialMedicalRecord = async (formData) => {
       ]);
     }
 
+    // Cancel the EMR update ticket so a retry can create a fresh one
     if (ticketCreated) {
       console.log('[EMR Service] Attempting to cancel update ticket due to error...');
       await cancelUpdateTicket();
     }
+
+    // Cancel the profile record log so a retry is not blocked by the
+    // "An update is already in progress" guard on createPersonalRecordLog
+    if (profileLogCreated) {
+      console.log('[EMR Service] Attempting to cancel personal record log due to error...');
+      await cancelPersonalRecordLog();
+    }
+
     throw error;
   }
 };

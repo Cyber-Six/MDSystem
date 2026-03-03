@@ -9,9 +9,47 @@ import { createPortal } from 'react-dom';
  * @param {Function} onClose - Close handler
  * @param {Array} errors - Array of { section, sectionIndex, message } objects
  * @param {Function} onGoToSection - Optional callback(sectionIndex) to navigate to a form step
+ * @param {'warning'|'error'} variant - Visual theme: 'warning' (amber) or 'error' (red)
+ * @param {string} title - Override the modal heading
+ * @param {string} subtitle - Override the subtitle under the heading
  */
-const ValidationWarningModal = ({ isOpen, onClose, errors = [], onGoToSection }) => {
+const ValidationWarningModal = ({
+  isOpen,
+  onClose,
+  errors = [],
+  onGoToSection,
+  variant = 'warning',
+  title,
+  subtitle,
+}) => {
   if (!isOpen || errors.length === 0) return null;
+
+  const isError = variant === 'error';
+  const colorScheme = isError
+    ? {
+        bg: 'bg-red-50',
+        border: 'border-red-200',
+        iconBg: 'bg-red-100',
+        iconColor: 'text-red-600',
+        titleColor: 'text-red-900',
+        subtitleColor: 'text-red-700',
+        closeColor: 'text-red-600 hover:text-red-800 hover:bg-red-100',
+        sectionLink: 'text-red-600 hover:text-red-800',
+        bulletColor: 'text-red-500',
+        btnBg: 'bg-red-600 hover:bg-red-700',
+      }
+    : {
+        bg: 'bg-amber-50',
+        border: 'border-amber-200',
+        iconBg: 'bg-amber-100',
+        iconColor: 'text-amber-600',
+        titleColor: 'text-amber-900',
+        subtitleColor: 'text-amber-700',
+        closeColor: 'text-amber-600 hover:text-amber-800 hover:bg-amber-100',
+        sectionLink: 'text-primary-600 hover:text-primary-800',
+        bulletColor: 'text-amber-500',
+        btnBg: 'bg-amber-600 hover:bg-amber-700',
+      };
 
   // Group errors by section
   const grouped = errors.reduce((acc, err) => {
@@ -72,23 +110,29 @@ const ValidationWarningModal = ({ isOpen, onClose, errors = [], onGoToSection })
       {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-amber-200 bg-amber-50 rounded-t-2xl">
-          <div className="flex items-center justify-center w-10 h-10 bg-amber-100 rounded-full">
-            <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
+        <div className={`flex items-center gap-3 px-6 py-4 border-b ${colorScheme.border} ${colorScheme.bg} rounded-t-2xl`}>
+          <div className={`flex items-center justify-center w-10 h-10 ${colorScheme.iconBg} rounded-full`}>
+            {isError ? (
+              <svg className={`w-6 h-6 ${colorScheme.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <svg className={`w-6 h-6 ${colorScheme.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            )}
           </div>
           <div>
-            <h3 className="text-lg font-heading font-bold text-amber-900">
-              Incomplete Form
+            <h3 className={`text-lg font-heading font-bold ${colorScheme.titleColor}`}>
+              {title || 'Incomplete Form'}
             </h3>
-            <p className="text-sm text-amber-700">
-              Please fix the following {errors.length} {errors.length === 1 ? 'issue' : 'issues'} before submitting
+            <p className={`text-sm ${colorScheme.subtitleColor}`}>
+              {subtitle || `Please fix the following ${errors.length} ${errors.length === 1 ? 'issue' : 'issues'} before submitting`}
             </p>
           </div>
           <button 
             onClick={onClose}
-            className="ml-auto p-1 text-amber-600 hover:text-amber-800 hover:bg-amber-100 rounded-lg transition-colors"
+            className={`ml-auto p-1 ${colorScheme.closeColor} rounded-lg transition-colors`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -114,7 +158,7 @@ const ValidationWarningModal = ({ isOpen, onClose, errors = [], onGoToSection })
                 {sectionIndex !== undefined && sectionIndex !== null && onGoToSection && (
                   <button
                     onClick={() => handleGoToSection(sectionIndex)}
-                    className="text-xs text-primary-600 hover:text-primary-800 font-semibold flex items-center gap-1 transition-colors"
+                    className={`text-xs ${colorScheme.sectionLink} font-semibold flex items-center gap-1 transition-colors`}
                   >
                     Go to section
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -126,7 +170,7 @@ const ValidationWarningModal = ({ isOpen, onClose, errors = [], onGoToSection })
               <ul className="space-y-1.5">
                 {items.map((msg, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-secondary-700">
-                    <svg className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className={`w-4 h-4 ${colorScheme.bulletColor} mt-0.5 flex-shrink-0`} fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
                     <span>{msg}</span>
@@ -141,9 +185,9 @@ const ValidationWarningModal = ({ isOpen, onClose, errors = [], onGoToSection })
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
           <button
             onClick={onClose}
-            className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl transition-colors text-sm"
+            className={`w-full py-2.5 px-4 ${colorScheme.btnBg} text-white font-semibold rounded-xl transition-colors text-sm`}
           >
-            I understand, let me fix it
+            {isError ? 'OK, I will fix it' : 'I understand, let me fix it'}
           </button>
         </div>
       </div>
