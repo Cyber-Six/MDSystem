@@ -140,6 +140,19 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     setFormData({ ...formData, certification: data });
   };
 
+  /**
+   * Validates a Philippine phone number.
+   * Accepts:
+   *   - Local mobile/landline starting with 0  → 0XXXXXXXXXX  (11 digits)
+   *   - With country code prefix               → +63XXXXXXXXXX (13 chars) or 63XXXXXXXXXX (12 digits)
+   */
+  const isValidPhilippinePhone = (raw) => {
+    const stripped = raw.replace(/[\s\-().]/g, '');
+    return /^0\d{10}$/.test(stripped) ||
+           /^\+63\d{10}$/.test(stripped) ||
+           /^63\d{10}$/.test(stripped);
+  };
+
   // Comprehensive form validation - returns array of { section, sectionIndex, message }
   const validateAllFields = (data) => {
     const errors = [];
@@ -153,7 +166,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     if (!pi.civilStatus) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Civil status is required' });
     if (!pi.nationality?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Nationality is required' });
     if (!pi.contactNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number is required' });
-    else if (!/^[+\d\s\-()]+$/.test(pi.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number must contain only digits, +, -, and spaces' });
+    else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number must be a valid Philippine number (e.g. 09171234567 or +639171234567)' });
     if (!pi.address?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Address is required' });
     if (!pi.program) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Program is required' });
     if (pi.program === 'Other' && !pi.programOther?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Please specify your program' });
@@ -167,11 +180,11 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
     if (!c1?.name?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First emergency contact name is required' });
     if (!c1?.relationship?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First emergency contact relationship is required' });
     if (!c1?.contactNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First emergency contact number is required' });
-    else if (!/^[+\d\s\-()]+$/.test(c1.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First emergency contact number must contain only digits, +, -, and spaces' });
+    else if (!isValidPhilippinePhone(c1.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'First emergency contact number must be a valid Philippine number (e.g. 09171234567)' });
     if (!c2?.name?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Second emergency contact name is required' });
     if (!c2?.relationship?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Second emergency contact relationship is required' });
     if (!c2?.contactNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Second emergency contact number is required' });
-    else if (!/^[+\d\s\-()]+$/.test(c2.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Second emergency contact number must contain only digits, +, -, and spaces' });
+    else if (!isValidPhilippinePhone(c2.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Second emergency contact number must be a valid Philippine number (e.g. 09171234567)' });
 
     // ---- Medical Background (Step 2) ----
     const mb = data.medicalBackground || {};
