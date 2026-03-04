@@ -18,6 +18,10 @@ Backend/Patients/node_modules/
 Backend/.env
 Backend/commands/
 
+Backend/services/docx-generation/__pycache__/
+Backend/services/docx-generation/templates/
+Backend/services/docx-generation/venv/
+
 /media
 media/promoted/
 media/staging/

@@ -47,7 +47,7 @@ function PatientRoleFromEmail(email) {
 }
 
 function isValidEmail(email) {
-  const regex = /^[^\s@]+@tip\.edu\.ph$/;
+  const regex = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*@tip\.edu\.ph$/;
   return regex.test(email);
 }
 
