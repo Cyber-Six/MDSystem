@@ -19,7 +19,7 @@ import InitialRecordDetailModal from './initial-record-detail-modal';
  * The component reflects the backend's UpdateTicket shape:
  *   { id, patientId, status, scope, created_at, first_name, last_name, branch }
  */
-const InitialRecordList = () => {
+const InitialRecordList = ({ staffRole = 'both' }) => {
   const [branch, setBranch] = useState(BRANCH.BOTH);
   const [statusFilter, setStatusFilter] = useState(TICKET_STATUS.PENDING);
   const [tickets, setTickets] = useState([]);
@@ -228,6 +228,7 @@ const InitialRecordList = () => {
             handleAction(updated);
             setSelectedTicket(null);
           }}
+          staffRole={staffRole}
         />
       )}
     </div>
