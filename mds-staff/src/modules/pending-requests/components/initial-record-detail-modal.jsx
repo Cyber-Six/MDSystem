@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TICKET_STATUS, staffUpdateTicket } from '../initial-record-service';
+import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
 import RecordReviewModal from './record-review-modal';
 
 /**
@@ -37,11 +37,13 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
     setLoading(true);
     setError('');
     try {
-      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.APPROVED);
+      // Step 1: approve personal record — if this fails the EMR ticket is NOT touched
+      // Step 2: approve EMR ticket (medical + dental) — only runs if step 1 succeeded
+      const newStatus = await approveInitialRecord(ticket.patientId);
       onAction?.({ ...ticket, status: newStatus }, newStatus);
       onClose();
     } catch (err) {
-      setError(err.message || 'Failed to approve ticket.');
+      setError(err.message || 'Failed to approve record. Please try again.');
     } finally {
       setLoading(false);
     }

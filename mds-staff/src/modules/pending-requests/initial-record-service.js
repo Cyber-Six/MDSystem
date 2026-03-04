@@ -12,10 +12,19 @@
 
 import { axiosRequest } from '../../packages-core-adapter';
 
-// ── Internal helper ─────────────────────────────────────────────────────────
+// ── Internal helpers ─────────────────────────────────────────────────────────
 
 const sendGraphQL = async (query, variables = {}) => {
   const response = await axiosRequest.post('/emr/medical', { query, variables });
+  if (response.data?.errors) {
+    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+  }
+  return response.data.data;
+};
+
+// Separate helper for the profile endpoint (medical resolver)
+const sendProfileGraphQL = async (query, variables = {}) => {
+  const response = await axiosRequest.post('/profile/medical', { query, variables });
   if (response.data?.errors) {
     throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
   }
@@ -129,4 +138,43 @@ export const staffUpdateTicket = async (userId, status) => {
     { userId, status },
   );
   return data.staffUpdateTicket;
+};
+
+/**
+ * Approve / set the status of the patient's personal record log.
+ * Must be called on /profile/medical (staff medical resolver).
+ *
+ * @param {string} userId  — the patient's ID
+ * @param {'Approved'|'Revision'|string} status
+ * @returns {Promise<string>}  new UpdateStatus
+ */
+export const setPersonalRecordLog = async (userId, status) => {
+  const data = await sendProfileGraphQL(
+    `mutation SetPersonalRecordLog($userId: ID!, $status: UpdateStatus!) {
+       setPersonalRecordLog(userId: $userId, status: $status)
+     }`,
+    { userId, status },
+  );
+  return data.setPersonalRecordLog;
+};
+
+/**
+ * Atomically approve both the personal record and the EMR update ticket.
+ *
+ * Order of operations:
+ *  1. setPersonalRecordLog → Approved   (/profile/medical)
+ *  2. staffUpdateTicket    → Approved   (/emr/medical)    — only runs if step 1 succeeds
+ *
+ * If step 1 fails, step 2 is **not** called and the error is re-thrown so
+ * the caller can surface it to the staff UI without any partial state.
+ *
+ * @param {string} userId  — ticket.patientId
+ * @returns {Promise<string>}  final UpdateStatus from step 2
+ */
+export const approveInitialRecord = async (userId) => {
+  // Step 1 — personal record must be committed first
+  await setPersonalRecordLog(userId, TICKET_STATUS.APPROVED);
+
+  // Step 2 — EMR ticket approval (medical + dental records)
+  return staffUpdateTicket(userId, TICKET_STATUS.APPROVED);
 };

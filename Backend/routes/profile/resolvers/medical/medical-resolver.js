@@ -135,6 +135,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     const result = await Wrapper.Mutation._setPersonalRecordLog(_, { userId, status }, { user, res });
+    await Wrapper.Mutation._reloadCredentialStatus(_, { userId }, { user, res }); // reload credential status after approval
     return result;
   },
 

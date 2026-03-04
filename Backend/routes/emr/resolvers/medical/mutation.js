@@ -10,6 +10,9 @@ const permit = require("../../../../services/permit.js");
 
 const Query = require("./query.js");
 
+const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
+    require("../../../profile/resolvers/wrapper/wrapper.js");
+
 const Mutation = {
   staffUpdateTicket: async (_, args, { user, res }) => {
     const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval, args.userId);
@@ -42,6 +45,7 @@ const Mutation = {
     await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
       [newStatus, record.id]
     );
+    await reloadCredentialStatus(_, { userId: args.userId }, { user, res }); // reload credential status after approval
     logger.info(`User ID ${user.id} updated ticket ID ${record.id} to status ${newStatus}`);
     return newStatus;
   },

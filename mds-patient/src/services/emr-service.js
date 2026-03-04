@@ -308,8 +308,9 @@ export const createInitialMedicalRecord = async (formData) => {
     // ======== REQUEST 3: Batch all create mutations + submit in one request ========
     // submitUpdateTicket is appended as the last field in the same mutation document
     // so the server processes it after all creates complete (GraphQL serial execution).
-    console.log('[EMR Service] [3/3] Sending batched create mutations + submit...');
-    const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId });
+    console.log('[EMR Service] [3/3] Fetching immunization catalog & sending batched mutations...');
+    const immunizationCatalog = await fetchImmunizationCatalog();
+    const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, immunizationCatalog);
     const batchResult = await sendBatchedCreateMutations(inputs, formData);
     Object.assign(results, batchResult);
     results.submitStatus = batchResult.submitTicket;
@@ -346,13 +347,110 @@ export const createInitialMedicalRecord = async (formData) => {
 };
 
 /**
+ * Fetch the Immunization domain catalog from the backend.
+ * Returns an array of { id, code, name } entries.
+ * Falls back to [] on failure — unmatched vaccines are preserved in notes.
+ */
+const fetchImmunizationCatalog = async () => {
+  const query = `
+    query GetImmunizationCatalog {
+      getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+        id
+        code
+        name
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(query, {});
+    console.log('[EMR Service] Immunization catalog loaded:', data.getDomainCatalogs?.length, 'entries');
+    return data.getDomainCatalogs || [];
+  } catch (error) {
+    console.warn('[EMR Service] Could not fetch immunization catalog, falling back to notes-only:', error.message);
+    return [];
+  }
+};
+
+/**
+ * Frontend checkbox ID → backend DomainTypeCatalog code(s) + dose number.
+ * covidVaccine maps to two records (dose 1 and dose 2).
+ */
+const VACCINE_CATALOG_MAP = {
+  bcg:          [{ code: 'BCG',           doseNumber: 1 }],
+  chickenPox:   [{ code: 'VARICELLA',     doseNumber: 1 }],
+  hepatitisA:   [{ code: 'HEPA',          doseNumber: 1 }],
+  hepatitisB:   [{ code: 'HEPB',          doseNumber: 1 }],
+  hpv:          [{ code: 'HPV',           doseNumber: 1 }],
+  mmr:          [{ code: 'MMR',           doseNumber: 1 }],
+  antiTetanus:  [{ code: 'TETANUS',       doseNumber: 1 }],
+  covidVaccine: [
+    { code: 'COVID_DOSE1', doseNumber: 1 },
+    { code: 'COVID_DOSE2', doseNumber: 2 },
+  ],
+  covidBooster: [{ code: 'COVID_BOOSTER1', doseNumber: 1 }],
+};
+
+/**
+ * Convert the form's immunization checkboxes into backend immunizationRecordInput objects.
+ * Each record needs vaccineTypeId (catalog DB id), immunizationDate, and doseNumber.
+ * Brands (astrazeneca, pfizer…) and free-text "other" vaccines go into notes.
+ *
+ * @param {object} medicalBackground - formData.medicalBackground
+ * @param {Array}  catalog           - result of fetchImmunizationCatalog()
+ * @returns {{ immunizationRecords: Array, immunizationNotes: string|null }}
+ */
+const buildImmunizationRecords = (medicalBackground, catalog) => {
+  const today = new Date().toISOString().split('T')[0];
+  const codeToId = Object.fromEntries(catalog.map(e => [e.code, e.id]));
+  const immunizationRecords = [];
+  const noteParts = [];
+
+  const checkedVaccines = Object.entries(medicalBackground?.immunizations || {})
+    .filter(([, checked]) => checked)
+    .map(([id]) => id);
+
+  for (const frontendId of checkedVaccines) {
+    const mappings = VACCINE_CATALOG_MAP[frontendId];
+    if (!mappings) {
+      noteParts.push(frontendId);
+      continue;
+    }
+    for (const { code, doseNumber } of mappings) {
+      const vaccineTypeId = codeToId[code];
+      if (!vaccineTypeId) {
+        // Catalog entry not found (catalog unavailable) — preserve as note
+        noteParts.push(code);
+        continue;
+      }
+      immunizationRecords.push({ vaccineTypeId, immunizationDate: today, doseNumber });
+    }
+  }
+
+  // COVID brand types have no separate catalog entries — record in notes
+  const covidTypes = Object.entries(medicalBackground?.covidVaccineType || {})
+    .filter(([, checked]) => checked)
+    .map(([id]) => id);
+  if (covidTypes.length > 0) {
+    noteParts.push(`COVID vaccine brand(s): ${covidTypes.join(', ')}`);
+  }
+
+  if (medicalBackground?.immunizationOther?.trim()) {
+    noteParts.push(`Other: ${medicalBackground.immunizationOther.trim()}`);
+  }
+
+  const immunizationNotes = noteParts.length > 0 ? noteParts.join('; ') : null;
+  return { immunizationRecords, immunizationNotes };
+};
+
+/**
  * Build all input objects from form data for the batched mutation
- * @param {object} formData - Form data from the initial record form
- * @param {object} photoIds - Staged fileIds from the media REST API
+ * @param {object} formData           - Form data from the initial record form
+ * @param {object} photoIds           - Staged fileIds from the media REST API
  * @param {string|null} photoIds.upperTeethFileId - Staged fileId for the upper teeth photo
  * @param {string|null} photoIds.lowerTeethFileId - Staged fileId for the lower teeth photo
+ * @param {Array}  immunizationCatalog - Pre-fetched result of fetchImmunizationCatalog()
  */
-const buildBatchInputs = (formData, photoIds = {}) => {
+const buildBatchInputs = (formData, photoIds = {}, immunizationCatalog = []) => {
   const inputs = {};
 
   // Student Profile (conditional)
@@ -450,27 +548,12 @@ const buildBatchInputs = (formData, photoIds = {}) => {
   ].filter(Boolean).join('; ') || null : null;
   inputs.medicationProfile = { medications: [], notes: medicationNotes };
 
-  // Immunization Profile
-  let immunizationNotes = null;
-  const immunizationList = [];
-  if (formData.medicalBackground?.immunizations) {
-    immunizationList.push(
-      ...Object.entries(formData.medicalBackground.immunizations)
-        .filter(([_, checked]) => checked)
-        .map(([id]) => id)
-    );
-  }
-  if (formData.medicalBackground?.covidVaccineType) {
-    const covidTypes = Object.entries(formData.medicalBackground.covidVaccineType)
-      .filter(([_, checked]) => checked)
-      .map(([id]) => id);
-    if (covidTypes.length > 0) immunizationList.push(`COVID vaccine types: ${covidTypes.join(', ')}`);
-  }
-  if (formData.medicalBackground?.immunizationOther) {
-    immunizationList.push(formData.medicalBackground.immunizationOther);
-  }
-  if (immunizationList.length > 0) immunizationNotes = immunizationList.join('; ');
-  inputs.immunizationProfile = { immunizations: [], notes: immunizationNotes };
+  // Immunization Profile — map frontend checkboxes to backend catalog records
+  const { immunizationRecords, immunizationNotes } = buildImmunizationRecords(
+    formData.medicalBackground,
+    immunizationCatalog
+  );
+  inputs.immunizationProfile = { immunizations: immunizationRecords, notes: immunizationNotes };
 
   // Lifestyle
   inputs.lifestyle = {
