@@ -1,22 +1,27 @@
 import React, { useState } from 'react';
 import { TICKET_STATUS, staffUpdateTicket } from '../initial-record-service';
+import RecordReviewModal from './record-review-modal';
 
 /**
  * InitialRecordDetailModal
  *
- * Lets staff review a patient's pending initial-record submission (or a
- * revision resubmission) and either:
- *   • Approve  → staffUpdateTicket(patientId, 'Approved')
- *   • Request Revision → staffUpdateTicket(patientId, 'Revision')
+ * Step 1: Shows patient summary info (name, ID, scope, status, branch).
+ * Provides a "Review Request" button to open Step 2 (RecordReviewModal)
+ * where staff can see all patient-submitted data, edit typos, and approve/reject.
+ *
+ * Also retains the existing quick-approve and revision request actions
+ * for cases where a full review is not needed.
  *
  * Props:
- *  ticket   {id, patientId, status}  — the UpdateTicket object
- *  onClose  () => void
- *  onAction (ticket, newStatus) => void  — called after a successful mutation
+ *  ticket     {id, patientId, status, scope, first_name, last_name, branch, created_at}
+ *  onClose    () => void
+ *  onAction   (ticket, newStatus) => void  — called after a successful mutation
+ *  staffRole  'medical' | 'dental' | 'both'  (defaults to 'both')
  */
-const InitialRecordDetailModal = ({ ticket, onClose, onAction }) => {
+const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both' }) => {
   const [revisionNote, setRevisionNote] = useState('');
   const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -171,6 +176,22 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction }) => {
             </div>
           </div>
 
+          {/* ── Review Request Button (Step 1 → Step 2) ── */}
+          {isPending && (
+            <button
+              onClick={() => setShowReviewModal(true)}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-semibold text-sm"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              Review Full Record
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          )}
+
           {/* Info notice for Revision-Submitted resubmissions */}
           {ticket.status === TICKET_STATUS.REVISION_SUBMITTED && (
             <div className="flex items-start gap-3 p-3 bg-accent-50 dark:bg-accent-900/20 border border-accent-200 dark:border-accent-800 rounded-lg">
@@ -295,6 +316,20 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction }) => {
           )}
         </div>
       </div>
+
+      {/* ── Step 2: Full Record Review Modal ── */}
+      {showReviewModal && (
+        <RecordReviewModal
+          ticket={ticket}
+          onClose={() => setShowReviewModal(false)}
+          onAction={(updatedTicket, newStatus) => {
+            onAction?.(updatedTicket, newStatus);
+            setShowReviewModal(false);
+            onClose();
+          }}
+          staffRole={staffRole}
+        />
+      )}
     </div>
   );
 };
