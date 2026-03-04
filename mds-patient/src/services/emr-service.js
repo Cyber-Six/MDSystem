@@ -176,15 +176,15 @@ const unstageMediaFile = async (fileId) => {
 const registerBranchIdentifier = async (identifier) => {
   if (!identifier?.trim()) return;
   const mutation = `
-    mutation CreateBranchIdentifier($identifier: ID!) {
-      createBranchIdentifier(identifier: $identifier) {
+    mutation CreateBranchIdentifier($input: BranchIdentifierInput!) {
+      createBranchIdentifier(input: $input) {
         branch
         identifier
       }
     }
   `;
   try {
-    const result = await sendGraphQLRequest(mutation, { identifier: identifier.trim() }, { endpoint: '/profile/patient' });
+    const result = await sendGraphQLRequest(mutation, { input: { identifier: identifier.trim() } }, { endpoint: '/profile/patient' });
     console.log('[EMR Service] Branch identifier registered:', identifier, '→ branch:', result?.createBranchIdentifier?.branch);
   } catch (error) {
     // Non-fatal: user may already be verified (re-submission) or branch already set.
@@ -221,8 +221,8 @@ const registerProfileSetup = async (identifier, personalInfo) => {
   // Build a compound mutation so both ops travel in one HTTP request.
   // createBranchIdentifier is conditional — skip it if no identifier is available.
   const mutation = hasIdentifier
-    ? `mutation ProfileSetup($identifier: ID!, $input: userProfileInput!) {
-        createBranchIdentifier(identifier: $identifier) { branch identifier }
+    ? `mutation ProfileSetup($branchInput: BranchIdentifierInput!, $input: userProfileInput!) {
+        createBranchIdentifier(input: $branchInput) { branch identifier }
         createPersonalRecordLog(input: $input) { first_name last_name }
       }`
     : `mutation ProfileSetup($input: userProfileInput!) {
@@ -230,7 +230,7 @@ const registerProfileSetup = async (identifier, personalInfo) => {
       }`;
 
   const variables = hasIdentifier
-    ? { identifier: identifier.trim(), input: personalInput }
+    ? { branchInput: { identifier: identifier.trim() }, input: personalInput }
     : { input: personalInput };
 
   try {

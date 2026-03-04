@@ -79,7 +79,7 @@ type BranchIdentifier{
 }
 
 input BranchIdentifierInput{
-  branch: USER_BRANCH!
+  branch: USER_BRANCH
   identifier: ID!
 }
 
@@ -133,7 +133,7 @@ type Mutation {
 
   updatePersonalRecordLog(userId: ID!, input: userProfileUpdateInput!): userProfile
 
-  createBranchIdentifier(input: BranchIdentifierUpdateInput!): BranchIdentifier 
+  createBranchIdentifier(input: BranchIdentifierInput!): BranchIdentifier 
   updateUserBranchIdentifier(userId: ID!, input: BranchIdentifierUpdateInput!): BranchIdentifier
 
   setPersonalRecordLog(userId: ID!, status: UpdateStatus!): UpdateStatus
