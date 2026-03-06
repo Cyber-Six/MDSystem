@@ -121,6 +121,30 @@ function twoFATemplate(otp) {
 }
 
 
+function medicineRequestApprovedTemplate(requestId, notes) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+      <h2 style="color:#2F4F4F;">Medicine Request Approved</h2>
+      <p>Your medicine request <strong>#${requestId}</strong> has been <span style="color:green;font-weight:bold;">approved</span> by the medical staff.</p>
+      <p>You may now proceed to the clinic to collect your medicine.</p>
+      ${notes ? `<p><strong>Staff notes:</strong> ${notes}</p>` : ''}
+      <p style="color:#888;">If you have questions, please contact the clinic directly.</p>
+    </div>
+  `;
+}
+
+function medicineRequestRejectedTemplate(requestId, reason) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+      <h2 style="color:#2F4F4F;">Medicine Request Rejected</h2>
+      <p>Your medicine request <strong>#${requestId}</strong> has been <span style="color:red;font-weight:bold;">rejected</span> by the medical staff.</p>
+      ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
+      <p>Please contact the clinic if you believe this is an error or to submit a new request.</p>
+      <p style="color:#888;">If you have questions, please contact the clinic directly.</p>
+    </div>
+  `;
+}
+
 function passwordResetTemplate(sessionToken, portal) {
   const route = process.env.RESET_PASSWORD_DOMAIN_ROUTE;
   const resetLink = `https://${portal}.${route}/${sessionToken}`;
@@ -170,4 +194,4 @@ function buildEmailTemplate(job_name, userEmail, data) {
   return { to: userEmail, subject, htmlContent };
 }
 
-module.exports = { enqueueEmail, enqueueEmailVerification, enqueueEmail2FA, enqueueResetPassword, buildEmailTemplate };
+module.exports = { enqueueEmail, enqueueEmailVerification, enqueueEmail2FA, enqueueResetPassword, buildEmailTemplate, medicineRequestApprovedTemplate, medicineRequestRejectedTemplate };

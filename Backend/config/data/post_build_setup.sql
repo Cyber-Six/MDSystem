@@ -1,3 +1,6 @@
+-- Medicine request rejection reason column (added post-initial build)
+ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
+
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);
 CREATE INDEX ON "patientUpdateLog"(status);
