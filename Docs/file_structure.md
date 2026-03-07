@@ -223,7 +223,7 @@ MDSystem/
 │       │   │   └── dashboard-home.jsx # Dashboard landing page content
 │       │   │
 │       │   ├── appointment/
-│       │   │   ├── appointment-router.jsx         # Appointment sub-routes
+│       │   │   ├── appointment.jsx         # Appointment sub-routes
 │       │   │   └── patient-appointment-service.js # Appointment API service
 │       │   │
 │       │   ├── e-consultation/

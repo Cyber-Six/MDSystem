@@ -11,6 +11,7 @@ import { sendGraphQLRequest } from '../../utils/graphql-client';
 export const STATUS = {
   PENDING: 'Pending',
   SCHEDULED: 'Scheduled',
+  IN_PROGRESS: 'InProgress',
   REJECTED: 'Rejected',
   EXPIRED: 'Expired',
   COMPLETED: 'Completed',
@@ -25,7 +26,7 @@ export const SESSION = {
 };
 
 // Active statuses that block a new booking
-export const ACTIVE_STATUSES = [STATUS.PENDING, STATUS.SCHEDULED];
+export const ACTIVE_STATUSES = [STATUS.PENDING, STATUS.SCHEDULED, STATUS.IN_PROGRESS];
 
 // ── Internal helper ──────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ export const listOpenAppointments = async (offset = 0, limit = 20) => {
         notes
         isActive
         containsCustomDates
-        whiteListOnly
+        whitelistOnly
       }
     }
   `, { offset, limit });

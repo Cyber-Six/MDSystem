@@ -87,9 +87,9 @@ async function validateSchedulerDate(schedulerId, date) {
 async function getAppointmentCounts(schedulerId, date) {
   const query = `
     SELECT 
-      COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
       COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0) AS "morningPending",
-      COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
       COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0) AS "afternoonPending"
     FROM "patientSlot" ps
     JOIN "ScheduleDateEntity" sde

@@ -39,7 +39,7 @@ function initPatientAppointmentGraphQL(app) {
       }
       return {
         schema: patientSchema,
-        graphiql: true,
+        graphiql: process.env.NODE_ENV !== 'production',
         context: {
           user: req.user, 
           res: req.res,
@@ -60,7 +60,7 @@ function initMedicalAppointmentGraphQL(app) {
       }
       return {
         schema: medicalSchema,
-        graphiql: true,
+        graphiql: process.env.NODE_ENV !== 'production',
         context: {
           user: req.user || null,
           res: req.res,

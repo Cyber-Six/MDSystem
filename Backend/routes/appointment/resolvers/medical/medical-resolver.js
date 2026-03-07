@@ -63,7 +63,7 @@ const Mutation = {
       throwGraphQLError(res).message("No appointment record found for the user").status(404).throw();
     }
 
-    return await Wrapper.Mutation._respondAppointment(_, { userId, status, notes }, { user, res });
+    return await Wrapper.Mutation._respondAppointment(_, { slotId: record[0].id, status, notes }, { user, res });
   },
 
   recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
@@ -81,7 +81,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._createScheduler(_, { input }, { user, res });
+    return await Wrapper.Mutation._createScheduler(_, { input }, { user, res });
   },
 
   updateScheduler: async (_, { schedulerId, input }, { user, res }) => {
@@ -90,7 +90,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._updateScheduler(_, { schedulerId, input }, { user, res });
+    return await Wrapper.Mutation._updateScheduler(_, { schedulerId, input }, { user, res });
   },
 
   deleteScheduler: async (_, { schedulerId }, { user, res }) => {
@@ -99,7 +99,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._deleteScheduler(_, { schedulerId }, { user, res });
+    return await Wrapper.Mutation._deleteScheduler(_, { schedulerId }, { user, res });
   },
 
   updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
@@ -108,7 +108,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._updateSchedulerRequirement(_, { schedulerId, input }, { user, res });
+    return await Wrapper.Mutation._updateSchedulerRequirement(_, { schedulerId, input }, { user, res });
   },
 
   deleteSchedulerRequirement: async (_, { schedulerId, label }, { user, res }) => {
@@ -117,7 +117,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._deleteSchedulerRequirement(_, { schedulerId, label }, { user, res });
+    return await Wrapper.Mutation._deleteSchedulerRequirement(_, { schedulerId, label }, { user, res });
   },
 
   setCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
@@ -126,7 +126,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._setCustomDates(_, { schedulerId, dates }, { user, res });
+    return await Wrapper.Mutation._setCustomDates(_, { schedulerId, dates }, { user, res });
   },
 
   unsetCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
@@ -135,7 +135,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._unsetCustomDates(_, { schedulerId, dates }, { user, res });
+    return await Wrapper.Mutation._unsetCustomDates(_, { schedulerId, dates }, { user, res });
   },
 
   addEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
@@ -144,7 +144,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._addEntryWhitelist(_, { schedulerId, patientIds }, { user, res });
+    return await Wrapper.Mutation._addEntryWhitelist(_, { schedulerId, patientIds }, { user, res });
   },
 
   removeEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
@@ -153,7 +153,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    await Wrapper.Mutation._removeEntryWhitelist(_, { schedulerId, patientIds }, { user, res });
+    return await Wrapper.Mutation._removeEntryWhitelist(_, { schedulerId, patientIds }, { user, res });
   },
 
   updateDateIdentity: async (_, { schedulerId, date, input }, { user, res }) => {
@@ -162,7 +162,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    await Wrapper.Mutation._updateDateIdentity(_, { schedulerId, date, input }, { user, res });
+    return await Wrapper.Mutation._updateDateIdentity(_, { schedulerId, date, input }, { user, res });
   }
 };
 

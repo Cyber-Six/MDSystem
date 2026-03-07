@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import AvailabilityCalendar from './availability-calendar';
 import DaySlotEditor from './day-slot-editor';
 import EventModal from './event-modal';
+import { listAllSchedulers, updateDateIdentity } from '../staff-appointment-service';
 
 /**
  * Availability Manager Component
@@ -15,21 +16,51 @@ const AvailabilityManager = () => {
   const [eventModalDate, setEventModalDate] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
   const [dayOverrides, setDayOverrides] = useState({}); // { [date]: { medical, dental, status, notes } }
+  const [schedulers, setSchedulers] = useState([]);
+  const [activeScheduler, setActiveScheduler] = useState(null);
+  const [error, setError] = useState('');
 
-  // Default slot configuration — SRS §3.4.2
-  const [slotDefaults] = useState({
-    medical: { morning: 60, afternoon: 60 },
-    dental: { morning: 1, afternoon: 1 },
-  });
+  // Derive slot defaults from the first active scheduler (or fallback)
+  const slotDefaults = activeScheduler
+    ? {
+        medical: { morning: activeScheduler.morningAllowed, afternoon: activeScheduler.afternoonAllowed },
+        dental: { morning: 1, afternoon: 1 },
+      }
+    : { medical: { morning: 60, afternoon: 60 }, dental: { morning: 1, afternoon: 1 } };
+
+  // Load schedulers from API
+  const loadSchedulers = useCallback(async () => {
+    try {
+      const list = await listAllSchedulers();
+      setSchedulers(list || []);
+      if (list?.length > 0) setActiveScheduler(list[0]);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSchedulers();
+  }, [loadSchedulers]);
 
   // TODO: Load events from API (ScheduleDateEntity / slotScheduler override records)
   const [events, setEvents] = useState([]);
 
-  const handleSaveDay = (dayData) => {
-    console.log('Save day config:', dayData);
+  const handleSaveDay = async (dayData) => {
+    // Persist to backend via updateDateIdentity
+    if (activeScheduler && dayData.date) {
+      try {
+        await updateDateIdentity(activeScheduler.id, dayData.date, {
+          morningAllowed: dayData.medical?.morning,
+          afternoonAllowed: dayData.medical?.afternoon,
+          scheduledDate: dayData.date,
+        });
+      } catch (err) {
+        setError(err.message);
+      }
+    }
     // Store override locally so view mode reflects saved values
     setDayOverrides((prev) => ({ ...prev, [dayData.date]: dayData }));
-    // TODO: API call to save day override
   };
 
   const handleCreateEvent = (date) => {
@@ -56,11 +87,37 @@ const AvailabilityManager = () => {
 
   return (
     <div className="space-y-3">
-      {/* Default Slots Summary */}
+      {/* Error */}
+      {error && (
+        <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-xs rounded-lg flex justify-between items-center">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="ml-2 font-bold">&times;</button>
+        </div>
+      )}
+
+      {/* Scheduler Selector + Default Slots Summary */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
+        {schedulers.length > 1 && (
+          <div className="mb-3">
+            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Active Scheduler</label>
+            <select
+              value={activeScheduler?.id || ''}
+              onChange={(e) => setActiveScheduler(schedulers.find((s) => s.id === e.target.value) || null)}
+              className="w-full max-w-xs px-2.5 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              {schedulers.map((s) => (
+                <option key={s.id} value={s.id}>{s.label} — {s.location}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Default Slot Configuration</h3>
-          <span className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase tracking-wider"></span>
+          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
+            {activeScheduler ? `${activeScheduler.label} — Slots` : 'Default Slot Configuration'}
+          </h3>
+          <span className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase tracking-wider">
+            {activeScheduler?.location || ''}
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-accent-50 dark:bg-accent-900/20 rounded-md p-2 text-center">
