@@ -10,7 +10,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 // In-progress do expire after nth time
 // Unless if the user is unverified where the first ticket never expires
 
-Query = {
+const Query = {
   listOpenAppointments: async (_, { offset, limit }, { user, res }) => {
     return await Wrapper.Query._listOpenAppointments(_, { offset, limit }, { user, res });
   },
@@ -32,7 +32,7 @@ Query = {
   }
 };
 
-Mutation = {
+const Mutation = {
   submitAppointment: async (_, { schedulerId, date, session, requirements }, { user, res }) => {
     const userStatus = await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res });
 

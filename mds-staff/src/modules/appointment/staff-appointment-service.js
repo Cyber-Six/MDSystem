@@ -11,6 +11,7 @@ import { axiosRequest } from '../../packages-core-adapter';
 export const STATUS = {
   PENDING: 'Pending',
   SCHEDULED: 'Scheduled',
+  IN_PROGRESS: 'InProgress',
   REJECTED: 'Rejected',
   EXPIRED: 'Expired',
   COMPLETED: 'Completed',
@@ -147,7 +148,7 @@ export const listAllSchedulers = async (offset = 0, limit = 50) => {
         notes
         isActive
         containsCustomDates
-        whiteListOnly
+        whitelistOnly
         created_at
       }
     }
@@ -242,7 +243,7 @@ export const createScheduler = async (input) => {
         notes
         isActive
         containsCustomDates
-        whiteListOnly
+        whitelistOnly
         created_at
       }
     }
@@ -269,7 +270,7 @@ export const updateScheduler = async (schedulerId, input) => {
         notes
         isActive
         containsCustomDates
-        whiteListOnly
+        whitelistOnly
       }
     }
   `, { schedulerId, input });

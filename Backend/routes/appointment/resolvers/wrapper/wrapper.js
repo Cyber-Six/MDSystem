@@ -122,8 +122,6 @@ const Query = {
 
     if (existingResult.rowCount > 0) { // Schedule exists → return it with counts
       const schedule = existingResult.rows[0];
-      schedule.schedulePerWeek = decodeSchedulingFlags(schedule.scheduleFlags);
-
       const counts = await getAppointmentCounts(schedulerId, date);
       return { ...schedule, ...counts };
     }
@@ -155,7 +153,6 @@ const Query = {
     }
 
     const newSchedule = newScheduleResult.rows[0];
-    newSchedule.schedulePerWeek = decodeSchedulingFlags(newSchedule.scheduleFlags);
 
     // Step 4: Return with zero counts for a fresh schedule
     return {
@@ -279,7 +276,23 @@ const Query = {
     `;
 
     const result = await db.query(query, [status, limit || 10, offset || 0]);
-    return result.rows;
+    const slots = result.rows;
+
+    if (slots.length === 0) return slots;
+
+    // Fetch requirements for returned slots
+    const slotIds = slots.map(s => s.id);
+    const reqResult = await db.query(
+      `SELECT psr.* FROM "patientScheduleRequirement" psr WHERE psr."patientSlotId" = ANY($1);`,
+      [slotIds]
+    );
+    const reqBySlot = {};
+    for (const req of reqResult.rows) {
+      if (!reqBySlot[req.patientSlotId]) reqBySlot[req.patientSlotId] = [];
+      reqBySlot[req.patientSlotId].push(req);
+    }
+
+    return slots.map(s => ({ ...s, requirements: reqBySlot[s.id] || [] }));
   }
 };
 
@@ -291,14 +304,14 @@ const Mutation = {
 
     // 1. Validate scheduler/date and session availability
     const scheduleData = await Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
-    if (session === "Morning" && scheduleData.morningAllowed <= scheduleData.morningRegistered) {
+    if (session === "Morning" && scheduleData.morningAllowed <= (scheduleData.morningRegistered + scheduleData.morningPending)) {
       throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
-    } else if (session === "Afternoon" && scheduleData.afternoonAllowed <= scheduleData.afternoonRegistered) {
+    } else if (session === "Afternoon" && scheduleData.afternoonAllowed <= (scheduleData.afternoonRegistered + scheduleData.afternoonPending)) {
       throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
     }
 
     // 2. Ensure requirements are satisfied
-    await validateSatisfiedAllRequirements(schedulerId, requirements, db, res);
+    await validateSatisfiedAllRequirements(schedulerId, requirements, res);
 
     for (const requirement of requirements) {
       if (requirement.filename) await promoteFile(user.id, requirement.filename, "appointmentRequirement");  
@@ -307,7 +320,7 @@ const Mutation = {
     const psResult = await db.query(
       `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session")
        VALUES ($1, $2, 'Pending', $3)
-       RETURNING id;`,
+       RETURNING *;`,
       [user.id, scheduleData.id, session]
     );
 
@@ -334,12 +347,19 @@ const Mutation = {
 
       await db.query(
         `INSERT INTO "patientScheduleRequirement" ("patientSlotId", "scheduleRequirementId", "filename")
-         VALUES ${placeholders.join(", ")};`,
+         VALUES ${placeholders.join(", ")}
+         RETURNING *;`,
         values
       );
     }
 
-    return psResult.rows[0];
+    // 5. Fetch inserted requirements to attach to the slot
+    const reqResult = await db.query(
+      `SELECT psr.* FROM "patientScheduleRequirement" psr WHERE psr."patientSlotId" = $1;`,
+      [patientSlotId]
+    );
+
+    return { ...psResult.rows[0], requirements: reqResult.rows };
   },
 
   _cancelAppointment: async (_, { patientId, cancelledBy, slotId }, { user, res }) => {
@@ -394,11 +414,15 @@ const Mutation = {
 
     // Step 2: Perform update
     const updateResult = await db.query(
-      `UPDATE "patientSlot" SET status = $1, notes = $2 WHERE id = $3;`,
-      [status, notes || null, slotId]
+      `UPDATE "patientSlot" SET status = $1, notes = $2, "approvedBy" = $3 WHERE id = $4 RETURNING *;`,
+      [status, notes || null, user.id, slotId]
     );
 
-    return updateResult.rowCount > 0;
+    if (updateResult.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to update slot status").status(500).throw();
+    }
+
+    return { ...updateResult.rows[0], requirements: [] };
   },
 
   _recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
@@ -425,11 +449,15 @@ const Mutation = {
     
     // Step 2: Perform update
     const updateResult = await db.query(
-      `UPDATE "patientSlot" SET status = 'InProgress', arrived_at = $1 WHERE id = $2;`,
+      `UPDATE "patientSlot" SET status = 'InProgress', arrived_at = $1 WHERE id = $2 RETURNING *;`,
       [arrived_at, slotId]
     );
 
-    return updateResult.rowCount > 0;
+    if (updateResult.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to record attendance").status(500).throw();
+    }
+
+    return { ...updateResult.rows[0], requirements: [] };
   },
 
   _createScheduler: async (_, { input }, { user, res }) => {
@@ -469,9 +497,13 @@ const Mutation = {
 
       const schedulerId = result.rows[0].id;
 
-      // Use the same client inside transaction
-      await insertSlotCustomDates(schedulerId, input.slotCustomDates || [], client);
-      await insertSchedulerWhitelist(schedulerId, input.whiteLists || [], client);
+      // Use the same client inside transaction (skip if empty)
+      if (input.slotCustomDates && input.slotCustomDates.length > 0) {
+        await insertSlotCustomDates(schedulerId, input.slotCustomDates, client);
+      }
+      if (input.whiteLists && input.whiteLists.length > 0) {
+        await insertSchedulerWhitelist(schedulerId, input.whiteLists, client);
+      }
 
       await client.query("COMMIT");
       logger.info(`Created new scheduler with ID ${schedulerId} by user ${user.id}`);
@@ -582,51 +614,68 @@ const Mutation = {
   _updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    } 
-    const fields = [];
-    const values = [];
-    let idx = 1;
-    
-    if (input.label !== undefined && input.label !== null) {
-      fields.push(`label = $${idx++}`);
-      values.push(input.label);
     }
 
-    if (input.notes !== undefined) {
-      fields.push(`notes = $${idx++}`);
-      values.push(input.notes);
+    // Check if a requirement with this label already exists for the scheduler
+    const existing = await db.query(
+      `SELECT id FROM "scheduleRequirement" WHERE "slotId" = $1 AND "label" = $2`,
+      [schedulerId, input.label]
+    );
+
+    if (existing.rowCount > 0) {
+      // Update existing requirement (identified by slotId + label)
+      const fields = [];
+      const values = [];
+      let idx = 1;
+
+      if (input.notes !== undefined) {
+        fields.push(`notes = $${idx++}`);
+        values.push(input.notes);
+      }
+
+      if (input.isDigital !== undefined && input.isDigital !== null) {
+        fields.push(`"isDigital" = $${idx++}`);
+        values.push(input.isDigital);
+      }
+
+      if (input.isActive !== undefined && input.isActive !== null) {
+        fields.push(`"isActive" = $${idx++}`);
+        values.push(input.isActive);
+      }
+
+      if (fields.length === 0) {
+        // Nothing to update — return existing record
+        const full = await db.query(`SELECT * FROM "scheduleRequirement" WHERE id = $1`, [existing.rows[0].id]);
+        return full.rows[0];
+      }
+
+      values.push(existing.rows[0].id);
+
+      const result = await db.query(
+        `UPDATE "scheduleRequirement" SET ${fields.join(", ")} WHERE id = $${idx} RETURNING *;`,
+        values
+      );
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res).message("Failed to update scheduler requirement").status(500).throw();
+      }
+
+      return result.rows[0];
+    } else {
+      // Insert new requirement
+      const result = await db.query(
+        `INSERT INTO "scheduleRequirement" ("slotId", "label", "notes", "isDigital", "isActive")
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *;`,
+        [schedulerId, input.label, input.notes || null, input.isDigital ?? true, input.isActive ?? true]
+      );
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res).message("Failed to create scheduler requirement").status(500).throw();
+      }
+
+      return result.rows[0];
     }
-
-    if (input.isDigital !== undefined && input.isDigital !== null) {
-      fields.push(`"isDigital" = $${idx++}`);
-      values.push(input.isDigital);
-    }
-
-    if (input.isActive !== undefined && input.isActive !== null) {
-      fields.push(`"isActive" = $${idx++}`);
-      values.push(input.isActive);
-    }
-
-    if (fields.length === 0) {
-      throwGraphQLError(res).message("No fields to update").status(400).throw();
-    }
-
-    values.push(schedulerId);
-
-    const query = `
-      UPDATE "scheduleRequirement"
-      SET ${fields.join(", ")}
-      WHERE slotId = $${idx}
-      RETURNING *;
-    `;
-
-    const result = await db.query(query, values);
-
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to update scheduler requirement").status(500).throw();
-    }
-
-    return result.rows[0];
   },
 
   _deleteSchedulerRequirement: async (_, { schedulerId, label }, { user, res }) => {
@@ -634,7 +683,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     const result = await db.query(
-      `DELETE FROM "scheduleRequirement" WHERE slotId = $1 AND label = $2;`,
+      `DELETE FROM "scheduleRequirement" WHERE "slotId" = $1 AND label = $2;`,
       [schedulerId, label]
     );
 
@@ -855,7 +904,10 @@ const Mutation = {
           .throw();
       }
 
-      return result.rows[0];
+      // Attach computed counts so GraphQL can resolve morningRegistered, etc.
+      const updated = result.rows[0];
+      const counts = await getAppointmentCounts(schedulerId, updated.scheduledDate);
+      return { ...updated, ...counts };
     } catch (err) {
       throwGraphQLError(res)
         .message(`Failed to update schedule date entity: ${err.message}`)

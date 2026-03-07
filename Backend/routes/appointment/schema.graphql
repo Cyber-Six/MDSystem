@@ -10,6 +10,7 @@ enum LOCATION_DESIGNATION {
 enum SCHEDULING_STATUS {
   Pending
   Scheduled
+  InProgress
   Rejected
   Expired
   Completed
@@ -33,7 +34,7 @@ type SlotScheduler {
   notes: String
   isActive: Boolean!
   containsCustomDates: Boolean!
-  whiteListOnly: Boolean
+  whitelistOnly: Boolean
   created_at: Date
 }
 
@@ -46,7 +47,7 @@ input SlotSchedulerInput {
   notes: String
   slotCustomDates: [Date!]!
   whiteLists: [ID!]!
-  whiteListOnly: Boolean!
+  whitelistOnly: Boolean!
 }
 
 input SlotSchedulerUpdateInput {
@@ -57,7 +58,7 @@ input SlotSchedulerUpdateInput {
   afternoonAllowed: Int
   notes: String
   isActive: Boolean
-  whiteListOnly: Boolean
+  whitelistOnly: Boolean
 }
 
 
@@ -85,14 +86,14 @@ type ScheduleDateEntity{
   afternoonAllowed: Int!
   afternoonRegistered: Int!
   afternoonPending: Int!
-  allowDuring: Date!
+  allowDuring: Boolean!
   scheduledDate: Date!
 }
 
 input ScheduleDateEntityUpdate {
   morningAllowed: Int
   afternoonAllowed: Int
-  allowDuring: Date
+  allowDuring: Boolean
   scheduledDate: Date!
 }
 
