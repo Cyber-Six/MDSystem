@@ -69,7 +69,6 @@ VALUES
 ('Food', 'Tree Nuts', true, 1),
 ('Food', 'Eggs', true, 1),
 ('Food', 'Milk/Dairy', true, 1),
-('Food', 'Seafood', true, 1),
 ('Food', 'Peanuts', true, 1),
 ('Food', 'Tree Nuts', true, 1),
 ('Food', 'Eggs', true, 1),
