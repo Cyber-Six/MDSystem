@@ -770,6 +770,7 @@ enum DomainType {
   Operation
   Immunization
   DentalProcedure
+  MedicalCondition
 }
 # Queries
 type Query {

@@ -66,7 +66,7 @@ const sendGraphQLRequest = async (query, variables = {}) => {
 /**
  * Update Student Profile with school information
  * Uses CREATE mutation for patient self-update (no userId needed)
- * @param {object} schoolData - School information (program, year, department, studentNumber, schoolYear, semester, studentCategory)
+ * @param {object} schoolData - School information (program, year, studentNumber, schoolYear, semester, studentCategory)
  * @returns {Promise} Response from server
  */
 export const updateStudentProfile = async (schoolData) => {
@@ -94,12 +94,7 @@ export const updateStudentProfile = async (schoolData) => {
   const variables = {
     input: {
       program: schoolData.program,
-      year: mapYearToEnum(schoolData.schoolYear),
-      // TEMPORARY WORKAROUND: Backend server needs restart to use updated schema
-      // Uncomment these if you get "guardian_name required" error (old schema cached)
-      guardian_name: 'N/A',
-      guardian_relation: 'N/A', 
-      guardian_contact: 'N/A'
+      year: mapYearToEnum(schoolData.schoolYear)
     }
   };
 

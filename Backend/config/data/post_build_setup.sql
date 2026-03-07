@@ -64,33 +64,52 @@ VALUES
 INSERT INTO "AllergenCatalog" (type, allergen, "isValid", created_by)
 VALUES
 -- Food Allergies
-('food', 'Seafood', true, 1),
-('food', 'Peanuts', true, 1),
-('food', 'Tree Nuts', true, 1),
-('food', 'Eggs', true, 1),
-('food', 'Milk/Dairy', true, 1),
+('Food', 'Seafood', true, 1),
+('Food', 'Peanuts', true, 1),
+('Food', 'Tree Nuts', true, 1),
+('Food', 'Eggs', true, 1),
+('Food', 'Milk/Dairy', true, 1),
 -- Drug Allergies
-('drug', 'Antibiotics (Penicillin)', true, 1),
-('drug', 'Sulfa Drugs', true, 1),
-('drug', 'NSAIDs (Aspirin, Ibuprofen)', true, 1),
+('Drug', 'Antibiotics (Penicillin)', true, 1),
+('Drug', 'Sulfa Drugs', true, 1),
+('Drug', 'NSAIDs (Aspirin, Ibuprofen)', true, 1),
 -- Environmental Allergies
-('environment', 'Dust Mites', true, 1),
-('environment', 'Mold', true, 1),
-('environment', 'Pollen', true, 1),
-('environment', 'Animal Fur/Dander', true, 1),
+('Environmental', 'Dust Mites', true, 1),
+('Environmental', 'Mold', true, 1),
+('Environmental', 'Pollen', true, 1),
+('Environmental', 'Animal Fur/Dander', true, 1),
 -- Insect Allergies
-('insect', 'Mosquito Bites', true, 1),
-('insect', 'Bee Stings', true, 1),
-('insect', 'Ant Bites', true, 1),
+('Insect', 'Mosquito Bites', true, 1),
+('Insect', 'Bee Stings', true, 1),
+('Insect', 'Ant Bites', true, 1),
 -- Chemical Allergies
-('chemical', 'Latex', true, 1),
-('chemical', 'Nickel/Metal', true, 1),
-('chemical', 'Cleaning Agents', true, 1),
-('chemical', 'Fabric Conditioner', true, 1),
+('Chemical', 'Latex', true, 1),
+('Chemical', 'Nickel/Metal', true, 1),
+('Chemical', 'Cleaning Agents', true, 1),
+('Chemical', 'Fabric Conditioner', true, 1),
 -- Other / Irritant-type
-('other', 'Smoke', true, 1),
-('other', 'Perfume/Cologne', true, 1),
-('other', 'Soaps/Lotions', true, 1);
+('Other', 'Smoke', true, 1),
+('Other', 'Perfume/Cologne', true, 1),
+('Other', 'Soaps/Lotions', true, 1);
+
+INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
+VALUES
+-- Medical Conditions
+('MedicalCondition', 'HEART', 'Heart Condition', 'History of heart-related conditions', true, 1),
+('MedicalCondition', 'HBP', 'High Blood Pressure', 'History of hypertension', true, 1),
+('MedicalCondition', 'EPILEPSY', 'Epilepsy/Seizure', 'History of epilepsy or seizure disorder', true, 1),
+('MedicalCondition', 'PSYCH', 'Psychiatric Illness', 'History of psychiatric condition', true, 1),
+('MedicalCondition', 'ASTHMA', 'Bronchial Asthma', 'Chronic respiratory condition', true, 1),
+('MedicalCondition', 'DIABETES_I', 'Diabetes Type I', 'Insulin-dependent diabetes mellitus', true, 1),
+('MedicalCondition', 'DIABETES_II', 'Diabetes Type II', 'Non-insulin-dependent diabetes mellitus', true, 1),
+('MedicalCondition', 'HEPA', 'Hepatitis A', 'History of Hepatitis A infection', true, 1),
+('MedicalCondition', 'HEPB', 'Hepatitis B', 'History of Hepatitis B infection', true, 1),
+('MedicalCondition', 'HEPC', 'Hepatitis C', 'History of Hepatitis C infection', true, 1),
+('MedicalCondition', 'HEPD', 'Hepatitis D', 'History of Hepatitis D infection', true, 1),
+('MedicalCondition', 'HEPE', 'Hepatitis E', 'History of Hepatitis E infection', true, 1),
+('MedicalCondition', 'AMOEBIASIS', 'Amoebiasis', 'History of amoebic infection', true, 1),
+('MedicalCondition', 'TB', 'Tuberculosis', 'History of pulmonary tuberculosis', true, 1),
+('MedicalCondition', 'TYPHOID', 'Typhoid Fever', 'History of typhoid infection', true, 1);
 
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)

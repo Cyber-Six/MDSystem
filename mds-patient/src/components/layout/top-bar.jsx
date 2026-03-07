@@ -9,7 +9,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [themeMode, setThemeMode] = useState(() => {
     // Initialize from localStorage or default to 'system'
-    return localStorage.getItem('themeMode') || 'system';
+    return localStorage.getItem('patient_themeMode') || 'system';
   });
   const notifRef = useRef(null);
 
@@ -27,7 +27,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
     };
 
     applyTheme(themeMode);
-    localStorage.setItem('themeMode', themeMode);
+    localStorage.setItem('patient_themeMode', themeMode);
 
     // Listen for system theme changes when in system mode
     if (themeMode === 'system') {

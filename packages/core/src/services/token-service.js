@@ -21,6 +21,9 @@ import axios from 'axios';
  * @param {Object} dependencies.navigator - Navigation adapter
  * @param {Function} dependencies.navigator.navigate - Navigate to path/route
  * @param {Function} dependencies.getApiBaseUrl - Function that returns API base URL
+ * @param {string} [dependencies.tokenNamespace] - Optional namespace prefix for storage keys
+ *                                                   (e.g. 'patient' → 'patient_accessToken')
+ *                                                   Omit for backward-compatible bare keys.
  * 
  * @returns {Object} Token service methods
  * 
@@ -53,7 +56,11 @@ import axios from 'axios';
  * // In React Native, storage operations return promises
  * const token = await tokenService.TokenStorage.getAccessToken();
  */
-export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
+export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNamespace }) => {
+  // Derive namespaced storage keys (e.g. 'patient_accessToken') or fall back to bare keys
+  const accessTokenKey  = tokenNamespace ? `${tokenNamespace}_accessToken`  : 'accessToken';
+  const refreshTokenKey = tokenNamespace ? `${tokenNamespace}_refreshToken` : 'refreshToken';
+
   /**
    * Token storage interface
    * Centralizes all token operations for easier auditing
@@ -66,7 +73,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
      * @returns {string|null|Promise<string|null>} Access token or null
      */
     getAccessToken: () => {
-      return storage.getItem('accessToken');
+      return storage.getItem(accessTokenKey);
     },
 
     /**
@@ -74,7 +81,7 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
      * @returns {string|null|Promise<string|null>} Refresh token or null
      */
     getRefreshToken: () => {
-      return storage.getItem('refreshToken');
+      return storage.getItem(refreshTokenKey);
     },
 
     /**
@@ -89,8 +96,8 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
       if (!accessToken || !refreshToken) {
         throw new Error('Both tokens are required');
       }
-      await Promise.resolve(storage.setItem('accessToken', accessToken));
-      await Promise.resolve(storage.setItem('refreshToken', refreshToken));
+      await Promise.resolve(storage.setItem(accessTokenKey, accessToken));
+      await Promise.resolve(storage.setItem(refreshTokenKey, refreshToken));
     },
 
     /**
@@ -100,8 +107,8 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl }) => {
      * @returns {Promise<void>} Resolves when both tokens are removed
      */
     clearTokens: async () => {
-      await Promise.resolve(storage.removeItem('accessToken'));
-      await Promise.resolve(storage.removeItem('refreshToken'));
+      await Promise.resolve(storage.removeItem(accessTokenKey));
+      await Promise.resolve(storage.removeItem(refreshTokenKey));
     },
 
     /**
