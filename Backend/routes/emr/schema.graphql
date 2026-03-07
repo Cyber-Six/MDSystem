@@ -417,11 +417,18 @@ input AllergenCatalogUpdateInput{
   isValid: Boolean
 }
 
+enum ALLERGY_SEVERITY{
+  Mild
+  Moderate
+  Severe
+  Unknown
+}
+
 type AllergyRecord{
   id: ID!
   allergenCatalogId: ID!
   status: ALLERGY_STATUS!
-  severity: String!
+  severity: ALLERGY_SEVERITY!
   notes: String
   dateIdentified: Date
 }
