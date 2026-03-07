@@ -95,7 +95,7 @@ VALUES
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
 -- Medical Conditions
-('MedicalCondition', 'HEART', 'Heart Condi~tion', 'History of heart-related conditions', true, 1),
+('MedicalCondition', 'HEART', 'Heart Condition', 'History of heart-related conditions', true, 1),
 ('MedicalCondition', 'HBP', 'High Blood Pressure', 'History of hypertension', true, 1),
 ('MedicalCondition', 'EPILEPSY', 'Epilepsy/Seizure', 'History of epilepsy or seizure disorder', true, 1),
 ('MedicalCondition', 'PSYCH', 'Psychiatric Illness', 'History of psychiatric condition', true, 1),

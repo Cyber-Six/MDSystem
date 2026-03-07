@@ -480,12 +480,11 @@ const Mutation = {
       try {
         const result = await db.queryControlled(
           `INSERT INTO "HospitalizationRecord"
-            ("hospitalizationId", "hospitalName", "reason", "admissionDate", "dischargeDate", "notes")
-           VALUES ($1, $2, $3, $4, $5, $6)
+            ("hospitalizationId", "reason", "admissionDate", "dischargeDate", "notes")
+           VALUES ($1, $2, $3, $4, $5)
            RETURNING *;`,
           [
             recordId,
-            hospitalization.hospitalName,
             hospitalization.reason,
             hospitalization.admissionDate,
             hospitalization.dischargeDate || null,

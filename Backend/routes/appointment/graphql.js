@@ -34,14 +34,14 @@ function initPatientAppointmentGraphQL(app) {
   app.use(
     "/appointment/patient",
     jwtProtect("patient"),
-    checkCredentialsStatus(),
+    checkCredentialsStatus,
     graphqlHTTP((req) => {
       if (!req.body || !req.body.query) {
         throw new Error("Empty GraphQL request");
       }
       return {
         schema: patientSchema,
-        graphiql: process.env.NODE_ENV !== 'production',
+        graphiql: true,
         context: {
           user: req.user, 
           res: req.res,
@@ -62,7 +62,7 @@ function initMedicalAppointmentGraphQL(app) {
       }
       return {
         schema: medicalSchema,
-        graphiql: process.env.NODE_ENV !== 'production',
+        graphiql: true,
         context: {
           user: req.user || null,
           res: req.res,
