@@ -56,6 +56,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Password check
   const passwordValid = await verifyPassword(password, user.password_hash);
   if (!passwordValid) {
+    await query.recordLoginAttempt(email, false); // record failed attempt
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
       message: "Email or password is incorrect."
@@ -121,6 +122,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Create actual auth session (JWT, cookie, etc.)
   //const authToken = await query.createAuthToken(session.user_id);
 
+  await query.recordLoginAttempt(session.email, true); // record successful login
   const tokens = await AuthSession.create(req, session.user_id);
   return res.status(200).json({
     ok: true,
