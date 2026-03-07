@@ -21,7 +21,7 @@ const Query = {
   getProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -30,7 +30,7 @@ const Query = {
   getDentalPhotoRecord: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserDentalPhotoRecord(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -38,7 +38,7 @@ const Query = {
   getObgynHistory: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserObgynHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -46,7 +46,7 @@ const Query = {
   getLifestyle: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserLifestyle(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -54,7 +54,7 @@ const Query = {
   getDentalHistory: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserDentalHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -62,7 +62,7 @@ const Query = {
   getDentalRecord: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserDentalRecord(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -70,7 +70,7 @@ const Query = {
   getVitalSigns: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserVitalSigns(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -78,7 +78,7 @@ const Query = {
   getOralApplianceProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserOralApplianceProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -86,7 +86,7 @@ const Query = {
   getEmergencyContact: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserEmergencyContact(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -94,7 +94,7 @@ const Query = {
   getAllergyProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserAllergyProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -102,7 +102,7 @@ const Query = {
   getMedicationProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserMedicationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -110,7 +110,7 @@ const Query = {
   getDentalProcedureProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserDentalProcedureProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -118,7 +118,7 @@ const Query = {
   getImmunizationProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserImmunizationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -126,7 +126,7 @@ const Query = {
   getOperationProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserOperationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -134,7 +134,7 @@ const Query = {
   getHospitalizationProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserHospitalizationProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -142,7 +142,7 @@ const Query = {
   getMedicalHistory: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserMedicalHistory(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -150,7 +150,7 @@ const Query = {
   getVisualAcuityProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserVisualAcuityProfile(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
