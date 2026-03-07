@@ -9,6 +9,36 @@ import { axiosRequest } from '../../../packages-core-adapter';
 import { updatePersonalInfo } from './personal-info-service';
 
 /**
+ * Upload a file to the media staging endpoint
+ * @param {File|null} file - Browser File object
+ * @returns {Promise<string|null>} Staged fileId UUID, or null if no file
+ */
+async function uploadMediaFile(file) {
+  if (!file) return null;
+  const body = new FormData();
+  body.append('file', file);
+  const response = await axiosRequest.post('/media', body, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  console.log('📸 Media file staged, fileId:', response.data.fileId);
+  return response.data.fileId;
+}
+
+/**
+ * Delete a previously staged media file
+ * @param {string|null} fileId - UUID returned by uploadMediaFile
+ */
+async function unstageMediaFile(fileId) {
+  if (!fileId) return;
+  try {
+    await axiosRequest.delete(`/media/${fileId}`);
+    console.log('🗑️ Staged media file removed:', fileId);
+  } catch (error) {
+    console.warn('⚠️ Failed to remove staged media file:', fileId, error.message);
+  }
+}
+
+/**
  * Sends GraphQL request to backend
  * @param {string} query - GraphQL query or mutation string
  * @param {object} variables - Query/mutation variables
@@ -398,16 +428,40 @@ export async function createLifestyle(formData) {
  * Following same pattern - create empty note only
  */
 export async function createVisualAcuityProfile(formData) {
-  console.log('👁️ Skipping visual acuity profile - backend bug with null acuity + requires catalog IDs');
-  console.log('👁️ Visual acuity data from form:', {
-    eyeglasses: formData.eyeglasses,
-    contactLenses: formData.contactLenses,
-    gradeOD: formData.gradeOD,
-    gradeOS: formData.gradeOS,
-    date: formData.visualAcuityDate
-  });
-  // Return null to skip this record creation
-  return null;
+  const mutation = `
+    mutation CreateVisualAcuityProfile($input: VisualAcuityProfileInput!) {
+      createVisualAcuityProfile(input: $input) {
+        id
+        notes
+        acuity {
+          id
+          left_eye
+          right_eye
+        }
+      }
+    }
+  `;
+
+  const hasVisualAcuity = formData.visualAcuity === 'yes';
+  const input = {
+    notes: hasVisualAcuity
+      ? `Eyeglasses: ${formData.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.contactLenses ? 'Yes' : 'No'}`
+      : null,
+    acuity: hasVisualAcuity && formData.acuityId
+      ? {
+          acuityId: formData.acuityId,
+          left_eye: formData.leftEye || 'N/A',
+          right_eye: formData.rightEye || 'N/A',
+          notes: formData.visualAcuityNotes || null,
+          recorded_at: new Date().toISOString().split('T')[0]
+        }
+      : null
+  };
+
+  console.log('👁️ Creating visual acuity profile...', input);
+  const response = await sendGraphQLRequest(mutation, { input });
+  console.log('✅ Visual acuity profile created');
+  return response.createVisualAcuityProfile;
 }
 
 /**
@@ -649,18 +703,11 @@ export async function createDentalHistory(formData) {
     }
   `;
 
-  // seenByDentist is INVERSE of firstTimeDentist
-  // firstTimeDentist='yes' means never seen a dentist before, so seenByDentist=false
-  // firstTimeDentist='no' means has been to dentist before, so seenByDentist=true
-  const seenByDentist = formData.firstTimeDentist === 'no';
-  
   const input = {
-    seenByDentist: seenByDentist,
-    lastDentalCleaning: formData.lastDentalCleaning || "I don't remember",
-    purpose: null,
-    lastVisitDate: formData.lastDentalConsultation 
-      ? new Date(formData.lastDentalConsultation).toISOString().split('T')[0]
-      : null
+    seenByDentist: formData.seenByDentist === true,
+    lastDentalCleaning: formData.lastDentalCleaning || '0-6',
+    purpose: formData.purpose || null,
+    lastVisitDate: formData.lastVisitDate || null
   };
 
   console.log('🦷 Creating dental history...', input);
@@ -686,9 +733,16 @@ export async function createOralApplianceProfile(formData) {
     }
   `;
 
+  const appliances = (formData.oralAppliances || []).map(a => ({
+    tagId: a.tagId,
+    status: a.status,
+    dateIssued: a.dateIssued,
+    arch: a.arch || 'None'
+  }));
+
   const input = {
-    appliances: [], // Empty - catalog IDs not available in form (using notes instead)
-    notes: null
+    appliances,
+    notes: formData.oralApplianceNotes || null
   };
 
   console.log('🔧 Creating oral appliance profile...', input);
@@ -714,9 +768,14 @@ export async function createDentalProcedureProfile(formData) {
     }
   `;
 
+  const procedures = (formData.dentalProcedures || []).map(p => ({
+    procedureTypeId: p.procedureTypeId,
+    procedureDate: p.procedureDate
+  }));
+
   const input = {
-    procedures: [], // Empty - catalog IDs not available in form (using notes instead)
-    notes: null
+    procedures,
+    notes: formData.dentalProcedureNotes || null
   };
 
   console.log('🔬 Creating dental procedure profile...', input);
@@ -765,8 +824,9 @@ export async function submitMedicalUpdate(formData) {
     console.log( '[Medical Update] Creating lifestyle...');
     results.lifestyle = await createLifestyle(formData);
 
-    // Skip Visual Acuity Profile (backend bug with null acuity)
-    console.log('[Medical Update] Skipping visual acuity profile - backend bug with null acuity + requires catalog IDs');
+    // Visual Acuity Profile (REQUIRED by backend)
+    console.log('[Medical Update] Creating visual acuity profile...');
+    results.visualAcuityProfile = await createVisualAcuityProfile(formData);
 
     // OB-GYN (Female only)
     if (formData.gender === 'Female') {
@@ -792,8 +852,20 @@ export async function submitDentalUpdate(formData) {
   console.log('🦷 ==================== DENTAL UPDATE ====================');
   
   const results = {};
+  let upperTeethFileId = null;
+  let lowerTeethFileId = null;
 
   try {
+    // Upload dental photos in parallel (if provided)
+    console.log('[Dental Update] Uploading dental photos...');
+    const [upperResult, lowerResult] = await Promise.allSettled([
+      uploadMediaFile(formData.upperTeethPhoto?.file ?? null),
+      uploadMediaFile(formData.lowerTeethPhoto?.file ?? null),
+    ]);
+    upperTeethFileId = upperResult.status === 'fulfilled' ? upperResult.value : null;
+    lowerTeethFileId = lowerResult.status === 'fulfilled' ? lowerResult.value : null;
+    console.log('[Dental Update] Photos staged:', { upperTeethFileId, lowerTeethFileId });
+
     // Dental History
     console.log('[Dental Update] Creating dental history...');
     results.dentalHistory = await createDentalHistory(formData);
@@ -806,12 +878,52 @@ export async function submitDentalUpdate(formData) {
     console.log('[Dental Update] Creating oral appliance profile...');
     results.oralApplianceProfile = await createOralApplianceProfile(formData);
 
+    // Dental Photo Record (REQUIRED by backend)
+    console.log('[Dental Update] Creating dental photo record...');
+    results.dentalPhotoRecord = await createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId);
+
     console.log('✅ Dental update completed successfully');
     return results;
   } catch (error) {
     console.error('❌ Dental update failed:', error);
+    // Clean up staged photos on failure
+    if (upperTeethFileId || lowerTeethFileId) {
+      console.log('[Dental Update] Cleaning up staged media files...');
+      await Promise.all([
+        unstageMediaFile(upperTeethFileId),
+        unstageMediaFile(lowerTeethFileId),
+      ]);
+    }
     throw error;
   }
+}
+
+/**
+ * Creates dental photo record
+ * @param {string|null} upperTeethFileId - Staged fileId for upper teeth
+ * @param {string|null} lowerTeethFileId - Staged fileId for lower teeth
+ */
+async function createDentalPhotoRecord(upperTeethFileId, lowerTeethFileId) {
+  const mutation = `
+    mutation CreateDentalPhotoRecord($input: DentalPhotoRecordInput!) {
+      createDentalPhotoRecord(input: $input) {
+        id
+        upperTeeth
+        lowerTeeth
+        isValid
+      }
+    }
+  `;
+
+  const input = {
+    upperTeeth: upperTeethFileId,
+    lowerTeeth: lowerTeethFileId
+  };
+
+  console.log('📸 Creating dental photo record...', input);
+  const response = await sendGraphQLRequest(mutation, { input });
+  console.log('✅ Dental photo record created');
+  return response.createDentalPhotoRecord;
 }
 
 /**
@@ -835,9 +947,10 @@ export async function submitUpdateRecord(formData, recordType) {
     
     console.log('✅ Ready to create new ticket');
 
-    // Step 2: Create update ticket (ALWAYS "Both" scope - backend requirement for first ticket)
-    // Users can still choose to fill only medical or dental, but ticket must be "Both"
-    ticketId = await createUpdateTicket('Both');
+    // Step 2: Map recordType to backend scope
+    const scopeMap = { medical: 'Medical', dental: 'Dental', both: 'Both' };
+    const scope = scopeMap[recordType] || 'Both';
+    ticketId = await createUpdateTicket(scope);
 
     const results = { ticketId };
 
@@ -846,13 +959,15 @@ export async function submitUpdateRecord(formData, recordType) {
     await updatePersonalInfo(formData);
     console.log('✅ Personal information submitted');
 
-    // Step 4: Submit medical data (ALWAYS - create empty records if user didn't fill this section)
-    // Backend requires all tables for "Both" scope ticket
-    results.medical = await submitMedicalUpdate(formData);
+    // Step 4: Submit medical data only when scope includes medical
+    if (recordType === 'medical' || recordType === 'both') {
+      results.medical = await submitMedicalUpdate(formData);
+    }
 
-    // Step 5: Submit dental data (ALWAYS - create empty records if user didn't fill this section)
-    // Backend requires all tables for "Both" scope ticket
-    results.dental = await submitDentalUpdate(formData);
+    // Step 5: Submit dental data only when scope includes dental
+    if (recordType === 'dental' || recordType === 'both') {
+      results.dental = await submitDentalUpdate(formData);
+    }
 
     // Step 6: Submit the ticket for review
     const finalStatus = await submitUpdateTicket();
