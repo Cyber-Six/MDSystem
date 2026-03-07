@@ -295,7 +295,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
           isOpen={activeAccordion === 'lifestyle'}
           onToggle={toggleAccordion}
         >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Do you smoke?"
               required
@@ -317,17 +317,6 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               ]}
               value={formData.alcohol || ''}
               onChange={(e) => handleInputChange('alcohol', e.target.value)}
-            />
-            <Select
-              label="Do you vape?"
-              required
-              options={[
-                { value: 'Never', label: 'Never' },
-                { value: 'Former', label: 'Former' },
-                { value: 'Current', label: 'Current' }
-              ]}
-              value={formData.vape || ''}
-              onChange={(e) => handleInputChange('vape', e.target.value)}
             />
           </div>
           <div className="mt-4">
