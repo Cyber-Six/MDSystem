@@ -169,8 +169,8 @@ export async function getOralFindingCatalogs() {
  */
 export async function getDentalProcedureCatalogs() {
   const query = `
-    query GetDomainCatalogs($domain: DomainType, $filterIsValid: Boolean) {
-      getDomainCatalogs(domain: $domain, filterIsValid: $filterIsValid) {
+    query GetDentalProcedureCatalogs {
+      getDomainCatalogs(domain: DentalProcedure, filterIsValid: true) {
         id
         domain
         name
@@ -184,10 +184,7 @@ export async function getDentalProcedureCatalogs() {
 
   try {
     console.log('✓ Fetching dental procedure catalogs...');
-    const response = await sendGraphQLRequest(query, {
-      domain: 'DentalProcedure',
-      filterIsValid: true
-    });
+    const response = await sendGraphQLRequest(query, {});
 
     const procedures = response.getDomainCatalogs || [];
     console.log(`✓ Fetched ${procedures.length} dental procedure items`);

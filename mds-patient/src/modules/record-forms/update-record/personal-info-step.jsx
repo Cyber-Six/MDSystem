@@ -55,20 +55,13 @@ const PersonalInfoStep = ({ formData, onChange }) => {
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <Select
             label="Program"
             required
             options={programs}
             value={formData.program || ''}
             onChange={(e) => handleInputChange('program', e.target.value)}
-          />
-          <Input
-            label="Department"
-            required
-            placeholder="e.g., College of Engineering"
-            value={formData.department || ''}
-            onChange={(e) => handleInputChange('department', e.target.value)}
           />
           <Input
             label="Student Number"
