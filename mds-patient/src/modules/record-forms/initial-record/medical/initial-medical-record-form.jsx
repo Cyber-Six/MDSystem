@@ -20,7 +20,7 @@ import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer
  * @param {Function} props.onComplete - Optional callback when form is successfully submitted
  * @param {boolean} props.isModal - Whether the form is displayed in a modal (affects styling)
  */
-const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
+const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false }) => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,6 +50,20 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
         setCatalogs((prev) => ({ ...prev, catalogsLoading: false, catalogsError: err.message }));
       });
   }, []);
+
+  // When revision pre-fill data arrives, merge it into the form state
+  useEffect(() => {
+    if (!revisionData) return;
+    console.log('[Initial Record Form] Applying revision pre-fill data...');
+    setFormData((prev) => ({
+      ...prev,
+      personalInfo:      { ...prev.personalInfo,      ...revisionData.personalInfo },
+      medicalHistory:    { ...prev.medicalHistory,    ...revisionData.medicalHistory },
+      medicalBackground: { ...prev.medicalBackground, ...revisionData.medicalBackground },
+      dentalHistory:     { ...prev.dentalHistory,     ...revisionData.dentalHistory },
+      ...(revisionData.obgyne ? { obgyne: { ...prev.obgyne, ...revisionData.obgyne } } : {}),
+    }));
+  }, [revisionData]);
 
   console.log('[Initial Medical Record Form] Component rendered, current step:', currentStep);
 

@@ -1082,6 +1082,323 @@ const mapDentalCleaningRange = (frontendValue) => {
  * Fetch the current patient's branch identifier from the profile endpoint.
  * Returns { branch, identifier } or null if not yet set.
  */
+// ─── Revision Pre-fill ────────────────────────────────────────────────────────
+
+/** Reverse mapping: backend dental cleaning enum → form dropdown value */
+const reverseMapDentalCleaningRange = (backendValue) => {
+  const mapping = {
+    '0-6':   '0 to 6 months ago',
+    '7-12':  '7 to 11 months ago',
+    '12-24': '1 year or more',
+  };
+  return mapping[backendValue] || '';
+};
+
+/** Reverse mapping: backend year level → form student category */
+const reverseMapYearLevel = (backendYear) => {
+  const mapping = {
+    'Freshman':  'Freshmen',
+    'Sophomore': 'Transferee',
+    'Junior':    'Old Student',
+    'Senior':    'Old Student',
+    'Masteral':  'Graduate studies (New student)',
+  };
+  return mapping[backendYear] || '';
+};
+
+/** Known program values (matches the form's programOptions list) */
+const KNOWN_PROGRAMS = new Set([
+  'AB ENGLISH (COA)', 'AB POLITICAL SCIENCE (COA)', 'ACT',
+  'ACCOUNTANCY (BSA)', 'BS BA ACCOUNTING INFORMATION SYSTEM (AIS) - (CBE)',
+  'ARCHITECTURE (CEA)', 'BS MATHEMATICS', 'BS ACCOUNTANCY (CBE)',
+  'BS BUSINESS ADMINISTRATION - FINANCIAL MANAGEMENT (CBE)',
+  'BS BUSINESS ADMINISTRATION - HRM (CBE)',
+  'BS BUSINESS ADMINISTRATION - LSCM (CBE)',
+  'BS BUSINESS ADMINISTRATION - MARKETING MANAGEMENT (CBE)',
+  'CIVIL ENGINEERING (CEA)', 'CHEMICAL ENGINEERING (CEA)',
+  'COMPUTER ENGINEERING (CEA)', 'COMPUTER SCIENCE (CCS)',
+  'DATA SCIENCE (CCS)', 'ELECTRICAL ENGINEERING (CEA)',
+  'ELECTRONICS AND COMMUNICATION ENGINEERING (CEA)',
+  'EMC-DAT (CCS)', 'EMC-GD (CCS)', 'GRADUATE PROGRAM',
+  'INDUSTRIAL ENGINEERING (CEA)', 'INFORMATION SYSTEM (CCS)',
+  'INFORMATION TECHNOLOGY (CCS)', 'MARINE TRANSPORTATION (MARINE)',
+  'MECHANICAL ENGINEERING (CEA)',
+]);
+
+/**
+ * Map fetched backend data back to the InitialMedicalRecordForm's formData shape.
+ */
+const mapRevisionDataToFormData = (profileData, emrData) => {
+  const pr  = profileData?.personalRecord || {};
+  const bid = profileData?.branchId;
+  const emr = emrData || {};
+
+  // ── Personal Info ──────────────────────────────────────────
+  const rawProgram       = emr?.emrProfile?.program || '';
+  const isKnownProgram   = KNOWN_PROGRAMS.has(rawProgram);
+  const ec               = emr?.emergencyContact || {};
+
+  const personalInfo = {
+    firstName:          pr.first_name     || '',
+    surname:            pr.last_name      || '',
+    middleName:         pr.middle_name    || '',
+    suffix:             pr.suffix         || '',
+    birthday:           pr.date_of_birth
+                          ? new Date(pr.date_of_birth).toISOString().split('T')[0]
+                          : '',
+    age:                '',   // auto-computed by the form on mount
+    gender:             pr.sex            || '',
+    civilStatus:        pr.civil_status   || '',
+    nationality:        pr.nationality    || '',
+    religion:           pr.religion       || '',
+    address:            pr.present_address || '',
+    contactNumber:      pr.contactNumber  || '',
+    studentNumber:      bid?.identifier   || '',
+    program:            isKnownProgram ? rawProgram : (rawProgram ? 'Other' : ''),
+    programOther:       isKnownProgram ? '' : rawProgram,
+    studentCategory:    reverseMapYearLevel(emr?.emrProfile?.year || ''),
+    drugTestDone:       '',   // not persisted
+    lastSchoolAttended: '',   // not persisted
+    emergencyContacts: [
+      {
+        name:          ec.firstContact?.contactName   || '',
+        relationship:  ec.firstContact?.relationship  || '',
+        contactNumber: ec.firstContact?.contactNumber || '',
+        address:       '',
+      },
+      {
+        name:          ec.secondContact?.contactName   || '',
+        relationship:  ec.secondContact?.relationship  || '',
+        contactNumber: ec.secondContact?.contactNumber || '',
+        address:       '',
+      },
+    ],
+  };
+
+  // ── Medical History ──────────────────────────────────────
+  const conditions = emr?.medicalHistory?.conditions || [];
+  const selfConditions   = {};
+  const familyConditions = {};
+  const familyWhoHasIt   = {};
+  for (const c of conditions) {
+    if (!c.conditionId) continue;
+    if (!c.relationship) {
+      selfConditions[c.conditionId] = true;
+    } else {
+      familyConditions[c.conditionId] = true;
+      familyWhoHasIt[c.conditionId]   = c.relationship;
+    }
+  }
+  const medicalHistory = {
+    self:           selfConditions,
+    family:         familyConditions,
+    familyWhoHasIt,
+  };
+
+  // ── Medical Background ───────────────────────────────────
+  const allergies    = emr?.allergyProfile?.allergies        || [];
+  const hosps        = emr?.hospitalizationProfile?.hospitalizations || [];
+  const ops          = emr?.operationProfile?.operations     || [];
+  const meds         = emr?.medicationProfile?.medications   || [];
+  const immunizations = emr?.immunizationProfile?.immunizations || [];
+  const ls           = emr?.lifestyle                        || {};
+  const va           = emr?.visualAcuity                     || {};
+
+  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, true]));
+  const hospMap     = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
+  const opsMap      = Object.fromEntries(ops.map(o => [o.procedureId, true]));
+  const medsMap     = Object.fromEntries(meds.map(m => [m.medicineId, true]));
+  const immunMap    = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, true]));
+
+  const vaNotesStr = va.notes || '';
+  const medicalBackground = {
+    immunizations:             immunMap,
+    immunizationOther:         '',
+    hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
+    allergies:                 allergyMap,
+    allergyOther:              '',
+    hasHospitalization:        hosps.length > 0        ? 'Yes' : 'No',
+    hospitalizationConditions: hospMap,
+    hospitalizationDate:       hosps[0]?.admissionDate
+                                 ? new Date(hosps[0].admissionDate).toISOString().split('T')[0]
+                                 : '',
+    hospitalizationNotes:      emr?.hospitalizationProfile?.notes || '',
+    hasOperation:              ops.length > 0          ? 'Yes' : 'No',
+    operationConditions:       opsMap,
+    operationDate:             ops[0]?.operationDate
+                                 ? new Date(ops[0].operationDate).toISOString().split('T')[0]
+                                 : '',
+    operationNotes:            emr?.operationProfile?.notes || '',
+    hasMedications:            meds.length > 0         ? 'Yes' : 'No',
+    selectedMedications:       medsMap,
+    medicationReason:          meds[0]?.description    || '',
+    medicationNotes:           emr?.medicationProfile?.notes || '',
+    smoker:                    ls.smoker ? 'yes' : 'no',
+    smokerSticksPerDay:        ls.numberOfCigarettesPerDay != null
+                                 ? String(ls.numberOfCigarettesPerDay) : '',
+    smokerYears:               ls.yearsSmoked != null
+                                 ? String(ls.yearsSmoked) : '',
+    alcoholDrinker:            ls.alcoholConsumer ? 'yes' : 'no',
+    alcoholFrequency:          ls.frequencyOfAlcoholConsumption || '',
+    eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes'),
+    contactLenses:             vaNotesStr.includes('Contact Lenses: Yes'),
+    gradeOD:                   va.acuity?.right_eye    || '',
+    gradeOS:                   va.acuity?.left_eye     || '',
+    visualAcuityDate:          va.acuity?.recorded_at
+                                 ? new Date(va.acuity.recorded_at).toISOString().split('T')[0]
+                                 : '',
+  };
+
+  // ── Dental History ───────────────────────────────────────
+  const dh        = emr?.dentalHistory || {};
+  const oaProfile = emr?.oralAppliance || {};
+  const appliances = oaProfile.appliances || [];
+  const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, true]));
+
+  const dentalHistory = {
+    // seenByDentist=true means patient has been seen before → firstTimeDentist='no'
+    // seenByDentist=false means patient has NEVER been seen → firstTimeDentist='yes'
+    firstTimeDentist:     dh.seenByDentist === true  ? 'no'
+                        : dh.seenByDentist === false ? 'yes' : '',
+    lastDentalConsultation: dh.lastVisitDate
+                              ? String(dh.lastVisitDate).slice(0, 7)  // YYYY-MM-DD → YYYY-MM
+                              : '',
+    lastDentalCleaning:   reverseMapDentalCleaningRange(dh.lastDentalCleaning || ''),
+    hasIntraOralAppliance: appliances.length > 0 ? 'yes' : 'no',
+    intraOralAppliances:   applianceMap,
+    applianceLocation:     appliances[0]?.arch || '',
+    toothExtraction:       '',   // never persisted to backend
+    dentalFilling:         '',   // never persisted to backend
+    upperTeethPhoto:       null, // files must be re-uploaded
+    lowerTeethPhoto:       null,
+  };
+
+  // ── OB-GYNE ─────────────────────────────────────────────
+  const obg = emr?.obgyne || {};
+  let menstruationDuration = '';
+  if (obg.notes) {
+    const durationMatch = obg.notes.match(/Duration:\s*(\d+)\s*days/i);
+    if (durationMatch) menstruationDuration = durationMatch[1];
+  }
+  const obgyne = {
+    lastMenstrualPeriod: obg.lastMenstrualPeriod
+                           ? new Date(obg.lastMenstrualPeriod).toISOString().split('T')[0]
+                           : '',
+    menstruationDuration,
+    dysmenorrhea: obg.hasDysmenorrhea ? 'Yes' : 'no',
+  };
+
+  return { personalInfo, medicalHistory, medicalBackground, dentalHistory, obgyne };
+};
+
+/**
+ * Fetch all existing record data for a patient in Revision status so the
+ * initial record form can be pre-populated with their previous submission.
+ *
+ * Makes two parallel requests:
+ *   1. /profile/patient — personal details + branch identifier
+ *   2. /emr/patient     — all EMR records in one batched query
+ *
+ * @returns {object|null} FormData-shaped object or null on complete failure
+ */
+export const fetchRevisionPrefill = async () => {
+  console.log('[EMR Service] Fetching revision pre-fill data...');
+
+  const [profileResult, emrResult] = await Promise.allSettled([
+    // ── Request 1: personal profile ──────────────────────
+    sendGraphQLRequest(
+      `query GetRevisionPersonalData {
+        personalRecord: getPersonalRecord {
+          first_name middle_name last_name suffix
+          date_of_birth sex civil_status nationality religion
+          contactNumber present_address
+        }
+        branchId: getBranchIdentifier {
+          identifier
+        }
+      }`,
+      {},
+      { endpoint: '/profile/patient' }
+    ),
+
+    // ── Request 2: all EMR data (batched) ─────────────────
+    sendGraphQLRequest(
+      `query GetRevisionEMRData {
+        emrProfile: getProfile {
+          ... on StudentProfile { program year }
+          ... on EmployeeProfile { department role }
+        }
+        emergencyContact: getEmergencyContact {
+          firstContact  { contactName relationship contactNumber }
+          secondContact { contactName relationship contactNumber }
+        }
+        medicalHistory: getMedicalHistory {
+          conditions { conditionId relationship }
+          notes
+        }
+        allergyProfile: getAllergyProfile {
+          allergies { allergenCatalogId status }
+          notes
+        }
+        hospitalizationProfile: getHospitalizationProfile {
+          hospitalizations { conditionId admissionDate notes }
+          notes
+        }
+        operationProfile: getOperationProfile {
+          operations { procedureId operationDate notes }
+          notes
+        }
+        medicationProfile: getMedicationProfile {
+          medications { medicineId description }
+          notes
+        }
+        immunizationProfile: getImmunizationProfile {
+          immunizations { vaccineTypeId }
+          notes
+        }
+        lifestyle: getLifestyle {
+          smoker numberOfCigarettesPerDay yearsSmoked
+          alcoholConsumer frequencyOfAlcoholConsumption
+        }
+        visualAcuity: getVisualAcuityProfile {
+          notes
+          acuity { left_eye right_eye recorded_at }
+        }
+        dentalHistory: getDentalHistory {
+          seenByDentist lastDentalCleaning lastVisitDate
+        }
+        oralAppliance: getOralApplianceProfile {
+          appliances { tagId arch }
+        }
+        obgyne: getObgynHistory {
+          lastMenstrualPeriod hasDysmenorrhea notes
+        }
+      }`,
+      {}
+    ),
+  ]);
+
+  if (profileResult.status === 'rejected') {
+    console.warn('[EMR Service] Profile prefill fetch failed:', profileResult.reason?.message);
+  }
+  if (emrResult.status === 'rejected') {
+    console.warn('[EMR Service] EMR prefill fetch failed:', emrResult.reason?.message);
+  }
+
+  // If both failed entirely, return null so the form starts blank
+  if (profileResult.status === 'rejected' && emrResult.status === 'rejected') {
+    console.error('[EMR Service] fetchRevisionPrefill: both requests failed, form will start blank');
+    return null;
+  }
+
+  const profileData = profileResult.status === 'fulfilled' ? profileResult.value : {};
+  const emrData     = emrResult.status    === 'fulfilled' ? emrResult.value    : {};
+
+  const mapped = mapRevisionDataToFormData(profileData, emrData);
+  console.log('[EMR Service] Revision pre-fill data mapped successfully');
+  return mapped;
+};
+
 export const getMyBranchIdentifier = async () => {
   const query = `
     query GetBranchIdentifier {

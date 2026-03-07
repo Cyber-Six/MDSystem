@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/layout/layout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
-import { checkInitialRecordStatus, getMyBranchIdentifier } from '../services/emr-service.js';
+import { checkInitialRecordStatus, getMyBranchIdentifier, fetchRevisionPrefill } from '../services/emr-service.js';
 import InitialRecordModal from '../components/modals/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 
@@ -23,6 +23,7 @@ const Dashboard = () => {
   const [showInitialRecordModal, setShowInitialRecordModal] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [recordStatus, setRecordStatus] = useState(null);
+  const [revisionData, setRevisionData] = useState(null);
 
   // Check if user needs to complete initial medical record (students only)
   useEffect(() => {
@@ -48,6 +49,16 @@ const Dashboard = () => {
         setRecordStatus(status);
         
         if (needsInitialRecord) {
+          // For revision status, pre-fetch existing data to populate the form
+          if (status === 'Revision') {
+            console.log('[Dashboard] Revision detected — fetching pre-fill data...');
+            try {
+              const prefill = await fetchRevisionPrefill();
+              setRevisionData(prefill);
+            } catch (err) {
+              console.warn('[Dashboard] Could not fetch revision pre-fill data:', err.message);
+            }
+          }
           setShowInitialRecordModal(true);
         }
       } catch (error) {
@@ -164,10 +175,13 @@ const Dashboard = () => {
       <InitialRecordModal 
         isOpen={showInitialRecordModal}
         onComplete={handleInitialRecordComplete}
+        isRevision={recordStatus === 'Revision'}
       >
         <InitialMedicalRecordForm 
           isModal={true}
           onComplete={handleInitialRecordComplete}
+          revisionData={revisionData}
+          isRevision={recordStatus === 'Revision'}
         />
       </InitialRecordModal>
 
