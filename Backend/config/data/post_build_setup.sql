@@ -69,14 +69,7 @@ VALUES
 ('Food', 'Tree Nuts', true, 1),
 ('Food', 'Eggs', true, 1),
 ('Food', 'Milk/Dairy', true, 1),
-('Food', 'Peanuts', true, 1),
-('Food', 'Tree Nuts', true, 1),
-('Food', 'Eggs', true, 1),
-('Food', 'Milk/Dairy', true, 1),
 -- Drug Allergies
-('Drug', 'Antibiotics (Penicillin)', true, 1),
-('Drug', 'Sulfa Drugs', true, 1),
-('Drug', 'NSAIDs (Aspirin, Ibuprofen)', true, 1),
 ('Drug', 'Antibiotics (Penicillin)', true, 1),
 ('Drug', 'Sulfa Drugs', true, 1),
 ('Drug', 'NSAIDs (Aspirin, Ibuprofen)', true, 1),
@@ -89,14 +82,7 @@ VALUES
 ('Insect', 'Mosquito Bites', true, 1),
 ('Insect', 'Bee Stings', true, 1),
 ('Insect', 'Ant Bites', true, 1),
-('Insect', 'Mosquito Bites', true, 1),
-('Insect', 'Bee Stings', true, 1),
-('Insect', 'Ant Bites', true, 1),
 -- Chemical Allergies
-('Chemical', 'Latex', true, 1),
-('Chemical', 'Nickel/Metal', true, 1),
-('Chemical', 'Cleaning Agents', true, 1),
-('Chemical', 'Fabric Conditioner', true, 1),
 ('Chemical', 'Latex', true, 1),
 ('Chemical', 'Nickel/Metal', true, 1),
 ('Chemical', 'Cleaning Agents', true, 1),
@@ -109,7 +95,7 @@ VALUES
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
 -- Medical Conditions
-('MedicalCondition', 'HEART', 'Heart Condition', 'History of heart-related conditions', true, 1),
+('MedicalCondition', 'HEART', 'Heart Condi~tion', 'History of heart-related conditions', true, 1),
 ('MedicalCondition', 'HBP', 'High Blood Pressure', 'History of hypertension', true, 1),
 ('MedicalCondition', 'EPILEPSY', 'Epilepsy/Seizure', 'History of epilepsy or seizure disorder', true, 1),
 ('MedicalCondition', 'PSYCH', 'Psychiatric Illness', 'History of psychiatric condition', true, 1),
