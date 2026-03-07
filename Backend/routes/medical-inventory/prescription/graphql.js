@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const medicalResolver = require("./resolvers/medical/medical-resolver.js");
-const { jwtProtect } = require("../../config/middleware/jwtProtect.js");
+const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
 
 const typeDefs = fs.readFileSync(path.join(__dirname, "./schema.graphql"), "utf8");
 
@@ -16,9 +16,9 @@ const medicalSchema = makeExecutableSchema({
   },
 });
 
-function initMedicalInventoryGraphQL(app) {
+function initPrescriptionGraphQL(app) {
   app.use(
-    "/medical-inventory/medical",
+    "/medical-inventory/prescription/medical",
     jwtProtect("medical"),
     graphqlHTTP((req) => ({
       schema: medicalSchema,
@@ -28,4 +28,4 @@ function initMedicalInventoryGraphQL(app) {
   );
 }
 
-module.exports = { initMedicalInventoryGraphQL };
+module.exports = { initPrescriptionGraphQL };

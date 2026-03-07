@@ -26,6 +26,11 @@ const permissions = {
   consultation_allow_view: "ALLOW_TO_VIEW_CONSULTATION",
   consultation_allow_edit: "ALLOW_TO_EDIT_CONSULTATION",
 
+  inventory_allow_view: "ALLOW_TO_VIEW_INVENTORY",
+  inventory_allow_edit: "ALLOW_TO_EDIT_INVENTORY",
+  inventory_allow_manage_requests: "ALLOW_TO_MANAGE_MEDICINE_REQUESTS",
+  inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",
+
 };
 
 async function getMedicalpermits(personnelId) {
