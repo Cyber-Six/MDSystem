@@ -772,6 +772,7 @@ enum DesignationBranch{
 
 enum DomainType {
   VisualAcuity
+  MedicalCondition
   Medication
   Hospitalization
   Operation
