@@ -1,222 +1,64 @@
 # MDSystem
 
-MDSystem is a medical data management monorepo for the TIP ecosystem. The repository combines a Node.js/Express backend, two React web portals, a React Native mobile app, and a shared core package used across platforms.
+MDSystem is a medical data management system for the TIP ecosystem. It provides digital workflows for patients, medical staff, and doctors — covering health records, appointments, consultations, medical inventory, and document generation.
 
-## Overview
+## Applications
 
-The current repository contains five main application areas:
+| Application | Description |
+|---|---|
+| **Patient Portal** | Web portal for patients to manage their medical records, view appointments, submit medicine requests, and access e-consultation. |
+| **Staff Portal** | Web portal for medical staff and doctors to handle appointments, review patient records, manage medical inventory, and oversee staff roles. |
+| **Mobile App** | React Native mobile client providing patient-facing access on Android and iOS. |
+| **Backend API** | Express-based REST and GraphQL API serving both portals and the mobile app. Handles authentication, EMR, inventory, media, and document services. |
+| **Shared Core** | Platform-agnostic JavaScript package shared across the web portals and mobile app for token management, API communication, and validation. |
 
-- `Backend/` — Express 5 API services for patient and staff flows
-- `mds-patient/` — React 19 + Vite patient portal
-- `mds-staff/` — React 19 + Vite staff portal
-- `mds-mobile/` — Expo + React Native mobile client
-- `packages/core/` — shared platform-agnostic business logic
+## Features
 
-The root workspace manages the frontend/mobile packages with npm workspaces. The backend is installed separately through the root `postinstall` script.
+### Patient
+- Account registration and authentication
+- Initial and updated medical record forms
+- Appointment scheduling and tracking
+- Medicine request submission
+- E-consultation (chatbot-assisted)
+- Document downloads (medical certificates, prescriptions, referrals)
 
-## Repository Layout
-
-```text
-MDSystem/
-├── Backend/
-├── Docs/
-├── mds-mobile/
-├── mds-patient/
-├── mds-staff/
-├── packages/
-│   └── core/
-├── package.json
-└── README.md
-```
-
-For a deeper folder map, see [Docs/file_structure.md](Docs/file_structure.md).
+### Medical Staff / Doctor
+- Patient record review and approval workflow
+- Appointment queue and availability management
+- Medical inventory tracking (stock, dispensing, transactions)
+- Document generation with tag-based templates
+- Role and permission management
+- Analytics and reports
 
 ## Tech Stack
 
-### Backend
-- Node.js
-- Express 5
-- PostgreSQL
-- Redis
-- GraphQL
-- BullMQ
-- Nodemailer
+| Layer | Stack |
+|---|---|
+| Backend | Node.js, Express 5, PostgreSQL, Redis, GraphQL, BullMQ |
+| Web Portals | React 19, Vite 7, React Router 7, Tailwind CSS 3 |
+| Mobile | Expo 54, React Native 0.81, TypeScript, NativeWind |
+| Document Service | Python, FastAPI, docxtpl |
+| Shared Core | ESM JavaScript, Axios |
 
-### Web
-- React 19
-- Vite 7
-- React Router 7
-- Tailwind CSS 3
-- ESLint
+## Repository Structure
 
-### Mobile
-- Expo 54
-- React Native 0.81
-- TypeScript
-- NativeWind
-- AsyncStorage
-
-### Shared Core
-- ESM JavaScript
-- Axios-based request utilities
-- Shared token, banner, API base URL, and validation logic
-
-## Workspace Commands
-
-Run these from the repository root:
-
-```bash
-npm install
-npm run build
-npm run build:patient
-npm run build:staff
-npm run dev:patient
-npm run dev:staff
-npm run dev:mobile
-npm run start:patient
-npm run start:staff
+```text
+MDSystem/
+├── Backend/          # API server and services
+├── mds-patient/      # Patient web portal
+├── mds-staff/        # Staff web portal
+├── mds-mobile/       # Mobile app
+├── packages/core/    # Shared business logic
+└── Docs/             # Project documentation
 ```
 
-### What These Commands Do
-
-- `npm install` installs all workspaces, then runs `cd Backend && npm install`
-- `npm run dev:patient` starts the patient Vite app
-- `npm run dev:staff` starts the staff Vite app
-- `npm run dev:mobile` starts the Expo dev server
-- `npm run start:patient` runs `Backend/server.js`
-- `npm run start:staff` runs `Backend/staff.js`
-
-## Quick Start
-
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Configure the backend
-
-Create `Backend/.env` manually. The backend reads configuration from `Backend/config/config.js` and expects these environment variables:
-
-```env
-POSTGRES_HOST=localhost
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your_password
-POSTGRES_DB=mdsystem
-POSTGRES_PORT=5432
-POSTGRES_MAX_CONN=5
-
-JWT_SECRET=replace_me
-JWT_EXPIRES_IN=1h
-JWT_ISSUER=mdssyme-auth
-
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-REDIS_USERNAME=mdsadmin
-REDIS_PASSWORD=replace_me
-REDIS_DB=0
-
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=your_email@example.com
-SMTP_PASS=your_app_password
-```
-
-### 3. Configure the web apps
-
-Both web apps already include `.env.example` files. Their `predev` and `prebuild` scripts sync `.env` from the example file automatically.
-
-Patient portal variables live in `mds-patient/.env.example`.
-Staff portal variables live in `mds-staff/.env.example`.
-
-Key variables:
-
-- `VITE_DEV_PORTAL`
-- `VITE_BACKEND_URL`
-- `VITE_BYPASS_PRIVATE_ROUTE_AUTH`
-- `VITE_BYPASS_INITIAL_RECORD` in the patient app
-
-### 4. Start the apps
-
-```bash
-npm run start:patient
-npm run start:staff
-npm run dev:patient
-npm run dev:staff
-npm run dev:mobile
-```
-
-## Runtime Notes
-
-### Backend entry points
-- `Backend/server.js` handles the patient-facing backend runtime
-- `Backend/staff.js` handles the staff-facing backend runtime
-
-### Local development routing
-- `mds-patient/vite.config.js` can proxy to `http://localhost:3001` when `VITE_DEV_PORTAL=local`
-- `mds-staff/vite.config.js` can proxy to `http://localhost:3002` when `VITE_DEV_PORTAL=local`
-
-### Shared core adapters
-- `mds-patient/src/packages-core-adapter.js` wires `@mdsystem/core` to browser APIs
-- `mds-staff/src/packages-core-adapter.js` wires `@mdsystem/core` to browser APIs
-- `mds-mobile/src/core.ts` wires `@mdsystem/core` to React Native APIs
-
-## Major Modules
-
-### Backend routes
-- `auth` for login, registration, refresh, email, and password flows
-- `appointment` for appointment GraphQL operations
-- `emr` for electronic medical records
-- `profile` for profile GraphQL operations
-- `medical-inventory` for inventory, prescriptions, and medicine requests
-- `info` for announcements and compliance content
-- `media` for uploads and media access
-- `consultation` for consultation-specific flows
-
-### Patient portal modules
-- `auth`
-- `dashboard`
-- `appointment`
-- `e-consultation`
-- `medicine-request`
-- `record-forms`
-
-### Staff portal modules
-- `auth`
-- `dashboard`
-- `appointment`
-- `medical-inventory`
-- `pending-requests`
-- `role-management`
+For the full file map, see [Docs/file_structure.md](Docs/file_structure.md).
 
 ## Documentation
 
-- [Docs/file_structure.md](Docs/file_structure.md) — current repository structure
-- [Docs/PENDING_REVIEW_IMPLEMENTATION.md](Docs/PENDING_REVIEW_IMPLEMENTATION.md) — pending review workflow notes
+- [Docs/file_structure.md](Docs/file_structure.md) — full repository structure
 - [packages/core/README.md](packages/core/README.md) — shared core package
-- [mds-mobile/README.md](mds-mobile/README.md) — mobile-specific setup and notes
-
-## Testing And Verification
-
-Currently verified project checks in the repository are:
-
-```bash
-cd mds-patient && npm run lint
-cd mds-staff && npm run lint
-```
-
-Current gaps:
-
-- `Backend/package.json` does not define a real automated test suite
-- `packages/core/package.json` still uses a placeholder `npm test` script
-- The root workspace does not expose a unified test command yet
-
-## Known Documentation Constraints
-
-- The repository includes `Backend/config/middleware/chatbotProxy.js`, but there is no checked-in `Backend/MDS-AI-Chatbot/` service directory in this workspace.
-- `Backend/services/docx-generation/` exists and contains its own Python-based assets and templates.
-- The canonical project documentation directory is `Docs/`, not `docs/`.
+- [mds-mobile/README.md](mds-mobile/README.md) — mobile app notes
 
 ## License
 
