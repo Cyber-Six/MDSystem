@@ -60,6 +60,8 @@ function sleep(ms) {
           }
 
         emailDetails = buildEmailTemplate(job.name, userEmail, data);
+      } else if (job.name === 'sendMedicineRequestNotification' || job.name === 'sendPrescriptionNotification') {
+        emailDetails = buildEmailTemplate(job.name, userEmail, data);
       } else if (job.name === 'sendEmail') {
         emailDetails = { to, subject, htmlContent };
       }
