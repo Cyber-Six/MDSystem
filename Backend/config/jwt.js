@@ -264,7 +264,8 @@ async function handleLogin({ userId, deviceId, role }) {
   }
 
   // Create new session
-  const newSessionId = crypto.randomUUID();
+  const gettedAnchor = normalizedRole === "medical" ? await getStaffAnchor(userId) : null;
+  const newSessionId = gettedAnchor ? gettedAnchor : crypto.randomUUID();
   const newRefreshToken = crypto.randomUUID();
 
   const newSession = {
