@@ -25,7 +25,8 @@ export const tokenService = createTokenService({
       window.location.assign(path); // Assign instead of href to properly trigger navigation
     } 
   },
-  getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl
+  getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
+  tokenNamespace: 'patient'
 });
 
 // 3. Create banner service instance

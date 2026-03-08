@@ -8,17 +8,8 @@
 
 import { axiosRequest } from '../../../packages-core-adapter';
 
-// Map form year values to GraphQL STUDENT_YEAR enum
-const mapYearToEnum = (year) => {
-  const yearMap = {
-    '1st Year': 'Freshman',
-    '2nd Year': 'Sophomore',
-    '3rd Year': 'Junior',
-    '4th Year': 'Senior',
-    '5th Year': 'Senior' // Map 5th year to Senior as backend doesn't have 5th Year
-  };
-  return yearMap[year] || year;
-};
+// Form values are already STUDENT_YEAR enum values (Freshman, Sophomore, etc.)
+const mapYearToEnum = (year) => year || 'Freshman';
 
 /**
  * Send a GraphQL request to the EMR endpoint
@@ -66,7 +57,7 @@ const sendGraphQLRequest = async (query, variables = {}) => {
 /**
  * Update Student Profile with school information
  * Uses CREATE mutation for patient self-update (no userId needed)
- * @param {object} schoolData - School information (program, year, department, studentNumber, schoolYear, semester, studentCategory)
+ * @param {object} schoolData - School information (program, year, studentNumber, schoolYear, semester, studentCategory)
  * @returns {Promise} Response from server
  */
 export const updateStudentProfile = async (schoolData) => {
@@ -94,12 +85,7 @@ export const updateStudentProfile = async (schoolData) => {
   const variables = {
     input: {
       program: schoolData.program,
-      year: mapYearToEnum(schoolData.schoolYear),
-      // TEMPORARY WORKAROUND: Backend server needs restart to use updated schema
-      // Uncomment these if you get "guardian_name required" error (old schema cached)
-      guardian_name: 'N/A',
-      guardian_relation: 'N/A', 
-      guardian_contact: 'N/A'
+      year: mapYearToEnum(schoolData.schoolYear)
     }
   };
 

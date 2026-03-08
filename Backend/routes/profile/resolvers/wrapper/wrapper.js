@@ -256,9 +256,9 @@ const Mutation = {
     const result = await db.query(checkQuery, [userId]);
     if (result.rows[0].exists) {
       const updateQuery = `
-        UPDATE "UsersCredentials"
+        UPDATE "UserCredentials"
         SET credentials_status = 'active'
-        WHERE user_id = $1;
+        WHERE id = $1;
       `;
       await db.query(updateQuery, [userId]);
       return { success: true, message: "Credential status updated to Active." };
@@ -342,7 +342,7 @@ const Mutation = {
         SET credentials_status = $1,
             locked_until = NOW() + $3 * INTERVAL '1 day'
         WHERE id = $2
-        AND credentials_status != 'unverified'
+        AND credentials_status != 'Unverified'
         RETURNING credentials_status, locked_until;
       `;
       params = [status, userId, lockDays];
@@ -353,7 +353,7 @@ const Mutation = {
         SET credentials_status = $1,
             locked_until = NULL
         WHERE id = $2
-        AND credentials_status != 'unverified'
+        AND credentials_status != 'Unverified'
         RETURNING credentials_status, locked_until;
       `;
       params = [status, userId];

@@ -20,6 +20,7 @@ Backend/commands/
 
 Backend/services/docx-generation/__pycache__/
 Backend/services/docx-generation/templates/
+Backend/services/docx-generation/generated/
 Backend/services/docx-generation/venv/
 
 /media

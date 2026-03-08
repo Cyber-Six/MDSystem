@@ -480,13 +480,12 @@ const Mutation = {
       try {
         const result = await db.queryControlled(
           `INSERT INTO "HospitalizationRecord"
-            ("hospitalizationId", "hospitalName", "reason", "admissionDate", "dischargeDate", "notes")
-           VALUES ($1, $2, $3, $4, $5, $6)
+            ("hospitalizationId", "conditionId", "admissionDate", "dischargeDate", "notes")
+           VALUES ($1, $2, $3, $4, $5)
            RETURNING *;`,
           [
             recordId,
-            hospitalization.hospitalName,
-            hospitalization.reason,
+            hospitalization.conditionId,
             hospitalization.admissionDate,
             hospitalization.dischargeDate || null,
             hospitalization.notes || null
@@ -659,7 +658,7 @@ const Mutation = {
            RETURNING *;`,
           [
             recordId,
-            allergy.allergenId,
+            allergy.allergenCatalogId,
             allergy.status,
             allergy.severity,
             allergy.notes || null,
@@ -672,7 +671,7 @@ const Mutation = {
         if (err.code === '23503') { // foreign key violation
           throwGraphQLError(res)
             .status(400)
-            .message(`Invalid allergenId: ${allergy.allergenId}`)
+            .message(`Invalid allergenCatalogId: ${allergy.allergenCatalogId}`)
             .throw();
         }
         else { throw err; }

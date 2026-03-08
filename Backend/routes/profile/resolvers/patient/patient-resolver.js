@@ -77,7 +77,7 @@ Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     const credentialStatus = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
-    if (credentialStatus !== "unverified") {
+    if (credentialStatus !== "Unverified") {
       throwGraphQLError(res).message("For patients, branch and identifier can only be set for unverified users.").status(400).throw();
       }
    

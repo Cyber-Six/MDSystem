@@ -9,7 +9,7 @@ import InitialMedicalRecordForm from '../modules/record-forms/initial-record/med
 // Lazy-loaded route modules for code splitting
 const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx'));
 const RecordUpdateForm = lazy(() => import('../modules/record-forms/update-record/record-update-form.jsx'));
-const AppointmentPage = lazy(() => import('../modules/appointment/appointment-router.jsx'));
+const AppointmentPage = lazy(() => import('../modules/appointment/appointment.jsx'));
 const MedicineRequestPage = lazy(() => import('../modules/medicine-request/medicine-request-page.jsx'));
 const EConsultation = lazy(() => import('../modules/e-consultation/e-consultation.jsx'));
 

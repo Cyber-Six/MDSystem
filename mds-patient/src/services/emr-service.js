@@ -237,7 +237,7 @@ const registerProfileSetup = async (identifier, personalInfo) => {
     const result = await sendGraphQLRequest(mutation, variables, { endpoint: '/profile/patient' });
     console.log('[EMR Service] Profile setup complete:', {
       branch: result?.createBranchIdentifier?.branch,
-      name: `${result?.createPersonalRecordLog?.first_name} ${result?.createPersonalRecordLog?.last_name}`,
+      identifier: result?.createBranchIdentifier?.identifier,
     });
   } catch (error) {
     // If a stale record log is blocking the submission, auto-cancel it and retry
@@ -254,7 +254,8 @@ const registerProfileSetup = async (identifier, personalInfo) => {
       }`;
       const retryResult = await sendGraphQLRequest(retryMutation, { input: personalInput }, { endpoint: '/profile/patient' });
       console.log('[EMR Service] Profile setup complete (after stale-log recovery):', {
-        name: `${retryResult?.createPersonalRecordLog?.first_name} ${retryResult?.createPersonalRecordLog?.last_name}`,
+        branch: null, // already set from first attempt
+        identifier: identifier?.trim() || null,
       });
       return;
     }

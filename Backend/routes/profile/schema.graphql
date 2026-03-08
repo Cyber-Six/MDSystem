@@ -99,10 +99,10 @@ enum UpdateStatus{
 }
 
 enum CredentialStatus{
-  unverified
-  active
-  locked
-  disabled
+  Unverified
+  Active
+  Locked
+  Disabled
 }
 
 # Queries

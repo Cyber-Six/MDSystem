@@ -63,9 +63,14 @@ function ScopeBadge({ scope }) {
     Dental:  'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300',
     Both:    'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300',
   };
+  const labels = {
+    Medical: 'Medical',
+    Dental:  'Dental',
+    Both:    'Both (Medical & Dental)',
+  };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[scope] || ''}`}>
-      {scope}
+      {labels[scope] ?? scope}
     </span>
   );
 }

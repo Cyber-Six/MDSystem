@@ -44,7 +44,7 @@ function jwtProtect(requiredRole = "patient") {
         }
 
        // 🔍 Role enforcement
-      if (requiredRole && role !== requiredRole.toLowerCase() && requiredRole !== "") {
+      if (requiredRole && role !== requiredRole.toLowerCase() && requiredRole !== "all") {
         logger.warn(`[AUTH] Role mismatch userId=${decoded.id}, required=${requiredRole}, got=${role}, route=${req.path}, ip=${req.ip}`);
         return res.status(403).json({
           error: "FORBIDDEN",
