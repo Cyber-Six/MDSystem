@@ -25,7 +25,7 @@ const StaffLayout = ({ children }) => {
       />
 
       {/* Main Content Area */}
-      <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
+      <div className={`flex-1 flex flex-col min-w-0 transition-[margin-left] duration-300 ${
         sidebarExpanded ? 'md:ml-56' : 'md:ml-16'
       }`}>
         {/* Top Bar */}

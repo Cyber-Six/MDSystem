@@ -101,7 +101,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   };
 
   return (
-    <header className="h-14 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between px-4 sticky top-0 z-30">
+    <header className="h-14 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between px-4 sticky top-0 z-10">
       {/* Left: Menu + Title */}
       <div className="flex items-center gap-3">
         {/* Mobile Menu Button */}
