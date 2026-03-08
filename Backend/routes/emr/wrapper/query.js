@@ -53,7 +53,6 @@ const Query = {
     const query = `
       SELECT pr.id, pr.profile_type,
              sp.program, sp.year,
-             sp.guardian_name, sp.guardian_relation, sp.guardian_contact,
              ep.department, ep.role, ep.position,
              pul.created_at, pul."patientId", pul.status
       FROM "profileRecord" pr
@@ -83,9 +82,6 @@ const Query = {
           profile_type: row.profile_type,
           program: row.program,
           year: row.year,
-          guardian_name: row.guardian_name,
-          guardian_relation: row.guardian_relation,
-          guardian_contact: row.guardian_contact,
           created_at: row.created_at,
           status: row.status,
         };

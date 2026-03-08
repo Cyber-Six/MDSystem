@@ -17,6 +17,7 @@
             <div class="controls">
                 <button class="btn btn-download" onclick="downloadDocx()">⬇ Download DOCX</button>
                 <button class="btn btn-back" onclick="window.history.back()">← Back</button>
+                <button class="btn btn-print" onclick="printPreview()">🖨 Print Preview</button>
             </div>
         </div>
         
@@ -33,6 +34,14 @@
 
     <script>
         {script}
+        
+        function printPreview() {
+            window.print();
+        }
     </script>
+    <style media="print">
+        .controls { display: none; }
+        .container { margin: 0; padding: 0; }
+    </style>
 </body>
 </html>

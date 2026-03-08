@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Login from '../modules/auth/login';
 import Register from '../modules/auth/register.jsx';
@@ -7,6 +7,7 @@ import AuthSlides from '../modules/auth/auth-slides.jsx';
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const buttonRef = useRef(null);
 
   // Patient portal supports both login and register
   const getViewFromPath = () => {
@@ -16,6 +17,13 @@ const Auth = () => {
   
   const [activeView, setActiveView] = useState(getViewFromPath());
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+  // Blur button when panel closes to remove focus styling
+  useEffect(() => {
+    if (!isPanelOpen && buttonRef.current) {
+      buttonRef.current.blur();
+    }
+  }, [isPanelOpen]);
 
   // Update activeView when path changes
   useEffect(() => {
@@ -57,7 +65,8 @@ const Auth = () => {
       {/* Toggle Button - Shows only when login panel is closed */}
       {!isPanelOpen && activeView === 'login' && (
         <button 
-          className="toggle-btn fixed top-6 right-6 px-6 py-3 bg-gradient-to-r from-primary-400 to-primary-500 hover:from-primary-500 hover:to-primary-600 text-white font-semibold rounded-full shadow-lg cursor-pointer flex items-center gap-2 z-[12] transition-all duration-300 hover:shadow-xl hover:scale-105"
+          ref={buttonRef}
+          className="toggle-btn fixed top-6 right-6 px-6 py-3 !bg-primary-500 hover:!bg-primary-600 text-white font-semibold rounded-full shadow-lg cursor-pointer flex items-center gap-2 z-[12] transition-colors duration-200 hover:shadow-xl active:!bg-primary-700 focus:!ring-0 focus:!outline-none"
           onClick={togglePanel}
           aria-label="Open login panel"
         >
@@ -69,15 +78,15 @@ const Auth = () => {
       )}
 
       {/* Sliding Login Panel */}
-      <div className={`auth-panel fixed top-0 h-screen w-full max-w-[420px] bg-white dark:bg-dark-bg-primary shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen && activeView === 'login' ? 'right-0' : '-right-full'}`}>
+      <div className={`auth-panel fixed top-0 h-screen w-full max-w-[420px] bg-white shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen && activeView === 'login' ? 'right-0' : '-right-full'}`}>
         <div className="h-full flex flex-col px-8 md:px-6 sm:px-5 py-8 md:py-6">
           {/* X Close Button */}
           <button
             onClick={closePanel}
-            className="absolute top-6 right-6 p-2 hover:bg-neutral-100 dark:hover:bg-dark-bg-secondary rounded-full transition-colors z-20"
+            className="absolute top-6 right-6 p-2 hover:bg-neutral-100 rounded-full transition-colors z-20"
             aria-label="Close login panel"
           >
-            <svg className="w-6 h-6 text-secondary-600 dark:text-dark-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 text-secondary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -90,10 +99,10 @@ const Auth = () => {
                 alt="MDSystem Logo" 
                 className="h-24 w-24 mx-auto mb-4"
               />
-              <h1 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary font-heading mb-1">
+              <h1 className="text-2xl font-bold text-secondary-900 font-heading mb-1">
                 Welcome Back
               </h1>
-              <p className="text-xs text-neutral-600 dark:text-dark-text-secondary">
+              <p className="text-xs text-neutral-600">
                 Sign in to your account to continue
               </p>
             </div>
@@ -104,13 +113,13 @@ const Auth = () => {
             </div>
             
             {/* Register Link - Always show for patient portal */}
-            <div className="mt-6 pt-4 border-t border-neutral-200 dark:border-dark-border-primary text-center">
-              <p className="text-xs text-neutral-600 dark:text-dark-text-secondary mb-2">
+            <div className="mt-6 pt-4 border-t border-neutral-200 text-center">
+              <p className="text-xs text-neutral-600 mb-2">
                 Don't have an account?
               </p>
               <button 
                 onClick={() => handleViewChange('register')}
-                className="text-accent-600 dark:text-accent-400 font-semibold text-xs hover:text-accent-700 dark:hover:text-accent-300 transition-colors hover:underline"
+                className="text-accent-600 font-semibold text-xs hover:text-accent-700 transition-colors hover:underline"
               >
                 Sign up!
               </button>
@@ -129,15 +138,15 @@ const Auth = () => {
           />
           
           {/* Modal Card */}
-          <div className="relative w-full max-w-md bg-white dark:bg-dark-bg-primary rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh]">
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh]">
             <div className="px-8 md:px-6 sm:px-5 py-8 md:py-6">
               {/* Close Button */}
               <button
                 onClick={() => handleViewChange('login')}
-                className="absolute top-4 right-4 p-2 hover:bg-neutral-100 dark:hover:bg-dark-bg-secondary rounded-full transition-colors z-30"
+                className="absolute top-4 right-4 p-2 hover:bg-neutral-100 rounded-full transition-colors z-30"
                 aria-label="Close register modal"
               >
-                <svg className="w-6 h-6 text-secondary-600 dark:text-dark-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-secondary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -149,10 +158,10 @@ const Auth = () => {
                   alt="MDSystem Logo" 
                   className="h-20 w-20 mx-auto mb-4"
                 />
-                <h2 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary font-heading mb-1">
+                <h2 className="text-2xl font-bold text-secondary-900 font-heading mb-1">
                   Create Account
                 </h2>
-                <p className="text-xs text-neutral-600 dark:text-dark-text-secondary">
+                <p className="text-xs text-neutral-600">
                   Join our healthcare platform
                 </p>
               </div>

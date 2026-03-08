@@ -36,7 +36,8 @@ type userProfile{
   province_address: String!
   status: UpdateStatus!
   email: String
-  entityId: ID
+  branch: USER_BRANCH
+  identifier: ID
   updated_at: Date
   created_at: Date
 }
@@ -117,6 +118,7 @@ type Query {
   getPersonalRecordLogStatus: String # get the update status of the logged in user
   getUserPersonalRecordLogStatus(userId: ID!): String
 
+  getPersonalRecordLog: userProfile
   getUserPersonalRecordLog(userId: ID!, from: Date, offset: Int, limit: Int): [userProfile!]
 
   getBranchIdentifier: BranchIdentifier

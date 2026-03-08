@@ -86,16 +86,16 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200] p-4">
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+        <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-secondary-900 dark:text-white">
+            <h2 className="text-base font-bold text-secondary-900 dark:text-white">
               Initial Record Submission
             </h2>
-            <p className="text-sm text-secondary-600 dark:text-neutral-400">
+            <p className="text-xs text-secondary-600 dark:text-neutral-400">
               Ticket&nbsp;#&nbsp;{ticket.id}
             </p>
           </div>
@@ -111,21 +111,21 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-5">
+        <div className="p-4 space-y-3">
 
           {/* Ticket info */}
           <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-            <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
-              <h3 className="text-sm font-semibold text-secondary-900 dark:text-white uppercase tracking-wide">
+            <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+              <h3 className="text-xs font-semibold text-secondary-900 dark:text-white uppercase tracking-wide">
                 Ticket Information
               </h3>
             </div>
-            <div className="p-4 grid grid-cols-2 gap-4">
+            <div className="p-3 grid grid-cols-2 gap-2">
               <div className="col-span-2">
                 <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                   Patient Name
                 </p>
-                <p className="text-sm font-semibold text-secondary-900 dark:text-white">
+                <p className="text-xs font-semibold text-secondary-900 dark:text-white">
                   {ticket.first_name || ticket.last_name
                     ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
                     : <span className="italic text-secondary-400 dark:text-neutral-500">— not available —</span>}
@@ -135,7 +135,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
                 <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                   Patient ID
                 </p>
-                <p className="text-sm font-semibold text-secondary-900 dark:text-white font-mono">
+                <p className="text-xs font-semibold text-secondary-900 dark:text-white font-mono">
                   {ticket.patientId}
                 </p>
               </div>
@@ -151,7 +151,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
                 <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                   Submitted
                 </p>
-                <p className="text-sm text-secondary-700 dark:text-neutral-300">
+                <p className="text-xs text-secondary-700 dark:text-neutral-300">
                   {ticket.created_at
                     ? new Date(ticket.created_at).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                     : '—'}
@@ -161,7 +161,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
                 <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                   Branch
                 </p>
-                <p className="text-sm text-secondary-700 dark:text-neutral-300">
+                <p className="text-xs text-secondary-700 dark:text-neutral-300">
                   {ticket.branch === 'QuezonCity' ? 'Quezon City' : ticket.branch ?? '—'}
                 </p>
               </div>
@@ -170,7 +170,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
                   <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
                     Scope
                   </p>
-                  <p className="text-sm text-secondary-700 dark:text-neutral-300">
+                  <p className="text-xs text-secondary-700 dark:text-neutral-300">
                     {ticket.scope}
                   </p>
                 </div>
@@ -182,9 +182,9 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
           {isPending && (
             <button
               onClick={() => setShowReviewModal(true)}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-semibold text-sm"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors font-medium text-sm"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
               Review Full Record
@@ -241,7 +241,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-neutral-50 dark:bg-neutral-800/50 px-6 py-4 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-3">
+        <div className="sticky bottom-0 bg-neutral-50 dark:bg-neutral-800/50 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-3">
           {showRevisionForm ? (
             <>
               <button
