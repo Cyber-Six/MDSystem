@@ -12,7 +12,7 @@ const Query = {
       'mb."dosageValue", mb."expiryDate", mb.location ' +
       'FROM "MedicalItems" mi ' +
       'JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id ' +
-      'WHERE mi.active = true AND mi.category = ' + "'medicine'" + ' AND mb."expiryDate" > CURRENT_DATE';
+      'WHERE mi.active = true AND mi.category = ' + "'Medicine'" + ' AND mb."expiryDate" > CURRENT_DATE';
     const params = [];
     let idx = 1;
 
@@ -51,7 +51,7 @@ const Mutation = {
 
     const txSql =
       'INSERT INTO "MedicineTransactionLog" ("patientId", action, quantity, "issuedBy", notes) ' +
-      'VALUES ($1, ' + "'issue'" + ', $2, $3, $4) RETURNING *';
+      'VALUES ($1, ' + "'Issue'" + ', $2, $3, $4) RETURNING *';
 
     try {
       const txResult = await db.query(txSql, [

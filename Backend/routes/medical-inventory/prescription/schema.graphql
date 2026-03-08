@@ -1,8 +1,8 @@
 scalar Date
 
 enum ItemCategory {
-  medicine
-  supply
+  Medicine
+  Supply
 }
 
 enum DosageUnit {
@@ -21,9 +21,9 @@ enum LocationDesignation {
 }
 
 enum TransactionActionType {
-  issue
-  return
-  adjust
+  Issue
+  Return
+  Adjust
 }
 
 type AvailableMedicine {

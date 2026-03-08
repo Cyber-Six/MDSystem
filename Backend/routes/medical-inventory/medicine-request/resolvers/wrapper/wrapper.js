@@ -12,7 +12,7 @@ const Query = {
       'mb."dosageValue", mb."expiryDate", mb.location ' +
       'FROM "MedicalItems" mi ' +
       'JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id ' +
-      'WHERE mi.active = true AND mi.category = ' + "'medicine'" + ' AND mb."expiryDate" > CURRENT_DATE';
+      'WHERE mi.active = true AND mi.category = ' + "'Medicine'" + ' AND mb."expiryDate" > CURRENT_DATE';
     const params = [];
     let idx = 1;
 
@@ -119,38 +119,59 @@ const Mutation = {
       throwGraphQLError(res).message("Only pending requests can be updated").status(400).throw();
     }
 
-    let transactionId = null;
+    let result;
 
-    // If approved, create a transaction log and MedicineEntity records
     if (status === "Approved") {
       const itemsResult = await db.query(
         'SELECT * FROM "MedicineRequestEntity" WHERE "requestId" = $1',
         [requestId]
       );
-
       const totalQuantity = itemsResult.rows.reduce(function(sum, item) { return sum + item.quantity; }, 0);
 
-      const txSql =
-        'INSERT INTO "MedicineTransactionLog" ("patientId", action, quantity, "issuedBy", notes) ' +
-        'VALUES ($1, ' + "'issue'" + ', $2, $3, $4) RETURNING *';
-      const txResult = await db.query(txSql, [
-        current.rows[0].patientId, totalQuantity, approvedBy, notes || null
-      ]);
-      transactionId = txResult.rows[0].id;
+      // Use a dedicated client so BEGIN/COMMIT/ROLLBACK stay on the same connection.
+      // SET CONSTRAINTS ALL DEFERRED resolves the circular FK:
+      //   MedicineTransactionLog.id REFERENCES MedicineRequestLog.transactionId (DEFERRABLE INITIALLY IMMEDIATE)
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SET CONSTRAINTS ALL DEFERRED');
 
-      for (const item of itemsResult.rows) {
-        await db.query(
-          'INSERT INTO "MedicineEntity" ("batchId", "transactionId") VALUES ($1, $2)',
-          [item.batchId, transactionId]
-        );
+        const txSql =
+          'INSERT INTO "MedicineTransactionLog" ("patientId", action, quantity, "issuedBy", notes) ' +
+          'VALUES ($1, ' + "'Issue'" + ', $2, $3, $4) RETURNING *';
+        const txResult = await client.query(txSql, [
+          current.rows[0].patientId, totalQuantity, approvedBy, notes || null
+        ]);
+        const transactionId = txResult.rows[0].id;
+
+        for (const item of itemsResult.rows) {
+          await client.query(
+            'INSERT INTO "MedicineEntity" ("batchId", "transactionId") VALUES ($1, $2)',
+            [item.batchId, transactionId]
+          );
+        }
+
+        const updateSql =
+          'UPDATE "MedicineRequestLog" SET status = $1, approved_by = $2, ' +
+          '"transactionId" = $3, notes = COALESCE($4, notes) ' +
+          'WHERE id = $5 RETURNING *';
+        result = await client.query(updateSql, [status, approvedBy, transactionId, notes, requestId]);
+
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        logger.error("Error in _setStatusMedicineRequest approval:", err);
+        throwGraphQLError(res).message("Database error").status(500).throw();
+      } finally {
+        client.release();
       }
+    } else {
+      const updateSql =
+        'UPDATE "MedicineRequestLog" SET status = $1, approved_by = $2, ' +
+        'notes = COALESCE($3, notes) ' +
+        'WHERE id = $4 RETURNING *';
+      result = await db.query(updateSql, [status, approvedBy, notes, requestId]);
     }
-
-    const updateSql =
-      'UPDATE "MedicineRequestLog" SET status = $1, approved_by = $2, ' +
-      '"transactionId" = COALESCE($3, "transactionId"), notes = COALESCE($4, notes) ' +
-      'WHERE id = $5 RETURNING *';
-    const result = await db.query(updateSql, [status, approvedBy, transactionId, notes, requestId]);
 
     const items = await db.query(
       'SELECT * FROM "MedicineRequestEntity" WHERE "requestId" = $1',

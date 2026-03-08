@@ -1,10 +1,8 @@
 scalar Date
 
 enum ItemCategory {
-  medicine
-  supply
-  instrument
-  equipment
+  Medicine
+  Supply
 }
 
 enum DosageUnit {
