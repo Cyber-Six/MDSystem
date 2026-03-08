@@ -9,7 +9,8 @@ import { createPortal } from 'react-dom';
 const InitialRecordModal = ({ 
   isOpen, 
   children,
-  onComplete
+  onComplete,
+  isRevision = false
 }) => {
   const modalRef = useRef(null);
 
@@ -63,28 +64,36 @@ const InitialRecordModal = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Banner */}
-        <div className="shrink-0 px-5 py-3 sm:px-6 sm:py-4 rounded-t-2xl bg-primary-500">
+        <div className={`shrink-0 px-5 py-3 sm:px-6 sm:py-4 rounded-t-2xl ${isRevision ? 'bg-yellow-500' : 'bg-primary-500'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-1.5 bg-white/25 rounded-lg">
-                <svg className="w-5 h-5 text-secondary-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+                {isRevision ? (
+                  <svg className="w-5 h-5 text-secondary-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-secondary-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                )}
               </div>
               <div>
                 <h1 id="initial-record-modal-title" className="text-base sm:text-lg font-bold text-secondary-900" style={{ margin: 0 }}>
-                  Complete Your Medical Record
+                  {isRevision ? 'Revise Your Medical Record' : 'Complete Your Medical Record'}
                 </h1>
                 <p className="text-xs sm:text-sm text-secondary-800/70" style={{ margin: 0 }}>
-                  Please fill out your initial medical record to access the dashboard
+                  {isRevision
+                    ? 'Staff requested corrections — your previous answers are pre-filled below'
+                    : 'Please fill out your initial medical record to access the dashboard'}
                 </p>
               </div>
             </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-xs font-medium bg-white/30 text-secondary-900 px-3 py-1.5 rounded-full">
+            <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium bg-white/30 text-secondary-900 px-3 py-1.5 rounded-full`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isRevision ? "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"} />
               </svg>
-              <span>Required for Access</span>
+              <span>{isRevision ? 'Revision Required' : 'Required for Access'}</span>
             </div>
           </div>
         </div>

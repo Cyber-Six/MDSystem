@@ -137,7 +137,7 @@ const uploadMediaFile = async (file) => {
   body.append('file', file);
 
   try {
-    const response = await axiosRequest.post('/media', body, {
+    const response = await axiosRequest.post('/media/stage/', body, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     console.log('[EMR Service] Media file staged, fileId:', response.data.fileId);
@@ -155,7 +155,7 @@ const uploadMediaFile = async (file) => {
 const unstageMediaFile = async (fileId) => {
   if (!fileId) return;
   try {
-    await axiosRequest.delete(`/media/${fileId}`);
+    await axiosRequest.delete(`/media/unstage/${fileId}`);
     console.log('[EMR Service] Staged media file removed, fileId:', fileId);
   } catch (error) {
     // Non-fatal — staging TTL will eventually free the slot
@@ -309,9 +309,9 @@ export const createInitialMedicalRecord = async (formData) => {
     // ======== REQUEST 3: Batch all create mutations + submit in one request ========
     // submitUpdateTicket is appended as the last field in the same mutation document
     // so the server processes it after all creates complete (GraphQL serial execution).
-    console.log('[EMR Service] [3/3] Fetching immunization catalog & sending batched mutations...');
-    const immunizationCatalog = await fetchImmunizationCatalog();
-    const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, immunizationCatalog);
+    console.log('[EMR Service] [3/3] Fetching all catalogs & sending batched mutations...');
+    const allCatalogs = await fetchAllCatalogs();
+    const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
     const batchResult = await sendBatchedCreateMutations(inputs, formData);
     Object.assign(results, batchResult);
     results.submitStatus = batchResult.submitTicket;
@@ -347,100 +347,224 @@ export const createInitialMedicalRecord = async (formData) => {
   }
 };
 
+// ─── Catalog Fetchers ────────────────────────────────────────────────────────
+
 /**
- * Fetch the Immunization domain catalog from the backend.
- * Returns an array of { id, code, name } entries.
- * Falls back to [] on failure — unmatched vaccines are preserved in notes.
+ * Fetch ALL catalogs needed to render the initial-record form in a SINGLE HTTP request.
+ * Uses GraphQL field aliases to combine all 7 catalog queries into one round-trip,
+ * reducing network overhead from 7 calls to 1.
+ * Exported so form components can load options before the patient submits.
+ * Gracefully degrades — any resolver failure returns empty arrays for that catalog.
  */
-const fetchImmunizationCatalog = async () => {
+export const fetchAllCatalogs = async () => {
   const query = `
-    query GetImmunizationCatalog {
-      getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+    query FetchAllCatalogs {
+      medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true) {
         id
         code
         name
+      }
+      hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true) {
+        id
+        code
+        name
+      }
+      operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true) {
+        id
+        code
+        name
+      }
+      medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true) {
+        id
+        code
+        name
+      }
+      immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+        id
+        code
+        name
+      }
+      allergenCatalog: getAllergenCatalogs(filterIsValid: true) {
+        id
+        allergen
+        type
+      }
+      oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true) {
+        id
+        name
+        description
       }
     }
   `;
   try {
     const data = await sendGraphQLRequest(query, {});
-    console.log('[EMR Service] Immunization catalog loaded:', data.getDomainCatalogs?.length, 'entries');
-    return data.getDomainCatalogs || [];
+    console.log('[EMR Service] All catalogs loaded in 1 request:', {
+      medicalConditions: data.medicalConditionCatalog?.length,
+      hospitalizations: data.hospitalizationCatalog?.length,
+      operations: data.operationCatalog?.length,
+      medications: data.medicationCatalog?.length,
+      immunizations: data.immunizationCatalog?.length,
+      allergens: data.allergenCatalog?.length,
+      oralAppliances: data.oralApplianceCatalog?.length,
+    });
+    return {
+      medicalConditionCatalog: data.medicalConditionCatalog || [],
+      hospitalizationCatalog: data.hospitalizationCatalog || [],
+      operationCatalog: data.operationCatalog || [],
+      medicationCatalog: data.medicationCatalog || [],
+      immunizationCatalog: data.immunizationCatalog || [],
+      allergenCatalog: data.allergenCatalog || [],
+      oralApplianceCatalog: data.oralApplianceCatalog || [],
+    };
   } catch (error) {
-    console.warn('[EMR Service] Could not fetch immunization catalog, falling back to notes-only:', error.message);
-    return [];
+    console.warn('[EMR Service] Could not fetch catalogs:', error.message);
+    return {
+      medicalConditionCatalog: [],
+      hospitalizationCatalog: [],
+      operationCatalog: [],
+      medicationCatalog: [],
+      immunizationCatalog: [],
+      allergenCatalog: [],
+      oralApplianceCatalog: [],
+    };
   }
 };
 
+// ─── Record Builder Functions ─────────────────────────────────────────────────
+
 /**
- * Frontend checkbox ID → backend DomainTypeCatalog code(s) + dose number.
- * covidVaccine maps to two records (dose 1 and dose 2).
+ * Build MedicalHistory.conditions from checked catalog IDs.
+ * formData.medicalHistory.self  = { [conditionCatalogId]: true/false }
+ * formData.medicalHistory.family = { [conditionCatalogId]: true/false }
+ * formData.medicalHistory.familyWhoHasIt = { [conditionCatalogId]: "Mother / Father / ..." }
  */
-const VACCINE_CATALOG_MAP = {
-  bcg:          [{ code: 'BCG',           doseNumber: 1 }],
-  chickenPox:   [{ code: 'VARICELLA',     doseNumber: 1 }],
-  hepatitisA:   [{ code: 'HEPA',          doseNumber: 1 }],
-  hepatitisB:   [{ code: 'HEPB',          doseNumber: 1 }],
-  hpv:          [{ code: 'HPV',           doseNumber: 1 }],
-  mmr:          [{ code: 'MMR',           doseNumber: 1 }],
-  antiTetanus:  [{ code: 'TETANUS',       doseNumber: 1 }],
-  covidVaccine: [
-    { code: 'COVID_DOSE1', doseNumber: 1 },
-    { code: 'COVID_DOSE2', doseNumber: 2 },
-  ],
-  covidBooster: [{ code: 'COVID_BOOSTER1', doseNumber: 1 }],
+const buildMedicalConditionRecords = (medicalHistory) => {
+  const notes = [];
+  const conditions = [
+    // Self conditions
+    ...Object.entries(medicalHistory?.self || {})
+      .filter(([, checked]) => checked)
+      .map(([id]) => ({ conditionId: id, diagnosedDate: null, relationship: null, description: null })),
+    // Family conditions — relationship field carries the family member name
+    ...Object.entries(medicalHistory?.family || {})
+      .filter(([, checked]) => checked)
+      .map(([id]) => {
+        const who = medicalHistory.familyWhoHasIt?.[id] || 'Family';
+        return { conditionId: id, diagnosedDate: null, relationship: who, description: null };
+      }),
+  ];
+  // Free-text "other" entries (no catalog ID) → append to notes
+  if (medicalHistory?.selfOther) notes.push(`Self: ${medicalHistory.selfOther}`);
+  if (medicalHistory?.familyOther) {
+    const who = medicalHistory.familyOtherWhoHasIt;
+    notes.push(who
+      ? `Family other: ${medicalHistory.familyOther} (${who})`
+      : `Family other: ${medicalHistory.familyOther}`);
+  }
+  return { conditions, notes: notes.length ? notes.join('; ') : null };
 };
 
 /**
- * Convert the form's immunization checkboxes into backend immunizationRecordInput objects.
- * Each record needs vaccineTypeId (catalog DB id), immunizationDate, and doseNumber.
- * Brands (astrazeneca, pfizer…) and free-text "other" vaccines go into notes.
- *
- * @param {object} medicalBackground - formData.medicalBackground
- * @param {Array}  catalog           - result of fetchImmunizationCatalog()
- * @returns {{ immunizationRecords: Array, immunizationNotes: string|null }}
+ * Build AllergyProfile.allergies from checked allergen catalog IDs.
+ * formData.medicalBackground.allergies = { [allergenCatalogId]: true/false }
+ */
+const buildAllergyRecords = (medicalBackground) => {
+  if (medicalBackground?.hasAllergies !== 'Yes') return { allergies: [], notes: null };
+  const notes = [];
+  const allergies = Object.entries(medicalBackground.allergies || {})
+    .filter(([, checked]) => checked)
+    .map(([id]) => ({
+      allergenCatalogId: id,
+      status: 'Active',
+      severity: 'Unknown',
+      notes: null,
+      date_identified: null,
+    }));
+  if (medicalBackground.allergyOther) notes.push(`Other: ${medicalBackground.allergyOther}`);
+  return { allergies, notes: notes.length ? notes.join('; ') : null };
+};
+
+/**
+ * Build HospitalizationProfile.hospitalizations from checked catalog IDs.
+ * formData.medicalBackground.hospitalizationConditions = { [conditionCatalogId]: true/false }
+ */
+const buildHospitalizationRecords = (medicalBackground) => {
+  if (medicalBackground?.hasHospitalization !== 'Yes') return { hospitalizations: [], notes: null };
+  const today = new Date().toISOString().split('T')[0];
+  const admissionDate = medicalBackground.hospitalizationDate
+    ? new Date(medicalBackground.hospitalizationDate).toISOString().split('T')[0]
+    : today;
+  const hospitalizations = Object.entries(medicalBackground.hospitalizationConditions || {})
+    .filter(([, checked]) => checked)
+    .map(([id]) => ({ conditionId: id, admissionDate, dischargeDate: null, notes: medicalBackground.hospitalizationNotes || null }));
+  return { hospitalizations, notes: medicalBackground.hospitalizationNotes || null };
+};
+
+/**
+ * Build OperationProfile.operations from checked catalog IDs.
+ * formData.medicalBackground.operationConditions = { [procedureCatalogId]: true/false }
+ */
+const buildOperationRecords = (medicalBackground) => {
+  if (medicalBackground?.hasOperation !== 'Yes') return { operations: [], notes: null };
+  const today = new Date().toISOString().split('T')[0];
+  const operationDate = medicalBackground.operationDate
+    ? new Date(medicalBackground.operationDate).toISOString().split('T')[0]
+    : today;
+  const operations = Object.entries(medicalBackground.operationConditions || {})
+    .filter(([, checked]) => checked)
+    .map(([id]) => ({ procedureId: id, operationDate, notes: medicalBackground.operationNotes || null }));
+  return { operations, notes: medicalBackground.operationNotes || null };
+};
+
+/**
+ * Build MedicationProfile.medications from checked catalog IDs.
+ * formData.medicalBackground.selectedMedications = { [medicineCatalogId]: true/false }
+ */
+const buildMedicationRecords = (medicalBackground) => {
+  if (medicalBackground?.hasMedications !== 'Yes') return { medications: [], notes: null };
+  const medications = Object.entries(medicalBackground.selectedMedications || {})
+    .filter(([, checked]) => checked)
+    .map(([id]) => ({ medicineId: id, description: medicalBackground.medicationReason || null }));
+  return { medications, notes: medicalBackground.medicationNotes || null };
+};
+
+/**
+ * Build ImmunizationProfile.immunizations from checked catalog IDs.
+ * formData.medicalBackground.immunizations = { [vaccineTypeCatalogId]: true/false }
+ * Keys are now catalog IDs (not old hardcoded frontend string keys).
  */
 const buildImmunizationRecords = (medicalBackground, catalog) => {
   const today = new Date().toISOString().split('T')[0];
-  const codeToId = Object.fromEntries(catalog.map(e => [e.code, e.id]));
-  const immunizationRecords = [];
+  const validIds = new Set(catalog.map(c => c.id));
   const noteParts = [];
-
-  const checkedVaccines = Object.entries(medicalBackground?.immunizations || {})
+  const immunizationRecords = Object.entries(medicalBackground?.immunizations || {})
     .filter(([, checked]) => checked)
-    .map(([id]) => id);
-
-  for (const frontendId of checkedVaccines) {
-    const mappings = VACCINE_CATALOG_MAP[frontendId];
-    if (!mappings) {
-      noteParts.push(frontendId);
-      continue;
-    }
-    for (const { code, doseNumber } of mappings) {
-      const vaccineTypeId = codeToId[code];
-      if (!vaccineTypeId) {
-        // Catalog entry not found (catalog unavailable) — preserve as note
-        noteParts.push(code);
-        continue;
-      }
-      immunizationRecords.push({ vaccineTypeId, immunizationDate: today, doseNumber });
-    }
-  }
-
-  // COVID brand types have no separate catalog entries — record in notes
-  const covidTypes = Object.entries(medicalBackground?.covidVaccineType || {})
-    .filter(([, checked]) => checked)
-    .map(([id]) => id);
-  if (covidTypes.length > 0) {
-    noteParts.push(`COVID vaccine brand(s): ${covidTypes.join(', ')}`);
-  }
-
+    .flatMap(([id]) => {
+      if (!validIds.has(id)) { noteParts.push(id); return []; }
+      return [{ vaccineTypeId: id, immunizationDate: today, doseNumber: 1 }];
+    });
   if (medicalBackground?.immunizationOther?.trim()) {
     noteParts.push(`Other: ${medicalBackground.immunizationOther.trim()}`);
   }
+  return { immunizationRecords, immunizationNotes: noteParts.length ? noteParts.join('; ') : null };
+};
 
-  const immunizationNotes = noteParts.length > 0 ? noteParts.join('; ') : null;
-  return { immunizationRecords, immunizationNotes };
+/**
+ * Build OralApplianceProfile.appliances from checked oral appliance catalog IDs.
+ * formData.dentalHistory.intraOralAppliances = { [tagId]: true/false }
+ * formData.dentalHistory.applianceLocation = 'Upper' | 'Lower' | 'Both'
+ */
+const buildOralApplianceRecords = (dentalHistory, catalog) => {
+  const validIds = new Set(catalog.map(c => c.id));
+  const arch = dentalHistory?.applianceLocation || 'Both';
+  const today = new Date().toISOString().split('T')[0];
+  const appliances = Object.entries(dentalHistory?.intraOralAppliances || {})
+    .filter(([, checked]) => checked)
+    .flatMap(([id]) => {
+      if (!validIds.has(id)) return [];
+      return [{ tagId: id, status: 'Active', dateIssued: today, arch }];
+    });
+  return { appliances, notes: dentalHistory?.applianceOther || null };
 };
 
 /**
@@ -449,9 +573,18 @@ const buildImmunizationRecords = (medicalBackground, catalog) => {
  * @param {object} photoIds           - Staged fileIds from the media REST API
  * @param {string|null} photoIds.upperTeethFileId - Staged fileId for the upper teeth photo
  * @param {string|null} photoIds.lowerTeethFileId - Staged fileId for the lower teeth photo
- * @param {Array}  immunizationCatalog - Pre-fetched result of fetchImmunizationCatalog()
+ * @param {object} allCatalogs - Pre-fetched result of fetchAllCatalogs()
  */
-const buildBatchInputs = (formData, photoIds = {}, immunizationCatalog = []) => {
+const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
+  const {
+    medicalConditionCatalog = [],
+    hospitalizationCatalog: _hCat = [],
+    operationCatalog: _oCat = [],
+    medicationCatalog: _mCat = [],
+    immunizationCatalog = [],
+    allergenCatalog: _aCat = [],
+    oralApplianceCatalog = [],
+  } = allCatalogs;
   const inputs = {};
 
   // Student Profile (conditional)
@@ -480,76 +613,27 @@ const buildBatchInputs = (formData, photoIds = {}, immunizationCatalog = []) => 
     };
   }
 
-  // Medical History notes
-  const medicalHistoryNotes = [];
-  if (formData.medicalHistory?.selfOther) {
-    medicalHistoryNotes.push(`Self: ${formData.medicalHistory.selfOther}`);
-  }
-  if (formData.medicalHistory?.family) {
-    const familyConditions = Object.entries(formData.medicalHistory.family)
-      .filter(([_, checked]) => checked)
-      .map(([conditionId, _]) => {
-        const whoHasIt = formData.medicalHistory.familyWhoHasIt?.[conditionId];
-        return whoHasIt ? `${conditionId} (${whoHasIt})` : conditionId;
-      });
-    if (familyConditions.length > 0) {
-      medicalHistoryNotes.push(`Family history: ${familyConditions.join(', ')}`);
-    }
-  }
-  if (formData.medicalHistory?.familyOther) {
-    const whoHasIt = formData.medicalHistory.familyOtherWhoHasIt;
-    medicalHistoryNotes.push(whoHasIt 
-      ? `Family other: ${formData.medicalHistory.familyOther} (${whoHasIt})`
-      : `Family other: ${formData.medicalHistory.familyOther}`);
-  }
-  inputs.medicalHistory = {
-    conditions: [],
-    notes: medicalHistoryNotes.length > 0 ? medicalHistoryNotes.join('; ') : null
-  };
+  // Medical History — self + family conditions via catalog IDs
+  const { conditions: medConditions, notes: medNotes } = buildMedicalConditionRecords(formData.medicalHistory);
+  inputs.medicalHistory = { conditions: medConditions, notes: medNotes };
 
-  // Allergy Profile
-  let allergyNotes = null;
-  if (formData.medicalBackground?.hasAllergies === 'Yes') {
-    const allergyList = [];
-    if (formData.medicalBackground.allergies) {
-      allergyList.push(
-        ...Object.entries(formData.medicalBackground.allergies)
-          .filter(([_, checked]) => checked)
-          .map(([id]) => id)
-      );
-    }
-    if (formData.medicalBackground.allergyOther) {
-      allergyList.push(formData.medicalBackground.allergyOther);
-    }
-    if (allergyList.length > 0) allergyNotes = `Allergies: ${allergyList.join(', ')}`;
-  }
-  inputs.allergyProfile = { allergies: [], notes: allergyNotes };
+  // Allergy Profile — allergen catalog IDs
+  const { allergies, notes: allergyNotes } = buildAllergyRecords(formData.medicalBackground);
+  inputs.allergyProfile = { allergies, notes: allergyNotes };
 
-  // Hospitalization Profile
-  const hospitalizationNotes = formData.medicalBackground?.hasHospitalization === 'Yes' ? [
-    formData.medicalBackground.hospitalizationReason ? `Reason: ${formData.medicalBackground.hospitalizationReason}` : null,
-    formData.medicalBackground.hospitalizationDate ? `Date: ${formData.medicalBackground.hospitalizationDate}` : null,
-    formData.medicalBackground.hospitalizationNotes || null
-  ].filter(Boolean).join('; ') || null : null;
-  inputs.hospitalizationProfile = { hospitalizations: [], notes: hospitalizationNotes };
+  // Hospitalization Profile — hospitalization catalog IDs
+  const { hospitalizations, notes: hospNotes } = buildHospitalizationRecords(formData.medicalBackground);
+  inputs.hospitalizationProfile = { hospitalizations, notes: hospNotes };
 
-  // Operation Profile
-  const operationNotes = formData.medicalBackground?.hasOperation === 'Yes' ? [
-    formData.medicalBackground.operationProcedure ? `Procedure: ${formData.medicalBackground.operationProcedure}` : null,
-    formData.medicalBackground.operationDate ? `Date: ${formData.medicalBackground.operationDate}` : null,
-    formData.medicalBackground.operationNotes || null
-  ].filter(Boolean).join('; ') || null : null;
-  inputs.operationProfile = { operations: [], notes: operationNotes };
+  // Operation Profile — operation catalog IDs
+  const { operations, notes: opNotes } = buildOperationRecords(formData.medicalBackground);
+  inputs.operationProfile = { operations, notes: opNotes };
 
-  // Medication Profile
-  const medicationNotes = formData.medicalBackground?.hasMedications === 'Yes' ? [
-    formData.medicalBackground.medicationCategory ? `Category: ${formData.medicalBackground.medicationCategory}` : null,
-    formData.medicalBackground.medicationReason ? `Reason: ${formData.medicalBackground.medicationReason}` : null,
-    formData.medicalBackground.medicationDetails ? `Medications: ${formData.medicalBackground.medicationDetails}` : null
-  ].filter(Boolean).join('; ') || null : null;
-  inputs.medicationProfile = { medications: [], notes: medicationNotes };
+  // Medication Profile — medication catalog IDs
+  const { medications, notes: medicalNotes } = buildMedicationRecords(formData.medicalBackground);
+  inputs.medicationProfile = { medications, notes: medicalNotes };
 
-  // Immunization Profile — map frontend checkboxes to backend catalog records
+  // Immunization Profile — vaccine catalog IDs (direct)
   const { immunizationRecords, immunizationNotes } = buildImmunizationRecords(
     formData.medicalBackground,
     immunizationCatalog
@@ -604,8 +688,9 @@ const buildBatchInputs = (formData, photoIds = {}, immunizationCatalog = []) => 
   // Dental Procedure Profile (empty)
   inputs.dentalProcedureProfile = { procedures: [], notes: null };
 
-  // Oral Appliance Profile (empty)
-  inputs.oralApplianceProfile = { appliances: [], notes: null };
+  // Oral Appliance Profile — oral appliance catalog IDs
+  const { appliances, notes: oralNotes } = buildOralApplianceRecords(formData.dentalHistory, oralApplianceCatalog);
+  inputs.oralApplianceProfile = { appliances, notes: oralNotes };
 
   // Dental Photo Record – use real staged fileIds from the media REST API
   inputs.dentalPhotoRecord = {
@@ -997,6 +1082,323 @@ const mapDentalCleaningRange = (frontendValue) => {
  * Fetch the current patient's branch identifier from the profile endpoint.
  * Returns { branch, identifier } or null if not yet set.
  */
+// ─── Revision Pre-fill ────────────────────────────────────────────────────────
+
+/** Reverse mapping: backend dental cleaning enum → form dropdown value */
+const reverseMapDentalCleaningRange = (backendValue) => {
+  const mapping = {
+    '0-6':   '0 to 6 months ago',
+    '7-12':  '7 to 11 months ago',
+    '12-24': '1 year or more',
+  };
+  return mapping[backendValue] || '';
+};
+
+/** Reverse mapping: backend year level → form student category */
+const reverseMapYearLevel = (backendYear) => {
+  const mapping = {
+    'Freshman':  'Freshmen',
+    'Sophomore': 'Transferee',
+    'Junior':    'Old Student',
+    'Senior':    'Old Student',
+    'Masteral':  'Graduate studies (New student)',
+  };
+  return mapping[backendYear] || '';
+};
+
+/** Known program values (matches the form's programOptions list) */
+const KNOWN_PROGRAMS = new Set([
+  'AB ENGLISH (COA)', 'AB POLITICAL SCIENCE (COA)', 'ACT',
+  'ACCOUNTANCY (BSA)', 'BS BA ACCOUNTING INFORMATION SYSTEM (AIS) - (CBE)',
+  'ARCHITECTURE (CEA)', 'BS MATHEMATICS', 'BS ACCOUNTANCY (CBE)',
+  'BS BUSINESS ADMINISTRATION - FINANCIAL MANAGEMENT (CBE)',
+  'BS BUSINESS ADMINISTRATION - HRM (CBE)',
+  'BS BUSINESS ADMINISTRATION - LSCM (CBE)',
+  'BS BUSINESS ADMINISTRATION - MARKETING MANAGEMENT (CBE)',
+  'CIVIL ENGINEERING (CEA)', 'CHEMICAL ENGINEERING (CEA)',
+  'COMPUTER ENGINEERING (CEA)', 'COMPUTER SCIENCE (CCS)',
+  'DATA SCIENCE (CCS)', 'ELECTRICAL ENGINEERING (CEA)',
+  'ELECTRONICS AND COMMUNICATION ENGINEERING (CEA)',
+  'EMC-DAT (CCS)', 'EMC-GD (CCS)', 'GRADUATE PROGRAM',
+  'INDUSTRIAL ENGINEERING (CEA)', 'INFORMATION SYSTEM (CCS)',
+  'INFORMATION TECHNOLOGY (CCS)', 'MARINE TRANSPORTATION (MARINE)',
+  'MECHANICAL ENGINEERING (CEA)',
+]);
+
+/**
+ * Map fetched backend data back to the InitialMedicalRecordForm's formData shape.
+ */
+const mapRevisionDataToFormData = (profileData, emrData) => {
+  const pr  = profileData?.personalRecord || {};
+  const bid = profileData?.branchId;
+  const emr = emrData || {};
+
+  // ── Personal Info ──────────────────────────────────────────
+  const rawProgram       = emr?.emrProfile?.program || '';
+  const isKnownProgram   = KNOWN_PROGRAMS.has(rawProgram);
+  const ec               = emr?.emergencyContact || {};
+
+  const personalInfo = {
+    firstName:          pr.first_name     || '',
+    surname:            pr.last_name      || '',
+    middleName:         pr.middle_name    || '',
+    suffix:             pr.suffix         || '',
+    birthday:           pr.date_of_birth
+                          ? new Date(pr.date_of_birth).toISOString().split('T')[0]
+                          : '',
+    age:                '',   // auto-computed by the form on mount
+    gender:             pr.sex            || '',
+    civilStatus:        pr.civil_status   || '',
+    nationality:        pr.nationality    || '',
+    religion:           pr.religion       || '',
+    address:            pr.present_address || '',
+    contactNumber:      pr.contactNumber  || '',
+    studentNumber:      bid?.identifier   || '',
+    program:            isKnownProgram ? rawProgram : (rawProgram ? 'Other' : ''),
+    programOther:       isKnownProgram ? '' : rawProgram,
+    studentCategory:    reverseMapYearLevel(emr?.emrProfile?.year || ''),
+    drugTestDone:       '',   // not persisted
+    lastSchoolAttended: '',   // not persisted
+    emergencyContacts: [
+      {
+        name:          ec.firstContact?.contactName   || '',
+        relationship:  ec.firstContact?.relationship  || '',
+        contactNumber: ec.firstContact?.contactNumber || '',
+        address:       '',
+      },
+      {
+        name:          ec.secondContact?.contactName   || '',
+        relationship:  ec.secondContact?.relationship  || '',
+        contactNumber: ec.secondContact?.contactNumber || '',
+        address:       '',
+      },
+    ],
+  };
+
+  // ── Medical History ──────────────────────────────────────
+  const conditions = emr?.medicalHistory?.conditions || [];
+  const selfConditions   = {};
+  const familyConditions = {};
+  const familyWhoHasIt   = {};
+  for (const c of conditions) {
+    if (!c.conditionId) continue;
+    if (!c.relationship) {
+      selfConditions[c.conditionId] = true;
+    } else {
+      familyConditions[c.conditionId] = true;
+      familyWhoHasIt[c.conditionId]   = c.relationship;
+    }
+  }
+  const medicalHistory = {
+    self:           selfConditions,
+    family:         familyConditions,
+    familyWhoHasIt,
+  };
+
+  // ── Medical Background ───────────────────────────────────
+  const allergies    = emr?.allergyProfile?.allergies        || [];
+  const hosps        = emr?.hospitalizationProfile?.hospitalizations || [];
+  const ops          = emr?.operationProfile?.operations     || [];
+  const meds         = emr?.medicationProfile?.medications   || [];
+  const immunizations = emr?.immunizationProfile?.immunizations || [];
+  const ls           = emr?.lifestyle                        || {};
+  const va           = emr?.visualAcuity                     || {};
+
+  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, true]));
+  const hospMap     = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
+  const opsMap      = Object.fromEntries(ops.map(o => [o.procedureId, true]));
+  const medsMap     = Object.fromEntries(meds.map(m => [m.medicineId, true]));
+  const immunMap    = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, true]));
+
+  const vaNotesStr = va.notes || '';
+  const medicalBackground = {
+    immunizations:             immunMap,
+    immunizationOther:         '',
+    hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
+    allergies:                 allergyMap,
+    allergyOther:              '',
+    hasHospitalization:        hosps.length > 0        ? 'Yes' : 'No',
+    hospitalizationConditions: hospMap,
+    hospitalizationDate:       hosps[0]?.admissionDate
+                                 ? new Date(hosps[0].admissionDate).toISOString().split('T')[0]
+                                 : '',
+    hospitalizationNotes:      emr?.hospitalizationProfile?.notes || '',
+    hasOperation:              ops.length > 0          ? 'Yes' : 'No',
+    operationConditions:       opsMap,
+    operationDate:             ops[0]?.operationDate
+                                 ? new Date(ops[0].operationDate).toISOString().split('T')[0]
+                                 : '',
+    operationNotes:            emr?.operationProfile?.notes || '',
+    hasMedications:            meds.length > 0         ? 'Yes' : 'No',
+    selectedMedications:       medsMap,
+    medicationReason:          meds[0]?.description    || '',
+    medicationNotes:           emr?.medicationProfile?.notes || '',
+    smoker:                    ls.smoker ? 'yes' : 'no',
+    smokerSticksPerDay:        ls.numberOfCigarettesPerDay != null
+                                 ? String(ls.numberOfCigarettesPerDay) : '',
+    smokerYears:               ls.yearsSmoked != null
+                                 ? String(ls.yearsSmoked) : '',
+    alcoholDrinker:            ls.alcoholConsumer ? 'yes' : 'no',
+    alcoholFrequency:          ls.frequencyOfAlcoholConsumption || '',
+    eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes'),
+    contactLenses:             vaNotesStr.includes('Contact Lenses: Yes'),
+    gradeOD:                   va.acuity?.right_eye    || '',
+    gradeOS:                   va.acuity?.left_eye     || '',
+    visualAcuityDate:          va.acuity?.recorded_at
+                                 ? new Date(va.acuity.recorded_at).toISOString().split('T')[0]
+                                 : '',
+  };
+
+  // ── Dental History ───────────────────────────────────────
+  const dh        = emr?.dentalHistory || {};
+  const oaProfile = emr?.oralAppliance || {};
+  const appliances = oaProfile.appliances || [];
+  const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, true]));
+
+  const dentalHistory = {
+    // seenByDentist=true means patient has been seen before → firstTimeDentist='no'
+    // seenByDentist=false means patient has NEVER been seen → firstTimeDentist='yes'
+    firstTimeDentist:     dh.seenByDentist === true  ? 'no'
+                        : dh.seenByDentist === false ? 'yes' : '',
+    lastDentalConsultation: dh.lastVisitDate
+                              ? String(dh.lastVisitDate).slice(0, 7)  // YYYY-MM-DD → YYYY-MM
+                              : '',
+    lastDentalCleaning:   reverseMapDentalCleaningRange(dh.lastDentalCleaning || ''),
+    hasIntraOralAppliance: appliances.length > 0 ? 'yes' : 'no',
+    intraOralAppliances:   applianceMap,
+    applianceLocation:     appliances[0]?.arch || '',
+    toothExtraction:       '',   // never persisted to backend
+    dentalFilling:         '',   // never persisted to backend
+    upperTeethPhoto:       null, // files must be re-uploaded
+    lowerTeethPhoto:       null,
+  };
+
+  // ── OB-GYNE ─────────────────────────────────────────────
+  const obg = emr?.obgyne || {};
+  let menstruationDuration = '';
+  if (obg.notes) {
+    const durationMatch = obg.notes.match(/Duration:\s*(\d+)\s*days/i);
+    if (durationMatch) menstruationDuration = durationMatch[1];
+  }
+  const obgyne = {
+    lastMenstrualPeriod: obg.lastMenstrualPeriod
+                           ? new Date(obg.lastMenstrualPeriod).toISOString().split('T')[0]
+                           : '',
+    menstruationDuration,
+    dysmenorrhea: obg.hasDysmenorrhea ? 'Yes' : 'no',
+  };
+
+  return { personalInfo, medicalHistory, medicalBackground, dentalHistory, obgyne };
+};
+
+/**
+ * Fetch all existing record data for a patient in Revision status so the
+ * initial record form can be pre-populated with their previous submission.
+ *
+ * Makes two parallel requests:
+ *   1. /profile/patient — personal details + branch identifier
+ *   2. /emr/patient     — all EMR records in one batched query
+ *
+ * @returns {object|null} FormData-shaped object or null on complete failure
+ */
+export const fetchRevisionPrefill = async () => {
+  console.log('[EMR Service] Fetching revision pre-fill data...');
+
+  const [profileResult, emrResult] = await Promise.allSettled([
+    // ── Request 1: personal profile ──────────────────────
+    sendGraphQLRequest(
+      `query GetRevisionPersonalData {
+        personalRecord: getPersonalRecord {
+          first_name middle_name last_name suffix
+          date_of_birth sex civil_status nationality religion
+          contactNumber present_address
+        }
+        branchId: getBranchIdentifier {
+          identifier
+        }
+      }`,
+      {},
+      { endpoint: '/profile/patient' }
+    ),
+
+    // ── Request 2: all EMR data (batched) ─────────────────
+    sendGraphQLRequest(
+      `query GetRevisionEMRData {
+        emrProfile: getProfile {
+          ... on StudentProfile { program year }
+          ... on EmployeeProfile { department role }
+        }
+        emergencyContact: getEmergencyContact {
+          firstContact  { contactName relationship contactNumber }
+          secondContact { contactName relationship contactNumber }
+        }
+        medicalHistory: getMedicalHistory {
+          conditions { conditionId relationship }
+          notes
+        }
+        allergyProfile: getAllergyProfile {
+          allergies { allergenCatalogId status }
+          notes
+        }
+        hospitalizationProfile: getHospitalizationProfile {
+          hospitalizations { conditionId admissionDate notes }
+          notes
+        }
+        operationProfile: getOperationProfile {
+          operations { procedureId operationDate notes }
+          notes
+        }
+        medicationProfile: getMedicationProfile {
+          medications { medicineId description }
+          notes
+        }
+        immunizationProfile: getImmunizationProfile {
+          immunizations { vaccineTypeId }
+          notes
+        }
+        lifestyle: getLifestyle {
+          smoker numberOfCigarettesPerDay yearsSmoked
+          alcoholConsumer frequencyOfAlcoholConsumption
+        }
+        visualAcuity: getVisualAcuityProfile {
+          notes
+          acuity { left_eye right_eye recorded_at }
+        }
+        dentalHistory: getDentalHistory {
+          seenByDentist lastDentalCleaning lastVisitDate
+        }
+        oralAppliance: getOralApplianceProfile {
+          appliances { tagId arch }
+        }
+        obgyne: getObgynHistory {
+          lastMenstrualPeriod hasDysmenorrhea notes
+        }
+      }`,
+      {}
+    ),
+  ]);
+
+  if (profileResult.status === 'rejected') {
+    console.warn('[EMR Service] Profile prefill fetch failed:', profileResult.reason?.message);
+  }
+  if (emrResult.status === 'rejected') {
+    console.warn('[EMR Service] EMR prefill fetch failed:', emrResult.reason?.message);
+  }
+
+  // If both failed entirely, return null so the form starts blank
+  if (profileResult.status === 'rejected' && emrResult.status === 'rejected') {
+    console.error('[EMR Service] fetchRevisionPrefill: both requests failed, form will start blank');
+    return null;
+  }
+
+  const profileData = profileResult.status === 'fulfilled' ? profileResult.value : {};
+  const emrData     = emrResult.status    === 'fulfilled' ? emrResult.value    : {};
+
+  const mapped = mapRevisionDataToFormData(profileData, emrData);
+  console.log('[EMR Service] Revision pre-fill data mapped successfully');
+  return mapped;
+};
+
 export const getMyBranchIdentifier = async () => {
   const query = `
     query GetBranchIdentifier {

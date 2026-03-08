@@ -19,7 +19,7 @@ const mediaRouter = express.Router();
 // --------------------
 // POST - Stage upload
 // --------------------
-mediaRouter.post('stage/', jwtProtect("all"), upload.single('file'), async (req, res) => {
+mediaRouter.post('/stage/', jwtProtect("all"), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'NO_FILE_UPLOADED' });
@@ -51,7 +51,7 @@ mediaRouter.post('stage/', jwtProtect("all"), upload.single('file'), async (req,
 // --------------------
 // DELETE - Unstage file
 // --------------------
-mediaRouter.delete('unstage/:fileId', jwtProtect("all"), async (req, res) => {
+mediaRouter.delete('/unstage/:fileId', jwtProtect("all"), async (req, res) => {
   try {
     const { fileId } = req.params;
 
