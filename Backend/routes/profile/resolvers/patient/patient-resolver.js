@@ -28,13 +28,14 @@ Query = {
     return await Wrapper.Query._getUserPersonalRecord(_, { userId: user.id }, { user, res });
   },
 
-  getPersonalRecordLog: async (_, { from, offset, limit }, { user, res }) => { // getting the update status of the logged in user
+  getPersonalRecordLog: async (_, __, { user, res }) => { // getting the update status of the logged in user
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getUserPersonalRecordLog(_, { userId: user.id, from, offset, limit }, { user, res });
+    const rows = await Wrapper.Query._getUserPersonalRecordLog(_, { userId: user.id, offset: 0, limit: 1 }, { user, res });
+    return rows?.[0] || null;
   },
-  
+
   getPersonalRecordLogStatus: async (_, __, { user, res }) => { // getting the update status of the logged in user
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
