@@ -68,7 +68,7 @@ const STATIC_IMMUNIZATIONS = [
  */
 const ALL_CATALOGS_QUERY = `
   query FetchAllMedicalCatalogs {
-    medicalConditions: searchDomainCatalogs(domain: "MedicalCondition", filterIsValid: true, names: []) {
+    medicalConditions: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true, limit: 100) {
       id
       domain
       name
@@ -116,7 +116,7 @@ const ALL_CATALOGS_QUERY = `
       description
       isValid
     }
-    allergens: getAllergenCatalogs(filterIsValid: true) {
+    allergens: getAllergenCatalogs(filterIsValid: true, limit: 100) {
       id
       allergen
       type
