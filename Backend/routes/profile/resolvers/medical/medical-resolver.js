@@ -16,11 +16,6 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to view credential status of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
     const result = await Wrapper.Query._getUserCredentialStatus(_, { userId }, { user, res });
     return result;
    },

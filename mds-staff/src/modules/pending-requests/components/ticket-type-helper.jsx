@@ -19,28 +19,13 @@
 import { axiosRequest } from '../../../packages-core-adapter';
 
 /**
- * Session-level circuit-breaker.
- * null  = not yet tested
- * true  = at least one call succeeded (staff has profile_allow_view)
- * false = got a 401 (staff lacks profile_allow_view); skip all further calls
- *         to avoid cascading token-refresh loops across parallel ticket requests.
- */
-let _credentialCheckAvailable = null;
-
-/**
  * Calls /profile/medical → getUserCredentialStatus(userId).
- *
- * On a 401 (permission denied) the circuit-breaker is tripped and subsequent
- * calls skip the network round-trip entirely, returning null immediately.
- * On any other error null is also returned so callers can degrade gracefully.
+ * Returns null on any error so callers can degrade gracefully.
  *
  * @param {string} userId
  * @returns {Promise<string|null>}  e.g. 'Unverified' | 'active' | null
  */
 export const getUserCredentialStatus = async (userId) => {
-  // Short-circuit once we know the endpoint is off-limits for this session
-  if (_credentialCheckAvailable === false) return null;
-
   try {
     const response = await axiosRequest.post('/profile/medical', {
       query: `query GetUserCredentialStatus($userId: ID!) {
@@ -48,21 +33,9 @@ export const getUserCredentialStatus = async (userId) => {
       }`,
       variables: { userId },
     });
-    _credentialCheckAvailable = true;
     return response.data?.data?.getUserCredentialStatus ?? null;
   } catch (err) {
-    if (err?.response?.status === 401) {
-      // Permission denied — trip the circuit-breaker so we don't repeat the
-      // refresh-and-retry cycle for every remaining ticket in the batch.
-      _credentialCheckAvailable = false;
-      console.warn(
-        '[MDSystem] ticket-type-helper: Staff lacks the profile_allow_view permission ' +
-        '(ALLOW_TO_VIEW_PROFILE). Falling back to scope-based ticket classification. ' +
-        'Grant that role to the staff account to enable precise Initial / Update separation.',
-      );
-    } else {
-      console.error('[MDSystem] ticket-type-helper getUserCredentialStatus error:', err?.message ?? err);
-    }
+    console.error('[MDSystem] ticket-type-helper getUserCredentialStatus error:', err?.message ?? err);
     return null;
   }
 };
@@ -95,6 +68,6 @@ export const enrichWithInitialFlag = async (tickets) =>
       // 'active'           → patient already has approved records   → UPDATE
       // null (call failed) → unknown; fall back to treating as INITIAL (safer than
       //                      hiding the record from the Initial tab entirely)
-      return { ...ticket, is_initial: status !== 'active' };
+      return { ...ticket, is_initial: status?.toLowerCase() !== 'active' };
     }),
   );
