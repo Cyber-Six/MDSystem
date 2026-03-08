@@ -51,7 +51,7 @@ Templates are `.docx` files using Jinja2-style tags via `docxtpl`:
    ```
 5. Set required env variables in `Backend/.env`:
    ```env
-   DOCX_GENERATED_PORT=8000
+   DOCX_GENERATED_PORT=3002
    TEMPLATE_PATH=/absolute/path/to/template.docx
    ```
 6. Run the service:
@@ -68,7 +68,7 @@ Templates are `.docx` files using Jinja2-style tags via `docxtpl`:
 - [ ] In-browser HTML preview via `mammoth.js`
 - [ ] DOCX download from preview page
 - [ ] Add a dedicated Express route (e.g. `POST /api/documents/generate`) that proxies to the FastAPI service
-- [ ] PDF export — requires `docx2pdf` (needs LibreOffice installed on the server)
+- [ ] PDF export via mammoth + WeasyPrint (pure Python, no system office suite needed)
 - [ ] Define tag contracts per document type:
   - **Medical Certificate:** `{{ NAME }}`, `{{ DATE }}`, `{{ DIAGNOSIS }}`, `{{ LICENSE_NO }}`
   - **Medical Clearance:** `{{ NAME }}`, `{{ DATE }}`, `{{ PURPOSE }}`, `{{ LICENSE_NO }}`
