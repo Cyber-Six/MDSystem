@@ -1,0 +1,78 @@
+scalar Date
+
+enum ItemCategory {
+  Medicine
+  Supply
+}
+
+enum DosageUnit {
+  mg
+  g
+  mcg
+  ml
+  L
+  IU
+}
+
+enum LocationDesignation {
+  Arlegui
+  Casal
+  QuezonCity
+}
+
+enum TransactionActionType {
+  Issue
+  Return
+  Adjust
+}
+
+type AvailableMedicine {
+  id: ID!
+  item_code: String
+  item_name: String
+  category: ItemCategory
+  description: String
+  batchId: ID
+  batchNumber: String
+  dosageUnit: DosageUnit
+  dosageValue: Int
+  expiryDate: Date
+  location: LocationDesignation
+}
+
+type PrescriptionTransaction {
+  id: ID!
+  patientId: Int
+  action: TransactionActionType
+  quantity: Int
+  issuedBy: Int
+  issuedAt: Date
+  notes: String
+  items: [PrescriptionItem]
+}
+
+type PrescriptionItem {
+  id: ID!
+  batchId: Int
+  transactionId: Int
+}
+
+input PrescriptionItemInput {
+  batchId: Int!
+  quantity: Int!
+}
+
+input IssuePrescriptionInput {
+  patientId: Int!
+  items: [PrescriptionItemInput!]!
+  notes: String
+}
+
+type Query {
+  getAvailableMedicine(location: LocationDesignation, offset: Int, limit: Int): [AvailableMedicine!]
+  getPatientPrescriptions(patientId: ID!, offset: Int, limit: Int): [PrescriptionTransaction!]
+}
+
+type Mutation {
+  issuePrescription(input: IssuePrescriptionInput!): PrescriptionTransaction
+}

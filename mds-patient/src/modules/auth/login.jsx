@@ -7,6 +7,7 @@ import DataConsent from './data-consent/data-consent.jsx';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showTwoFactor, setShowTwoFactor] = useState(false);
@@ -219,8 +220,8 @@ const Login = () => {
         <div className="w-full max-w-md mx-auto">
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
-              <p className="text-error-600 dark:text-error-400 text-sm text-center">
+            <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
+              <p className="text-error-600 text-sm text-center">
                 {error}
               </p>
             </div>
@@ -229,7 +230,7 @@ const Login = () => {
           <form onSubmit={handleInitialLogin} className="space-y-5">
           {/* Email Input */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-secondary-700 dark:text-dark-text-primary mb-2">
+            <label htmlFor="email" className="block text-sm font-medium text-secondary-700 mb-2">
               Email Address
             </label>
             <input 
@@ -240,35 +241,57 @@ const Login = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isLoading}
-              className="w-full px-4 py-3 bg-neutral-50 dark:bg-dark-bg-tertiary 
-                       text-secondary-900 dark:text-dark-text-primary 
-                       border border-neutral-300 dark:border-dark-border-primary 
+              className="w-full px-4 py-3 bg-neutral-50 
+                       text-secondary-900 
+                       border border-neutral-300 
                        rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       placeholder:text-neutral-400 dark:placeholder:text-dark-text-tertiary
+                       placeholder:text-neutral-400
                        transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
           
           {/* Password Input */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-secondary-700 dark:text-dark-text-primary mb-2">
+            <label htmlFor="password" className="block text-sm font-medium text-secondary-700 mb-2">
               Password
             </label>
-            <input 
-              id="password"
-              type="password" 
-              placeholder="Enter your password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-              className="w-full px-4 py-3 bg-neutral-50 dark:bg-dark-bg-tertiary 
-                       text-secondary-900 dark:text-dark-text-primary 
-                       border border-neutral-300 dark:border-dark-border-primary 
-                       rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       placeholder:text-neutral-400 dark:placeholder:text-dark-text-tertiary
-                       transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            />
+            <div className="relative">
+              <input 
+                id="password"
+                type={showPassword ? "text" : "password"} 
+                placeholder="Enter your password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                className="w-full px-4 py-3 bg-neutral-50 
+                         text-secondary-900 
+                         border border-neutral-300 
+                         rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                         placeholder:text-neutral-400
+                         transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+                         pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary-500 hover:text-secondary-700 transition-colors disabled:opacity-50"
+                disabled={isLoading}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 1l22 22" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
           
           {/* Login Button */}
@@ -276,7 +299,7 @@ const Login = () => {
             type="submit" 
             disabled={isLoading}
             className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
-                     dark:bg-primary-600 dark:hover:bg-primary-700
+                    
                      text-white font-semibold py-3.5 rounded-lg
                      transition-all duration-200 
                      disabled:opacity-50 disabled:cursor-not-allowed
@@ -300,7 +323,7 @@ const Login = () => {
             <button 
               type="button" 
               onClick={() => setShowForgotPassword(true)}
-              className="text-accent-600 dark:text-accent-400 hover:text-accent-700 dark:hover:text-accent-300 
+              className="text-accent-600 hover:text-accent-700 
                        font-medium text-sm transition-colors hover:underline"
             >
               Forgot your password?
@@ -319,7 +342,7 @@ const Login = () => {
             />
             
             {/* Modal Card */}
-            <div className="relative w-full max-w-md bg-white dark:bg-dark-bg-primary rounded-2xl shadow-2xl">
+            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl">
               <div className="px-8 md:px-6 sm:px-5 py-8 md:py-6">
                 {/* Forgot Password Component */}
                 <ForgetPassword
@@ -347,23 +370,23 @@ const Login = () => {
     return (
       <div className="w-full max-w-md mx-auto">
         <div className="text-center mb-8">
-          <div className="bg-primary-100 dark:bg-primary-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-primary-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
+            <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary mb-3">
+          <h2 className="text-2xl font-bold text-secondary-900 mb-3">
             Verify Your Email
           </h2>
-          <p className="text-sm text-neutral-600 dark:text-dark-text-secondary leading-relaxed">
+          <p className="text-sm text-neutral-600 leading-relaxed">
             We've sent a 6-digit code to<br />
-            <span className="font-semibold text-secondary-900 dark:text-dark-text-primary">{email}</span>
+            <span className="font-semibold text-secondary-900">{email}</span>
           </p>
         </div>
         
         {error && (
-          <div className="mb-6 p-4 bg-error-50 dark:bg-error-900/20 border border-error-300 dark:border-error-700 rounded-lg">
-            <p className="text-error-600 dark:text-error-400 text-sm text-center">
+          <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
+            <p className="text-error-600 text-sm text-center">
               {error}
             </p>
           </div>
@@ -371,7 +394,7 @@ const Login = () => {
         
         <form onSubmit={handleTwoFactorVerification} className="space-y-5">
           <div>
-            <label htmlFor="otp" className="block text-sm font-medium text-secondary-700 dark:text-dark-text-primary mb-2 text-center">
+            <label htmlFor="otp" className="block text-sm font-medium text-secondary-700 mb-2 text-center">
               Verification Code
             </label>
             <input 
@@ -383,11 +406,11 @@ const Login = () => {
               maxLength={6}
               required
               disabled={isLoading}
-              className="w-full px-4 py-4 bg-neutral-50 dark:bg-dark-bg-tertiary 
-                       text-secondary-900 dark:text-dark-text-primary text-center text-2xl font-mono tracking-widest
-                       border-2 border-neutral-300 dark:border-dark-border-primary 
+              className="w-full px-4 py-4 bg-neutral-50 
+                       text-secondary-900 text-center text-2xl font-mono tracking-widest
+                       border-2 border-neutral-300 
                        rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       placeholder:text-neutral-400 dark:placeholder:text-dark-text-tertiary placeholder:text-xl
+                       placeholder:text-neutral-400 placeholder:text-xl
                        transition-all duration-200 disabled:opacity-50"
             />
           </div>
@@ -396,7 +419,7 @@ const Login = () => {
             type="submit" 
             disabled={isLoading}
             className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
-                     dark:bg-primary-600 dark:hover:bg-primary-700
+                    
                      text-white font-semibold py-3.5 rounded-lg
                      transition-all duration-200 
                      disabled:opacity-50 disabled:cursor-not-allowed
@@ -410,9 +433,9 @@ const Login = () => {
               type="button" 
               onClick={handleResend2FA}
               disabled={isLoading}
-              className="flex-1 bg-neutral-100 dark:bg-dark-bg-tertiary hover:bg-neutral-200 dark:hover:bg-secondary-700
-                       text-secondary-700 dark:text-dark-text-primary font-medium py-3 rounded-lg 
-                       border border-neutral-300 dark:border-dark-border-primary
+              className="flex-1 bg-neutral-100 hover:bg-neutral-200
+                       text-secondary-700 font-medium py-3 rounded-lg 
+                       border border-neutral-300
                        transition-all duration-200 disabled:opacity-50 text-sm"
             >
               Resend Code
@@ -425,9 +448,9 @@ const Login = () => {
                 setVerificationKey('');
                 setTwoFactorCode('');
               }}
-              className="flex-1 bg-white dark:bg-dark-bg-primary hover:bg-neutral-50 dark:hover:bg-secondary-800
-                       text-secondary-700 dark:text-dark-text-primary font-medium py-3 rounded-lg 
-                       border border-neutral-300 dark:border-dark-border-secondary
+              className="flex-1 bg-white hover:bg-neutral-50
+                       text-secondary-700 font-medium py-3 rounded-lg 
+                       border border-neutral-300
                        transition-all duration-200 text-sm"
             >
               Go Back

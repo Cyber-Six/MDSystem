@@ -81,6 +81,32 @@ async function enqueueResetPassword(userEmail, portal="patient") {
   };
 }
 
+async function enqueueMedicineRequestNotification(userEmail, requestId, status, notes) {
+  const job = await emailQueue.add('sendMedicineRequestNotification', {
+    userEmail,
+    data: { requestId, status, notes },
+  }, {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 1000 },
+    removeOnComplete: true,
+  });
+  const waitingCount = await emailQueue.getWaitingCount();
+  return { jobId: job.id, position: waitingCount };
+}
+
+async function enqueuePrescriptionNotification(userEmail, transactionId, notes) {
+  const job = await emailQueue.add('sendPrescriptionNotification', {
+    userEmail,
+    data: { transactionId, notes },
+  }, {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 1000 },
+    removeOnComplete: true,
+  });
+  const waitingCount = await emailQueue.getWaitingCount();
+  return { jobId: job.id, position: waitingCount };
+}
+
   
 // -------------------- Templates --------------------
 function emailVerificationTemplate(otp) {
@@ -145,6 +171,18 @@ function medicineRequestRejectedTemplate(requestId, reason) {
   `;
 }
 
+function prescriptionIssuedTemplate(transactionId, notes) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+      <h2 style="color:#2F4F4F;">Prescription Issued</h2>
+      <p>A prescription <strong>#${transactionId}</strong> has been <span style="color:green;font-weight:bold;">issued</span> for you by the medical staff.</p>
+      <p>Please visit the clinic to collect your prescribed medicine.</p>
+      ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+      <p style="color:#888;">If you have questions, please contact the clinic directly.</p>
+    </div>
+  `;
+}
+
 function passwordResetTemplate(sessionToken, portal) {
   const route = process.env.RESET_PASSWORD_DOMAIN_ROUTE;
   const resetLink = `https://${portal}.${route}/${sessionToken}`;
@@ -186,6 +224,17 @@ function buildEmailTemplate(job_name, userEmail, data) {
   } else if (job_name === "sendPasswordResetLink"){
     subject = "Reset Your MDSystem Password";
     htmlContent = passwordResetTemplate(data.resetpwlink, data.portal); // ✅ callable fn
+  } else if (job_name === "sendMedicineRequestNotification") {
+    if (data.status === "Approved") {
+      subject = "Medicine Request Approved";
+      htmlContent = medicineRequestApprovedTemplate(data.requestId, data.notes);
+    } else {
+      subject = "Medicine Request Rejected";
+      htmlContent = medicineRequestRejectedTemplate(data.requestId, data.notes);
+    }
+  } else if (job_name === "sendPrescriptionNotification") {
+    subject = "Prescription Issued";
+    htmlContent = prescriptionIssuedTemplate(data.transactionId, data.notes);
   } else {
     subject = "Your MDSystem OTP Verification";
     htmlContent = emailVerificationTemplate(data.otp); // fallback
@@ -194,4 +243,4 @@ function buildEmailTemplate(job_name, userEmail, data) {
   return { to: userEmail, subject, htmlContent };
 }
 
-module.exports = { enqueueEmail, enqueueEmailVerification, enqueueEmail2FA, enqueueResetPassword, buildEmailTemplate, medicineRequestApprovedTemplate, medicineRequestRejectedTemplate };
+module.exports = { enqueueEmail, enqueueEmailVerification, enqueueEmail2FA, enqueueResetPassword, enqueueMedicineRequestNotification, enqueuePrescriptionNotification, buildEmailTemplate, medicineRequestApprovedTemplate, medicineRequestRejectedTemplate, prescriptionIssuedTemplate };
