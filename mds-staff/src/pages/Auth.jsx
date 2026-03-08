@@ -1,9 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Login from '../modules/auth/login';
 import AuthSlides from '../modules/auth/auth-slides.jsx';
 
 const Auth = () => {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const buttonRef = useRef(null);
+
+  // Blur button when panel closes to remove focus styling
+  useEffect(() => {
+    if (!isPanelOpen && buttonRef.current) {
+      buttonRef.current.blur();
+    }
+  }, [isPanelOpen]);
 
   const togglePanel = () => {
     setIsPanelOpen(!isPanelOpen);
@@ -35,7 +43,8 @@ const Auth = () => {
       {/* Toggle Button - Shows only when login panel is closed */}
       {!isPanelOpen && (
         <button 
-          className="toggle-btn fixed top-6 right-6 px-6 py-3 bg-gradient-to-r from-primary-400 to-primary-500 hover:from-primary-500 hover:to-primary-600 text-white font-semibold rounded-full shadow-lg cursor-pointer flex items-center gap-2 z-[12] transition-all duration-300 hover:shadow-xl hover:scale-105"
+          ref={buttonRef}
+          className="toggle-btn fixed top-6 right-6 px-6 py-3 !bg-primary-500 hover:!bg-primary-600 text-white font-semibold rounded-full shadow-lg cursor-pointer flex items-center gap-2 z-[12] transition-colors duration-200 hover:shadow-xl active:!bg-primary-700 focus:!ring-0 focus:!outline-none"
           onClick={togglePanel}
           aria-label="Open login panel"
         >
@@ -47,15 +56,15 @@ const Auth = () => {
       )}
 
       {/* Sliding Login Panel */}
-      <div className={`auth-panel fixed top-0 h-screen w-full max-w-[420px] bg-white dark:bg-dark-bg-primary shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen ? 'right-0' : '-right-full'}`}>
+      <div className={`auth-panel fixed top-0 h-screen w-full max-w-[420px] bg-white shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen ? 'right-0' : '-right-full'}`}>
         <div className="h-full flex flex-col px-8 md:px-6 sm:px-5 py-8 md:py-6">
           {/* X Close Button */}
           <button
             onClick={closePanel}
-            className="absolute top-6 right-6 p-2 hover:bg-neutral-100 dark:hover:bg-dark-bg-secondary rounded-full transition-colors z-20"
+            className="absolute top-6 right-6 p-2 hover:bg-neutral-100 rounded-full transition-colors z-20"
             aria-label="Close login panel"
           >
-            <svg className="w-6 h-6 text-secondary-600 dark:text-dark-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 text-secondary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -68,10 +77,10 @@ const Auth = () => {
                 alt="MDSystem Logo" 
                 className="h-24 w-24 mx-auto mb-4"
               />
-              <h1 className="text-2xl font-bold text-secondary-900 dark:text-dark-text-primary font-heading mb-1">
+              <h1 className="text-2xl font-bold text-secondary-900 font-heading mb-1">
                 Staff Portal
               </h1>
-              <p className="text-xs text-neutral-600 dark:text-dark-text-secondary">
+              <p className="text-xs text-neutral-600">
                 Sign in to your staff account
               </p>
             </div>
