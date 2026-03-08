@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ProgressStepper from './progress-stepper';
 import PersonalInfoStep from './personal-info-step';
 import MedicalHistoryStep from './medical-history-step';
@@ -7,12 +7,33 @@ import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
 import { updatePersonalInfo } from './personal-info-service';
 import { submitUpdateRecord } from './update-record-service';
+import { axiosRequest } from '../../../packages-core-adapter';
 
 const RecordUpdateForm = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
+
+  // Fetch patient sex on mount so OB-GYN section shows correctly for female patients
+  useEffect(() => {
+    const fetchUserSex = async () => {
+      try {
+        const response = await axiosRequest({
+          method: 'POST',
+          url: '/profile/patient',
+          data: { query: '{ getPersonalRecord { sex } }' }
+        });
+        const sex = response.data?.data?.getPersonalRecord?.sex;
+        if (sex) {
+          setFormData(prev => ({ ...prev, sex }));
+        }
+      } catch (error) {
+        console.warn('[RecordUpdateForm] Could not fetch user sex:', error.message);
+      }
+    };
+    fetchUserSex();
+  }, []);
 
   // Dynamically build steps based on recordType
   const getSteps = () => {
@@ -40,8 +61,8 @@ const RecordUpdateForm = () => {
 
     if (stepName === 'Medical History') {
       // Lifestyle habits are always required
-      if (!formData.smoking || !formData.alcohol || !formData.vape) {
-        alert('Please fill in all Lifestyle Habits (Smoking, Alcohol, Vape) before proceeding.');
+      if (!formData.smoking || !formData.alcohol) {
+        alert('Please fill in all Lifestyle Habits (Smoking, Alcohol) before proceeding.');
         return false;
       }
       // If user said yes to allergies, check sub-fields
@@ -98,11 +119,6 @@ const RecordUpdateForm = () => {
         alert('Please select when your last dental cleaning was.');
         return false;
       }
-      // Oral hygiene habits are required
-      if (!formData.brushingFrequency || !formData.flossingHabit || !formData.mouthwashUse) {
-        alert('Please fill in all Oral Hygiene Habits (Brushing, Flossing, Mouthwash) before proceeding.');
-        return false;
-      }
       // Validate oral appliance entries if any were added
       const appliances = formData.oralAppliances || [];
       for (const appliance of appliances) {
@@ -118,6 +134,15 @@ const RecordUpdateForm = () => {
           alert('Please fill in the Date of Procedure for all selected dental procedures.');
           return false;
         }
+      }
+      // Dental photos are required (backend DentalPhotoRecordInput requires UUID! for both fields)
+      if (!formData.upperTeethPhoto?.file) {
+        alert('Please upload a photo of your upper teeth.');
+        return false;
+      }
+      if (!formData.lowerTeethPhoto?.file) {
+        alert('Please upload a photo of your lower teeth.');
+        return false;
       }
       return true;
     }
@@ -161,8 +186,8 @@ const RecordUpdateForm = () => {
       // Success!
       alert(`✅ ${recordType === 'both' ? 'Medical and Dental' : recordType === 'medical' ? 'Medical' : 'Dental'} record updated successfully!\n\nYour update has been submitted for review.`);
       
-      // Reset form and redirect to choice page
-      setFormData({});
+      // Reset form and redirect to choice page (preserve sex for OB-GYN gating)
+      setFormData(prev => ({ sex: prev.sex }));
       setCurrentStep(0);
       setRecordType(null);
       
@@ -202,13 +227,13 @@ const RecordUpdateForm = () => {
   const handleChoiceSelect = (choice) => {
     setRecordType(choice);
     setCurrentStep(0);
-    setFormData({});
+    setFormData(prev => ({ sex: prev.sex }));
   };
 
   const handleChangeType = () => {
     setRecordType(null);
     setCurrentStep(0);
-    setFormData({});
+    setFormData(prev => ({ sex: prev.sex }));
   };
 
   return (

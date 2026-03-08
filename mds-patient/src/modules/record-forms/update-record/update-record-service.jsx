@@ -295,13 +295,13 @@ export async function createMedicalHistory(formData) {
     medicalHistoryNotes.push(`Self Other: ${formData.selfOther}`);
   }
   
-  // Add family conditions with who has it information
+  // Add family conditions with relationship information
   if (formData.familyConditions) {
     const familyConditions = Object.entries(formData.familyConditions)
-      .filter(([_, checked]) => checked)
-      .map(([conditionId, _]) => {
-        const whoHasIt = formData.familyWhoHasIt?.[conditionId];
-        return whoHasIt ? `${conditionId} (${whoHasIt})` : conditionId;
+      .filter(([_, val]) => val && val.checked)
+      .map(([conditionId, val]) => {
+        const relationship = val.relationship;
+        return relationship ? `${conditionId} (${relationship})` : conditionId;
       });
     
     if (familyConditions.length > 0) {
@@ -348,34 +348,33 @@ export async function createAllergyProfile(formData) {
     }
   `;
 
-  // Build allergy notes from form data
+  // Build allergy notes and allergy entries from form data
   let allergyNotes = null;
-  if (formData.hasAllergies === 'Yes') {
-    const allergyList = [];
-    
-    // Get selected allergies
-    if (formData.allergies) {
-      const selectedAllergies = Object.entries(formData.allergies)
-        .filter(([_, checked]) => checked)
-        .map(([allergyId, _]) => allergyId);
-      
-      if (selectedAllergies.length > 0) {
-        allergyList.push(...selectedAllergies);
-      }
+  const allergies = [];
+
+  if (formData.hasAllergies === 'yes') {
+    const selectedIds = formData.selectedAllergies || [];
+
+    for (const allergenId of selectedIds) {
+      const detail = formData.allergyDetails?.[allergenId] || {};
+      allergies.push({
+        allergenCatalogId: allergenId,
+        status: detail.status || 'Active',
+        severity: detail.severity || 'Mild',
+        notes: null,
+        date_identified: null
+      });
     }
-    
-    // Add other allergies
-    if (formData.allergyOther) {
-      allergyList.push(formData.allergyOther);
-    }
-    
-    if (allergyList.length > 0) {
-      allergyNotes = `Allergies: ${allergyList.join(', ')}`;
-    }
+
+    // Capture free-text notes (typed field when catalogs are unavailable)
+    const noteParts = [];
+    if (formData.allergiesDetail) noteParts.push(formData.allergiesDetail);
+    if (formData.allergiesNotes) noteParts.push(formData.allergiesNotes);
+    if (noteParts.length > 0) allergyNotes = noteParts.join('; ');
   }
 
   const input = {
-    allergies: [], // Empty - catalog IDs not available in form (using notes instead)
+    allergies,
     notes: allergyNotes
   };
 
@@ -401,19 +400,25 @@ export async function createLifestyle(formData) {
     }
   `;
 
+  const isSmoker = formData.smoking === 'Current' || formData.smoking === 'Former';
+  const isDrinker = formData.alcohol === 'Occasionally' || formData.alcohol === 'Regularly';
+
+  // Build lifestyle notes from form selections
+  const lifestyleNotes = [
+    `Smoking: ${formData.smoking || 'Never'}`,
+    `Alcohol: ${formData.alcohol || 'Never'}`,
+    formData.lifestyleNotes || null
+  ].filter(Boolean).join('; ');
+
   const input = {
-    smoker: formData.smoker === 'yes',
-    numberOfCigarettesPerDay: formData.smoker === 'yes' 
-      ? parseInt(formData.smokerSticksPerDay) || null
+    smoker: isSmoker,
+    numberOfCigarettesPerDay: null,
+    yearsSmoked: null,
+    alcoholConsumer: isDrinker,
+    frequencyOfAlcoholConsumption: isDrinker
+      ? formData.alcohol
       : null,
-    yearsSmoked: formData.smoker === 'yes'
-      ? parseInt(formData.smokerYears) || null
-      : null,
-    alcoholConsumer: formData.alcoholDrinker === 'yes',
-    frequencyOfAlcoholConsumption: formData.alcoholDrinker === 'yes'
-      ? formData.alcoholFrequency || null
-      : null,
-    notes: null
+    notes: lifestyleNotes
   };
 
   console.log('🏃 Creating lifestyle...', input);
@@ -444,9 +449,7 @@ export async function createVisualAcuityProfile(formData) {
 
   const hasVisualAcuity = formData.visualAcuity === 'yes';
   const input = {
-    notes: hasVisualAcuity
-      ? `Eyeglasses: ${formData.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.contactLenses ? 'Yes' : 'No'}`
-      : null,
+    notes: hasVisualAcuity ? 'Uses corrective lenses' : null,
     acuity: hasVisualAcuity && formData.acuityId
       ? {
           acuityId: formData.acuityId,
@@ -523,31 +526,28 @@ export async function createImmunizationProfile(formData) {
   let immunizationNotes = null;
   const immunizationList = [];
   
-  // Get selected immunizations
-  if (formData.immunizations) {
-    const selectedImmunizations = Object.entries(formData.immunizations)
-      .filter(([_, checked]) => checked)
-      .map(([immunizationId, _]) => immunizationId);
-    
-    if (selectedImmunizations.length > 0) {
-      immunizationList.push(...selectedImmunizations);
+  // Get selected immunizations (formData.immunizations is an array of IDs)
+  if (Array.isArray(formData.immunizations) && formData.immunizations.length > 0) {
+    immunizationList.push(...formData.immunizations);
+  }
+
+  // Add immunization details (dates, dose numbers)
+  if (formData.immunizationDetails) {
+    const details = Object.entries(formData.immunizationDetails)
+      .map(([vaccineId, detail]) => {
+        const parts = [vaccineId];
+        if (detail.date) parts.push(`date: ${detail.date}`);
+        if (detail.doseNumber) parts.push(`dose: ${detail.doseNumber}`);
+        return parts.join(' ');
+      });
+    if (details.length > 0) {
+      immunizationList.push(`Details: ${details.join(', ')}`);
     }
   }
-  
-  // Get COVID vaccine types if applicable
-  if (formData.covidVaccineType) {
-    const covidTypes = Object.entries(formData.covidVaccineType)
-      .filter(([_, checked]) => checked)
-      .map(([typeId, _]) => typeId);
-    
-    if (covidTypes.length > 0) {
-      immunizationList.push(`COVID vaccine types: ${covidTypes.join(', ')}`);
-    }
-  }
-  
-  // Add other immunizations
-  if (formData.immunizationOther) {
-    immunizationList.push(formData.immunizationOther);
+
+  // Add immunization notes
+  if (formData.immunizationNotes) {
+    immunizationList.push(formData.immunizationNotes);
   }
   
   if (immunizationList.length > 0) {
@@ -583,12 +583,15 @@ export async function createHospitalizationProfile(formData) {
   `;
 
   // Build hospitalization notes from form structure
-  const hospitalizationNotes = formData.hasHospitalization === 'Yes' ? [
-    formData.hospitalizationReason 
-      ? `Reason: ${formData.hospitalizationReason}` 
+  const hospitalizationNotes = formData.hasHospitalizations === 'yes' ? [
+    formData.hospitalizationCondition 
+      ? `Condition: ${formData.hospitalizationCondition}` 
       : null,
-    formData.hospitalizationDate 
-      ? `Date: ${formData.hospitalizationDate}` 
+    formData.admissionDate 
+      ? `Admission: ${formData.admissionDate}` 
+      : null,
+    formData.dischargeDate 
+      ? `Discharge: ${formData.dischargeDate}` 
       : null,
     formData.hospitalizationNotes || null
   ].filter(Boolean).join('; ') || null : null;
@@ -622,14 +625,14 @@ export async function createOperationProfile(formData) {
   `;
 
   // Build operation notes from form structure
-  const operationNotes = formData.hasOperation === 'Yes' ? [
-    formData.operationProcedure 
-      ? `Procedure: ${formData.operationProcedure}` 
+  const operationNotes = formData.hasSurgeries === 'yes' ? [
+    formData.surgeryType 
+      ? `Type: ${formData.surgeryType}` 
       : null,
     formData.operationDate 
       ? `Date: ${formData.operationDate}` 
       : null,
-    formData.operationNotes || null
+    formData.surgeryNotes || null
   ].filter(Boolean).join('; ') || null : null;
 
   const input = {
@@ -661,17 +664,18 @@ export async function createMedicationProfile(formData) {
   `;
 
   // Build medication notes from form structure
-  const medicationNotes = formData.hasMedications === 'Yes' ? [
-    formData.medicationCategory 
-      ? `Category: ${formData.medicationCategory}` 
-      : null,
-    formData.medicationReason 
-      ? `Reason: ${formData.medicationReason}` 
-      : null,
-    formData.medicationDetails 
-      ? `Medications: ${formData.medicationDetails}` 
-      : null
-  ].filter(Boolean).join('; ') || null : null;
+  const medicationNotes = formData.hasMedications === 'yes' ? (() => {
+    const meds = formData.currentMedications || [];
+    const medEntries = meds.map((m, i) => {
+      const parts = [`#${i + 1}: ${m.medicineId || 'Unknown'}`];
+      if (m.description) parts.push(m.description);
+      return parts.join(' - ');
+    });
+    const parts = [];
+    if (medEntries.length > 0) parts.push(medEntries.join('; '));
+    if (formData.medicationNotes) parts.push(formData.medicationNotes);
+    return parts.length > 0 ? parts.join('; ') : null;
+  })() : null;
 
   const input = {
     medications: [], // Empty - catalog IDs not available in form (using notes instead)
@@ -829,7 +833,7 @@ export async function submitMedicalUpdate(formData) {
     results.visualAcuityProfile = await createVisualAcuityProfile(formData);
 
     // OB-GYN (Female only)
-    if (formData.gender === 'Female') {
+    if (formData.sex === 'Female') {
       console.log('[Medical Update] Creating OB-GYNE history...');
       results.obgynHistory = await createObgynHistory(formData);
     } else {

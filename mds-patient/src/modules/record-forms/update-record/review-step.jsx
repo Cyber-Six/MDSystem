@@ -36,14 +36,12 @@ const ReviewStep = ({ formData, onEdit, recordType }) => {
     'Program': formData.program,
     'Age': formData.age,
     'School Year': formData.schoolYear,
-    'Semester': formData.semester,
     'Sex': formData.sex,
     'Home Address': formData.homeAddress,
     'Boarding Address': formData.boardingAddress,
     'Contact Number': formData.contactNumber,
     'Email': formData.email,
     'Civil Status': formData.civilStatus,
-    'Student Category': formData.studentCategory,
     'Emergency Contact 1': formData.emergencyContact1Name 
       ? `${formData.emergencyContact1Name} (${formData.emergencyContact1Relationship}) - ${formData.emergencyContact1Number}`
       : null,
@@ -52,41 +50,47 @@ const ReviewStep = ({ formData, onEdit, recordType }) => {
       : null
   };
 
+  const selfConditionsList = formData.selfConditions
+    ? Object.entries(formData.selfConditions).filter(([_, v]) => v).map(([k]) => k).join(', ')
+    : null;
+  const familyConditionsList = formData.familyConditions
+    ? Object.entries(formData.familyConditions)
+        .filter(([_, v]) => v?.checked)
+        .map(([k, v]) => v.relationship ? `${k} (${v.relationship})` : k)
+        .join(', ')
+    : null;
+
   const medicalHistory = {
-    'Medical Conditions': formData.medicalConditions?.join(', '),
-    'Medical Conditions Details': formData.medicalConditionsOther,
+    'Self Conditions': selfConditionsList,
+    'Family Conditions': familyConditionsList,
     'Allergies': formData.hasAllergies,
-    'Allergy Details': formData.allergiesDetail,
+    'Allergy Notes': formData.allergiesNotes,
     'Smoking': formData.smoking,
     'Alcohol': formData.alcohol,
-    'Vape': formData.vape,
     'Visual Acuity': formData.visualAcuity,
     ...(formData.sex === 'Female' && {
       'Last Menstrual Period': formData.lastMenstrualPeriod,
       'Dysmenorrhea': formData.dysmenorrhea
     }),
-    'Immunizations': formData.immunizations?.join(', '),
+    'Immunizations': Array.isArray(formData.immunizations) && formData.immunizations.length > 0
+      ? formData.immunizations.join(', ') : null,
     'Hospitalizations': formData.hasHospitalizations,
-    'Hospitalization Details': formData.hospitalizationsDetail,
+    'Hospitalization Notes': formData.hospitalizationNotes,
     'Surgeries': formData.hasSurgeries,
-    'Surgery Details': formData.surgeriesDetail,
+    'Surgery Notes': formData.surgeryNotes,
     'Current Medications': formData.hasMedications,
-    'Medication Details': formData.medicationsDetail
+    'Medication Notes': formData.medicationNotes
   };
 
   const dentalHistory = {
-    'Visited Dentist': formData.visitedDentist,
-    'Last Consultation': formData.lastDentalConsultation,
+    'Visited Dentist': formData.seenByDentist === true ? 'Yes' : formData.seenByDentist === false ? 'No' : null,
+    'Purpose of Last Visit': formData.purpose,
     'Last Cleaning': formData.lastDentalCleaning,
-    'Intraoral Appliances': formData.hasIntraoralAppliances,
-    'Appliance Type': formData.intraoralApplianceType,
-    'Appliance Location': formData.intraoralApplianceLocation,
-    'Dental Procedures': formData.dentalProcedures?.join(', '),
-    'Other Procedures': formData.dentalProceduresOther,
-    'Dental Concerns': formData.dentalConcerns,
-    'Brushing Frequency': formData.brushingFrequency,
-    'Flossing Habit': formData.flossingHabit,
-    'Mouthwash Use': formData.mouthwashUse
+    'Intraoral Appliances': formData.hasOralAppliances === true ? 'Yes' : formData.hasOralAppliances === false ? 'No' : null,
+    'Appliance Count': formData.oralAppliances?.length > 0 ? `${formData.oralAppliances.length} appliance(s) added` : null,
+    'Dental Procedures': formData.dentalProcedures?.length > 0
+      ? `${formData.dentalProcedures.length} procedure(s) selected`
+      : null
   };
 
   // Calculate correct step indices based on recordType

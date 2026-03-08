@@ -8,17 +8,8 @@
 
 import { axiosRequest } from '../../../packages-core-adapter';
 
-// Map form year values to GraphQL STUDENT_YEAR enum
-const mapYearToEnum = (year) => {
-  const yearMap = {
-    '1st Year': 'Freshman',
-    '2nd Year': 'Sophomore',
-    '3rd Year': 'Junior',
-    '4th Year': 'Senior',
-    '5th Year': 'Senior' // Map 5th year to Senior as backend doesn't have 5th Year
-  };
-  return yearMap[year] || year;
-};
+// Form values are already STUDENT_YEAR enum values (Freshman, Sophomore, etc.)
+const mapYearToEnum = (year) => year || 'Freshman';
 
 /**
  * Send a GraphQL request to the EMR endpoint
