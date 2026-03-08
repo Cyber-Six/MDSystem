@@ -136,3 +136,5 @@ dist-ssr/
 Backend/config/data/initialadmin.sql
 
 MDS-AI-Chatbot
+
+use_case.md
