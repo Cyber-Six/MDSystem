@@ -6,6 +6,7 @@ const { getStudentBranchFromEmail, isStudentEmail } = require("../../../../utils
 const db = require("../../../../config/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 const logger = require("../../../../utils/logger.js");
+const { get } = require("http");
 // creating of updateTicket
 // In-progress do expire after nth time
 // Unless if the user is unverified where the first ticket never expires
@@ -27,6 +28,13 @@ Query = {
     return await Wrapper.Query._getUserPersonalRecord(_, { userId: user.id }, { user, res });
   },
 
+  getPersonalRecordLog: async (_, { from, offset, limit }, { user, res }) => { // getting the update status of the logged in user
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._getUserPersonalRecordLog(_, { userId: user.id, from, offset, limit }, { user, res });
+  },
+  
   getPersonalRecordLogStatus: async (_, __, { user, res }) => { // getting the update status of the logged in user
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
