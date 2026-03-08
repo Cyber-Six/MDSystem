@@ -57,7 +57,7 @@ const Query = {
 
     let query = `
       SELECT pr.id, pr.profile_type,
-             sp.program, sp.year, sp.guardian_name, sp.guardian_relation, sp.guardian_contact,
+             sp.program, sp.year,
              ep.department, ep.role, ep.position,
              log.status, log.created_at, log.scope
       FROM "profileRecord" pr
@@ -111,9 +111,6 @@ const Query = {
           id: row.id,
           program: row.program,
           year: row.year,
-          guardian_name: row.guardian_name,
-          guardian_relation: row.guardian_relation,
-          guardian_contact: row.guardian_contact,
           archived_at: null
         };
       } else if (row.profile_type === 'Employee') {
