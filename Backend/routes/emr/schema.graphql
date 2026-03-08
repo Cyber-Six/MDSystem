@@ -42,19 +42,19 @@ interface UserProfile{
 
 type StudentProfile implements UserProfile {
   id: ID!
-  program: String!
-  year: STUDENT_YEAR!
-  status: UpdateStatus! 
+  program: String
+  year: STUDENT_YEAR
+  status: UpdateStatus
   archived_at: Date
   created_at: Date
 }
 
 type EmployeeProfile implements UserProfile {
   id: ID!
-  department: String!
-  role: String!
-  position: String!
-  status: UpdateStatus! 
+  department: String
+  role: String
+  position: String
+  status: UpdateStatus
   archived_at: Date
   created_at: Date
 }
@@ -777,7 +777,6 @@ enum DomainType {
   Operation
   Immunization
   DentalProcedure
-  MedicalCondition
 }
 # Queries
 type Query {
