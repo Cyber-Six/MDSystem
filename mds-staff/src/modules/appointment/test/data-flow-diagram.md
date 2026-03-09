@@ -38,9 +38,9 @@
 
 ### Phase 1 — Schedule Discovery
 
-- [ ] `listOpenAppointments` resolver implemented
-- [ ] `listAppointmentSchedules` resolver implemented
-- [ ] `listAppointmentRequirement` resolver implemented
+- [x] `listOpenAppointments` resolver implemented
+- [x] `listAppointmentSchedule` resolver implemented
+- [x] `listAppointmentRequirements` resolver implemented
 
 ```
 ( Patient )
@@ -52,8 +52,8 @@
 
 ### Phase 2 — Schedule Availability Check
 
-- [ ] Frontend correctly handles "no available schedule" → End
-- [ ] Frontend correctly handles "schedule closed / no slot" → End
+- [x] Frontend correctly handles "no available schedule" → End
+- [x] Frontend correctly handles "schedule closed / no slot" → End
 
 ```
 <? patient finds a available Schedule? >
@@ -65,9 +65,9 @@
 
 ### Phase 3 — Pre-Requirements Gate
 
-- [ ] `Submit Requirements` resolver implemented (green)
-- [ ] `Submit Appointment Request` resolver implemented (green)
-- [ ] Pre-requirements correctly gate the submission
+- [x] `submitAppointment` mutation handles requirements inline
+- [x] `submitAppointment` mutation implemented (green)
+- [x] Pre-requirements correctly gate the submission
 
 ```
 <? is there pre requirements? >
@@ -78,15 +78,19 @@
 
 ### Phase 4 — Submission & Logging
 
-- [ ] Patient slot logged as `"InProgress"` on submission
+> **Note:** The SVG diagram labels this step `"InProgress"`, but the actual
+> codebase inserts the slot as `"Pending"`.  `InProgress` is set later when
+> the patient physically arrives (via `recordAppointmentAttendance`).
+
+- [x] Patient slot logged as `"Pending"` on submission
 - [ ] `decayed "expired"` auto-process triggers on timeout (purple)
-- [ ] Request forwarded to Staff for review
-- [ ] `( prevent multiple appointment )` rule enforced
+- [x] Request forwarded to Staff for review
+- [x] `( prevent multiple appointment )` rule enforced
 
 ```
 [ Submit Appointment Request ]
   --> ( Staff )                                     // Staff Required — request forwarded for review
-  --> [ entry patientSlot is logged "InProgress" ]
+  --> [ entry patientSlot is logged "Pending" ]      // SVG says "InProgress" — code uses "Pending"
         |
         |--> [ decayed "expired" ]                  // auto (purple): slot expires if staff does not respond
         |      --> ( End )
@@ -96,9 +100,9 @@
 
 ### Phase 5 — Staff Decision
 
-- [ ] `respondAppointmentRequest` resolver handles approve/reject
-- [ ] Rejection terminates flow → End
-- [ ] Approval sets status to `"scheduled"`
+- [x] `respondAppointment` resolver handles approve/reject
+- [x] Rejection terminates flow → End
+- [x] Approval sets status to `"Scheduled"`
 
 ```
 <? Staff Approved? >
@@ -109,9 +113,9 @@
 
 ### Phase 6 — Post-Schedule Status Tracking
 
-- [ ] `setAppointment Cancelled` resolver implemented (green)
-- [ ] `Appointment status "completed"` resolver implemented (green)
-- [ ] `Appointment status "no-show"` auto-process implemented (purple)
+- [x] `cancelAppointment` mutation implemented (patient-side, green)
+- [ ] `Appointment status "completed"` — staff-side only (not patient mutation)
+- [ ] `Appointment status "no-show"` auto-process not yet implemented (purple)
 
 ```
 <? cancelled? >
@@ -160,14 +164,19 @@
 
 ## Appointment Status State Machine
 
-| Status        | Trigger                                      | Transition To       |
-|---------------|----------------------------------------------|---------------------|
-| `InProgress`  | Patient submits appointment request          | Awaiting staff      |
-| `expired`     | No staff response within time limit (auto)   | `( End )`           |
-| `scheduled`   | Staff approves request                       | Monitoring phase    |
-| `cancelled`   | Cancellation triggered (staff or patient)    | `( End )`           |
-| `no-show`     | Patient did not attend the appointment       | `( End )`           |
-| `completed`   | Appointment successfully fulfilled           | `( End )`           |
+> Aligned to actual `schedulingStatus` enum and codebase behavior.
+
+| Status              | Trigger                                         | Transition To       |
+|---------------------|-------------------------------------------------|---------------------|
+| `Pending`           | Patient submits appointment request             | Awaiting staff      |
+| `Scheduled`         | Staff approves request                          | Monitoring phase    |
+| `InProgress`        | Patient arrives (`recordAppointmentAttendance`) | Active visit        |
+| `Completed`         | Appointment successfully fulfilled              | `( End )`           |
+| `Rejected`          | Staff rejects the request                       | `( End )`           |
+| `Expired`           | No staff response within time limit (auto)      | `( End )`           |
+| `CancelledByPatient`| Patient cancels their own appointment           | `( End )`           |
+| `CancelledByMedical`| Staff/medical cancels the appointment           | `( End )`           |
+| `NoShow`            | Patient did not attend the appointment          | `( End )`           |
 
 ---
 
