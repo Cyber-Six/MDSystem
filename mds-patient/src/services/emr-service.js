@@ -6,6 +6,24 @@ import { axiosRequest } from '../packages-core-adapter';
 import { sendGraphQLRequest } from '../utils/graphql-client';
 
 /**
+ * Fetch the current update ticket (id + status) without throwing.
+ * Returns null if no ticket exists.
+ */
+const fetchCurrentUpdateTicket = async () => {
+  const query = `
+    query GetCurrentUpdateTicket {
+      getUpdateTicket { id status scope }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(query, {});
+    return data.getUpdateTicket ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Create an update ticket (required before making any profile mutations)
  * @param {string} scope - 'Medical', 'Dental', or 'Both'
  */
@@ -23,9 +41,19 @@ const createUpdateTicket = async (scope = 'Both') => {
     console.log('[EMR Service] Update ticket created:', data.createUpdateTicket);
     return data.createUpdateTicket;
   } catch (error) {
-    // If a stale ticket is blocking, cancel it and retry once
     const isStaleTicket = error.message?.toLowerCase().includes('already in progress');
     if (isStaleTicket) {
+      // Inspect the existing ticket before deciding what to do
+      const existing = await fetchCurrentUpdateTicket();
+
+      // Revision tickets are valid for all create mutations — reuse the existing ID
+      // (cancelUpdateTicket only allows InProgress/Pending, so we cannot cancel it)
+      if (existing?.status === 'Revision') {
+        console.log('[EMR Service] Existing ticket is in Revision — reusing ticket id:', existing.id);
+        return existing.id;
+      }
+
+      // For InProgress/Pending stale tickets — cancel and create a fresh one
       console.warn('[EMR Service] Stale update ticket detected — cancelling and retrying...');
       await cancelUpdateTicket();
       const retryData = await sendGraphQLRequest(mutation, { scope });
@@ -1179,8 +1207,9 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     civilStatus:        pr.civil_status   || '',
     nationality:        pr.nationality    || '',
     religion:           pr.religion       || '',
-    address:            pr.present_address || '',
-    contactNumber:      pr.contactNumber  || '',
+    address:            pr.present_address   || '',
+    provinceAddress:    pr.province_address  || '',
+    contactNumber:      pr.contactNumber     || '',
     studentNumber:      bid?.identifier   || '',
     program:            isKnownProgram ? rawProgram : (rawProgram ? 'Other' : ''),
     programOther:       isKnownProgram ? '' : rawProgram,
@@ -1343,7 +1372,7 @@ export const fetchRevisionPrefill = async () => {
         personalLog: getPersonalRecordLog {
           first_name middle_name last_name suffix
           date_of_birth sex civil_status nationality religion
-          contactNumber present_address
+          contactNumber present_address province_address
         }
         branchId: getBranchIdentifier {
           identifier

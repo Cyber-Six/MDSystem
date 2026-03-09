@@ -305,8 +305,13 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
         } else if (lower.includes('unique constraint') || lower.includes('duplicate')) {
           errors.push({ section: 'Submission Error', sectionIndex: null, message: 'This record already exists. Your medical record may have already been submitted.' });
 
-        // Date / type conversion
-        } else if (lower.includes('invalid input syntax') || lower.includes('date') || lower.includes('timestamp')) {
+        // Stale / in-progress ticket — must appear before the date check because
+        // "update" contains "date" as a substring and would otherwise be misclassified.
+        } else if (lower.includes('already in progress') || lower.includes('cannot cancel update ticket')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'A previous submission is still being processed. Please wait a moment and try again.' });
+
+        // Date / type conversion — use word boundary to avoid matching "update", "candidate", etc.
+        } else if (lower.includes('invalid input syntax') || /\bdate\b/.test(lower) || /\btimestamp\b/.test(lower)) {
           errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'A date field contains an invalid value. Please re-enter your date of birth or other date fields.' });
 
         // Auth errors
