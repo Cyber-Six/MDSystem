@@ -5,6 +5,7 @@ import {
   TICKET_STATUS,
   getStatusUpdateTickets,
 } from '../initial-record-service';
+import { enrichWithInitialFlag } from './ticket-type-helper';
 import InitialRecordDetailModal from './initial-record-detail-modal';
 
 /**
@@ -34,7 +35,8 @@ const InitialRecordList = ({ staffRole = 'both' }) => {
     setError('');
     try {
       const result = await getStatusUpdateTickets([statusFilter], branch);
-      setTickets(result);
+      const enriched = await enrichWithInitialFlag(result);
+      setTickets(enriched.filter((t) => t.is_initial));
     } catch (err) {
       setError(err.message || 'Failed to load tickets.');
     } finally {

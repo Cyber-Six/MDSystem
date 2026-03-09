@@ -6,7 +6,7 @@ import DentalHistoryStep from './dental-history-step';
 import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
 import { updatePersonalInfo } from './personal-info-service';
-import { submitUpdateRecord } from './update-record-service';
+import { submitUpdateRecord, getUpdateTicketStatus } from './update-record-service';
 import { axiosRequest } from '../../../packages-core-adapter';
 
 const RecordUpdateForm = () => {
@@ -14,6 +14,7 @@ const RecordUpdateForm = () => {
   const [formData, setFormData] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
+  const [pendingWarning, setPendingWarning] = useState(null); // { scope } of existing pending ticket
 
   // Fetch patient sex on mount so OB-GYN section shows correctly for female patients
   useEffect(() => {
@@ -171,6 +172,20 @@ const RecordUpdateForm = () => {
   };
 
   const handleSubmit = async () => {
+    // Check for an existing Pending ticket first and warn the patient before cancelling it
+    try {
+      const existing = await getUpdateTicketStatus();
+      if (existing?.status === 'Pending') {
+        setPendingWarning({ scope: existing.scope });
+        return; // stop here — wait for patient to confirm or cancel
+      }
+    } catch (_) {
+      // If we can't check, just proceed — ensureNoActiveTicket will handle it
+    }
+    await doSubmit();
+  };
+
+  const doSubmit = async () => {
     setIsSubmitting(true);
     
     try {
@@ -238,6 +253,46 @@ const RecordUpdateForm = () => {
 
   return (
     <>
+      {/* Warning modal shown when a Pending ticket already exists */}
+      {pendingWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="w-10 h-10 rounded-full bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-secondary-800 dark:text-white mb-1">
+                  Existing Request Found
+                </h3>
+                <p className="text-sm text-secondary-600 dark:text-neutral-300">
+                  You already have a <strong>{pendingWarning.scope}</strong> update request that is currently pending staff review.
+                </p>
+                <p className="text-sm text-secondary-600 dark:text-neutral-300 mt-2">
+                  If you continue, your existing <strong>{pendingWarning.scope}</strong> request will be <span className="text-error-600 dark:text-error-400 font-semibold">cancelled</span> and replaced with this new submission.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => setPendingWarning(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
+              >
+                Keep Old Request
+              </button>
+              <button
+                onClick={() => { setPendingWarning(null); doSubmit(); }}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-error-500 hover:bg-error-600 text-white transition-colors"
+              >
+                Cancel Old &amp; Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!recordType ? (
         <RecordChoicePage onSelect={handleChoiceSelect} />
       ) : (
