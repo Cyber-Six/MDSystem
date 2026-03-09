@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const medicalResolver = require("./resolvers/medical/medical-resolver.js");
-const { jwtProtect } = require("../../config/middleware/jwtProtect.js");
+const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
 
 const typeDefs = fs.readFileSync(path.join(__dirname, "./schema.graphql"), "utf8");
 

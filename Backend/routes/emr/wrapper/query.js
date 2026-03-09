@@ -56,7 +56,7 @@ const Query = {
              ep.department, ep.role, ep.position,
              pul.created_at, pul."patientId", pul.status
       FROM "profileRecord" pr
-      LEFT JOIN "patientUpdateLog" pul ON pul.id = pr.id
+      JOIN "patientUpdateLog" pul ON pul.id = pr.id
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4
@@ -342,10 +342,10 @@ const Query = {
         WHERE "id" = $1 OR "id" = $2
         ORDER BY "id" ASC;
       `;
-      const ContactNumbers = await db.query(numbersQuery, [row.firstNumber, row.secondNumber  ]);
-      const f1 = row.firstNumber > row.secondNumber ? 1 : 0;
-      row.firstContact = ContactNumbers?.rows[f1] || null;
-      row.secondContact = ContactNumbers?.rows[!f1] || null;
+      const ContactNumbers = await db.query(numbersQuery, [row.firstNumber, row.secondNumber]);
+      const numbers = ContactNumbers?.rows || [];
+      row.firstContact = numbers.find(n => n.id === row.firstNumber) || null;
+      row.secondContact = numbers.find(n => n.id === row.secondNumber) || null;
     }
 
     logger.debug("User Emergency Contact with Numbers:", result.rows);
