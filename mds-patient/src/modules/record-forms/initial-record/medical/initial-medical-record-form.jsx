@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProgressStepper from './progress-stepper';
 import PersonalInfoForm from './personal-info';
@@ -9,7 +9,7 @@ import OBGYNEForm from './obygyne';
 import ReviewForm from './review-form';
 import { Button } from './form-elements';
 import ValidationWarningModal from '@core/components/modals/validation-warning-modal';
-import { createInitialMedicalRecord } from '@core/services/emr-service';
+import { createInitialMedicalRecord, fetchAllCatalogs } from '@core/services/emr-service';
 import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer';
 
 /**
@@ -20,7 +20,7 @@ import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer
  * @param {Function} props.onComplete - Optional callback when form is successfully submitted
  * @param {boolean} props.isModal - Whether the form is displayed in a modal (affects styling)
  */
-const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
+const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false }) => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -28,6 +28,42 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [dbErrors, setDbErrors] = useState([]);
   const [showDbErrorModal, setShowDbErrorModal] = useState(false);
+
+  // Catalog data fetched from the backend to populate form options dynamically
+  const [catalogs, setCatalogs] = useState({
+    medicalConditionCatalog: [],
+    hospitalizationCatalog: [],
+    operationCatalog: [],
+    medicationCatalog: [],
+    immunizationCatalog: [],
+    allergenCatalog: [],
+    oralApplianceCatalog: [],
+    catalogsLoading: true,
+    catalogsError: null,
+  });
+
+  useEffect(() => {
+    fetchAllCatalogs()
+      .then((cats) => setCatalogs({ ...cats, catalogsLoading: false, catalogsError: null }))
+      .catch((err) => {
+        console.warn('[Initial Record Form] Catalog fetch failed:', err.message);
+        setCatalogs((prev) => ({ ...prev, catalogsLoading: false, catalogsError: err.message }));
+      });
+  }, []);
+
+  // When revision pre-fill data arrives, merge it into the form state
+  useEffect(() => {
+    if (!revisionData) return;
+    console.log('[Initial Record Form] Applying revision pre-fill data...');
+    setFormData((prev) => ({
+      ...prev,
+      personalInfo:      { ...prev.personalInfo,      ...revisionData.personalInfo },
+      medicalHistory:    { ...prev.medicalHistory,    ...revisionData.medicalHistory },
+      medicalBackground: { ...prev.medicalBackground, ...revisionData.medicalBackground },
+      dentalHistory:     { ...prev.dentalHistory,     ...revisionData.dentalHistory },
+      ...(revisionData.obgyne ? { obgyne: { ...prev.obgyne, ...revisionData.obgyne } } : {}),
+    }));
+  }, [revisionData]);
 
   console.log('[Initial Medical Record Form] Component rendered, current step:', currentStep);
 
@@ -63,27 +99,40 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
       family: {}
     },
     medicalBackground: {
+      // Immunizations — keys are vaccine catalog IDs
       immunizations: {},
-      drugAllergy: '',
-      foodAllergy: '',
-      otherAllergy: '',
-      hospitalizations: '',
-      operations: '',
-      maintenanceMedications: '',
-      tattooLocation: '',
-      piercingLocation: '',
+      immunizationOther: '',
+      // Allergies — keys are allergen catalog IDs
+      hasAllergies: '',
+      allergies: {},
+      allergyOther: '',
+      // Hospitalizations — keys are hospitalization condition catalog IDs
+      hasHospitalization: '',
+      hospitalizationConditions: {},
+      hospitalizationDate: '',
+      hospitalizationNotes: '',
+      // Operations — keys are operation procedure catalog IDs
+      hasOperation: '',
+      operationConditions: {},
+      operationDate: '',
+      operationNotes: '',
+      // Medications — keys are medication catalog IDs
+      hasMedications: '',
+      selectedMedications: {},
+      medicationReason: '',
+      medicationNotes: '',
+      // Lifestyle
       smoker: 'no',
       smokerSticksPerDay: '',
       smokerYears: '',
       alcoholDrinker: 'no',
       alcoholFrequency: '',
+      // Visual Acuity
       eyeglasses: false,
       contactLenses: false,
       gradeOD: '',
       gradeOS: '',
       visualAcuityDate: '',
-      height: '',
-      weight: ''
     },
     dentalHistory: {
       firstTimeDentist: '',
@@ -394,23 +443,33 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false }) => {
         );
       case 1:
         return (
-          <MedicalHistoryForm 
-            data={formData.medicalHistory} 
-            onChange={handleMedicalHistoryChange} 
+          <MedicalHistoryForm
+            data={formData.medicalHistory}
+            onChange={handleMedicalHistoryChange}
+            medicalConditionCatalog={catalogs.medicalConditionCatalog}
+            catalogsLoading={catalogs.catalogsLoading}
           />
         );
       case 2:
         return (
-          <MedicalBackgroundForm 
-            data={formData.medicalBackground} 
-            onChange={handleMedicalBackgroundChange} 
+          <MedicalBackgroundForm
+            data={formData.medicalBackground}
+            onChange={handleMedicalBackgroundChange}
+            immunizationCatalog={catalogs.immunizationCatalog}
+            allergenCatalog={catalogs.allergenCatalog}
+            hospitalizationCatalog={catalogs.hospitalizationCatalog}
+            operationCatalog={catalogs.operationCatalog}
+            medicationCatalog={catalogs.medicationCatalog}
+            catalogsLoading={catalogs.catalogsLoading}
           />
         );
       case 3:
         return (
-          <DentalHistoryForm 
-            data={formData.dentalHistory} 
-            onChange={handleDentalHistoryChange} 
+          <DentalHistoryForm
+            data={formData.dentalHistory}
+            onChange={handleDentalHistoryChange}
+            oralApplianceCatalog={catalogs.oralApplianceCatalog}
+            catalogsLoading={catalogs.catalogsLoading}
           />
         );
       case 4:
