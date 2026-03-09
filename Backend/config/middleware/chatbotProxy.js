@@ -1,7 +1,7 @@
 /**
  * Chatbot Proxy Middleware
  * 
- * Proxies /econsultation/chat/* requests to the MDS-AI-Chatbot microservice.
+ * Proxies /econsultation/chat/* requests to the MDS-Chatbot microservice.
  * 
  * Configuration:
  *   CHATBOT_URL     — Base URL of the chatbot service (set in .env)
