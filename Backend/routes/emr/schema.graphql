@@ -354,6 +354,7 @@ type EmergencyNumber {
     contactName: String!
     relationship: String!
     contactNumber: String!
+    address: String
     isVerified: Boolean
     created_at: Date
 }
@@ -362,6 +363,7 @@ input EmergencyNumberInput {
     contactName: String!
     relationship: String!
     contactNumber: String!
+    address: String
     isVerified: Boolean
 }
 

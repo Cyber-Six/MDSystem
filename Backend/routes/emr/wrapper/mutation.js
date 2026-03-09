@@ -27,7 +27,7 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "student_profile" 
-        (id, program, year)
+        ("profileId", program, year)
        VALUES ($1, $2, $3)
        ON CONFLICT (id) DO UPDATE
          SET program = EXCLUDED.program,
@@ -61,7 +61,7 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "employee_profile" 
-        (id, department, role, position)
+        ("profileId", department, role, position)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (id) DO UPDATE
          SET department = EXCLUDED.department,
