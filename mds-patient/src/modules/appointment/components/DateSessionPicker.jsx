@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Spinner, BackButton } from './shared';
-import { SESSION } from '../patient-appointment-service';
+import { SESSION, listScheduleAvailabilityBatch } from '../patient-appointment-service';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -27,6 +27,10 @@ const DateSessionPicker = ({
   onNext,
   onBack,
 }) => {
+  // dateSlots: { [dateStr]: { morningRemaining, afternoonRemaining } }
+  const [dateSlots, setDateSlots] = useState({});
+  const [loadingCalendar, setLoadingCalendar] = useState(false);
+
   // ── Current month (fixed — no navigation) ─────────────────────────────────
   const now = new Date();
   const year = now.getFullYear();
@@ -54,13 +58,60 @@ const DateSessionPicker = ({
     return isScheduleMatch(dateStr);
   };
 
-  // ── Day status (for cell colouring — schedule-based only, no pre-fetch) ──
+  // ── Valid dates to batch-fetch (schedule-matches within booking window) ──
+
+  const validDates = useMemo(() => {
+    const dates = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = fmtDate(year, month, d);
+      if (isDateAllowed(ds)) dates.push(ds);
+    }
+    return dates;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduler?.id, customDates, today, maxDate, year, month, daysInMonth]);
+
+  // ── Batch-fetch availability for all valid dates (single request) ─────────
+
+  useEffect(() => {
+    if (validDates.length === 0) {
+      setDateSlots({});
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingCalendar(true);
+
+    listScheduleAvailabilityBatch(scheduler.id, validDates)
+      .then((results) => {
+        if (cancelled) return;
+        const map = {};
+        for (const a of results) {
+          // scheduledDate may come back as a Date object or a string
+          const ds = typeof a.scheduledDate === 'string'
+            ? a.scheduledDate.split('T')[0]
+            : a.scheduledDate;
+          map[ds] = {
+            morningRemaining:   a.morningAllowed   - a.morningRegistered   - a.morningPending,
+            afternoonRemaining: a.afternoonAllowed - a.afternoonRegistered - a.afternoonPending,
+          };
+        }
+        setDateSlots(map);
+      })
+      .catch(() => { /* silent — calendar falls back to schedule-only colouring */ })
+      .finally(() => { if (!cancelled) setLoadingCalendar(false); });
+
+    return () => { cancelled = true; };
+  }, [validDates, scheduler.id]);
+
+  // ── Day status (schedule + slot data) ─────────────────────────────────
 
   const getDayStatus = (dateStr) => {
     if (!isDateAllowed(dateStr)) return 'unavailable';
-    // Slot-level full/limited status is only known after the user clicks the date
-    // and the parent fetches real availability. Until then every schedule-valid
-    // day shows as 'available'.
+    if (loadingCalendar) return 'loading';
+    const s = dateSlots[dateStr];
+    if (!s) return 'available'; // data not fetched yet — treat as open
+    if (s.morningRemaining <= 0 && s.afternoonRemaining <= 0) return 'full';
+    if (s.morningRemaining <= 0 || s.afternoonRemaining <= 0) return 'limited';
     return 'available';
   };
 
@@ -90,7 +141,7 @@ const DateSessionPicker = ({
   // ── Click handler ─────────────────────────────────────────────────────────
 
   const handleDayClick = (dateStr) => {
-    if (getDayStatus(dateStr) === 'unavailable') return;
+    if (getDayStatus(dateStr) === 'unavailable' || getDayStatus(dateStr) === 'full') return;
     onDateChange(dateStr);
   };
 
@@ -98,11 +149,16 @@ const DateSessionPicker = ({
 
   const cellStyle = {
     available:   'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30 cursor-pointer',
+    limited:     'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 cursor-pointer',
+    full:        'bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-500 cursor-not-allowed',
     unavailable: 'text-neutral-300 dark:text-neutral-600',
+    loading:     'text-neutral-400 dark:text-neutral-500 animate-pulse',
   };
 
   const dotColor = {
     available: 'bg-green-500',
+    limited:   'bg-yellow-500',
+    full:      'bg-red-500',
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -148,7 +204,8 @@ const DateSessionPicker = ({
             const status = getDayStatus(cell.dateStr);
             const isSelected = cell.dateStr === selectedDate;
             const isToday = cell.dateStr === todayStr;
-            const isClickable = status === 'available';
+            const isClickable = status === 'available' || status === 'limited';
+            const slots = dateSlots[cell.dateStr];
 
             return (
               <div
@@ -174,11 +231,18 @@ const DateSessionPicker = ({
                   )}
                 </div>
 
-                {/* Dot for available days */}
-                {status === 'available' && selectedDate !== cell.dateStr && (
-                  <div className="mt-0.5">
-                    <p className="text-[9px] text-green-600 dark:text-green-400 leading-tight">Open</p>
-                  </div>
+                {/* Slot hint */}
+                {status === 'loading' && (
+                  <p className="text-[9px] leading-tight opacity-50 mt-0.5">...</p>
+                )}
+                {slots && status === 'full' && (
+                  <p className="text-[9px] text-red-500 dark:text-red-400 leading-tight mt-0.5">Full</p>
+                )}
+                {slots && status === 'limited' && (
+                  <p className="text-[9px] text-yellow-600 dark:text-yellow-400 leading-tight mt-0.5">Limited</p>
+                )}
+                {slots && status === 'available' && (
+                  <p className="text-[9px] text-green-600 dark:text-green-400 leading-tight mt-0.5">Open</p>
                 )}
               </div>
             );
@@ -188,8 +252,8 @@ const DateSessionPicker = ({
         {/* Legend */}
         <div className="p-2 border-t border-neutral-200 dark:border-neutral-700 flex flex-wrap gap-3">
           {[
-            { color: 'bg-green-500', label: 'Available' },
-            { color: 'bg-neutral-300 dark:bg-neutral-600', label: 'Unavailable' },
+            { color: 'bg-green-500', label: 'Available' },            { color: 'bg-yellow-500', label: 'Limited' },
+            { color: 'bg-red-500', label: 'Full' },            { color: 'bg-neutral-300 dark:bg-neutral-600', label: 'Unavailable' },
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${color}`} />

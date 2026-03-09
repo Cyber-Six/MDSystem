@@ -164,6 +164,93 @@ const Query = {
     };
   },
 
+  _listAppointmentScheduleBatch: async (_, { schedulerId, dates }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Filter to only dates within the valid booking window
+    const validDates = dates.filter((date) => isWithinFutureTimeframe(date, MAX_SCHEDULING_DAYS));
+
+    if (validDates.length === 0) return [];
+
+    // Fetch default slot counts from the scheduler once
+    const schedulerResult = await db.query(
+      `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+      [schedulerId]
+    );
+    if (schedulerResult.rowCount === 0) {
+      throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+    }
+    const { morningAllowed, afternoonAllowed } = schedulerResult.rows[0];
+
+    // Fetch all existing ScheduleDateEntity rows for these dates in one query
+    const existingResult = await db.query(
+      `SELECT sde.* FROM "ScheduleDateEntity" sde
+       WHERE sde."slotId" = $1 AND sde."scheduledDate" = ANY($2::date[]);`,
+      [schedulerId, validDates]
+    );
+    const existingByDate = {};
+    for (const row of existingResult.rows) {
+      existingByDate[row.scheduledDate] = row;
+    }
+
+    // Bulk-insert any missing dates in one statement
+    const missingDates = validDates.filter((d) => !existingByDate[d]);
+    if (missingDates.length > 0) {
+      const placeholders = missingDates.map((_, i) => `($1, $${i + 2}, $${missingDates.length + i + 2}, $${2 * missingDates.length + i + 2})`);
+      const values = [schedulerId,
+        ...missingDates,
+        ...missingDates.map(() => morningAllowed),
+        ...missingDates.map(() => afternoonAllowed)
+      ];
+      const insertResult = await db.query(
+        `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+         VALUES ${placeholders.join(', ')}
+         ON CONFLICT ("slotId", "scheduledDate") DO NOTHING
+         RETURNING *;`,
+        values
+      );
+      for (const row of insertResult.rows) {
+        existingByDate[row.scheduledDate] = row;
+      }
+    }
+
+    // Fetch real-time booked + pending counts for all dates in one query
+    const countsResult = await db.query(
+      `SELECT
+         sde."scheduledDate",
+         COALESCE(SUM(CASE WHEN ps.session = 'Morning'   AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
+         COALESCE(SUM(CASE WHEN ps.session = 'Morning'   AND ps.status = 'Pending'                               THEN 1 ELSE 0 END), 0) AS "morningPending",
+         COALESCE(SUM(CASE WHEN ps.session = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
+         COALESCE(SUM(CASE WHEN ps.session = 'Afternoon' AND ps.status = 'Pending'                               THEN 1 ELSE 0 END), 0) AS "afternoonPending"
+       FROM "ScheduleDateEntity" sde
+       LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
+       WHERE sde."slotId" = $1 AND sde."scheduledDate" = ANY($2::date[])
+       GROUP BY sde."scheduledDate";`,
+      [schedulerId, validDates]
+    );
+    const countsByDate = {};
+    for (const row of countsResult.rows) {
+      countsByDate[row.scheduledDate] = {
+        morningRegistered:   Number(row.morningRegistered),
+        morningPending:      Number(row.morningPending),
+        afternoonRegistered: Number(row.afternoonRegistered),
+        afternoonPending:    Number(row.afternoonPending),
+      };
+    }
+
+    return validDates
+      .filter((d) => existingByDate[d])
+      .map((d) => ({
+        ...existingByDate[d],
+        morningRegistered:   countsByDate[d]?.morningRegistered   ?? 0,
+        morningPending:      countsByDate[d]?.morningPending      ?? 0,
+        afternoonRegistered: countsByDate[d]?.afternoonRegistered ?? 0,
+        afternoonPending:    countsByDate[d]?.afternoonPending    ?? 0,
+      }));
+  },
+
   _listAllAppointmentRequirements: async (_, { schedulerId, offset, limit, isActive }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

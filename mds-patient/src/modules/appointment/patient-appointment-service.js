@@ -115,6 +115,32 @@ export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
 };
 
 /**
+ * Get slot availability for multiple dates in a single request.
+ * @param {string} schedulerId
+ * @param {string[]} dates - Array of ISO date strings (YYYY-MM-DD)
+ * @returns {Promise<Array>} ScheduleDateEntity[]
+ */
+export const listScheduleAvailabilityBatch = async (schedulerId, dates) => {
+  const data = await sendGraphQL(`
+    query ListAppointmentScheduleBatch($schedulerId: ID!, $dates: [Date!]!) {
+      listAppointmentScheduleBatch(schedulerId: $schedulerId, dates: $dates) {
+        id
+        slotId
+        morningAllowed
+        morningRegistered
+        morningPending
+        afternoonAllowed
+        afternoonRegistered
+        afternoonPending
+        allowDuring
+        scheduledDate
+      }
+    }
+  `, { schedulerId, dates });
+  return data.listAppointmentScheduleBatch;
+};
+
+/**
  * Get slot availability for a specific scheduler + date.
  * @param {string} schedulerId
  * @param {string} date - ISO date string (YYYY-MM-DD)

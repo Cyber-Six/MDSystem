@@ -149,7 +149,8 @@ input patientSlotInput { # for medical only
 type Query {
   listOpenAppointments(offset: Int, limit: Int): [SlotScheduler!] # list all open appointments
   listCustomDates(schedulerId: ID!, offset: Int, limit: Int): [Date!]
-  listAppointmentSchedule(schedulerId: ID!, date: Date!): ScheduleDateEntity 
+  listAppointmentSchedule(schedulerId: ID!, date: Date!): ScheduleDateEntity
+  listAppointmentScheduleBatch(schedulerId: ID!, dates: [Date!]!): [ScheduleDateEntity!]!
   listAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
 
   getAppointmentStatus: SCHEDULING_STATUS

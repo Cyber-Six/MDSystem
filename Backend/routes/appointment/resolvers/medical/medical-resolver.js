@@ -50,6 +50,14 @@ const Query = {
     }
     return await Wrapper.Query._searchAppointmentStatuses(_, { status, offset, limit }, { user, res });
   },
+
+  listAppointmentScheduleBatch: async (_, { schedulerId, dates }, { user, res }) => {
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
+    if (!permitted) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._listAppointmentScheduleBatch(_, { schedulerId, dates }, { user, res });
+  },
 };
 
 const Mutation = {
