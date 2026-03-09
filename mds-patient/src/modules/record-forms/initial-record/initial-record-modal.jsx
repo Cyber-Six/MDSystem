@@ -10,7 +10,8 @@ const InitialRecordModal = ({
   isOpen, 
   children,
   onComplete,
-  isRevision = false
+  isRevision = false,
+  revisionNote = null
 }) => {
   const modalRef = useRef(null);
 
@@ -97,6 +98,19 @@ const InitialRecordModal = ({
             </div>
           </div>
         </div>
+
+        {/* Revision Note Banner */}
+        {isRevision && revisionNote && (
+          <div className="shrink-0 mx-5 mt-4 px-4 py-3 bg-yellow-50 border border-yellow-300 rounded-lg flex items-start gap-3">
+            <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold text-yellow-800">Staff Note</p>
+              <p className="text-sm text-yellow-700 mt-0.5">{revisionNote}</p>
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 min-h-0 flex flex-col">

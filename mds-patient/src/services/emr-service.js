@@ -1529,7 +1529,7 @@ export const checkInitialRecordStatus = async () => {
       { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
-      `query GetUpdateTicket { getUpdateTicket { id status } }`,
+      `query GetUpdateTicket { getUpdateTicket { id status notes } }`,
       {}
     ),
   ]);
@@ -1550,14 +1550,14 @@ export const checkInitialRecordStatus = async () => {
   if (credentialStatus === 'Unverified') {
     const ticketStatus = ticket?.status || null;
     console.log('[EMR Service] Credential is Unverified — initial record required. Ticket status:', ticketStatus);
-    return { needsInitialRecord: true, status: ticketStatus, ticketId: ticket?.id ?? null };
+    return { needsInitialRecord: true, status: ticketStatus, ticketId: ticket?.id ?? null, notes: ticket?.notes ?? null };
   }
 
   // Secondary check: non-Unverified credential (Active / Locked / Disabled) means
   // the patient has already completed and passed the initial record step.
   if (credentialStatus && credentialStatus !== 'Unverified') {
     console.log('[EMR Service] Credential is', credentialStatus, '— initial record already completed');
-    return { needsInitialRecord: false, status: ticket?.status ?? null, ticketId: ticket?.id ?? null };
+    return { needsInitialRecord: false, status: ticket?.status ?? null, ticketId: ticket?.id ?? null, notes: ticket?.notes ?? null };
   }
 
   // Fallback (credential fetch failed): fall back to update-ticket heuristic.
@@ -1576,7 +1576,7 @@ export const checkInitialRecordStatus = async () => {
     currentStatus: ticket.status,
   });
 
-  return { needsInitialRecord, status: ticket.status, ticketId: ticket.id };
+  return { needsInitialRecord, status: ticket.status, ticketId: ticket.id, notes: ticket.notes ?? null };
 };
 
 export default {

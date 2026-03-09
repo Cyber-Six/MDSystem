@@ -161,7 +161,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     setActionLoading(true);
     setActionError('');
     try {
-      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REVISION);
+      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REVISION, revisionNote.trim());
       onAction?.({ ...ticket, status: newStatus }, newStatus);
       onClose();
     } catch (err) {
@@ -451,7 +451,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                       className="w-full px-3 py-2 text-sm border border-warning-300 dark:border-warning-700 rounded-lg bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white focus:ring-2 focus:ring-warning-500 focus:border-warning-500 resize-none"
                     />
                     <p className="mt-1 text-xs text-secondary-400 dark:text-neutral-500">
-                      This note is for your reference only.
+                      This note will be sent to the patient so they know what to correct.
                     </p>
                   </div>
                 </div>

@@ -24,6 +24,7 @@ const Dashboard = () => {
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [recordStatus, setRecordStatus] = useState(null);
   const [revisionData, setRevisionData] = useState(null);
+  const [revisionNote, setRevisionNote] = useState(null);
 
   // Check if user needs to complete initial medical record (students only)
   useEffect(() => {
@@ -38,7 +39,7 @@ const Dashboard = () => {
 
       try {
         console.log('[Dashboard] Checking initial record status for student...');
-        const [{ needsInitialRecord, status }, branchInfo] = await Promise.all([
+        const [{ needsInitialRecord, status, notes: ticketNotes }, branchInfo] = await Promise.all([
           checkInitialRecordStatus(),
           getMyBranchIdentifier(),
         ]);
@@ -57,6 +58,10 @@ const Dashboard = () => {
               setRevisionData(prefill);
             } catch (err) {
               console.warn('[Dashboard] Could not fetch revision pre-fill data:', err.message);
+            }
+            // Store the staff's revision note from the ticket
+            if (ticketNotes) {
+              setRevisionNote(ticketNotes);
             }
           }
           setShowInitialRecordModal(true);
@@ -244,6 +249,7 @@ const Dashboard = () => {
         isOpen={showInitialRecordModal}
         onComplete={handleInitialRecordComplete}
         isRevision={recordStatus === 'Revision'}
+        revisionNote={revisionNote}
       >
         <InitialMedicalRecordForm 
           isModal={true}

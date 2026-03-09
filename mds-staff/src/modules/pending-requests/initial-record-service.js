@@ -131,12 +131,12 @@ export const getUserUpdateTicket = async (userId) => {
  * @param {'Approved'|'Revision'} status
  * @returns {Promise<string>}  new UpdateStatus
  */
-export const staffUpdateTicket = async (userId, status) => {
+export const staffUpdateTicket = async (userId, status, notes) => {
   const data = await sendGraphQL(
-    `mutation StaffUpdateTicket($userId: ID!, $status: UpdateStatus!) {
-       staffUpdateTicket(userId: $userId, status: $status)
+    `mutation StaffUpdateTicket($userId: ID!, $status: UpdateStatus!, $notes: String) {
+       staffUpdateTicket(userId: $userId, status: $status, notes: $notes)
      }`,
-    { userId, status },
+    { userId, status, notes: notes || null },
   );
   return data.staffUpdateTicket;
 };
