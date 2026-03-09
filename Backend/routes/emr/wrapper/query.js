@@ -303,7 +303,7 @@ const Query = {
       const appliancesQuery = `
         SELECT status, "dateIssued", "tagId", arch
         FROM "OralApplianceRecord"
-        WHERE "oralApplianceId" = $1;
+        WHERE "applianceId" = $1;
       `;
       const ApplianceProfiles = await db.query(appliancesQuery, [row.id]);
       row.appliances = ApplianceProfiles.rows;
