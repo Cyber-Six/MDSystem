@@ -42,8 +42,8 @@ const Mutation = {
         }
       }
 
-    await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
-      [newStatus, record.id]
+    await db.query(`UPDATE "patientUpdateLog" SET status = $1, notes = $2 WHERE id = $3;`,
+      [newStatus, args.notes, record.id]
     );
     await reloadCredentialStatus(_, { userId: args.userId }, { user, res }); // reload credential status after approval
     logger.info(`User ID ${user.id} updated ticket ID ${record.id} to status ${newStatus}`);

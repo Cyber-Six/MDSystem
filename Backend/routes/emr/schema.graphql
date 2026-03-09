@@ -878,7 +878,7 @@ type Mutation {
   submitUpdateTicket: UpdateStatus
   cancelUpdateTicket: UpdateStatus
 
-  staffUpdateTicket(userId: ID!, status: UpdateStatus!): UpdateStatus
+  staffUpdateTicket(userId: ID!, status: UpdateStatus!, notes: String): UpdateStatus
   
 
   createStudentProfile(input: StudentProfileInput!): StudentProfile # for patients

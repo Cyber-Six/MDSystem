@@ -2,7 +2,6 @@ const logger = require('../utils/logger.js');
 const db = require('../config/db.js');
 const permissions = {
   is_admin: "IS_ADMIN",
-  is_staff: "IS_STAFF",
   privileged_to_perform_on_superior: "PRIVILEGED_TO_PERFORM_ON_SUPERIOR",
 
   emr_allow_approval: "ALLOW_TO_APPROVE_EMR",
