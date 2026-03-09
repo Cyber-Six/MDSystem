@@ -3,6 +3,7 @@ import AppointmentDetailsModal from '../components/modals/AppointmentDetailsModa
 import RecordUpdateDetailsModal from '../components/modals/RecordUpdateDetailsModal';
 import MedicineRequestDetailsModal from '../components/modals/MedicineRequestDetailsModal';
 import InitialRecordList from '../modules/pending-requests/components/initial-record-list';
+import RecordUpdateList from '../modules/pending-requests/components/review-sections/record-update/record-update-list';
 
 /**
  * Pending Requests Page
@@ -341,8 +342,13 @@ const PendingRequests = () => {
         <InitialRecordList />
       )}
 
-      {/* Requests Table (Appointment / Record Update / Medicine Request) */}
-      {filterType !== 'Initial Record' && (
+      {/* Record Update Requests — powered by the real backend */}
+      {filterType === 'Record Update' && (
+        <RecordUpdateList />
+      )}
+
+      {/* Requests Table (Appointment / Medicine Request) */}
+      {filterType !== 'Initial Record' && filterType !== 'Record Update' && (
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
         <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">

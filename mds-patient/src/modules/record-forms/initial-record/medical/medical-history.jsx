@@ -1,48 +1,34 @@
 import React, { useState } from 'react';
 import { Checkbox, Input, Textarea } from './form-elements';
 
-const medicalConditions = [
-  { id: 'covid19', label: 'COVID 19' },
-  { id: 'amoebiasis', label: 'Amoebiasis' },
-  { id: 'bronchialAsthma', label: 'Bronchial Asthma' },
-  { id: 'diabetes', label: 'Diabetes' },
-  { id: 'epilepsyConvulsion', label: 'Epilepsy, Convulsion' },
-  { id: 'handicapCongenitalDeformities', label: 'Handicap, Congenital Deformities' },
-  { id: 'heartDisease', label: 'Heart Disease' },
-  { id: 'hepatitis', label: 'Hepatitis' },
-  { id: 'hypertension', label: 'Hypertension' },
-  { id: 'malaria', label: 'Malaria' },
-  { id: 'psychiatricIllness', label: 'Psychiatric Illness' },
-  { id: 'syncope', label: 'Syncope' },
-  { id: 'tuberculosis', label: 'Tuberculosis' },
-  { id: 'typhoidFever', label: 'Typhoid Fever' },
-  { id: 'thyroidProblems', label: 'Thyroid problems' },
-  { id: 'others', label: 'Others (Fracture, Hernia etc.)' },
-];
-
-const familyMedicalConditions = [
-  { id: 'covid19', label: 'COVID 19' },
-  { id: 'amoebiasis', label: 'Amoebiasis' },
-  { id: 'bronchialAsthma', label: 'Bronchial Asthma' },
-  { id: 'diabetes', label: 'Diabetes' },
-  { id: 'epilepsyConvulsion', label: 'Epilepsy, Convulsion' },
-  { id: 'handicapCongenitalDeformities', label: 'Handicap, Congenital Deformities' },
-  { id: 'heartDisease', label: 'Heart Disease' },
-  { id: 'hepatitis', label: 'Hepatitis' },
-  { id: 'highBloodPressure', label: 'High Blood Pressure' },
-  { id: 'malaria', label: 'Malaria' },
-  { id: 'psychiatricIllness', label: 'Psychiatric Illness' },
-  { id: 'tuberculosis', label: 'Tuberculosis' },
-  { id: 'typhoidFever', label: 'Typhoid Fever' },
-  { id: 'thyroidProblems', label: 'Thyroid problems' },
-  { id: 'others', label: 'Others (Fracture, Hernia etc.)' },
-];
-
-const MedicalHistoryForm = ({ data, onChange }) => {
+/**
+ * MedicalHistoryForm
+ *
+ * Renders self and family medical history checkboxes from the backend
+ * MedicalCondition domain catalog (fetched via fetchAllCatalogs in the parent).
+ *
+ * Form data shape (medicalHistory):
+ *  {
+ *    self:               { [conditionCatalogId]: boolean }
+ *    family:             { [conditionCatalogId]: boolean }
+ *    familyWhoHasIt:     { [conditionCatalogId]: string }  -- "Mother", "Father", etc.
+ *    selfOtherChecked:   boolean
+ *    selfOther:          string
+ *    familyOtherChecked: boolean
+ *    familyOther:        string
+ *    familyOtherWhoHasIt: string
+ *  }
+ */
+const MedicalHistoryForm = ({
+  data,
+  onChange,
+  medicalConditionCatalog = [],
+  catalogsLoading = false,
+}) => {
   const [activeTab, setActiveTab] = useState('self');
 
-  const handleSelfConditionChange = (conditionId, checked) => {
-    const self = { ...data.self, [conditionId]: checked };
+  const handleSelfConditionChange = (id, checked) => {
+    const self = { ...data.self, [id]: checked };
     onChange({ ...data, self });
   };
 
@@ -50,26 +36,35 @@ const MedicalHistoryForm = ({ data, onChange }) => {
     onChange({ ...data, selfOther: value });
   };
 
-  const handleFamilyConditionChange = (conditionId, checked) => {
-    const family = { ...data.family, [conditionId]: checked };
-    // Clear the "who has it" field if unchecked
+  const handleFamilyConditionChange = (id, checked) => {
+    const family = { ...data.family, [id]: checked };
     if (!checked) {
       const familyWhoHasIt = { ...data.familyWhoHasIt };
-      delete familyWhoHasIt[conditionId];
+      delete familyWhoHasIt[id];
       onChange({ ...data, family, familyWhoHasIt });
     } else {
       onChange({ ...data, family });
     }
   };
 
-  const handleFamilyWhoHasItChange = (conditionId, value) => {
-    const familyWhoHasIt = { ...data.familyWhoHasIt, [conditionId]: value };
+  const handleFamilyWhoHasItChange = (id, value) => {
+    const familyWhoHasIt = { ...data.familyWhoHasIt, [id]: value };
     onChange({ ...data, familyWhoHasIt });
   };
 
   const handleFamilyOtherChange = (value) => {
     onChange({ ...data, familyOther: value });
   };
+
+  const CatalogLoader = () => (
+    <div className="flex items-center gap-2 text-sm text-secondary-500 py-4">
+      <svg className="animate-spin w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+      Loading conditions...
+    </div>
+  );
 
   return (
     <div className="form-section">
@@ -83,6 +78,7 @@ const MedicalHistoryForm = ({ data, onChange }) => {
       {/* Tabs */}
       <div className="flex border-b-2 border-neutral-200 mb-6">
         <button
+          type="button"
           className={`py-3 px-6 font-medium transition-colors duration-200 border-b-2 ${
             activeTab === 'self'
               ? 'border-primary-600 text-primary-700'
@@ -93,6 +89,7 @@ const MedicalHistoryForm = ({ data, onChange }) => {
           Yourself
         </button>
         <button
+          type="button"
           className={`py-3 px-6 font-medium transition-colors duration-200 border-b-2 ${
             activeTab === 'family'
               ? 'border-primary-600 text-primary-700'
@@ -110,18 +107,29 @@ const MedicalHistoryForm = ({ data, onChange }) => {
           <p className="text-sm text-secondary-600 mb-4">
             Check any conditions that apply to you:
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {medicalConditions.map((condition) => (
-              <div key={condition.id} className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors">
-                <Checkbox
-                  label={condition.label}
-                  checked={data.self?.[condition.id] || false}
-                  onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
-                />
-              </div>
-            ))}
-          </div>
-          {/* Other Option - Separate at bottom */}
+
+          {catalogsLoading ? (
+            <CatalogLoader />
+          ) : medicalConditionCatalog.length === 0 ? (
+            <p className="text-sm text-secondary-400 italic">No conditions available.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {medicalConditionCatalog.map((condition) => (
+                <div
+                  key={condition.id}
+                  className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
+                >
+                  <Checkbox
+                    label={condition.name}
+                    checked={data.self?.[condition.id] || false}
+                    onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Other Option */}
           <div className="mt-6 border-2 border-neutral-300 rounded-lg p-4">
             <Checkbox
               label="Other:"
@@ -148,28 +156,39 @@ const MedicalHistoryForm = ({ data, onChange }) => {
           <p className="text-sm text-secondary-600 mb-4">
             Check any conditions that apply to your immediate family members and specify who has it:
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {familyMedicalConditions.map((condition) => (
-              <div key={condition.id} className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors">
-                <Checkbox
-                  label={condition.label}
-                  checked={data.family?.[condition.id] || false}
-                  onChange={(e) => handleFamilyConditionChange(condition.id, e.target.checked)}
-                />
-                {data.family?.[condition.id] && (
-                  <div className="mt-2 ml-6">
-                    <Input
-                      placeholder="Who has this condition? (e.g., Mother, Father, Sibling)"
-                      value={data.familyWhoHasIt?.[condition.id] || ''}
-                      onChange={(e) => handleFamilyWhoHasItChange(condition.id, e.target.value)}
-                      className="text-sm"
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          {/* Other Option - Separate at bottom */}
+
+          {catalogsLoading ? (
+            <CatalogLoader />
+          ) : medicalConditionCatalog.length === 0 ? (
+            <p className="text-sm text-secondary-400 italic">No conditions available.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {medicalConditionCatalog.map((condition) => (
+                <div
+                  key={condition.id}
+                  className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
+                >
+                  <Checkbox
+                    label={condition.name}
+                    checked={data.family?.[condition.id] || false}
+                    onChange={(e) => handleFamilyConditionChange(condition.id, e.target.checked)}
+                  />
+                  {data.family?.[condition.id] && (
+                    <div className="mt-2 ml-6">
+                      <Input
+                        placeholder="Who has this condition? (e.g., Mother, Father, Sibling)"
+                        value={data.familyWhoHasIt?.[condition.id] || ''}
+                        onChange={(e) => handleFamilyWhoHasItChange(condition.id, e.target.value)}
+                        className="text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Other Option */}
           <div className="mt-6 border-2 border-neutral-300 rounded-lg p-4">
             <Checkbox
               label="Other:"

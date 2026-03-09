@@ -17,7 +17,7 @@ async function uploadMediaFile(file) {
   if (!file) return null;
   const body = new FormData();
   body.append('file', file);
-  const response = await axiosRequest.post('/media', body, {
+  const response = await axiosRequest.post('/media/stage/', body, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
   console.log('📸 Media file staged, fileId:', response.data.fileId);
@@ -31,7 +31,7 @@ async function uploadMediaFile(file) {
 async function unstageMediaFile(fileId) {
   if (!fileId) return;
   try {
-    await axiosRequest.delete(`/media/${fileId}`);
+    await axiosRequest.delete(`/media/unstage/${fileId}`);
     console.log('🗑️ Staged media file removed:', fileId);
   } catch (error) {
     console.warn('⚠️ Failed to remove staged media file:', fileId, error.message);
