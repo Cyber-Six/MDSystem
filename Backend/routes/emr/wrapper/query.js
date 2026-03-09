@@ -301,7 +301,7 @@ const Query = {
 
     for (const row of result.rows) {
       const appliancesQuery = `
-        SELECT status, dateIssued, tagId, arch
+        SELECT status, "dateIssued", "tagId", arch
         FROM "OralApplianceRecord"
         WHERE "oralApplianceId" = $1;
       `;
