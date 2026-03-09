@@ -21,11 +21,14 @@ const permissions = {
   appointment_allow_edit_configuration: "ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION",
 
   announcement_allow_crud: "ALLOW_TO_CRUD_ANNOUNCEMENT",
-  
+
   consultation_allow_view: "ALLOW_TO_VIEW_CONSULTATION",
   consultation_allow_edit: "ALLOW_TO_EDIT_CONSULTATION",
 
   inventory_allow_view: "ALLOW_TO_VIEW_INVENTORY",
+  inventory_allow_dispense: "ALLOW_TO_DISPENSE_MEDICINE",
+
+  medicine_request_allow_approve: "ALLOW_TO_APPROVE_MEDICINE_REQUEST",
   inventory_allow_edit: "ALLOW_TO_EDIT_INVENTORY",
   inventory_allow_manage_requests: "ALLOW_TO_MANAGE_MEDICINE_REQUESTS",
   inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",

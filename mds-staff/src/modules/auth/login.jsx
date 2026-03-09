@@ -194,6 +194,14 @@ const Login = () => {
         case 'OUTDATED_CONSENT':
           setError('You must agree to the latest data consent policy.');
           break;
+        case 'STAFF_ACCOUNT_PENDING':
+          setError('Your staff account is not yet activated. Contact your administrator to grant you access.');
+          setShowConsent(false);
+          break;
+        case 'STAFF_ACCOUNT_SUSPENDED':
+          setError('Your staff account has been suspended. Contact your administrator.');
+          setShowConsent(false);
+          break;
         default:
           setError(errorMsg);
       }

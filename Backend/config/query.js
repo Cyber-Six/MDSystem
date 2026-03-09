@@ -312,6 +312,17 @@ async function recordLoginAttempt(email, wasSuccessful) {
 }
 
 
+async function updateUserIdentity(userId, identity) {
+  const sql = `
+    UPDATE "UserCredentials"
+    SET identity = $1
+    WHERE id = $2
+    RETURNING id, identity;
+  `;
+  const result = await query(sql, [identity, userId]);
+  return result.rows[0] || null;
+}
+
 module.exports = {
     connect,
     query,
@@ -325,6 +336,7 @@ module.exports = {
     getUserConsentStateByEmail,
     updateUserConsent,
     getUserIdentity,
+    updateUserIdentity,
     isUserValidated,
     setExpiredUpdateTickets,
     setExpiredPersonalTickets,
