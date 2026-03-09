@@ -256,6 +256,7 @@ const Dashboard = () => {
           onComplete={handleInitialRecordComplete}
           revisionData={revisionData}
           isRevision={recordStatus === 'Revision'}
+          staffNote={revisionNote}
         />
       </InitialRecordModal>
 

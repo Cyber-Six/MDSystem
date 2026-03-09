@@ -20,7 +20,7 @@ import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer
  * @param {Function} props.onComplete - Optional callback when form is successfully submitted
  * @param {boolean} props.isModal - Whether the form is displayed in a modal (affects styling)
  */
-const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false }) => {
+const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false, staffNote = null }) => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);

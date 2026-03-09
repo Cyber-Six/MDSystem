@@ -65,8 +65,8 @@ const InitialRecordModal = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Banner */}
-        <div className={`shrink-0 px-5 py-3 sm:px-6 sm:py-4 rounded-t-2xl ${isRevision ? 'bg-yellow-500' : 'bg-primary-500'}`}>
-          <div className="flex items-center justify-between">
+        <div className={`shrink-0 rounded-t-2xl ${isRevision ? 'bg-yellow-500' : 'bg-primary-500'}`}>
+          <div className="px-5 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-1.5 bg-white/25 rounded-lg">
                 {isRevision ? (
@@ -97,20 +97,20 @@ const InitialRecordModal = ({
               <span>{isRevision ? 'Revision Required' : 'Required for Access'}</span>
             </div>
           </div>
-        </div>
 
-        {/* Revision Note Banner */}
-        {isRevision && revisionNote && (
-          <div className="shrink-0 mx-5 mt-4 px-4 py-3 bg-yellow-50 border border-yellow-300 rounded-lg flex items-start gap-3">
-            <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-            </svg>
-            <div>
-              <p className="text-sm font-semibold text-yellow-800">Staff Note</p>
-              <p className="text-sm text-yellow-700 mt-0.5">{revisionNote}</p>
+          {/* Staff Note — attached flush to the bottom of the header, no gap */}
+          {isRevision && revisionNote && (
+            <div className="mx-5 mb-4 px-4 py-3 bg-yellow-400/30 rounded-xl flex items-start gap-3">
+              <svg className="w-4 h-4 text-secondary-800 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+              <div>
+                <p className="text-xs font-semibold text-secondary-900 uppercase tracking-wide">Staff Note</p>
+                <p className="text-sm text-secondary-800 mt-0.5">{revisionNote}</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Content */}
         <div className="flex-1 min-h-0 flex flex-col">

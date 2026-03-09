@@ -70,9 +70,6 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
   };
 
   const handleRequestRevision = async () => {
-    // revisionNote is for operator context – it is not sent to the backend
-    // because the current staffUpdateTicket mutation does not accept a notes
-    // parameter. See backend issues table.
     if (!revisionNote.trim()) {
       setError('Please provide a reason for the revision request.');
       return;
@@ -80,7 +77,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
     setLoading(true);
     setError('');
     try {
-      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REVISION);
+      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REVISION, revisionNote.trim());
       onAction?.({ ...ticket, status: newStatus }, newStatus);
       onClose();
     } catch (err) {
