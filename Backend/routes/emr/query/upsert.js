@@ -10,8 +10,8 @@ async function upsertEmergencyNumber(input) {
   const normalizedNumber = normalizeNumber(input.contactNumber);
   // Check if number already exists
   const existing = await query(
-    `SELECT * FROM "EmergencyNumber" WHERE "contactNumber" = $1`,
-    [normalizedNumber]
+    `SELECT * FROM "EmergencyNumber" WHERE "contactNumber" = $1 AND "contactName" = $2 AND "address" = $3;`,
+    [normalizedNumber, normalizedName, input.address || null]
   );
 
   if (existing.rows.length > 0) {
