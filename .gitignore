@@ -5,6 +5,7 @@
 # ============================================
 Database/setup.psql
 .MDSystem-Drive/
+*.service
 
 
 # ============================================
@@ -136,3 +137,5 @@ dist-ssr/
 Backend/config/data/initialadmin.sql
 
 MDS-AI-Chatbot
+
+use_case.md

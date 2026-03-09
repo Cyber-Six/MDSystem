@@ -10,6 +10,9 @@ const { initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initMedicalProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { initMedicalConsultationGraphQL } = require('./routes/consultation/consult/graphql.js');
+const { initMedicalInventoryGraphQL } = require('./routes/medical-inventory/inventory/graphql.js');
+const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
+const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 
@@ -62,6 +65,9 @@ initMedicalEMRGraphQL(app);
 initMedicalProfileGraphQL(app);
 initMedicalAppointmentGraphQL(app);
 initMedicalConsultationGraphQL(app);
+initMedicalInventoryGraphQL(app);
+initMedicalMedicineRequestGraphQL(app);
+initPrescriptionGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);

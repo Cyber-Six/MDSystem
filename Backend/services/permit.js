@@ -2,7 +2,6 @@ const logger = require('../utils/logger.js');
 const db = require('../config/db.js');
 const permissions = {
   is_admin: "IS_ADMIN",
-  is_staff: "IS_STAFF",
   privileged_to_perform_on_superior: "PRIVILEGED_TO_PERFORM_ON_SUPERIOR",
 
   emr_allow_approval: "ALLOW_TO_APPROVE_EMR",
@@ -27,10 +26,13 @@ const permissions = {
   consultation_allow_edit: "ALLOW_TO_EDIT_CONSULTATION",
 
   inventory_allow_view: "ALLOW_TO_VIEW_INVENTORY",
-  inventory_allow_add: "ALLOW_TO_ADD_INVENTORY",
   inventory_allow_dispense: "ALLOW_TO_DISPENSE_MEDICINE",
 
   medicine_request_allow_approve: "ALLOW_TO_APPROVE_MEDICINE_REQUEST",
+  inventory_allow_edit: "ALLOW_TO_EDIT_INVENTORY",
+  inventory_allow_manage_requests: "ALLOW_TO_MANAGE_MEDICINE_REQUESTS",
+  inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",
+
 };
 
 async function getMedicalpermits(personnelId) {

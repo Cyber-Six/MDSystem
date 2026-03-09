@@ -244,3 +244,34 @@ VALUES
 ('System Maintenance Notice', 'The system will be down for maintenance on Saturday, 10:00 PM - 12:00 AM.', 'd6067d73-64e3-4b1a-a593-5a80b70c9120', true),
 ('New Feature Release: Patient Portal', 'We are excited to announce the launch of our new patient portal, allowing you to easily access your medical records and appointments online.', 'a1f5c8e2-3b9d-4c2e-9f8a-7b6d5c4e3f21', true),
 ('COVID-19 Vaccination Drive', 'Join us for our upcoming COVID-19 vaccination drive on Friday, 9:00 AM - 4:00 PM at all branches. Walk-ins welcome!', 'c3e8f9a1-2d4b-4e5f-8a7c-6b5d4e3f2a10', true);
+
+INSERT INTO "rolesTable" (label, data)
+VALUES
+('IS_ADMIN', 'Grants full administrative privileges'),
+('PRIVILEGED_TO_PERFORM_ON_SUPERIOR', 'Allows actions on superior accounts'),
+
+('ALLOW_TO_APPROVE_EMR', 'Permission to approve electronic medical records'),
+('ALLOW_TO_EDIT_EMR', 'Permission to edit electronic medical records'),
+('ALLOW_TO_VIEW_EMR', 'Permission to view electronic medical records'),
+('ALLOW_TO_SET_DENTAL_RECORD', 'Permission to set dental records'),
+('ALLOW_TO_EDIT_CATALOGS', 'Permission to edit EMR catalogs'),
+
+('ALLOW_TO_APPROVE_PROFILE', 'Permission to approve user profiles'),
+('ALLOW_TO_VIEW_PROFILE', 'Permission to view user profiles'),
+('ALLOW_TO_EDIT_PROFILE', 'Permission to edit user profiles'),
+('ALLOW_TO_UPDATE_EMAIL_IDENTIFIER', 'Permission to update email identifiers'),
+
+('ALLOW_TO_APPROVE_APPOINTMENT', 'Permission to approve appointments'),
+('ALLOW_TO_VIEW_APPOINTMENT', 'Permission to view appointment records'),
+('ALLOW_TO_VIEW_APPOINTMENT_CONFIGURATION', 'Permission to view appointment configuration'),
+('ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION', 'Permission to edit appointment configuration'),
+
+('ALLOW_TO_CRUD_ANNOUNCEMENT', 'Permission to create, read, update, and delete announcements'),
+
+('ALLOW_TO_VIEW_CONSULTATION', 'Permission to view consultations'),
+('ALLOW_TO_EDIT_CONSULTATION', 'Permission to edit consultations'),
+
+('ALLOW_TO_VIEW_INVENTORY', 'Permission to view inventory'),
+('ALLOW_TO_EDIT_INVENTORY', 'Permission to edit inventory'),
+('ALLOW_TO_MANAGE_MEDICINE_REQUESTS', 'Permission to manage medicine requests'),
+('ALLOW_TO_PRESCRIBE', 'Permission to prescribe medicines');

@@ -18,7 +18,7 @@ The update-record module handles:
 |------|---------|
 | **record-update-form.jsx** | Main form container component that orchestrates the entire multi-step form flow. Manages form state, current step tracking, and navigation between steps. |
 | **progress-stepper.jsx** | Visual progress indicator showing which step the user is currently on, with completed step indicators and styling. |
-| **record-choice-page.jsx** | Full-page selection interface where users choose what type of record they want to update (Medical, Dental, or Both). Replaces the modal version. |
+| **record-choice-page.jsx** | Full-page selection interface where users choose what type of record they want to update (Medical, Dental, or Both). Replaces the modal version. 
 
 ### Form Steps
 

@@ -42,19 +42,19 @@ interface UserProfile{
 
 type StudentProfile implements UserProfile {
   id: ID!
-  program: String!
-  year: STUDENT_YEAR!
-  status: UpdateStatus! 
+  program: String
+  year: STUDENT_YEAR
+  status: UpdateStatus
   archived_at: Date
   created_at: Date
 }
 
 type EmployeeProfile implements UserProfile {
   id: ID!
-  department: String!
-  role: String!
-  position: String!
-  status: UpdateStatus! 
+  department: String
+  role: String
+  position: String
+  status: UpdateStatus
   archived_at: Date
   created_at: Date
 }
@@ -354,6 +354,7 @@ type EmergencyNumber {
     contactName: String!
     relationship: String!
     contactNumber: String!
+    address: String
     isVerified: Boolean
     created_at: Date
 }
@@ -362,6 +363,7 @@ input EmergencyNumberInput {
     contactName: String!
     relationship: String!
     contactNumber: String!
+    address: String
     isVerified: Boolean
 }
 
@@ -737,6 +739,7 @@ type UpdateTicket {
   scope: UpdateScope
   first_name: String
   last_name: String
+  notes: String
   branch: DesignationBranch
   created_at: Date
 }
@@ -772,12 +775,12 @@ enum DesignationBranch{
 
 enum DomainType {
   VisualAcuity
+  MedicalCondition
   Medication
   Hospitalization
   Operation
   Immunization
   DentalProcedure
-  MedicalCondition
 }
 # Queries
 type Query {
@@ -876,7 +879,7 @@ type Mutation {
   submitUpdateTicket: UpdateStatus
   cancelUpdateTicket: UpdateStatus
 
-  staffUpdateTicket(userId: ID!, status: UpdateStatus!): UpdateStatus
+  staffUpdateTicket(userId: ID!, status: UpdateStatus!, notes: String): UpdateStatus
   
 
   createStudentProfile(input: StudentProfileInput!): StudentProfile # for patients

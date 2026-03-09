@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Input, Select, Textarea, AccordionSection } from './form-elements';
 import { fetchAllDentalCatalogs } from './dental-history-service';
 import { useBanner } from '../../../context/banner-context';
@@ -12,15 +12,10 @@ const DentalHistoryStep = ({ formData, onChange }) => {
     isLoading: true,
     error: null
   });
-
-  // Prevent duplicate fetch in React StrictMode (dev double-mount)
-  const hasFetched = useRef(false);
+  const [hasDentalProcedures, setHasDentalProcedures] = useState(() => (formData.dentalProcedures?.length > 0 ? true : null));
 
   // Fetch catalogs on mount
   useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-
     let isMounted = true;
     
     const loadCatalogs = async () => {
@@ -160,7 +155,7 @@ const DentalHistoryStep = ({ formData, onChange }) => {
                     hasOralAppliances: true,
                     oralAppliances: formData.oralAppliances?.length
                       ? formData.oralAppliances
-                      : [{ tagId: '', status: '', dateIssued: '', arch: 'None' }]
+                      : [{ tagId: '', status: '', dateIssued: '', arch: 'Both' }]
                   })}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
@@ -180,7 +175,12 @@ const DentalHistoryStep = ({ formData, onChange }) => {
 
             {formData.hasOralAppliances === true && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {catalogs.oralAppliances.length > 0 ? (
+                {catalogs.isLoading ? (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-secondary-700 dark:text-neutral-300">Appliance Type *</label>
+                    <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">Loading appliances...</p>
+                  </div>
+                ) : catalogs.oralAppliances.length > 0 ? (
                   <Select
                     label="Appliance Type *"
                     required
@@ -192,36 +192,35 @@ const DentalHistoryStep = ({ formData, onChange }) => {
                     }}
                   />
                 ) : (
-                  <Input
-                    label="Appliance Type *"
-                    required
-                    placeholder="e.g., Braces, Retainer"
-                    value={formData.oralAppliances?.[0]?.tagId || ''}
-                    onChange={(e) => {
-                      const entry = { ...(formData.oralAppliances?.[0] || {}), tagId: e.target.value };
-                      handleInputChange('oralAppliances', [entry]);
-                    }}
-                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-secondary-700 dark:text-neutral-300">Appliance Type *</label>
+                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                      Appliance catalog unavailable. Please try again later.
+                    </p>
+                  </div>
                 )}
                 <Select
                   label="Location *"
                   required
                   options={[
-                    { value: 'None', label: 'None' },
                     { value: 'Upper', label: 'Upper' },
                     { value: 'Lower', label: 'Lower' },
                     { value: 'Both', label: 'Both' }
                   ]}
-                  value={formData.oralAppliances?.[0]?.arch || 'None'}
+                  value={formData.oralAppliances?.[0]?.arch || 'Both'}
                   onChange={(e) => {
                     const entry = { ...(formData.oralAppliances?.[0] || {}), arch: e.target.value };
                     handleInputChange('oralAppliances', [entry]);
                   }}
                 />
-                <Input
+                <Select
                   label="Status *"
                   required
-                  placeholder="e.g., Active, Completed"
+                  options={[
+                    { value: 'Active', label: 'Active' },
+                    { value: 'Completed', label: 'Completed' },
+                    { value: 'Removed', label: 'Removed' }
+                  ]}
                   value={formData.oralAppliances?.[0]?.status || ''}
                   onChange={(e) => {
                     const entry = { ...(formData.oralAppliances?.[0] || {}), status: e.target.value };
@@ -252,68 +251,105 @@ const DentalHistoryStep = ({ formData, onChange }) => {
           onToggle={toggleAccordion}
         >
           <div className="space-y-4">
-            <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-2">
-              Have you had any of the following dental procedures within the past 24 months (2 years)?
-            </p>
-
-            <div className="space-y-3">
-              {catalogs.dentalProcedures.map((procedure) => {
-                const isSelected = (formData.dentalProcedures || []).some(p => p.procedureTypeId === procedure.id);
-                return (
-                  <div key={procedure.id} className="bg-neutral-50 dark:bg-neutral-800 p-4 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-secondary-700 dark:text-neutral-300">{procedure.name}</span>
-                      <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`procedure-${procedure.id}`}
-                            checked={isSelected}
-                            onChange={() => {
-                              const procedures = formData.dentalProcedures || [];
-                              if (!isSelected) {
-                                handleInputChange('dentalProcedures', [...procedures, { procedureTypeId: procedure.id, procedureDate: '' }]);
-                              }
-                            }}
-                            className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-secondary-600 dark:text-neutral-400">Yes</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="radio"
-                            name={`procedure-${procedure.id}`}
-                            checked={!isSelected}
-                            onChange={() => {
-                              const procedures = (formData.dentalProcedures || []).filter(p => p.procedureTypeId !== procedure.id);
-                              handleInputChange('dentalProcedures', procedures);
-                            }}
-                            className="w-4 h-4 text-primary-500 focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-secondary-600 dark:text-neutral-400">No</span>
-                        </label>
-                      </div>
-                    </div>
-                    {isSelected && (
-                      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600">
-                        <Input
-                          label="Date of Procedure *"
-                          type="date"
-                          required
-                          value={(formData.dentalProcedures || []).find(p => p.procedureTypeId === procedure.id)?.procedureDate || ''}
-                          onChange={(e) => {
-                            const procedures = (formData.dentalProcedures || []).map(p =>
-                              p.procedureTypeId === procedure.id ? { ...p, procedureDate: e.target.value } : p
-                            );
-                            handleInputChange('dentalProcedures', procedures);
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            {catalogs.isLoading ? (
+              <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">Loading procedure catalog...</p>
+            ) : (
+              <>
+            <div className="flex items-center gap-6">
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 mr-4">Have you had any of the following dental procedures within the past 24 months (2 years)?</p>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="hasDentalProcedures"
+                  checked={hasDentalProcedures === true}
+                  onChange={() => setHasDentalProcedures(true)}
+                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="hasDentalProcedures"
+                  checked={hasDentalProcedures === false}
+                  onChange={() => {
+                    setHasDentalProcedures(false);
+                    handleInputChange('dentalProcedures', []);
+                  }}
+                  className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
+              </label>
             </div>
+
+            {hasDentalProcedures === true && (
+              <div className="space-y-3">
+                {catalogs.dentalProcedures.length === 0 ? (
+                  <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    Dental procedure catalog unavailable. Please try again later.
+                  </p>
+                ) : (
+                  catalogs.dentalProcedures.map((procedure) => {
+                    const isSelected = (formData.dentalProcedures || []).some(p => p.procedureTypeId === procedure.id);
+                    return (
+                      <div key={procedure.id} className="bg-neutral-50 dark:bg-neutral-800 p-4 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-secondary-700 dark:text-neutral-300">{procedure.name}</span>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`procedure-${procedure.id}`}
+                                checked={isSelected}
+                                onChange={() => {
+                                  const procedures = formData.dentalProcedures || [];
+                                  if (!isSelected) {
+                                    handleInputChange('dentalProcedures', [...procedures, { procedureTypeId: procedure.id, procedureDate: '' }]);
+                                  }
+                                }}
+                                className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                              />
+                              <span className="text-sm text-secondary-600 dark:text-neutral-400">Yes</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`procedure-${procedure.id}`}
+                                checked={!isSelected}
+                                onChange={() => {
+                                  const procedures = (formData.dentalProcedures || []).filter(p => p.procedureTypeId !== procedure.id);
+                                  handleInputChange('dentalProcedures', procedures);
+                                }}
+                                className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                              />
+                              <span className="text-sm text-secondary-600 dark:text-neutral-400">No</span>
+                            </label>
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600">
+                            <Input
+                              label="Date of Procedure *"
+                              type="date"
+                              required
+                              value={(formData.dentalProcedures || []).find(p => p.procedureTypeId === procedure.id)?.procedureDate || ''}
+                              onChange={(e) => {
+                                const procedures = (formData.dentalProcedures || []).map(p =>
+                                  p.procedureTypeId === procedure.id ? { ...p, procedureDate: e.target.value } : p
+                                );
+                                handleInputChange('dentalProcedures', procedures);
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+              </>
+            )}
           </div>
         </AccordionSection>
 
