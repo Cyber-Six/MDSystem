@@ -38,6 +38,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     immunizationCatalog: [],
     allergenCatalog: [],
     oralApplianceCatalog: [],
+    dentalProcedureCatalog: [],
     catalogsLoading: true,
     catalogsError: null,
   });
@@ -141,15 +142,14 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       hasIntraOralAppliance: '',
       intraOralAppliances: {},
       applianceLocation: '',
-      toothExtraction: '',
-      dentalFilling: '',
+      selectedDentalProcedures: {},
       upperTeethPhoto: null,
       lowerTeethPhoto: null
     },
     obgyne: {
-      menarcheYearAge: '',
+      lastMenstrualPeriod: '',
       menstruationDuration: '',
-      dysmenorrhea: 'no'
+      dysmenorrhea: ''
     },
     certification: {
       verified: false,
@@ -245,8 +245,6 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     if (!dh.firstTimeDentist) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'First time dentist question is required' });
     if (!dh.lastDentalCleaning) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Last dental cleaning is required' });
     if (!dh.hasIntraOralAppliance) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Intra-oral appliance question is required (Yes/No)' });
-    if (!dh.toothExtraction) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Tooth extraction question is required (Yes/No)' });
-    if (!dh.dentalFilling) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Dental filling question is required (Yes/No)' });
     if (!dh.upperTeethPhoto) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Upper teeth photo is required' });
     if (!dh.lowerTeethPhoto) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Lower teeth photo is required' });
 
@@ -469,6 +467,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
             data={formData.dentalHistory}
             onChange={handleDentalHistoryChange}
             oralApplianceCatalog={catalogs.oralApplianceCatalog}
+            dentalProcedureCatalog={catalogs.dentalProcedureCatalog}
             catalogsLoading={catalogs.catalogsLoading}
           />
         );

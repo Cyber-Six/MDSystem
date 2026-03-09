@@ -394,6 +394,16 @@ export const fetchAllCatalogs = async () => {
         name
         description
       }
+      visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true) {
+        id
+        code
+        name
+      }
+      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true) {
+        id
+        code
+        name
+      }
     }
   `;
   try {
@@ -406,6 +416,8 @@ export const fetchAllCatalogs = async () => {
       immunizations: data.immunizationCatalog?.length,
       allergens: data.allergenCatalog?.length,
       oralAppliances: data.oralApplianceCatalog?.length,
+      visualAcuityTypes: data.visualAcuityCatalog?.length,
+      dentalProcedures: data.dentalProcedureCatalog?.length,
     });
     return {
       medicalConditionCatalog: data.medicalConditionCatalog || [],
@@ -415,6 +427,8 @@ export const fetchAllCatalogs = async () => {
       immunizationCatalog: data.immunizationCatalog || [],
       allergenCatalog: data.allergenCatalog || [],
       oralApplianceCatalog: data.oralApplianceCatalog || [],
+      visualAcuityCatalog: data.visualAcuityCatalog || [],
+      dentalProcedureCatalog: data.dentalProcedureCatalog || [],
     };
   } catch (error) {
     console.warn('[EMR Service] Could not fetch catalogs:', error.message);
@@ -426,6 +440,8 @@ export const fetchAllCatalogs = async () => {
       immunizationCatalog: [],
       allergenCatalog: [],
       oralApplianceCatalog: [],
+      visualAcuityCatalog: [],
+      dentalProcedureCatalog: [],
     };
   }
 };
@@ -584,6 +600,8 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
     immunizationCatalog = [],
     allergenCatalog: _aCat = [],
     oralApplianceCatalog = [],
+    visualAcuityCatalog = [],
+    dentalProcedureCatalog = [],
   } = allCatalogs;
   const inputs = {};
 
@@ -655,13 +673,15 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
 
   // Visual Acuity Profile
   const hasVisualAcuity = formData.medicalBackground.eyeglasses || formData.medicalBackground.contactLenses;
+  // Use the first catalog entry for acuityId — falls back to null (acuity omitted) if catalog is empty
+  const visualAcuityId = visualAcuityCatalog[0]?.id ?? null;
   inputs.visualAcuityProfile = {
     notes: hasVisualAcuity
       ? `Eyeglasses: ${formData.medicalBackground.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.medicalBackground.contactLenses ? 'Yes' : 'No'}`
       : null,
-    acuity: hasVisualAcuity
+    acuity: hasVisualAcuity && visualAcuityId
       ? {
-          acuityId: "1",
+          acuityId: visualAcuityId,
           left_eye: formData.medicalBackground.gradeOS || "N/A",
           right_eye: formData.medicalBackground.gradeOD || "N/A",
           notes: null,
@@ -685,8 +705,13 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       : null
   };
 
-  // Dental Procedure Profile (empty)
-  inputs.dentalProcedureProfile = { procedures: [], notes: null };
+  // Dental Procedure Profile — built from selected catalog IDs
+  const today = new Date().toISOString().split('T')[0];
+  const validProcedureIds = new Set(dentalProcedureCatalog.map(c => c.id));
+  const dentalProcedures = Object.entries(formData.dentalHistory.selectedDentalProcedures || {})
+    .filter(([id, checked]) => checked && validProcedureIds.has(id))
+    .map(([id]) => ({ procedureTypeId: id, procedureDate: today }));
+  inputs.dentalProcedureProfile = { procedures: dentalProcedures, notes: null };
 
   // Oral Appliance Profile — oral appliance catalog IDs
   const { appliances, notes: oralNotes } = buildOralApplianceRecords(formData.dentalHistory, oralApplianceCatalog);
