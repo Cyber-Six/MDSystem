@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Input, Select, Textarea, AccordionSection } from './form-elements';
 import { fetchAllDentalCatalogs } from './dental-history-service';
 import { useBanner } from '../../../context/banner-context';
@@ -14,14 +14,8 @@ const DentalHistoryStep = ({ formData, onChange }) => {
   });
   const [hasDentalProcedures, setHasDentalProcedures] = useState(() => (formData.dentalProcedures?.length > 0 ? true : null));
 
-  // Prevent duplicate fetch in React StrictMode (dev double-mount)
-  const hasFetched = useRef(false);
-
   // Fetch catalogs on mount
   useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-
     let isMounted = true;
     
     const loadCatalogs = async () => {
