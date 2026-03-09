@@ -29,7 +29,7 @@ const Mutation = {
       `INSERT INTO "student_profile" 
         ("profileId", program, year)
        VALUES ($1, $2, $3)
-       ON CONFLICT (id) DO UPDATE
+       ON CONFLICT ("profileId") DO UPDATE
          SET program = EXCLUDED.program,
              year = EXCLUDED.year
              RETURNING *;`,
@@ -63,7 +63,7 @@ const Mutation = {
       `INSERT INTO "employee_profile" 
         ("profileId", department, role, position)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (id) DO UPDATE
+       ON CONFLICT ("profileId") DO UPDATE
          SET department = EXCLUDED.department,
              role = EXCLUDED.role,
              position = EXCLUDED.position
