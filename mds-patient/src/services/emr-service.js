@@ -1129,7 +1129,8 @@ const KNOWN_PROGRAMS = new Set([
  * Map fetched backend data back to the InitialMedicalRecordForm's formData shape.
  */
 const mapRevisionDataToFormData = (profileData, emrData) => {
-  const pr  = profileData?.personalRecord || {};
+  // personalLog = candidate data from UsersPersonalLog (the patient's submitted form)
+  const pr  = profileData?.personalLog || {};
   const bid = profileData?.branchId;
   const emr = emrData || {};
 
@@ -1306,9 +1307,13 @@ export const fetchRevisionPrefill = async () => {
 
   const [profileResult, emrResult] = await Promise.allSettled([
     // ── Request 1: personal profile ──────────────────────
+    // Only queries getPersonalRecordLog (UsersPersonalLog) which contains
+    // the patient's submitted form data. getPersonalRecord (UsersPersonal)
+    // is intentionally excluded because its personal fields are null until
+    // staff approval runs applyUpdatePersonalRecord.
     sendGraphQLRequest(
       `query GetRevisionPersonalData {
-        personalRecord: getPersonalRecord {
+        personalLog: getPersonalRecordLog {
           first_name middle_name last_name suffix
           date_of_birth sex civil_status nationality religion
           contactNumber present_address
@@ -1385,14 +1390,19 @@ export const fetchRevisionPrefill = async () => {
     console.warn('[EMR Service] EMR prefill fetch failed:', emrResult.reason?.message);
   }
 
-  // If both failed entirely, return null so the form starts blank
-  if (profileResult.status === 'rejected' && emrResult.status === 'rejected') {
+  // Even on a GraphQL error the response may carry partial data. Recover it.
+  const profileData = profileResult.status === 'fulfilled'
+    ? profileResult.value
+    : (profileResult.reason?.data || {});
+  const emrData = emrResult.status === 'fulfilled'
+    ? emrResult.value
+    : (emrResult.reason?.data || {});
+
+  // If no usable profile or EMR data at all, start the form blank
+  if (!profileData?.personalLog && Object.keys(emrData).length === 0) {
     console.error('[EMR Service] fetchRevisionPrefill: both requests failed, form will start blank');
     return null;
   }
-
-  const profileData = profileResult.status === 'fulfilled' ? profileResult.value : {};
-  const emrData     = emrResult.status    === 'fulfilled' ? emrResult.value    : {};
 
   const mapped = mapRevisionDataToFormData(profileData, emrData);
   console.log('[EMR Service] Revision pre-fill data mapped successfully');
