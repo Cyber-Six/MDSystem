@@ -18,7 +18,6 @@ async function upsertEmergencyNumber(input) {
     // Reuse existing record
     return existing.rows[0];
   }
-  console.log("fdd", input);
   // Otherwise insert new
   const result = await query(
     `INSERT INTO "EmergencyNumber"

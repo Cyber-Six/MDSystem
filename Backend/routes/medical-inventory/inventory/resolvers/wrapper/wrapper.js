@@ -1,7 +1,7 @@
-const db = require("../../../../config/query.js");
-const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
+const db = require("../../../../../config/query.js");
+const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const { validateItemActive } = require("./helper.js");
-const logger = require("../../../../utils/logger.js");
+const logger = require("../../../../../utils/logger.js");
 
 const Query = {
   _getMedicalItems: async (_, { category, offset = 0, limit = 20 }, { res }) => {

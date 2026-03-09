@@ -1,5 +1,5 @@
-const db = require("../../../../config/query.js");
-const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
+const db = require("../../../../../config/query.js");
+const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 
 async function validateItemExists(itemId, res) {
   const result = await db.query(
