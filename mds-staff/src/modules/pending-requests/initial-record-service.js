@@ -46,6 +46,7 @@ export const TICKET_STATUS = {
   PENDING: 'Pending',
   REVISION: 'Revision',
   REVISION_SUBMITTED: 'RevisionSubmitted',
+  REJECTED: 'Rejected',
   EXPIRED: 'Expired',
   CANCELLED: 'Cancelled',
   APPROVED: 'Approved',
