@@ -621,12 +621,14 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       firstContact: {
         contactName: formData.personalInfo.emergencyContacts[0].name,
         relationship: formData.personalInfo.emergencyContacts[0].relationship,
-        contactNumber: formData.personalInfo.emergencyContacts[0].contactNumber
+        contactNumber: formData.personalInfo.emergencyContacts[0].contactNumber,
+        address: formData.personalInfo.emergencyContacts[0].address || null
       },
       secondContact: {
         contactName: formData.personalInfo.emergencyContacts[1].name,
         relationship: formData.personalInfo.emergencyContacts[1].relationship,
-        contactNumber: formData.personalInfo.emergencyContacts[1].contactNumber
+        contactNumber: formData.personalInfo.emergencyContacts[1].contactNumber,
+        address: formData.personalInfo.emergencyContacts[1].address || null
       }
     };
   }
@@ -1190,13 +1192,13 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
         name:          ec.firstContact?.contactName   || '',
         relationship:  ec.firstContact?.relationship  || '',
         contactNumber: ec.firstContact?.contactNumber || '',
-        address:       '',
+        address:       ec.firstContact?.address       || '',
       },
       {
         name:          ec.secondContact?.contactName   || '',
         relationship:  ec.secondContact?.relationship  || '',
         contactNumber: ec.secondContact?.contactNumber || '',
-        address:       '',
+        address:       ec.secondContact?.address       || '',
       },
     ],
   };
@@ -1359,8 +1361,8 @@ export const fetchRevisionPrefill = async () => {
           ... on EmployeeProfile { department role }
         }
         emergencyContact: getEmergencyContact {
-          firstContact  { contactName relationship contactNumber }
-          secondContact { contactName relationship contactNumber }
+          firstContact  { contactName relationship contactNumber address }
+          secondContact { contactName relationship contactNumber address }
         }
         medicalHistory: getMedicalHistory {
           conditions { conditionId relationship }
