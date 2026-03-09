@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/layout/layout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
 import { checkInitialRecordStatus, getMyBranchIdentifier, fetchRevisionPrefill } from '../services/emr-service.js';
-import InitialRecordModal from '../components/modals/initial-record-modal.jsx';
+import InitialRecordModal from '../modules/record-forms/initial-record/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 
 // Lazy-loaded route modules for code splitting

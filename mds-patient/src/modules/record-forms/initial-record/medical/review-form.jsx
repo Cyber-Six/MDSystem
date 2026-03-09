@@ -54,7 +54,8 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange }) 
           <DataRow label="Civil Status" value={formData.personalInfo?.civilStatus} />
           <DataRow label="Nationality" value={formData.personalInfo?.nationality} />
           <DataRow label="Religion" value={formData.personalInfo?.religion} />
-          <DataRow label="Address" value={formData.personalInfo?.address} />
+          <DataRow label="Present Address" value={formData.personalInfo?.address} />
+          <DataRow label="Province Address" value={formData.personalInfo?.provinceAddress} />
           <DataRow label="Contact Number" value={formData.personalInfo?.contactNumber} />
         </dl>
       </div>
@@ -159,12 +160,17 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange }) 
         </div>
 
         <dl className="space-y-1">
-          <DataRow label="Drug Allergy" value={formData.medicalBackground?.drugAllergy} />
-          <DataRow label="Food Allergy" value={formData.medicalBackground?.foodAllergy} />
-          <DataRow label="Other Allergy" value={formData.medicalBackground?.otherAllergy} />
-          <DataRow label="Hospitalizations" value={formData.medicalBackground?.hospitalizations} />
-          <DataRow label="Operations" value={formData.medicalBackground?.operations} />
-          <DataRow label="Maintenance Medications" value={formData.medicalBackground?.maintenanceMedications} />
+          <DataRow label="Has Allergies" value={formData.medicalBackground?.hasAllergies} />
+          <DataRow label="Allergy Notes" value={formData.medicalBackground?.allergyOther} />
+          <DataRow label="Hospitalization" value={formData.medicalBackground?.hasHospitalization} />
+          <DataRow label="Hospitalization Date" value={formatDate(formData.medicalBackground?.hospitalizationDate)} />
+          <DataRow label="Hospitalization Notes" value={formData.medicalBackground?.hospitalizationNotes} />
+          <DataRow label="Surgery/Operation" value={formData.medicalBackground?.hasOperation} />
+          <DataRow label="Operation Date" value={formatDate(formData.medicalBackground?.operationDate)} />
+          <DataRow label="Operation Notes" value={formData.medicalBackground?.operationNotes} />
+          <DataRow label="Maintenance Medications" value={formData.medicalBackground?.hasMedications} />
+          <DataRow label="Medication Reason" value={formData.medicalBackground?.medicationReason} />
+          <DataRow label="Medication Notes" value={formData.medicalBackground?.medicationNotes} />
           <DataRow label="Tattoo Location" value={formData.medicalBackground?.tattooLocation} />
           <DataRow label="Piercing Location" value={formData.medicalBackground?.piercingLocation} />
           <DataRow label="Smoker" value={formData.medicalBackground?.smoker === 'yes' ? `Yes (${formData.medicalBackground?.smokerSticksPerDay || 0} sticks/day, ${formData.medicalBackground?.smokerYears || 0} years)` : 'No'} />
@@ -178,19 +184,17 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange }) 
               <DataRow label="Visual Acuity Date" value={formatDate(formData.medicalBackground?.visualAcuityDate)} />
             </>
           )}
-          <DataRow label="Height" value={formData.medicalBackground?.height ? `${formData.medicalBackground.height} cm` : ''} />
-          <DataRow label="Weight" value={formData.medicalBackground?.weight ? `${formData.medicalBackground.weight} kg` : ''} />
         </dl>
       </div>
 
       {/* OB-GYNE History (if female) */}
       {formData.personalInfo?.gender === 'Female' && (
         <div className="form-section">
-          <SectionHeader title="OB-GYNE History" onEditClick={() => onEdit(3)} />
+          <SectionHeader title="OB-GYNE History" onEditClick={() => onEdit(4)} />
           <dl className="space-y-1">
-            <DataRow label="Menarche" value={formData.obGyne?.menarcheYearAge} />
-            <DataRow label="Menstruation Duration" value={formData.obGyne?.menstruationDuration} />
-            <DataRow label="Dysmenorrhea" value={formData.obGyne?.dysmenorrhea === 'yes' ? 'Yes' : 'No'} />
+            <DataRow label="Last Menstrual Period" value={formatDate(formData.obgyne?.lastMenstrualPeriod)} />
+            <DataRow label="Menstruation Duration" value={formData.obgyne?.menstruationDuration} />
+            <DataRow label="Dysmenorrhea" value={formData.obgyne?.dysmenorrhea ? (formData.obgyne.dysmenorrhea.toLowerCase() === 'yes' ? 'Yes' : 'No') : ''} />
           </dl>
         </div>
       )}
