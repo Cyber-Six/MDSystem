@@ -11,6 +11,7 @@ const query = require("../../../config/query.js");
 const { verifyPassword, generateRandomKey } = require("../../../utils/security.js");
 
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
+const { findMedicalPermit, permissions: medicalPermissions } = require("../../../services/permit.js");
 const AuthSession = require("../../../utils/authSession.js");
 const router = express.Router();
 
@@ -119,6 +120,26 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   }
 
   deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
+
+  // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
+  const portal = detectPortalFromSubdomain(req);
+  if (portal === "medical") {
+    const identity = await query.getUserIdentity(session.user_id);
+    if (identity !== "Medical") {
+      const hasStaffRole = await findMedicalPermit(session.user_id, medicalPermissions.is_staff);
+      if (hasStaffRole) {
+        return res.status(403).json({
+          error: "STAFF_ACCOUNT_SUSPENDED",
+          message: "Your staff account is currently suspended. Contact your administrator.",
+        });
+      }
+      return res.status(403).json({
+        error: "STAFF_ACCOUNT_PENDING",
+        message: "Your account does not yet have staff access. Ask your administrator to activate your account.",
+      });
+    }
+  }
+
   // ✅ Create actual auth session (JWT, cookie, etc.)
   //const authToken = await query.createAuthToken(session.user_id);
 

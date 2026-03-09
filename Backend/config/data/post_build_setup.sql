@@ -1,6 +1,14 @@
 -- Medicine request rejection reason column (added post-initial build)
 ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
 
+-- Role management: insert new permission labels (idempotent)
+INSERT INTO "rolesTable" (label) VALUES
+  ('ALLOW_TO_VIEW_INVENTORY'),
+  ('ALLOW_TO_ADD_INVENTORY'),
+  ('ALLOW_TO_DISPENSE_MEDICINE'),
+  ('ALLOW_TO_APPROVE_MEDICINE_REQUEST')
+ON CONFLICT (label) DO NOTHING;
+
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);
 CREATE INDEX ON "patientUpdateLog"(status);
