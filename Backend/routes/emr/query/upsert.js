@@ -28,8 +28,8 @@ async function upsertEmergencyNumber(input) {
     [
       normalizedName,
       input.relationship.trim(),
-      input.address,
       normalizedNumber,
+      input.address || null,
       input.isVerified || false
     ]
   );
