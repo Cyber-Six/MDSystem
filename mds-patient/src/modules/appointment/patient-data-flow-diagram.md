@@ -37,9 +37,9 @@
 
 > Patient browses available appointment schedules, dates, and requirements.
 
-- [ ] `listOpenAppointments` resolver implemented
-- [ ] `listAppointmentSchedules` resolver implemented
-- [ ] `listAppointmentRequirement` resolver implemented
+- [x] `listOpenAppointments` resolver implemented
+- [x] `listAppointmentSchedule` resolver implemented
+- [x] `listAppointmentRequirements` resolver implemented
 
 ```
 ( Patient )
@@ -55,8 +55,8 @@
 
 > System validates that the schedule exists and has open slots.
 
-- [ ] Frontend correctly handles "no available schedule" → End
-- [ ] Frontend correctly handles "schedule closed / no slot" → End
+- [x] Frontend correctly handles "no available schedule" → End
+- [x] Frontend correctly handles "schedule closed / no slot" → End
 
 ```
 <? patient finds a available Schedule? >
@@ -72,9 +72,9 @@
 
 > If the schedule has pre-requirements, the patient must submit them before booking.
 
-- [ ] `Submit Requirements` resolver implemented (green)
-- [ ] `Submit Appointment Request` resolver implemented (green)
-- [ ] Pre-requirements correctly gate the submission flow
+- [x] `submitAppointment` mutation handles requirements inline
+- [x] `submitAppointment` mutation implemented (green)
+- [x] Pre-requirements correctly gate the submission flow
 
 ```
 <? is there pre requirements? >
@@ -90,15 +90,19 @@
 > Request is sent to Staff. The patient's slot is held as "InProgress".
 > If Staff does not respond within the time window, the slot auto-expires.
 
-- [ ] Patient slot logged as `"InProgress"` on submission
+> **Note:** The SVG diagram labels this step `"InProgress"`, but the actual
+> codebase inserts the slot as `"Pending"`.  `InProgress` is set later when
+> the patient physically arrives (via `recordAppointmentAttendance`).
+
+- [x] Patient slot logged as `"Pending"` on submission
 - [ ] `decayed "expired"` auto-process triggers on timeout (purple)
-- [ ] Request forwarded to Staff for review
-- [ ] `( prevent multiple appointment )` business rule enforced
+- [x] Request forwarded to Staff for review
+- [x] `( prevent multiple appointment )` business rule enforced
 
 ```
 [ Submit Appointment Request ]
   --> ( Staff )                                     // Staff Required — request forwarded for review
-  --> [ entry patientSlot is logged "InProgress" ]
+  --> [ entry patientSlot is logged "Pending" ]      // SVG says "InProgress" — code uses "Pending"
         |
         |--> [ decayed "expired" ]                  // auto (purple): slot expires if staff does not respond
         |      --> ( End )
@@ -117,8 +121,8 @@
 
 ```
 <? Staff Approved? >
-  -- No  --> ( End )
-  -- Yes --> [ Appointment is Settled  status "scheduled" ]
+  -- No (Rejected)  --> ( End )
+  -- Yes --> [ Appointment is Settled  status "Scheduled" ]
                --> <? cancelled? >
 ```
 
@@ -128,9 +132,9 @@
 
 > After the appointment is scheduled, it can be cancelled, completed, or marked no-show.
 
-- [ ] `setAppointment Cancelled` resolver implemented (green)
-- [ ] `Appointment status "completed"` resolver implemented (green)
-- [ ] `Appointment status "no-show"` auto-process implemented (purple)
+- [x] `cancelAppointment` mutation implemented (patient-side, green)
+- [ ] `Appointment status "completed"` — staff-side only (not patient mutation)
+- [ ] `Appointment status "no-show"` auto-process not yet implemented (purple)
 
 ```
 <? cancelled? >
@@ -179,14 +183,19 @@
 
 ## Appointment Status State Machine (Patient View)
 
-| Status        | Trigger                                     | What Patient Sees          |
-|---------------|---------------------------------------------|----------------------------|
-| `InProgress`  | Patient submits appointment request         | "Awaiting staff approval"  |
-| `expired`     | No staff response within time limit (auto)  | "Request expired"          |
-| `scheduled`   | Staff approves request                      | "Appointment confirmed"    |
-| `cancelled`   | Cancellation by staff or patient            | "Appointment cancelled"    |
-| `no-show`     | Patient did not attend                      | "Marked as no-show"        |
-| `completed`   | Appointment successfully fulfilled          | "Appointment completed"    |
+> Aligned to actual `schedulingStatus` enum and codebase behavior.
+
+| Status              | Trigger                                         | What Patient Sees          |
+|---------------------|-------------------------------------------------|----------------------------|
+| `Pending`           | Patient submits appointment request             | "Awaiting staff approval"  |
+| `Scheduled`         | Staff approves request                          | "Appointment confirmed"    |
+| `InProgress`        | Patient arrives (`recordAppointmentAttendance`) | "Checked in"               |
+| `Completed`         | Appointment successfully fulfilled              | "Appointment completed"    |
+| `Rejected`          | Staff rejects the request                       | "Request rejected"         |
+| `Expired`           | No staff response within time limit (auto)      | "Request expired"          |
+| `CancelledByPatient`| Patient cancels their own appointment           | "You cancelled"            |
+| `CancelledByMedical`| Staff/medical cancels the appointment           | "Cancelled by clinic"      |
+| `NoShow`            | Patient did not attend the appointment          | "Marked as no-show"        |
 
 ---
 
@@ -203,22 +212,24 @@
 
 ### Resolvers (Patient-facing)
 
-- [ ] `listOpenAppointments` — list open appointment schedules
-- [ ] `listAppointmentSchedules` — list available dates for a schedule
-- [ ] `listAppointmentRequirement` — list pre-requirements
-- [ ] `submitRequirements` — submit pre-requirements
-- [ ] `submitAppointmentRequest` — submit the appointment request
+- [x] `listOpenAppointments` — list open appointment schedules
+- [x] `listCustomDates` — list custom dates for a scheduler
+- [x] `listAppointmentSchedule` — get availability for scheduler + date
+- [x] `listAppointmentRequirements` — list pre-requirements
+- [x] `getAppointmentStatus` — check current appointment status
+- [x] `submitAppointment` — submit appointment with requirements
+- [x] `cancelAppointment` — cancel active appointment
 
 ### Status Transitions
 
-- [ ] Slot logged as `"InProgress"` on submission
-- [ ] `decayed "expired"` auto-triggers on staff timeout
-- [ ] `"scheduled"` set on staff approval
-- [ ] `setAppointmentCancelled` transitions to `"cancelled"`
-- [ ] `"completed"` set when appointment fulfilled
-- [ ] `"no-show"` auto-set when patient doesn't attend
+- [x] Slot logged as `"Pending"` on submission
+- [ ] `decayed "Expired"` auto-triggers on staff timeout
+- [x] `"Scheduled"` set on staff approval
+- [x] `cancelAppointment` transitions to `"CancelledByPatient"`
+- [ ] `"Completed"` set when appointment fulfilled (staff-side)
+- [ ] `"NoShow"` auto-set when patient doesn't attend
 
 ### Business Rules
 
-- [ ] Prevent multiple active appointments per patient
-- [ ] Pre-requirements gate enforced before submission
+- [x] Prevent multiple active appointments per patient
+- [x] Pre-requirements gate enforced before submission
