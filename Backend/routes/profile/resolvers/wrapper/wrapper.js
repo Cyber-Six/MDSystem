@@ -257,7 +257,7 @@ const Mutation = {
     if (result.rows[0].exists) {
       const updateQuery = `
         UPDATE "UserCredentials"
-        SET credentials_status = 'active'
+        SET credentials_status = 'Active'
         WHERE id = $1;
       `;
       await db.query(updateQuery, [userId]);
