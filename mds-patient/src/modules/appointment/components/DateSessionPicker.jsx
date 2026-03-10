@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Spinner, BackButton } from './shared';
 import { SESSION } from '../patient-appointment-service';
 
@@ -27,14 +27,41 @@ const DateSessionPicker = ({
   onNext,
   onBack,
 }) => {
-  // ── Current month (fixed — no navigation) ─────────────────────────────────
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
-  const prevMonthDays = new Date(year, month, 0).getDate();
   const todayStr = fmtDate(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // ── Month navigation (only enabled when maxDate overflows into next month) ─
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const maxDateObj = new Date(maxDate + 'T00:00:00');
+  const maxMonth = maxDateObj.getMonth();
+  const maxYear = maxDateObj.getFullYear();
+  const spansNextMonth = maxYear > currentYear || maxMonth > currentMonth;
+
+  const [viewYear, setViewYear] = useState(currentYear);
+  const [viewMonth, setViewMonth] = useState(currentMonth);
+
+  const canGoPrev = viewYear > currentYear || viewMonth > currentMonth;
+  const canGoNext = spansNextMonth && (viewYear < maxYear || viewMonth < maxMonth);
+
+  const handlePrevMonth = () => {
+    if (!canGoPrev) return;
+    if (viewMonth === 0) { setViewYear(viewYear - 1); setViewMonth(11); }
+    else setViewMonth(viewMonth - 1);
+  };
+  const handleNextMonth = () => {
+    if (!canGoNext) return;
+    if (viewMonth === 11) { setViewYear(viewYear + 1); setViewMonth(0); }
+    else setViewMonth(viewMonth + 1);
+  };
+
+  // ── Derive calendar grid from viewYear/viewMonth ──────────────────────────
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay(); // 0 = Sun
+  const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
+
+  // Compute how many days ahead from the maxDate prop
+  const schedulingDays = Math.round((maxDateObj - new Date(today + 'T00:00:00')) / 86400000);
 
   // ── Date helpers ──────────────────────────────────────────────────────────
 
@@ -71,12 +98,12 @@ const DateSessionPicker = ({
     for (let i = firstDayOfWeek - 1; i >= 0; i--)
       cells.push({ day: prevMonthDays - i, isOtherMonth: true });
     for (let d = 1; d <= daysInMonth; d++)
-      cells.push({ day: d, isOtherMonth: false, dateStr: fmtDate(year, month, d) });
+      cells.push({ day: d, isOtherMonth: false, dateStr: fmtDate(viewYear, viewMonth, d) });
     const remaining = 42 - cells.length;
     for (let i = 1; i <= remaining; i++)
       cells.push({ day: i, isOtherMonth: true });
     return cells;
-  }, [year, month, daysInMonth, firstDayOfWeek, prevMonthDays]);
+  }, [viewYear, viewMonth, daysInMonth, firstDayOfWeek, prevMonthDays]);
 
   // ── Session slot counts for the *selected* date ──────────────────────────
 
@@ -112,16 +139,38 @@ const DateSessionPicker = ({
       <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-2">Select Date &amp; Session</h2>
       <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-1">{scheduler.label} — {scheduler.location}</p>
       <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-6">
-        Available days: {scheduler.schedulePerWeek?.join(', ')} | Bookings up to 7 days ahead
+        Available days: {scheduler.schedulePerWeek?.join(', ')} | Bookings up to {schedulingDays} day{schedulingDays !== 1 ? 's' : ''} ahead
       </p>
 
       {/* ── Calendar ──────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 mb-6">
-        {/* Month title — no navigation (patient is locked to current month) */}
-        <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 text-center">
+        {/* Month title — navigation enabled only when maxDate crosses into next month */}
+        <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+          {spansNextMonth ? (
+            <button
+              onClick={handlePrevMonth}
+              disabled={!canGoPrev}
+              className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4 text-neutral-600 dark:text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          ) : <span />}
           <h3 className="text-sm font-semibold text-neutral-800 dark:text-white" style={{ margin: 0 }}>
-            {MONTH_NAMES[month]} {year}
+            {MONTH_NAMES[viewMonth]} {viewYear}
           </h3>
+          {spansNextMonth ? (
+            <button
+              onClick={handleNextMonth}
+              disabled={!canGoNext}
+              className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4 text-neutral-600 dark:text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ) : <span />}
         </div>
 
         {/* Day-of-week headers */}

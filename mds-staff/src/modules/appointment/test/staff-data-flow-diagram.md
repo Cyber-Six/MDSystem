@@ -40,8 +40,8 @@
 
 ### Inbound Request
 
-- [ ] Staff receives inbound appointment request notification
-- [ ] `respondAppointmentRequest` resolver implemented
+- [x] Staff receives inbound appointment request notification
+- [x] `respondAppointmentRequest` resolver implemented
 
 ```
 ( Patient ) --> [ Submit Appointment Request ]
@@ -56,8 +56,8 @@
 
 ### Staff Decision
 
-- [ ] Approval sets status to `"scheduled"`
-- [ ] Rejection terminates the request → End
+- [x] Approval sets status to `"Scheduled"`
+- [x] Rejection terminates the request → End
 
 ```
 ( Staff ) --> [ respondAppointment Request ]
@@ -69,9 +69,10 @@
 
 ### Post-Schedule Tracking (Staff-side)
 
-- [ ] `setAppointment Cancelled` resolver implemented (green)
-- [ ] `Appointment status "completed"` resolver implemented (green)
-- [ ] `Appointment status "no-show"` auto-process implemented (purple)
+- [x] `setAppointment Cancelled` resolver implemented (green) — via `respondAppointment(status: CancelledByMedical)`
+- [x] `Appointment status "completed"` resolver implemented (green) — via `respondAppointment(status: Completed)`
+- [x] `Appointment status "no-show"` resolver implemented (green) — via `respondAppointment(status: NoShow)`
+- [ ] `decayed "expired"` auto-process not yet automated (purple)
 
 ```
 <? cancelled? >
@@ -94,8 +95,8 @@ All operations below are initiated by `( Staff )`.
 
 > Controls which patients may book specific schedules.
 
-- [ ] `AddEntryWhitelist` resolver implemented
-- [ ] `deleteEntryWhitelist` resolver implemented
+- [x] `AddEntryWhitelist` resolver implemented
+- [x] `deleteEntryWhitelist` resolver implemented
 
 ```
 ( Staff ) --> [ AddEntryWhitelist ]
@@ -106,8 +107,8 @@ All operations below are initiated by `( Staff )`.
 
 > Override default schedule availability dates.
 
-- [ ] `setCustomDates` resolver implemented
-- [ ] `unsetCustomDates` resolver implemented
+- [x] `setCustomDates` resolver implemented
+- [x] `unsetCustomDates` resolver implemented
 
 ```
 ( Staff ) --> [ setCustomDates ]
@@ -118,9 +119,9 @@ All operations below are initiated by `( Staff )`.
 
 > Create and manage appointment schedule templates.
 
-- [ ] `createScheduler` resolver implemented
-- [ ] `updateScheduler` resolver implemented
-- [ ] `deleteScheduler` resolver implemented
+- [x] `createScheduler` resolver implemented
+- [x] `updateScheduler` resolver implemented
+- [x] `deleteScheduler` resolver implemented
 
 ```
 ( Staff ) --> [ createScheduler ]
@@ -132,7 +133,7 @@ All operations below are initiated by `( Staff )`.
 
 > Update the morning / afternoon slots allowed for a specific day only.
 
-- [ ] `updateDateIdentity` resolver implemented
+- [x] `updateDateIdentity` resolver implemented
 
 ```
 ( Staff ) --> [ updateDateIdentity ]
@@ -140,8 +141,8 @@ All operations below are initiated by `( Staff )`.
 
 ### Requirements Management
 
-- [ ] `updateScheduler Requirement` resolver implemented
-- [ ] `deleteScheduler Requirement` resolver implemented
+- [x] `updateScheduler Requirement` resolver implemented
+- [x] `deleteScheduler Requirement` resolver implemented
 
 ```
 ( Staff ) --> [ updateScheduler Requirement ]
@@ -150,10 +151,10 @@ All operations below are initiated by `( Staff )`.
 
 ### Query Operations (Staff View)
 
-- [ ] `listAllOpenAppointment` resolver implemented
-- [ ] `listAllAppointmentSchedules` resolver implemented
-- [ ] `listAppointmentPreRequirement` resolver implemented
-- [ ] `listAppointmentIdentity` resolver implemented
+- [x] `listAllOpenAppointment` resolver implemented
+- [x] `listAllAppointmentSchedules` resolver implemented
+- [x] `listAppointmentPreRequirement` resolver implemented
+- [x] `listAppointmentIdentity` resolver implemented
 
 ```
 ( Staff ) --> [ listAllOpen Appointment ]
@@ -184,14 +185,17 @@ All operations below are initiated by `( Staff )`.
 
 ## Appointment Status State Machine (Staff View)
 
-| Status        | Staff Action                                 | Result                    |
-|---------------|----------------------------------------------|---------------------------|
-| `InProgress`  | Patient submitted; awaiting staff response   | Review & respond          |
-| `expired`     | Staff did not respond in time (auto)         | Slot released             |
-| `scheduled`   | Staff approved the request                   | Appointment active        |
-| `cancelled`   | Staff or patient cancels                     | Appointment terminated    |
-| `no-show`     | Patient did not attend (auto)                | Record marked             |
-| `completed`   | Appointment fulfilled                        | Record closed             |
+| Status              | Staff Action                                        | Result                    |
+|---------------------|-----------------------------------------------------|---------------------------|
+| `Pending`           | Patient submitted; awaiting staff response          | Review & respond          |
+| `Scheduled`         | Staff approved the request                          | Appointment active        |
+| `InProgress`        | Patient arrived (`recordAppointmentAttendance`)     | Active visit              |
+| `Completed`         | Staff marks appointment fulfilled                   | Record closed             |
+| `Rejected`          | Staff rejects the request                           | `( End )`                 |
+| `Expired`           | Staff did not respond in time (auto)                | Slot released             |
+| `CancelledByPatient`| Patient cancels their own appointment               | Appointment terminated    |
+| `CancelledByMedical`| Staff cancels the appointment                       | Appointment terminated    |
+| `NoShow`            | Patient did not attend                              | Record marked             |
 
 ---
 
@@ -199,34 +203,34 @@ All operations below are initiated by `( Staff )`.
 
 ### Schedule Management Resolvers
 
-- [ ] `createScheduler`
-- [ ] `updateScheduler`
-- [ ] `deleteScheduler`
-- [ ] `setCustomDates`
-- [ ] `unsetCustomDates`
-- [ ] `updateDateIdentity`
-- [ ] `AddEntryWhitelist`
-- [ ] `deleteEntryWhitelist`
-- [ ] `updateSchedulerRequirement`
-- [ ] `deleteSchedulerRequirement`
+- [x] `createScheduler`
+- [x] `updateScheduler`
+- [x] `deleteScheduler`
+- [x] `setCustomDates`
+- [x] `unsetCustomDates`
+- [x] `updateDateIdentity`
+- [x] `AddEntryWhitelist`
+- [x] `deleteEntryWhitelist`
+- [x] `updateSchedulerRequirement`
+- [x] `deleteSchedulerRequirement`
 
 ### Appointment Response Resolvers
 
-- [ ] `respondAppointmentRequest`
-- [ ] `setAppointmentCancelled`
+- [x] `respondAppointmentRequest`
+- [x] `setAppointmentCancelled`
 
 ### Query Resolvers
 
-- [ ] `listAllOpenAppointment`
-- [ ] `listAllAppointmentSchedules`
-- [ ] `listAppointmentPreRequirement`
-- [ ] `listAppointmentIdentity`
+- [x] `listAllOpenAppointment`
+- [x] `listAllAppointmentSchedules`
+- [x] `listAppointmentPreRequirement`
+- [x] `listAppointmentIdentity`
 
 ### Status Transitions (Staff-side)
 
-- [ ] Approval → `"scheduled"`
-- [ ] Rejection → `( End )`
+- [x] Approval → `"Scheduled"`
+- [x] Rejection → `( End )`
 - [ ] `decayed "expired"` auto-triggers when staff doesn't respond
-- [ ] `setAppointmentCancelled` → `"cancelled"`
-- [ ] `"completed"` set post-appointment
-- [ ] `"no-show"` auto-set when patient absent
+- [x] `setAppointmentCancelled` → `"CancelledByMedical"`
+- [x] `"Completed"` set post-appointment
+- [x] `"NoShow"` set by staff when patient absent

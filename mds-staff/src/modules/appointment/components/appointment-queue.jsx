@@ -22,7 +22,8 @@ const TABS = [
   { key: 'InProgress',         label: 'In Progress', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
   { key: 'Completed',          label: 'Completed',   icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
   { key: 'NoShow',             label: 'No Show',     icon: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636' },
-  { key: 'CancelledByPatient', label: 'Cancelled',   icon: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { key: 'CancelledByPatient', label: 'Patient Cancel', icon: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { key: 'CancelledByMedical', label: 'Staff Cancel',  icon: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z' },
   { key: 'Rejected',           label: 'Rejected',    icon: 'M6 18L18 6M6 6l12 12' },
 ];
 

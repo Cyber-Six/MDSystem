@@ -3,11 +3,11 @@
 
 ## Patient Queries
 - **Create**  **Test**
-- [x] [ ] listOpenAppointments — query function
-- [x] [ ] listCustomDates (schedulerId) — query function
-- [x] [ ] listAppointmentSchedule (schedulerId, date) — query function
-- [x] [ ] listAppointmentRequirements (schedulerId) — query function
-- [x] [ ] getAppointmentStatus — query function
+- [x] [X] listOpenAppointments — query function
+- [x] [X] listCustomDates (schedulerId) — query function
+- [x] [X] listAppointmentSchedule (schedulerId, date) — query function
+- [x] [X] listAppointmentRequirements (schedulerId) — query function
+- [x] [X] getAppointmentStatus — query function
 
 ---
 
