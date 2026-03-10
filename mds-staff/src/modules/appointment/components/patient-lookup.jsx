@@ -249,6 +249,7 @@ const PatientLookup = () => {
           onMarkDone={handleModalMarkDone}
           onMarkComplete={handleModalMarkComplete}
           onMarkNoShow={handleModalMarkNoShow}
+          hideHistory
         />
       )}
     </div>

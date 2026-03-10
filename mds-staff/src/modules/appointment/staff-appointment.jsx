@@ -206,6 +206,7 @@ const StaffAppointment = () => {
           onMarkDone={handleMarkDone}
           onMarkComplete={handleMarkComplete}
           onMarkNoShow={handleMarkNoShow}
+          hideHistory
         />
       )}
     </div>
