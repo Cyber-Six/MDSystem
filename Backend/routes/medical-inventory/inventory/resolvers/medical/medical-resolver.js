@@ -11,7 +11,7 @@ const Query = {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getMedicalItems(_, args, { res });
+    return await Wrapper.Query._getMedicalItems(_, { active: true, ...args }, { res });
   },
 
   getMedicalItem: async (_, args, { user, res }) => {
@@ -31,7 +31,7 @@ const Query = {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getMedicalSupply(_, args, { res });
+    return await Wrapper.Query._getMedicalSupply(_, { availableOnly: true, ...args }, { res });
   },
 
   getSupplyBatches: async (_, args, { user, res }) => {
@@ -41,7 +41,7 @@ const Query = {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getSupplyBatches(_, args, { res });
+    return await Wrapper.Query._getSupplyBatches(_, { availableOnly: true, ...args }, { res });
   },
 };
 

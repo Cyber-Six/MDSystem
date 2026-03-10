@@ -136,6 +136,6 @@ dist-ssr/
 *.sw?
 Backend/config/data/initialadmin.sql
 
-MDS-AI-Chatbot
+MDS-Chatbot
 
 use_case.md

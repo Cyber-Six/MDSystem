@@ -502,4 +502,4 @@ npm run start:staff
 - No `Backend/.env.example` is tracked in the repository; create `Backend/.env` manually.
 - `Backend/commands/` is an empty placeholder directory.
 - `Backend/routes/staff/` contains a placeholder `.txt` file alongside `staff.js`.
-- The repository includes `config/middleware/chatbotProxy.js`, but no checked-in `Backend/MDS-AI-Chatbot/` service directory exists.
+- The repository includes `config/middleware/chatbotProxy.js`, but no checked-in `Backend/MDS-Chatbot/` service directory exists.
