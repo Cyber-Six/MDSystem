@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
+  STATUS,
   getAppointmentStatus,
   listOpenAppointments,
   listRequirements,
@@ -48,6 +49,10 @@ const PatientAppointment = () => {
   const [cancelling, setCancelling] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Rejection notice
+  const [rejectionRecord, setRejectionRecord] = useState(null);
+  const [rejectionAcknowledged, setRejectionAcknowledged] = useState(false);
+
   // ── Date helpers (local date — avoids UTC off-by-one in non-UTC timezones) ─
 
   const localDateStr = (d = new Date()) =>
@@ -66,12 +71,22 @@ const PatientAppointment = () => {
     setLoading(true);
     setError(null);
     try {
-      const status = await getAppointmentStatus();
+      const record = await getAppointmentStatus();
+      const status = record?.status ?? null;
       setCurrentStatus(status);
 
-      if (!status || !ACTIVE_STATUSES.includes(status)) {
+      if (status === STATUS.REJECTED) {
+        setRejectionRecord(record);
+        setRejectionAcknowledged(false);
+        // Pre-load schedulers so the wizard is ready after the patient dismisses
         const list = await listOpenAppointments();
         setSchedulers(list);
+      } else {
+        setRejectionRecord(null);
+        if (!status || !ACTIVE_STATUSES.includes(status)) {
+          const list = await listOpenAppointments();
+          setSchedulers(list);
+        }
       }
     } catch (err) {
       setError(err.message);
@@ -217,6 +232,41 @@ const PatientAppointment = () => {
       {/* ── Active Appointment Card ─────────────────────────────────────────── */}
       {currentStatus && ACTIVE_STATUSES.includes(currentStatus) ? (
         <ActiveAppointmentCard currentStatus={currentStatus} onCancel={handleCancel} cancelling={cancelling} />
+      ) : rejectionRecord && !rejectionAcknowledged ? (
+        /* ── Rejection Notice ────────────────────────────────────────────────── */
+        <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-lg p-6">
+          <div className="flex items-start gap-4 mb-4">
+            <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 dark:text-white mb-1">Appointment Rejected</h3>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                Your previous appointment request was not approved.
+              </p>
+            </div>
+          </div>
+
+          {rejectionRecord?.notes && (
+            <div className="mb-5 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wide mb-1">Reason</p>
+              <p className="text-sm text-red-800 dark:text-red-300">{rejectionRecord.notes}</p>
+            </div>
+          )}
+
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-5">
+            You may submit a new appointment request below.
+          </p>
+
+          <button
+            onClick={() => setRejectionAcknowledged(true)}
+            className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-all"
+          >
+            OK, Book New Appointment
+          </button>
+        </div>
       ) : (
         <>
           {/* ── Booking Wizard ─────────────────────────────────────────────── */}

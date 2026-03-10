@@ -189,7 +189,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                   onClick={() => { setShowCancelForm(false); setCancelReason(''); }}
                   className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
                 >
-                  Nevermind
+                  Cancel
                 </button>
               </div>
             </div>
@@ -197,13 +197,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 bg-white dark:bg-neutral-800 px-5 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
-          >
-            Close
-          </button>
+        <div className="sticky bottom-0 bg-white dark:bg-neutral-800 px-5 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-end">
           <div className="flex items-center gap-2">
             {(canReject || canCancelByMedical) && !showCancelForm && (
               <button

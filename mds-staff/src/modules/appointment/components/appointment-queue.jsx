@@ -53,12 +53,15 @@ const AppointmentQueue = ({ onViewDetails }) => {
     fetchAppointments(activeTab);
   }, [activeTab, fetchAppointments]);
 
-  /* Client-side search filter on patientId */
+  /* Client-side search filter on patientId / identifier / name */
   const rows = useMemo(() => {
     if (!search.trim()) return appointments;
     const q = search.toLowerCase();
     return appointments.filter((a) =>
-      a.patientId?.toLowerCase().includes(q) || a.id?.toLowerCase().includes(q)
+      String(a.patientIdentifier ?? '').includes(q) ||
+      String(a.patientId ?? '').includes(q) ||
+      (a.patientName ?? '').toLowerCase().includes(q) ||
+      (a.id ?? '').toLowerCase().includes(q)
     );
   }, [appointments, search]);
 
@@ -139,7 +142,7 @@ const AppointmentQueue = ({ onViewDetails }) => {
           <table className="w-full" style={{ minWidth: 480 }}>
             <thead>
               <tr className="bg-neutral-50/60 dark:bg-neutral-700/30">
-                {['Patient ID', 'Session', 'Status', 'Notes', 'Created'].map((h) => (
+                {['Patient', 'Session', 'Status', 'Notes', 'Created'].map((h) => (
                   <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
@@ -153,8 +156,13 @@ const AppointmentQueue = ({ onViewDetails }) => {
                   onClick={() => onViewDetails?.(apt)}
                   className="hover:bg-primary-50/40 dark:hover:bg-neutral-700/30 cursor-pointer transition-colors"
                 >
-                  <td className="px-4 py-2.5 text-xs text-secondary-500 dark:text-neutral-400 font-mono">
-                    {apt.patientId}
+                  <td className="px-4 py-2.5">
+                    <p className="text-xs font-mono text-secondary-500 dark:text-neutral-400">
+                      {apt.patientIdentifier ?? apt.patientId}
+                    </p>
+                    {apt.patientName && (
+                      <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">{apt.patientName}</p>
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-secondary-600 dark:text-neutral-300 whitespace-nowrap">
                     {apt.session}
