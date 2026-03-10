@@ -486,6 +486,28 @@ const MedicalBackgroundForm = ({
                   />
                   <span className="ml-2">Yes</span>
                 </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="smoker"
+                    value="quit"
+                    checked={data.smoker === 'quit'}
+                    onChange={(e) => handleChange('smoker', e.target.value)}
+                    className="form-checkbox"
+                  />
+                  <span className="ml-2">Yes, But I quit</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="smoker"
+                    value="vape"
+                    checked={data.smoker === 'vape'}
+                    onChange={(e) => handleChange('smoker', e.target.value)}
+                    className="form-checkbox"
+                  />
+                  <span className="ml-2">Vape</span>
+                </label>
               </div>
               {data.smoker === 'yes' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

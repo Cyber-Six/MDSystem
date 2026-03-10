@@ -228,7 +228,7 @@ const registerBranchIdentifier = async (identifier) => {
  * @param {object} personalInfo - formData.personalInfo
  * @param {boolean} isRevision - When true, pre-cancels the existing InProgress log before creating a new one
  */
-const registerProfileSetup = async (identifier, personalInfo, isRevision = false) => {
+const registerProfileSetup = async (identifier, personalInfo, isRevision = false, { branch } = {}) => {
   const pi = personalInfo || {};
   const hasIdentifier = !!identifier?.trim();
 
@@ -266,8 +266,11 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
         createPersonalRecordLog(input: $input) { first_name last_name }
       }`;
 
+  const branchInput = { identifier: identifier.trim() };
+  if (branch) branchInput.branch = branch;
+
   const variables = hasIdentifier && !isRevision
-    ? { branchInput: { identifier: identifier.trim() }, input: personalInput }
+    ? { branchInput, input: personalInput }
     : { input: personalInput };
 
   try {
@@ -294,10 +297,12 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
       // so we issue both operations independently to avoid compound-mutation partial failures.
       if (hasIdentifier) {
         try {
+          const retryBranchInput = { identifier: identifier.trim() };
+          if (branch) retryBranchInput.branch = branch;
           const branchMutation = `mutation RetryBranch($branchInput: BranchIdentifierInput!) {
             createBranchIdentifier(input: $branchInput) { branch identifier }
           }`;
-          await sendGraphQLRequest(branchMutation, { branchInput: { identifier: identifier.trim() } }, { endpoint: '/profile/patient' });
+          await sendGraphQLRequest(branchMutation, { branchInput: retryBranchInput }, { endpoint: '/profile/patient' });
         } catch (branchErr) {
           // Branch may already be set from a previous attempt — non-fatal
           console.warn('[EMR Service] Branch retry warning (may already exist):', branchErr.message);
@@ -446,7 +451,7 @@ export const createInitialEmployeeRecord = async (formData) => {
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
     console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
-    await registerProfileSetup(formData.personalInfo?.employeeId, formData.personalInfo);
+    await registerProfileSetup(formData.personalInfo?.employeeId, formData.personalInfo, false, { branch: formData.personalInfo?.branch });
     profileLogCreated = true;
 
     // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========

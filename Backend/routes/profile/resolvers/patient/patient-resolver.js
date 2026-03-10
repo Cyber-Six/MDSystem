@@ -110,8 +110,8 @@ Mutation = {
         throwGraphQLError(res).message("Unable to determine branch from email. Please provide a valid student email.").status(400).throw();
       }
     } else if (isEmployeeEmail(getEmail) || isMedicalEmail(getEmail)) {
-      // Employees and medical staff are not campus-specific — assign Both
-      input.branch = 'Both';
+      // Use user-supplied branch if provided; fall back to 'Both'
+      if (!input.branch) input.branch = 'Both';
     } else {
       throwGraphQLError(res).message("Unable to determine branch from email. Unrecognized email format.").status(400).throw();
     }
