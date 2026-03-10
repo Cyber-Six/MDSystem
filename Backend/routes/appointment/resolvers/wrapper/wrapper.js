@@ -26,7 +26,8 @@ const Query = {
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
-      WHERE (
+      WHERE ss."isActive" = true
+        AND (
               $4 = 'Both'
            OR ($4 = 'Manila' AND ss.location IN ('Arlegui', 'Casal'))
            OR ($4 = 'QuezonCity' AND ss.location = 'QuezonCity')
@@ -47,7 +48,8 @@ const Query = {
     const result = await db.query(query, [
       user.id,
       limit || 10,
-      offset || 0
+      offset || 0,
+      userBranch
     ]);
     result.rows.forEach(row => {
       row.schedulePerWeek = decodeSchedulingFlags(row.scheduleFlags);
@@ -98,13 +100,13 @@ const Query = {
     return result.rows.map(row => row.scheduledDate);
   },
 
-  _listAppointmentSchedule: async (_, { schedulerId, date }, { user, res }) => {
+  _listAppointmentSchedule: async (_, { schedulerId, date, skipTimeframe }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Timeframe validation
-    if (!isWithinFutureTimeframe(date, MAX_SCHEDULING_DAYS)) {
+    // Timeframe validation (skipped for medical/staff callers)
+    if (!skipTimeframe && !isWithinFutureTimeframe(date, MAX_SCHEDULING_DAYS)) {
       const today = new Date();
       const latestAllowed = new Date(today);
       latestAllowed.setDate(today.getDate() + MAX_SCHEDULING_DAYS);
@@ -396,13 +398,12 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const validStatuses = ["Scheduled", "Rejected"];
-    if (!validStatuses.includes(status)) {
-      throwGraphQLError(res)
-        .message(`Invalid status. Must be one of: ${validStatuses.join(", ")}`)
-        .status(400)
-        .throw();
-    }
+    // Valid state transitions per appointment state machine
+    const validTransitions = {
+      Pending: ["Scheduled", "Rejected"],
+      Scheduled: ["CancelledByMedical", "NoShow"],
+      InProgress: ["Completed", "NoShow"],
+    };
 
     // Step 1: Check current slot status
     const { rows } = await db.query(
@@ -414,9 +415,12 @@ const Mutation = {
       throwGraphQLError(res).message("Slot not found").status(404).throw();
     }
 
-    if (rows[0].status !== "Pending") {
+    const currentStatus = rows[0].status;
+    const allowed = validTransitions[currentStatus];
+
+    if (!allowed || !allowed.includes(status)) {
       throwGraphQLError(res)
-        .message("Slot status must be Pending to respond")
+        .message(`Cannot transition from "${currentStatus}" to "${status}". Allowed: ${(allowed || []).join(", ") || "none"}`)
         .status(400)
         .throw();
     }
@@ -727,6 +731,13 @@ const Mutation = {
 
     try {
       const result = await db.query(query, values);
+
+      // Keep containsCustomDates flag in sync
+      await db.query(
+        `UPDATE "slotScheduler" SET "containsCustomDates" = true WHERE id = $1;`,
+        [schedulerId]
+      );
+
       return result.rows.map(r => r.scheduledDate);
     } catch (err) {
       throwGraphQLError(res)
@@ -763,6 +774,16 @@ const Mutation = {
           .status(404)
           .throw();
       }
+
+      // Keep containsCustomDates flag in sync
+      const remaining = await db.query(
+        `SELECT 1 FROM "SlotCustomDate" WHERE "slotScheduleId" = $1 LIMIT 1;`,
+        [schedulerId]
+      );
+      await db.query(
+        `UPDATE "slotScheduler" SET "containsCustomDates" = $1 WHERE id = $2;`,
+        [remaining.rowCount > 0, schedulerId]
+      );
 
       // Return the list of dates that were actually deleted
       return result.rows.map(r => r.scheduledDate);

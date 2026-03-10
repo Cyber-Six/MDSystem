@@ -179,6 +179,48 @@ export const listAllRequirements = async (schedulerId, offset = 0, limit = 50) =
   return data.listAllAppointmentRequirements;
 };
 
+/**
+ * Get slot availability for a specific scheduler + date.
+ * @param {string} schedulerId
+ * @param {string} date - ISO date string (YYYY-MM-DD)
+ * @returns {Promise<object>} ScheduleDateEntity with morning/afternoon counts
+ */
+export const getScheduleAvailability = async (schedulerId, date) => {
+  const data = await sendGraphQL(`
+    query ListAppointmentSchedule($schedulerId: ID!, $date: Date!) {
+      listAppointmentSchedule(schedulerId: $schedulerId, date: $date) {
+        id
+        slotId
+        morningAllowed
+        morningRegistered
+        morningPending
+        afternoonAllowed
+        afternoonRegistered
+        afternoonPending
+        allowDuring
+        scheduledDate
+      }
+    }
+  `, { schedulerId, date });
+  return data.listAppointmentSchedule;
+};
+
+/**
+ * List custom dates for a scheduler.
+ * @param {string} schedulerId
+ * @param {number} [offset=0]
+ * @param {number} [limit=100]
+ * @returns {Promise<string[]>}
+ */
+export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
+  const data = await sendGraphQL(`
+    query ListCustomDates($schedulerId: ID!, $offset: Int, $limit: Int) {
+      listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit)
+    }
+  `, { schedulerId, offset, limit });
+  return data.listCustomDates;
+};
+
 // ── Mutations — Appointment Responses ────────────────────────────────────────
 
 /**

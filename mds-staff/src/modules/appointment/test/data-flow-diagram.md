@@ -83,7 +83,7 @@
 > the patient physically arrives (via `recordAppointmentAttendance`).
 
 - [x] Patient slot logged as `"Pending"` on submission
-- [ ] `decayed "expired"` auto-process triggers on timeout (purple)
+- [ ] `decayed "expired"` auto-process triggers on timeout (purple) — not yet automated
 - [x] Request forwarded to Staff for review
 - [x] `( prevent multiple appointment )` rule enforced
 
@@ -114,8 +114,9 @@
 ### Phase 6 — Post-Schedule Status Tracking
 
 - [x] `cancelAppointment` mutation implemented (patient-side, green)
-- [ ] `Appointment status "completed"` — staff-side only (not patient mutation)
-- [ ] `Appointment status "no-show"` auto-process not yet implemented (purple)
+- [x] `Appointment status "completed"` — staff-side via `respondAppointment(status: Completed)` (InProgress → Completed)
+- [x] `Appointment status "no-show"` — staff-side via `respondAppointment(status: NoShow)` (Scheduled/InProgress → NoShow)
+- [ ] `decayed "expired"` auto-process triggers on timeout (purple) — not yet automated
 
 ```
 <? cancelled? >
@@ -195,8 +196,8 @@ All operations below are initiated by `( Staff )`.
 
 ### Whitelist Management
 
-- [ ] `AddEntryWhitelist` resolver implemented
-- [ ] `deleteEntryWhitelist` resolver implemented
+- [x] `AddEntryWhitelist` resolver implemented
+- [x] `deleteEntryWhitelist` resolver implemented
 
 ```
 // Whitelist function — controls which patients may book specific schedules
@@ -206,8 +207,8 @@ All operations below are initiated by `( Staff )`.
 
 ### Custom Date Management
 
-- [ ] `setCustomDates` resolver implemented
-- [ ] `unsetCustomDates` resolver implemented
+- [x] `setCustomDates` resolver implemented
+- [x] `unsetCustomDates` resolver implemented
 
 ```
 // set custom dates — override default schedule availability dates
@@ -217,9 +218,9 @@ All operations below are initiated by `( Staff )`.
 
 ### Scheduler CRUD
 
-- [ ] `createScheduler` resolver implemented
-- [ ] `updateScheduler` resolver implemented
-- [ ] `deleteScheduler` resolver implemented
+- [x] `createScheduler` resolver implemented
+- [x] `updateScheduler` resolver implemented
+- [x] `deleteScheduler` resolver implemented
 
 ```
 // create schedule appointments — manage appointment schedule templates
@@ -230,7 +231,7 @@ All operations below are initiated by `( Staff )`.
 
 ### Date Identity
 
-- [ ] `updateDateIdentity` resolver implemented
+- [x] `updateDateIdentity` resolver implemented
 
 ```
 // update the morning / afternoon allowed for that day only
@@ -239,8 +240,8 @@ All operations below are initiated by `( Staff )`.
 
 ### Requirements Management
 
-- [ ] `updateScheduler Requirement` resolver implemented
-- [ ] `deleteScheduler Requirement` resolver implemented
+- [x] `updateScheduler Requirement` resolver implemented
+- [x] `deleteScheduler Requirement` resolver implemented
 
 ```
 ( Staff ) --> [ updateScheduler Requirement ]
@@ -249,10 +250,10 @@ All operations below are initiated by `( Staff )`.
 
 ### Query Operations (Staff View)
 
-- [ ] `listAllOpenAppointment` resolver implemented
-- [ ] `listAllAppointmentSchedules` resolver implemented
-- [ ] `listAppointmentPreRequirement` resolver implemented
-- [ ] `listAppointmentIdentity` resolver implemented
+- [x] `listAllOpenAppointment` resolver implemented
+- [x] `listAllAppointmentSchedules` resolver implemented
+- [x] `listAppointmentPreRequirement` resolver implemented
+- [x] `listAppointmentIdentity` resolver implemented
 
 ```
 ( Staff ) --> [ listAllOpen Appointment ]
@@ -263,8 +264,8 @@ All operations below are initiated by `( Staff )`.
 
 ### Appointment Response
 
-- [ ] `respondAppointmentRequest` resolver implemented
-- [ ] Approval / rejection logic wired to `<? Staff Approved? >`
+- [x] `respondAppointmentRequest` resolver implemented
+- [x] Approval / rejection logic wired to `<? Staff Approved? >`
 
 ```
 ( Staff ) --> [ respondAppointment Request ] --> <? Staff Approved? >

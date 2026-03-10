@@ -75,10 +75,11 @@ const StaffAppointment = () => {
     }
   };
 
-  const handleCancel = async (id, reason) => {
+  const handleCancel = async (id, reason, cancelStatus) => {
     try {
-      await respondToAppointment(id, STATUS.REJECTED, reason);
-      setSuccessMsg('Appointment rejected.');
+      const status = cancelStatus || STATUS.REJECTED;
+      await respondToAppointment(id, status, reason);
+      setSuccessMsg(status === STATUS.REJECTED ? 'Appointment rejected.' : 'Appointment cancelled.');
     } catch (err) {
       setError(err.message);
     }
@@ -93,9 +94,22 @@ const StaffAppointment = () => {
     }
   };
 
-  const handleReschedule = (id) => {
-    // TODO: Implement reschedule flow via updateDateIdentity / respondToAppointment
-    console.log('Reschedule:', id);
+  const handleMarkComplete = async (userId) => {
+    try {
+      await respondToAppointment(userId, STATUS.COMPLETED);
+      setSuccessMsg('Appointment marked as completed.');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleMarkNoShow = async (userId) => {
+    try {
+      await respondToAppointment(userId, STATUS.NO_SHOW);
+      setSuccessMsg('Appointment marked as no-show.');
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   /* ── Section switcher tabs ───────────────────────────────────────────── */
@@ -176,7 +190,8 @@ const StaffAppointment = () => {
           onConfirm={handleConfirm}
           onCancel={handleCancel}
           onMarkDone={handleMarkDone}
-          onReschedule={handleReschedule}
+          onMarkComplete={handleMarkComplete}
+          onMarkNoShow={handleMarkNoShow}
         />
       )}
     </div>

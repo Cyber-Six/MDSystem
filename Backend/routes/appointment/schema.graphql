@@ -53,7 +53,7 @@ input SlotSchedulerInput {
 input SlotSchedulerUpdateInput {
   label: String
   location: LOCATION_DESIGNATION
-  schedulePerWeek: [String!]!
+  schedulePerWeek: [String!]
   morningAllowed: Int
   afternoonAllowed: Int
   notes: String
@@ -94,7 +94,7 @@ input ScheduleDateEntityUpdate {
   morningAllowed: Int
   afternoonAllowed: Int
   allowDuring: Boolean
-  scheduledDate: Date!
+  scheduledDate: Date
 }
 
 type ScheduleRequirement {
