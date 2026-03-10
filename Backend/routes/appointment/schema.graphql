@@ -137,6 +137,7 @@ type patientSlot {
   approvedBy: ID
   notes: String
   arrived_at: Date
+  rejection_acknowledged: Boolean
   created_at: Date!
 }
 
@@ -170,6 +171,7 @@ type Query {
 type Mutation {
   submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!): patientSlot
   cancelAppointment: Boolean
+  acknowledgeRejection: Boolean
 
   #----------- --^ Patient and --v Medical
   respondAppointment(userId: ID!, status: SCHEDULING_STATUS!, notes: String): patientSlot

@@ -376,6 +376,21 @@ const Mutation = {
     return { ...psResult.rows[0], requirements: reqResult.rows };
   },
 
+  _acknowledgeRejection: async (_, { patientId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const result = await db.query(
+      `UPDATE "patientSlot" SET "rejection_acknowledged" = true
+       WHERE "patientId" = $1 AND status = 'Rejected' AND "rejection_acknowledged" = false
+       RETURNING id;`,
+      [patientId]
+    );
+
+    return result.rowCount > 0;
+  },
+
   _cancelAppointment: async (_, { patientId, cancelledBy, slotId }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

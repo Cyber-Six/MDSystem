@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   STATUS,
   getAppointmentStatus,
+  acknowledgeRejection,
   listOpenAppointments,
   listRequirements,
   listCustomDates,
@@ -77,7 +78,7 @@ const PatientAppointment = () => {
 
       if (status === STATUS.REJECTED) {
         setRejectionRecord(record);
-        setRejectionAcknowledged(false);
+        setRejectionAcknowledged(!!record?.rejection_acknowledged);
         // Pre-load schedulers so the wizard is ready after the patient dismisses
         const list = await listOpenAppointments();
         setSchedulers(list);
@@ -261,7 +262,10 @@ const PatientAppointment = () => {
           </p>
 
           <button
-            onClick={() => setRejectionAcknowledged(true)}
+            onClick={async () => {
+              await acknowledgeRejection();
+              setRejectionAcknowledged(true);
+            }}
             className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-all"
           >
             OK, Book New Appointment
