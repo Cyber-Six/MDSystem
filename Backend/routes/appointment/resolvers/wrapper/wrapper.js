@@ -21,16 +21,25 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
+    const userBranch = await db.getUserBranch(user.id);
+
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
-      WHERE ss."whitelistOnly" = false
-         OR EXISTS (
-           SELECT 1
-           FROM "schedulerWhitelist" swl
-           WHERE swl."slotSchedulerId" = ss.id
-             AND swl."patientId" = $1
-         )
+      WHERE (
+              $4 = 'Both'
+           OR ($4 = 'Manila' AND ss.location IN ('Arlegui', 'Casal'))
+           OR ($4 = 'QuezonCity' AND ss.location = 'QuezonCity')
+            )
+        AND (
+              ss."whitelistOnly" = false
+           OR EXISTS (
+                SELECT 1
+                FROM "schedulerWhitelist" swl
+                WHERE swl."slotSchedulerId" = ss.id
+                  AND swl."patientId" = $1
+              )
+            )
       ORDER BY ss.created_at ASC
       LIMIT $2 OFFSET $3;
     `;
