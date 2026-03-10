@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ALL_CATEGORIES } from '../../medical-inventory-service';
 
 /**
- * Add Medical Item Modal — creates a new MedicalItems record.
+ * Edit Medical Item Modal — updates an existing MedicalItems record.
+ * Item code cannot be changed (primary identifier).
  */
-const AddItemModal = ({ onClose, onSave }) => {
+const EditItemModal = ({ item, onClose, onSave }) => {
   const [form, setForm] = useState({
-    item_code: '',
     item_name: '',
     category: 'Medicine',
     description: '',
@@ -15,17 +15,27 @@ const AddItemModal = ({ onClose, onSave }) => {
   const [submitError, setSubmitError] = useState('');
   const [touched, setTouched] = useState({});
 
+  useEffect(() => {
+    if (item) {
+      setForm({
+        item_name: item.item_name || '',
+        category: item.category || 'Medicine',
+        description: item.description || '',
+      });
+    }
+  }, [item]);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const touch = (k) => setTouched((t) => ({ ...t, [k]: true }));
 
-  const isComplete = form.item_code.trim() && form.item_name.trim();
-  const hasError = (field) => touched[field] && !form[field]?.trim();
+  const isComplete = form.item_name.trim();
+  const hasError = (field) => touched[field] && !form[field]?.trim() && field !== 'description';
 
   const handleSubmit = async (e) => {
     if (e?.preventDefault) e.preventDefault();
     
     // Mark all fields as touched
-    setTouched({ item_code: true, item_name: true });
+    setTouched({ item_name: true });
     
     if (!isComplete) return;
     
@@ -35,11 +45,10 @@ const AddItemModal = ({ onClose, onSave }) => {
       await onSave(form);
     } catch (err) {
       const message = err.message || 'Failed to save. Please try again.';
-      // Check for 409 conflict (duplicate item code)
       if (err.response?.status === 409 || message.includes('409')) {
-        setSubmitError('Item code already exists. Please use a unique code.');
+        setSubmitError('This item name is already in use.');
       } else if (message.includes('duplicate') || message.includes('unique')) {
-        setSubmitError('An item with this code already exists.');
+        setSubmitError('Duplicate field error. Please check your input.');
       } else {
         setSubmitError(message);
       }
@@ -48,14 +57,16 @@ const AddItemModal = ({ onClose, onSave }) => {
     }
   };
 
+  if (!item) return null;
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold text-secondary-900 dark:text-white">Add Medical Item</h2>
-            <p className="text-[11px] text-secondary-500 dark:text-neutral-400 leading-none mt-0.5">Register a new item in the inventory catalog</p>
+            <h2 className="text-sm font-bold text-secondary-900 dark:text-white">Edit Medical Item</h2>
+            <p className="text-[11px] text-secondary-500 dark:text-neutral-400 leading-none mt-0.5">{item.item_code}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors">
             <svg className="w-4 h-4 text-secondary-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -66,31 +77,9 @@ const AddItemModal = ({ onClose, onSave }) => {
         <form onSubmit={handleSubmit} className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                Item Code <span className="text-error-500">*</span>
-              </label>
-              <input 
-                type="text" 
-                value={form.item_code} 
-                onChange={(e) => set('item_code', e.target.value)}
-                onBlur={() => touch('item_code')}
-                placeholder="e.g. MED-011" 
-                required 
-                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
-                  hasError('item_code')
-                    ? 'border-error-500 dark:border-error-500 focus:ring-error-500'
-                    : 'border-neutral-300 dark:border-neutral-600'
-                }`}
-              />
-              {hasError('item_code') && (
-                <div className="flex items-center gap-1 mt-1.5">
-                  <svg className="w-3.5 h-3.5 text-error-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                  <p className="text-[10px] text-error-500 font-medium">Item code is required</p>
-                </div>
-              )}
-              {!hasError('item_code') && (
-                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">Must be unique (no duplicates)</p>
-              )}
+              <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Item Code</label>
+              <input type="text" value={item.item_code} disabled className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-500 cursor-not-allowed opacity-60" />
+              <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">Cannot be changed</p>
             </div>
             <div>
               <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Category *</label>
@@ -154,13 +143,13 @@ const AddItemModal = ({ onClose, onSave }) => {
         {/* Footer */}
         <div className="sticky bottom-0 bg-neutral-50 dark:bg-neutral-800/50 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-end gap-2">
           <button onClick={onClose} disabled={submitting} className="px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors disabled:opacity-50">Cancel</button>
-          <button onClick={handleSubmit} disabled={submitting || !isComplete} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+          <button onClick={handleSubmit} disabled={submitting || !isComplete} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${
             isComplete
-              ? 'text-white bg-primary-500 hover:bg-primary-600 disabled:opacity-50'
+              ? 'text-white bg-primary-500 hover:bg-primary-600'
               : 'text-neutral-400 dark:text-neutral-500 bg-neutral-200 dark:bg-neutral-700 cursor-not-allowed'
           }`}>
             {submitting && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
-            {submitting ? 'Saving...' : isComplete ? 'Add Item' : 'Fill Required Fields'}
+            {submitting ? 'Saving...' : isComplete ? 'Update Item' : 'Fill Required Fields'}
           </button>
         </div>
       </div>
@@ -168,4 +157,4 @@ const AddItemModal = ({ onClose, onSave }) => {
   );
 };
 
-export default AddItemModal;
+export default EditItemModal;
