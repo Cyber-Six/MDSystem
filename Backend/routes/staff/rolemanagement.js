@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../../config/db.js');
 const db = require('../../config/query.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect');
 const { isMedicalPermitted, permissions: medPermissions } = require('../../services/permit.js');
@@ -98,7 +97,7 @@ function labelsToUiPermissions(labelList) {
 
 // Atomically replace all rolesMap entries and update identity (uses pg transaction)
 async function applyStaffAccount(userId, roledata, newIdentity, assignedById) {
-  const client = await pool.connect();
+  const client = await db.connect();
   try {
     await client.query('BEGIN');
 
