@@ -17,8 +17,6 @@ const SectionWrapper = ({
   children,
   isEditing = false,
   onToggleEdit,
-  editReason = '',
-  onEditReasonChange,
   hasEdits = false,
   isPending = false,  // show edit button only for actionable statuses
 }) => {
@@ -112,24 +110,6 @@ const SectionWrapper = ({
       {/* Body */}
       {!collapsed && (
         <div className="p-4 space-y-4">
-          {/* DPA reason field when editing */}
-          {isEditing && (
-            <div className="bg-warning-50 dark:bg-warning-900/10 border border-warning-200 dark:border-warning-800 rounded-lg p-3">
-              <label className="block text-xs font-semibold text-warning-800 dark:text-warning-400 mb-1">
-                Edit Reason (required for DPA compliance)
-              </label>
-              <input
-                type="text"
-                value={editReason}
-                onChange={(e) => onEditReasonChange?.(e.target.value)}
-                placeholder="e.g., Corrected typo in patient name, Fixed date format..."
-                className="w-full px-3 py-1.5 text-sm border border-warning-300 dark:border-warning-700 rounded-lg bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white focus:ring-2 focus:ring-warning-500 focus:border-warning-500"
-              />
-              <p className="mt-1 text-xs text-warning-600 dark:text-warning-500">
-                All edits are logged for Data Privacy Act compliance.
-              </p>
-            </div>
-          )}
           {children}
         </div>
       )}

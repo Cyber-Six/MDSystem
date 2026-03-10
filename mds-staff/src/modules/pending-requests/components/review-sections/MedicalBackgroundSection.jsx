@@ -1,5 +1,5 @@
 import React from 'react';
-import SectionWrapper, { DataRow } from './SectionWrapper';
+import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
 
 /**
  * MedicalBackgroundSection
@@ -20,13 +20,17 @@ const MedicalBackgroundSection = ({
   isEditing = false,
   editedFields = {},
   onFieldChange,
-  editReason = '',
-  onEditReasonChange,
   onToggleEdit,
   isPending = false,
   isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
+
+  const getVal = (key, fallback) =>
+    editedFields[key] !== undefined ? editedFields[key] : fallback;
+
+  const getOriginal = (key, current) =>
+    editedFields[key] !== undefined ? current : undefined;
 
   const getCatalogName = (catalog, id, nameField = 'name') => {
     if (!catalog?.length || id === undefined || id === null) return null;
@@ -51,8 +55,6 @@ const MedicalBackgroundSection = ({
       }
       isEditing={isEditing}
       onToggleEdit={onToggleEdit}
-      editReason={editReason}
-      onEditReasonChange={onEditReasonChange}
       hasEdits={hasEdits}
       isPending={isPending}
     >
@@ -203,23 +205,55 @@ const MedicalBackgroundSection = ({
         </h4>
         {lifestyle ? (
           <dl className="space-y-0">
-            <DataRow
+            <EditableField
               label="Smoker"
-              value={
-                lifestyle.smoker
-                  ? `Yes — ${lifestyle.numberOfCigarettesPerDay ?? 0} sticks/day, ${lifestyle.yearsSmoked ?? 0} years`
-                  : 'No'
-              }
+              value={getVal('smoker', lifestyle.smoker ? 'Yes' : 'No')}
+              originalValue={getOriginal('smoker', lifestyle.smoker ? 'Yes' : 'No')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('smoker', v)}
+              type="select"
+              options={['Yes', 'No']}
             />
-            <DataRow
+            <EditableField
+              label="Cigarettes/Day"
+              value={getVal('cigarettesPerDay', String(lifestyle.numberOfCigarettesPerDay ?? ''))}
+              originalValue={getOriginal('cigarettesPerDay', String(lifestyle.numberOfCigarettesPerDay ?? ''))}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('cigarettesPerDay', v)}
+              type="number"
+            />
+            <EditableField
+              label="Years Smoked"
+              value={getVal('yearsSmoked', String(lifestyle.yearsSmoked ?? ''))}
+              originalValue={getOriginal('yearsSmoked', String(lifestyle.yearsSmoked ?? ''))}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('yearsSmoked', v)}
+              type="number"
+            />
+            <EditableField
               label="Alcohol Consumer"
-              value={
-                lifestyle.alcoholConsumer
-                  ? `Yes — ${lifestyle.frequencyOfAlcoholConsumption || 'Frequency not specified'}`
-                  : 'No'
-              }
+              value={getVal('alcoholConsumer', lifestyle.alcoholConsumer ? 'Yes' : 'No')}
+              originalValue={getOriginal('alcoholConsumer', lifestyle.alcoholConsumer ? 'Yes' : 'No')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('alcoholConsumer', v)}
+              type="select"
+              options={['Yes', 'No']}
             />
-            {lifestyle.notes && <DataRow label="Notes" value={lifestyle.notes} />}
+            <EditableField
+              label="Alcohol Frequency"
+              value={getVal('alcoholFrequency', lifestyle.frequencyOfAlcoholConsumption ?? '')}
+              originalValue={getOriginal('alcoholFrequency', lifestyle.frequencyOfAlcoholConsumption ?? '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
+            />
+            <EditableField
+              label="Notes"
+              value={getVal('lifestyleNotes', lifestyle.notes ?? '')}
+              originalValue={getOriginal('lifestyleNotes', lifestyle.notes ?? '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('lifestyleNotes', v)}
+              type="textarea"
+            />
           </dl>
         ) : (
           <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No lifestyle data</p>
@@ -233,12 +267,29 @@ const MedicalBackgroundSection = ({
         </h4>
         {visualAcuityProfile?.acuity ? (
           <dl className="space-y-0">
-            <DataRow label="Left Eye (OS)" value={visualAcuityProfile.acuity.left_eye} />
-            <DataRow label="Right Eye (OD)" value={visualAcuityProfile.acuity.right_eye} />
+            <EditableField
+              label="Left Eye (OS)"
+              value={getVal('acuityLeft', visualAcuityProfile.acuity.left_eye ?? '')}
+              originalValue={getOriginal('acuityLeft', visualAcuityProfile.acuity.left_eye ?? '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('acuityLeft', v)}
+            />
+            <EditableField
+              label="Right Eye (OD)"
+              value={getVal('acuityRight', visualAcuityProfile.acuity.right_eye ?? '')}
+              originalValue={getOriginal('acuityRight', visualAcuityProfile.acuity.right_eye ?? '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('acuityRight', v)}
+            />
             <DataRow label="Recorded" value={formatDate(visualAcuityProfile.acuity.recorded_at)} />
-            {visualAcuityProfile.acuity.notes && (
-              <DataRow label="Notes" value={visualAcuityProfile.acuity.notes} />
-            )}
+            <EditableField
+              label="Notes"
+              value={getVal('acuityNotes', visualAcuityProfile.acuity.notes ?? '')}
+              originalValue={getOriginal('acuityNotes', visualAcuityProfile.acuity.notes ?? '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('acuityNotes', v)}
+              type="textarea"
+            />
           </dl>
         ) : (
           <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No visual acuity data</p>
@@ -252,11 +303,46 @@ const MedicalBackgroundSection = ({
         </h4>
         {vitalSigns ? (
           <dl className="space-y-0">
-            <DataRow label="Height" value={vitalSigns.height_cm ? `${vitalSigns.height_cm} cm` : null} />
-            <DataRow label="Weight" value={vitalSigns.weight_kg ? `${vitalSigns.weight_kg} kg` : null} />
-            {vitalSigns.blood_pressure && <DataRow label="Blood Pressure" value={vitalSigns.blood_pressure} />}
-            {vitalSigns.heart_rate && <DataRow label="Heart Rate" value={`${vitalSigns.heart_rate} bpm`} />}
-            {vitalSigns.temperature && <DataRow label="Temperature" value={`${vitalSigns.temperature} °C`} />}
+            <EditableField
+              label="Height (cm)"
+              value={getVal('height_cm', String(vitalSigns.height_cm ?? ''))}
+              originalValue={getOriginal('height_cm', String(vitalSigns.height_cm ?? ''))}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('height_cm', v)}
+              type="number"
+            />
+            <EditableField
+              label="Weight (kg)"
+              value={getVal('weight_kg', String(vitalSigns.weight_kg ?? ''))}
+              originalValue={getOriginal('weight_kg', String(vitalSigns.weight_kg ?? ''))}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('weight_kg', v)}
+              type="number"
+            />
+            <EditableField
+              label="Blood Pressure"
+              value={getVal('blood_pressure', vitalSigns.blood_pressure ?? '')}
+              originalValue={getOriginal('blood_pressure', vitalSigns.blood_pressure ?? '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('blood_pressure', v)}
+              placeholder="e.g. 120/80"
+            />
+            <EditableField
+              label="Heart Rate (bpm)"
+              value={getVal('heart_rate', String(vitalSigns.heart_rate ?? ''))}
+              originalValue={getOriginal('heart_rate', String(vitalSigns.heart_rate ?? ''))}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('heart_rate', v)}
+              type="number"
+            />
+            <EditableField
+              label="Temperature (°C)"
+              value={getVal('temperature', String(vitalSigns.temperature ?? ''))}
+              originalValue={getOriginal('temperature', String(vitalSigns.temperature ?? ''))}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('temperature', v)}
+              type="number"
+            />
           </dl>
         ) : (
           <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">No physical measurements</p>

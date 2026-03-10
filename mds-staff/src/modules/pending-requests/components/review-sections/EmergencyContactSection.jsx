@@ -11,8 +11,6 @@ const EmergencyContactSection = ({
   isEditing = false,
   editedFields = {},
   onFieldChange,
-  editReason = '',
-  onEditReasonChange,
   onToggleEdit,
   isPending = false,
 }) => {
@@ -82,8 +80,6 @@ const EmergencyContactSection = ({
       }
       isEditing={isEditing}
       onToggleEdit={onToggleEdit}
-      editReason={editReason}
-      onEditReasonChange={onEditReasonChange}
       hasEdits={hasEdits}
       isPending={isPending}
     >

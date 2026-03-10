@@ -1,5 +1,5 @@
 import React from 'react';
-import SectionWrapper, { DataRow } from './SectionWrapper';
+import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
 
 /**
  * MedicalHistorySection
@@ -13,13 +13,17 @@ const MedicalHistorySection = ({
   isEditing = false,
   editedFields = {},
   onFieldChange,
-  editReason = '',
-  onEditReasonChange,
   onToggleEdit,
   isPending = false,
   isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
+
+  const getVal = (key, fallback) =>
+    editedFields[key] !== undefined ? editedFields[key] : fallback;
+
+  const getOriginal = (key, current) =>
+    editedFields[key] !== undefined ? current : undefined;
 
   const getCatalogName = (catalog, id) => {
     if (!catalog?.length || id === undefined || id === null) return null;
@@ -48,8 +52,6 @@ const MedicalHistorySection = ({
       }
       isEditing={isEditing}
       onToggleEdit={onToggleEdit}
-      editReason={editReason}
-      onEditReasonChange={onEditReasonChange}
       hasEdits={hasEdits}
       isPending={isPending}
     >
@@ -104,16 +106,19 @@ const MedicalHistorySection = ({
       </div>
 
       {/* Notes */}
-      {medicalHistory?.notes && (
-        <div className="mt-4">
-          <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
-            Notes
-          </h4>
-          <p className="text-sm text-secondary-700 dark:text-neutral-300 bg-neutral-50 dark:bg-neutral-800/30 p-2 rounded">
-            {medicalHistory.notes}
-          </p>
-        </div>
-      )}
+      <div className="mt-4">
+        <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">
+          Notes
+        </h4>
+        <EditableField
+          label="Notes"
+          value={getVal('notes', medicalHistory?.notes ?? '')}
+          originalValue={getOriginal('notes', medicalHistory?.notes ?? '')}
+          isEditing={isEditing}
+          onChange={(v) => onFieldChange?.('notes', v)}
+          type="textarea"
+        />
+      </div>
     </SectionWrapper>
   );
 };

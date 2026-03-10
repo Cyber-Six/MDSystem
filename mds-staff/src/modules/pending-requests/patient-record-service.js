@@ -390,6 +390,24 @@ export const getUserOralApplianceProfile = async (userId) => {
   return data.getUserOralApplianceProfile ?? [];
 };
 
+// ── Dental Photo Record ──────────────────────────────────────────────────────
+
+export const getUserDentalPhotoRecord = async (userId) => {
+  const data = await sendGraphQL(
+    `query GetUserDentalPhotoRecord($userId: ID!) {
+       getUserDentalPhotoRecord(userId: $userId, limit: 1) {
+         id
+         upperTeeth
+         lowerTeeth
+         isValid
+         created_at
+       }
+     }`,
+    { userId },
+  );
+  return data.getUserDentalPhotoRecord ?? [];
+};
+
 // ── Catalog Fetcher ──────────────────────────────────────────────────────────
 
 /**
@@ -507,6 +525,7 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', sex = 
     fetches.dentalHistory          = getUserDentalHistory(userId);
     fetches.dentalProcedureProfile = getUserDentalProcedureProfile(userId);
     fetches.oralApplianceProfile   = getUserOralApplianceProfile(userId);
+    fetches.dentalPhotoRecord      = getUserDentalPhotoRecord(userId);
   }
 
   // Execute all fetches in parallel

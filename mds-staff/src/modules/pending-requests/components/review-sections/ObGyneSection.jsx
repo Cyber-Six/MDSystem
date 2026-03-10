@@ -1,5 +1,5 @@
 import React from 'react';
-import SectionWrapper, { DataRow } from './SectionWrapper';
+import SectionWrapper, { EditableField } from './SectionWrapper';
 
 /**
  * ObGyneSection
@@ -11,18 +11,17 @@ const ObGyneSection = ({
   isEditing = false,
   editedFields = {},
   onFieldChange,
-  editReason = '',
-  onEditReasonChange,
   onToggleEdit,
   isPending = false,
   isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
 
-  const formatDate = (d) => {
-    if (!d) return null;
-    return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  };
+  const getVal = (key, fallback) =>
+    editedFields[key] !== undefined ? editedFields[key] : fallback;
+
+  const getOriginal = (key, current) =>
+    editedFields[key] !== undefined ? current : undefined;
 
   return (
     <SectionWrapper
@@ -36,24 +35,36 @@ const ObGyneSection = ({
       }
       isEditing={isEditing}
       onToggleEdit={onToggleEdit}
-      editReason={editReason}
-      onEditReasonChange={onEditReasonChange}
       hasEdits={hasEdits}
       isPending={isPending}
     >
       {obgynHistory ? (
         <dl className="space-y-0">
-          <DataRow
+          <EditableField
             label="Last Menstrual Period"
-            value={formatDate(obgynHistory.lastMenstrualPeriod)}
+            value={getVal('lastMenstrualPeriod', obgynHistory.lastMenstrualPeriod ? String(obgynHistory.lastMenstrualPeriod).split('T')[0] : '')}
+            originalValue={getOriginal('lastMenstrualPeriod', obgynHistory.lastMenstrualPeriod ? String(obgynHistory.lastMenstrualPeriod).split('T')[0] : '')}
+            isEditing={isEditing}
+            onChange={(v) => onFieldChange?.('lastMenstrualPeriod', v)}
+            type="date"
           />
-          <DataRow
+          <EditableField
             label="Dysmenorrhea"
-            value={obgynHistory.hasDysmenorrhea ? 'Yes' : 'No'}
+            value={getVal('hasDysmenorrhea', obgynHistory.hasDysmenorrhea ? 'Yes' : 'No')}
+            originalValue={getOriginal('hasDysmenorrhea', obgynHistory.hasDysmenorrhea ? 'Yes' : 'No')}
+            isEditing={isEditing}
+            onChange={(v) => onFieldChange?.('hasDysmenorrhea', v)}
+            type="select"
+            options={['Yes', 'No']}
           />
-          {obgynHistory.notes && (
-            <DataRow label="Notes" value={obgynHistory.notes} />
-          )}
+          <EditableField
+            label="Notes"
+            value={getVal('notes', obgynHistory.notes ?? '')}
+            originalValue={getOriginal('notes', obgynHistory.notes ?? '')}
+            isEditing={isEditing}
+            onChange={(v) => onFieldChange?.('notes', v)}
+            type="textarea"
+          />
         </dl>
       ) : (
         <p className="text-sm text-secondary-500 dark:text-neutral-400 italic">
