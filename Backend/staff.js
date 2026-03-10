@@ -77,7 +77,7 @@ app.use('/staff', staffRoutes);
 app.use('/admin/staff', roleManagementRoutes);
 
 // ======================================
-// AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice
+// AI Medical Chatbot — proxied to MDS-Chatbot microservice
 // Staff routes: JWT validated first, then forwarded with staff identity
 // Patient routes on staff portal are also proxied (for staff-side patient chat views)
 // IMPORTANT: Single mount point so Express doesn't strip the /staff prefix

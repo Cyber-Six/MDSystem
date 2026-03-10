@@ -69,7 +69,7 @@ initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
 initPatientMedicineRequestGraphQL(app);
 
-// AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice
+// AI Medical Chatbot — proxied to MDS-Chatbot microservice
 // Requests to /econsultation/chat/* are forwarded to CHATBOT_URL (localhost or remote)
 app.use('/econsultation/chat', chatbotProxy);
 logger.info(`✅ Chatbot proxy registered at /econsultation/chat → ${process.env.CHATBOT_URL || '(not configured)'}`);
