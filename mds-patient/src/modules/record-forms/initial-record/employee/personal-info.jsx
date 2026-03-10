@@ -215,6 +215,16 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             onChange={(e) => handleChange('position', e.target.value)}
             placeholder="Enter position"
           />
+          <Select
+            label="Campus Branch"
+            required
+            value={data.branch || ''}
+            onChange={(e) => handleChange('branch', e.target.value)}
+            options={[
+              { value: 'Manila', label: 'Manila' },
+              { value: 'QuezonCity', label: 'Quezon City' },
+            ]}
+          />
         </div>
       </div>
 

@@ -38,6 +38,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     immunizationCatalog: [],
     allergenCatalog: [],
     oralApplianceCatalog: [],
+    dentalProcedureCatalog: [],
     catalogsLoading: true,
     catalogsError: null,
   });
@@ -89,6 +90,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
       employmentCategoryOther: '',
       employmentStatus: '',
       position: '',
+      branch: '',
       emergencyContacts: [
         { name: '', relationship: '', contactNumber: '', address: '' },
         { name: '', relationship: '', contactNumber: '', address: '' }
@@ -209,6 +211,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     if (!pi.employmentCategory) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employment category is required' });
     if (pi.employmentCategory === 'Other' && !pi.employmentCategoryOther?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Please specify your employment category' });
     if (!pi.employmentStatus) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Employment status is required' });
+    if (!pi.branch) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Campus branch is required' });
 
     // Emergency contacts — first contact required, second is optional
     const c1 = pi.emergencyContacts?.[0];
@@ -411,6 +414,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
             data={formData.dentalHistory}
             onChange={handleDentalHistoryChange}
             oralApplianceCatalog={catalogs.oralApplianceCatalog}
+            dentalProcedureCatalog={catalogs.dentalProcedureCatalog}
             catalogsLoading={catalogs.catalogsLoading}
           />
         );
