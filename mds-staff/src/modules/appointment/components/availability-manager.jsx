@@ -40,12 +40,15 @@ const AvailabilityManager = () => {
       }
     : { medical: { morning: 60, afternoon: 60 }, dental: { morning: 1, afternoon: 1 } };
 
-  // Load schedulers from API
-  const loadSchedulers = useCallback(async () => {
+  // Load schedulers from API — preserves the currently selected scheduler if it still exists
+  const loadSchedulers = useCallback(async (preserveId = null) => {
     try {
       const list = await listAllSchedulers();
       setSchedulers(list || []);
-      if (list?.length > 0) setActiveScheduler(list[0]);
+      if (list?.length > 0) {
+        const kept = preserveId ? list.find((s) => String(s.id) === String(preserveId)) : null;
+        setActiveScheduler(kept || list[0]);
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -103,42 +106,39 @@ const AvailabilityManager = () => {
   };
 
   const handleSaveScheduler = async (formData, pendingReqs) => {
-    try {
-      if (formData.id) {
-        // Update existing
-        await updateScheduler(formData.id, {
-          label: formData.label,
-          location: formData.location,
-          schedulePerWeek: formData.schedulePerWeek,
-          morningAllowed: formData.morningAllowed,
-          afternoonAllowed: formData.afternoonAllowed,
-          notes: formData.notes || null,
-          isActive: formData.isActive,
-          whitelistOnly: formData.whitelistOnly,
-        });
-      } else {
-        // Create new
-        const created = await createScheduler({
-          label: formData.label,
-          location: formData.location,
-          schedulePerWeek: formData.schedulePerWeek,
-          morningAllowed: formData.morningAllowed,
-          afternoonAllowed: formData.afternoonAllowed,
-          notes: formData.notes || null,
-          whitelistOnly: formData.whitelistOnly ?? false,
-          slotCustomDates: [],
-          whiteLists: [],
-        });
-        // Save any pending requirements for the new scheduler
-        if (pendingReqs?.length > 0 && created?.id) {
-          for (const req of pendingReqs) {
-            await updateRequirement(created.id, { label: req.label, isDigital: true, isActive: true });
-          }
+    if (formData.id) {
+      // Update existing — re-throws so the modal stays open on failure
+      const updated = await updateScheduler(formData.id, {
+        label: formData.label,
+        location: formData.location,
+        schedulePerWeek: formData.schedulePerWeek,
+        morningAllowed: formData.morningAllowed,
+        afternoonAllowed: formData.afternoonAllowed,
+        notes: formData.notes || null,
+        isActive: formData.isActive,
+        whitelistOnly: formData.whitelistOnly,
+      });
+      await loadSchedulers(updated?.id ?? formData.id);
+    } else {
+      // Create new
+      const created = await createScheduler({
+        label: formData.label,
+        location: formData.location,
+        schedulePerWeek: formData.schedulePerWeek,
+        morningAllowed: formData.morningAllowed,
+        afternoonAllowed: formData.afternoonAllowed,
+        notes: formData.notes || null,
+        whitelistOnly: formData.whitelistOnly ?? false,
+        slotCustomDates: [],
+        whiteLists: [],
+      });
+      // Save any pending requirements for the new scheduler
+      if (pendingReqs?.length > 0 && created?.id) {
+        for (const req of pendingReqs) {
+          await updateRequirement(created.id, { label: req.label, isDigital: true, isActive: true });
         }
       }
-      await loadSchedulers();
-    } catch (err) {
-      setError(err.message);
+      await loadSchedulers(created?.id);
     }
   };
 
@@ -149,6 +149,7 @@ const AvailabilityManager = () => {
       await loadSchedulers();
     } catch (err) {
       setError(err.message);
+      throw err; // re-throw so the modal (if open) can show the error too
     }
   };
 
@@ -169,7 +170,7 @@ const AvailabilityManager = () => {
             <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Active Scheduler</label>
             <select
               value={activeScheduler?.id || ''}
-              onChange={(e) => setActiveScheduler(schedulers.find((s) => s.id === e.target.value) || null)}
+              onChange={(e) => setActiveScheduler(schedulers.find((s) => String(s.id) === e.target.value) || null)}
               className="w-full max-w-xs px-2.5 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               {schedulers.map((s) => (

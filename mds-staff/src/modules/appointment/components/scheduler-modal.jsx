@@ -12,12 +12,14 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
   const [newReqLabel, setNewReqLabel] = useState('');
   const [loadingReqs, setLoadingReqs] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState('');
 
   // Reset form when modal opens / scheduler changes
   useEffect(() => {
     if (isOpen) {
       setFormData(getDefaults(editingScheduler));
       setNewReqLabel('');
+      setModalError('');
       if (editingScheduler?.id) {
         loadRequirements(editingScheduler.id);
       } else {
@@ -81,14 +83,17 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.label.trim() || formData.schedulePerWeek.length === 0) return;
+    if (!formData.label.trim()) { setModalError('Label is required.'); return; }
+    if (formData.schedulePerWeek.length === 0) { setModalError('Select at least one schedule day.'); return; }
 
     setSaving(true);
+    setModalError('');
     try {
-      // Collect pending local requirements (for new schedulers)
       const pendingReqs = requirements.filter((r) => String(r.id).startsWith('local-'));
       await onSave?.({ ...formData, id: editingScheduler?.id }, pendingReqs);
       onClose();
+    } catch (err) {
+      setModalError(err.message || 'Failed to save scheduler.');
     } finally {
       setSaving(false);
     }
@@ -115,6 +120,14 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Inline error */}
+          {modalError && (
+            <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-xs rounded-lg flex justify-between items-center">
+              <span>{modalError}</span>
+              <button type="button" onClick={() => setModalError('')} className="ml-2 font-bold">&times;</button>
+            </div>
+          )}
+
           {/* Label */}
           <div>
             <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Label</label>
@@ -285,7 +298,15 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
             {isEditing && onDelete && (
               <button
                 type="button"
-                onClick={() => { onDelete(editingScheduler.id); onClose(); }}
+                onClick={async () => {
+                  setModalError('');
+                  try {
+                    await onDelete(editingScheduler.id);
+                    onClose();
+                  } catch (err) {
+                    setModalError(err.message || 'Failed to delete scheduler.');
+                  }
+                }}
                 className="px-4 py-2 text-sm font-medium text-error-600 dark:text-error-400 bg-error-50 dark:bg-error-900/20 hover:bg-error-100 dark:hover:bg-error-900/30 rounded-md transition-colors"
               >
                 Delete
