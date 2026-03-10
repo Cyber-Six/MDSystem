@@ -158,16 +158,28 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
          up.first_name,
          up.middle_name,
          up.last_name,
-         up.branch,
-         (SELECT MAX(ula.created_at)
-          FROM "UserLoginAttempt" ula
-          WHERE ula.user_id = uc.id AND ula.was_successful = true
-         ) AS last_login
+         up.branch
        FROM "UserCredentials" uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        WHERE uc.email ILIKE '%.mds@tip.edu.ph'
        ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`
     );
+
+    // Fetch last login dates
+    let lastLoginMap = {};
+    try {
+      const loginResult = await db.query(
+        `SELECT ula.user_id, MAX(ula.attempted_at) AS last_login
+         FROM "UserLoginAttempt" ula
+         WHERE ula.was_successful = true
+         GROUP BY ula.user_id`
+      );
+      for (const row of loginResult.rows) {
+        lastLoginMap[row.user_id] = row.last_login;
+      }
+    } catch (_) {
+      // gracefully skip on error
+    }
 
     const staffList = await Promise.all(result.rows.map(async (row) => {
       // Load role labels for this user
@@ -197,6 +209,7 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
         row.last_name,
       ].filter(Boolean);
 
+      const lastLogin = lastLoginMap[row.id] || null;
       return {
         id: String(row.id),
         email: row.email,
@@ -206,8 +219,8 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
         status: staffStatus,
         permissions: uiPerms,
         credentialsStatus: row.credentials_status,
-        lastLogin: row.last_login
-          ? new Date(row.last_login).toLocaleString('en-US', {
+        lastLogin: lastLogin
+          ? new Date(lastLogin).toLocaleString('en-US', {
               month: 'short', day: 'numeric', year: 'numeric',
               hour: '2-digit', minute: '2-digit',
             })

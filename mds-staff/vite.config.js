@@ -99,6 +99,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
+        '/admin': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
       },
     }
   }
