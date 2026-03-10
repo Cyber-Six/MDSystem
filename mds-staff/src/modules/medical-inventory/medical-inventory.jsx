@@ -4,13 +4,16 @@ import MedicalItemList from './components/medical-item/medical-item-list';
 import MedicalItemDetail from './components/medical-item/medical-item-detail';
 import DispenseQueue from './components/dispense-queue/dispense-queue';
 import AddItemModal from './components/medical-item/add-item-modal';
+import EditItemModal from './components/medical-item/edit-item-modal';
+import DeleteItemConfirmation from './components/medical-item/delete-item-confirmation';
 import AddSupplyModal from './components/add-supply/add-supply-modal';
 import SplitSupplyModal from './components/split-supply/split-supply-modal';
 import AdjustStockModal from './components/adjust-stock/adjust-stock-modal';
 import DispenseModal from './components/dispense-queue/dispense-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
+import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
 import {
-  SEED_ITEMS, SEED_BATCHES, SEED_REQUESTS, SEED_TRANSACTIONS,
+  SEED_BATCHES, SEED_REQUESTS, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
 } from './inventory-seed-data';
 
@@ -20,8 +23,11 @@ import {
  */
 const MedicalInventory = () => {
   const [activeSection, setActiveSection] = useState('dashboard');
-  const [items, setItems] = useState(SEED_ITEMS);
-  const [batches, setBatches] = useState(SEED_BATCHES);
+  const [items, setItems] = useState([]);
+  const [itemsLoading, setItemsLoading] = useState(true);
+  const [itemsError, setItemsError] = useState('');
+  const [selectedItemLoading, setSelectedItemLoading] = useState(false);
+  const [batches, setBatches] = useState([]);
   const [requests, setRequests] = useState(SEED_REQUESTS);
   const [transactions, setTransactions] = useState(SEED_TRANSACTIONS);
 
@@ -34,6 +40,10 @@ const MedicalInventory = () => {
   const [showSplitSupply, setShowSplitSupply] = useState(false);
   const [showAdjustStock, setShowAdjustStock] = useState(false);
   const [showDispense, setShowDispense] = useState(false);
+  const [showEditItem, setShowEditItem] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingItem, setDeletingItem] = useState(null);
 
   // Context for modals
   const [supplyContext, setSupplyContext] = useState(null); // { itemId }
@@ -44,6 +54,62 @@ const MedicalInventory = () => {
   // Feedback
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // ── Fetch items from API ───────────────────────────────────────────────
+  const loadItems = useCallback(async () => {
+    setItemsLoading(true);
+    setItemsError('');
+    try {
+      const data = await fetchMedicalItems();
+      setItems(data);
+      // Fetch batches for all items in parallel
+      const batchResults = await Promise.all(
+        data.map((item) => {
+          const isMedicine = item.category?.toLowerCase() === 'medicine';
+          if (isMedicine) {
+            return fetchMedicineBatches(Number(item.id)).then((bs) =>
+              bs.map((b) => ({
+                id: b.id,
+                medicalItemId: b.medicalItemId,
+                batchNumber: b.batchNumber,
+                currentQuantity: b.dosageValue,
+                initialQuantity: b.dosageValue,
+                dosageUnit: b.dosageUnit,
+                expiryDate: b.expiryDate,
+                location: b.location,
+                supplierName: b.supplierName,
+                notes: b.notes,
+              }))
+            );
+          } else {
+            return fetchSupplyBatches(Number(item.id)).then((bs) =>
+              bs.map((b) => ({
+                id: b.id,
+                medicalItemId: b.supplyItemId,
+                batchNumber: b.batch_number,
+                currentQuantity: b.currentQuantity,
+                initialQuantity: b.initialQuantity,
+                unit: b.unit,
+                expiryDate: b.expiry_date,
+                location: b.location,
+                supplierName: b.supplier_name,
+                notes: b.notes,
+              }))
+            );
+          }
+        })
+      );
+      setBatches(batchResults.flat());
+    } catch (err) {
+      setItemsError(err.message || 'Failed to load medical items.');
+    } finally {
+      setItemsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
 
   useEffect(() => {
     if (error || successMsg) {
@@ -63,9 +129,21 @@ const MedicalInventory = () => {
 
   /* ── Handlers ───────────────────────────────────────────────────────── */
 
-  const handleSelectItem = (item) => {
+  const handleSelectItem = async (item) => {
     setSelectedItem(item);
     setActiveSection('detail');
+    setSelectedItemLoading(true);
+    try {
+      const fresh = await fetchMedicalItem(item.id);
+      if (fresh) {
+        setItems((prev) => prev.map((i) => i.id === fresh.id ? { ...i, ...fresh } : i));
+        setSelectedItem(fresh);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load item details.');
+    } finally {
+      setSelectedItemLoading(false);
+    }
   };
 
   const handleBackToList = () => {
@@ -73,28 +151,110 @@ const MedicalInventory = () => {
     setActiveSection('items');
   };
 
-  const handleAddItem = (newItem) => {
-    const id = Math.max(...items.map((i) => i.id)) + 1;
-    setItems([...items, { ...newItem, id, active: true }]);
+  const handleAddItem = async (newItem) => {
+    const created = await createMedicalItem({
+      item_code: newItem.item_code,
+      item_name: newItem.item_name,
+      category: newItem.category,
+      description: newItem.description || null,
+    });
+    setItems((prev) => [...prev, created]);
     setShowAddItem(false);
-    setSuccessMsg(`${newItem.item_name} added to inventory.`);
+    setSuccessMsg(`${created.item_name} added to inventory.`);
   };
 
-  const handleAddSupply = (batch) => {
-    const id = Math.max(...batches.map((b) => b.id)) + 1;
-    const newBatch = { ...batch, id, initialQuantity: batch.currentQuantity };
-    setBatches([...batches, newBatch]);
-    // Record transaction
-    const txId = Math.max(...transactions.map((t) => t.id)) + 1;
-    const item = items.find((i) => i.id === batch.medicalItemId);
-    setTransactions([{
-      id: txId, patientId: null, patientName: null, action: 'receive',
-      quantity: batch.currentQuantity, issuedBy: 101, issuedByName: 'Current User',
-      issuedAt: new Date().toISOString(), notes: `Received batch ${batch.batchNumber}`,
-      itemName: item?.item_name || '', batchNumber: batch.batchNumber,
-    }, ...transactions]);
+  const handleEditItem = (item) => {
+    setEditingItem(item);
+    setShowEditItem(true);
+  };
+
+  const handleSaveEditItem = async (updatedData) => {
+    if (!editingItem) return;
+    const updated = await updateMedicalItem(editingItem.id, {
+      item_name: updatedData.item_name,
+      category: updatedData.category,
+      description: updatedData.description || null,
+    });
+    setItems((prev) => prev.map((i) => i.id === updated.id ? { ...i, ...updated } : i));
+    if (selectedItem?.id === updated.id) {
+      setSelectedItem({ ...selectedItem, ...updated });
+    }
+    setShowEditItem(false);
+    setEditingItem(null);
+    setSuccessMsg(`${updated.item_name} updated successfully.`);
+  };
+
+  const handleDeleteItem = (item) => {
+    setDeletingItem(item);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async (itemId) => {
+    await deleteMedicalItem(itemId);
+    setItems((prev) => prev.filter((i) => i.id !== itemId));
+    if (selectedItem?.id === itemId) {
+      setSelectedItem(null);
+      setActiveSection('items');
+    }
+    setShowDeleteConfirm(false);
+    setDeletingItem(null);
+    setSuccessMsg('Item deleted successfully.');
+  };
+
+  const handleAddSupply = async (batch) => {
+    let created;
+
+    if (batch.isMedicine) {
+      created = await addMedicineSupply({
+        medicalItemId: batch.medicalItemId,
+        batchNumber: batch.batchNumber,
+        dosageUnit: batch.dosageUnit,
+        dosageValue: batch.quantity,
+        expiryDate: batch.expiryDate,
+        location: batch.location,
+        supplierName: batch.supplierName || null,
+        notes: batch.notes || null,
+      });
+    } else {
+      created = await addSupplyBatch({
+        supplyItemId: batch.medicalItemId,
+        batch_number: batch.batchNumber,
+        initialQuantity: batch.quantity,
+        unit: batch.unit,
+        expiry_date: batch.expiryDate,
+        location: batch.location,
+        received_at: batch.receivedAt,
+        supplier_name: batch.supplierName || null,
+        notes: batch.notes || null,
+      });
+    }
+
+    const normalized = batch.isMedicine
+      ? {
+          id: created.id,
+          medicalItemId: created.medicalItemId,
+          batchNumber: created.batchNumber,
+          currentQuantity: created.dosageValue,
+          initialQuantity: created.dosageValue,
+          expiryDate: created.expiryDate,
+          location: created.location,
+          supplierName: created.supplierName,
+          notes: created.notes,
+        }
+      : {
+          id: created.id,
+          medicalItemId: created.supplyItemId,
+          batchNumber: created.batch_number,
+          currentQuantity: created.currentQuantity,
+          initialQuantity: created.initialQuantity,
+          expiryDate: created.expiry_date,
+          location: created.location,
+          supplierName: created.supplier_name,
+          notes: created.notes,
+        };
+    setBatches([...batches, normalized]);
     setShowAddSupply(false);
-    setSuccessMsg(`Batch ${batch.batchNumber} received (${batch.currentQuantity} units).`);
+    setSuccessMsg(`Batch ${batch.batchNumber} received (${batch.quantity} units).`);
   };
 
   const handleSplit = ({ sourceBatchId, quantity, toClinic, notes }) => {
@@ -243,6 +403,7 @@ const MedicalInventory = () => {
           batches={batches}
           requests={requests}
           transactions={transactions}
+          loading={itemsLoading}
           onNavigate={(section) => setActiveSection(section)}
           onSelectItem={handleSelectItem}
         />
@@ -251,20 +412,27 @@ const MedicalInventory = () => {
       {activeSection === 'items' && (
         <MedicalItemList
           items={enrichedItems}
+          loading={itemsLoading}
+          error={itemsError}
           onSelectItem={handleSelectItem}
           onAddItem={() => setShowAddItem(true)}
           onAddSupply={openAddSupply}
+          onEditItem={handleEditItem}
+          onDeleteItem={handleDeleteItem}
         />
       )}
 
       {activeSection === 'detail' && selectedEnriched && (
         <MedicalItemDetail
           item={selectedEnriched}
+          loading={selectedItemLoading}
           transactions={transactions.filter((t) => t.itemName === selectedEnriched.item_name)}
           onBack={handleBackToList}
           onAddSupply={() => openAddSupply(selectedEnriched.id)}
           onSplit={openSplit}
           onAdjust={openAdjust}
+          onEditItem={handleEditItem}
+          onDeleteItem={handleDeleteItem}
         />
       )}
 
@@ -285,6 +453,22 @@ const MedicalInventory = () => {
         <AddItemModal
           onClose={() => setShowAddItem(false)}
           onSave={handleAddItem}
+        />
+      )}
+
+      {showEditItem && editingItem && (
+        <EditItemModal
+          item={editingItem}
+          onClose={() => { setShowEditItem(false); setEditingItem(null); }}
+          onSave={handleSaveEditItem}
+        />
+      )}
+
+      {showDeleteConfirm && deletingItem && (
+        <DeleteItemConfirmation
+          item={deletingItem}
+          onClose={() => { setShowDeleteConfirm(false); setDeletingItem(null); }}
+          onConfirm={handleConfirmDelete}
         />
       )}
 

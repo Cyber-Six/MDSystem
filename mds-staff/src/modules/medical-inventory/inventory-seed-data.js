@@ -3,7 +3,7 @@
  * DELETE THIS FILE when real backend integration is done.
  */
 
-export const LOCATIONS = ['Casal', 'Arlegui'];
+export const LOCATIONS = ['Casal', 'Arlegui', 'QuezonCity'];
 
 export const CATEGORIES = [
   { value: 'medicine', label: 'Medicine' },
@@ -155,12 +155,14 @@ export const SEED_TRANSACTIONS = [
 
 export const computeItemStats = (items, batches) => {
   return items.map((item) => {
-    const itemBatches = batches.filter((b) => b.medicalItemId === item.id);
+    const itemBatches = batches.filter((b) => String(b.medicalItemId) === String(item.id));
     const casalBatches = itemBatches.filter((b) => b.location === 'Casal');
     const arleguiBatches = itemBatches.filter((b) => b.location === 'Arlegui');
+    const quezonCityBatches = itemBatches.filter((b) => b.location === 'QuezonCity');
     const totalStock = itemBatches.reduce((sum, b) => sum + b.currentQuantity, 0);
     const casalStock = casalBatches.reduce((sum, b) => sum + b.currentQuantity, 0);
     const arlegui = arleguiBatches.reduce((sum, b) => sum + b.currentQuantity, 0);
+    const quezonCity = quezonCityBatches.reduce((sum, b) => sum + b.currentQuantity, 0);
     const isLowStock = totalStock <= item.reorder_level;
     const hasExpired = itemBatches.some((b) => b.expiryDate && new Date(b.expiryDate) < new Date());
     const hasExpiringSoon = itemBatches.some((b) => {
@@ -168,6 +170,6 @@ export const computeItemStats = (items, batches) => {
       const days = Math.ceil((new Date(b.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
       return days > 0 && days <= 30;
     });
-    return { ...item, batches: itemBatches, totalStock, casalStock, arlegui, isLowStock, hasExpired, hasExpiringSoon, batchCount: itemBatches.length };
+    return { ...item, batches: itemBatches, totalStock, casalStock, arlegui, quezonCity, isLowStock, hasExpired, hasExpiringSoon, batchCount: itemBatches.length };
   });
 };

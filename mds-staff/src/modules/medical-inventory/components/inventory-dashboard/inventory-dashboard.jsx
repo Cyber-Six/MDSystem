@@ -141,7 +141,7 @@ const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate
               const st = getExpiryStatus(batch.expiryDate);
               const item = items.find((i) => i.id === batch.medicalItemId);
               return (
-                <div key={batch.id} className="px-3 py-1.5 flex items-center justify-between">
+                <div key={`${batch.medicalItemId}-${batch.id}`} className="px-3 py-1.5 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-medium text-secondary-800 dark:text-white m-0">{item?.item_name || 'Unknown'}</p>
                     <p className="text-[10px] text-secondary-400 dark:text-neutral-500 m-0">{batch.batchNumber} · {batch.location}</p>
