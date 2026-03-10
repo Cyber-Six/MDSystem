@@ -119,10 +119,10 @@ input SplitMedicalSupplyInput {
 }
 
 type Query {
-  getMedicalItems(category: ItemCategory, offset: Int, limit: Int): [MedicalItem!]
+  getMedicalItems(category: ItemCategory, active: Boolean, offset: Int, limit: Int): [MedicalItem!]
   getMedicalItem(id: ID!): MedicalItem
-  getMedicalSupply(medicalItemId: Int!, location: LocationDesignation, offset: Int, limit: Int): [MedicineBatch!]
-  getSupplyBatches(supplyItemId: Int!, location: LocationDesignation, offset: Int, limit: Int): [SupplyBatch!]
+  getMedicalSupply(medicalItemId: Int!, location: LocationDesignation, availableOnly: Boolean, offset: Int, limit: Int): [MedicineBatch!]
+  getSupplyBatches(supplyItemId: Int!, location: LocationDesignation, availableOnly: Boolean, offset: Int, limit: Int): [SupplyBatch!]
 }
 
 type Mutation {

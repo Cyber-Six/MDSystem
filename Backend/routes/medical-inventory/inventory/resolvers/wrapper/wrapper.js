@@ -4,7 +4,7 @@ const { validateItemActive } = require("./helper.js");
 const logger = require("../../../../../utils/logger.js");
 
 const Query = {
-  _getMedicalItems: async (_, { category, offset = 0, limit = 20 }, { res }) => {
+  _getMedicalItems: async (_, { category, active, offset = 0, limit = 20 }, { res }) => {
     let sql = 'SELECT * FROM "MedicalItems" WHERE 1=1';
     const params = [];
     let idx = 1;
@@ -12,6 +12,12 @@ const Query = {
     if (category) {
       sql += ' AND category = $' + idx;
       params.push(category);
+      idx++;
+    }
+
+    if (active !== undefined && active !== null) {
+      sql += ' AND active = $' + idx;
+      params.push(active);
       idx++;
     }
 
@@ -30,7 +36,7 @@ const Query = {
     return result.rows[0] || null;
   },
 
-  _getMedicalSupply: async (_, { medicalItemId, location, offset = 0, limit = 20 }, { res }) => {
+  _getMedicalSupply: async (_, { medicalItemId, location, availableOnly, offset = 0, limit = 20 }, { res }) => {
     let sql = 'SELECT * FROM "MedicineBatch" WHERE "medicalItemId" = $1';
     const params = [medicalItemId];
     let idx = 2;
@@ -41,6 +47,10 @@ const Query = {
       idx++;
     }
 
+    if (availableOnly) {
+      sql += ' AND "expiryDate" > CURRENT_DATE';
+    }
+
     sql += ' ORDER BY "expiryDate" ASC OFFSET $' + idx + ' LIMIT $' + (idx + 1);
     params.push(offset, limit);
 
@@ -48,7 +58,7 @@ const Query = {
     return result.rows;
   },
 
-  _getSupplyBatches: async (_, { supplyItemId, location, offset = 0, limit = 20 }, { res }) => {
+  _getSupplyBatches: async (_, { supplyItemId, location, availableOnly, offset = 0, limit = 20 }, { res }) => {
     let sql = 'SELECT * FROM "SupplyBatch" WHERE "supplyItemId" = $1';
     const params = [supplyItemId];
     let idx = 2;
@@ -57,6 +67,10 @@ const Query = {
       sql += ' AND location = $' + idx;
       params.push(location);
       idx++;
+    }
+
+    if (availableOnly) {
+      sql += ' AND "currentQuantity" > 0 AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)';
     }
 
     sql += ' ORDER BY expiry_date ASC OFFSET $' + idx + ' LIMIT $' + (idx + 1);
