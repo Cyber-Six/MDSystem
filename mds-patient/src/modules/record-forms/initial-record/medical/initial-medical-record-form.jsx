@@ -492,6 +492,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
             onEdit={handleEdit}
             certification={formData.certification}
             onCertificationChange={handleCertificationChange}
+            catalogs={catalogs}
           />
         );
       default:

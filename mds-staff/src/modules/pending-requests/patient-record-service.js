@@ -98,7 +98,7 @@ export const getUserEmergencyContact = async (userId) => {
            contactNumber
            isVerified
          }
-         status
+
          created_at
        }
      }`,
@@ -122,7 +122,6 @@ export const getUserMedicalHistory = async (userId) => {
            relationship
          }
          notes
-         status
          created_at
        }
      }`,
@@ -144,7 +143,6 @@ export const getUserLifestyle = async (userId) => {
          alcoholConsumer
          frequencyOfAlcoholConsumption
          notes
-         status
          created_at
        }
      }`,
@@ -169,7 +167,6 @@ export const getUserAllergyProfile = async (userId) => {
            dateIdentified
          }
          notes
-         status
          created_at
        }
      }`,
@@ -191,7 +188,6 @@ export const getUserMedicationProfile = async (userId) => {
            description
          }
          notes
-         status
          created_at
        }
      }`,
@@ -214,7 +210,6 @@ export const getUserImmunizationProfile = async (userId) => {
            doseNumber
          }
          notes
-         status
          created_at
        }
      }`,
@@ -238,7 +233,6 @@ export const getUserHospitalizationProfile = async (userId) => {
            notes
          }
          notes
-         status
          created_at
        }
      }`,
@@ -261,7 +255,6 @@ export const getUserOperationProfile = async (userId) => {
            notes
          }
          notes
-         status
          created_at
        }
      }`,
@@ -286,7 +279,6 @@ export const getUserVisualAcuityProfile = async (userId) => {
            notes
            recorded_at
          }
-         status
          created_at
        }
      }`,
@@ -308,7 +300,6 @@ export const getUserVitalSigns = async (userId) => {
          heart_rate
          temperature
          notes
-         status
          created_at
        }
      }`,
@@ -347,8 +338,7 @@ export const getUserDentalHistory = async (userId) => {
          lastDentalCleaning
          purpose
          lastVisitDate
-         status
-         created_at
+         archived_at
        }
      }`,
     { userId },
