@@ -170,13 +170,20 @@ const PersonalInfoForm = ({ data, onChange }) => {
             placeholder="+63 XXX XXX XXXX"
           />
         </div>
-        <div className="mt-4">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
-            label="Address"
+            label="Present Address"
             required
             value={data.address || ''}
             onChange={(e) => handleChange('address', e.target.value)}
-            placeholder="Enter complete address"
+            placeholder="Enter current/present address"
+          />
+          <Input
+            label="Province Address"
+            required
+            value={data.provinceAddress || ''}
+            onChange={(e) => handleChange('provinceAddress', e.target.value)}
+            placeholder="Enter province/permanent address"
           />
         </div>
       </div>

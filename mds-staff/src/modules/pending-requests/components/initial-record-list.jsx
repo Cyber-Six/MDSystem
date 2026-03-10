@@ -63,6 +63,7 @@ const InitialRecordList = ({ staffRole = 'both' }) => {
       [TICKET_STATUS.REVISION_SUBMITTED]: 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400',
       [TICKET_STATUS.APPROVED]:           'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
       [TICKET_STATUS.REVISION]:           'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
+      [TICKET_STATUS.REJECTED]:           'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
       [TICKET_STATUS.EXPIRED]:            'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400',
       [TICKET_STATUS.CANCELLED]:          'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400',
     };
@@ -107,6 +108,7 @@ const InitialRecordList = ({ staffRole = 'both' }) => {
               <option value={TICKET_STATUS.REVISION_SUBMITTED}>Revision Submitted</option>
               <option value={TICKET_STATUS.APPROVED}>Approved</option>
               <option value={TICKET_STATUS.REVISION}>Revision Requested</option>
+              <option value={TICKET_STATUS.REJECTED}>Rejected</option>
               <option value={TICKET_STATUS.EXPIRED}>Expired</option>
               <option value={TICKET_STATUS.CANCELLED}>Cancelled</option>
             </select>

@@ -6,6 +6,24 @@ import { axiosRequest } from '../packages-core-adapter';
 import { sendGraphQLRequest } from '../utils/graphql-client';
 
 /**
+ * Fetch the current update ticket (id + status) without throwing.
+ * Returns null if no ticket exists.
+ */
+const fetchCurrentUpdateTicket = async () => {
+  const query = `
+    query GetCurrentUpdateTicket {
+      getUpdateTicket { id status scope }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(query, {});
+    return data.getUpdateTicket ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Create an update ticket (required before making any profile mutations)
  * @param {string} scope - 'Medical', 'Dental', or 'Both'
  */
@@ -23,9 +41,19 @@ const createUpdateTicket = async (scope = 'Both') => {
     console.log('[EMR Service] Update ticket created:', data.createUpdateTicket);
     return data.createUpdateTicket;
   } catch (error) {
-    // If a stale ticket is blocking, cancel it and retry once
     const isStaleTicket = error.message?.toLowerCase().includes('already in progress');
     if (isStaleTicket) {
+      // Inspect the existing ticket before deciding what to do
+      const existing = await fetchCurrentUpdateTicket();
+
+      // Revision tickets are valid for all create mutations — reuse the existing ID
+      // (cancelUpdateTicket only allows InProgress/Pending, so we cannot cancel it)
+      if (existing?.status === 'Revision') {
+        console.log('[EMR Service] Existing ticket is in Revision — reusing ticket id:', existing.id);
+        return existing.id;
+      }
+
+      // For InProgress/Pending stale tickets — cancel and create a fresh one
       console.warn('[EMR Service] Stale update ticket detected — cancelling and retrying...');
       await cancelUpdateTicket();
       const retryData = await sendGraphQLRequest(mutation, { scope });
@@ -198,8 +226,9 @@ const registerBranchIdentifier = async (identifier) => {
  *
  * @param {string} identifier - Student/employee number
  * @param {object} personalInfo - formData.personalInfo
+ * @param {boolean} isRevision - When true, pre-cancels the existing InProgress log before creating a new one
  */
-const registerProfileSetup = async (identifier, personalInfo) => {
+const registerProfileSetup = async (identifier, personalInfo, isRevision = false) => {
   const pi = personalInfo || {};
   const hasIdentifier = !!identifier?.trim();
 
@@ -218,9 +247,17 @@ const registerProfileSetup = async (identifier, personalInfo) => {
     province_address: pi.provinceAddress?.trim() || pi.address?.trim() || '',
   };
 
+  // For revisions: the personal record log is still in InProgress from the original submission.
+  // Proactively cancel it first so createPersonalRecordLog won't throw "already in progress".
+  if (isRevision) {
+    await cancelPersonalRecordLog();
+    console.log('[EMR Service] Revision: pre-cancelled existing personal record log');
+  }
+
   // Build a compound mutation so both ops travel in one HTTP request.
   // createBranchIdentifier is conditional — skip it if no identifier is available.
-  const mutation = hasIdentifier
+  // For revisions, createBranchIdentifier is also skipped (already set from initial submission).
+  const mutation = hasIdentifier && !isRevision
     ? `mutation ProfileSetup($branchInput: BranchIdentifierInput!, $input: userProfileInput!) {
         createBranchIdentifier(input: $branchInput) { branch identifier }
         createPersonalRecordLog(input: $input) { first_name last_name }
@@ -229,7 +266,7 @@ const registerProfileSetup = async (identifier, personalInfo) => {
         createPersonalRecordLog(input: $input) { first_name last_name }
       }`;
 
-  const variables = hasIdentifier
+  const variables = hasIdentifier && !isRevision
     ? { branchInput: { identifier: identifier.trim() }, input: personalInput }
     : { input: personalInput };
 
@@ -252,7 +289,7 @@ const registerProfileSetup = async (identifier, personalInfo) => {
       const retryMutation = `mutation ProfileSetupRetry($input: userProfileInput!) {
         createPersonalRecordLog(input: $input) { first_name last_name }
       }`;
-      const retryResult = await sendGraphQLRequest(retryMutation, { input: personalInput }, { endpoint: '/profile/patient' });
+      await sendGraphQLRequest(retryMutation, { input: personalInput }, { endpoint: '/profile/patient' });
       console.log('[EMR Service] Profile setup complete (after stale-log recovery):', {
         branch: null, // already set from first attempt
         identifier: identifier?.trim() || null,
@@ -265,11 +302,13 @@ const registerProfileSetup = async (identifier, personalInfo) => {
   }
 };
 
-export const createInitialMedicalRecord = async (formData) => {
-  console.log('[EMR Service] Starting initial medical record creation (batched)');
+export const createInitialMedicalRecord = async (formData, { isRevision = false } = {}) => {
+  console.log('[EMR Service] Starting initial medical record creation (batched)', isRevision ? '(revision)' : '(new)');
   console.log('[EMR Service] Form data received:', formData);
 
   let ticketCreated = false;
+  // profileLogCreated tracks whether a NEW log was created (not an update).
+  // For revisions we update the existing log, so cleanup on error is not needed.
   let profileLogCreated = false;
   // Track staged file IDs so they can be cleaned up if the submission fails
   let upperTeethFileId = null;
@@ -281,22 +320,45 @@ export const createInitialMedicalRecord = async (formData) => {
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
     // Both mutations go to /profile/patient — batched into ONE request.
     // Must complete before ticket creation so the branch is already set.
+    // For revisions: uses updatePatientPersonalRecordLog directly (no create → no 400).
     console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
-    await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo);
-    profileLogCreated = true;
+    await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
+    profileLogCreated = !isRevision; // only mark for cleanup if a new log was created
 
-    // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========
-    // createUpdateTicket and both photo uploads are independent of each other
-    // so all three fire simultaneously.
+    // ======== REQUEST 2 (parallel): Resolve ticket + upload dental photos ========
+    // For revisions: pre-fetch the existing Revision ticket to avoid a 400 from
+    // createUpdateTicket, then reuse its ID directly.
+    // For new submissions: createUpdateTicket and both photo uploads fire together.
     console.log('[EMR Service] [2/3] Creating ticket & uploading photos (parallel)...');
+
+    let ticketPromise;
+    if (isRevision) {
+      const existing = await fetchCurrentUpdateTicket();
+      if (existing?.status === 'Revision') {
+        console.log('[EMR Service] Revision: reusing existing ticket:', existing.id);
+        ticketPromise = Promise.resolve(existing.id);
+        // ticket already exists — no new ticket to cancel on error
+      } else {
+        // Unexpected state (e.g. ticket was already submitted) — fall through to create
+        ticketPromise = createUpdateTicket('Both');
+      }
+    } else {
+      ticketPromise = createUpdateTicket('Both');
+    }
+
     const [ticketResult, upperResult, lowerResult] = await Promise.allSettled([
-      createUpdateTicket('Both'),
+      ticketPromise,
       uploadMediaFile(formData.dentalHistory?.upperTeethPhoto?.file ?? null),
       uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null),
     ]);
 
     // Capture partial results so cleanup always works even if one operation fails
-    if (ticketResult.status === 'fulfilled') { ticketCreated = true; results.ticketId = ticketResult.value; }
+    // For revisions reusing an existing ticket, ticketCreated stays false so we
+    // don't cancel the revision ticket if a later step fails.
+    if (ticketResult.status === 'fulfilled') {
+      if (!isRevision) ticketCreated = true;
+      results.ticketId = ticketResult.value;
+    }
     upperTeethFileId = upperResult.status === 'fulfilled' ? upperResult.value : null;
     lowerTeethFileId = lowerResult.status === 'fulfilled' ? lowerResult.value : null;
 
@@ -394,6 +456,16 @@ export const fetchAllCatalogs = async () => {
         name
         description
       }
+      visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true) {
+        id
+        code
+        name
+      }
+      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true) {
+        id
+        code
+        name
+      }
     }
   `;
   try {
@@ -406,6 +478,8 @@ export const fetchAllCatalogs = async () => {
       immunizations: data.immunizationCatalog?.length,
       allergens: data.allergenCatalog?.length,
       oralAppliances: data.oralApplianceCatalog?.length,
+      visualAcuityTypes: data.visualAcuityCatalog?.length,
+      dentalProcedures: data.dentalProcedureCatalog?.length,
     });
     return {
       medicalConditionCatalog: data.medicalConditionCatalog || [],
@@ -415,6 +489,8 @@ export const fetchAllCatalogs = async () => {
       immunizationCatalog: data.immunizationCatalog || [],
       allergenCatalog: data.allergenCatalog || [],
       oralApplianceCatalog: data.oralApplianceCatalog || [],
+      visualAcuityCatalog: data.visualAcuityCatalog || [],
+      dentalProcedureCatalog: data.dentalProcedureCatalog || [],
     };
   } catch (error) {
     console.warn('[EMR Service] Could not fetch catalogs:', error.message);
@@ -426,6 +502,8 @@ export const fetchAllCatalogs = async () => {
       immunizationCatalog: [],
       allergenCatalog: [],
       oralApplianceCatalog: [],
+      visualAcuityCatalog: [],
+      dentalProcedureCatalog: [],
     };
   }
 };
@@ -584,6 +662,8 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
     immunizationCatalog = [],
     allergenCatalog: _aCat = [],
     oralApplianceCatalog = [],
+    visualAcuityCatalog = [],
+    dentalProcedureCatalog = [],
   } = allCatalogs;
   const inputs = {};
 
@@ -603,12 +683,14 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       firstContact: {
         contactName: formData.personalInfo.emergencyContacts[0].name,
         relationship: formData.personalInfo.emergencyContacts[0].relationship,
-        contactNumber: formData.personalInfo.emergencyContacts[0].contactNumber
+        contactNumber: formData.personalInfo.emergencyContacts[0].contactNumber,
+        address: formData.personalInfo.emergencyContacts[0].address || null
       },
       secondContact: {
         contactName: formData.personalInfo.emergencyContacts[1].name,
         relationship: formData.personalInfo.emergencyContacts[1].relationship,
-        contactNumber: formData.personalInfo.emergencyContacts[1].contactNumber
+        contactNumber: formData.personalInfo.emergencyContacts[1].contactNumber,
+        address: formData.personalInfo.emergencyContacts[1].address || null
       }
     };
   }
@@ -655,13 +737,15 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
 
   // Visual Acuity Profile
   const hasVisualAcuity = formData.medicalBackground.eyeglasses || formData.medicalBackground.contactLenses;
+  // Use the first catalog entry for acuityId — falls back to null (acuity omitted) if catalog is empty
+  const visualAcuityId = visualAcuityCatalog[0]?.id ?? null;
   inputs.visualAcuityProfile = {
     notes: hasVisualAcuity
       ? `Eyeglasses: ${formData.medicalBackground.eyeglasses ? 'Yes' : 'No'}, Contact Lenses: ${formData.medicalBackground.contactLenses ? 'Yes' : 'No'}`
       : null,
-    acuity: hasVisualAcuity
+    acuity: hasVisualAcuity && visualAcuityId
       ? {
-          acuityId: "1",
+          acuityId: visualAcuityId,
           left_eye: formData.medicalBackground.gradeOS || "N/A",
           right_eye: formData.medicalBackground.gradeOD || "N/A",
           notes: null,
@@ -685,8 +769,13 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       : null
   };
 
-  // Dental Procedure Profile (empty)
-  inputs.dentalProcedureProfile = { procedures: [], notes: null };
+  // Dental Procedure Profile — built from selected catalog IDs
+  const today = new Date().toISOString().split('T')[0];
+  const validProcedureIds = new Set(dentalProcedureCatalog.map(c => c.id));
+  const dentalProcedures = Object.entries(formData.dentalHistory.selectedDentalProcedures || {})
+    .filter(([id, checked]) => checked && validProcedureIds.has(id))
+    .map(([id]) => ({ procedureTypeId: id, procedureDate: today }));
+  inputs.dentalProcedureProfile = { procedures: dentalProcedures, notes: null };
 
   // Oral Appliance Profile — oral appliance catalog IDs
   const { appliances, notes: oralNotes } = buildOralApplianceRecords(formData.dentalHistory, oralApplianceCatalog);
@@ -1129,7 +1218,8 @@ const KNOWN_PROGRAMS = new Set([
  * Map fetched backend data back to the InitialMedicalRecordForm's formData shape.
  */
 const mapRevisionDataToFormData = (profileData, emrData) => {
-  const pr  = profileData?.personalRecord || {};
+  // personalLog = candidate data from UsersPersonalLog (the patient's submitted form)
+  const pr  = profileData?.personalLog || {};
   const bid = profileData?.branchId;
   const emr = emrData || {};
 
@@ -1151,8 +1241,9 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     civilStatus:        pr.civil_status   || '',
     nationality:        pr.nationality    || '',
     religion:           pr.religion       || '',
-    address:            pr.present_address || '',
-    contactNumber:      pr.contactNumber  || '',
+    address:            pr.present_address   || '',
+    provinceAddress:    pr.province_address  || '',
+    contactNumber:      pr.contactNumber     || '',
     studentNumber:      bid?.identifier   || '',
     program:            isKnownProgram ? rawProgram : (rawProgram ? 'Other' : ''),
     programOther:       isKnownProgram ? '' : rawProgram,
@@ -1164,13 +1255,13 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
         name:          ec.firstContact?.contactName   || '',
         relationship:  ec.firstContact?.relationship  || '',
         contactNumber: ec.firstContact?.contactNumber || '',
-        address:       '',
+        address:       ec.firstContact?.address       || '',
       },
       {
         name:          ec.secondContact?.contactName   || '',
         relationship:  ec.secondContact?.relationship  || '',
         contactNumber: ec.secondContact?.contactNumber || '',
-        address:       '',
+        address:       ec.secondContact?.address       || '',
       },
     ],
   };
@@ -1306,12 +1397,16 @@ export const fetchRevisionPrefill = async () => {
 
   const [profileResult, emrResult] = await Promise.allSettled([
     // ── Request 1: personal profile ──────────────────────
+    // Only queries getPersonalRecordLog (UsersPersonalLog) which contains
+    // the patient's submitted form data. getPersonalRecord (UsersPersonal)
+    // is intentionally excluded because its personal fields are null until
+    // staff approval runs applyUpdatePersonalRecord.
     sendGraphQLRequest(
       `query GetRevisionPersonalData {
-        personalRecord: getPersonalRecord {
+        personalLog: getPersonalRecordLog {
           first_name middle_name last_name suffix
           date_of_birth sex civil_status nationality religion
-          contactNumber present_address
+          contactNumber present_address province_address
         }
         branchId: getBranchIdentifier {
           identifier
@@ -1329,8 +1424,8 @@ export const fetchRevisionPrefill = async () => {
           ... on EmployeeProfile { department role }
         }
         emergencyContact: getEmergencyContact {
-          firstContact  { contactName relationship contactNumber }
-          secondContact { contactName relationship contactNumber }
+          firstContact  { contactName relationship contactNumber address }
+          secondContact { contactName relationship contactNumber address }
         }
         medicalHistory: getMedicalHistory {
           conditions { conditionId relationship }
@@ -1385,14 +1480,19 @@ export const fetchRevisionPrefill = async () => {
     console.warn('[EMR Service] EMR prefill fetch failed:', emrResult.reason?.message);
   }
 
-  // If both failed entirely, return null so the form starts blank
-  if (profileResult.status === 'rejected' && emrResult.status === 'rejected') {
+  // Even on a GraphQL error the response may carry partial data. Recover it.
+  const profileData = profileResult.status === 'fulfilled'
+    ? profileResult.value
+    : (profileResult.reason?.data || {});
+  const emrData = emrResult.status === 'fulfilled'
+    ? emrResult.value
+    : (emrResult.reason?.data || {});
+
+  // If no usable profile or EMR data at all, start the form blank
+  if (!profileData?.personalLog && Object.keys(emrData).length === 0) {
     console.error('[EMR Service] fetchRevisionPrefill: both requests failed, form will start blank');
     return null;
   }
-
-  const profileData = profileResult.status === 'fulfilled' ? profileResult.value : {};
-  const emrData     = emrResult.status    === 'fulfilled' ? emrResult.value    : {};
 
   const mapped = mapRevisionDataToFormData(profileData, emrData);
   console.log('[EMR Service] Revision pre-fill data mapped successfully');
@@ -1419,48 +1519,64 @@ export const getMyBranchIdentifier = async () => {
 
 export const checkInitialRecordStatus = async () => {
   console.log('[EMR Service] Checking initial record status...');
-  
-  const query = `
-    query GetUpdateTicket {
-      getUpdateTicket {
-        id
-        status
-      }
-    }
-  `;
-  
-  try {
-    const data = await sendGraphQLRequest(query, {});
-    console.log('[EMR Service] Update ticket status:', data.getUpdateTicket);
-    
-    // If there's a ticket with status Pending, Approved, or RevisionSubmitted, they've completed the initial record
-    const ticket = data.getUpdateTicket;
-    
-    if (!ticket) {
-      // No ticket at all - needs to fill out initial record
-      console.log('[EMR Service] No update ticket found - initial record required');
-      return { needsInitialRecord: true, status: null };
-    }
-    
-    // Check if the status indicates they've completed the initial record
-    const completedStatuses = ['Pending', 'Approved', 'RevisionSubmitted'];
-    const needsInitialRecord = !completedStatuses.includes(ticket.status);
-    
-    console.log('[EMR Service] Initial record status:', { 
-      needsInitialRecord, 
-      currentStatus: ticket.status 
-    });
-    
-    return { 
-      needsInitialRecord, 
-      status: ticket.status,
-      ticketId: ticket.id
-    };
-  } catch (error) {
-    // If the query fails (e.g., no ticket exists), user needs to fill out the initial record
-    console.log('[EMR Service] Error checking status (likely no ticket):', error.message);
-    return { needsInitialRecord: true, status: null, error: error.message };
+
+  // Query credential status (profile) and update ticket (EMR) in parallel.
+  // getCredentialStatus is the authoritative signal: Unverified = new patient.
+  const [credentialResult, ticketResult] = await Promise.allSettled([
+    sendGraphQLRequest(
+      `query GetCredentialStatus { getCredentialStatus }`,
+      {},
+      { endpoint: '/profile/patient' }
+    ),
+    sendGraphQLRequest(
+      `query GetUpdateTicket { getUpdateTicket { id status notes } }`,
+      {}
+    ),
+  ]);
+
+  const credentialStatus = credentialResult.status === 'fulfilled'
+    ? credentialResult.value?.getCredentialStatus
+    : null;
+
+  const ticket = ticketResult.status === 'fulfilled'
+    ? ticketResult.value?.getUpdateTicket
+    : null;
+
+  console.log('[EMR Service] Credential status:', credentialStatus);
+  console.log('[EMR Service] Update ticket:', ticket);
+
+  // Primary check: Unverified credential status means the patient is new and
+  // must complete the initial record form regardless of any ticket state.
+  if (credentialStatus === 'Unverified') {
+    const ticketStatus = ticket?.status || null;
+    console.log('[EMR Service] Credential is Unverified — initial record required. Ticket status:', ticketStatus);
+    return { needsInitialRecord: true, status: ticketStatus, ticketId: ticket?.id ?? null, notes: ticket?.notes ?? null };
   }
+
+  // Secondary check: non-Unverified credential (Active / Locked / Disabled) means
+  // the patient has already completed and passed the initial record step.
+  if (credentialStatus && credentialStatus !== 'Unverified') {
+    console.log('[EMR Service] Credential is', credentialStatus, '— initial record already completed');
+    return { needsInitialRecord: false, status: ticket?.status ?? null, ticketId: ticket?.id ?? null, notes: ticket?.notes ?? null };
+  }
+
+  // Fallback (credential fetch failed): fall back to update-ticket heuristic.
+  console.warn('[EMR Service] Could not fetch credential status — falling back to ticket heuristic');
+
+  if (!ticket) {
+    console.log('[EMR Service] No update ticket found - initial record required');
+    return { needsInitialRecord: true, status: null };
+  }
+
+  const completedStatuses = ['Pending', 'Approved', 'RevisionSubmitted'];
+  const needsInitialRecord = !completedStatuses.includes(ticket.status);
+
+  console.log('[EMR Service] Initial record status (fallback):', {
+    needsInitialRecord,
+    currentStatus: ticket.status,
+  });
+
+  return { needsInitialRecord, status: ticket.status, ticketId: ticket.id, notes: ticket.notes ?? null };
 };
 
 export default {
