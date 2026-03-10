@@ -28,8 +28,9 @@ const Query = {
   },
 
   getAppointmentStatus: async (_, __, { user, res }) => {
-  return await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id, }, { user, res });
-  }
+    const records = await Wrapper.Query._getUserAppointmentRecords(_, { userId: user.id, offset: 0, limit: 1 }, { user, res });
+    return records && records.length > 0 ? records[0] : null;
+  },
 };
 
 const Mutation = {
@@ -47,7 +48,7 @@ const Mutation = {
   cancelAppointment: async (_, __, { user, res }) => {
     const userRecord = await Wrapper.Query._getUserAppointmentRecords(_, { userId: user.id, offset: 0, limit: 1 }, { user, res });
 
-    if (!userRecord || !["Pending", "Scheduled", "InProgress"].includes(userRecord[0].status)) {
+    if (!userRecord || userRecord.length === 0 || !["Pending", "Scheduled", "InProgress"].includes(userRecord[0].status)) {
       throwGraphQLError(res).message("No active appointment found to cancel").status(404).throw();
     }
 

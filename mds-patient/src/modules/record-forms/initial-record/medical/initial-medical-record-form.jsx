@@ -20,7 +20,7 @@ import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer
  * @param {Function} props.onComplete - Optional callback when form is successfully submitted
  * @param {boolean} props.isModal - Whether the form is displayed in a modal (affects styling)
  */
-const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false }) => {
+const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false, staffNote = null }) => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,6 +38,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     immunizationCatalog: [],
     allergenCatalog: [],
     oralApplianceCatalog: [],
+    dentalProcedureCatalog: [],
     catalogsLoading: true,
     catalogsError: null,
   });
@@ -82,6 +83,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       nationality: '',
       religion: '',
       address: '',
+      provinceAddress: '',
       contactNumber: '',
       program: '',
       programOther: '',
@@ -141,15 +143,14 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       hasIntraOralAppliance: '',
       intraOralAppliances: {},
       applianceLocation: '',
-      toothExtraction: '',
-      dentalFilling: '',
+      selectedDentalProcedures: {},
       upperTeethPhoto: null,
       lowerTeethPhoto: null
     },
     obgyne: {
-      menarcheYearAge: '',
+      lastMenstrualPeriod: '',
       menstruationDuration: '',
-      dysmenorrhea: 'no'
+      dysmenorrhea: ''
     },
     certification: {
       verified: false,
@@ -216,7 +217,8 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     if (!pi.nationality?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Nationality is required' });
     if (!pi.contactNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number is required' });
     else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Contact number must be a valid Philippine number (e.g. 09171234567 or +639171234567)' });
-    if (!pi.address?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Address is required' });
+    if (!pi.address?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Present address is required' });
+    if (!pi.provinceAddress?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Province address is required' });
     if (!pi.program) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Program is required' });
     if (pi.program === 'Other' && !pi.programOther?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Please specify your program' });
     if (!pi.studentNumber?.trim()) errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'Student number is required' });
@@ -245,8 +247,6 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     if (!dh.firstTimeDentist) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'First time dentist question is required' });
     if (!dh.lastDentalCleaning) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Last dental cleaning is required' });
     if (!dh.hasIntraOralAppliance) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Intra-oral appliance question is required (Yes/No)' });
-    if (!dh.toothExtraction) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Tooth extraction question is required (Yes/No)' });
-    if (!dh.dentalFilling) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Dental filling question is required (Yes/No)' });
     if (!dh.upperTeethPhoto) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Upper teeth photo is required' });
     if (!dh.lowerTeethPhoto) errors.push({ section: 'Dental History', sectionIndex: 3, message: 'Lower teeth photo is required' });
 
@@ -305,8 +305,13 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
         } else if (lower.includes('unique constraint') || lower.includes('duplicate')) {
           errors.push({ section: 'Submission Error', sectionIndex: null, message: 'This record already exists. Your medical record may have already been submitted.' });
 
-        // Date / type conversion
-        } else if (lower.includes('invalid input syntax') || lower.includes('date') || lower.includes('timestamp')) {
+        // Stale / in-progress ticket — must appear before the date check because
+        // "update" contains "date" as a substring and would otherwise be misclassified.
+        } else if (lower.includes('already in progress') || lower.includes('cannot cancel update ticket')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'A previous submission is still being processed. Please wait a moment and try again.' });
+
+        // Date / type conversion — use word boundary to avoid matching "update", "candidate", etc.
+        } else if (lower.includes('invalid input syntax') || /\bdate\b/.test(lower) || /\btimestamp\b/.test(lower)) {
           errors.push({ section: 'Personal Information', sectionIndex: 0, message: 'A date field contains an invalid value. Please re-enter your date of birth or other date fields.' });
 
         // Auth errors
@@ -406,7 +411,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       console.log('[Initial Medical Record Form] Submitting to backend...');
       
       // Submit to backend via GraphQL service
-      const result = await createInitialMedicalRecord(sanitizedData);
+      const result = await createInitialMedicalRecord(sanitizedData, { isRevision });
       
       console.log('[Initial Medical Record Form] Submission successful!', result);
       
@@ -469,6 +474,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
             data={formData.dentalHistory}
             onChange={handleDentalHistoryChange}
             oralApplianceCatalog={catalogs.oralApplianceCatalog}
+            dentalProcedureCatalog={catalogs.dentalProcedureCatalog}
             catalogsLoading={catalogs.catalogsLoading}
           />
         );
@@ -486,6 +492,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
             onEdit={handleEdit}
             certification={formData.certification}
             onCertificationChange={handleCertificationChange}
+            catalogs={catalogs}
           />
         );
       default:

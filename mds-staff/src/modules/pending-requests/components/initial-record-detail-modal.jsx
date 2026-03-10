@@ -21,6 +21,8 @@ import RecordReviewModal from './record-review-modal';
 const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both' }) => {
   const [revisionNote, setRevisionNote] = useState('');
   const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectNote, setRejectNote] = useState('');
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -49,10 +51,25 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
     }
   };
 
+  const handleReject = async () => {
+    if (!rejectNote.trim()) {
+      setError('Please provide a reason for rejecting this submission.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REJECTED);
+      onAction?.({ ...ticket, status: newStatus }, newStatus);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Failed to reject the submission.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRequestRevision = async () => {
-    // revisionNote is for operator context – it is not sent to the backend
-    // because the current staffUpdateTicket mutation does not accept a notes
-    // parameter. See backend issues table.
     if (!revisionNote.trim()) {
       setError('Please provide a reason for the revision request.');
       return;
@@ -60,7 +77,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
     setLoading(true);
     setError('');
     try {
-      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REVISION);
+      const newStatus = await staffUpdateTicket(ticket.patientId, TICKET_STATUS.REVISION, revisionNote.trim());
       onAction?.({ ...ticket, status: newStatus }, newStatus);
       onClose();
     } catch (err) {
@@ -77,6 +94,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
     [TICKET_STATUS.REVISION_SUBMITTED]: 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400',
     [TICKET_STATUS.APPROVED]:           'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
     [TICKET_STATUS.REVISION]:           'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
+    [TICKET_STATUS.REJECTED]:           'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
     [TICKET_STATUS.EXPIRED]:            'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400',
     [TICKET_STATUS.CANCELLED]:          'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400',
   };
@@ -216,6 +234,29 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
             </div>
           )}
 
+          {/* Reject reason form */}
+          {showRejectForm && (
+            <div className="border border-error-200 dark:border-error-800 rounded-lg overflow-hidden bg-error-50 dark:bg-error-900/10">
+              <div className="px-4 py-3 border-b border-error-200 dark:border-error-800">
+                <h3 className="text-sm font-semibold text-error-900 dark:text-error-400">
+                  Reason for Rejection
+                </h3>
+              </div>
+              <div className="p-4">
+                <textarea
+                  value={rejectNote}
+                  onChange={(e) => { setRejectNote(e.target.value); setError(''); }}
+                  rows={3}
+                  placeholder="Describe why this submission is being rejected…"
+                  className="w-full px-3 py-2 text-sm border border-error-300 dark:border-error-700 rounded-lg bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white focus:ring-2 focus:ring-error-500 focus:border-error-500 resize-none"
+                />
+                <p className="mt-1 text-xs text-secondary-400 dark:text-neutral-500">
+                  This note is for your reference only and is not stored in the backend at this time.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Revision reason form */}
           {showRevisionForm && (
             <div className="border border-warning-200 dark:border-warning-800 rounded-lg overflow-hidden bg-warning-50 dark:bg-warning-900/10">
@@ -269,6 +310,33 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
                 Send Revision Request
               </button>
             </>
+          ) : showRejectForm ? (
+            <>
+              <button
+                onClick={() => { setShowRejectForm(false); setRejectNote(''); setError(''); }}
+                disabled={loading}
+                className="px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={loading}
+                className="px-4 py-2 text-sm font-medium text-white bg-error-600 hover:bg-error-700 rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+              >
+                {loading ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+                Confirm Rejection
+              </button>
+            </>
           ) : isPending ? (
             <>
               <button
@@ -279,6 +347,16 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
                 Close
               </button>
               <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowRejectForm(false); setShowRevisionForm(false); setShowRejectForm(true); setError(''); }}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-error-600 hover:bg-error-700 rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Reject
+                </button>
                 <button
                   onClick={() => setShowRevisionForm(true)}
                   disabled={loading}

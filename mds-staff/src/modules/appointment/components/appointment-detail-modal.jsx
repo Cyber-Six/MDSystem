@@ -6,9 +6,12 @@ import React, { useState } from 'react';
  * Backend shape: { id, patientId, slotEntityId, status, session,
  *   approvedBy, notes, arrived_at, created_at, requirements[] }
  *
- * Actions: Confirm (Pending→Scheduled), Reject, Record Attendance (Scheduled→arrived)
+ * Actions align to the appointment state machine:
+ *   Pending     → Approve (Scheduled), Reject
+ *   Scheduled   → Record Attendance (InProgress), Cancel (CancelledByMedical), No-Show
+ *   InProgress  → Complete, No-Show
  */
-const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onMarkDone, onReschedule }) => {
+const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onMarkDone, onMarkNoShow, onMarkComplete }) => {
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
@@ -28,12 +31,19 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
   } = appointment;
 
   const canConfirm = status === 'Pending';
-  const canMarkDone = status === 'Scheduled';
-  const canCancel = !['Completed', 'Rejected', 'CancelledByPatient', 'CancelledByMedical', 'Expired'].includes(status);
+  const canReject = status === 'Pending';
+  const canRecordAttendance = status === 'Scheduled';
+  const canCancelByMedical = status === 'Scheduled';
+  const canMarkComplete = status === 'InProgress';
+  const canMarkNoShow = status === 'Scheduled' || status === 'InProgress';
 
   const handleCancel = () => {
     if (!cancelReason.trim()) return;
-    onCancel?.(patientId, cancelReason);
+    if (status === 'Pending') {
+      onCancel?.(patientId, cancelReason);
+    } else if (status === 'Scheduled') {
+      onCancel?.(patientId, cancelReason, 'CancelledByMedical');
+    }
     onClose();
   };
 
@@ -42,8 +52,18 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
     onClose();
   };
 
-  const handleMarkDone = () => {
+  const handleRecordAttendance = () => {
     onMarkDone?.(id);
+    onClose();
+  };
+
+  const handleMarkComplete = () => {
+    onMarkComplete?.(patientId);
+    onClose();
+  };
+
+  const handleMarkNoShow = () => {
+    onMarkNoShow?.(patientId);
     onClose();
   };
 
@@ -169,7 +189,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                   onClick={() => { setShowCancelForm(false); setCancelReason(''); }}
                   className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
                 >
-                  Nevermind
+                  Cancel
                 </button>
               </div>
             </div>
@@ -177,20 +197,22 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 bg-white dark:bg-neutral-800 px-5 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
-          >
-            Close
-          </button>
+        <div className="sticky bottom-0 bg-white dark:bg-neutral-800 px-5 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-end">
           <div className="flex items-center gap-2">
-            {canCancel && !showCancelForm && (
+            {(canReject || canCancelByMedical) && !showCancelForm && (
               <button
                 onClick={() => setShowCancelForm(true)}
                 className="px-4 py-2 text-sm font-medium text-error-600 dark:text-error-400 border border-error-200 dark:border-error-700 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-md transition-colors"
               >
-                Reject
+                {canReject ? 'Reject' : 'Cancel'}
+              </button>
+            )}
+            {canMarkNoShow && (
+              <button
+                onClick={handleMarkNoShow}
+                className="px-4 py-2 text-sm font-medium text-warning-600 dark:text-warning-400 border border-warning-200 dark:border-warning-700 hover:bg-warning-50 dark:hover:bg-warning-900/20 rounded-md transition-colors"
+              >
+                No-Show
               </button>
             )}
             {canConfirm && (
@@ -201,12 +223,20 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                 Approve
               </button>
             )}
-            {canMarkDone && (
+            {canRecordAttendance && (
               <button
-                onClick={handleMarkDone}
+                onClick={handleRecordAttendance}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors"
               >
                 Record Attendance
+              </button>
+            )}
+            {canMarkComplete && (
+              <button
+                onClick={handleMarkComplete}
+                className="px-4 py-2 text-sm font-medium text-white bg-success-500 hover:bg-success-600 rounded-md transition-colors"
+              >
+                Mark Complete
               </button>
             )}
           </div>

@@ -76,12 +76,12 @@ const Query = {
 const Mutation = {
   _createMedicineRequest: async (_, { patientId, input }, { res }) => {
     const logSql =
-      'INSERT INTO "MedicineRequestLog" ("patientId", status, purpose, notes, created_at) ' +
-      'VALUES ($1, ' + "'Pending'" + ', $2, $3, $4) RETURNING *';
+      `INSERT INTO "MedicineRequestLog" ("patientId", status, purpose, created_at) 
+       VALUES ($1, 'Pending', $2, $3) RETURNING *`;
 
     try {
       const logResult = await db.query(logSql, [
-        patientId, input.purpose, input.notes || null, Math.floor(Date.now() / 1000)
+        patientId, input.purpose, Math.floor(Date.now() / 1000)
       ]);
       const request = logResult.rows[0];
 
