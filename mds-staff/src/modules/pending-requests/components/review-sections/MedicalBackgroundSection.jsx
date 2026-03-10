@@ -203,12 +203,12 @@ const MedicalBackgroundSection = ({
         <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
           Lifestyle
         </h4>
-        {lifestyle ? (
+        {lifestyle || isEditing ? (
           <dl className="space-y-0">
             <EditableField
               label="Smoker"
-              value={getVal('smoker', lifestyle.smoker ? 'Yes' : 'No')}
-              originalValue={getOriginal('smoker', lifestyle.smoker ? 'Yes' : 'No')}
+              value={getVal('smoker', lifestyle?.smoker ? 'Yes' : lifestyle ? 'No' : '')}
+              originalValue={getOriginal('smoker', lifestyle?.smoker ? 'Yes' : lifestyle ? 'No' : '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('smoker', v)}
               type="select"
@@ -216,24 +216,24 @@ const MedicalBackgroundSection = ({
             />
             <EditableField
               label="Cigarettes/Day"
-              value={getVal('cigarettesPerDay', String(lifestyle.numberOfCigarettesPerDay ?? ''))}
-              originalValue={getOriginal('cigarettesPerDay', String(lifestyle.numberOfCigarettesPerDay ?? ''))}
+              value={getVal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
+              originalValue={getOriginal('cigarettesPerDay', String(lifestyle?.numberOfCigarettesPerDay ?? ''))}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('cigarettesPerDay', v)}
               type="number"
             />
             <EditableField
               label="Years Smoked"
-              value={getVal('yearsSmoked', String(lifestyle.yearsSmoked ?? ''))}
-              originalValue={getOriginal('yearsSmoked', String(lifestyle.yearsSmoked ?? ''))}
+              value={getVal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
+              originalValue={getOriginal('yearsSmoked', String(lifestyle?.yearsSmoked ?? ''))}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('yearsSmoked', v)}
               type="number"
             />
             <EditableField
               label="Alcohol Consumer"
-              value={getVal('alcoholConsumer', lifestyle.alcoholConsumer ? 'Yes' : 'No')}
-              originalValue={getOriginal('alcoholConsumer', lifestyle.alcoholConsumer ? 'Yes' : 'No')}
+              value={getVal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : lifestyle ? 'No' : '')}
+              originalValue={getOriginal('alcoholConsumer', lifestyle?.alcoholConsumer ? 'Yes' : lifestyle ? 'No' : '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('alcoholConsumer', v)}
               type="select"
@@ -241,15 +241,15 @@ const MedicalBackgroundSection = ({
             />
             <EditableField
               label="Alcohol Frequency"
-              value={getVal('alcoholFrequency', lifestyle.frequencyOfAlcoholConsumption ?? '')}
-              originalValue={getOriginal('alcoholFrequency', lifestyle.frequencyOfAlcoholConsumption ?? '')}
+              value={getVal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
+              originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
             />
             <EditableField
               label="Notes"
-              value={getVal('lifestyleNotes', lifestyle.notes ?? '')}
-              originalValue={getOriginal('lifestyleNotes', lifestyle.notes ?? '')}
+              value={getVal('lifestyleNotes', lifestyle?.notes ?? '')}
+              originalValue={getOriginal('lifestyleNotes', lifestyle?.notes ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('lifestyleNotes', v)}
               type="textarea"
@@ -265,27 +265,29 @@ const MedicalBackgroundSection = ({
         <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
           Visual Acuity
         </h4>
-        {visualAcuityProfile?.acuity ? (
+        {visualAcuityProfile?.acuity || isEditing ? (
           <dl className="space-y-0">
             <EditableField
               label="Left Eye (OS)"
-              value={getVal('acuityLeft', visualAcuityProfile.acuity.left_eye ?? '')}
-              originalValue={getOriginal('acuityLeft', visualAcuityProfile.acuity.left_eye ?? '')}
+              value={getVal('acuityLeft', visualAcuityProfile?.acuity?.left_eye ?? '')}
+              originalValue={getOriginal('acuityLeft', visualAcuityProfile?.acuity?.left_eye ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('acuityLeft', v)}
             />
             <EditableField
               label="Right Eye (OD)"
-              value={getVal('acuityRight', visualAcuityProfile.acuity.right_eye ?? '')}
-              originalValue={getOriginal('acuityRight', visualAcuityProfile.acuity.right_eye ?? '')}
+              value={getVal('acuityRight', visualAcuityProfile?.acuity?.right_eye ?? '')}
+              originalValue={getOriginal('acuityRight', visualAcuityProfile?.acuity?.right_eye ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('acuityRight', v)}
             />
-            <DataRow label="Recorded" value={formatDate(visualAcuityProfile.acuity.recorded_at)} />
+            {visualAcuityProfile?.acuity?.recorded_at && (
+              <DataRow label="Recorded" value={formatDate(visualAcuityProfile.acuity.recorded_at)} />
+            )}
             <EditableField
               label="Notes"
-              value={getVal('acuityNotes', visualAcuityProfile.acuity.notes ?? '')}
-              originalValue={getOriginal('acuityNotes', visualAcuityProfile.acuity.notes ?? '')}
+              value={getVal('acuityNotes', visualAcuityProfile?.acuity?.notes ?? '')}
+              originalValue={getOriginal('acuityNotes', visualAcuityProfile?.acuity?.notes ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('acuityNotes', v)}
               type="textarea"
@@ -301,44 +303,44 @@ const MedicalBackgroundSection = ({
         <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
           Physical Measurements
         </h4>
-        {vitalSigns ? (
+        {vitalSigns || isEditing ? (
           <dl className="space-y-0">
             <EditableField
               label="Height (cm)"
-              value={getVal('height_cm', String(vitalSigns.height_cm ?? ''))}
-              originalValue={getOriginal('height_cm', String(vitalSigns.height_cm ?? ''))}
+              value={getVal('height_cm', String(vitalSigns?.height_cm ?? ''))}
+              originalValue={getOriginal('height_cm', String(vitalSigns?.height_cm ?? ''))}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('height_cm', v)}
               type="number"
             />
             <EditableField
               label="Weight (kg)"
-              value={getVal('weight_kg', String(vitalSigns.weight_kg ?? ''))}
-              originalValue={getOriginal('weight_kg', String(vitalSigns.weight_kg ?? ''))}
+              value={getVal('weight_kg', String(vitalSigns?.weight_kg ?? ''))}
+              originalValue={getOriginal('weight_kg', String(vitalSigns?.weight_kg ?? ''))}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('weight_kg', v)}
               type="number"
             />
             <EditableField
               label="Blood Pressure"
-              value={getVal('blood_pressure', vitalSigns.blood_pressure ?? '')}
-              originalValue={getOriginal('blood_pressure', vitalSigns.blood_pressure ?? '')}
+              value={getVal('blood_pressure', vitalSigns?.blood_pressure ?? '')}
+              originalValue={getOriginal('blood_pressure', vitalSigns?.blood_pressure ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('blood_pressure', v)}
               placeholder="e.g. 120/80"
             />
             <EditableField
               label="Heart Rate (bpm)"
-              value={getVal('heart_rate', String(vitalSigns.heart_rate ?? ''))}
-              originalValue={getOriginal('heart_rate', String(vitalSigns.heart_rate ?? ''))}
+              value={getVal('heart_rate', String(vitalSigns?.heart_rate ?? ''))}
+              originalValue={getOriginal('heart_rate', String(vitalSigns?.heart_rate ?? ''))}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('heart_rate', v)}
               type="number"
             />
             <EditableField
               label="Temperature (°C)"
-              value={getVal('temperature', String(vitalSigns.temperature ?? ''))}
-              originalValue={getOriginal('temperature', String(vitalSigns.temperature ?? ''))}
+              value={getVal('temperature', String(vitalSigns?.temperature ?? ''))}
+              originalValue={getOriginal('temperature', String(vitalSigns?.temperature ?? ''))}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('temperature', v)}
               type="number"

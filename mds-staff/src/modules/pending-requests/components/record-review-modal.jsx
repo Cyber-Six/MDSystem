@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
-import { fetchPatientRecordForReview, fetchCatalogsForReview } from '../patient-record-service';
+import { fetchPatientRecordForReview, fetchCatalogsForReview, submitStaffEdits } from '../patient-record-service';
 import {
   PersonalInfoSection,
   EmergencyContactSection,
@@ -137,10 +137,16 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     setActionLoading(true);
     setActionError('');
     try {
-      // TODO: If edits exist, submit them via the appropriate backend mutations
-      // before approving the ticket. Each edited section should call its
-      // corresponding update* mutation with the staff-edited values.
-      // The edit reasons should be included in the audit log.
+      // Submit staff edits before approving (if any fields were modified)
+      if (hasAnyEdits) {
+        const editResult = await submitStaffEdits(ticket.patientId, editedFields, recordData);
+        if (!editResult.success) {
+          setActionError(`Failed to save edits: ${editResult.errors.join('; ')}`);
+          setActionLoading(false);
+          setShowDPAConfirm(false);
+          return;
+        }
+      }
 
       // Step 1: approve personal record — if this fails the EMR ticket is NOT touched
       // Step 2: approve EMR ticket (medical + dental) — only runs if step 1 succeeded

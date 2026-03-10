@@ -547,3 +547,411 @@ export const fetchPatientRecordForReview = async (userId, scope = 'Both', sex = 
 
   return result;
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Staff Edit Mutations ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Profile endpoint helper (for personal info updates)
+const sendProfileGraphQL = async (query, variables = {}) => {
+  const response = await axiosRequest.post('/profile/medical', { query, variables });
+  if (response.data?.errors) {
+    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+  }
+  return response.data.data;
+};
+
+// ── Personal Info (via /profile/medical) ─────────────────────────────────────
+
+export const staffUpdatePersonalRecord = async (userId, input) => {
+  const data = await sendProfileGraphQL(
+    `mutation UpdatePersonalRecordLog($userId: ID!, $input: userProfileUpdateInput!) {
+       updatePersonalRecordLog(userId: $userId, input: $input) {
+         id first_name last_name middle_name suffix sex
+       }
+     }`,
+    { userId, input },
+  );
+  return data.updatePersonalRecordLog;
+};
+
+// ── Student Profile ──────────────────────────────────────────────────────────
+
+export const staffUpdateStudentProfile = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateStudentProfile($userId: ID!, $input: StudentProfileUpdateInput!) {
+       updateStudentProfile(userId: $userId, input: $input) {
+         id program year
+       }
+     }`,
+    { userId, input },
+  );
+  return data.updateStudentProfile;
+};
+
+// ── Employee Profile ─────────────────────────────────────────────────────────
+
+export const staffUpdateEmployeeProfile = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateEmployeeProfile($userId: ID!, $input: EmployeeProfileUpdateInput!) {
+       updateEmployeeProfile(userId: $userId, input: $input) {
+         id department role position
+       }
+     }`,
+    { userId, input },
+  );
+  return data.updateEmployeeProfile;
+};
+
+// ── Emergency Contact ────────────────────────────────────────────────────────
+
+export const staffUpdateEmergencyContact = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateEmergencyContact($userId: ID!, $input: EmergencyContactInput!) {
+       updateEmergencyContact(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateEmergencyContact;
+};
+
+// ── Medical History ──────────────────────────────────────────────────────────
+
+export const staffUpdateMedicalHistory = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateMedicalHistory($userId: ID!, $input: MedicalHistoryInput!) {
+       updateMedicalHistory(userId: $userId, input: $input) { id notes }
+     }`,
+    { userId, input },
+  );
+  return data.updateMedicalHistory;
+};
+
+// ── Lifestyle ────────────────────────────────────────────────────────────────
+
+export const staffUpdateLifestyle = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateLifestyle($userId: ID!, $input: LifestyleUpdateInput!) {
+       updateLifestyle(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateLifestyle;
+};
+
+// ── Visual Acuity Profile ────────────────────────────────────────────────────
+
+export const staffUpdateVisualAcuityProfile = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateVisualAcuityProfile($userId: ID!, $input: VisualAcuityProfileInput!) {
+       updateVisualAcuityProfile(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateVisualAcuityProfile;
+};
+
+// ── Vital Signs (Physical Measurements) ──────────────────────────────────────
+
+export const staffUpdateVitalSigns = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateVitalSigns($userId: ID!, $input: VitalSignsUpdateInput!) {
+       updateVitalSigns(userId: $userId, input: $input) {
+         id height_cm weight_kg blood_pressure heart_rate temperature
+       }
+     }`,
+    { userId, input },
+  );
+  return data.updateVitalSigns;
+};
+
+// ── OB-GYNE History ─────────────────────────────────────────────────────────
+
+export const staffUpdateObgynHistory = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateObgynHistory($userId: ID!, $input: ObgynHistoryUpdateInput!) {
+       updateObgynHistory(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateObgynHistory;
+};
+
+// ── Dental History ───────────────────────────────────────────────────────────
+
+export const staffUpdateDentalHistory = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateDentalHistory($userId: ID!, $input: DentalHistoryUpdateInput!) {
+       updateDentalHistory(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateDentalHistory;
+};
+
+// ── Allergy Profile ──────────────────────────────────────────────────────────
+
+export const staffUpdateAllergyProfile = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateAllergyProfile($userId: ID!, $input: AllergyProfileUpdateInput!) {
+       updateAllergyProfile(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateAllergyProfile;
+};
+
+// ── Medication Profile ───────────────────────────────────────────────────────
+
+export const staffUpdateMedicationProfile = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateMedicationProfile($userId: ID!, $input: MedicationProfileInput!) {
+       updateMedicationProfile(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateMedicationProfile;
+};
+
+// ── Immunization Profile ─────────────────────────────────────────────────────
+
+export const staffUpdateImmunizationProfile = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateImmunizationProfile($userId: ID!, $input: ImmunizationProfileInput!) {
+       updateImmunizationProfile(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateImmunizationProfile;
+};
+
+// ── Hospitalization Profile ──────────────────────────────────────────────────
+
+export const staffUpdateHospitalizationProfile = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateHospitalizationProfile($userId: ID!, $input: HospitalizationProfileInput!) {
+       updateHospitalizationProfile(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateHospitalizationProfile;
+};
+
+// ── Operation Profile ────────────────────────────────────────────────────────
+
+export const staffUpdateOperationProfile = async (userId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateOperationProfile($userId: ID!, $input: OperationProfileInput!) {
+       updateOperationProfile(userId: $userId, input: $input) { id }
+     }`,
+    { userId, input },
+  );
+  return data.updateOperationProfile;
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Submit All Staff Edits (orchestrator) ────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+const YEAR_DISPLAY_TO_ENUM = {
+  'Grade 11': 'Grade11', 'Grade 12': 'Grade12',
+  Freshman: 'Freshman', Sophomore: 'Sophomore',
+  Junior: 'Junior', Senior: 'Senior',
+  Masteral: 'Masteral', Doctorate: 'Doctorate',
+};
+
+/**
+ * Submit all staff-edited fields to the backend before approving a record.
+ *
+ * @param {string} userId       — Patient ID
+ * @param {Object} editedFields — Keyed by section name from the review modal
+ * @param {Object} recordData   — Original fetched record data (for merging required fields)
+ * @returns {Promise<{success: boolean, errors: string[]}>}
+ */
+export const submitStaffEdits = async (userId, editedFields, recordData) => {
+  const errors = [];
+  const mutations = [];
+
+  // ── Personal Info ──────────────────────────────────────────────────────────
+  const pi = editedFields.personalInfo;
+  if (pi && Object.keys(pi).length > 0) {
+    // Personal record fields (name, sex) → /profile/medical
+    const personalFields = {};
+    if (pi.first_name !== undefined) personalFields.first_name = pi.first_name;
+    if (pi.last_name !== undefined) personalFields.last_name = pi.last_name;
+    if (pi.middle_name !== undefined) personalFields.middle_name = pi.middle_name;
+    if (pi.suffix !== undefined) personalFields.suffix = pi.suffix;
+    if (pi.sex !== undefined) personalFields.sex = pi.sex;
+
+    if (Object.keys(personalFields).length > 0) {
+      // sex is required in userProfileUpdateInput
+      if (!personalFields.sex) personalFields.sex = recordData?.basicInfo?.sex || 'Male';
+      mutations.push(
+        staffUpdatePersonalRecord(userId, personalFields)
+          .catch((e) => { errors.push(`Personal info: ${e.message}`); }),
+      );
+    }
+
+    // Student profile → /emr/medical
+    const studentFields = {};
+    if (pi.program !== undefined) studentFields.program = pi.program;
+    if (pi.year !== undefined) studentFields.year = YEAR_DISPLAY_TO_ENUM[pi.year] ?? pi.year;
+
+    if (Object.keys(studentFields).length > 0 &&
+        (recordData?.basicInfo?.profile_type === 'Student' || recordData?.profile?.program)) {
+      mutations.push(
+        staffUpdateStudentProfile(userId, studentFields)
+          .catch((e) => { errors.push(`Student profile: ${e.message}`); }),
+      );
+    }
+
+    // Employee profile → /emr/medical
+    const employeeFields = {};
+    if (pi.department !== undefined) employeeFields.department = pi.department;
+    if (pi.role !== undefined) employeeFields.role = pi.role;
+    if (pi.position !== undefined) employeeFields.position = pi.position;
+
+    if (Object.keys(employeeFields).length > 0 &&
+        (recordData?.basicInfo?.profile_type === 'Employee' || recordData?.profile?.department)) {
+      mutations.push(
+        staffUpdateEmployeeProfile(userId, employeeFields)
+          .catch((e) => { errors.push(`Employee profile: ${e.message}`); }),
+      );
+    }
+  }
+
+  // ── Emergency Contacts ─────────────────────────────────────────────────────
+  const ec = editedFields.emergencyContact;
+  if (ec && Object.keys(ec).length > 0) {
+    const origFirst = recordData?.emergencyContact?.firstContact ?? {};
+    const origSecond = recordData?.emergencyContact?.secondContact ?? {};
+
+    const input = {
+      firstContact: {
+        contactName: ec['first.contactName'] ?? origFirst.contactName ?? '',
+        relationship: ec['first.relationship'] ?? origFirst.relationship ?? '',
+        contactNumber: ec['first.contactNumber'] ?? origFirst.contactNumber ?? '',
+      },
+      secondContact: {
+        contactName: ec['second.contactName'] ?? origSecond.contactName ?? '',
+        relationship: ec['second.relationship'] ?? origSecond.relationship ?? '',
+        contactNumber: ec['second.contactNumber'] ?? origSecond.contactNumber ?? '',
+      },
+    };
+
+    mutations.push(
+      staffUpdateEmergencyContact(userId, input)
+        .catch((e) => { errors.push(`Emergency contacts: ${e.message}`); }),
+    );
+  }
+
+  // ── Medical History (notes only) ───────────────────────────────────────────
+  const mh = editedFields.medicalHistory;
+  if (mh && Object.keys(mh).length > 0) {
+    const origConditions = recordData?.medicalHistory?.conditions ?? [];
+    const input = {
+      conditions: origConditions.map((c) => ({
+        conditionId: c.conditionId,
+        description: c.description || undefined,
+        diagnosedDate: c.diagnosedDate || undefined,
+        relationship: c.relationship || undefined,
+      })),
+      notes: mh.notes ?? recordData?.medicalHistory?.notes ?? null,
+    };
+
+    mutations.push(
+      staffUpdateMedicalHistory(userId, input)
+        .catch((e) => { errors.push(`Medical history: ${e.message}`); }),
+    );
+  }
+
+  // ── Medical Background ─────────────────────────────────────────────────────
+  const mb = editedFields.medicalBackground;
+  if (mb && Object.keys(mb).length > 0) {
+    // — Lifestyle —
+    const lifestyleKeys = ['smoker', 'cigarettesPerDay', 'yearsSmoked', 'alcoholConsumer', 'alcoholFrequency', 'lifestyleNotes'];
+    if (lifestyleKeys.some((k) => mb[k] !== undefined)) {
+      const input = {};
+      if (mb.smoker !== undefined) input.smoker = mb.smoker === 'Yes';
+      if (mb.cigarettesPerDay !== undefined) input.numberOfCigarettesPerDay = parseInt(mb.cigarettesPerDay, 10) || null;
+      if (mb.yearsSmoked !== undefined) input.yearsSmoked = parseInt(mb.yearsSmoked, 10) || null;
+      if (mb.alcoholConsumer !== undefined) input.alcoholConsumer = mb.alcoholConsumer === 'Yes';
+      if (mb.alcoholFrequency !== undefined) input.frequencyOfAlcoholConsumption = mb.alcoholFrequency || null;
+      if (mb.lifestyleNotes !== undefined) input.notes = mb.lifestyleNotes || null;
+
+      mutations.push(
+        staffUpdateLifestyle(userId, input)
+          .catch((e) => { errors.push(`Lifestyle: ${e.message}`); }),
+      );
+    }
+
+    // — Visual Acuity —
+    const acuityKeys = ['acuityLeft', 'acuityRight', 'acuityNotes'];
+    if (acuityKeys.some((k) => mb[k] !== undefined)) {
+      const origAcuity = recordData?.visualAcuityProfile?.acuity;
+      const input = {
+        acuity: {
+          acuityId: origAcuity?.acuityId ?? origAcuity?.id ?? '0',
+          left_eye: mb.acuityLeft ?? origAcuity?.left_eye ?? '',
+          right_eye: mb.acuityRight ?? origAcuity?.right_eye ?? '',
+          notes: mb.acuityNotes ?? origAcuity?.notes ?? null,
+        },
+      };
+
+      mutations.push(
+        staffUpdateVisualAcuityProfile(userId, input)
+          .catch((e) => { errors.push(`Visual acuity: ${e.message}`); }),
+      );
+    }
+
+    // — Vital Signs —
+    const vitalKeys = ['height_cm', 'weight_kg', 'blood_pressure', 'heart_rate', 'temperature'];
+    if (vitalKeys.some((k) => mb[k] !== undefined)) {
+      const input = {};
+      if (mb.height_cm !== undefined) input.height_cm = parseFloat(mb.height_cm) || null;
+      if (mb.weight_kg !== undefined) input.weight_kg = parseFloat(mb.weight_kg) || null;
+      if (mb.blood_pressure !== undefined) input.blood_pressure = mb.blood_pressure || null;
+      if (mb.heart_rate !== undefined) input.heart_rate = parseInt(mb.heart_rate, 10) || null;
+      if (mb.temperature !== undefined) input.temperature = parseFloat(mb.temperature) || null;
+
+      mutations.push(
+        staffUpdateVitalSigns(userId, input)
+          .catch((e) => { errors.push(`Vital signs: ${e.message}`); }),
+      );
+    }
+  }
+
+  // ── OB-GYNE ───────────────────────────────────────────────────────────────
+  const ob = editedFields.obgyne;
+  if (ob && Object.keys(ob).length > 0) {
+    const input = {};
+    if (ob.lastMenstrualPeriod !== undefined) input.lastMenstrualPeriod = ob.lastMenstrualPeriod || null;
+    if (ob.hasDysmenorrhea !== undefined) input.hasDysmenorrhea = ob.hasDysmenorrhea === 'Yes';
+    if (ob.notes !== undefined) input.notes = ob.notes || null;
+
+    mutations.push(
+      staffUpdateObgynHistory(userId, input)
+        .catch((e) => { errors.push(`OB-GYNE: ${e.message}`); }),
+    );
+  }
+
+  // ── Dental History (excluding dental procedures — dental doctor only) ──────
+  const dh = editedFields.dentalHistory;
+  if (dh && Object.keys(dh).length > 0) {
+    const input = {};
+    if (dh.seenByDentist !== undefined) input.seenByDentist = dh.seenByDentist === 'Yes';
+    if (dh.lastDentalCleaning !== undefined) input.lastDentalCleaning = dh.lastDentalCleaning || null;
+    if (dh.purpose !== undefined) input.purpose = dh.purpose || null;
+    if (dh.lastVisitDate !== undefined) input.lastVisitDate = dh.lastVisitDate || null;
+
+    mutations.push(
+      staffUpdateDentalHistory(userId, input)
+        .catch((e) => { errors.push(`Dental history: ${e.message}`); }),
+    );
+  }
+
+  // Execute all mutations in parallel
+  await Promise.all(mutations);
+
+  return { success: errors.length === 0, errors };
+};
