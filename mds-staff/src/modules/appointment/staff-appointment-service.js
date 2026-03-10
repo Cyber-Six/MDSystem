@@ -64,6 +64,8 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
       searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit) {
         id
         patientId
+        patientIdentifier
+        patientName
         slotEntityId
         status
         session

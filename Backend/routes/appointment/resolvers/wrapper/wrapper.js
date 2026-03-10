@@ -21,7 +21,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const userBranch = await db.getUserBranch(user.id);
+    const userBranch = (await db.getUserBranch(user.id)) ?? 'Both';
 
     const query = `
       SELECT ss.*
@@ -276,10 +276,13 @@ const Query = {
     }
 
     const query = `
-      SELECT ps.*, ss.location
+      SELECT ps.*, ss.location,
+        up."identifier" AS "patientIdentifier",
+        CONCAT(up.first_name, ' ', up.last_name) AS "patientName"
       FROM "patientSlot" ps
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
+      LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
 
       WHERE ps.status = $1
       ORDER BY ps.id DESC

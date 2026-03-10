@@ -128,6 +128,8 @@ input patientScheduleRequirementInput {
 type patientSlot {
   id: ID!
   patientId: ID!
+  patientIdentifier: Int
+  patientName: String
   slotEntityId: ID!
   status: SCHEDULING_STATUS!
   session: SCHEDULE_SESSION!
@@ -152,7 +154,7 @@ type Query {
   listAppointmentSchedule(schedulerId: ID!, date: Date!): ScheduleDateEntity 
   listAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
 
-  getAppointmentStatus: SCHEDULING_STATUS
+  getAppointmentStatus: patientSlot
   #----------- --^ Patient and --v Medical
   getUserAppointmentStatus(userId: ID!): SCHEDULING_STATUS
 

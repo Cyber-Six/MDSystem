@@ -43,7 +43,13 @@ const sendGraphQL = async (query, variables = {}) => {
 export const getAppointmentStatus = async () => {
   const data = await sendGraphQL(`
     query {
-      getAppointmentStatus
+      getAppointmentStatus {
+        id
+        status
+        session
+        notes
+        created_at
+      }
     }
   `);
   return data.getAppointmentStatus;
@@ -189,3 +195,5 @@ export const cancelAppointment = async () => {
   `);
   return data.cancelAppointment;
 };
+
+

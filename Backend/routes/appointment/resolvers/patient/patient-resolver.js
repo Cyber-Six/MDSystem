@@ -28,8 +28,9 @@ const Query = {
   },
 
   getAppointmentStatus: async (_, __, { user, res }) => {
-  return await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id, }, { user, res });
-  }
+    const records = await Wrapper.Query._getUserAppointmentRecords(_, { userId: user.id, offset: 0, limit: 1 }, { user, res });
+    return records && records.length > 0 ? records[0] : null;
+  },
 };
 
 const Mutation = {

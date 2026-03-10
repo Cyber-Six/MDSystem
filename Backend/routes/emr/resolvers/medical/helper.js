@@ -27,8 +27,7 @@ function assertActiveUpdateTicket(record, res, allowedScope = "Both") {
   const scope = record.scope; // e.g. "Dental" or "Medical"
   const allowed = allowedScope;
 
-  if (allowed === "Both") {
-    // Both scopes are allowed, nothing to check
+  if (allowed === "Both" || scope === "Both") {
     return;
   }
 
