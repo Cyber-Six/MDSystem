@@ -2,9 +2,39 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/layout/layout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
-import { checkInitialRecordStatus, getMyBranchIdentifier, fetchRevisionPrefill } from '../services/emr-service.js';
+import { checkInitialRecordStatus, getMyBranchIdentifier, fetchRevisionPrefill, getMyPersonalEmail } from '../services/emr-service.js';
 import InitialRecordModal from '../modules/record-forms/initial-record/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
+import InitialEmployeeRecordForm from '../modules/record-forms/initial-record/employee/initial-employee-record-form.jsx';
+import { detectRoleFromEmail } from '@mdsystem/core/validation/email-validation';
+
+// Derive the patient role from stored value, with fallback for sessions
+// created before the patient_role key was introduced.
+const resolveStoredRole = async () => {
+  const stored = localStorage.getItem('patient_role');
+  if (stored) return stored;
+
+  // Backward-compat: old sessions stored the email instead
+  const legacyEmail = (localStorage.getItem('patient_email') || '').toLowerCase().trim();
+  if (legacyEmail) {
+    const role = detectRoleFromEmail(legacyEmail) || 'Student';
+    localStorage.setItem('patient_role', role);
+    localStorage.removeItem('patient_email'); // migrate
+    return role;
+  }
+
+  // Absolute fallback: ask the backend
+  try {
+    const emailFromProfile = await getMyPersonalEmail();
+    if (emailFromProfile) {
+      const role = detectRoleFromEmail(String(emailFromProfile).toLowerCase().trim()) || 'Student';
+      localStorage.setItem('patient_role', role);
+      return role;
+    }
+  } catch (_) { /* ignore */ }
+
+  return 'Student';
+};
 
 // Lazy-loaded route modules for code splitting
 const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx'));
@@ -24,9 +54,12 @@ const Dashboard = () => {
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [recordStatus, setRecordStatus] = useState(null);
   const [revisionData, setRevisionData] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [revisionNote, setRevisionNote] = useState(null);
+  // In this portal, both Employee and Medical emails should use the employee initial form.
+  const isEmployee = userRole === 'Employee' || userRole === 'Medical';
 
-  // Check if user needs to complete initial medical record (students only)
+  // Check if user needs to complete initial medical record
   useEffect(() => {
     const checkRecordStatus = async () => {
       // Check if bypass is enabled
@@ -38,7 +71,11 @@ const Dashboard = () => {
       }
 
       try {
-        console.log('[Dashboard] Checking initial record status for student...');
+        const detectedRole = await resolveStoredRole();
+        setUserRole(detectedRole);
+
+        console.log('[Dashboard] Checking initial record status...');
+        console.log('[Dashboard] User role detected:', detectedRole);
         const [{ needsInitialRecord, status, notes: ticketNotes }, branchInfo] = await Promise.all([
           checkInitialRecordStatus(),
           getMyBranchIdentifier(),
@@ -244,20 +281,30 @@ const Dashboard = () => {
 
   return (
     <>
-      {/* Initial Medical Record Modal - Only for students who haven't completed it */}
+      {/* Initial Medical Record Modal - Renders employee or student form based on email */}
       <InitialRecordModal 
         isOpen={showInitialRecordModal}
         onComplete={handleInitialRecordComplete}
         isRevision={recordStatus === 'Revision'}
         revisionNote={revisionNote}
       >
-        <InitialMedicalRecordForm 
-          isModal={true}
-          onComplete={handleInitialRecordComplete}
-          revisionData={revisionData}
-          isRevision={recordStatus === 'Revision'}
-          staffNote={revisionNote}
-        />
+        {isEmployee ? (
+          <InitialEmployeeRecordForm
+            isModal={true}
+            onComplete={handleInitialRecordComplete}
+            revisionData={revisionData}
+            isRevision={recordStatus === 'Revision'}
+            staffNote={revisionNote}
+          />
+        ) : (
+          <InitialMedicalRecordForm
+            isModal={true}
+            onComplete={handleInitialRecordComplete}
+            revisionData={revisionData}
+            isRevision={recordStatus === 'Revision'}
+            staffNote={revisionNote}
+          />
+        )}
       </InitialRecordModal>
 
       <Layout>

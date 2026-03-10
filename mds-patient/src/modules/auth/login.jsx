@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { axiosRequest, TokenStorage } from '../../packages-core-adapter.js';
+import { detectRoleFromEmail } from '@mdsystem/core/validation/email-validation';
 import ForgetPassword from './forget-password.jsx';
 import DataConsent from './data-consent/data-consent.jsx';
 
@@ -169,6 +170,11 @@ const Login = () => {
       if (response.data.ok) {
         if (response.data.accessToken && response.data.refreshToken) {
           TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+          // Store detected role for routing (employee vs student) — avoids exposing email
+          if (email) {
+            const role = detectRoleFromEmail(email.toLowerCase().trim()) || 'Student';
+            localStorage.setItem('patient_role', role);
+          }
         }
         navigate('/');
       }

@@ -124,6 +124,8 @@ type Query {
   getBranchIdentifier: BranchIdentifier
   getUserBranchIdentifier(userId: ID!): BranchIdentifier
 
+  getLoginEmail: String # returns the user's login email from UserCredentials (works before initial record is submitted)
+
 }
 
 # Mutations

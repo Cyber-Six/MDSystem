@@ -277,15 +277,33 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
       identifier: result?.createBranchIdentifier?.identifier,
     });
   } catch (error) {
-    // If a stale record log is blocking the submission, auto-cancel it and retry
-    // (this can happen when a previous submission failed mid-way and left a stuck log)
-    const isStaleLog = error.message?.toLowerCase().includes('already in progress');
-    if (isStaleLog) {
-      console.warn('[EMR Service] Stale personal record log detected — cancelling and retrying...');
-      await cancelPersonalRecordLog();
+    // If a stale record log is blocking the submission, auto-cancel it and retry.
+    // This can happen when a previous submission failed mid-way and left a stuck log,
+    // or when a compound mutation partially succeeded but one operation threw.
+    const msg = error.message?.toLowerCase() || '';
+    const isStaleLog = msg.includes('already in progress');
+    const isPartialFailure = msg.includes('identifier') && msg.includes('branch');
+
+    if (isStaleLog || isPartialFailure) {
+      console.warn('[EMR Service] Stale/partial state detected — cleaning up and retrying...', error.message);
+
+      // Best-effort cancel — may fail if nothing was created, that's fine.
+      try { await cancelPersonalRecordLog(); } catch (_) { /* ignore */ }
 
       // On retry, createBranchIdentifier may already be set from the first attempt,
-      // so only re-run createPersonalRecordLog to avoid a duplicate-identifier error.
+      // so we issue both operations independently to avoid compound-mutation partial failures.
+      if (hasIdentifier) {
+        try {
+          const branchMutation = `mutation RetryBranch($branchInput: BranchIdentifierInput!) {
+            createBranchIdentifier(input: $branchInput) { branch identifier }
+          }`;
+          await sendGraphQLRequest(branchMutation, { branchInput: { identifier: identifier.trim() } }, { endpoint: '/profile/patient' });
+        } catch (branchErr) {
+          // Branch may already be set from a previous attempt — non-fatal
+          console.warn('[EMR Service] Branch retry warning (may already exist):', branchErr.message);
+        }
+      }
+
       const retryMutation = `mutation ProfileSetupRetry($input: userProfileInput!) {
         createPersonalRecordLog(input: $input) { first_name last_name }
       }`;
@@ -410,6 +428,78 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
 };
 
 // ─── Catalog Fetchers ────────────────────────────────────────────────────────
+
+/**
+ * Create a complete initial medical record for an employee
+ * Same 3-phase flow as createInitialMedicalRecord but uses employeeId as identifier
+ */
+export const createInitialEmployeeRecord = async (formData) => {
+  console.log('[EMR Service] Starting initial EMPLOYEE medical record creation (batched)');
+
+  let ticketCreated = false;
+  let profileLogCreated = false;
+  let upperTeethFileId = null;
+  let lowerTeethFileId = null;
+
+  try {
+    const results = {};
+
+    // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
+    console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
+    await registerProfileSetup(formData.personalInfo?.employeeId, formData.personalInfo);
+    profileLogCreated = true;
+
+    // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========
+    console.log('[EMR Service] [2/3] Creating ticket & uploading photos (parallel)...');
+    const [ticketResult, upperResult, lowerResult] = await Promise.allSettled([
+      createUpdateTicket('Both'),
+      uploadMediaFile(formData.dentalHistory?.upperTeethPhoto?.file ?? null),
+      uploadMediaFile(formData.dentalHistory?.lowerTeethPhoto?.file ?? null),
+    ]);
+
+    if (ticketResult.status === 'fulfilled') { ticketCreated = true; results.ticketId = ticketResult.value; }
+    upperTeethFileId = upperResult.status === 'fulfilled' ? upperResult.value : null;
+    lowerTeethFileId = lowerResult.status === 'fulfilled' ? lowerResult.value : null;
+
+    const parallelError = [ticketResult, upperResult, lowerResult].find(r => r.status === 'rejected');
+    if (parallelError) throw parallelError.reason;
+
+    console.log('[EMR Service] Ticket + photos ready:', { ticketId: results.ticketId, upperTeethFileId, lowerTeethFileId });
+
+    // ======== REQUEST 3: Batch all create mutations + submit in one request ========
+    console.log('[EMR Service] [3/3] Fetching all catalogs & sending batched mutations...');
+    const allCatalogs = await fetchAllCatalogs();
+    const inputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
+    const batchResult = await sendBatchedCreateMutations(inputs, formData);
+    Object.assign(results, batchResult);
+    results.submitStatus = batchResult.submitTicket;
+    console.log('[EMR Service] Initial employee medical record creation completed successfully');
+    return { success: true, data: results };
+
+  } catch (error) {
+    console.error('[EMR Service] Failed to create initial employee medical record:', error);
+
+    if (upperTeethFileId || lowerTeethFileId) {
+      console.log('[EMR Service] Cleaning up staged media files...');
+      await Promise.all([
+        unstageMediaFile(upperTeethFileId),
+        unstageMediaFile(lowerTeethFileId),
+      ]);
+    }
+
+    if (ticketCreated) {
+      console.log('[EMR Service] Attempting to cancel update ticket due to error...');
+      await cancelUpdateTicket();
+    }
+
+    if (profileLogCreated) {
+      console.log('[EMR Service] Attempting to cancel personal record log due to error...');
+      await cancelPersonalRecordLog();
+    }
+
+    throw error;
+  }
+};
 
 /**
  * Fetch ALL catalogs needed to render the initial-record form in a SINGLE HTTP request.
@@ -677,6 +767,18 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
     };
   }
 
+  // Employee Profile (conditional)
+  if (formData.personalInfo.department) {
+    const category = formData.personalInfo.employmentCategory === 'Other'
+      ? formData.personalInfo.employmentCategoryOther
+      : formData.personalInfo.employmentCategory;
+    inputs.employeeProfile = {
+      department: formData.personalInfo.department,
+      role: category || '',
+      position: formData.personalInfo.position || ''
+    };
+  }
+
   // Emergency Contacts
   if (formData.personalInfo.emergencyContacts?.length >= 2) {
     inputs.emergencyContact = {
@@ -793,11 +895,17 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
       const lmpDate = formData.obgyne.lastMenstrualPeriod
         ? new Date(formData.obgyne.lastMenstrualPeriod).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0];
+      const noteParts = [];
+      if (formData.obgyne.menstruationDuration)
+        noteParts.push(`Duration: ${formData.obgyne.menstruationDuration} days`);
+      if (formData.obgyne.menarcheYearAge)
+        noteParts.push(`Menarche: ${formData.obgyne.menarcheYearAge}`);
+      if (formData.obgyne.padsPerDay)
+        noteParts.push(`Pads/day: ${formData.obgyne.padsPerDay}`);
       inputs.obgynHistory = {
         lastMenstrualPeriod: lmpDate,
         hasDysmenorrhea: formData.obgyne.dysmenorrhea === 'Yes',
-        notes: formData.obgyne.menstruationDuration
-          ? `Duration: ${formData.obgyne.menstruationDuration} days` : null
+        notes: noteParts.length ? noteParts.join('; ') : null
       };
     } else {
       inputs.obgynHistory = {
@@ -830,6 +938,11 @@ const sendBatchedCreateMutations = async (inputs, formData) => {
   // Conditionally include student profile
   if (inputs.studentProfile) {
     addMutation('studentProfile', 'createStudentProfile', 'StudentProfileInput', 'studentProfile', 'studentInput');
+  }
+
+  // Conditionally include employee profile
+  if (inputs.employeeProfile) {
+    addMutation('employeeProfile', 'createEmployeeProfile', 'EmployeeProfileInput', 'employeeProfile', 'empInput');
   }
 
   // Emergency contact
@@ -1517,6 +1630,23 @@ export const getMyBranchIdentifier = async () => {
   }
 };
 
+export const getMyPersonalEmail = async () => {
+  // getLoginEmail queries UserCredentials directly, so it works for all users
+  // including those who haven't submitted the initial record yet (no UsersPersonal row).
+  const query = `
+    query GetLoginEmail {
+      getLoginEmail
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(query, {}, { endpoint: '/profile/patient' });
+    return data?.getLoginEmail || null;
+  } catch (error) {
+    console.warn('[EMR Service] Could not fetch login email:', error.message);
+    return null;
+  }
+};
+
 export const checkInitialRecordStatus = async () => {
   console.log('[EMR Service] Checking initial record status...');
 
@@ -1581,5 +1711,6 @@ export const checkInitialRecordStatus = async () => {
 
 export default {
   createInitialMedicalRecord,
+  createInitialEmployeeRecord,
   checkInitialRecordStatus
 };

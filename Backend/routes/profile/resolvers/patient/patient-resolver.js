@@ -2,7 +2,7 @@ const Wrapper = require("../wrapper/wrapper.js");
 const path = require("path");
 const dotenv = require("dotenv");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
-const { getStudentBranchFromEmail, isStudentEmail } = require("../../../../utils/validator.js");
+const { getStudentBranchFromEmail, isStudentEmail, isEmployeeEmail, isMedicalEmail } = require("../../../../utils/validator.js");
 const db = require("../../../../config/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 const logger = require("../../../../utils/logger.js");
@@ -50,6 +50,15 @@ Query = {
     }
     return await Wrapper.Query._getBranchIdentifier(_, { userId: user.id }, { user, res });
   },
+
+  getLoginEmail: async (_, __, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    // Queries UserCredentials directly — reliable for all users including unverified
+    const email = await db.findEmailByUserId(user.id);
+    return email || null;
+  },
 };
 
 Mutation = {
@@ -95,12 +104,17 @@ Mutation = {
       throwGraphQLError(res).message("Email not found for the user.").status(400).throw();
     }
     
-    if (isStudentEmail(getEmail)) { // if email get the branch from email
+    if (isStudentEmail(getEmail)) { // derive Manila/QuezonCity from the student email prefix
       input.branch = getStudentBranchFromEmail(getEmail);
       if (!input.branch) {
         throwGraphQLError(res).message("Unable to determine branch from email. Please provide a valid student email.").status(400).throw();
-        }
       }
+    } else if (isEmployeeEmail(getEmail) || isMedicalEmail(getEmail)) {
+      // Employees and medical staff are not campus-specific — assign Both
+      input.branch = 'Both';
+    } else {
+      throwGraphQLError(res).message("Unable to determine branch from email. Unrecognized email format.").status(400).throw();
+    }
 
     return await Wrapper.Mutation._UserBranchIdentifier(_, { userId: user.id, input }, { user, res });
   },
