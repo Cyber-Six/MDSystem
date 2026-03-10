@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
-import { fetchPatientRecordForReview } from '../patient-record-service';
+import { fetchPatientRecordForReview, fetchCatalogsForReview } from '../patient-record-service';
 import {
   PersonalInfoSection,
   EmergencyContactSection,
@@ -31,6 +31,7 @@ import {
 const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) => {
   // ── State ──────────────────────────────────────────────────────────────────
   const [recordData, setRecordData] = useState(null);
+  const [catalogs, setCatalogs] = useState({});
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
@@ -69,8 +70,14 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
       setFetchError('');
       try {
         const sex = ticket.sex ?? null; // may not be available from ticket list
-        const data = await fetchPatientRecordForReview(ticket.patientId, scope, sex);
-        if (!cancelled) setRecordData(data);
+        const [data, cats] = await Promise.all([
+          fetchPatientRecordForReview(ticket.patientId, scope, sex),
+          fetchCatalogsForReview(),
+        ]);
+        if (!cancelled) {
+          setRecordData(data);
+          setCatalogs(cats);
+        }
       } catch (err) {
         if (!cancelled) setFetchError(err.message || 'Failed to load patient record.');
       } finally {
@@ -290,6 +297,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               {includeMedical && (
                 <MedicalHistorySection
                   medicalHistory={recordData.medicalHistory}
+                  catalogs={catalogs}
                   isEditing={editingSections.medicalHistory ?? false}
                   editedFields={editedFields.medicalHistory ?? {}}
                   onFieldChange={(f, v) => setFieldValue('medicalHistory', f, v)}
@@ -304,6 +312,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               {/* Medical Background (allergies, immunizations, etc.) */}
               {includeMedical && (
                 <MedicalBackgroundSection
+                  catalogs={catalogs}
                   allergyProfile={recordData.allergyProfile}
                   immunizationProfile={recordData.immunizationProfile}
                   hospitalizationProfile={recordData.hospitalizationProfile}
@@ -341,6 +350,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               {/* Dental History */}
               {includeDental && (
                 <DentalHistorySection
+                  catalogs={catalogs}
                   dentalHistory={recordData.dentalHistory}
                   dentalProcedureProfile={recordData.dentalProcedureProfile}
                   oralApplianceProfile={recordData.oralApplianceProfile}

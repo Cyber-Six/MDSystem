@@ -10,6 +10,7 @@ const DentalHistorySection = ({
   dentalHistory,
   dentalProcedureProfile,
   oralApplianceProfile,
+  catalogs = {},
   isEditing = false,
   editedFields = {},
   onFieldChange,
@@ -20,6 +21,12 @@ const DentalHistorySection = ({
   isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
+
+  const getCatalogName = (catalog, id) => {
+    if (!catalog?.length || id === undefined || id === null) return null;
+    const item = catalog.find((c) => String(c.id) === String(id));
+    return item?.name ?? null;
+  };
 
   const formatDate = (d) => {
     if (!d) return '—';
@@ -63,7 +70,7 @@ const DentalHistorySection = ({
           <thead>
             <tr className="border-b border-neutral-200 dark:border-neutral-700">
               <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Procedure ID
+                Procedure
               </th>
               <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
                 Date
@@ -77,7 +84,7 @@ const DentalHistorySection = ({
                 className="border-b border-neutral-100 dark:border-neutral-800 last:border-0"
               >
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  #{proc.procedureTypeId}
+                  {getCatalogName(catalogs.dentalProcedureCatalog, proc.procedureTypeId) || `Procedure #${proc.procedureTypeId}`}
                 </td>
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
                   {formatDate(proc.procedureDate)}
@@ -108,7 +115,7 @@ const DentalHistorySection = ({
           <thead>
             <tr className="border-b border-neutral-200 dark:border-neutral-700">
               <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Tag ID
+                Tag
               </th>
               <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
                 Status
@@ -128,7 +135,7 @@ const DentalHistorySection = ({
                 className="border-b border-neutral-100 dark:border-neutral-800 last:border-0"
               >
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  #{a.tagId}
+                  {getCatalogName(catalogs.oralApplianceCatalog, a.tagId) || `Tag #${a.tagId}`}
                 </td>
                 <td className="py-2 px-3">
                   <span

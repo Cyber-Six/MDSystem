@@ -550,11 +550,11 @@ const buildAllergyRecords = (medicalBackground) => {
   if (medicalBackground?.hasAllergies !== 'Yes') return { allergies: [], notes: null };
   const notes = [];
   const allergies = Object.entries(medicalBackground.allergies || {})
-    .filter(([, checked]) => checked)
-    .map(([id]) => ({
+    .filter(([, val]) => (typeof val === 'object' ? val?.checked : val))
+    .map(([id, val]) => ({
       allergenCatalogId: id,
       status: 'Active',
-      severity: 'Unknown',
+      severity: (typeof val === 'object' && val?.severity) ? val.severity : 'Unknown',
       notes: null,
       date_identified: null,
     }));
@@ -634,13 +634,13 @@ const buildImmunizationRecords = (medicalBackground, catalog) => {
  */
 const buildOralApplianceRecords = (dentalHistory, catalog) => {
   const validIds = new Set(catalog.map(c => c.id));
-  const arch = dentalHistory?.applianceLocation || 'Both';
   const today = new Date().toISOString().split('T')[0];
   const appliances = Object.entries(dentalHistory?.intraOralAppliances || {})
-    .filter(([, checked]) => checked)
-    .flatMap(([id]) => {
+    .filter(([, val]) => (typeof val === 'object' ? val?.checked : val))
+    .flatMap(([id, val]) => {
       if (!validIds.has(id)) return [];
-      return [{ tagId: id, status: 'Active', dateIssued: today, arch }];
+      const itemArch = (typeof val === 'object' && val?.arch) ? val.arch : 'None';
+      return [{ tagId: id, status: 'Active', dateIssued: today, arch: itemArch }];
     });
   return { appliances, notes: dentalHistory?.applianceOther || null };
 };

@@ -40,6 +40,18 @@ const MedicalBackgroundForm = ({
     onChange({ ...data, [field]: { ...data[field], [id]: checked } });
   };
 
+  const handleAllergyToggle = (allergenId, checked) => {
+    const current = data.allergies?.[allergenId];
+    const severity = (typeof current === 'object' && current?.severity) ? current.severity : 'Unknown';
+    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked, severity } } });
+  };
+
+  const handleAllergySeverity = (allergenId, severity) => {
+    const current = data.allergies?.[allergenId];
+    const prevChecked = typeof current === 'object' ? !!current?.checked : !!current;
+    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked: prevChecked, severity } } });
+  };
+
   const toggleAccordion = (section) => {
     setActiveAccordion(activeAccordion === section ? '' : section);
   };
@@ -178,17 +190,37 @@ const MedicalBackgroundForm = ({
                   ).map((type) => (
                     <div key={type}>
                       <p className="text-xs font-semibold text-secondary-500 uppercase tracking-wide mb-2">{type}</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
+                      <div className="space-y-2 ml-2">
                         {allergenCatalog
                           .filter(a => a.type === type)
-                          .map((allergen) => (
-                            <Checkbox
-                              key={allergen.id}
-                              label={allergen.allergen}
-                              checked={data.allergies?.[allergen.id] || false}
-                              onChange={(e) => handleCatalogToggle('allergies', allergen.id, e.target.checked)}
-                            />
-                          ))}
+                          .map((allergen) => {
+                            const allergyVal = data.allergies?.[allergen.id];
+                            const isChecked = typeof allergyVal === 'object' ? !!allergyVal?.checked : !!allergyVal;
+                            const severity = typeof allergyVal === 'object' ? (allergyVal?.severity || 'Unknown') : 'Unknown';
+                            return (
+                              <div key={allergen.id}>
+                                <Checkbox
+                                  label={allergen.allergen}
+                                  checked={isChecked}
+                                  onChange={(e) => handleAllergyToggle(allergen.id, e.target.checked)}
+                                />
+                                {isChecked && (
+                                  <div className="ml-6 mt-1 mb-1">
+                                    <select
+                                      className="form-input text-xs py-1 px-2"
+                                      value={severity}
+                                      onChange={(e) => handleAllergySeverity(allergen.id, e.target.value)}
+                                    >
+                                      <option value="Unknown">Severity: Unknown</option>
+                                      <option value="Mild">Severity: Mild</option>
+                                      <option value="Moderate">Severity: Moderate</option>
+                                      <option value="Severe">Severity: Severe</option>
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   ))}

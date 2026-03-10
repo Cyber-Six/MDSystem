@@ -16,6 +16,7 @@ const MedicalBackgroundSection = ({
   lifestyle,
   visualAcuityProfile,
   vitalSigns,
+  catalogs = {},
   isEditing = false,
   editedFields = {},
   onFieldChange,
@@ -26,6 +27,12 @@ const MedicalBackgroundSection = ({
   isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
+
+  const getCatalogName = (catalog, id, nameField = 'name') => {
+    if (!catalog?.length || id === undefined || id === null) return null;
+    const item = catalog.find((c) => String(c.id) === String(id));
+    return item?.[nameField] ?? null;
+  };
 
   const formatDate = (d) => {
     if (!d) return null;
@@ -65,7 +72,7 @@ const MedicalBackgroundSection = ({
                     ? 'bg-success-100 dark:bg-success-900/20 text-success-800 dark:text-success-400'
                     : 'bg-warning-100 dark:bg-warning-900/20 text-warning-800 dark:text-warning-400'
                 }`}>
-                  Allergen #{a.allergenCatalogId}
+                  {getCatalogName(catalogs.allergenCatalog, a.allergenCatalogId, 'allergen') || `Allergen #${a.allergenCatalogId}`}
                 </span>
                 <span className="text-xs text-secondary-600 dark:text-neutral-400">
                   Severity: {a.severity || '—'} &middot; Status: {a.status}
@@ -105,7 +112,7 @@ const MedicalBackgroundSection = ({
                 {immunizationProfile.immunizations.map((imm, i) => (
                   <tr key={imm.id ?? i} className="border-b border-neutral-100 dark:border-neutral-700/50">
                     <td className="py-1.5 px-2 text-secondary-900 dark:text-white">
-                      Vaccine #{imm.vaccineTypeId}
+                      {getCatalogName(catalogs.immunizationCatalog, imm.vaccineTypeId) || `Vaccine #${imm.vaccineTypeId}`}
                     </td>
                     <td className="py-1.5 px-2 text-secondary-700 dark:text-neutral-300">
                       {formatDate(imm.immunizationDate)}
@@ -132,9 +139,10 @@ const MedicalBackgroundSection = ({
           <div className="space-y-2">
             {hospitalizationProfile.hospitalizations.map((h, i) => (
               <div key={h.id ?? i} className="bg-neutral-50 dark:bg-neutral-800/30 rounded-lg p-3">
-                <DataRow label="Condition" value={h.notes || `Condition #${h.conditionId}`} />
+                <DataRow label="Condition" value={getCatalogName(catalogs.hospitalizationCatalog, h.conditionId) || `Condition #${h.conditionId}`} />
                 <DataRow label="Admitted" value={formatDate(h.admissionDate)} />
                 <DataRow label="Discharged" value={formatDate(h.dischargeDate) || 'Ongoing'} />
+                {h.notes && <DataRow label="Notes" value={h.notes} />}
               </div>
             ))}
           </div>
@@ -152,8 +160,9 @@ const MedicalBackgroundSection = ({
           <div className="space-y-2">
             {operationProfile.operations.map((op, i) => (
               <div key={op.id ?? i} className="bg-neutral-50 dark:bg-neutral-800/30 rounded-lg p-3">
-                <DataRow label="Procedure" value={op.notes || `Procedure #${op.procedureId}`} />
+                <DataRow label="Procedure" value={getCatalogName(catalogs.operationCatalog, op.procedureId) || `Procedure #${op.procedureId}`} />
                 <DataRow label="Date" value={formatDate(op.operationDate)} />
+                {op.notes && <DataRow label="Notes" value={op.notes} />}
               </div>
             ))}
           </div>
@@ -172,7 +181,7 @@ const MedicalBackgroundSection = ({
             {medicationProfile.medications.map((med, i) => (
               <div key={med.id ?? i} className="flex items-center gap-2 py-1">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-accent-100 dark:bg-accent-900/20 text-accent-800 dark:text-accent-400">
-                  Medicine #{med.medicineId}
+                  {getCatalogName(catalogs.medicationCatalog, med.medicineId) || `Medicine #${med.medicineId}`}
                 </span>
                 {med.description && (
                   <span className="text-sm text-secondary-600 dark:text-neutral-400">

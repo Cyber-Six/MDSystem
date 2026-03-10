@@ -390,6 +390,77 @@ export const getUserOralApplianceProfile = async (userId) => {
   return data.getUserOralApplianceProfile ?? [];
 };
 
+// ── Catalog Fetcher ──────────────────────────────────────────────────────────
+
+/**
+ * Fetch all catalog tables needed to resolve IDs into human-readable names
+ * for the review modal. Uses field aliases to batch all catalog queries into
+ * one round-trip. Returns empty arrays per catalog on failure (graceful degradation).
+ */
+export const fetchCatalogsForReview = async () => {
+  try {
+    const data = await sendGraphQL(`
+      query FetchReviewCatalogs {
+        medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true) {
+          id
+          name
+        }
+        hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true) {
+          id
+          name
+        }
+        operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true) {
+          id
+          name
+        }
+        medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true) {
+          id
+          name
+        }
+        immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+          id
+          name
+        }
+        allergenCatalog: getAllergenCatalogs(filterIsValid: true) {
+          id
+          allergen
+          type
+        }
+        oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true) {
+          id
+          name
+        }
+        dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true) {
+          id
+          name
+        }
+      }
+    `);
+    return {
+      medicalConditionCatalog: data.medicalConditionCatalog || [],
+      hospitalizationCatalog:  data.hospitalizationCatalog  || [],
+      operationCatalog:        data.operationCatalog        || [],
+      medicationCatalog:       data.medicationCatalog       || [],
+      immunizationCatalog:     data.immunizationCatalog     || [],
+      allergenCatalog:         data.allergenCatalog         || [],
+      oralApplianceCatalog:    data.oralApplianceCatalog    || [],
+      dentalProcedureCatalog:  data.dentalProcedureCatalog  || [],
+    };
+  } catch (err) {
+    console.warn('[PatientRecordService] Could not fetch catalogs:', err.message);
+    return {
+      medicalConditionCatalog: [],
+      hospitalizationCatalog:  [],
+      operationCatalog:        [],
+      medicationCatalog:       [],
+      immunizationCatalog:     [],
+      allergenCatalog:         [],
+      oralApplianceCatalog:    [],
+      dentalProcedureCatalog:  [],
+    };
+  }
+};
+
 // ── Aggregate Fetcher ────────────────────────────────────────────────────────
 
 /**

@@ -9,6 +9,7 @@ import SectionWrapper, { DataRow } from './SectionWrapper';
  */
 const MedicalHistorySection = ({
   medicalHistory,
+  catalogs = {},
   isEditing = false,
   editedFields = {},
   onFieldChange,
@@ -19,6 +20,12 @@ const MedicalHistorySection = ({
   isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
+
+  const getCatalogName = (catalog, id) => {
+    if (!catalog?.length || id === undefined || id === null) return null;
+    const item = catalog.find((c) => String(c.id) === String(id));
+    return item?.name ?? null;
+  };
 
   const conditions = medicalHistory?.conditions ?? [];
   const selfConditions = conditions.filter((c) => !c.relationship);
@@ -58,7 +65,7 @@ const MedicalHistorySection = ({
                 key={cond.id ?? i}
                 className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-error-100 dark:bg-error-900/20 text-error-800 dark:text-error-400 font-medium"
               >
-                {cond.description || `Condition #${cond.conditionId}`}
+                {getCatalogName(catalogs.medicalConditionCatalog, cond.conditionId) || cond.description || `Condition #${cond.conditionId}`}
                 {cond.diagnosedDate && (
                   <span className="ml-1 text-xs text-error-500 dark:text-error-500">
                     ({formatDate(cond.diagnosedDate)})
@@ -84,7 +91,7 @@ const MedicalHistorySection = ({
             {familyConditions.map((cond, i) => (
               <DataRow
                 key={cond.id ?? i}
-                label={cond.description || `Condition #${cond.conditionId}`}
+                label={getCatalogName(catalogs.medicalConditionCatalog, cond.conditionId) || cond.description || `Condition #${cond.conditionId}`}
                 value={cond.relationship}
               />
             ))}
