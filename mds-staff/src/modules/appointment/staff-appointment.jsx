@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AppointmentQueue from './components/appointment-queue';
 import AvailabilityManager from './components/availability-manager';
 import AppointmentDetailModal from './components/appointment-detail-modal';
@@ -48,6 +48,7 @@ const StaffAppointment = () => {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const queueRef = useRef(null);
 
   // Auto-dismiss feedback messages
   useEffect(() => {
@@ -71,6 +72,9 @@ const StaffAppointment = () => {
     try {
       await respondToAppointment(id, STATUS.SCHEDULED);
       setSuccessMsg('Appointment confirmed.');
+      const slotId = selectedAppointment?.id;
+      handleCloseModal();
+      queueRef.current?.removeAppointment(slotId, STATUS.SCHEDULED);
     } catch (err) {
       setError(err.message);
     }
@@ -81,6 +85,9 @@ const StaffAppointment = () => {
       const status = cancelStatus || STATUS.REJECTED;
       await respondToAppointment(id, status, reason);
       setSuccessMsg(status === STATUS.REJECTED ? 'Appointment rejected.' : 'Appointment cancelled.');
+      const slotId = selectedAppointment?.id;
+      handleCloseModal();
+      queueRef.current?.removeAppointment(slotId, status);
     } catch (err) {
       setError(err.message);
     }
@@ -90,6 +97,9 @@ const StaffAppointment = () => {
     try {
       await recordAttendance(id, new Date().toISOString());
       setSuccessMsg('Attendance recorded.');
+      const slotId = selectedAppointment?.id;
+      handleCloseModal();
+      queueRef.current?.removeAppointment(slotId, STATUS.IN_PROGRESS);
     } catch (err) {
       setError(err.message);
     }
@@ -99,6 +109,9 @@ const StaffAppointment = () => {
     try {
       await respondToAppointment(userId, STATUS.COMPLETED);
       setSuccessMsg('Appointment marked as completed.');
+      const slotId = selectedAppointment?.id;
+      handleCloseModal();
+      queueRef.current?.removeAppointment(slotId, STATUS.COMPLETED);
     } catch (err) {
       setError(err.message);
     }
@@ -108,6 +121,9 @@ const StaffAppointment = () => {
     try {
       await respondToAppointment(userId, STATUS.NO_SHOW);
       setSuccessMsg('Appointment marked as no-show.');
+      const slotId = selectedAppointment?.id;
+      handleCloseModal();
+      queueRef.current?.removeAppointment(slotId, STATUS.NO_SHOW);
     } catch (err) {
       setError(err.message);
     }
@@ -185,7 +201,7 @@ const StaffAppointment = () => {
 
       {/* Content */}
       {activeSection === 'queue' && (
-        <AppointmentQueue onViewDetails={handleViewDetails} />
+        <AppointmentQueue ref={queueRef} onViewDetails={handleViewDetails} />
       )}
 
       {activeSection === 'availability' && (
@@ -206,6 +222,7 @@ const StaffAppointment = () => {
           onMarkDone={handleMarkDone}
           onMarkComplete={handleMarkComplete}
           onMarkNoShow={handleMarkNoShow}
+          hideHistory
         />
       )}
     </div>

@@ -207,9 +207,11 @@ const Query = {
     const querySlots = `
       SELECT ps.*,
         up."identifier" AS "patientIdentifier",
-        CONCAT(up.first_name, ' ', up.last_name) AS "patientName"
+        CONCAT(up.first_name, ' ', up.last_name) AS "patientName",
+        CONCAT(staff.first_name, ' ', staff.last_name) AS "approvedBy"
       FROM "patientSlot" ps
       LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
+      LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
       WHERE ps."patientId" = $1
       ORDER BY ps.id DESC
       LIMIT $2 OFFSET $3;
@@ -293,11 +295,13 @@ const Query = {
     const query = `
       SELECT ps.*, ss.location,
         up."identifier" AS "patientIdentifier",
-        CONCAT(up.first_name, ' ', up.last_name) AS "patientName"
+        CONCAT(up.first_name, ' ', up.last_name) AS "patientName",
+        CONCAT(staff.first_name, ' ', staff.last_name) AS "approvedBy"
       FROM "patientSlot" ps
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
       LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
+      LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
 
       WHERE ps.status = $1
       ORDER BY ps.id DESC
@@ -458,7 +462,7 @@ const Mutation = {
         .throw();
     }
 
-    // Step 2: Perform update
+    // Step 2: Perform update and resolve the approver name
     const updateResult = await db.query(
       `UPDATE "patientSlot" SET status = $1, notes = $2, "approvedBy" = $3 WHERE id = $4 RETURNING *;`,
       [status, notes || null, user.id, slotId]
@@ -468,7 +472,15 @@ const Mutation = {
       throwGraphQLError(res).message("Failed to update slot status").status(500).throw();
     }
 
-    return { ...updateResult.rows[0], requirements: [] };
+    // Resolve approver name
+    const staffResult = await db.query(
+      `SELECT CONCAT(first_name, ' ', last_name) AS name FROM "UsersPersonal" WHERE id = $1 LIMIT 1;`,
+      [user.id]
+    );
+    const row = updateResult.rows[0];
+    row.approvedBy = staffResult.rows[0]?.name || String(user.id);
+
+    return { ...row, requirements: [] };
   },
 
   _recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {

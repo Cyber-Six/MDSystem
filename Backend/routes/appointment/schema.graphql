@@ -134,7 +134,7 @@ type patientSlot {
   status: SCHEDULING_STATUS!
   session: SCHEDULE_SESSION!
   requirements: [patientScheduleRequirement!]!
-  approvedBy: ID
+  approvedBy: String
   notes: String
   arrived_at: Date
   rejection_acknowledged: Boolean

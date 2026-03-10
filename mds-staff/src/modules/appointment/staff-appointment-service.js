@@ -6,6 +6,21 @@
 
 import { axiosRequest } from '../../packages-core-adapter';
 
+/**
+ * Fetch a submitted appointment requirement file as a blob object URL.
+ * Endpoint: GET /media/record/appointmentRequirement/:uuid  (JWT: medical)
+ * @param {string} uuid - The filename UUID from patientScheduleRequirement
+ * @returns {Promise<{ blobUrl: string, contentType: string }>}
+ */
+export const fetchRequirementFile = async (uuid) => {
+  const response = await axiosRequest.get(`/media/record/appointmentRequirement/${uuid}`, {
+    responseType: 'blob',
+  });
+  const contentType = response.headers?.['content-type'] || '';
+  const blobUrl = URL.createObjectURL(response.data);
+  return { blobUrl, contentType };
+};
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 export const STATUS = {

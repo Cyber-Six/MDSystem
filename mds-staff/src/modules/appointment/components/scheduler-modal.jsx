@@ -13,6 +13,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
   const [loadingReqs, setLoadingReqs] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Reset form when modal opens / scheduler changes
   useEffect(() => {
@@ -20,6 +21,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
       setFormData(getDefaults(editingScheduler));
       setNewReqLabel('');
       setModalError('');
+      setShowDeleteConfirm(false);
       if (editingScheduler?.id) {
         loadRequirements(editingScheduler.id);
       } else {
@@ -293,20 +295,45 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
             </div>
           </div>
 
+          {/* Delete Confirmation Panel */}
+          {showDeleteConfirm && (
+            <div className="rounded-lg border border-error-200 dark:border-error-800 bg-error-50 dark:bg-error-900/20 p-4">
+              <p className="text-sm font-semibold text-error-700 dark:text-error-400 mb-1">Delete this scheduler?</p>
+              <p className="text-xs text-error-600 dark:text-error-500 mb-3">This action cannot be undone. Any active appointments under this scheduler will be affected.</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setModalError('');
+                    try {
+                      await onDelete(editingScheduler.id);
+                      onClose();
+                    } catch (err) {
+                      setModalError(err.message || 'Failed to delete scheduler.');
+                      setShowDeleteConfirm(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded-md transition-colors"
+                >
+                  Confirm Delete
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="flex gap-2 pt-2 border-t border-neutral-200 dark:border-neutral-700">
-            {isEditing && onDelete && (
+            {isEditing && onDelete && !showDeleteConfirm && (
               <button
                 type="button"
-                onClick={async () => {
-                  setModalError('');
-                  try {
-                    await onDelete(editingScheduler.id);
-                    onClose();
-                  } catch (err) {
-                    setModalError(err.message || 'Failed to delete scheduler.');
-                  }
-                }}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="px-4 py-2 text-sm font-medium text-error-600 dark:text-error-400 bg-error-50 dark:bg-error-900/20 hover:bg-error-100 dark:hover:bg-error-900/30 rounded-md transition-colors"
               >
                 Delete
