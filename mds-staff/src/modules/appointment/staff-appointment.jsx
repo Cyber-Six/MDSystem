@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AppointmentQueue from './components/appointment-queue';
 import AvailabilityManager from './components/availability-manager';
 import AppointmentDetailModal from './components/appointment-detail-modal';
+import PatientLookup from './components/patient-lookup';
 import {
   STATUS,
   SESSION,
@@ -133,6 +134,15 @@ const StaffAppointment = () => {
         </svg>
       ),
     },
+    {
+      key: 'lookup',
+      label: 'Patient Lookup',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+        </svg>
+      ),
+    },
   ];
 
   return (
@@ -180,6 +190,10 @@ const StaffAppointment = () => {
 
       {activeSection === 'availability' && (
         <AvailabilityManager />
+      )}
+
+      {activeSection === 'lookup' && (
+        <PatientLookup />
       )}
 
       {/* Appointment Detail Modal */}

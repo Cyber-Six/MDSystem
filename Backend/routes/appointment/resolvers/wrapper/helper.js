@@ -129,12 +129,13 @@ async function validateSatisfiedAllRequirements(scheduleId, requirements, res) {
     [scheduleId]
   );
 
-  const requiredIds = result.rows.map(r => r.id);
+  const requiredIds = result.rows.map(r => String(r.id));
 
   // Extract provided IDs from array of patientScheduleRequirement objects
   const providedIds = (requirements || [])
     .map(r => r.scheduleRequirementId)
-    .filter(id => id != null);
+    .filter(id => id != null)
+    .map(id => String(id));
 
   // Case: no requirements defined in DB
   if (requiredIds.length === 0) {

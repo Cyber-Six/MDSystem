@@ -203,10 +203,13 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Fetch the patient slots
+    // Fetch the patient slots (with identifier + name from UsersPersonal)
     const querySlots = `
-      SELECT ps.*
+      SELECT ps.*,
+        up."identifier" AS "patientIdentifier",
+        CONCAT(up.first_name, ' ', up.last_name) AS "patientName"
       FROM "patientSlot" ps
+      LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
       WHERE ps."patientId" = $1
       ORDER BY ps.id DESC
       LIMIT $2 OFFSET $3;
@@ -268,6 +271,18 @@ const Query = {
       return null; // No appointments found
     }
     return result.rows[0].status;
+  },
+
+  _resolvePatientByIdentifier: async (_, { identifier }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const result = await db.query(
+      `SELECT id FROM "UsersPersonal" WHERE identifier = $1 LIMIT 1;`,
+      [identifier]
+    );
+    if (result.rowCount === 0) return null;
+    return String(result.rows[0].id);
   },
 
   _searchAppointmentStatuses: async (_, { status, offset, limit }, { user, res }) => {
@@ -633,6 +648,28 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    // Refuse deletion if any appointment records reference this scheduler's date entities
+    const slotCheck = await db.query(
+      `SELECT 1 FROM "patientSlot" ps
+       INNER JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+       WHERE sde."slotId" = $1
+       LIMIT 1;`,
+      [schedulerId]
+    );
+
+    if (slotCheck.rowCount > 0) {
+      throwGraphQLError(res)
+        .message("Cannot delete scheduler: it has associated appointment records. Deactivate it instead.")
+        .status(400)
+        .throw();
+    }
+
+    // Cascade delete child records in FK-safe order before deleting the scheduler
+    await db.query(`DELETE FROM "schedulerWhitelist" WHERE "slotSchedulerId" = $1;`, [schedulerId]);
+    await db.query(`DELETE FROM "scheduleRequirement" WHERE "slotId" = $1;`, [schedulerId]);
+    await db.query(`DELETE FROM "SlotCustomDate" WHERE "slotScheduleId" = $1;`, [schedulerId]);
+    await db.query(`DELETE FROM "ScheduleDateEntity" WHERE "slotId" = $1;`, [schedulerId]);
 
     const result = await db.query(
       `DELETE FROM "slotScheduler" WHERE id = $1;`,

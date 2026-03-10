@@ -90,6 +90,20 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
  * @param {string} userId
  * @returns {Promise<string|null>}
  */
+/**
+ * Resolve a patient's internal userId from their student/employee identifier.
+ * @param {number} identifier - Student or employee ID number
+ * @returns {Promise<string|null>}
+ */
+export const resolvePatientByIdentifier = async (identifier) => {
+  const data = await sendGraphQL(`
+    query ResolvePatientByIdentifier($identifier: Int!) {
+      resolvePatientByIdentifier(identifier: $identifier)
+    }
+  `, { identifier: Number(identifier) });
+  return data.resolvePatientByIdentifier;
+};
+
 export const getPatientStatus = async (userId) => {
   const data = await sendGraphQL(`
     query GetUserAppointmentStatus($userId: ID!) {
@@ -112,6 +126,8 @@ export const getPatientRecords = async (userId, offset = 0, limit = 20) => {
       getUserAppointmentRecords(userId: $userId, offset: $offset, limit: $limit) {
         id
         patientId
+        patientIdentifier
+        patientName
         slotEntityId
         status
         session
