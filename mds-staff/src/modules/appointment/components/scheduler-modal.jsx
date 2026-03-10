@@ -78,7 +78,10 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
     if (isEditing && editingScheduler?.id && !String(req.id).startsWith('local-')) {
       try {
         await deleteRequirement(editingScheduler.id, req.label);
-      } catch { /* ignore */ }
+      } catch (err) {
+        setModalError(err.message || 'Failed to delete requirement.');
+        return;
+      }
     }
     setRequirements((prev) => prev.filter((r) => r.id !== req.id));
   };

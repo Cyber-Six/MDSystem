@@ -5,6 +5,7 @@
  */
 
 import { sendGraphQLRequest } from '../../utils/graphql-client';
+import { axiosRequest } from '../../packages-core-adapter';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -204,6 +205,31 @@ export const cancelAppointment = async () => {
     }
   `);
   return data.cancelAppointment;
+};
+
+// ── Media Staging ────────────────────────────────────────────────────────────
+
+/**
+ * Upload a file to the media staging area.
+ * @param {File} file - Browser File object
+ * @returns {Promise<string>} fileId (UUID) from the staging server
+ */
+export const stageFile = async (file) => {
+  const body = new FormData();
+  body.append('file', file);
+  const response = await axiosRequest.post('/media/stage/', body, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data.fileId;
+};
+
+/**
+ * Remove a previously staged file.
+ * @param {string} fileId - UUID returned by stageFile
+ */
+export const unstageFile = async (fileId) => {
+  if (!fileId) return;
+  await axiosRequest.delete(`/media/unstage/${fileId}`);
 };
 
 

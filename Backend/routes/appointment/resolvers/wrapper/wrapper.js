@@ -603,7 +603,7 @@ const Mutation = {
       if (encodedScheduleFlags === -1) {
         throwGraphQLError(res).message("Invalid schedule days").status(400).throw();
       }
-      fields.push(`scheduleFlags = $${idx++}`);
+      fields.push(`"scheduleFlags" = $${idx++}`);
       values.push(encodedScheduleFlags);
     }
 
@@ -762,9 +762,25 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    const result = await db.query(
-      `DELETE FROM "scheduleRequirement" WHERE "slotId" = $1 AND label = $2;`,
+
+    // Find the requirement ID first
+    const lookup = await db.query(
+      `SELECT id FROM "scheduleRequirement" WHERE "slotId" = $1 AND label = $2;`,
       [schedulerId, label]
+    );
+    if (lookup.rowCount === 0) return false;
+
+    const reqId = lookup.rows[0].id;
+
+    // Cascade-delete any patient submissions referencing this requirement
+    await db.query(
+      `DELETE FROM "patientScheduleRequirement" WHERE "scheduleRequirementId" = $1;`,
+      [reqId]
+    );
+
+    const result = await db.query(
+      `DELETE FROM "scheduleRequirement" WHERE id = $1;`,
+      [reqId]
     );
 
     return result.rowCount > 0;

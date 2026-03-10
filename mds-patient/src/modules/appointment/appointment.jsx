@@ -156,7 +156,7 @@ const PatientAppointment = () => {
     try {
       const reqPayload = requirements.map((r) => ({
         scheduleRequirementId: r.id,
-        filename: uploadedFiles[r.id] || '',
+        filename: uploadedFiles[r.id]?.fileId || '',
       }));
       await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqPayload);
       setSuccessMessage('Your appointment has been submitted successfully!');
