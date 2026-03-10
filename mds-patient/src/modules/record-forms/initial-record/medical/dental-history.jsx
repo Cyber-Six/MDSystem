@@ -1,7 +1,7 @@
 import React from 'react';
 import { Input, Textarea, Checkbox } from './form-elements';
 
-const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], catalogsLoading = false }) => {
+const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalProcedureCatalog = [], catalogsLoading = false }) => {
   const handleChange = (field, value) => {
     onChange({ ...data, [field]: value });
   };
@@ -12,6 +12,16 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], catalogs
       intraOralAppliances: {
         ...data.intraOralAppliances,
         [appliance]: checked
+      }
+    });
+  };
+
+  const handleDentalProcedureChange = (id, checked) => {
+    onChange({
+      ...data,
+      selectedDentalProcedures: {
+        ...data.selectedDentalProcedures,
+        [id]: checked
       }
     });
   };
@@ -223,68 +233,34 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], catalogs
           Dental Procedures
         </h3>
 
-        <div className="space-y-5">
-        <div>
+        <div className="space-y-4">
           <label className="form-label">
-            HAVE YOU HAD TOOTH EXTRACTION FOR THE PAST 24 MONTHS (2 YEARS ) OR MORE ? <span className="text-error-500">*</span>
+            WHICH OF THE FOLLOWING DENTAL PROCEDURES HAVE YOU HAD FOR THE PAST 24 MONTHS (2 YEARS) OR MORE?
+            <span className="text-xs font-normal text-secondary-500 ml-2">(Select all that apply)</span>
           </label>
-          <div className="flex gap-6 mt-2 ml-6">
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="toothExtraction"
-                value="yes"
-                checked={data.toothExtraction === 'yes'}
-                onChange={(e) => handleChange('toothExtraction', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">Yes</span>
-            </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="toothExtraction"
-                value="no"
-                checked={data.toothExtraction === 'no'}
-                onChange={(e) => handleChange('toothExtraction', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">No</span>
-            </label>
-          </div>
-        </div>
 
-        {/* Dental Filling */}
-        <div>
-          <label className="form-label">
-            HAVE YOU HAD A DENTAL FILLING FOR THE PAST 24 MONTHS ( 2 YEARS ) OR MORE? <span className="text-error-500">*</span>
-          </label>
-          <div className="flex gap-6 mt-2 ml-6">
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="dentalFilling"
-                value="yes"
-                checked={data.dentalFilling === 'yes'}
-                onChange={(e) => handleChange('dentalFilling', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">Yes</span>
-            </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                name="dentalFilling"
-                value="no"
-                checked={data.dentalFilling === 'no'}
-                onChange={(e) => handleChange('dentalFilling', e.target.value)}
-                className="form-checkbox"
-              />
-              <span className="ml-2 text-secondary-700">No</span>
-            </label>
-          </div>
-        </div>
-
+          {catalogsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-secondary-500 py-4">
+              <svg className="animate-spin w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Loading procedures...
+            </div>
+          ) : dentalProcedureCatalog.length === 0 ? (
+            <p className="text-sm text-secondary-400 italic">No procedures available.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-2">
+              {dentalProcedureCatalog.map((procedure) => (
+                <Checkbox
+                  key={procedure.id}
+                  label={procedure.name}
+                  checked={data.selectedDentalProcedures?.[procedure.id] || false}
+                  onChange={(e) => handleDentalProcedureChange(procedure.id, e.target.checked)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
