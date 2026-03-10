@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { searchByStatus } from '../staff-appointment-service';
 
 /* ── constants ─────────────────────────────────────────────── */
@@ -28,12 +28,30 @@ const TABS = [
 ];
 
 /* ── component ─────────────────────────────────────────────── */
-const AppointmentQueue = ({ onViewDetails }) => {
+const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [activeTab,   setActiveTab]   = useState('Pending');
   const [search,      setSearch]      = useState('');
   const [appointments, setAppointments] = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [tabCounts,    setTabCounts]    = useState({});
+
+  /* Expose removeAppointment so the parent can optimistically move an item
+     out of the current tab after a status-changing action */
+  useImperativeHandle(ref, () => ({
+    removeAppointment: (id, newStatus) => {
+      setAppointments((prev) => prev.filter((a) => a.id !== id));
+      setTabCounts((prev) => {
+        const updated = { ...prev };
+        if (updated[activeTab] !== undefined) {
+          updated[activeTab] = Math.max(0, (updated[activeTab] || 1) - 1);
+        }
+        if (newStatus && updated[newStatus] !== undefined) {
+          updated[newStatus] = (updated[newStatus] || 0) + 1;
+        }
+        return updated;
+      });
+    },
+  }), [activeTab]);
 
   /* Fetch appointments whenever the active tab changes */
   const fetchAppointments = useCallback(async (status) => {
@@ -196,6 +214,6 @@ const AppointmentQueue = ({ onViewDetails }) => {
       </div>
     </div>
   );
-};
+});
 
 export default AppointmentQueue;
