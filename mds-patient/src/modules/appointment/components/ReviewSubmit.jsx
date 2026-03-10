@@ -31,7 +31,7 @@ const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, 
             {requirements.map((r) => (
               <li key={r.id} className="text-sm text-neutral-700 dark:text-neutral-300 flex items-center space-x-2">
                 <span className="text-green-500">✓</span>
-                <span>{r.label}: {uploadedFiles[r.id]}</span>
+                <span>{r.label}: {uploadedFiles[r.id]?.fileName}</span>
               </li>
             ))}
           </ul>
