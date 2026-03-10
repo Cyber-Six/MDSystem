@@ -37,25 +37,25 @@ export const isStudentEmail = (email) => {
  * isEmployeeEmail('msmith@tip.edu.ph')           // → false
  */
 export const isEmployeeEmail = (email) => {
-  const regex = /^[a-z]+(\.[a-z]+)+@tip\.edu\.ph$/;
+  const regex = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+@tip\.edu\.ph$/;
   return regex.test(email);
 };
 
 /**
  * Validate if email is a medical staff email format
- * Pattern: {lowercase letters}.{optional more names}.mds@tip.edu.ph
- * Examples: john.mds@tip.edu.ph, maria.dela.cruz.mds@tip.edu.ph
+ * Pattern: {alphanumeric}.{optional more names}.mds@tip.edu.ph
+ * Examples: john.mds@tip.edu.ph, test4.mds@tip.edu.ph
  * 
  * @param {string} email - Email address to validate
  * @returns {boolean} True if valid medical email format
  * 
  * @example
  * isMedicalEmail('john.mds@tip.edu.ph')              // → true
- * isMedicalEmail('maria.dela.cruz.mds@tip.edu.ph')   // → true
+ * isMedicalEmail('test4.mds@tip.edu.ph')             // → true
  * isMedicalEmail('john.doe@tip.edu.ph')              // → false
  */
 export const isMedicalEmail = (email) => {
-  const regex = /^[a-z]+(\.[a-z]+)*\.mds@tip\.edu\.ph$/;
+  const regex = /^[a-z][a-z0-9]*(\.([a-z][a-z0-9]*))*\.mds@tip\.edu\.ph$/;
   return regex.test(email);
 };
 

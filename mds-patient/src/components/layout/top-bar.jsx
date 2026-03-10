@@ -86,6 +86,9 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
       // Clear e-consultation session data to prevent session leakage across users
       localStorage.removeItem('econsultation_session_id');
       sessionStorage.removeItem('econsultation_initialized');
+      // Clear stored role used for routing
+      localStorage.removeItem('patient_role');
+      localStorage.removeItem('patient_email'); // remove legacy key too
 
       // Call the proper logout function from token service
       // This clears tokens, calls backend logout, and navigates to /auth
