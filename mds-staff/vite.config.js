@@ -78,6 +78,12 @@ export default defineConfig(({ mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: true,
+          bypass: function(req) {
+            // Don't proxy GET requests (browser navigation) - let React Router handle them
+            if (req.method === 'GET') {
+              return '/index.html';
+            }
+          },
         },
         '/profile': {
           target: BACKEND_URL,

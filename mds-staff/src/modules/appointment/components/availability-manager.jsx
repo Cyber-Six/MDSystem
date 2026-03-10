@@ -2,7 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AvailabilityCalendar from './availability-calendar';
 import DaySlotEditor from './day-slot-editor';
 import EventModal from './event-modal';
-import { listAllSchedulers, updateDateIdentity } from '../staff-appointment-service';
+import SchedulerModal from './scheduler-modal';
+import {
+  listAllSchedulers,
+  createScheduler,
+  updateScheduler,
+  deleteScheduler,
+  updateRequirement,
+  updateDateIdentity,
+} from '../staff-appointment-service';
 
 /**
  * Availability Manager Component
@@ -19,6 +27,10 @@ const AvailabilityManager = () => {
   const [schedulers, setSchedulers] = useState([]);
   const [activeScheduler, setActiveScheduler] = useState(null);
   const [error, setError] = useState('');
+
+  // Scheduler modal
+  const [showSchedulerModal, setShowSchedulerModal] = useState(false);
+  const [editingScheduler, setEditingScheduler] = useState(null);
 
   // Derive slot defaults from the first active scheduler (or fallback)
   const slotDefaults = activeScheduler
@@ -83,6 +95,61 @@ const AvailabilityManager = () => {
 
   const handleDeleteEvent = (eventId) => {
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
+  };
+
+  const handleOpenSchedulerModal = (scheduler = null) => {
+    setEditingScheduler(scheduler);
+    setShowSchedulerModal(true);
+  };
+
+  const handleSaveScheduler = async (formData, pendingReqs) => {
+    try {
+      if (formData.id) {
+        // Update existing
+        await updateScheduler(formData.id, {
+          label: formData.label,
+          location: formData.location,
+          schedulePerWeek: formData.schedulePerWeek,
+          morningAllowed: formData.morningAllowed,
+          afternoonAllowed: formData.afternoonAllowed,
+          notes: formData.notes || null,
+          isActive: formData.isActive,
+          whitelistOnly: formData.whitelistOnly,
+        });
+      } else {
+        // Create new
+        const created = await createScheduler({
+          label: formData.label,
+          location: formData.location,
+          schedulePerWeek: formData.schedulePerWeek,
+          morningAllowed: formData.morningAllowed,
+          afternoonAllowed: formData.afternoonAllowed,
+          notes: formData.notes || null,
+          whitelistOnly: formData.whitelistOnly ?? false,
+          slotCustomDates: [],
+          whiteLists: [],
+        });
+        // Save any pending requirements for the new scheduler
+        if (pendingReqs?.length > 0 && created?.id) {
+          for (const req of pendingReqs) {
+            await updateRequirement(created.id, { label: req.label, isDigital: true, isActive: true });
+          }
+        }
+      }
+      await loadSchedulers();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteScheduler = async (schedulerId) => {
+    if (!window.confirm('Are you sure you want to delete this scheduler?')) return;
+    try {
+      await deleteScheduler(schedulerId);
+      await loadSchedulers();
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -161,39 +228,36 @@ const AvailabilityManager = () => {
         </div>
       </div>
 
-      {/* Active Events List */}
+      {/* Active Schedulers List */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
         <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Active Events</h3>
+          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Active Schedulers</h3>
           <button
-            onClick={() => handleCreateEvent(null)}
+            onClick={() => handleOpenSchedulerModal(null)}
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            New Event
+            New Scheduler
           </button>
         </div>
         <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-          {events.length > 0 ? (
-            events.map((event) => (
-              <div key={event.id} className="px-3 py-2 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors">
+          {schedulers.length > 0 ? (
+            schedulers.map((sched) => (
+              <div key={sched.id} className="px-3 py-2 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    event.effect === 'Suspend' ? 'bg-error-500' : event.effect === 'Reduce' ? 'bg-warning-500' : 'bg-success-500'
-                  }`} />
-                  <span className="text-sm font-medium text-secondary-800 dark:text-white truncate">{event.name}</span>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sched.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
+                  <span className="text-sm font-medium text-secondary-800 dark:text-white truncate">{sched.label}</span>
                   <span className="text-xs text-secondary-400 dark:text-neutral-500">·</span>
                   <span className="text-xs text-secondary-500 dark:text-neutral-400 whitespace-nowrap">
-                    {event.startDate === event.endDate ? event.startDate : `${event.startDate} → ${event.endDate}`}
-                    {' · '}{event.affects} · {event.effect}
-                    {event.recurrence !== 'None' && ` · ${event.recurrence}`}
+                    {sched.location} · AM {sched.morningAllowed} · PM {sched.afternoonAllowed}
+                    {sched.schedulePerWeek?.length > 0 && ` · ${sched.schedulePerWeek.map((d) => d.slice(0, 3)).join(', ')}`}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
-                    onClick={() => { setEditingEvent(event); setShowEventModal(true); }}
+                    onClick={() => handleOpenSchedulerModal(sched)}
                     className="p-1.5 text-secondary-400 hover:text-secondary-600 dark:text-neutral-500 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
                     title="Edit"
                   >
@@ -202,7 +266,7 @@ const AvailabilityManager = () => {
                     </svg>
                   </button>
                   <button
-                    onClick={() => handleDeleteEvent(event.id)}
+                    onClick={() => handleDeleteScheduler(sched.id)}
                     className="p-1.5 text-error-400 hover:text-error-600 dark:text-error-500 dark:hover:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors"
                     title="Delete"
                   >
@@ -215,8 +279,8 @@ const AvailabilityManager = () => {
             ))
           ) : (
             <div className="py-8 text-center">
-              <p className="text-sm text-secondary-500 dark:text-neutral-400">No active events</p>
-              <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">Create events to override default schedules</p>
+              <p className="text-sm text-secondary-500 dark:text-neutral-400">No schedulers configured</p>
+              <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">Create a scheduler to start managing appointments</p>
             </div>
           )}
         </div>
@@ -229,6 +293,15 @@ const AvailabilityManager = () => {
         onSave={handleSaveEvent}
         initialDate={eventModalDate}
         editingEvent={editingEvent}
+      />
+
+      {/* Scheduler Modal */}
+      <SchedulerModal
+        isOpen={showSchedulerModal}
+        onClose={() => { setShowSchedulerModal(false); setEditingScheduler(null); }}
+        onSave={handleSaveScheduler}
+        onDelete={handleDeleteScheduler}
+        editingScheduler={editingScheduler}
       />
     </div>
   );

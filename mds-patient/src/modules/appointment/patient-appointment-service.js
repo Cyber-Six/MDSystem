@@ -48,11 +48,21 @@ export const getAppointmentStatus = async () => {
         status
         session
         notes
+        rejection_acknowledged
         created_at
       }
     }
   `);
   return data.getAppointmentStatus;
+};
+
+export const acknowledgeRejection = async () => {
+  const data = await sendGraphQL(`
+    mutation {
+      acknowledgeRejection
+    }
+  `);
+  return data.acknowledgeRejection;
 };
 
 /**
