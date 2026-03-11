@@ -170,7 +170,6 @@ const PatientAppointment = () => {
   };
 
   const handleCancel = async () => {
-    if (!window.confirm('Are you sure you want to cancel your appointment?')) return;
     setCancelling(true);
     setError(null);
     try {
