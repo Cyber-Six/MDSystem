@@ -12,10 +12,6 @@ const MAX_FILE_SIZE = parseInt(process.env.MEDIA_SIZE_MB, 10) * 1024 * 1024 || 5
 const ALLOWED_MIME_TYPES = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
-  'image/webp': '.webp',
-  'image/gif': '.gif',
-  'image/bmp': '.bmp',
-  'image/tiff': '.tiff',
   'application/pdf': '.pdf',
   'video/mp4': '.mp4',
   'video/quicktime': '.mov',
