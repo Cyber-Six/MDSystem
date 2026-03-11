@@ -180,6 +180,27 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
 
         <dl className="space-y-1">
           <DataRow label="Has Allergies" value={formData.medicalBackground?.hasAllergies} />
+          {formData.medicalBackground?.hasAllergies === 'Yes' &&
+            formData.medicalBackground?.allergies &&
+            Object.entries(formData.medicalBackground.allergies).filter(([, v]) => (typeof v === 'object' ? v?.checked : v)).length > 0 && (
+            <div className="py-1">
+              <dt className="text-sm text-secondary-500">Selected Allergies</dt>
+              <dd className="mt-1 flex flex-wrap gap-2">
+                {Object.entries(formData.medicalBackground.allergies)
+                  .filter(([, v]) => (typeof v === 'object' ? v?.checked : v))
+                  .map(([id, v]) => {
+                    const name = getCatalogName(catalogs?.allergenCatalog, id);
+                    const severity = typeof v === 'object' ? (v?.severity || 'Unknown') : 'Unknown';
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-error-100 text-error-800 font-medium">
+                        {name}
+                        <span className="text-xs opacity-70">({severity})</span>
+                      </span>
+                    );
+                  })}
+              </dd>
+            </div>
+          )}
           <DataRow label="Allergy Notes" value={formData.medicalBackground?.allergyOther} />
           <DataRow label="Hospitalization" value={formData.medicalBackground?.hasHospitalization} />
           <DataRow label="Hospitalization Date" value={formatDate(formData.medicalBackground?.hospitalizationDate)} />
@@ -235,23 +256,27 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
         {formData.dentalHistory?.hasIntraOralAppliance === 'yes' && (
           <div className="mt-4">
             <h5 className="text-sm font-semibold text-secondary-700 mb-2">Intra-Oral Appliances</h5>
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-2">
               {formData.dentalHistory?.intraOralAppliances &&
                 Object.entries(formData.dentalHistory.intraOralAppliances)
-                  .filter(([_, v]) => v)
-                  .map(([id]) => (
-                    <span key={id} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800 font-medium">
-                      {id === 'other'
-                        ? (formData.dentalHistory?.applianceOther || 'Other')
-                        : getCatalogName(catalogs?.oralApplianceCatalog, id)}
-                    </span>
-                  ))}
+                  .filter(([, v]) => (typeof v === 'object' ? v?.checked : v))
+                  .map(([id, v]) => {
+                    const name = id === 'other'
+                      ? (formData.dentalHistory?.applianceOther || 'Other')
+                      : getCatalogName(catalogs?.oralApplianceCatalog, id);
+                    const arch = typeof v === 'object' ? (v?.arch || '') : '';
+                    return (
+                      <div key={id} className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800 font-medium">
+                          {name}
+                        </span>
+                        {arch && (
+                          <span className="text-xs text-secondary-600">Location: <span className="font-medium">{arch}</span></span>
+                        )}
+                      </div>
+                    );
+                  })}
             </div>
-            {formData.dentalHistory?.applianceLocation && (
-              <p className="text-sm text-secondary-600 mt-2">
-                Location: <span className="font-medium">{formData.dentalHistory.applianceLocation}</span>
-              </p>
-            )}
           </div>
         )}
 

@@ -6,12 +6,26 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
     onChange({ ...data, [field]: value });
   };
 
-  const handleApplianceChange = (appliance, checked) => {
+  const handleApplianceChange = (applianceId, checked) => {
+    const current = data.intraOralAppliances?.[applianceId];
+    const arch = (typeof current === 'object' && current?.arch) ? current.arch : '';
     onChange({
       ...data,
       intraOralAppliances: {
         ...data.intraOralAppliances,
-        [appliance]: checked
+        [applianceId]: { checked, arch }
+      }
+    });
+  };
+
+  const handleApplianceArchChange = (applianceId, arch) => {
+    const current = data.intraOralAppliances?.[applianceId];
+    const prevChecked = typeof current === 'object' ? !!current?.checked : !!current;
+    onChange({
+      ...data,
+      intraOralAppliances: {
+        ...data.intraOralAppliances,
+        [applianceId]: { checked: prevChecked, arch }
       }
     });
   };
@@ -176,54 +190,78 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
             ) : oralApplianceCatalog.length === 0 ? (
               <p className="text-sm text-secondary-400 italic">No appliances available.</p>
             ) : (
-              <div className="space-y-3 ml-6">
-                {oralApplianceCatalog.map((appliance) => (
-                  <Checkbox
-                    key={appliance.id}
-                    label={appliance.name}
-                    checked={data.intraOralAppliances?.[appliance.id] || false}
-                    onChange={(e) => handleApplianceChange(appliance.id, e.target.checked)}
-                  />
-                ))}
+              <div className="space-y-2 ml-6">
+                {oralApplianceCatalog.map((appliance) => {
+                  const appVal = data.intraOralAppliances?.[appliance.id];
+                  const isChecked = typeof appVal === 'object' ? !!appVal?.checked : !!appVal;
+                  const arch = typeof appVal === 'object' ? (appVal?.arch || '') : '';
+                  return (
+                    <div key={appliance.id}>
+                      <Checkbox
+                        label={appliance.name}
+                        checked={isChecked}
+                        onChange={(e) => handleApplianceChange(appliance.id, e.target.checked)}
+                      />
+                      {isChecked && (
+                        <div className="ml-6 mt-1 mb-2 flex gap-4">
+                          {['Upper', 'Lower', 'Both'].map((loc) => (
+                            <label key={loc} className="flex items-center text-sm">
+                              <input
+                                type="radio"
+                                name={`applianceArch-${appliance.id}`}
+                                value={loc}
+                                checked={arch === loc}
+                                onChange={(e) => handleApplianceArchChange(appliance.id, e.target.value)}
+                                className="form-checkbox"
+                              />
+                              <span className="ml-1 text-secondary-700">{loc}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
             {/* Other / custom appliance */}
-            <div className="mt-3 ml-6">
-              <div className="flex items-center gap-2">
+            <div className="mt-2 ml-6">
+              <div>
                 <Checkbox
                   label="Other:"
-                  checked={data.intraOralAppliances?.other || false}
+                  checked={typeof data.intraOralAppliances?.other === 'object' ? !!data.intraOralAppliances.other?.checked : !!data.intraOralAppliances?.other}
                   onChange={(e) => handleApplianceChange('other', e.target.checked)}
                 />
-                {data.intraOralAppliances?.other && (
-                  <Input
-                    placeholder="Specify other appliance..."
-                    value={data.applianceOther || ''}
-                    onChange={(e) => handleChange('applianceOther', e.target.value)}
-                    className="flex-1"
-                  />
+                {(typeof data.intraOralAppliances?.other === 'object' ? !!data.intraOralAppliances.other?.checked : !!data.intraOralAppliances?.other) && (
+                  <>
+                    <div className="ml-6 mt-1">
+                      <Input
+                        placeholder="Specify other appliance..."
+                        value={data.applianceOther || ''}
+                        onChange={(e) => handleChange('applianceOther', e.target.value)}
+                      />
+                    </div>
+                    <div className="ml-6 mt-1 mb-2 flex gap-4">
+                      {['Upper', 'Lower', 'Both'].map((loc) => {
+                        const otherArch = typeof data.intraOralAppliances?.other === 'object' ? (data.intraOralAppliances.other?.arch || '') : '';
+                        return (
+                          <label key={loc} className="flex items-center text-sm">
+                            <input
+                              type="radio"
+                              name="applianceArch-other"
+                              value={loc}
+                              checked={otherArch === loc}
+                              onChange={(e) => handleApplianceArchChange('other', e.target.value)}
+                              className="form-checkbox"
+                            />
+                            <span className="ml-1 text-secondary-700">{loc}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
-              </div>
-            </div>
-
-            {/* Appliance Location */}
-            <div className="mt-6">
-              <label className="form-label mb-3">SPECIFY THE LOCATION OF YOUR INTRA-ORAL APPLIANCE</label>
-              <div className="flex gap-6 ml-6">
-                {['Upper', 'Lower', 'Both'].map((loc) => (
-                  <label key={loc} className="flex items-center">
-                    <input
-                      type="radio"
-                      name="applianceLocation"
-                      value={loc}
-                      checked={data.applianceLocation === loc}
-                      onChange={(e) => handleChange('applianceLocation', e.target.value)}
-                      className="form-checkbox"
-                    />
-                    <span className="ml-2 text-secondary-700">{loc}</span>
-                  </label>
-                ))}
               </div>
             </div>
           </div>

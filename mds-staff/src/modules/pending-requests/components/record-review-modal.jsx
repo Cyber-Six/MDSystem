@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
-import { fetchPatientRecordForReview } from '../patient-record-service';
+import { fetchPatientRecordForReview, fetchCatalogsForReview, submitStaffEdits } from '../patient-record-service';
 import {
   PersonalInfoSection,
   EmergencyContactSection,
@@ -31,6 +31,7 @@ import {
 const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) => {
   // ── State ──────────────────────────────────────────────────────────────────
   const [recordData, setRecordData] = useState(null);
+  const [catalogs, setCatalogs] = useState({});
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
@@ -43,7 +44,6 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
 
   // Edit state per section
   const [editingSections, setEditingSections] = useState({});
-  const [editReasons, setEditReasons] = useState({});
   const [editedFields, setEditedFields] = useState({});
 
   // DPA confirmation
@@ -69,8 +69,14 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
       setFetchError('');
       try {
         const sex = ticket.sex ?? null; // may not be available from ticket list
-        const data = await fetchPatientRecordForReview(ticket.patientId, scope, sex);
-        if (!cancelled) setRecordData(data);
+        const [data, cats] = await Promise.all([
+          fetchPatientRecordForReview(ticket.patientId, scope, sex),
+          fetchCatalogsForReview(),
+        ]);
+        if (!cancelled) {
+          setRecordData(data);
+          setCatalogs(cats);
+        }
       } catch (err) {
         if (!cancelled) setFetchError(err.message || 'Failed to load patient record.');
       } finally {
@@ -105,10 +111,6 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     setEditingSections((prev) => ({ ...prev, [section]: !prev[section] }));
   }, []);
 
-  const setEditReason = useCallback((section, reason) => {
-    setEditReasons((prev) => ({ ...prev, [section]: reason }));
-  }, []);
-
   const setFieldValue = useCallback((section, field, value) => {
     setEditedFields((prev) => ({
       ...prev,
@@ -135,10 +137,16 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     setActionLoading(true);
     setActionError('');
     try {
-      // TODO: If edits exist, submit them via the appropriate backend mutations
-      // before approving the ticket. Each edited section should call its
-      // corresponding update* mutation with the staff-edited values.
-      // The edit reasons should be included in the audit log.
+      // Submit staff edits before approving (if any fields were modified)
+      if (hasAnyEdits) {
+        const editResult = await submitStaffEdits(ticket.patientId, editedFields, recordData);
+        if (!editResult.success) {
+          setActionError(`Failed to save edits: ${editResult.errors.join('; ')}`);
+          setActionLoading(false);
+          setShowDPAConfirm(false);
+          return;
+        }
+      }
 
       // Step 1: approve personal record — if this fails the EMR ticket is NOT touched
       // Step 2: approve EMR ticket (medical + dental) — only runs if step 1 succeeded
@@ -265,8 +273,6 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                 isEditing={editingSections.personalInfo ?? false}
                 editedFields={editedFields.personalInfo ?? {}}
                 onFieldChange={(f, v) => setFieldValue('personalInfo', f, v)}
-                editReason={editReasons.personalInfo ?? ''}
-                onEditReasonChange={(r) => setEditReason('personalInfo', r)}
                 onToggleEdit={() => toggleEdit('personalInfo')}
                 isPending={isPending}
               />
@@ -278,8 +284,6 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                   isEditing={editingSections.emergencyContact ?? false}
                   editedFields={editedFields.emergencyContact ?? {}}
                   onFieldChange={(f, v) => setFieldValue('emergencyContact', f, v)}
-                  editReason={editReasons.emergencyContact ?? ''}
-                  onEditReasonChange={(r) => setEditReason('emergencyContact', r)}
                   onToggleEdit={canAccessMedical ? () => toggleEdit('emergencyContact') : undefined}
                   isPending={isPending && canAccessMedical}
                   isLocked={!canAccessMedical}
@@ -290,11 +294,10 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               {includeMedical && (
                 <MedicalHistorySection
                   medicalHistory={recordData.medicalHistory}
+                  catalogs={catalogs}
                   isEditing={editingSections.medicalHistory ?? false}
                   editedFields={editedFields.medicalHistory ?? {}}
                   onFieldChange={(f, v) => setFieldValue('medicalHistory', f, v)}
-                  editReason={editReasons.medicalHistory ?? ''}
-                  onEditReasonChange={(r) => setEditReason('medicalHistory', r)}
                   onToggleEdit={canAccessMedical ? () => toggleEdit('medicalHistory') : undefined}
                   isPending={isPending && canAccessMedical}
                   isLocked={!canAccessMedical}
@@ -304,6 +307,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               {/* Medical Background (allergies, immunizations, etc.) */}
               {includeMedical && (
                 <MedicalBackgroundSection
+                  catalogs={catalogs}
                   allergyProfile={recordData.allergyProfile}
                   immunizationProfile={recordData.immunizationProfile}
                   hospitalizationProfile={recordData.hospitalizationProfile}
@@ -315,8 +319,6 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                   isEditing={editingSections.medicalBackground ?? false}
                   editedFields={editedFields.medicalBackground ?? {}}
                   onFieldChange={(f, v) => setFieldValue('medicalBackground', f, v)}
-                  editReason={editReasons.medicalBackground ?? ''}
-                  onEditReasonChange={(r) => setEditReason('medicalBackground', r)}
                   onToggleEdit={canAccessMedical ? () => toggleEdit('medicalBackground') : undefined}
                   isPending={isPending && canAccessMedical}
                   isLocked={!canAccessMedical}
@@ -330,8 +332,6 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                   isEditing={editingSections.obgyne ?? false}
                   editedFields={editedFields.obgyne ?? {}}
                   onFieldChange={(f, v) => setFieldValue('obgyne', f, v)}
-                  editReason={editReasons.obgyne ?? ''}
-                  onEditReasonChange={(r) => setEditReason('obgyne', r)}
                   onToggleEdit={canAccessMedical ? () => toggleEdit('obgyne') : undefined}
                   isPending={isPending && canAccessMedical}
                   isLocked={!canAccessMedical}
@@ -341,14 +341,14 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               {/* Dental History */}
               {includeDental && (
                 <DentalHistorySection
+                  catalogs={catalogs}
                   dentalHistory={recordData.dentalHistory}
                   dentalProcedureProfile={recordData.dentalProcedureProfile}
                   oralApplianceProfile={recordData.oralApplianceProfile}
+                  dentalPhotoRecord={recordData.dentalPhotoRecord}
                   isEditing={editingSections.dentalHistory ?? false}
                   editedFields={editedFields.dentalHistory ?? {}}
                   onFieldChange={(f, v) => setFieldValue('dentalHistory', f, v)}
-                  editReason={editReasons.dentalHistory ?? ''}
-                  onEditReasonChange={(r) => setEditReason('dentalHistory', r)}
                   onToggleEdit={canAccessDental ? () => toggleEdit('dentalHistory') : undefined}
                   isPending={isPending && canAccessDental}
                   isLocked={!canAccessDental}
@@ -377,7 +377,6 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                           return (
                             <p key={section} className="text-xs text-warning-600 dark:text-warning-400">
                               • <span className="font-medium">{section}</span>: {count} field(s) modified
-                              {editReasons[section] ? ` — "${editReasons[section]}"` : ' — ⚠ reason missing'}
                             </p>
                           );
                         })}
@@ -396,18 +395,13 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                     </svg>
                     <div>
                       <h4 className="text-sm font-bold text-primary-900 dark:text-primary-300">
-                        Data Privacy Act Confirmation
+                        Confirm Staff Changes
                       </h4>
                       <p className="text-xs text-primary-700 dark:text-primary-400 mt-1">
-                        You are about to approve this record with staff-modified fields. Under the
-                        Data Privacy Act (RA 10173), all modifications to patient data must be documented
-                        and traceable. By proceeding, you confirm that:
+                        You are about to approve this record with staff-modified fields.
+                        By proceeding, you confirm that all edits are corrections of genuine
+                        errors and that you are authorized to make these changes.
                       </p>
-                      <ul className="mt-2 space-y-1 text-xs text-primary-700 dark:text-primary-400 list-disc list-inside">
-                        <li>All edits are corrections of genuine errors or typos</li>
-                        <li>Edit reasons are accurate and sufficient</li>
-                        <li>You are authorized to make these changes</li>
-                      </ul>
                       <div className="flex gap-2 mt-3">
                         <button
                           onClick={() => setShowDPAConfirm(false)}

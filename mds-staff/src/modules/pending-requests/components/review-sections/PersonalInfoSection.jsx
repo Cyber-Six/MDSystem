@@ -13,8 +13,6 @@ const PersonalInfoSection = ({
   isEditing = false,
   editedFields = {},
   onFieldChange,
-  editReason = '',
-  onEditReasonChange,
   onToggleEdit,
   isPending = false,
 }) => {
@@ -51,8 +49,6 @@ const PersonalInfoSection = ({
       }
       isEditing={isEditing}
       onToggleEdit={onToggleEdit}
-      editReason={editReason}
-      onEditReasonChange={onEditReasonChange}
       hasEdits={hasEdits}
       isPending={isPending}
     >
@@ -62,16 +58,43 @@ const PersonalInfoSection = ({
           Personal Details
         </h4>
         <dl className="space-y-0">
-          <DataRow
-            label="Full Name"
-            value={
-              [basicInfo?.last_name, basicInfo?.first_name, basicInfo?.middle_name]
-                .filter(Boolean)
-                .join(basicInfo?.last_name ? ', ' : ' ') +
-              (basicInfo?.suffix ? ` ${basicInfo.suffix}` : '') || '—'
-            }
+          <EditableField
+            label="Last Name"
+            value={getVal('last_name', basicInfo?.last_name)}
+            originalValue={getOriginal('last_name', basicInfo?.last_name)}
+            isEditing={isEditing}
+            onChange={(v) => onFieldChange?.('last_name', v)}
           />
-          <DataRow label="Sex" value={basicInfo?.sex} />
+          <EditableField
+            label="First Name"
+            value={getVal('first_name', basicInfo?.first_name)}
+            originalValue={getOriginal('first_name', basicInfo?.first_name)}
+            isEditing={isEditing}
+            onChange={(v) => onFieldChange?.('first_name', v)}
+          />
+          <EditableField
+            label="Middle Name"
+            value={getVal('middle_name', basicInfo?.middle_name)}
+            originalValue={getOriginal('middle_name', basicInfo?.middle_name)}
+            isEditing={isEditing}
+            onChange={(v) => onFieldChange?.('middle_name', v)}
+          />
+          <EditableField
+            label="Suffix"
+            value={getVal('suffix', basicInfo?.suffix)}
+            originalValue={getOriginal('suffix', basicInfo?.suffix)}
+            isEditing={isEditing}
+            onChange={(v) => onFieldChange?.('suffix', v)}
+          />
+          <EditableField
+            label="Sex"
+            value={getVal('sex', basicInfo?.sex)}
+            originalValue={getOriginal('sex', basicInfo?.sex)}
+            isEditing={isEditing}
+            onChange={(v) => onFieldChange?.('sex', v)}
+            type="select"
+            options={['Male', 'Female', 'Other']}
+          />
           <DataRow label="Identifier" value={basicInfo?.identifier} />
           <DataRow label="Branch" value={basicInfo?.branch === 'QuezonCity' ? 'Quezon City' : basicInfo?.branch} />
         </dl>

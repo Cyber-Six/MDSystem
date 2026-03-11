@@ -1,5 +1,68 @@
-import React from 'react';
-import SectionWrapper, { DataRow } from './SectionWrapper';
+import React, { useState, useEffect } from 'react';
+import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
+import { axiosRequest } from '../../../../packages-core-adapter';
+
+/**
+ * AuthenticatedImage
+ * Fetches a JWT-protected image via axiosRequest and renders it from a blob URL.
+ */
+const AuthenticatedImage = ({ path, alt, className }) => {
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let objectUrl = null;
+    let cancelled = false;
+
+    axiosRequest
+      .get(path, { responseType: 'blob' })
+      .then((res) => {
+        if (!cancelled) {
+          objectUrl = URL.createObjectURL(res.data);
+          setSrc(objectUrl);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [path]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center w-full h-32 rounded-lg bg-neutral-100 dark:bg-neutral-700/50 animate-pulse">
+        <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (error || !src) {
+    return (
+      <div className="flex items-center justify-center w-full h-24 rounded-lg bg-neutral-100 dark:bg-neutral-700/50 border border-dashed border-neutral-300 dark:border-neutral-600">
+        <p className="text-xs text-neutral-400 dark:text-neutral-500">Photo unavailable</p>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+    />
+  );
+};
 
 /**
  * DentalHistorySection
@@ -10,16 +73,28 @@ const DentalHistorySection = ({
   dentalHistory,
   dentalProcedureProfile,
   oralApplianceProfile,
+  dentalPhotoRecord = null,
+  catalogs = {},
   isEditing = false,
   editedFields = {},
   onFieldChange,
-  editReason = '',
-  onEditReasonChange,
   onToggleEdit,
   isPending = false,
   isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
+
+  const getVal = (key, fallback) =>
+    editedFields[key] !== undefined ? editedFields[key] : fallback;
+
+  const getOriginal = (key, current) =>
+    editedFields[key] !== undefined ? current : undefined;
+
+  const getCatalogName = (catalog, id) => {
+    if (!catalog?.length || id === undefined || id === null) return null;
+    const item = catalog.find((c) => String(c.id) === String(id));
+    return item?.name ?? null;
+  };
 
   const formatDate = (d) => {
     if (!d) return '—';
@@ -41,12 +116,39 @@ const DentalHistorySection = ({
     }
 
     return (
-      <div className="space-y-2">
-        <DataRow label="Seen by Dentist" value={dentalHistory.seenByDentist ? 'Yes' : 'No'} />
-        <DataRow label="Last Dental Cleaning" value={dentalHistory.lastDentalCleaning || '—'} />
-        <DataRow label="Purpose" value={dentalHistory.purpose || '—'} />
-        <DataRow label="Last Visit Date" value={formatDate(dentalHistory.lastVisitDate)} />
-      </div>
+      <dl className="space-y-0">
+        <EditableField
+          label="Seen by Dentist"
+          value={getVal('seenByDentist', dentalHistory.seenByDentist ? 'Yes' : 'No')}
+          originalValue={getOriginal('seenByDentist', dentalHistory.seenByDentist ? 'Yes' : 'No')}
+          isEditing={isEditing}
+          onChange={(v) => onFieldChange?.('seenByDentist', v)}
+          type="select"
+          options={['Yes', 'No']}
+        />
+        <EditableField
+          label="Last Dental Cleaning"
+          value={getVal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? '')}
+          originalValue={getOriginal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? '')}
+          isEditing={isEditing}
+          onChange={(v) => onFieldChange?.('lastDentalCleaning', v)}
+        />
+        <EditableField
+          label="Purpose"
+          value={getVal('purpose', dentalHistory.purpose ?? '')}
+          originalValue={getOriginal('purpose', dentalHistory.purpose ?? '')}
+          isEditing={isEditing}
+          onChange={(v) => onFieldChange?.('purpose', v)}
+        />
+        <EditableField
+          label="Last Visit Date"
+          value={getVal('lastVisitDate', dentalHistory.lastVisitDate ? String(dentalHistory.lastVisitDate).split('T')[0] : '')}
+          originalValue={getOriginal('lastVisitDate', dentalHistory.lastVisitDate ? String(dentalHistory.lastVisitDate).split('T')[0] : '')}
+          isEditing={isEditing}
+          onChange={(v) => onFieldChange?.('lastVisitDate', v)}
+          type="date"
+        />
+      </dl>
     );
   };
 
@@ -63,7 +165,7 @@ const DentalHistorySection = ({
           <thead>
             <tr className="border-b border-neutral-200 dark:border-neutral-700">
               <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Procedure ID
+                Procedure
               </th>
               <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
                 Date
@@ -77,7 +179,7 @@ const DentalHistorySection = ({
                 className="border-b border-neutral-100 dark:border-neutral-800 last:border-0"
               >
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  #{proc.procedureTypeId}
+                  {getCatalogName(catalogs.dentalProcedureCatalog, proc.procedureTypeId) || `Procedure #${proc.procedureTypeId}`}
                 </td>
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
                   {formatDate(proc.procedureDate)}
@@ -108,7 +210,7 @@ const DentalHistorySection = ({
           <thead>
             <tr className="border-b border-neutral-200 dark:border-neutral-700">
               <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
-                Tag ID
+                Tag
               </th>
               <th className="text-left py-2 px-3 font-medium text-neutral-500 dark:text-neutral-400">
                 Status
@@ -128,7 +230,7 @@ const DentalHistorySection = ({
                 className="border-b border-neutral-100 dark:border-neutral-800 last:border-0"
               >
                 <td className="py-2 px-3 text-neutral-700 dark:text-neutral-300">
-                  #{a.tagId}
+                  {getCatalogName(catalogs.oralApplianceCatalog, a.tagId) || `Tag #${a.tagId}`}
                 </td>
                 <td className="py-2 px-3">
                   <span
@@ -164,8 +266,6 @@ const DentalHistorySection = ({
       scope="dental"
       isEditing={isEditing}
       hasEdits={hasEdits}
-      editReason={editReason}
-      onEditReasonChange={onEditReasonChange}
       onToggleEdit={onToggleEdit}
       isPending={isPending}
       isLocked={isLocked}
@@ -196,6 +296,42 @@ const DentalHistorySection = ({
         </h4>
         {renderOralAppliances()}
       </div>
+
+      {/* Dental Photos */}
+      {dentalPhotoRecord && (dentalPhotoRecord.upperTeeth || dentalPhotoRecord.lowerTeeth) && (
+        <div className="mt-2">
+          <h4 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
+            Dental Photos
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {dentalPhotoRecord.upperTeeth && (
+              <div>
+                <p className="text-xs font-medium text-secondary-600 dark:text-neutral-400 mb-1.5 uppercase tracking-wide">
+                  Upper Teeth
+                </p>
+                <AuthenticatedImage
+                  path={`/media/record/dentalPhoto/${dentalPhotoRecord.upperTeeth}`}
+                  alt="Upper teeth photo"
+                  className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 object-cover"
+                />
+              </div>
+            )}
+            {dentalPhotoRecord.lowerTeeth && (
+              <div>
+                <p className="text-xs font-medium text-secondary-600 dark:text-neutral-400 mb-1.5 uppercase tracking-wide">
+                  Lower Teeth
+                </p>
+                <AuthenticatedImage
+                  path={`/media/record/dentalPhoto/${dentalPhotoRecord.lowerTeeth}`}
+                  alt="Lower teeth photo"
+                  className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 object-cover"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </SectionWrapper>
   );
 };
