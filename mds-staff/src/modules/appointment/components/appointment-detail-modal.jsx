@@ -32,15 +32,17 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
   const [historyLoading, setHistoryLoading] = useState(false);
   const [viewingFile, setViewingFile] = useState(null); // { blobUrl, contentType, reqId }
   const [loadingReqId, setLoadingReqId] = useState(null);
+  const [fileError, setFileError] = useState(null); // { reqId, message }
 
   const handleViewFile = useCallback(async (req) => {
     if (!req.filename) return;
     setLoadingReqId(req.id);
+    setFileError(null);
     try {
       const { blobUrl, contentType } = await fetchRequirementFile(req.filename);
       setViewingFile({ blobUrl, contentType, reqId: req.id, filename: req.filename });
     } catch {
-      // could show an error toast here if needed
+      setFileError({ reqId: req.id, message: 'File not found or could not be loaded.' });
     } finally {
       setLoadingReqId(null);
     }
@@ -295,6 +297,9 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                       </p>
                       {req.filename && (
                         <p className="text-[10px] text-secondary-400 dark:text-neutral-500 font-mono truncate">{req.filename}</p>
+                      )}
+                      {fileError?.reqId === req.id && (
+                        <p className="text-[10px] text-error-500 dark:text-error-400 mt-0.5">{fileError.message}</p>
                       )}
                     </div>
                     {req.filename && (

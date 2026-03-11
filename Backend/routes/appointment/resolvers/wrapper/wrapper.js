@@ -346,8 +346,11 @@ const Mutation = {
     // 2. Ensure requirements are satisfied
     await validateSatisfiedAllRequirements(schedulerId, requirements, res);
 
+    // Promote staged files and update filenames to the promoted UUIDs
     for (const requirement of requirements) {
-      if (requirement.filename) await promoteFile(user.id, requirement.filename, "appointmentRequirement");  
+      if (requirement.filename) {
+        requirement.filename = await promoteFile(user.id, requirement.filename, "appointmentRequirement");
+      }
     }
     // 3. Create patientSlot row
     const psResult = await db.query(
