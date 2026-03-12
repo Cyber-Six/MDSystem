@@ -121,9 +121,15 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Batch #</th>
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Location</th>
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
-                  <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Initial</th>
-                  <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Current</th>
-                  <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Used %</th>
+                  {item.category?.toLowerCase() === 'medicine' ? (
+                    <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Dosage</th>
+                  ) : (
+                    <>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Initial</th>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Current</th>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Used %</th>
+                    </>
+                  )}
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Received</th>
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Supplier</th>
                   <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Actions</th>
@@ -131,11 +137,12 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
                 {sortedBatches.length === 0 && (
-                  <tr><td colSpan={10} className="px-4 py-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No batches for this item. Add supply to get started.</td></tr>
+                  <tr><td colSpan={item.category?.toLowerCase() === 'medicine' ? 8 : 10} className="px-4 py-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No batches for this item. Add supply to get started.</td></tr>
                 )}
                 {sortedBatches.map((batch, idx) => {
                   const st = getExpiryStatus(batch.expiryDate);
-                  const usedPct = batch.initialQuantity > 0 ? Math.round(((batch.initialQuantity - batch.currentQuantity) / batch.initialQuantity) * 100) : 0;
+                  const isMedicineBatch = item.category?.toLowerCase() === 'medicine';
+                  const usedPct = !isMedicineBatch && batch.initialQuantity > 0 ? Math.round(((batch.initialQuantity - batch.currentQuantity) / batch.initialQuantity) * 100) : 0;
                   return (
                     <tr key={`${batch.medicalItemId}-${batch.id}`} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50">
                       <td className="px-3 py-1.5">
@@ -153,16 +160,24 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                           <span className={`inline-flex px-1 py-0.5 text-[10px] font-medium rounded ${st.color}`}>{st.label}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-1.5 text-center text-xs text-secondary-500 dark:text-neutral-400">{batch.initialQuantity}</td>
-                      <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">{batch.currentQuantity}</td>
-                      <td className="px-3 py-1.5 text-center">
-                        <div className="flex items-center gap-1 justify-center">
-                          <div className="w-12 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${usedPct >= 80 ? 'bg-error-500' : usedPct >= 50 ? 'bg-warning-500' : 'bg-success-500'}`} style={{ width: `${usedPct}%` }}></div>
-                          </div>
-                          <span className="text-[10px] text-secondary-400 dark:text-neutral-500">{usedPct}%</span>
-                        </div>
-                      </td>
+                      {isMedicineBatch ? (
+                        <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">
+                          {batch.dosageValue != null ? `${batch.dosageValue} ${batch.dosageUnit || ''}` : '—'}
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-3 py-1.5 text-center text-xs text-secondary-500 dark:text-neutral-400">{batch.initialQuantity ?? '—'}</td>
+                          <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">{batch.currentQuantity ?? '—'}</td>
+                          <td className="px-3 py-1.5 text-center">
+                            <div className="flex items-center gap-1 justify-center">
+                              <div className="w-12 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${usedPct >= 80 ? 'bg-error-500' : usedPct >= 50 ? 'bg-warning-500' : 'bg-success-500'}`} style={{ width: `${usedPct}%` }}></div>
+                              </div>
+                              <span className="text-[10px] text-secondary-400 dark:text-neutral-500">{usedPct}%</span>
+                            </div>
+                          </td>
+                        </>
+                      )}
                       <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">{batch.receivedAt ? new Date(batch.receivedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
                       <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">{batch.supplierName || '—'}</td>
                       <td className="px-3 py-1.5 text-center">

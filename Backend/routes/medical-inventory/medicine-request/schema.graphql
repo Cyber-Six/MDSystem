@@ -80,6 +80,7 @@ type Query {
   getMedicineStatus: [MedicineRequest!]
   getMedicineRequestById(requestId: ID!): MedicineRequest
   getMedicineRequests(patientId: ID!, offset: Int, limit: Int): [MedicineRequest!]
+  getAllMedicineRequests(status: RequestStatus, offset: Int, limit: Int): [MedicineRequest!]
 }
 
 type Mutation {

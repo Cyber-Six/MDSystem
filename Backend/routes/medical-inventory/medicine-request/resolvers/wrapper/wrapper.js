@@ -71,6 +71,27 @@ const Query = {
     const result = await db.query(sql, [patientId, offset, limit]);
     return result.rows;
   },
+
+  _getAllMedicineRequests: async (_, { status, offset = 0, limit = 50 }, { res }) => {
+    let sql =
+      'SELECT mrl.*, ' +
+      'COALESCE(json_agg(' +
+      'json_build_object(' + "'id'" + ', mre.id, ' + "'batchId'" + ', mre."batchId", ' + "'requestId'" + ', mre."requestId", ' + "'quantity'" + ', mre.quantity)' +
+      ') FILTER (WHERE mre.id IS NOT NULL), ' + "'[]'" + ') AS items ' +
+      'FROM "MedicineRequestLog" mrl ' +
+      'LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id';
+    const params = [];
+    if (status) {
+      sql += ' WHERE mrl.status = $1';
+      params.push(status);
+    }
+    const offsetIdx = params.length + 1;
+    const limitIdx = params.length + 2;
+    sql += ' GROUP BY mrl.id ORDER BY mrl.created_at DESC OFFSET $' + offsetIdx + ' LIMIT $' + limitIdx;
+    params.push(offset, limit);
+    const result = await db.query(sql, params);
+    return result.rows;
+  },
 };
 
 const Mutation = {
