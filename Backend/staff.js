@@ -21,6 +21,7 @@ const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js'
 const staffRoutes = require('./routes/staff/staff.js');
 const roleManagementRoutes = require('./routes/staff/rolemanagement.js');
 const mediaRoutes = require('./routes/media/media.js');
+const documentRoutes = require('./routes/documents/documents.js');
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
@@ -76,6 +77,7 @@ app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
 app.use('/admin/staff', roleManagementRoutes);
 app.use('/media', mediaRoutes);
+app.use('/documents', documentRoutes);
 
 // ======================================
 // AI Medical Chatbot — proxied to MDS-Chatbot microservice

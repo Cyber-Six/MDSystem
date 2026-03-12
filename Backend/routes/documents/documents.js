@@ -54,6 +54,20 @@ router.post('/generate', async (req, res) => {
 });
 
 /**
+ * POST /documents/generate-docx
+ * Legacy alias for POST /documents/generate.
+ * Body: { template, tags }
+ */
+router.post('/generate-docx', async (req, res) => {
+  try {
+    await proxyPost(`${DOCX_SERVICE}/generate-docx`, req.body, res);
+  } catch (err) {
+    logger.error('Document generate-docx proxy error', { error: err.message });
+    res.status(502).json({ error: 'DOCUMENT_SERVICE_UNAVAILABLE', message: 'Could not reach the document service.' });
+  }
+});
+
+/**
  * POST /documents/preview
  * Generate DOCX and return an in-browser HTML preview.
  * Body: { template, tags }
@@ -91,6 +105,20 @@ router.get('/templates', async (req, res) => {
     res.json(response.data);
   } catch (err) {
     logger.error('Template list proxy error', { error: err.message });
+    res.status(502).json({ error: 'DOCUMENT_SERVICE_UNAVAILABLE', message: 'Could not reach the document service.' });
+  }
+});
+
+/**
+ * GET /documents/contracts
+ * List tag contracts per document type (which tags each template expects).
+ */
+router.get('/contracts', async (req, res) => {
+  try {
+    const response = await axios.get(`${DOCX_SERVICE}/documents/contracts`);
+    res.json(response.data);
+  } catch (err) {
+    logger.error('Contracts list proxy error', { error: err.message });
     res.status(502).json({ error: 'DOCUMENT_SERVICE_UNAVAILABLE', message: 'Could not reach the document service.' });
   }
 });

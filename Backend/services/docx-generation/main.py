@@ -2,15 +2,16 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 
-from config import SERVICE_HOST, SERVICE_PORT
+from config import SERVICE_HOST, SERVICE_PORT, LOG_LEVEL
 from routes.document import router as document_router
 from routes.report import router as report_router
+from routes.legacy import router as legacy_router
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s  %(name)-28s  %(levelname)-7s  %(message)s",
 )
 logger = logging.getLogger("mds-document-service")
@@ -26,6 +27,7 @@ app = FastAPI(
 
 app.include_router(document_router)
 app.include_router(report_router)
+app.include_router(legacy_router)
 
 
 @app.get("/health")

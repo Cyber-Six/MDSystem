@@ -2,14 +2,15 @@ const express = require('express');
 const path = require('path');
 const dotenv = require("dotenv");
 const logger = require('../../utils/logger.js');
-const { MEDIA_PATH, checkFileByUuid } = require('../../config/multer.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 // Import helpers from config/multer.js
 const {
   upload,
+  MEDIA_PATH, 
   validateFileType,
   stageFile,
   unstageFile,
+  checkFileByUuid
 } = require('../../config/multer.js');
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
@@ -76,7 +77,7 @@ const category_lookup = {
   "eConsultation" : MEDIA_PATH.eConsultation
 };
 
-mediaRouter.get('/record/:category/:fileId', jwtProtect("medical"), async (req, res) => {
+mediaRouter.get('/record/:category/:fileId', jwtProtect("all"), async (req, res) => {
   const { category, fileId } = req.params;
   const basePath = category_lookup[category];
 
