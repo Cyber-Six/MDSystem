@@ -1,6 +1,6 @@
 const path = require('path');
 const multer = require('multer');
-const FileType = require('file-type');
+const { fileTypeFromBuffer } = require('file-type');
 const fs = require('fs').promises;
 const { v4: uuidv4 } = require('uuid');
 const { incrementMediaStagingCount, decrementMediaStagingCount } = require('./redis.js');
@@ -50,7 +50,7 @@ function safeResolve(base, fileId) {
 }
 
 async function validateFileType(buffer) {
-  const fileType = await FileType.fromBuffer(buffer);
+  const fileType = await fileTypeFromBuffer(buffer);
   if (!fileType || !ALLOWED_MIME_TYPES[fileType.mime]) {
     throw new Error('INVALID_FILE_TYPE');
   }
