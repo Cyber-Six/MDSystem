@@ -1,6 +1,10 @@
 -- Medicine request rejection reason column (added post-initial build)
 ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
 
+-- MedicineBatch quantity tracking columns
+ALTER TABLE "MedicineBatch" ADD COLUMN IF NOT EXISTS "initialQuantity" INT;
+ALTER TABLE "MedicineBatch" ADD COLUMN IF NOT EXISTS "currentQuantity" INT;
+
 -- Role management: insert new permission labels (idempotent)
 INSERT INTO "rolesTable" (label) VALUES
   ('ALLOW_TO_VIEW_INVENTORY'),

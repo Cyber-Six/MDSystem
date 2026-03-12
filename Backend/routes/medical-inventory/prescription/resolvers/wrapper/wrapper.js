@@ -12,7 +12,7 @@ const Query = {
       'mb."dosageValue", mb."expiryDate", mb.location ' +
       'FROM "MedicalItems" mi ' +
       'JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id ' +
-      'WHERE mi.active = true AND mi.category = ' + "'Medicine'" + ' AND mb."expiryDate" > CURRENT_DATE';
+      'WHERE mi.active = true AND mi.category = ' + "'Medicine'" + ' AND mb."expiryDate" > CURRENT_DATE AND mb."currentQuantity" > 0';
     const params = [];
     let idx = 1;
 
@@ -61,6 +61,22 @@ const Mutation = {
 
       const items = [];
       for (const item of input.items) {
+        // Verify and decrement stock
+        const stockCheck = await db.query(
+          'SELECT "currentQuantity" FROM "MedicineBatch" WHERE id = $1 LIMIT 1',
+          [item.batchId]
+        );
+        if (stockCheck.rows.length === 0) {
+          throwGraphQLError(res).message('Batch not found: ' + item.batchId).status(404).throw();
+        }
+        if (stockCheck.rows[0].currentQuantity < item.quantity) {
+          throwGraphQLError(res).message('Insufficient stock for batch ' + item.batchId).status(400).throw();
+        }
+        await db.query(
+          'UPDATE "MedicineBatch" SET "currentQuantity" = "currentQuantity" - $1 WHERE id = $2',
+          [item.quantity, item.batchId]
+        );
+
         const entitySql =
           'INSERT INTO "MedicineEntity" ("batchId", "transactionId") ' +
           'VALUES ($1, $2) RETURNING *';

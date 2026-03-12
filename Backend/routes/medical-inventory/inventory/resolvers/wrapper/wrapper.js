@@ -48,7 +48,7 @@ const Query = {
     }
 
     if (availableOnly) {
-      sql += ' AND "expiryDate" > CURRENT_DATE';
+      sql += ' AND "currentQuantity" > 0 AND "expiryDate" > CURRENT_DATE';
     }
 
     sql += ' ORDER BY "expiryDate" ASC OFFSET $' + idx + ' LIMIT $' + (idx + 1);
@@ -152,14 +152,14 @@ const Mutation = {
     await validateItemActive(input.medicalItemId, res);
 
     const sql =
-      'INSERT INTO "MedicineBatch" ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location, "receivedBy", notes) ' +
-      'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *';
+      'INSERT INTO "MedicineBatch" ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "initialQuantity", "currentQuantity", "expiryDate", location, "receivedBy", notes) ' +
+      'VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10) RETURNING *';
 
     try {
       const result = await db.query(sql, [
         input.medicalItemId, input.supplierName || null, input.batchNumber,
-        input.dosageUnit, input.dosageValue, input.expiryDate,
-        input.location, receivedBy, input.notes || null
+        input.dosageUnit, input.dosageValue, input.initialQuantity,
+        input.expiryDate, input.location, receivedBy, input.notes || null
       ]);
       return result.rows[0];
     } catch (err) {
