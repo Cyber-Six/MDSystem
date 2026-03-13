@@ -4,11 +4,14 @@
  * Frontend-only utility to tell apart Initial Record submissions from
  * Record Update requests — no backend changes required.
  *
- * Logic (mirrors what the backend already enforces):
- *   - A patient whose credentials_status is 'Unverified' has never had a
- *     ticket approved.  Their submission is an INITIAL record.
- *   - Any patient with credentials_status !== 'Unverified' already has an
- *     approved record in the DB.  Their submission is an UPDATE request.
+ * Logic:
+ *   - Initial-record tickets and personal-record logs are created as part of
+ *     the same workflow and share near-identical creation timestamps.
+ *   - Update-request tickets are created later, while personal-record log
+ *     creation time remains anchored to the initial workflow.
+ *
+ * We therefore classify scope='Both' tickets by comparing ticket.created_at
+ * to the latest personal-record-log created_at for the same user.
  *
  * Shortcut (always safe):
  *   scope === 'Medical' | 'Dental' → always UPDATE
@@ -41,33 +44,90 @@ export const getUserCredentialStatus = async (userId) => {
 };
 
 /**
+ * Fetches the latest personal-record log metadata for a patient.
+ * We only need created_at/status for initial-vs-update classification.
+ *
+ * @param {string} userId
+ * @returns {Promise<{created_at?: string, status?: string}|null>}
+ */
+export const getLatestPersonalRecordLogMeta = async (userId) => {
+  try {
+    const response = await axiosRequest.post('/profile/medical', {
+      query: `query GetLatestPersonalRecordLogMeta($userId: ID!, $limit: Int) {
+        getUserPersonalRecordLog(userId: $userId, limit: $limit) {
+          id
+          status
+          created_at
+        }
+      }`,
+      variables: { userId, limit: 1 },
+    });
+
+    const rows = response.data?.data?.getUserPersonalRecordLog;
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  } catch (err) {
+    console.error('[MDSystem] ticket-type-helper getLatestPersonalRecordLogMeta error:', err?.message ?? err);
+    return null;
+  }
+};
+
+const INITIAL_MATCH_WINDOW_MS = 24 * 60 * 60 * 1000; // 24-hour window for initial record submission
+
+const isNearSameTimestamp = (a, b) => {
+  const aMs = a ? new Date(a).getTime() : NaN;
+  const bMs = b ? new Date(b).getTime() : NaN;
+  if (!Number.isFinite(aMs) || !Number.isFinite(bMs)) return false;
+  return Math.abs(aMs - bMs) <= INITIAL_MATCH_WINDOW_MS;
+};
+
+/**
  * Adds `is_initial: boolean` to every ticket in the list.
- * All credential-status look-ups run in parallel.
+ * All look-ups run in parallel.
  *
- * Fallback when the credential check is unavailable (null return):
- *   status !== 'active'  ←→  treat as initial.
- * This means scope='Both' tickets from verified patients will appear in the
- * Initial tab when the permission check cannot be performed — an acceptable
- * trade-off vs. the worse outcome of the Initial tab being completely empty.
+ * Fallback strategy when timestamp-based check is unavailable:
+ * use credential-status heuristic for backward compatibility.
  *
- * @param {Array<{patientId: string, scope: string}>} tickets
+ * @param {Array<{patientId: string, scope: string, created_at?: string}>} tickets
  * @returns {Promise<Array<{...ticket, is_initial: boolean}>>}
  */
-export const enrichWithInitialFlag = async (tickets) =>
-  Promise.all(
+export const enrichWithInitialFlag = async (tickets) => {
+  const logMetaCache = new Map();
+  const credentialCache = new Map();
+
+  const getCachedLogMeta = async (userId) => {
+    if (!logMetaCache.has(userId)) {
+      logMetaCache.set(userId, await getLatestPersonalRecordLogMeta(userId));
+    }
+    return logMetaCache.get(userId);
+  };
+
+  const getCachedCredentialStatus = async (userId) => {
+    if (!credentialCache.has(userId)) {
+      credentialCache.set(userId, await getUserCredentialStatus(userId));
+    }
+    return credentialCache.get(userId);
+  };
+
+  return Promise.all(
     tickets.map(async (ticket) => {
       // Partial-scope tickets are only submitted by verified patients → always UPDATE
       if (ticket.scope === 'Medical' || ticket.scope === 'Dental') {
         return { ...ticket, is_initial: false };
       }
 
-      // scope === 'Both': check whether the patient has been verified before
-      const status = await getUserCredentialStatus(ticket.patientId);
+      const latestPersonalLog = await getCachedLogMeta(ticket.patientId);
 
-      // 'Unverified'       → patient has never had a ticket approved → INITIAL
-      // 'active'           → patient already has approved records   → UPDATE
-      // null (call failed) → unknown; fall back to treating as INITIAL (safer than
-      //                      hiding the record from the Initial tab entirely)
-      return { ...ticket, is_initial: status?.toLowerCase() !== 'active' };
+      if (latestPersonalLog?.created_at && isNearSameTimestamp(ticket.created_at, latestPersonalLog.created_at)) {
+        return { ...ticket, is_initial: true };
+      }
+
+      // Backward-compatible fallback when log metadata is unavailable.
+      if (!latestPersonalLog) {
+        const status = await getCachedCredentialStatus(ticket.patientId);
+        return { ...ticket, is_initial: status?.toLowerCase() !== 'active' };
+      }
+
+      return { ...ticket, is_initial: false };
     }),
   );
+};

@@ -98,17 +98,6 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
                 />
                 <span className="ml-2 text-secondary-700">No</span>
               </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="firstTimeDentist"
-                  value="idk"
-                  checked={data.firstTimeDentist === 'idk'}
-                  onChange={(e) => handleChange('firstTimeDentist', e.target.value)}
-                  className="form-checkbox"
-                />
-                <span className="ml-2 text-secondary-700">I don't know</span>
-              </label>
             </div>
           </div>
 
@@ -310,39 +299,6 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
             </div>
           )}
 
-          {/* Tooth Extraction */}
-          <div className="pt-4 border-t border-secondary-100">
-            <label className="form-label">
-              HAVE YOU HAD A TOOTH EXTRACTION IN THE PAST 24 MONTHS? <span className="text-error-500">*</span>
-            </label>
-            <div className="flex gap-6 mt-2 ml-6">
-              <label className="flex items-center">
-                <input type="radio" name="toothExtraction" value="yes" checked={data.toothExtraction === 'yes'} onChange={(e) => handleChange('toothExtraction', e.target.value)} className="form-checkbox" />
-                <span className="ml-2 text-secondary-700">Yes</span>
-              </label>
-              <label className="flex items-center">
-                <input type="radio" name="toothExtraction" value="no" checked={data.toothExtraction === 'no'} onChange={(e) => handleChange('toothExtraction', e.target.value)} className="form-checkbox" />
-                <span className="ml-2 text-secondary-700">No</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Dental Filling */}
-          <div>
-            <label className="form-label">
-              HAVE YOU HAD A DENTAL FILLING IN THE PAST 24 MONTHS? <span className="text-error-500">*</span>
-            </label>
-            <div className="flex gap-6 mt-2 ml-6">
-              <label className="flex items-center">
-                <input type="radio" name="dentalFilling" value="yes" checked={data.dentalFilling === 'yes'} onChange={(e) => handleChange('dentalFilling', e.target.value)} className="form-checkbox" />
-                <span className="ml-2 text-secondary-700">Yes</span>
-              </label>
-              <label className="flex items-center">
-                <input type="radio" name="dentalFilling" value="no" checked={data.dentalFilling === 'no'} onChange={(e) => handleChange('dentalFilling', e.target.value)} className="form-checkbox" />
-                <span className="ml-2 text-secondary-700">No</span>
-              </label>
-            </div>
-          </div>
         </div>
       </div>
 
