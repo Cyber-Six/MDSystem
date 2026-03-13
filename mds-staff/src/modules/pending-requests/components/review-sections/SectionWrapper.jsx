@@ -111,6 +111,21 @@ const SectionWrapper = ({
       {!collapsed && (
         <div className="p-4 space-y-4">
           {children}
+          {isPending && onToggleEdit && isEditing && (
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToggleEdit();
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-md bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

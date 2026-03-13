@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   BRANCH,
   ALL_BRANCHES,
@@ -20,7 +20,11 @@ import InitialRecordDetailModal from './initial-record-detail-modal';
  * The component reflects the backend's UpdateTicket shape:
  *   { id, patientId, status, scope, created_at, first_name, last_name, branch }
  */
-const InitialRecordList = ({ staffRole = 'both' }) => {
+const InitialRecordList = ({
+  staffRole = 'both',
+  externalStatusFilter = null,
+  showStatusFilter = true,
+}) => {
   const [branch, setBranch] = useState(BRANCH.BOTH);
   const [statusFilter, setStatusFilter] = useState(TICKET_STATUS.PENDING);
   const [tickets, setTickets] = useState([]);
@@ -28,13 +32,31 @@ const InitialRecordList = ({ staffRole = 'both' }) => {
   const [error, setError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
 
+  const effectiveStatusFilter = externalStatusFilter ?? statusFilter;
+  const queryStatuses = useMemo(
+    () => (
+      effectiveStatusFilter === 'all'
+        ? [
+            TICKET_STATUS.PENDING,
+            TICKET_STATUS.REVISION_SUBMITTED,
+            TICKET_STATUS.APPROVED,
+            TICKET_STATUS.REVISION,
+            TICKET_STATUS.REJECTED,
+            TICKET_STATUS.EXPIRED,
+            TICKET_STATUS.CANCELLED,
+          ]
+        : [effectiveStatusFilter]
+    ),
+    [effectiveStatusFilter],
+  );
+
   // ── Fetch ----------------------------------------------------------------
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const result = await getStatusUpdateTickets([statusFilter], branch);
+      const result = await getStatusUpdateTickets(queryStatuses, branch);
       const enriched = await enrichWithInitialFlag(result);
       setTickets(enriched.filter((t) => t.is_initial));
     } catch (err) {
@@ -42,7 +64,7 @@ const InitialRecordList = ({ staffRole = 'both' }) => {
     } finally {
       setLoading(false);
     }
-  }, [branch, statusFilter]);
+  }, [branch, queryStatuses]);
 
   useEffect(() => {
     fetchTickets();
@@ -95,24 +117,26 @@ const InitialRecordList = ({ staffRole = 'both' }) => {
           </div>
 
           {/* Status filter */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 shrink-0">
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
-            >
-              <option value={TICKET_STATUS.PENDING}>Pending</option>
-              <option value={TICKET_STATUS.REVISION_SUBMITTED}>Revision Submitted</option>
-              <option value={TICKET_STATUS.APPROVED}>Approved</option>
-              <option value={TICKET_STATUS.REVISION}>Revision Requested</option>
-              <option value={TICKET_STATUS.REJECTED}>Rejected</option>
-              <option value={TICKET_STATUS.EXPIRED}>Expired</option>
-              <option value={TICKET_STATUS.CANCELLED}>Cancelled</option>
-            </select>
-          </div>
+          {showStatusFilter && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 shrink-0">
+                Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+              >
+                <option value={TICKET_STATUS.PENDING}>Pending</option>
+                <option value={TICKET_STATUS.REVISION_SUBMITTED}>Revision Submitted</option>
+                <option value={TICKET_STATUS.APPROVED}>Approved</option>
+                <option value={TICKET_STATUS.REVISION}>Revision Requested</option>
+                <option value={TICKET_STATUS.REJECTED}>Rejected</option>
+                <option value={TICKET_STATUS.EXPIRED}>Expired</option>
+                <option value={TICKET_STATUS.CANCELLED}>Cancelled</option>
+              </select>
+            </div>
+          )}
 
           {/* Refresh button */}
           <button

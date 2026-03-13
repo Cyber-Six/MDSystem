@@ -5,6 +5,17 @@ import MedicineRequestDetailsModal from '../components/modals/MedicineRequestDet
 import InitialRecordList from '../modules/pending-requests/components/initial-record-list';
 import RecordUpdateList from '../modules/pending-requests/components/review-sections/record-update/record-update-list';
 
+const STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'All Status' },
+  { value: 'Pending', label: 'Pending' },
+  { value: 'Approved', label: 'Approved' },
+  { value: 'RevisionSubmitted', label: 'Request Submitted' },
+  { value: 'Revision', label: 'Revision Requested' },
+  { value: 'Rejected', label: 'Rejected' },
+  { value: 'Expired', label: 'Expired' },
+  { value: 'Cancelled', label: 'Cancelled' },
+];
+
 /**
  * Pending Requests Page
  * Staff can view and manage pending requests with filters
@@ -238,7 +249,7 @@ const PendingRequests = () => {
     alert(`Medicine request rejected. Reason: ${reason}`);
   };
 
-  // Filter requests
+  // Filter requests (legacy local table only)
   const filteredRequests = allRequests.filter(request => {
     const matchesType = filterType === 'all' || request.type === filterType;
     const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
@@ -313,10 +324,9 @@ const PendingRequests = () => {
               onChange={(e) => setFilterStatus(e.target.value)}
               className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
-              <option value="all">All Status</option>
-              <option value="Pending">Pending</option>
-              <option value="Revision">Revision</option>
-              <option value="Expired">Expired</option>
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
           </div>
 
@@ -339,16 +349,36 @@ const PendingRequests = () => {
 
       {/* Initial Record Submissions — powered by the real backend */}
       {filterType === 'Initial Record' && (
-        <InitialRecordList />
+        <InitialRecordList
+          externalStatusFilter={filterStatus}
+          showStatusFilter={false}
+        />
       )}
 
       {/* Record Update Requests — powered by the real backend */}
       {filterType === 'Record Update' && (
-        <RecordUpdateList />
+        <RecordUpdateList
+          externalStatusFilter={filterStatus}
+          showStatusFilter={false}
+        />
+      )}
+
+      {/* All Types: render both backend-backed patient-record request lists */}
+      {filterType === 'all' && (
+        <>
+          <InitialRecordList
+            externalStatusFilter={filterStatus}
+            showStatusFilter={false}
+          />
+          <RecordUpdateList
+            externalStatusFilter={filterStatus}
+            showStatusFilter={false}
+          />
+        </>
       )}
 
       {/* Requests Table (Appointment / Medicine Request) */}
-      {filterType !== 'Initial Record' && filterType !== 'Record Update' && (
+      {filterType !== 'Initial Record' && filterType !== 'Record Update' && filterType !== 'all' && (
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
         <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">

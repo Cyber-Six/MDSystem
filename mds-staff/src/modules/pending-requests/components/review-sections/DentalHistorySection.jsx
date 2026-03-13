@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import SectionWrapper, { DataRow, EditableField } from './SectionWrapper';
 import { axiosRequest } from '../../../../packages-core-adapter';
 
+const DENTAL_CLEANING_CHOICES = [
+  { value: '0-6', label: '0-6 months' },
+  { value: '7-12', label: '7-12 months' },
+  { value: '12-24', label: '12-24 months' },
+  { value: '>24', label: '>24 months' },
+];
+
 /**
  * AuthenticatedImage
  * Fetches a JWT-protected image via axiosRequest and renders it from a blob URL.
@@ -10,6 +17,7 @@ const AuthenticatedImage = ({ path, alt, className }) => {
   const [src, setSrc] = useState(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     let objectUrl = null;
@@ -56,11 +64,45 @@ const AuthenticatedImage = ({ path, alt, className }) => {
   }
 
   return (
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-    />
+    <>
+      <button
+        type="button"
+        onClick={() => setIsExpanded(true)}
+        className="block w-full text-left"
+        title="Click to enlarge"
+      >
+        <img
+          src={src}
+          alt={alt}
+          className={`${className} cursor-zoom-in`}
+        />
+      </button>
+
+      {isExpanded && (
+        <div
+          className="fixed inset-0 z-[1200] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center"
+          onClick={() => setIsExpanded(false)}
+        >
+          <div
+            className="relative max-w-6xl w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setIsExpanded(false)}
+              className="absolute -top-10 right-0 text-white/90 hover:text-white text-sm font-medium"
+            >
+              Close
+            </button>
+            <img
+              src={src}
+              alt={alt}
+              className="w-full max-h-[85vh] object-contain rounded-lg border border-white/20 shadow-2xl"
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
@@ -83,6 +125,14 @@ const DentalHistorySection = ({
   isLocked = false,
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
+
+  const formatCleaningRange = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+    const text = String(value).trim();
+    const match = DENTAL_CLEANING_CHOICES.find((choice) => choice.value === text.replace(/\s+/gu, ''));
+    if (match) return match.label;
+    return text;
+  };
 
   const getVal = (key, fallback) =>
     editedFields[key] !== undefined ? editedFields[key] : fallback;
@@ -128,10 +178,16 @@ const DentalHistorySection = ({
         />
         <EditableField
           label="Last Dental Cleaning"
-          value={getVal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? '')}
-          originalValue={getOriginal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? '')}
+          value={
+            isEditing
+              ? getVal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? '')
+              : formatCleaningRange(getVal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? ''))
+          }
+          originalValue={formatCleaningRange(getOriginal('lastDentalCleaning', dentalHistory.lastDentalCleaning ?? ''))}
           isEditing={isEditing}
           onChange={(v) => onFieldChange?.('lastDentalCleaning', v)}
+          type="select"
+          options={DENTAL_CLEANING_CHOICES}
         />
         <EditableField
           label="Purpose"

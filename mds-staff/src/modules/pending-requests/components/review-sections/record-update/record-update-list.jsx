@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   BRANCH,
   TICKET_STATUS,
@@ -39,6 +39,7 @@ const STATUS_OPTIONS = [
   { value: TICKET_STATUS.REVISION_SUBMITTED, label: 'Revision Submitted' },
   { value: TICKET_STATUS.APPROVED,           label: 'Approved' },
   { value: TICKET_STATUS.REVISION,           label: 'Revision Requested' },
+  { value: TICKET_STATUS.REJECTED,           label: 'Rejected' },
   { value: TICKET_STATUS.EXPIRED,            label: 'Expired' },
   { value: TICKET_STATUS.CANCELLED,          label: 'Cancelled' },
 ];
@@ -49,6 +50,7 @@ const statusBadgeClass = (status) => {
     [TICKET_STATUS.REVISION_SUBMITTED]: 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400',
     [TICKET_STATUS.APPROVED]:           'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
     [TICKET_STATUS.REVISION]:           'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
+    [TICKET_STATUS.REJECTED]:           'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
     [TICKET_STATUS.EXPIRED]:            'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400',
     [TICKET_STATUS.CANCELLED]:          'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400',
   };
@@ -69,7 +71,11 @@ const scopeBadgeClass = (scope) => {
   return map[scope] ?? 'bg-neutral-100 text-neutral-600';
 };
 
-const RecordUpdateList = ({ staffRole = 'both' }) => {
+const RecordUpdateList = ({
+  staffRole = 'both',
+  externalStatusFilter = null,
+  showStatusFilter = true,
+}) => {
   // ── Filter state ──────────────────────────────────────────────────────────
   // Default to Manila since testing environment is in Manila branch.
   const [branch, setBranch] = useState(BRANCH.MANILA);
@@ -80,6 +86,26 @@ const RecordUpdateList = ({ staffRole = 'both' }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const effectiveStatusFilter = externalStatusFilter ?? statusFilter;
+  const queryStatuses = useMemo(() => {
+    if (effectiveStatusFilter === 'all') {
+      return [
+        TICKET_STATUS.PENDING,
+        TICKET_STATUS.REVISION_SUBMITTED,
+        TICKET_STATUS.APPROVED,
+        TICKET_STATUS.REVISION,
+        TICKET_STATUS.REJECTED,
+        TICKET_STATUS.EXPIRED,
+        TICKET_STATUS.CANCELLED,
+      ];
+    }
+
+    if (effectiveStatusFilter === TICKET_STATUS.EXPIRED) {
+      return [TICKET_STATUS.PENDING];
+    }
+
+    return [effectiveStatusFilter];
+  }, [effectiveStatusFilter]);
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
@@ -94,25 +120,27 @@ const RecordUpdateList = ({ staffRole = 'both' }) => {
        *
        * For all other statuses we query directly.
        */
-      const queryStatuses =
-        statusFilter === TICKET_STATUS.EXPIRED
-          ? [TICKET_STATUS.PENDING]
-          : [statusFilter];
-
       const result = await getStatusUpdateTickets(queryStatuses, branch);
 
       // Keep only update requests (is_initial === false); initial records are shown on the Initial Record tab.
       const updateOnly = (await enrichWithInitialFlag(result)).filter((t) => !t.is_initial);
 
       let processed;
-      if (statusFilter === TICKET_STATUS.EXPIRED) {
+      if (effectiveStatusFilter === TICKET_STATUS.EXPIRED) {
         // Show only Pending tickets that are past the validity window.
         processed = updateOnly
           .filter(isExpiredByAge)
           .map((t) => ({ ...t, _displayStatus: TICKET_STATUS.EXPIRED }));
-      } else if (statusFilter === TICKET_STATUS.PENDING) {
+      } else if (effectiveStatusFilter === TICKET_STATUS.PENDING) {
         // Hide age-expired tickets from the Pending view so they don't appear twice.
         processed = updateOnly.filter((t) => !isExpiredByAge(t));
+      } else if (effectiveStatusFilter === 'all') {
+        // In all-status view, keep non-expired Pending as Pending and render old Pending as Expired.
+        processed = updateOnly.map((t) => (
+          t.status === TICKET_STATUS.PENDING && isExpiredByAge(t)
+            ? { ...t, _displayStatus: TICKET_STATUS.EXPIRED }
+            : t
+        ));
       } else {
         processed = updateOnly;
       }
@@ -123,7 +151,7 @@ const RecordUpdateList = ({ staffRole = 'both' }) => {
     } finally {
       setLoading(false);
     }
-  }, [branch, statusFilter]);
+  }, [branch, effectiveStatusFilter, queryStatuses]);
 
   useEffect(() => {
     fetchTickets();
@@ -185,20 +213,22 @@ const RecordUpdateList = ({ staffRole = 'both' }) => {
           </div>
 
           {/* Status */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 shrink-0">
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
+          {showStatusFilter && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 shrink-0">
+                Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Refresh */}
           <button

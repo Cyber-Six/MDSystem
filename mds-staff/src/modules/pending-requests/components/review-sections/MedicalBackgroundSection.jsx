@@ -26,6 +26,13 @@ const MedicalBackgroundSection = ({
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
 
+  const lifestyleKeys = ['smoker', 'cigarettesPerDay', 'yearsSmoked', 'alcoholConsumer', 'alcoholFrequency', 'lifestyleNotes'];
+  const hasLifestyleEdits = lifestyleKeys.some((key) => editedFields[key] !== undefined);
+  const acuityKeys = ['acuityLeft', 'acuityRight', 'acuityNotes'];
+  const hasAcuityEdits = acuityKeys.some((key) => editedFields[key] !== undefined);
+  const vitalKeys = ['height_cm', 'weight_kg', 'blood_pressure', 'heart_rate', 'temperature'];
+  const hasVitalEdits = vitalKeys.some((key) => editedFields[key] !== undefined);
+
   const getVal = (key, fallback) =>
     editedFields[key] !== undefined ? editedFields[key] : fallback;
 
@@ -203,7 +210,7 @@ const MedicalBackgroundSection = ({
         <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
           Lifestyle
         </h4>
-        {lifestyle || isEditing ? (
+        {lifestyle || isEditing || hasLifestyleEdits ? (
           <dl className="space-y-0">
             <EditableField
               label="Smoker"
@@ -265,7 +272,7 @@ const MedicalBackgroundSection = ({
         <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
           Visual Acuity
         </h4>
-        {visualAcuityProfile?.acuity || isEditing ? (
+        {visualAcuityProfile?.acuity || isEditing || hasAcuityEdits ? (
           <dl className="space-y-0">
             <EditableField
               label="Left Eye (OS)"
@@ -303,7 +310,7 @@ const MedicalBackgroundSection = ({
         <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
           Physical Measurements
         </h4>
-        {vitalSigns || isEditing ? (
+        {vitalSigns || isEditing || hasVitalEdits ? (
           <dl className="space-y-0">
             <EditableField
               label="Height (cm)"
