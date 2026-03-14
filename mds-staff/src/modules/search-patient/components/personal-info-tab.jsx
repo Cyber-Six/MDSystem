@@ -1,5 +1,5 @@
 import React from 'react';
-import PatientSectionCard from './patient-section-card';
+import PatientSectionCard from './section-card';
 
 function Field({ label, value }) {
   return (

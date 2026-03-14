@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import PatientSectionCard from './patient-section-card';
+import PatientSectionCard from './section-card';
 
 const REQ_STATUS_STYLES = {
   Dispensed: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',

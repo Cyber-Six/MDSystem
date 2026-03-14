@@ -1,3 +1,4 @@
+// @refresh reset
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { formatPatientName } from '../services/patient-search-service';
 
@@ -57,9 +58,21 @@ export function PatientTabsProvider({ children }) {
     setActiveTabId(null);
   }, []);
 
+  const reorderTabs = useCallback((fromId, toId) => {
+    setTabs((prev) => {
+      const from = prev.findIndex((t) => t.id === fromId);
+      const to   = prev.findIndex((t) => t.id === toId);
+      if (from === -1 || to === -1 || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
   return (
     <PatientTabsContext.Provider
-      value={{ tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch }}
+      value={{ tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch, reorderTabs }}
     >
       {children}
     </PatientTabsContext.Provider>

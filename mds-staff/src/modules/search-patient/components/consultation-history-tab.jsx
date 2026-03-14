@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import PatientSectionCard from './patient-section-card';
+import PatientSectionCard from './section-card';
 
 const TYPE_STYLES = {
   Medical: 'bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400 border border-accent-200 dark:border-accent-800/50',
