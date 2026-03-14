@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatPatientName, getPatientInitials, getProfileLabel } from '../../../../services/patient-search-service';
+import { formatPatientName, getPatientInitials, getProfileLabel } from '../../../services/patient-search-service';
 
 // ── Badge helpers ────────────────────────────────────────────────────────────────
 const STATUS_STYLES = {

@@ -1,5 +1,5 @@
 import React from 'react';
-import PatientSectionCard from './patient-section-card';
+import PatientSectionCard from './section-card';
 
 const APPT_STATUS_STYLES = {
   Pending:   'bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-600',

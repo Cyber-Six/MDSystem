@@ -33,15 +33,15 @@ const GQL_BASIC_RECORD_FALLBACK = `
   }
 `;
 
-const PatientPersonalInfoTab = lazy(() => import('./components/patient-personal-info-tab'));
-const PatientMedicalRecordTab = lazy(() => import('./components/patient-medical-record-tab'));
-const PatientDentalRecordTab = lazy(() => import('./components/patient-dental-record-tab'));
-const PatientConsultationTab = lazy(() => import('./components/patient-consultation-tab'));
-const PatientConsultationHistoryTab = lazy(() => import('./components/patient-consultation-history-tab'));
-const PatientAppointmentsTab = lazy(() => import('./components/patient-appointments-tab'));
-const PatientMedicineRequestsTab = lazy(() => import('./components/patient-medicine-requests-tab'));
-const PatientDocumentsTab = lazy(() => import('./components/patient-documents-tab'));
-const PatientObgyneTab = lazy(() => import('./components/patient-obgyne-tab'));
+const PatientPersonalInfoTab = lazy(() => import('./components/personal-info-tab'));
+const PatientMedicalRecordTab = lazy(() => import('./components/medical-record-tab'));
+const PatientDentalRecordTab = lazy(() => import('./components/dental-record-tab'));
+const PatientConsultationTab = lazy(() => import('./components/consultation-tab'));
+const PatientConsultationHistoryTab = lazy(() => import('./components/consultation-history-tab'));
+const PatientAppointmentsTab = lazy(() => import('./components/appointments-tab'));
+const PatientMedicineRequestsTab = lazy(() => import('./components/medicine-requests-tab'));
+const PatientDocumentsTab = lazy(() => import('./components/documents-tab'));
+const PatientObgyneTab = lazy(() => import('./components/obgyne-tab'));
 
 function LoadingBlock({ label }) {
   return (
@@ -194,9 +194,9 @@ function toDisplayPatient(patientId, data, mockPatient) {
   };
 }
 
-export default function PatientRecordView({ patientId, embedded = false, onBack }) {
+export default function PatientRecordView({ patientId, initialTab: initialTabProp, embedded = false, onBack }) {
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'personal';
+  const initialTab = initialTabProp || searchParams.get('tab') || 'personal';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);

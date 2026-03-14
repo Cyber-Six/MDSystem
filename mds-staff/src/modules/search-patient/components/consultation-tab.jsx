@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import PatientSectionCard from './patient-section-card';
+import PatientSectionCard from './section-card';
 import { axiosRequest } from '../../../packages-core-adapter';
 
 const INITIAL_FORM = {
