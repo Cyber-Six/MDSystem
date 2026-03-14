@@ -86,7 +86,7 @@ const Query = {
   getEmergencyContact: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserEmergencyContact(_, {userId: user.id, offset: 0, limit: 1}, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
+    else if (result[0].status === "InProgress" || result[0].status === "Revision" || result[0].status === "Approved") return result[0];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },

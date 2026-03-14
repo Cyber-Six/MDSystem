@@ -908,6 +908,7 @@ const Query = {
         latest.created_at   AS latest_updated_at
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
+      JOIN "UserCredentials" uc ON uc.id = up.id
       -- latest personal name snapshot
       LEFT JOIN LATERAL (
         SELECT l.first_name, l.last_name, l.middle_name, l.suffix
@@ -938,14 +939,15 @@ const Query = {
       WHERE
         ($1::text IS NULL OR up.branch::text = $1::text)
         AND (
-          up.identifier ILIKE $2
-          OR (upl.first_name || ' ' || upl.last_name) ILIKE $3
-          OR (upl.last_name  || ', ' || upl.first_name) ILIKE $3
-          OR upl.first_name ILIKE $3
-          OR upl.last_name  ILIKE $3
+          up.identifier::text ILIKE $2
+          OR (COALESCE(upl.first_name, '') || ' ' || COALESCE(upl.last_name, '')) ILIKE $3
+          OR (COALESCE(upl.last_name, '')  || ', ' || COALESCE(upl.first_name, '')) ILIKE $3
+          OR COALESCE(upl.first_name, '') ILIKE $3
+          OR COALESCE(upl.last_name, '') ILIKE $3
+          OR uc.email ILIKE $3
         )
       ORDER BY
-        CASE WHEN up.identifier ILIKE $2 THEN 0 ELSE 1 END,
+        CASE WHEN up.identifier::text ILIKE $2 THEN 0 ELSE 1 END,
         upl.last_name, upl.first_name
       LIMIT $4 OFFSET $5;
     `;

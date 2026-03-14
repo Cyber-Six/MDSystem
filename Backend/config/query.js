@@ -275,6 +275,28 @@ async function isUserValidated(userId) {
   }
 }
 
+async function getUserCredentialStatus(userId) {
+  const sql = `
+    SELECT credentials_status AS status
+    FROM "UserCredentials"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return result.rows[0].status || null;
+  } catch (err) {
+    logger.error(`Error fetching credential status for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
 async function getUserBranch(userId) {
   const sql = `
     SELECT branch
@@ -358,6 +380,7 @@ module.exports = {
     getUserConsentStateByEmail,
     updateUserConsent,
     getUserIdentity,
+    getUserCredentialStatus,
     updateUserIdentity,
     isUserValidated,
     setExpiredUpdateTickets,

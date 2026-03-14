@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../packages-core-adapter';
 
 // ── Queries ───────────────────────────────────────────────────────────────────
@@ -200,7 +200,10 @@ const STATUS_BANNER = {
  */
 const PatientRecord = () => {
   const { patientId } = useParams();
-  const [activeTab, setActiveTab] = useState('personal');
+  const [searchParams] = useSearchParams();
+  const VALID_TABS = ['personal', 'medical', 'dental', 'obgyne', 'history', 'appointments', 'medicines', 'documents'];
+  const initialTab = VALID_TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'personal';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
