@@ -12,8 +12,9 @@ import AdjustStockModal from './components/adjust-stock/adjust-stock-modal';
 import DispenseModal from './components/dispense-queue/dispense-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
+import { fetchPatientMedicineRequests, fetchAllMedicineRequests, setMedicineRequestStatus } from './medicine-request-service';
 import {
-  SEED_BATCHES, SEED_REQUESTS, SEED_TRANSACTIONS,
+  SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
 } from './inventory-seed-data';
 
@@ -28,8 +29,14 @@ const MedicalInventory = () => {
   const [itemsError, setItemsError] = useState('');
   const [selectedItemLoading, setSelectedItemLoading] = useState(false);
   const [batches, setBatches] = useState([]);
-  const [requests, setRequests] = useState(SEED_REQUESTS);
+  const [requests, setRequests] = useState([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [transactions, setTransactions] = useState(SEED_TRANSACTIONS);
+
+  // Patient medicine request lookup
+  const [patientLookupId, setPatientLookupId] = useState('');
+  const [isFetchingPatientReqs, setIsFetchingPatientReqs] = useState(false);
+  const [patientReqsMsg, setPatientReqsMsg] = useState('');
 
   // Selected item for detail view
   const [selectedItem, setSelectedItem] = useState(null);
@@ -209,7 +216,7 @@ const MedicalInventory = () => {
         medicalItemId: batch.medicalItemId,
         batchNumber: batch.batchNumber,
         dosageUnit: batch.dosageUnit,
-        dosageValue: batch.quantity,
+        dosageValue: batch.dosageValue,
         expiryDate: batch.expiryDate,
         location: batch.location,
         supplierName: batch.supplierName || null,
@@ -234,8 +241,10 @@ const MedicalInventory = () => {
           id: created.id,
           medicalItemId: created.medicalItemId,
           batchNumber: created.batchNumber,
-          currentQuantity: created.dosageValue,
-          initialQuantity: created.dosageValue,
+          dosageValue: created.dosageValue,
+          dosageUnit: created.dosageUnit,
+          currentQuantity: null,
+          initialQuantity: null,
           expiryDate: created.expiryDate,
           location: created.location,
           supplierName: created.supplierName,
@@ -288,6 +297,86 @@ const MedicalInventory = () => {
     setSuccessMsg(`Split ${quantity} units to ${toClinic}.`);
   };
 
+  // Auto-load all pending medicine requests on mount
+  const loadAllMedicineRequests = useCallback(async () => {
+    setIsLoadingRequests(true);
+    try {
+      const rawRequests = await fetchAllMedicineRequests('Pending');
+      const enriched = rawRequests.map((req) => ({
+        ...req,
+        patientName: `Patient #${req.patientId}`,
+        patientType: 'Self-Request',
+        _isRealRequest: true,
+        items: (req.items || []).map((item) => {
+          const batch = batches.find((b) => String(b.id) === String(item.batchId));
+          const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
+          return {
+            ...item,
+            itemId: medicine?.id || batch?.medicalItemId || null,
+            itemName: medicine?.item_name || `Batch #${item.batchId}`,
+          };
+        }),
+      }));
+      setRequests(enriched);
+    } catch (err) {
+      setError(err.message || 'Failed to load medicine requests.');
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  }, [batches, items]);
+
+  useEffect(() => {
+    if (!itemsLoading) loadAllMedicineRequests();
+  }, [itemsLoading, loadAllMedicineRequests]);
+
+  // Load real patient medicine requests into the dispense queue
+  const loadPatientMedicineRequests = async (patientId) => {
+    if (!patientId) return;
+    setIsFetchingPatientReqs(true);
+    setPatientReqsMsg('');
+    try {
+      const rawRequests = await fetchPatientMedicineRequests(String(patientId));
+
+      // Enrich with itemName by cross-referencing batches → items
+      const enriched = rawRequests.map((req) => ({
+        ...req,
+        patientName: `Patient #${req.patientId}`,
+        patientType: 'Self-Request',
+        _isRealRequest: true,
+        items: (req.items || []).map((item) => {
+          const batch = batches.find((b) => String(b.id) === String(item.batchId));
+          const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
+          return {
+            ...item,
+            itemId: medicine?.id || batch?.medicalItemId || null,
+            itemName: medicine?.item_name || `Batch #${item.batchId}`,
+          };
+        }),
+      }));
+
+      // Merge into queue — update existing, prepend new
+      setRequests((prev) => {
+        const existingIds = new Set(prev.map((r) => String(r.id)));
+        const newOnes = enriched.filter((r) => !existingIds.has(String(r.id)));
+        const updated = prev.map((r) => {
+          const live = enriched.find((e) => String(e.id) === String(r.id));
+          return live ? { ...r, ...live } : r;
+        });
+        return [...newOnes, ...updated];
+      });
+
+      setPatientReqsMsg(
+        enriched.length === 0
+          ? `No requests found for Patient #${patientId}`
+          : `Loaded ${enriched.length} request(s) for Patient #${patientId}`,
+      );
+    } catch (err) {
+      setPatientReqsMsg(err.message || 'Failed to load patient requests. Check that the backend staff endpoint is registered.');
+    } finally {
+      setIsFetchingPatientReqs(false);
+    }
+  };
+
   const handleAdjust = ({ batchId, delta, reason }) => {
     setBatches(batches.map((b) => b.id === batchId ? { ...b, currentQuantity: Math.max(0, b.currentQuantity + delta) } : b));
     const batch = batches.find((b) => b.id === batchId);
@@ -303,25 +392,35 @@ const MedicalInventory = () => {
     setSuccessMsg(`Stock adjusted by ${delta > 0 ? '+' : ''}${delta} units.`);
   };
 
-  const handleDispense = ({ requestId, allocations }) => {
-    // Decrement batches
+  const handleDispense = async ({ request, quantity, allocation }) => {
+    const requestId = request?.id;
+    // Decrement batches locally (allocation items have .id = batchId, .allocate = qty)
     const batchUpdates = {};
-    allocations.forEach(({ batchId, qty }) => {
-      batchUpdates[batchId] = (batchUpdates[batchId] || 0) + qty;
+    (allocation || []).forEach(({ id: batchId, allocate: qty }) => {
+      if (batchId && qty) batchUpdates[batchId] = (batchUpdates[batchId] || 0) + qty;
     });
     setBatches(batches.map((b) => batchUpdates[b.id] ? { ...b, currentQuantity: Math.max(0, b.currentQuantity - batchUpdates[b.id]) } : b));
-    // Update request status
+    // Update request status locally
     setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Approved' } : r));
-    // Record transactions
-    const req = requests.find((r) => r.id === requestId);
-    const totalQty = allocations.reduce((s, a) => s + a.qty, 0);
-    const txId = Math.max(...transactions.map((t) => t.id)) + 1;
+    // For real patient requests: persist approval to backend
+    if (request?._isRealRequest) {
+      try {
+        await setMedicineRequestStatus(requestId, 'Approved');
+      } catch (err) {
+        console.error('Failed to update medicine request status in backend:', err);
+      }
+    }
+    // Record transaction locally
+    const req = requests.find((r) => r.id === requestId) || request;
+    const totalQty = (allocation || []).reduce((s, a) => s + (a.allocate || 0), 0);
+    const txId = Math.max(0, ...transactions.map((t) => t.id)) + 1;
     setTransactions([{
       id: txId, patientId: req?.patientId, patientName: req?.patientName, action: 'issue',
       quantity: totalQty, issuedBy: 101, issuedByName: 'Current User',
       issuedAt: new Date().toISOString(),
       notes: `Dispensed for: ${req?.purpose || 'N/A'}`,
-      itemName: req?.items?.[0]?.itemName || '', batchNumber: allocations.map((a) => batches.find((b) => b.id === a.batchId)?.batchNumber).join(', '),
+      itemName: req?.items?.[0]?.itemName || '',
+      batchNumber: (allocation || []).map((a) => batches.find((b) => b.id === a.id)?.batchNumber).filter(Boolean).join(', '),
     }, ...transactions]);
     setShowDispense(false);
     setSuccessMsg(`Dispensed ${totalQty} units to ${req?.patientName || 'patient'}.`);
@@ -347,7 +446,7 @@ const MedicalInventory = () => {
     {
       key: 'dispense', label: 'Dispense Queue',
       icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
-      badge: requests.filter((r) => r.status === 'InProgress').length,
+      badge: requests.filter((r) => r.status === 'Pending' || r.status === 'InProgress').length,
     },
     {
       key: 'history', label: 'History',
@@ -436,12 +535,36 @@ const MedicalInventory = () => {
         />
       )}
 
-      {activeSection === 'dispense' && (
-        <DispenseQueue
-          requests={requests}
-          items={items}
-          onDispense={openDispense}
-        />
+        {activeSection === 'dispense' && (
+        <div className="space-y-3">
+          {/* Patient Request Loader */}
+          <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-4">
+            <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-2">Load Patient Medicine Requests</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={patientLookupId}
+                onChange={(e) => setPatientLookupId(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && loadPatientMedicineRequests(patientLookupId)}
+                placeholder="Enter Patient ID…"
+                className="flex-1 px-3 py-1.5 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <button
+                onClick={() => loadPatientMedicineRequests(patientLookupId)}
+                disabled={!patientLookupId.trim() || isFetchingPatientReqs}
+                className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md disabled:opacity-50 transition-colors"
+              >
+                {isFetchingPatientReqs ? 'Loading…' : 'Load'}
+              </button>
+            </div>
+            {patientReqsMsg && (
+              <p className={`text-[11px] mt-1.5 ${patientReqsMsg.startsWith('No') || patientReqsMsg.includes('Failed') ? 'text-error-600 dark:text-error-400' : 'text-success-600 dark:text-success-400'}`}>
+                {patientReqsMsg}
+              </p>
+            )}
+          </div>
+          <DispenseQueue requests={requests} items={items} onDispense={openDispense} />
+        </div>
       )}
 
       {activeSection === 'history' && (

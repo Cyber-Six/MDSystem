@@ -107,6 +107,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
+        '/medical-inventory': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
       },
     }
   }

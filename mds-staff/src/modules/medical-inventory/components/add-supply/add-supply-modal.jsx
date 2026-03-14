@@ -14,6 +14,7 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
     batchNumber: '',
     expiryDate: '',
     quantity: '',
+    dosageValue: '',
     dosageUnit: 'mg',
     unit: 'pcs',
     location: 'Casal',
@@ -29,17 +30,19 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
   const isMedicine = selectedItem?.category?.toLowerCase() === ITEM_CATEGORY.MEDICINE.toLowerCase();
 
   const resetForm = () => {
-    setForm({ batchNumber: '', expiryDate: '', quantity: '', dosageUnit: 'mg', unit: 'pcs', location: 'Casal', supplierName: '', notes: '' });
+    setForm({ batchNumber: '', expiryDate: '', quantity: '', dosageValue: '', dosageUnit: 'mg', unit: 'pcs', location: 'Casal', supplierName: '', notes: '' });
   };
 
   const handleSubmit = async (e) => {
     if (e?.preventDefault) e.preventDefault();
-    if (!selectedItemId || !form.batchNumber.trim() || !form.quantity) return;
+    if (!selectedItemId || !form.batchNumber.trim()) return;
+    if (!isMedicine && !form.quantity) return;
     const batch = {
       medicalItemId: Number(selectedItemId),
       batchNumber: form.batchNumber.trim(),
       expiryDate: form.expiryDate || null,
       quantity: parseInt(form.quantity),
+      dosageValue: isMedicine ? parseInt(form.dosageValue) : null,
       dosageUnit: form.dosageUnit,
       unit: form.unit,
       location: form.location,
@@ -96,14 +99,20 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
               <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Batch / Lot Number *</label>
               <input type="text" value={form.batchNumber} onChange={(e) => set('batchNumber', e.target.value)} placeholder="e.g. CAS-PAR-003" required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
             </div>
-            <div>
-              <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Quantity *</label>
-              <input type="number" min={1} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} placeholder="e.g. 100" required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
-            </div>
+            {!isMedicine && (
+              <div>
+                <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Quantity *</label>
+                <input type="number" min={1} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} placeholder="e.g. 100" required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+              </div>
+            )}
           </div>
 
           {isMedicine ? (
             <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Dosage Value *</label>
+                <input type="number" min={1} value={form.dosageValue} onChange={(e) => set('dosageValue', e.target.value)} placeholder="e.g. 500" required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+              </div>
               <div>
                 <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Dosage Unit *</label>
                 <select value={form.dosageUnit} onChange={(e) => set('dosageUnit', e.target.value)} className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500">

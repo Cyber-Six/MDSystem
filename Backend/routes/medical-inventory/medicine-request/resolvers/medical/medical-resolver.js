@@ -33,6 +33,16 @@ const Query = {
     }
     return await Wrapper.Query._getMedicineRequests(_, args, { res });
   },
+
+  getAllMedicineRequests: async (_, args, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
+    if (!isPermitted) {
+      logger.warn("Unauthorized medicine request list attempt by staff " + user.id);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._getAllMedicineRequests(_, args, { res });
+  },
 };
 
 const Mutation = {
