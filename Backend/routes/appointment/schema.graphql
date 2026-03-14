@@ -24,10 +24,17 @@ enum SCHEDULE_SESSION {
   Afternoon
 }
 
+
+enum PATIENT_TYPE {
+  Student
+  Employee
+}
+
 type SlotScheduler {
   id: ID!
   label: String!
   location: LOCATION_DESIGNATION!
+  patientType: PATIENT_TYPE
   schedulePerWeek: [String!]!
   morningAllowed: Int!
   afternoonAllowed: Int!
@@ -41,6 +48,7 @@ type SlotScheduler {
 input SlotSchedulerInput {
   label: String!
   location: LOCATION_DESIGNATION!
+  patientType: PATIENT_TYPE
   schedulePerWeek: [String!]!
   morningAllowed: Int!
   afternoonAllowed: Int!
@@ -53,6 +61,7 @@ input SlotSchedulerInput {
 input SlotSchedulerUpdateInput {
   label: String
   location: LOCATION_DESIGNATION
+  patientType: PATIENT_TYPE
   schedulePerWeek: [String!]
   morningAllowed: Int
   afternoonAllowed: Int

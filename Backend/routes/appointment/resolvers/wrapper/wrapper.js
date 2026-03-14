@@ -16,17 +16,22 @@ const { encodeSchedulingFlags, decodeSchedulingFlags, validateSchedulerDate,
 const MAX_SCHEDULING_DAYS = parseInt(dotenv.MAX_SCHEDULING_DAYS || 7);
 
 const Query = {
-  _listOpenAppointments: async (_, { offset, limit }, { user, res }) => {
+  _listOpenAppointments: async (_, { offset, limit, schedulerId = null }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const userBranch = (await db.getUserBranch(user.id)) ?? 'Both';
-
+    const userBranch = await db.getUserBranch(user.id);
+    const userPatientType = await db.getUserPatientType(user.id);
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
       WHERE ss."isActive" = true
+        AND ( $6 IS NULL OR ss.id = $6 ) -- Optional schedulerId filter for submitAppointment resolver
+        AND (
+              ss."patientType" IS NULL
+              OR ss."patientType" = $5
+              )
         AND (
               $4 = 'Both'
            OR ($4 = 'Manila' AND ss.location IN ('Arlegui', 'Casal'))
@@ -49,7 +54,9 @@ const Query = {
       user.id,
       limit || 10,
       offset || 0,
-      userBranch
+      userBranch,
+      userPatientType,
+      schedulerId
     ]);
     result.rows.forEach(row => {
       row.schedulePerWeek = decodeSchedulingFlags(row.scheduleFlags);
@@ -333,69 +340,91 @@ const Mutation = {
   _submitAppointment: async (_, { schedulerId, date, session, requirements }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    // 1. Validate scheduler/date and session availability
-    const scheduleData = await Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
-    if (session === "Morning" && scheduleData.morningAllowed <= (scheduleData.morningRegistered + scheduleData.morningPending)) {
-      throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
-    } else if (session === "Afternoon" && scheduleData.afternoonAllowed <= (scheduleData.afternoonRegistered + scheduleData.afternoonPending)) {
-      throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
-    }
-
-    // 2. Ensure requirements are satisfied
-    await validateSatisfiedAllRequirements(schedulerId, requirements, res);
-
-    // Promote staged files and update filenames to the promoted UUIDs
-    for (const requirement of requirements) {
-      if (requirement.filename) {
-        requirement.filename = await promoteFile(user.id, requirement.filename, "appointmentRequirement");
       }
+
+    try {  // validation block with detailed error handling
+      const allowedScheduler = await Query._listOpenAppointments(_, { offset: 0, limit: 1, schedulerId }, { user, res });
+      if (allowedScheduler.length === 0) {
+        throwGraphQLError(res).message("Scheduler not found or not allowed.").status(404).throw();
+      }
+
+      // 1. Validate scheduler/date and session availability
+      const scheduleData = await Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
+      if (session === "Morning" && scheduleData.morningAllowed <= (scheduleData.morningRegistered + scheduleData.morningPending)) {
+        throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
+      } else if (session === "Afternoon" && scheduleData.afternoonAllowed <= (scheduleData.afternoonRegistered + scheduleData.afternoonPending)) {
+        throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
+      }
+
+      // 2. Ensure requirements are satisfied
+      await validateSatisfiedAllRequirements(schedulerId, requirements, res);
+    } catch (err) { 
+      logger.error("Error validating appointment submission:", err);
+      throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();
     }
-    // 3. Create patientSlot row
-    const psResult = await db.query(
-      `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session")
-       VALUES ($1, $2, 'Pending', $3)
-       RETURNING *;`,
-      [user.id, scheduleData.id, session]
-    );
 
-    if (psResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to create appointment").status(500).throw();
-    }
-
-    const patientSlotId = psResult.rows[0].id;
-
-    // 4. Insert patientScheduleRequirement rows (one per requirement)
-    if (requirements && requirements.length > 0) {
-      const values = [];
-      const placeholders = requirements.map((req, i) => {
-        if (!req.scheduleRequirementId) {
-          throwGraphQLError(res)
-            .message(`Requirement at index ${i} missing scheduleRequirementId`)
-            .status(400)
-            .throw();
+    try { // main logic block with cleanup on failure
+      for (const requirement of requirements) {
+        if (requirement.filename) {
+          requirement.filename = await promoteFile(user.id, requirement.filename, "appointmentRequirement");
         }
-        const offset = i * 3;
-        values.push(patientSlotId, req.scheduleRequirementId, req.filename || null);
-        return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
-      });
-
-      await db.query(
-        `INSERT INTO "patientScheduleRequirement" ("patientSlotId", "scheduleRequirementId", "filename")
-         VALUES ${placeholders.join(", ")}
+      }
+      // 3. Create patientSlot row
+      const psResult = await db.query(
+        `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session")
+         VALUES ($1, $2, 'Pending', $3)
          RETURNING *;`,
-        values
+        [user.id, scheduleData.id, session]
       );
+
+      if (psResult.rowCount === 0) {
+        throwGraphQLError(res).message("Failed to create appointment").status(500).throw();
+      }
+
+      const patientSlotId = psResult.rows[0].id;
+
+      // 4. Insert patientScheduleRequirement rows (one per requirement)
+      if (requirements && requirements.length > 0) {
+        const values = [];
+        const placeholders = requirements.map((req, i) => {
+          if (!req.scheduleRequirementId) {
+            throwGraphQLError(res)
+              .message(`Requirement at index ${i} missing scheduleRequirementId`)
+              .status(400)
+              .throw();
+          }
+          const offset = i * 3;
+          values.push(patientSlotId, req.scheduleRequirementId, req.filename || null);
+          return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
+        });
+
+        await db.query(
+          `INSERT INTO "patientScheduleRequirement" ("patientSlotId", "scheduleRequirementId", "filename")
+           VALUES ${placeholders.join(", ")}
+           RETURNING *;`,
+          values
+        );
+      }
+
+      // 5. Fetch inserted requirements to attach to the slot
+      const reqResult = await db.query(
+        `SELECT psr.* FROM "patientScheduleRequirement" psr WHERE psr."patientSlotId" = $1;`,
+        [patientSlotId]
+      );
+
+      return { ...psResult.rows[0], requirements: reqResult.rows };
+    } catch (err) {
+      // On any error, attempt to clean up any promoted files for this request
+      if (requirements && requirements.length > 0) {
+        for (const requirement of requirements) {
+          if (requirement.filename) {
+            await deleteFile(requirement.filename, "appointmentRequirement");
+          }
+        }
+      }
+      logger.error("Error submitting appointment:", err);
+      throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();  
     }
-
-    // 5. Fetch inserted requirements to attach to the slot
-    const reqResult = await db.query(
-      `SELECT psr.* FROM "patientScheduleRequirement" psr WHERE psr."patientSlotId" = $1;`,
-      [patientSlotId]
-    );
-
-    return { ...psResult.rows[0], requirements: reqResult.rows };
   },
 
   _acknowledgeRejection: async (_, { patientId }, { user, res }) => {
@@ -537,12 +566,13 @@ const Mutation = {
 
       const result = await client.query(
         `INSERT INTO "slotScheduler"
-          (label, location, "scheduleFlags", "morningAllowed", "afternoonAllowed", "whitelistOnly", "containsCustomDates", notes)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          (label, location, "patientType", "scheduleFlags", "morningAllowed", "afternoonAllowed", "whitelistOnly", "containsCustomDates", notes)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           RETURNING *;`,
         [
           input.label,
           input.location,
+          input.patientType || null,
           encodedScheduleFlags,
           input.morningAllowed,
           input.afternoonAllowed,
@@ -599,6 +629,11 @@ const Mutation = {
     if (input.location !== undefined && input.location !== null) {
       fields.push(`location = $${idx++}`);
       values.push(input.location);
+    }
+
+    if (input.patientType !== undefined && input.patientType !== null) {
+      fields.push(`"patientType" = $${idx++}`);
+      values.push(input.patientType);
     }
 
     if (input.schedulePerWeek !== undefined && input.schedulePerWeek !== null) {
