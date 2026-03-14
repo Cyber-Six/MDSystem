@@ -66,6 +66,7 @@ export const tokenService = createTokenService({
     },
   },
   getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
+  tokenNamespace: 'patient',
 }) as any; // Type assertion for JS module
 
 // 3. Create banner service instance

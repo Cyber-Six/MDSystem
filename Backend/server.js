@@ -23,6 +23,7 @@ const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
+const { initSocket, getIO } = require('./config/sockets');
 const { initPatientMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
@@ -107,9 +108,14 @@ const server = app.listen(PORT, HOST, () => {
   logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
 });
 
+// Initialize Socket.IO
+initSocket(server);
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully...');
+  const io = getIO();
+  if (io) io.close();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
@@ -118,6 +124,8 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully...');
+  const io = getIO();
+  if (io) io.close();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
