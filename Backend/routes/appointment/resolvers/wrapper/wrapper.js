@@ -27,7 +27,7 @@ const Query = {
       SELECT ss.*
       FROM "slotScheduler" ss
       WHERE ss."isActive" = true
-        AND ( $6 IS NULL OR ss.id = $6 ) -- Optional schedulerId filter for submitAppointment resolver
+        AND ss.id = COALESCE($6, ss.id) -- Optional schedulerId filter for submitAppointment resolver
         AND (
               ss."patientType" IS NULL
               OR ss."patientType" = $5
