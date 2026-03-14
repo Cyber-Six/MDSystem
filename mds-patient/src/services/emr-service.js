@@ -1660,6 +1660,103 @@ export const getMyPersonalEmail = async () => {
   }
 };
 
+// Module-level cache so multiple components can call getPatientProfile
+// without triggering duplicate network requests in the same session.
+let _patientProfileCache = null;
+
+const _extractEmergencyContactNumber = (contact) => {
+  if (!contact) return null;
+  if (typeof contact === 'string') return contact;
+  if (typeof contact?.contactNumber === 'string') return contact.contactNumber;
+  return null;
+};
+
+export const getPatientProfile = async () => {
+  if (_patientProfileCache) return _patientProfileCache;
+
+  const profileData = await sendGraphQLRequest(
+    `query GetPatientProfileData {
+      personalLog: getPersonalRecordLog {
+        id
+        first_name middle_name last_name suffix
+        contactNumber
+      }
+      personalRecord: getPersonalRecord {
+        id
+      }
+      personalLogStatus: getPersonalRecordLogStatus
+      loginEmail: getLoginEmail
+      branchId: getBranchIdentifier {
+        identifier
+      }
+    }`,
+    {},
+    { endpoint: '/profile/patient' }
+  ).catch((error) => {
+    console.warn('[EMR Service] Could not fetch patient profile data:', error.message);
+    return {};
+  });
+
+  const log = profileData?.personalLog || {};
+  const activeStatuses = new Set(['InProgress', 'Pending', 'Revision', 'Approved']);
+  const hasActiveProfile = activeStatuses.has(profileData?.personalLogStatus);
+
+  let emergencyData = null;
+
+  if (hasActiveProfile) {
+    emergencyData = await sendGraphQLRequest(
+      `query GetEmergencyContact {
+        emergencyContact: getEmergencyContact {
+          firstContact { contactNumber }
+          secondContact { contactNumber }
+        }
+      }`,
+      {}
+    ).catch((error) => {
+      console.warn('[EMR Service] Active emergency contact fetch failed:', error.message);
+      return null;
+    });
+  }
+
+  // Fallback path for users without an active profile: request latest available
+  // emergency contact by user ID when available.
+  if (!emergencyData) {
+    const userId = profileData?.personalRecord?.id || profileData?.personalLog?.id || null;
+
+    if (userId) {
+      emergencyData = await sendGraphQLRequest(
+        `query GetLatestEmergencyContact($userId: ID!, $offset: Int, $limit: Int) {
+          emergencyContacts: getUserEmergencyContact(userId: $userId, offset: $offset, limit: $limit) {
+            firstContact { contactNumber }
+            secondContact { contactNumber }
+          }
+        }`,
+        { userId, offset: 0, limit: 1 }
+      ).catch((error) => {
+        console.warn('[EMR Service] Fallback emergency contact fetch failed:', error.message);
+        return null;
+      });
+    }
+  }
+
+  const latestEmergency = emergencyData?.emergencyContact
+    || (Array.isArray(emergencyData?.emergencyContacts) ? emergencyData.emergencyContacts[0] : null)
+    || null;
+  const nameParts = [log.first_name, log.middle_name, log.last_name, log.suffix].filter(Boolean);
+
+  _patientProfileCache = {
+    name: nameParts.length > 0 ? nameParts.join(' ') : null,
+    firstName: log.first_name || null,
+    email: profileData?.loginEmail || null,
+    contactNumber: log.contactNumber || null,
+    firstEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.firstContact),
+    secondEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.secondContact),
+    identifier: profileData?.branchId?.identifier || null,
+  };
+
+  return _patientProfileCache;
+};
+
 export const checkInitialRecordStatus = async () => {
   console.log('[EMR Service] Checking initial record status...');
 

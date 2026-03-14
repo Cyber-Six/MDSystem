@@ -232,6 +232,7 @@ async function setExpiredUpdateTickets(id) {
       logger.info(`Expired ${result.rowCount} update tickets.`);
     } catch (err) {
       logger.error("Error expiring update tickets:", err);
+      throw err;
     }
   }
 
@@ -247,6 +248,7 @@ async function setExpiredPersonalTickets(id) {
       logger.info(`Expired ${result.rowCount} personal update tickets.`);
     } catch (err) {
       logger.error("Error expiring personal update tickets:", err);
+      throw err;
     }
   }
 
@@ -330,6 +332,7 @@ async function recordLoginAttempt(email, wasSuccessful) {
     await query(sql, [email, wasSuccessful]);
   } catch (err) {
     logger.error("Error recording login attempt:", err);
+    throw err;
   }
 }
 
@@ -343,6 +346,25 @@ async function updateUserIdentity(userId, identity) {
   `;
   const result = await query(sql, [identity, userId]);
   return result.rows[0] || null;
+}
+
+async function getUserPatientType(userId) { 
+  const sql = `
+    SELECT profile
+    FROM "Patients"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+    if (result.rows.length === 0) return null; // patient not found
+
+    return result.rows[0].profile; 
+  } catch (err) {
+    logger.error(`Error fetching patient type for userId=${userId}:`, err);
+    throw err;
+  }
 }
 
 module.exports = {
@@ -364,5 +386,6 @@ module.exports = {
     setExpiredUpdateTickets,
     setExpiredPersonalTickets,
     getUserBranch,
-    recordLoginAttempt
+    recordLoginAttempt,
+    getUserPatientType
 };

@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/layout/layout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
-import { checkInitialRecordStatus, getMyBranchIdentifier, fetchRevisionPrefill, getMyPersonalEmail } from '../services/emr-service.js';
+import { checkInitialRecordStatus, getMyBranchIdentifier, fetchRevisionPrefill, getMyPersonalEmail, getPatientProfile } from '../services/emr-service.js';
 import InitialRecordModal from '../modules/record-forms/initial-record/initial-record-modal.jsx';
 import InitialMedicalRecordForm from '../modules/record-forms/initial-record/medical/initial-medical-record-form.jsx';
 import InitialEmployeeRecordForm from '../modules/record-forms/initial-record/employee/initial-employee-record-form.jsx';
@@ -56,6 +56,7 @@ const Dashboard = () => {
   const [revisionData, setRevisionData] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [revisionNote, setRevisionNote] = useState(null);
+  const [firstName, setFirstName] = useState(null);
   // In this portal, both Employee and Medical emails should use the employee initial form.
   const isEmployee = userRole === 'Employee' || userRole === 'Medical';
 
@@ -73,6 +74,9 @@ const Dashboard = () => {
       try {
         const detectedRole = await resolveStoredRole();
         setUserRole(detectedRole);
+
+        // Fetch patient name for the dashboard greeting (non-blocking; result is cached)
+        getPatientProfile().then(p => { if (p?.firstName) setFirstName(p.firstName); }).catch(() => {});
 
         console.log('[Dashboard] Checking initial record status...');
         console.log('[Dashboard] User role detected:', detectedRole);
@@ -311,7 +315,7 @@ const Dashboard = () => {
         <ErrorBoundary>
           <Suspense fallback={<RouteLoader />}>
             <Routes>
-              <Route path="/" element={<DashboardHome />} />
+              <Route path="/" element={<DashboardHome firstName={firstName} />} />
               <Route path="/record-update" element={<RecordUpdateForm />} />
               <Route path="/appointments" element={<AppointmentPage />} />
               <Route path="/medicine-request" element={<MedicineRequestPage />} />

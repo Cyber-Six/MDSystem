@@ -25,6 +25,7 @@ const documentRoutes = require('./routes/documents/documents.js');
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
+const { initSocket, getIO } = require('./config/sockets');
 
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -112,9 +113,14 @@ const server = app.listen(PORT, HOST, () => {
   logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
 });
 
+// Initialize Socket.IO
+initSocket(server);
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down staff server gracefully...');
+  const io = getIO();
+  if (io) io.close();
   server.close(() => {
     logger.info('Staff server closed');
     process.exit(0);
@@ -123,6 +129,8 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down staff server gracefully...');
+  const io = getIO();
+  if (io) io.close();
   server.close(() => {
     logger.info('Staff server closed');
     process.exit(0);

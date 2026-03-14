@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-const DashboardHome = () => {
+const DashboardHome = ({ firstName }) => {
   const pendingRequests = [
     { id: 1, type: 'Appointment', title: 'Medical Consultation', date: 'Dec 25, 2025', status: 'Pending', color: 'blue' },
     { id: 2, type: 'Medicine Request', title: 'Biogesic Request', date: 'Dec 20, 2025', status: 'Approved', color: 'green' },
@@ -54,7 +54,7 @@ const DashboardHome = () => {
     <div className="space-y-6 py-6">
       {/* Welcome Section */}
       <div className="bg-primary-500 dark:bg-neutral-900 rounded-lg p-6 text-white">
-        <h1 className="text-3xl font-bold mb-2 text-white">Welcome back, Student!</h1>
+        <h1 className="text-3xl font-bold mb-2 text-white">Welcome back, {firstName || 'there'}!</h1>
         <p className="text-white/80 dark:text-neutral-300">Here's what's happening with your health records today.</p>
       </div>
 

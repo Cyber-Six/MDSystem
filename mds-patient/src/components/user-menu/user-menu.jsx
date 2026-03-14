@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { User, Settings, Moon, Sun, Monitor, HelpCircle, LogOut, ChevronRight, ChevronLeft, Lock, ShieldCheck, Activity, MessageSquare, Send } from 'lucide-react';
 import ProfileModal from '@core/components/profile/profile-modal';
+import { getPatientProfile } from '@core/services/emr-service';
 import ChangePasswordModal from '@core/components/settings/change-password-modal';
 import TwoFactorAuthModal from '@core/components/settings/two-factor-auth-modal';
 import LoginActivityModal from '@core/components/settings/login-activity-modal';
@@ -14,11 +15,17 @@ const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
   const [activeModal, setActiveModal] = useState(null);
   const menuRef = useRef(null);
 
-  // Mock user data
-  const userData = {
-    name: 'Student Name',
-    email: 'student@tip.edu.ph'
-  };
+  const [userData, setUserData] = useState({ name: '', email: '' });
+
+  useEffect(() => {
+    getPatientProfile()
+      .then((profile) => {
+        if (profile) {
+          setUserData({ name: profile.name || '', email: profile.email || '' });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {

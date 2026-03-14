@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
-import { searchByStatus } from '../staff-appointment-service';
+import { searchByStatus, getStatusCounts } from '../staff-appointment-service';
 
-/* ── constants ─────────────────────────────────────────────── */
+/* ── constants ─────────────────────────────────────── */
 
 const STATUS_STYLES = {
   Pending:             'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
@@ -27,24 +27,27 @@ const TABS = [
   { key: 'Rejected',           label: 'Rejected',    icon: 'M6 18L18 6M6 6l12 12' },
 ];
 
-/* ── component ─────────────────────────────────────────────── */
+/* ── component ─────────────────────────────────────── */
 const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [activeTab,   setActiveTab]   = useState('Pending');
   const [search,      setSearch]      = useState('');
   const [appointments, setAppointments] = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [tabCounts,    setTabCounts]    = useState({});
+  const [loadingCounts, setLoadingCounts] = useState(true);
 
   /* Expose removeAppointment so the parent can optimistically move an item
-     out of the current tab after a status-changing action */
+     out of the current tab after a status-changing action, and update counts */
   useImperativeHandle(ref, () => ({
     removeAppointment: (id, newStatus) => {
       setAppointments((prev) => prev.filter((a) => a.id !== id));
       setTabCounts((prev) => {
         const updated = { ...prev };
+        // Decrement old status count
         if (updated[activeTab] !== undefined) {
           updated[activeTab] = Math.max(0, (updated[activeTab] || 1) - 1);
         }
+        // Increment new status count
         if (newStatus && updated[newStatus] !== undefined) {
           updated[newStatus] = (updated[newStatus] || 0) + 1;
         }
@@ -53,14 +56,35 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     },
   }), [activeTab]);
 
+  /* Load status counts once on mount */
+  useEffect(() => {
+    const loadCounts = async () => {
+      try {
+        setLoadingCounts(true);
+        const counts = await getStatusCounts();
+        // Initialize with 0 for all tab statuses
+        const initialCounts = {};
+        for (const tab of TABS) {
+          initialCounts[tab.key] = counts[tab.key] || 0;
+        }
+        setTabCounts(initialCounts);
+      } catch (err) {
+        console.error('Failed to load appointment counts:', err);
+      } finally {
+        setLoadingCounts(false);
+      }
+    };
+    loadCounts();
+  }, []);
+
   /* Fetch appointments whenever the active tab changes */
   const fetchAppointments = useCallback(async (status) => {
     setLoading(true);
     try {
       const data = await searchByStatus(status, 0, 50);
       setAppointments(data || []);
-      setTabCounts((prev) => ({ ...prev, [status]: (data || []).length }));
-    } catch {
+    } catch (err) {
+      console.error('Failed to fetch appointments:', err);
       setAppointments([]);
     } finally {
       setLoading(false);
@@ -71,7 +95,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     fetchAppointments(activeTab);
   }, [activeTab, fetchAppointments]);
 
-  /* Client-side search filter on patientId / identifier / name */
+  /* Client-side search filter on patientIdentifier / name / email */
   const rows = useMemo(() => {
     if (!search.trim()) return appointments;
     const q = search.toLowerCase();
@@ -79,6 +103,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       String(a.patientIdentifier ?? '').includes(q) ||
       String(a.patientId ?? '').includes(q) ||
       (a.patientName ?? '').toLowerCase().includes(q) ||
+      (a.patientEmail ?? '').toLowerCase().includes(q) ||
       (a.id ?? '').toLowerCase().includes(q)
     );
   }, [appointments, search]);
@@ -106,14 +131,24 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tab.icon} />
             </svg>
             {tab.label}
-            {tabCounts[tab.key] !== undefined && (
-              <span className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${
+            {loadingCounts ? (
+              <span className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold animate-pulse ${
                 activeTab === tab.key
                   ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                   : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
               }`}>
-                {tabCounts[tab.key]}
+                —
               </span>
+            ) : (
+              tabCounts[tab.key] !== undefined && (
+                <span className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${
+                  activeTab === tab.key
+                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                    : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
+                }`}>
+                  {tabCounts[tab.key]}
+                </span>
+              )
             )}
           </button>
         ))}
@@ -128,7 +163,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           </svg>
           <input
             type="text"
-            placeholder="Search by patient ID..."
+            placeholder="Search by name, ID, or email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
@@ -150,10 +185,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       <div className="overflow-x-auto">
         {loading ? (
           <div className="px-4 py-12 text-center">
-            <svg className="animate-spin mx-auto w-6 h-6 text-primary-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
+            <div className="animate-spin mx-auto w-6 h-6 rounded-full border-2 border-current/20 border-t-current text-primary-500 mb-2" />
             <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading appointments...</p>
           </div>
         ) : (

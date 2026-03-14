@@ -35,7 +35,7 @@ const Query = {
 
     const ticket = result.rows[0];
 
-    if (ticket && ticket.status.toLowerCase() === "in-progress") {
+    if (ticket && ticket.status === "InProgress") {
       const cutoff = Date.now() - UPDATE_TICKET_EXPIRY_SEC * 1000;
       const createdAt = new Date(ticket.created_at).getTime();
 
