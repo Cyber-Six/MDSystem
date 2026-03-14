@@ -10,7 +10,7 @@ const STATUS_STYLES = {
   Cancelled: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400',
 };
 
-function StatusBadge({ status }) {
+function StatusBadge({ status }) {  
   if (!status) return null;
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${STATUS_STYLES[status] || STATUS_STYLES.Expired}`}>
