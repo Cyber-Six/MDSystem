@@ -5,7 +5,7 @@ import ErrorBoundary from '../components/error-boundary.jsx';
 
 // Lazy-loaded route modules for code splitting
 const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx'));
-const SearchPatient = lazy(() => import('./SearchPatient.jsx'));
+const SearchPatient = lazy(() => import('../modules/staff/search-patient/search-patient.jsx'));
 const PatientRecord = lazy(() => import('./PatientRecord.jsx'));
 const PendingRequests = lazy(() => import('./PendingRequests.jsx'));
 const StaffAppointment = lazy(() => import('../modules/appointment/staff-appointment.jsx'));
