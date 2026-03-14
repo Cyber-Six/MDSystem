@@ -85,6 +85,11 @@ export default defineConfig(({ mode }) => {
             }
           },
         },
+        '/consultation': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
         '/profile': {
           target: BACKEND_URL,
           changeOrigin: true,

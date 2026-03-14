@@ -36,6 +36,7 @@ const GQL_BASIC_RECORD_FALLBACK = `
 const PatientPersonalInfoTab = lazy(() => import('./components/patient-personal-info-tab'));
 const PatientMedicalRecordTab = lazy(() => import('./components/patient-medical-record-tab'));
 const PatientDentalRecordTab = lazy(() => import('./components/patient-dental-record-tab'));
+const PatientConsultationTab = lazy(() => import('./components/patient-consultation-tab'));
 const PatientConsultationHistoryTab = lazy(() => import('./components/patient-consultation-history-tab'));
 const PatientAppointmentsTab = lazy(() => import('./components/patient-appointments-tab'));
 const PatientMedicineRequestsTab = lazy(() => import('./components/patient-medicine-requests-tab'));
@@ -200,6 +201,7 @@ export default function PatientRecordView({ patientId, embedded = false, onBack 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
+  const [consultations, setConsultations] = useState([]);
 
   const isMockPatient = String(patientId || '').startsWith('mock-');
   const mockPatient = isMockPatient ? MOCK_PATIENT_RECORDS[String(patientId)] : null;
@@ -278,6 +280,33 @@ export default function PatientRecordView({ patientId, embedded = false, onBack 
 
   const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient), [patientId, recordData, mockPatient]);
 
+  useEffect(() => {
+    setConsultations(patient?.history?.consultations || []);
+  }, [patientId, patient]);
+
+  const handleSaveConsultation = (entry) => {
+    const now = new Date();
+    const newEntry = {
+      id: `CONS-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`,
+      type: entry?.type || 'Medical',
+      date: now.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+      time: now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+      diagnosis: entry?.diagnosis || 'General consultation',
+      diagnoses: Array.isArray(entry?.diagnoses) ? entry.diagnoses : [],
+      doctor: entry?.doctor || 'Clinic Staff',
+      vitalSigns: {
+        bp: entry?.vitalSigns?.bp || '',
+        temp: entry?.vitalSigns?.temp || '',
+        heartRate: entry?.vitalSigns?.heartRate || '',
+      },
+      treatment: entry?.treatment || '',
+      notes: entry?.notes || '',
+    };
+
+    setConsultations((prev) => [newEntry, ...prev]);
+    setActiveTab('history');
+  };
+
   if (isLoading) return <LoadingBlock label="Loading patient record..." />;
 
   if (!isMockPatient && (loadError || !recordData?.getPatientBasicInfo)) {
@@ -304,6 +333,7 @@ export default function PatientRecordView({ patientId, embedded = false, onBack 
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Record' },
     { id: 'dental', label: 'Dental Record' },
+    { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
     { id: 'appointments', label: 'Appointments' },
@@ -326,8 +356,16 @@ export default function PatientRecordView({ patientId, embedded = false, onBack 
         return <PatientMedicalRecordTab patient={patient} />;
       case 'dental':
         return <PatientDentalRecordTab patient={patient} />;
+      case 'consultation':
+        return (
+          <PatientConsultationTab
+            patient={patient}
+            consultations={consultations}
+            onSaveConsultation={handleSaveConsultation}
+          />
+        );
       case 'history':
-        return <PatientConsultationHistoryTab patient={patient} />;
+        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} />;
       case 'appointments':
         return <PatientAppointmentsTab patient={patient} />;
       case 'medicines':
