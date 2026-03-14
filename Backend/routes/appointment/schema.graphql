@@ -139,6 +139,7 @@ type patientSlot {
   patientId: ID!
   patientIdentifier: Int
   patientName: String
+  patientEmail: String
   slotEntityId: ID!
   status: SCHEDULING_STATUS!
   session: SCHEDULE_SESSION!
@@ -148,6 +149,11 @@ type patientSlot {
   arrived_at: Date
   rejection_acknowledged: Boolean
   created_at: Date!
+}
+
+type StatusCount {
+  status: SCHEDULING_STATUS!
+  count: Int!
 }
 
 input patientSlotInput { # for medical only
@@ -175,6 +181,7 @@ type Query {
   listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
 
   searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]
+  getAppointmentStatusCounts: [StatusCount!]
 }
 
 # Mutations
