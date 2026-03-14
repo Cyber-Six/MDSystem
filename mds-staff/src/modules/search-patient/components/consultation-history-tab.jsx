@@ -14,8 +14,24 @@ function TypeBadge({ type }) {
   );
 }
 
-export default function PatientConsultationHistoryTab({ patient }) {
-  const consultations = patient.history.consultations || [];
+function getPrimaryDiagnosis(consult) {
+  if (!Array.isArray(consult?.diagnoses) || consult.diagnoses.length === 0) {
+    return { text: consult?.diagnosis || 'No diagnosis', codes: [] };
+  }
+
+  const primary = consult.diagnoses.find((d) => d?.isPrimary || String(d?.diagnosisType || '').toLowerCase() === 'primary') || consult.diagnoses[0];
+  const title = primary?.title || primary?.diagnosisName || consult?.diagnosis || 'No diagnosis';
+  const codes = consult.diagnoses.map((d) => d?.code || d?.icdCode).filter(Boolean);
+  const codePrefix = primary?.code || primary?.icdCode;
+
+  return {
+    text: codePrefix ? `${codePrefix} - ${title}` : title,
+    codes,
+  };
+}
+
+export default function PatientConsultationHistoryTab({ patient, consultations: consultationEntries }) {
+  const consultations = consultationEntries || patient?.history?.consultations || [];
   const [filter, setFilter] = useState('All');
 
   const filtered = filter === 'All' ? consultations : consultations.filter(c => c.type === filter);
@@ -48,6 +64,10 @@ export default function PatientConsultationHistoryTab({ patient }) {
         <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60 -mx-3 -mb-3">
           {filtered.map((consult, idx) => (
             <article key={idx} className="px-3 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors">
+              {(() => {
+                const diagnosis = getPrimaryDiagnosis(consult);
+                return (
+                  <>
 
               {/* Row 1: type badge + id + date/time */}
               <div className="flex items-center justify-between gap-2 mb-2">
@@ -61,8 +81,17 @@ export default function PatientConsultationHistoryTab({ patient }) {
               </div>
 
               {/* Row 2: diagnosis + doctor */}
-              <p className="text-sm font-semibold text-secondary-800 dark:text-white leading-snug">{consult.diagnosis}</p>
+              <p className="text-sm font-semibold text-secondary-800 dark:text-white leading-snug">{diagnosis.text}</p>
               <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">{consult.doctor}</p>
+              {diagnosis.codes.length > 1 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {diagnosis.codes.slice(0, 4).map((code, codeIdx) => (
+                    <span key={`${code}-${codeIdx}`} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">
+                      {code}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Row 3: vitals inline strip (if present) */}
               {consult.vitalSigns && (
@@ -100,6 +129,10 @@ export default function PatientConsultationHistoryTab({ patient }) {
                   )}
                 </div>
               )}
+
+                  </>
+                );
+              })()}
 
             </article>
           ))}
