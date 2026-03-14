@@ -10,6 +10,7 @@ import AddSupplyModal from './components/add-supply/add-supply-modal';
 import SplitSupplyModal from './components/split-supply/split-supply-modal';
 import AdjustStockModal from './components/adjust-stock/adjust-stock-modal';
 import DispenseModal from './components/dispense-queue/dispense-modal';
+import DispenseMedicineModal from './components/dispense-medicine/dispense-medicine-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, setMedicineRequestStatus } from './medicine-request-service';
@@ -47,6 +48,7 @@ const MedicalInventory = () => {
   const [showSplitSupply, setShowSplitSupply] = useState(false);
   const [showAdjustStock, setShowAdjustStock] = useState(false);
   const [showDispense, setShowDispense] = useState(false);
+  const [showDispenseMedicine, setShowDispenseMedicine] = useState(false);
   const [showEditItem, setShowEditItem] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -57,6 +59,7 @@ const MedicalInventory = () => {
   const [splitContext, setSplitContext] = useState(null); // { batch }
   const [adjustContext, setAdjustContext] = useState(null); // { batch }
   const [dispenseContext, setDispenseContext] = useState(null); // { request }
+  const [dispenseMedicineContext, setDispenseMedicineContext] = useState(null); // { patientId, patientName }
 
   // Feedback
   const [error, setError] = useState('');
@@ -217,6 +220,7 @@ const MedicalInventory = () => {
         batchNumber: batch.batchNumber,
         dosageUnit: batch.dosageUnit,
         dosageValue: batch.dosageValue,
+        quantity: batch.quantity,
         expiryDate: batch.expiryDate,
         location: batch.location,
         supplierName: batch.supplierName || null,
@@ -297,11 +301,11 @@ const MedicalInventory = () => {
     setSuccessMsg(`Split ${quantity} units to ${toClinic}.`);
   };
 
-  // Auto-load all pending medicine requests on mount
+  // Auto-load all medicine requests on mount (all statuses)
   const loadAllMedicineRequests = useCallback(async () => {
     setIsLoadingRequests(true);
     try {
-      const rawRequests = await fetchAllMedicineRequests('Pending');
+      const rawRequests = await fetchAllMedicineRequests(null);
       const enriched = rawRequests.map((req) => ({
         ...req,
         patientName: `Patient #${req.patientId}`,
@@ -426,11 +430,38 @@ const MedicalInventory = () => {
     setSuccessMsg(`Dispensed ${totalQty} units to ${req?.patientName || 'patient'}.`);
   };
 
+  const handleApprove = async (request) => {
+    const requestId = request?.id;
+    if (!requestId) return;
+    try {
+      await setMedicineRequestStatus(requestId, 'Approved');
+      setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Approved' } : r));
+      setSuccessMsg(`Medicine request #${requestId} approved!`);
+    } catch (err) {
+      setError(err.message || 'Failed to approve medicine request.');
+      console.error('Error approving medicine request:', err);
+    }
+  };
+
+  const handleReject = async (request) => {
+    const requestId = request?.id;
+    if (!requestId) return;
+    try {
+      await setMedicineRequestStatus(requestId, 'Rejected');
+      setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Rejected' } : r));
+      setSuccessMsg(`Medicine request #${requestId} rejected!`);
+    } catch (err) {
+      setError(err.message || 'Failed to reject medicine request.');
+      console.error('Error rejecting medicine request:', err);
+    }
+  };
+
   // Open modals with context
   const openAddSupply = (itemId) => { setSupplyContext({ itemId }); setShowAddSupply(true); };
   const openSplit = (batch) => { setSplitContext({ batch }); setShowSplitSupply(true); };
   const openAdjust = (batch) => { setAdjustContext({ batch }); setShowAdjustStock(true); };
   const openDispense = (request) => { setDispenseContext({ request }); setShowDispense(true); };
+  const openDispenseMedicine = (patientId, patientName) => { setDispenseMedicineContext({ patientId, patientName }); setShowDispenseMedicine(true); };
 
   /* ── Section tabs ───────────────────────────────────────────────────── */
 
@@ -537,33 +568,65 @@ const MedicalInventory = () => {
 
         {activeSection === 'dispense' && (
         <div className="space-y-3">
-          {/* Patient Request Loader */}
-          <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-4">
-            <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-2">Load Patient Medicine Requests</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={patientLookupId}
-                onChange={(e) => setPatientLookupId(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && loadPatientMedicineRequests(patientLookupId)}
-                placeholder="Enter Patient ID…"
-                className="flex-1 px-3 py-1.5 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              />
-              <button
-                onClick={() => loadPatientMedicineRequests(patientLookupId)}
-                disabled={!patientLookupId.trim() || isFetchingPatientReqs}
-                className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md disabled:opacity-50 transition-colors"
-              >
-                {isFetchingPatientReqs ? 'Loading…' : 'Load'}
-              </button>
+          {/* Medicine Dispensing Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Patient Request Loader */}
+            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-4">
+              <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-2">Patient Requests</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={patientLookupId}
+                  onChange={(e) => setPatientLookupId(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && loadPatientMedicineRequests(patientLookupId)}
+                  placeholder="Enter Patient ID…"
+                  className="flex-1 px-3 py-1.5 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+                <button
+                  onClick={() => loadPatientMedicineRequests(patientLookupId)}
+                  disabled={!patientLookupId.trim() || isFetchingPatientReqs}
+                  className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md disabled:opacity-50 transition-colors"
+                >
+                  {isFetchingPatientReqs ? 'Loading…' : 'Load'}
+                </button>
+              </div>
+              {patientReqsMsg && (
+                <p className={`text-[11px] mt-1.5 ${patientReqsMsg.startsWith('No') || patientReqsMsg.includes('Failed') ? 'text-error-600 dark:text-error-400' : 'text-success-600 dark:text-success-400'}`}>
+                  {patientReqsMsg}
+                </p>
+              )}
             </div>
-            {patientReqsMsg && (
-              <p className={`text-[11px] mt-1.5 ${patientReqsMsg.startsWith('No') || patientReqsMsg.includes('Failed') ? 'text-error-600 dark:text-error-400' : 'text-success-600 dark:text-success-400'}`}>
-                {patientReqsMsg}
-              </p>
-            )}
+
+            {/* Direct Prescription Issuing */}
+            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-4">
+              <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-2">Issue Medicine Directly</p>
+              <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mb-2">Dispense available medicines to any patient</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Patient ID…"
+                  id="directPatientId"
+                  className="flex-1 px-3 py-1.5 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+                <button
+                  onClick={() => {
+                    const input = document.getElementById('directPatientId');
+                    const patientId = input?.value.trim();
+                    if (patientId) {
+                      openDispenseMedicine(Number(patientId), `Patient #${patientId}`);
+                      input.value = '';
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium bg-success-500 hover:bg-success-600 text-white rounded-md transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Dispense
+                </button>
+              </div>
+            </div>
           </div>
-          <DispenseQueue requests={requests} items={items} onDispense={openDispense} />
+
+          <DispenseQueue requests={requests} items={items} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} />
         </div>
       )}
 
@@ -628,6 +691,18 @@ const MedicalInventory = () => {
           items={items}
           onClose={() => setShowDispense(false)}
           onConfirm={handleDispense}
+        />
+      )}
+
+      {showDispenseMedicine && dispenseMedicineContext && (
+        <DispenseMedicineModal
+          patientId={dispenseMedicineContext.patientId}
+          patientName={dispenseMedicineContext.patientName}
+          onClose={() => setShowDispenseMedicine(false)}
+          onSuccess={(result) => {
+            setSuccessMsg(`Dispensed medicine to ${dispenseMedicineContext.patientName}. Transaction ID: ${result.id}`);
+            setShowDispenseMedicine(false);
+          }}
         />
       )}
     </div>
