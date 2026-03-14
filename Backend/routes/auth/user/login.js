@@ -144,6 +144,18 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
   const portal = detectPortalFromSubdomain(req);
   if (portal === "medical") {
+    const normalizedEmail = String(session.email || '').toLowerCase();
+    if (normalizedEmail.endsWith('.mds@tip.edu.ph')) {
+      const credentialsStatus = await query.getUserCredentialStatus(session.user_id);
+      const isActiveCredential = String(credentialsStatus || '').toLowerCase() === 'active';
+      if (!isActiveCredential) {
+        return res.status(403).json({
+          error: "STAFF_ACCOUNT_NOT_VERIFIED",
+          message: "Please ask your admin to verify your account first.",
+        });
+      }
+    }
+
     const identity = await query.getUserIdentity(session.user_id);
     if (identity !== "Medical") {
       const hasStaffRole = await isMedicalPermitted(session.user_id, medicalPermissions.is_staff);
