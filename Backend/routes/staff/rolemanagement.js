@@ -117,7 +117,7 @@ async function applyStaffAccount(userId, roledata, newIdentity, assignedById) {
       await client.query(
         `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
          SELECT $1, r.id, v.branch, $2
-         FROM (VALUES ${values.join(',')}) AS v(label, branch)
+         FROM (VALUES ${values.join(',')}) AS v(label text, branch "UserDesignation")
          JOIN "rolesTable" r ON r.label = v.label
          ON CONFLICT ("personnelId", "rolesId") DO UPDATE
            SET branch = EXCLUDED.branch, "assignedBy" = EXCLUDED."assignedBy"`,
@@ -130,9 +130,10 @@ async function applyStaffAccount(userId, roledata, newIdentity, assignedById) {
       `UPDATE "UserCredentials" SET identity = $1 WHERE id = $2`,
       [newIdentity, userId]
     );
-
+    logger.info(`Updated identity for userId=${userId} to ${newIdentity}`);
     await client.query('COMMIT');
   } catch (err) {
+    logger.error('Error applying staff account changes:', err);
     await client.query('ROLLBACK');
     throw err;
   } finally {
@@ -181,19 +182,33 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
       // gracefully skip on error
     }
 
-    const staffList = await Promise.all(result.rows.map(async (row) => {
-      // Load role labels for this user
-      const rolesResult = await db.query(
-        `SELECT rt.label FROM "rolesMap" rm
-         JOIN "rolesTable" rt ON rm."rolesId" = rt.id
-         WHERE rm."personnelId" = $1`,
-        [row.id]
-      );
-      const labelList = rolesResult.rows.map(r => r.label);
+    // For each user, fetch their roles and determine permissions and status
+    // 1. Get all staff rows
+    const staffRows = result.rows;
+
+    // 2. Get all roles for all staff in one query
+    const staffIds = staffRows.map(r => r.id);
+    const rolesResult = await db.query(
+      `SELECT rm."personnelId", rt.label
+       FROM "rolesMap" rm
+       JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+       WHERE rm."personnelId" = ANY($1)`,
+      [staffIds]
+    );
+
+    // 3. Group roles by personnelId
+    const rolesByStaff = {};
+    for (const { personnelId, label } of rolesResult.rows) {
+      if (!rolesByStaff[personnelId]) rolesByStaff[personnelId] = [];
+      rolesByStaff[personnelId].push(label);
+    }
+
+    // 4. Build staff list without N+1 queries
+    const staffList = staffRows.map((row) => {
+      const labelList = rolesByStaff[row.id] || [];
       const hasStaff  = labelList.includes(medPermissions.is_staff);
       const uiPerms   = labelsToUiPermissions(labelList);
 
-      // Determine staff status
       let staffStatus;
       if (row.identity === 'Medical') {
         staffStatus = 'Active';
@@ -210,6 +225,7 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
       ].filter(Boolean);
 
       const lastLogin = lastLoginMap[row.id] || null;
+
       return {
         id: String(row.id),
         email: row.email,
@@ -226,7 +242,7 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
             })
           : null,
       };
-    }));
+    });
 
     return res.json({ ok: true, staff: staffList });
   } catch (err) {
@@ -261,7 +277,7 @@ router.put('/accounts/:userId', jwtProtect('medical'), async (req, res) => {
     if (targetResult.rows.length === 0) {
       return res.status(404).json({ error: 'NOT_FOUND', message: 'User not found.' });
     }
-    if (!targetResult.rows[0].email.toLowerCase().endsWith('.mds@tip.edu.ph')) {
+    if (targetResult.rows[0].identity !== 'Medical') {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Can only manage .mds@tip.edu.ph staff accounts.' });
     }
 

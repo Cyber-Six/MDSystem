@@ -64,6 +64,31 @@ async function delKey(key) {
   await client.del(key);
 }
 
+// --- Set key helpers (for socket tracking) ---
+
+async function sAddKey(key, member, expireSeconds) {
+  if (!client) throw new Error("Redis client not initialized");
+  await client.sAdd(key, member);
+  if (expireSeconds) {
+    await client.expire(key, expireSeconds);
+  }
+}
+
+async function sMembersKey(key) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.sMembers(key);
+}
+
+async function sRemKey(key, member) {
+  if (!client) throw new Error("Redis client not initialized");
+  await client.sRem(key, member);
+}
+
+async function sCardKey(key) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.sCard(key);
+}
+
 // ------------------------------------------------
 
 async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
@@ -653,6 +678,10 @@ module.exports = {
   setKey,
   getKey,
   delKey,
+  sAddKey,
+  sMembersKey,
+  sRemKey,
+  sCardKey,
   setOTP,
   verifyOTP,
   deleteOTP,
