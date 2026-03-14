@@ -594,6 +594,55 @@ async function decrementMediaStagingCount(userId) {
   return newCount;
 }
 
+const LoginFailureMatrix = {
+  patient: {
+    prefix: "login:patient",
+    failTtl: Number(process.env.PATIENT_LOGIN_FAIL_TTL) || 300,
+    lockdownSeconds: Number(process.env.PATIENT_LOGIN_FAIL_LOCKDOWN_SECONDS) || 300,
+    threshold: Number(process.env.PATIENT_FAILED_LOGIN_THRESHOLD) || 5,
+  },
+  medical: {
+    prefix: "login:staff",
+    failTtl: Number(process.env.STAFF_LOGIN_FAIL_TTL) || 300,
+    lockdownSeconds: Number(process.env.STAFF_LOGIN_FAIL_LOCKDOWN_SECONDS) || 300,
+    threshold: Number(process.env.STAFF_FAILED_LOGIN_THRESHOLD) || 3,
+  },
+};
+
+async function incrementLoginFailure(email, portal) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!LoginFailureMatrix[portal]) throw new Error(`Unknown portal for login failure: ${portal}`);
+  
+  const prefix = LoginFailureMatrix[portal].prefix;
+  const failKey = `${prefix}:fail:${email}`;
+  const count = await client.incr(failKey);
+
+  if (count === 1) { // first failure → set TTL
+    await client.expire(failKey, LoginFailureMatrix[portal].failTtl);
+  }
+
+  const threshold = LoginFailureMatrix[portal].threshold;
+  if (count >= threshold) {
+    const lockdownSeconds = LoginFailureMatrix[portal].lockdownSeconds;
+    await client.set(`${prefix}:lock:${email}`, "1", { EX: lockdownSeconds });
+    logger.warn("Login failure threshold exceeded", { email, portal, count, threshold });
+  }
+
+  return count;
+}
+
+async function isLoginLocked(email, portal) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!LoginFailureMatrix[portal]) throw new Error(`Unknown portal for login lock: ${portal}`);
+  const prefix = LoginFailureMatrix[portal].prefix;
+  const lockKey = `${prefix}:lock:${email}`;
+
+  const exists = await client.exists(lockKey);
+  if (exists !== 1) return 0; // not locked
+
+  const ttl = await client.ttl(lockKey);
+  return ttl > 0 ? ttl : 0; // return remaining lockout time in seconds
+}
 
 // ------------------------------------------------
 
@@ -614,7 +663,9 @@ module.exports = {
   deleteEmailAttempts,
   getOTPFailureCount,
   getOTPLockoutTTL,
-  
+  incrementLoginFailure,
+  isLoginLocked,
+
   createVerificationSession,
   getVerificationSession,
   updateConsentInSession,
