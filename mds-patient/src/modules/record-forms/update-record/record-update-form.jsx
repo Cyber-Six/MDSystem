@@ -6,8 +6,9 @@ import DentalHistoryStep from './dental-history-step';
 import ReviewStep from './review-step';
 import RecordChoicePage from './record-choice-page';
 import { updatePersonalInfo } from './personal-info-service';
-import { submitUpdateRecord, getUpdateTicketStatus } from './update-record-service';
+import { submitUpdateRecord, getUpdateTicketStatus, getUpdateRevisionStatus, fetchUpdateRevisionPrefill } from './update-record-service';
 import { axiosRequest } from '../../../packages-core-adapter';
+import ValidationWarningModal from '../../../components/modals/validation-warning-modal';
 
 const RecordUpdateForm = () => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -15,6 +16,54 @@ const RecordUpdateForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordType, setRecordType] = useState(null); // 'medical', 'dental', or 'both'
   const [pendingWarning, setPendingWarning] = useState(null); // { scope } of existing pending ticket
+
+  // Revision tracking
+  const [revisionStatus, setRevisionStatus] = useState(null); // { id, status, notes }
+  const [showRevisionBanner, setShowRevisionBanner] = useState(false);
+  const [revisionLoading, setRevisionLoading] = useState(true);
+
+  // Success modal tracking
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  // Submission error tracking
+  const [dbErrors, setDbErrors] = useState([]);
+  const [showDbErrorModal, setShowDbErrorModal] = useState(false);
+
+  // Check for pending revision request on mount
+  useEffect(() => {
+    const checkForRevision = async () => {
+      try {
+        console.log('[RecordUpdateForm] Checking for pending revision...');
+        const ticket = await getUpdateRevisionStatus();
+        
+        if (ticket && ticket.status === 'Revision') {
+          console.log('[RecordUpdateForm] ⚠️ REVISION DETECTED:', ticket.notes);
+          setRevisionStatus(ticket);
+          setShowRevisionBanner(true);
+          
+          // Pre-fetch previous data for revision
+          try {
+            const prefill = await fetchUpdateRevisionPrefill();
+            if (prefill && Object.keys(prefill).length > 0) {
+              console.log('[RecordUpdateForm] Pre-fill data fetched for revision');
+              // Form data will be pre-filled when patient starts editing
+            }
+          } catch (err) {
+            console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
+          }
+        } else {
+          console.log('[RecordUpdateForm] No revision pending');
+        }
+      } catch (error) {
+        console.error('[RecordUpdateForm] Error checking revision status:', error.message);
+      } finally {
+        setRevisionLoading(false);
+      }
+    };
+
+    checkForRevision();
+  }, []);
 
   // Fetch patient sex on mount so OB-GYN section shows correctly for female patients
   useEffect(() => {
@@ -185,6 +234,59 @@ const RecordUpdateForm = () => {
     await doSubmit();
   };
 
+  // Parse submission errors into user-friendly messages
+  const parseSubmissionError = (error) => {
+    const errors = [];
+
+    // Collect all GraphQL error messages (may be multiple)
+    const gqlMessages = (
+      error.graphQLErrors ??
+      error.response?.data?.errors ??
+      []
+    ).map(e => e?.message).filter(Boolean);
+
+    if (gqlMessages.length > 0) {
+      gqlMessages.forEach(msg => {
+        const lower = msg.toLowerCase();
+
+        // Handle ticket-related errors
+        if (lower.includes('already in progress') || lower.includes('cannot cancel update ticket')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'A previous submission is still being processed. Please wait a moment and try again.' });
+        } else if (lower.includes('invalid input value for enum') || lower.includes('invalid value')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'One or more fields contain invalid values. Please review your selections and try again.' });
+        } else if (lower.includes('null value') || lower.includes('not-null') || lower.includes('violates not-null')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'A required field is missing. Please review all sections and ensure nothing is left blank.' });
+        } else if (lower.includes('unique constraint') || lower.includes('duplicate')) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'This record has already been submitted.' });
+        } else if (lower.includes('invalid input syntax') || /\bdate\b/.test(lower) || /\btimestamp\b/.test(lower)) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'A date field contains an invalid value. Please check and re-enter date fields.' });
+        } else if (lower.includes('unauthorized') || error.status === 401 || error.response?.status === 401) {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Your session has expired. Please log out and log back in, then try again.' });
+        } else if (lower === 'database error' || lower.startsWith('database error') || lower.includes('internal server error')) {
+          // Suppress generic messages
+        } else {
+          errors.push({ section: 'Submission Error', sectionIndex: null, message: msg });
+        }
+      });
+    } else if (error.response?.status === 401) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Your session has expired. Please log out and log back in, then try again.' });
+    } else if (error.response?.status === 403) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Access denied. You may not have permission to submit this form.' });
+    } else if (error.response?.status >= 500) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'The server encountered an unexpected error. Please try again in a moment.' });
+    } else if (error.message) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: error.message });
+    } else {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'An unexpected error occurred. Please check your inputs and try again.' });
+    }
+
+    if (errors.length === 0) {
+      errors.push({ section: 'Submission Error', sectionIndex: null, message: 'Your submission could not be completed. Please review your inputs and try again.' });
+    }
+
+    return errors;
+  };
+
   const doSubmit = async () => {
     setIsSubmitting(true);
     
@@ -198,28 +300,30 @@ const RecordUpdateForm = () => {
       const results = await submitUpdateRecord(formData, recordType);
       console.log('[RecordUpdateForm] ✅ Records submitted successfully:', results);
       
-      // Success!
-      alert(`✅ ${recordType === 'both' ? 'Medical and Dental' : recordType === 'medical' ? 'Medical' : 'Dental'} record updated successfully!\n\nYour update has been submitted for review.`);
-      
-      // Reset form and redirect to choice page (preserve sex for OB-GYN gating)
-      setFormData(prev => ({ sex: prev.sex }));
-      setCurrentStep(0);
-      setRecordType(null);
+      // Show success modal!
+      const recordTypeLabel = recordType === 'both' ? 'Medical and Dental' : recordType === 'medical' ? 'Medical' : 'Dental';
+      setSuccessMessage(recordTypeLabel);
+      setShowSuccessModal(true);
       
       console.log('[RecordUpdateForm] ==================== SUBMISSION COMPLETE ====================');
     } catch (error) {
       console.error('[RecordUpdateForm] ❌ Submission failed:', error);
-      
-      let errorMessage = 'Failed to update record. Please try again.';
-      
-      if (error.message) {
-        errorMessage = `Error: ${error.message}`;
-      }
-      
-      alert(`❌ ${errorMessage}\n\nPlease check your inputs and try again. If the problem persists, contact support.`);
+      const parsedErrors = parseSubmissionError(error);
+      setDbErrors(parsedErrors);
+      setShowDbErrorModal(true);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+    // Reset form and redirect to choice page (preserve sex for OB-GYN gating)
+    setFormData(prev => ({ sex: prev.sex }));
+    setCurrentStep(0);
+    setRecordType(null);
+    setRevisionStatus(null);
+    setShowRevisionBanner(false);
   };
 
   const renderStep = () => {
@@ -233,7 +337,15 @@ const RecordUpdateForm = () => {
       case 'Dental History':
         return <DentalHistoryStep formData={formData} onChange={setFormData} />;
       case 'Review & Submit':
-        return <ReviewStep formData={formData} onEdit={handleEdit} recordType={recordType} />;
+        return (
+          <ReviewStep 
+            formData={formData} 
+            onEdit={handleEdit} 
+            recordType={recordType}
+            isRevision={revisionStatus?.status === 'Revision'}
+            revisionNotes={revisionStatus?.notes || null}
+          />
+        );
       default:
         return null;
     }
@@ -253,7 +365,154 @@ const RecordUpdateForm = () => {
 
   return (
     <>
-      {/* Warning modal shown when a Pending ticket already exists */}
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl max-w-2xl w-full p-8">
+            {/* Icon */}
+            <div className="flex justify-center mb-6">
+              <div className="w-20 h-20 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center">
+                <svg className="w-10 h-10 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Title */}
+            <h2 className="text-3xl font-bold text-secondary-900 dark:text-white text-center mb-2">
+              Record Updated Successfully!
+            </h2>
+
+            {/* Message */}
+            <p className="text-lg text-secondary-600 dark:text-neutral-400 text-center mb-8">
+              Your {successMessage} record has been submitted for review.
+            </p>
+
+            {/* Info Box */}
+            <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 rounded-xl p-6 mb-8">
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-success-600 dark:text-success-400 mt-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm text-success-800 dark:text-success-300">
+                    Your update has been received and is now pending review
+                  </span>
+                </div>
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-success-600 dark:text-success-400 mt-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm text-success-800 dark:text-success-300">
+                    The medical staff will review your submission
+                  </span>
+                </div>
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-success-600 dark:text-success-400 mt-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm text-success-800 dark:text-success-300">
+                    You'll receive a notification if more changes are needed
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Button */}
+            <button
+              onClick={handleSuccessModalClose}
+              className="w-full px-6 py-3 bg-success-500 hover:bg-success-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              Back to Updates
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Submission Error Modal */}
+      <ValidationWarningModal
+        isOpen={showDbErrorModal}
+        onClose={() => setShowDbErrorModal(false)}
+        errors={dbErrors}
+        onGoToSection={(stepIndex) => { setCurrentStep(stepIndex); setShowDbErrorModal(false); }}
+        variant="error"
+        title="Submission Failed"
+        subtitle="The server rejected your submission. Please fix the issue below and try again."
+      />
+
+      {/* Revision Request Banner - Show if revision is pending */}
+      {showRevisionBanner && revisionStatus?.status === 'Revision' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6">
+            {/* Header */}
+            <div className="flex items-start gap-4 mb-4">
+              <div className="w-12 h-12 rounded-full bg-error-100 dark:bg-error-900/30 flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-error-600 dark:text-error-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 4v2M7.08 6.47A9.002 9.002 0 0012 2c4.97 0 9 4.03 9 9s-4.03 9-9 9S3 16.97 3 12c0-2.395.896-4.576 2.364-6.192M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-2xl font-bold text-secondary-900 dark:text-white mb-1">
+                  Revision Requested
+                </h2>
+                <p className="text-secondary-600 dark:text-neutral-400">
+                  The medical staff has requested you to revise your submitted record.
+                </p>
+              </div>
+            </div>
+
+            {/* Staff Notes Section */}
+            {revisionStatus?.notes && (
+              <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-xl p-4 mb-6">
+                <div className="text-sm font-semibold text-error-900 dark:text-error-200 mb-2">
+                  🔍 Staff Notes:
+                </div>
+                <p className="text-sm text-error-800 dark:text-error-300 whitespace-pre-wrap">
+                  {revisionStatus.notes}
+                </p>
+              </div>
+            )}
+
+            {/* Action Instructions */}
+            <div className="bg-primary-50 dark:bg-primary-500/10 rounded-xl p-4 mb-6 border border-primary-200 dark:border-primary-500/30">
+              <ol className="text-sm text-secondary-700 dark:text-neutral-300 space-y-2 list-decimal list-inside">
+                <li>Review the notes above carefully</li>
+                <li>Edit the required sections if needed</li>
+                <li>Submit your revised record for re-review</li>
+              </ol>
+            </div>
+
+            {/* Button */}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowRevisionBanner(false)}
+                className="px-5 py-2.5 rounded-lg font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowRevisionBanner(false);
+                  // Map scope to recordType: Medical→medical, Dental→dental, Both→both
+                  const scopeMap = {
+                    'Medical': 'medical',
+                    'Dental': 'dental',
+                    'Both': 'both'
+                  };
+                  const recordTypeForRevision = scopeMap[revisionStatus?.scope] || 'medical';
+                  setRecordType(recordTypeForRevision);
+                  setCurrentStep(0);
+                }}
+                className="px-5 py-2.5 rounded-lg font-semibold bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+              >
+                Start Revision
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Warning Modal (existing) */}
       {pendingWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-xl max-w-md w-full p-6">

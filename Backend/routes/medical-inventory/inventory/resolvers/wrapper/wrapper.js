@@ -161,7 +161,18 @@ const Mutation = {
         input.dosageUnit, input.dosageValue, input.expiryDate,
         input.location, receivedBy, input.notes || null
       ]);
-      return result.rows[0];
+      
+      const batch = result.rows[0];
+      const quantity = input.quantity || 1;
+      
+      // Bulk insert individual MedicineEntity records for each unit
+      if (quantity > 0) {
+        const placeholders = Array(quantity).fill('($1)').join(',');
+        const bulkSql = `INSERT INTO "MedicineEntity" ("batchId") VALUES ${placeholders}`;
+        await db.query(bulkSql, [batch.id]);
+      }
+      
+      return batch;
     } catch (err) {
       logger.error("Error in _addMedicalSupply:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();

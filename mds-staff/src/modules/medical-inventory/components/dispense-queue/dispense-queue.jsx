@@ -5,10 +5,10 @@ import { STATUS_BADGES } from '../../inventory-seed-data';
  * Dispense Queue — shows pending doctor / student medicine requests.
  * Key feature: "QTY PENDING" badge when quantity is null (student self-request).
  */
-const DispenseQueue = ({ requests, items, onDispense }) => {
+const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => {
   const [search, setSearch] = useState('');
   const [filterClinic, setFilterClinic] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('InProgress');
+  const [filterStatus, setFilterStatus] = useState('Pending');
 
   const itemMap = useMemo(() => {
     const m = {};
@@ -34,7 +34,7 @@ const DispenseQueue = ({ requests, items, onDispense }) => {
     });
   }, [requests, search, filterClinic, filterStatus, itemMap]);
 
-  const statusOptions = ['All', 'InProgress', 'Approved', 'Completed', 'Rejected'];
+  const statusOptions = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
 
   return (
     <div className="space-y-2">
@@ -67,19 +67,22 @@ const DispenseQueue = ({ requests, items, onDispense }) => {
               <tr className="bg-neutral-50 dark:bg-neutral-700/50">
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">ID</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Patient</th>
-                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item</th>
+                <th className="px-3 py-1.5 text[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Qty</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Purpose</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Type</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Date</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
+                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Transaction ID</th>
+                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Notes</th>
+                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Approved By</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center">
+                  <td colSpan={12} className="px-4 py-10 text-center">
                     <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                     <p className="text-sm text-secondary-400 dark:text-neutral-500">No requests match your filters</p>
                   </td>
@@ -112,7 +115,22 @@ const DispenseQueue = ({ requests, items, onDispense }) => {
                       <td className="px-3 py-1.5">
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>
                       </td>
+                      <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.transactionId ? `#${req.transactionId}` : '—'}</td>
+                      <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400 max-w-[120px] truncate" title={req.notes}>{req.notes || '—'}</td>
+                      <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.approved_by ? `Staff #${req.approved_by}` : '—'}</td>
                       <td className="px-3 py-1.5 text-right">
+                        {req.status === 'Pending' && (
+                          <div className="inline-flex items-center gap-1">
+                            <button onClick={() => onApprove?.(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              Approve
+                            </button>
+                            <button onClick={() => onReject?.(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              Reject
+                            </button>
+                          </div>
+                        )}
                         {(req.status === 'InProgress' || req.status === 'Approved') && (
                           <button onClick={() => onDispense(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>

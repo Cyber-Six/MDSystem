@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ReviewStep = ({ formData, onEdit, recordType }) => {
+const ReviewStep = ({ formData, onEdit, recordType, revisionNotes = null, isRevision = false }) => {
   const SectionHeader = ({ title, onEditClick }) => (
     <div className="flex items-center justify-between mb-4 pb-3 border-b-2 border-primary-500">
       <h4 className="text-lg font-heading font-semibold text-secondary-800 dark:text-white">{title}</h4>
@@ -109,6 +109,25 @@ const ReviewStep = ({ formData, onEdit, recordType }) => {
 
   return (
     <div className="space-y-6">
+      {/* Revision Notes Banner - Show if this is a revision resubmission */}
+      {isRevision && revisionNotes && (
+        <div className="bg-accent-50 dark:bg-accent-900/20 border-l-4 border-accent-500 rounded-xl p-4 flex gap-4">
+          <div className="flex-shrink-0">
+            <svg className="w-5 h-5 text-accent-600 dark:text-accent-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-accent-900 dark:text-accent-200 mb-2">
+              Staff Feedback on Your Revision:
+            </p>
+            <p className="text-sm text-accent-800 dark:text-accent-300 whitespace-pre-wrap">
+              {revisionNotes}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Personal Information */}
       <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-lg border border-neutral-200 dark:border-neutral-700">
         <SectionHeader title="Personal Information" onEditClick={() => onEdit(getStepIndex('personal'))} />

@@ -92,6 +92,7 @@ input MedicineBatchInput {
   dosageValue: Int!
   expiryDate: Date!
   location: LocationDesignation!
+  quantity: Int!
   notes: String
 }
 

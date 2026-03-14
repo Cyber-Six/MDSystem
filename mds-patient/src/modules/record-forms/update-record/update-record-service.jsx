@@ -8,6 +8,13 @@
 import { axiosRequest } from '../../../packages-core-adapter';
 import { updatePersonalInfo } from './personal-info-service';
 
+// Debug logging - set to false to silence console logs
+const DEBUG = false;
+
+// Helper function for conditional logging
+const log = (...args) => DEBUG && console.log(...args);
+const warn = (...args) => DEBUG && console.warn(...args);
+
 /**
  * Upload a file to the media staging endpoint
  * @param {File|null} file - Browser File object
@@ -111,6 +118,58 @@ export async function getUpdateTicketStatus() {
 }
 
 /**
+ * Get the current update ticket with full details including status and revision notes
+ * Used to detect if patient has a pending revision request from staff
+ * @returns {Promise<{id, status, notes} | null>} Ticket details or null if no ticket
+ */
+export async function getUpdateRevisionStatus() {
+  const query = `
+    query GetUpdateTicket {
+      getUpdateTicket {
+        id
+        status
+        scope
+        notes
+      }
+    }
+  `;
+
+  try {
+    console.log('[UpdateRevision] 🔍 Checking for revision status...');
+    const response = await sendGraphQLRequest(query, {});
+    
+    if (response.getUpdateTicket) {
+      const ticket = response.getUpdateTicket;
+      console.log('[UpdateRevision] ✓ Ticket status:', ticket.status, 'Scope:', ticket.scope);
+      
+      if (ticket.status === 'Revision') {
+        console.log('[UpdateRevision] ⚠️ REVISION DETECTED - Staff notes:', ticket.notes);
+      }
+      
+      return ticket;
+    }
+    
+    console.log('[UpdateRevision] ✓ No active ticket');
+    return null;
+  } catch (error) {
+    console.log('[UpdateRevision] ℹ️ Could not fetch revision status:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Fetch the patient's previous medical/dental records for pre-filling the form during revision
+ * NOTE: This is currently a placeholder - pre-fill from previous ticket could be added later
+ * @returns {Promise<object>} Previous form data to pre-fill the revision form
+ */
+export async function fetchUpdateRevisionPrefill() {
+  // For now, we'll just note that pre-fill is optional
+  // The revision banner will show regardless, allowing patient to restart entry
+  console.log('[UpdateRevision] 📥 Pre-fill available - patient can edit form sections');
+  return {};
+}
+
+/**
  * Ensures no active ticket exists by checking and cancelling if needed
  * @returns {Promise<boolean>} true if ticket was cancelled or no ticket existed, false if ticket couldn't be cancelled
  */
@@ -127,20 +186,26 @@ export async function ensureNoActiveTicket() {
     console.log('ℹ️ Found active ticket:', ticket.id, 'Status:', ticket.status);
     
     // Check if ticket is in a cancellable state
-    if (ticket.status === 'InProgress' || ticket.status === 'Pending') {
-      console.log('🚫 Attempting to cancel active ticket...');
-      const cancelResult = await cancelUpdateTicket();
-      
-      if (cancelResult) {
-        console.log('✅ Successfully cancelled active ticket');
-        return true;
-      } else {
-        console.error('❌ Failed to cancel active ticket');
-        return false;
-      }
-    } else {
+    // Cancellable: InProgress, Pending, Revision (patient resubmitting after revision request)
+    // Final/Not cancellable: Approved, Cancelled, Rejected, Expired
+    const finalStatuses = ['Approved', 'Cancelled', 'Rejected', 'Expired'];
+    const isFinalStatus = finalStatuses.includes(ticket.status);
+    
+    if (isFinalStatus) {
       console.log('ℹ️ Ticket is in final status:', ticket.status, '- no need to cancel');
       return true;
+    }
+    
+    // Otherwise ticket is cancellable (InProgress, Pending, Revision, etc)
+    console.log('🚫 Attempting to cancel active ticket...');
+    const cancelResult = await cancelUpdateTicket();
+    
+    if (cancelResult) {
+      console.log('✅ Successfully cancelled active ticket');
+      return true;
+    } else {
+      console.error('❌ Failed to cancel active ticket');
+      return false;
     }
   } catch (error) {
     console.error('❌ Error checking/cancelling active ticket:', error.message);
@@ -941,20 +1006,30 @@ export async function submitUpdateRecord(formData, recordType) {
   let ticketId = null;
   
   try {
-    // Step 1: Ensure no active ticket exists (check and cancel if needed)
+    // Step 1: Check for existing update ticket
     console.log('🔍 Checking for existing update ticket...');
-    const canProceed = await ensureNoActiveTicket();
+    const existingTicket = await getUpdateTicketStatus();
     
-    if (!canProceed) {
-      throw new Error('An update ticket is already in progress. Please cancel it or wait for it to be processed.');
-    }
-    
-    console.log('✅ Ready to create new ticket');
+    if (existingTicket?.status === 'Revision') {
+      // Special case: Patient is resubmitting after a revision request
+      // Reuse the existing Revision ticket instead of creating a new one
+      console.log('📋 Reusing existing Revision ticket:', existingTicket.id);
+      ticketId = existingTicket.id;
+    } else {
+      // Normal case: No active ticket or ticket is in other state - cancel and create new
+      const canProceed = await ensureNoActiveTicket();
+      
+      if (!canProceed) {
+        throw new Error('An update ticket is already in progress. Please cancel it or wait for it to be processed.');
+      }
+      
+      console.log('✅ Ready to create new ticket');
 
-    // Step 2: Map recordType to backend scope
-    const scopeMap = { medical: 'Medical', dental: 'Dental', both: 'Both' };
-    const scope = scopeMap[recordType] || 'Both';
-    ticketId = await createUpdateTicket(scope);
+      // Step 2: Map recordType to backend scope
+      const scopeMap = { medical: 'Medical', dental: 'Dental', both: 'Both' };
+      const scope = scopeMap[recordType] || 'Both';
+      ticketId = await createUpdateTicket(scope);
+    }
 
     const results = { ticketId };
 

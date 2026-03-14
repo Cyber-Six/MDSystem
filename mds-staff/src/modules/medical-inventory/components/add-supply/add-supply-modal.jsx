@@ -36,7 +36,8 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
   const handleSubmit = async (e) => {
     if (e?.preventDefault) e.preventDefault();
     if (!selectedItemId || !form.batchNumber.trim()) return;
-    if (!isMedicine && !form.quantity) return;
+    if (!form.quantity) return;
+    if (isMedicine && !form.dosageValue) return;
     const batch = {
       medicalItemId: Number(selectedItemId),
       batchNumber: form.batchNumber.trim(),
@@ -99,12 +100,17 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
               <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Batch / Lot Number *</label>
               <input type="text" value={form.batchNumber} onChange={(e) => set('batchNumber', e.target.value)} placeholder="e.g. CAS-PAR-003" required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
             </div>
-            {!isMedicine && (
-              <div>
-                <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Quantity *</label>
-                <input type="number" min={1} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} placeholder="e.g. 100" required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
-              </div>
-            )}
+            <div>
+              <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
+                {isMedicine ? 'Number of Units' : 'Quantity'} *
+              </label>
+              <input type="number" min={1} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} placeholder={isMedicine ? "e.g. 50" : "e.g. 100"} required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+              {isMedicine && form.quantity && (
+                <p className="mt-1 text-[10px] text-secondary-500 dark:text-neutral-400">
+                  {form.quantity} unit{form.quantity > 1 ? 's' : ''} will be created with individual IDs
+                </p>
+              )}
+            </div>
           </div>
 
           {isMedicine ? (

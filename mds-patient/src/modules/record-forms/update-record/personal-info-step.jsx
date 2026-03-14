@@ -40,6 +40,9 @@ const PersonalInfoStep = ({ formData, onChange }) => {
     onChange({ ...formData, [field]: value });
   };
 
+  // Strip any character that is not a digit, +, -, space, or parenthesis
+  const filterPhone = (val) => val.replace(/[^\d+\-\s()]/g, '');
+
   return (
     <div className="space-y-6">
       {/* School Information Card */}
@@ -120,7 +123,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               placeholder="Contact Number"
               value={formData.emergencyContact1Number || ''}
-              onChange={(e) => handleInputChange('emergencyContact1Number', e.target.value)}
+              onChange={(e) => handleInputChange('emergencyContact1Number', filterPhone(e.target.value))}
             />
           </div>
         </div>
@@ -149,7 +152,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               placeholder="Contact Number"
               value={formData.emergencyContact2Number || ''}
-              onChange={(e) => handleInputChange('emergencyContact2Number', e.target.value)}
+              onChange={(e) => handleInputChange('emergencyContact2Number', filterPhone(e.target.value))}
             />
           </div>
         </div>
