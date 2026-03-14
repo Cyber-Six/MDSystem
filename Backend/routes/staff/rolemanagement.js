@@ -118,9 +118,7 @@ async function applyStaffAccount(userId, roledata, newIdentity, assignedById) {
         `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
          SELECT $1, r.id, v.branch, $2
          FROM (VALUES ${values.join(',')}) AS v(label, branch)
-         JOIN "rolesTable" r ON r.label = v.label
-         ON CONFLICT ("personnelId", "rolesId") DO UPDATE
-           SET branch = EXCLUDED.branch, "assignedBy" = EXCLUDED."assignedBy"`,
+         JOIN "rolesTable" r ON r.label = v.label`,
         params
       );
     }
@@ -162,6 +160,8 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
        FROM "UserCredentials" uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        WHERE uc.email ILIKE '%.mds@tip.edu.ph'
+         AND LOWER(TRIM(COALESCE(uc.credentials_status, ''))) = 'active'
+         AND uc.identity IN ('Employee','Medical')
        ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`
     );
 
@@ -255,7 +255,7 @@ router.put('/accounts/:userId', jwtProtect('medical'), async (req, res) => {
 
     // Verify target user exists and is a .mds@ account
     const targetResult = await db.query(
-      `SELECT id, email, identity FROM "UserCredentials" WHERE id = $1`,
+      `SELECT id, email, identity, credentials_status FROM "UserCredentials" WHERE id = $1`,
       [userId]
     );
     if (targetResult.rows.length === 0) {
@@ -265,6 +265,21 @@ router.put('/accounts/:userId', jwtProtect('medical'), async (req, res) => {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Can only manage .mds@tip.edu.ph staff accounts.' });
     }
 
+    // Ensure the target is a staff credential (avoid touching patient/student rows)
+    const targetIdentity = String(targetResult.rows[0].identity || '');
+    if (!['Employee', 'Medical'].includes(targetIdentity)) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Target account is not a staff account.' });
+    }
+
+    // Only active/verified staff accounts can be managed in role management.
+    const targetCredentialStatus = String(targetResult.rows[0].credentials_status || '').toLowerCase();
+    if (targetCredentialStatus !== 'active') {
+      return res.status(403).json({
+        error: 'STAFF_NOT_VERIFIED',
+        message: 'This account is not yet verified. Please approve the initial record first.',
+      });
+    }
+
     // Prevent admin from removing their own IS_ADMIN unless they're not the last admin
     if (String(req.user.id) === String(userId) && status === 'Suspended') {
       return res.status(400).json({ error: 'CANNOT_SELF_SUSPEND', message: 'Admins cannot suspend their own account.' });
@@ -272,7 +287,8 @@ router.put('/accounts/:userId', jwtProtect('medical'), async (req, res) => {
 
     // Use the branch the staff set when completing their initial medical record
     const branchResult = await db.getUserBranch(String(userId));
-    const targetBranch = branchResult || 'Both';
+    const allowedBranches = new Set(['Manila', 'QuezonCity', 'Both']);
+    const targetBranch = allowedBranches.has(branchResult) ? branchResult : 'Both';
 
     // Convert UI permissions → distinct backend label set, always include IS_STAFF
     const labels = uiPermissionsToLabels(uiPerms);
