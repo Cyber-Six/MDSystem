@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatPatientName, getPatientInitials, getProfileLabel } from '../../../../services/patient-search-service';
+import { usePatientTabs } from '../../../../context/patient-tabs-context';
 
 const STATUS_STYLES = {
   InProgress:        'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -11,7 +12,6 @@ const STATUS_STYLES = {
   Cancelled:         'bg-neutral-100 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400',
 };
 
-// The record sections that open in new tabs
 const RECORD_SECTIONS = [
   {
     id: 'personal',
@@ -71,8 +71,10 @@ const RECORD_SECTIONS = [
 ];
 
 const PatientDetailPanel = ({ patient, onClose }) => {
-  const handleOpenTab = (tabId) => {
-    window.open(`/patient/${patient.id}?tab=${tabId}`, '_blank');
+  const { openTab } = usePatientTabs();
+
+  const handleOpenSection = (sectionId) => {
+    openTab(patient, sectionId);
   };
 
   return (
@@ -146,7 +148,7 @@ const PatientDetailPanel = ({ patient, onClose }) => {
           {RECORD_SECTIONS.map((section) => (
             <button
               key={section.id}
-              onClick={() => handleOpenTab(section.id)}
+              onClick={() => handleOpenSection(section.id)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors group text-left"
             >
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${section.color}`}>
@@ -157,7 +159,7 @@ const PatientDetailPanel = ({ patient, onClose }) => {
                 <p className="text-xs text-secondary-400 dark:text-neutral-500 truncate">{section.description}</p>
               </div>
               <svg className="w-4 h-4 text-secondary-300 dark:text-neutral-600 group-hover:text-primary-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           ))}

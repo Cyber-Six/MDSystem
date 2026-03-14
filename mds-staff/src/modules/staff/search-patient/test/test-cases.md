@@ -6,10 +6,12 @@
 - [ ] [ ] Search by name (first, last, partial) returns matching patients
 - [ ] [ ] Search by email returns matching patients
 - [ ] [ ] Search with < 2 characters shows hint, no API call
-- [ ] [ ] Debounce: rapid typing only fires one search after 300ms pause
+- [ ] [ ] Debounce: rapid typing shows loader immediately, fires API after 2s pause
+- [ ] [ ] Loader spinner appears during debounce wait period
+- [ ] [ ] Loader spinner persists through API call until results arrive
 - [ ] [ ] Empty results show "No patients found" message
 - [ ] [ ] API error displays error message
-- [ ] [ ] Loading spinner shows during search
+- [ ] [ ] SEARCH_DEBOUNCE_MS constant at top of file is easy to change
 
 ## Type Filter
 - **Create**  **Test**
@@ -34,25 +36,37 @@
 - [ ] [ ] Close button on detail panel deselects patient
 - [ ] [ ] Selected patient row is visually highlighted
 
-## Open in New Tab (Record Sections)
+## Chrome-like Tab Management
 - **Create**  **Test**
-- [ ] [ ] "Full Details" opens /patient/{id}?tab=personal in new browser tab
-- [ ] [ ] "Medical Records" opens /patient/{id}?tab=medical in new browser tab
-- [ ] [ ] "Dental Records" opens /patient/{id}?tab=dental in new browser tab
-- [ ] [ ] "Appointment Records" opens /patient/{id}?tab=appointments in new browser tab
-- [ ] [ ] "Consultation History" opens /patient/{id}?tab=history in new browser tab
-- [ ] [ ] New tab loads PatientRecord with correct tab pre-selected
-- [ ] [ ] New tab authentication works (JWT in localStorage shared across tabs)
+- [ ] [ ] "Search" tab is always first and not closable
+- [ ] [ ] Clicking a record section in detail panel opens a new internal tab
+- [ ] [ ] Active tab has distinct styling (white bg, top border)
+- [ ] [ ] Inactive tabs have muted styling
+- [ ] [ ] Hovering over a tab reveals the close (x) button
+- [ ] [ ] Clicking a tab switches to that tab's content
+- [ ] [ ] Closing a tab removes it and switches back to search view
+- [ ] [ ] Opening same patient+section does not create duplicate tab
+- [ ] [ ] Tab label shows patient name + section name
+- [ ] [ ] Tab tooltip shows full "Patient Name - Section" on hover
+- [ ] [ ] Multiple tabs can be open simultaneously
+- [ ] [ ] Tab bar scrolls horizontally when many tabs are open
+- [ ] [ ] Patient record content renders correctly inside tab
 
-## PatientRecord Tab Deep-Linking
+## Tab Persistence
 - **Create**  **Test**
-- [ ] [ ] /patient/{id}?tab=personal opens Personal Info tab
-- [ ] [ ] /patient/{id}?tab=medical opens Medical Record tab
-- [ ] [ ] /patient/{id}?tab=dental opens Dental Record tab
-- [ ] [ ] /patient/{id}?tab=appointments opens Appointments tab
-- [ ] [ ] /patient/{id}?tab=history opens Consultation History tab
-- [ ] [ ] /patient/{id} (no tab param) defaults to Personal Info
-- [ ] [ ] /patient/{id}?tab=invalid defaults to Personal Info
+- [ ] [ ] Navigating to Appointments module and back retains open tabs
+- [ ] [ ] Navigating to Dashboard and back retains open tabs
+- [ ] [ ] Navigating to Pending Requests and back retains open tabs
+- [ ] [ ] Active tab selection is preserved when navigating back
+- [ ] [ ] Search state (results, selected patient) is re-created on return
+
+## Embedded PatientRecord
+- **Create**  **Test**
+- [ ] [ ] PatientRecord renders without back button when embedded
+- [ ] [ ] PatientRecord loads correct patient data when given patientId prop
+- [ ] [ ] PatientRecord opens to the correct tab via initialTab prop
+- [ ] [ ] Tab switching within PatientRecord works normally when embedded
+- [ ] [ ] Print and Edit buttons still visible when embedded
 
 ## Reusable Service (patient-search-service.js)
 - **Create**  **Test**
@@ -77,7 +91,7 @@
 - [ ] [ ] Patient with no latest_status shows "No record"
 - [ ] [ ] Rapid patient selections do not cause stale state
 - [ ] [ ] Switching search type while detail panel is open clears selection if patient is filtered out
-- [ ] [ ] Browser back button from new tab returns to search
+- [ ] [ ] Opening many tabs does not degrade performance
 
 ## Future: Appointment Module Integration
 - **Create**  **Test**
@@ -90,6 +104,8 @@
 
 Notes:
 - Each line has two leading checkboxes: first for implementing, second for testing.
-- "Open in new tab" tests require manual verification in browser.
+- Tab persistence relies on PatientTabsContext wrapping all routes in Dashboard.jsx.
+- Debounce delay is configurable via SEARCH_DEBOUNCE_MS constant in search-patient.jsx.
 - Reusable service located at: `src/services/patient-search-service.js`
 - Module located at: `src/modules/staff/search-patient/`
+- Tab context located at: `src/context/patient-tabs-context.jsx`

@@ -81,6 +81,7 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
         patientId
         patientIdentifier
         patientName
+        patientEmail
         slotEntityId
         status
         session
@@ -98,6 +99,26 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
     }
   `, { status, offset, limit });
   return data.searchAppointmentStatuses;
+};
+
+/**
+ * Get appointment counts grouped by status (single query).
+ * @returns {Promise<Object>} e.g. { Pending: 5, Scheduled: 10, ... }
+ */
+export const getStatusCounts = async () => {
+  const data = await sendGraphQL(`
+    query GetAppointmentStatusCounts {
+      getAppointmentStatusCounts {
+        status
+        count
+      }
+    }
+  `);
+  const counts = {};
+  for (const { status, count } of data.getAppointmentStatusCounts) {
+    counts[status] = count;
+  }
+  return counts;
 };
 
 /**
