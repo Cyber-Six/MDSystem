@@ -37,6 +37,14 @@
  * });
  */
 export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL = '', getDevSubdomain = null }) => {
+  const hasBrowserLocation = () => {
+    return (
+      typeof window !== 'undefined' &&
+      window.location &&
+      typeof window.location.hostname === 'string'
+    );
+  };
+
   /**
    * Determine logging state once at creation time (hostname doesn't change at runtime)
    * @type {boolean}
@@ -47,7 +55,7 @@ export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL 
     if (forceEnabled === false) return false;
     
     // Auto-detect: only log on localhost
-    if (typeof window !== 'undefined') {
+    if (hasBrowserLocation()) {
       const hostname = window.location.hostname;
       return hostname === 'localhost' || hostname === '127.0.0.1';
     }
@@ -75,7 +83,7 @@ export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL 
     const base = config.baseURL || '';
     const path = config.url || '';
     
-    if (typeof window !== 'undefined') {
+    if (hasBrowserLocation()) {
       const hostname = window.location.hostname;
       
       if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -84,7 +92,7 @@ export const createRequestLogger = ({ forceEnabled = undefined, computedBaseURL 
         if (forwardedHost) {
           backendURL = `https://${forwardedHost}${path}`;
         } else {
-          backendURL = `${window.location.origin}${path} (no proxy)`;
+          backendURL = `${window.location.origin || ''}${path} (no proxy)`;
         }
       } else {
         // Production: Show actual production URL
