@@ -74,7 +74,8 @@ export const createApiBaseUrlProvider = ({ getHostname, getEnv }) => {
    * @returns {string|null} Hostname to send in X-Forwarded-Host header
    */
   const getDevSubdomain = () => {
-    const hostname = getHostname();
+    const rawHostname = getHostname();
+    const hostname = typeof rawHostname === 'string' ? rawHostname : '';
     
     // For local development - simulate subdomain
     if (hostname === 'localhost' || hostname === '127.0.0.1') {

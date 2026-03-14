@@ -6,10 +6,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./config/*": "./src/config/*",
-    "./services/*": "./src/services/*",
-    "./utils/*": "./src/utils/*",
-    "./validation/*": "./src/validation/*"
+    "./config/*": "./src/config/*.js",
+    "./services/*": "./src/services/*.js",
+    "./utils/*": "./src/utils/*.js",
+    "./validation/*": "./src/validation/*.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
