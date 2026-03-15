@@ -8,7 +8,8 @@ import { getExpiryStatus, CATEGORY_COLORS } from '../../inventory-seed-data';
 const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate, onSelectItem }) => {
   const pendingCount = requests.filter((r) => r.status === 'InProgress').length;
   const totalItems = items.length;
-  const totalStock = batches.reduce((s, b) => s + b.currentQuantity, 0);
+  const getStock = (b) => b.availableQuantity ?? b.currentQuantity ?? 0;
+  const totalStock = batches.reduce((s, b) => s + getStock(b), 0);
   const lowStockItems = items.filter((i) => i.isLowStock);
   const expiringSoon = batches.filter((b) => {
     if (!b.expiryDate) return false;
@@ -17,8 +18,8 @@ const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate
   });
   const expiredBatches = batches.filter((b) => b.expiryDate && new Date(b.expiryDate) < new Date());
 
-  const casalStock = batches.filter((b) => b.location === 'Casal').reduce((s, b) => s + b.currentQuantity, 0);
-  const arlegui = batches.filter((b) => b.location === 'Arlegui').reduce((s, b) => s + b.currentQuantity, 0);
+  const casalStock = batches.filter((b) => b.location === 'Casal').reduce((s, b) => s + getStock(b), 0);
+  const arlegui = batches.filter((b) => b.location === 'Arlegui').reduce((s, b) => s + getStock(b), 0);
 
   const recentTx = transactions.slice(0, 5);
 

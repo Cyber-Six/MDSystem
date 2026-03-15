@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { sendGraphQLRequest } from '../../utils/graphql-client';
 import { getMyPersonalEmail } from '../../services/emr-service';
+import RequestNotificationModal from './components/request-notification-modal';
 
 const MedicineRequestPage = () => {
   // User info
@@ -27,6 +28,22 @@ const MedicineRequestPage = () => {
   // Cancel-and-resubmit confirmation
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [pendingSubmitPayload, setPendingSubmitPayload] = useState(null);
+
+  // Notification modal state - persist dismissed notifications in localStorage
+  const [dismissedNotifications, setDismissedNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dismissedMedicalNotifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [notificationRequest, setNotificationRequest] = useState(null);
+
+  // Persist dismissed notifications to localStorage
+  useEffect(() => {
+    localStorage.setItem('dismissedMedicalNotifications', JSON.stringify(dismissedNotifications));
+  }, [dismissedNotifications]);
 
   // Data
   const [availableMedicines, setAvailableMedicines] = useState([]);
@@ -148,6 +165,7 @@ const MedicineRequestPage = () => {
               status
               transactionId
               purpose
+              notes
               approved_by
               created_at
               items {
@@ -177,6 +195,28 @@ const MedicineRequestPage = () => {
 
     fetchRequestHistory();
   }, []);
+
+  // Check for notification-worthy requests (approved/rejected)
+  useEffect(() => {
+    if (!requests || requests.length === 0) return;
+
+    // Find first approved or rejected request that hasn't been dismissed
+    const notificationReq = requests.find((r) => {
+      const status = r.status?.toLowerCase();
+      const isNotificationStatus = status === 'approved' || status === 'rejected';
+      const isNotDismissed = !dismissedNotifications.includes(r.id);
+      return isNotificationStatus && isNotDismissed;
+    });
+
+    setNotificationRequest(notificationReq || null);
+  }, [requests, dismissedNotifications]);
+
+  const handleDismissNotification = () => {
+    if (notificationRequest) {
+      setDismissedNotifications([...dismissedNotifications, notificationRequest.id]);
+      setNotificationRequest(null);
+    }
+  };
 
   const handleMedicineToggle = (itemCode, medicineGroup) => {
     const isSelected = formData.items.some(item => item.itemCode === itemCode);
@@ -401,6 +441,9 @@ const MedicineRequestPage = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
+
+      {/* Request Notification Modal */}
+      <RequestNotificationModal request={notificationRequest} onDismiss={handleDismissNotification} batches={availableMedicines} />
 
       {/* Cancel-and-Resubmit Confirmation Modal */}
       {showCancelConfirm && (

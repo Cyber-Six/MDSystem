@@ -11,16 +11,26 @@
 import { axiosRequest } from '../../packages-core-adapter';
 
 const sendGraphQL = async (query, variables = {}) => {
-  const response = await axiosRequest.post('/medical-inventory/medicine-request/medical', {
-    query,
-    variables,
-  });
+  try {
+    const response = await axiosRequest.post('/medical-inventory/medicine-request/medical', {
+      query,
+      variables,
+    });
 
-  if (response.data.errors) {
-    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+    if (response.data.errors) {
+      console.error('❌ GraphQL Error:', response.data.errors);
+      throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+    }
+
+    return response.data.data;
+  } catch (err) {
+    console.error('❌ sendGraphQL error:', {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+    });
+    throw err;
   }
-
-  return response.data.data;
 };
 
 /**
@@ -96,6 +106,7 @@ export const fetchAllMedicineRequests = async (status = null, offset = 0, limit 
  * @returns {Promise<Object>} Updated MedicineRequest
  */
 export const setMedicineRequestStatus = async (requestId, status, notes = null) => {
+  console.log('📤 setMedicineRequestStatus called:', { requestId, status, notes });
   const data = await sendGraphQL(
     `mutation SetStatusMedicineRequest($requestId: ID!, $status: RequestStatus!, $notes: String) {
       setStatusMedicineRequest(requestId: $requestId, status: $status, notes: $notes) {
@@ -117,5 +128,6 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
     }`,
     { requestId, status, notes },
   );
+  console.log('✅ setMedicineRequestStatus response:', data.setStatusMedicineRequest);
   return data.setStatusMedicineRequest;
 };

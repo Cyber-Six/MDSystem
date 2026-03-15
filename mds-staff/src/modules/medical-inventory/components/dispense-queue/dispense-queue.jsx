@@ -5,10 +5,10 @@ import { STATUS_BADGES } from '../../inventory-seed-data';
  * Dispense Queue — shows pending doctor / student medicine requests.
  * Key feature: "QTY PENDING" badge when quantity is null (student self-request).
  */
-const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => {
+const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject }) => {
   const [search, setSearch] = useState('');
-  const [filterClinic, setFilterClinic] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('Pending');
+  const [filterLocation, setFilterLocation] = useState('Casal');
+  const [filterStatus, setFilterStatus] = useState('All');
 
   // Helper to format date safely
   const formatDate = (dateValue) => {
@@ -41,9 +41,20 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
     return m;
   }, [items]);
 
+  const batchMap = useMemo(() => {
+    const m = {};
+    (batches || []).forEach((b) => (m[b.id] = b));
+    return m;
+  }, [batches]);
+
   const filtered = useMemo(() => {
     return (requests || []).filter((r) => {
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
+      // Filter by location from batch
+      const batchId = r.items?.[0]?.batchId;
+      const reqLocation = batchId ? (batchMap[batchId]?.location || 'Casal') : 'Casal';
+      if (reqLocation !== filterLocation) return false;
+      // Search
       if (search) {
         const q = search.toLowerCase();
         const itemId = r.items?.[0]?.itemId;
@@ -57,12 +68,35 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
       }
       return true;
     });
-  }, [requests, search, filterClinic, filterStatus, itemMap]);
+  }, [requests, search, filterLocation, filterStatus, itemMap, batchMap]);
 
   const statusOptions = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
+  const locations = ['Casal', 'Arlegui', 'QuezonCity'];
+
+  const getLocationDisplay = (loc) => {
+    const map = { Casal: 'Casal', Arlegui: 'Arlegui', QuezonCity: 'Quezon City' };
+    return map[loc] || loc;
+  };
 
   return (
     <div className="space-y-2">
+      {/* Location Tabs */}
+      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-700">
+        {locations.map((loc) => (
+          <button
+            key={loc}
+            onClick={() => setFilterLocation(loc)}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 ${
+              filterLocation === loc
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+            }`}
+          >
+            {getLocationDisplay(loc)}
+          </button>
+        ))}
+      </div>
+
       {/* Filters bar */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-2.5">
         <div className="flex flex-wrap items-center gap-2">

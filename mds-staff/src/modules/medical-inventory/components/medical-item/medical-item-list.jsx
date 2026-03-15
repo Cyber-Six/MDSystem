@@ -12,17 +12,20 @@ const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAdd
   const [filterStatus, setFilterStatus] = useState('all');
 
   const filtered = useMemo(() => {
-    return items.filter((item) => {
+    const result = items.filter((item) => {
       const q = search.toLowerCase();
       const matchSearch = !q || item.item_name.toLowerCase().includes(q) || item.item_code.toLowerCase().includes(q);
       const matchCat = filterCategory === 'all' || item.category === filterCategory;
       const matchLoc = filterLocation === 'all' || item.batches?.some((b) => b.location === filterLocation);
       const matchStatus = filterStatus === 'all'
+        || (filterStatus === 'good' && !item.isLowStock && !item.hasExpired && !item.hasExpiringSoon)
         || (filterStatus === 'low' && item.isLowStock)
         || (filterStatus === 'expired' && item.hasExpired)
         || (filterStatus === 'expiring' && item.hasExpiringSoon);
       return matchSearch && matchCat && matchLoc && matchStatus;
     });
+    console.log('🔍 Items filtered:', { totalItems: items.length, filterCategory, filteredCount: result.length, sampleCategories: items.slice(0, 3).map(i => ({ id: i.id, name: i.item_name, category: i.category })) });
+    return result;
   }, [items, search, filterCategory, filterLocation, filterStatus]);
 
   return (
@@ -65,9 +68,10 @@ const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAdd
             <label className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 shrink-0">Status</label>
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-2 py-1 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500">
               <option value="all">All</option>
+              <option value="good">Good Condition</option>
               <option value="low">Low Stock</option>
-              <option value="expired">Has Expired</option>
               <option value="expiring">Expiring Soon</option>
+              <option value="expired">Expired</option>
             </select>
           </div>
 
