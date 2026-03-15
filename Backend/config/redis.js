@@ -68,9 +68,14 @@ async function delKey(key) {
 
 async function sAddKey(key, member, expireSeconds) {
   if (!client) throw new Error("Redis client not initialized");
-  await client.sAdd(key, member);
   if (expireSeconds) {
-    await client.expire(key, expireSeconds);
+    // Single round trip via pipeline
+    await client.multi()
+      .sAdd(key, member)
+      .expire(key, expireSeconds)
+      .exec();
+  } else {
+    await client.sAdd(key, member);
   }
 }
 
@@ -87,6 +92,44 @@ async function sRemKey(key, member) {
 async function sCardKey(key) {
   if (!client) throw new Error("Redis client not initialized");
   return await client.sCard(key);
+}
+
+// --- List key helpers (for notification queuing) ---
+
+async function rPushKey(key, value) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.rPush(key, value);
+}
+
+async function lRangeKey(key, start, stop) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.lRange(key, start, stop);
+}
+
+async function lTrimKey(key, start, stop) {
+  if (!client) throw new Error("Redis client not initialized");
+  await client.lTrim(key, start, stop);
+}
+
+async function lLenKey(key) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.lLen(key);
+}
+
+/**
+ * Atomically read the entire list and delete it in a single MULTI/EXEC transaction.
+ * Prevents double-delivery when two connections flush the same user simultaneously.
+ *
+ * @param {string} key
+ * @returns {Promise<string[]>}
+ */
+async function lRangeDelKey(key) {
+  if (!client) throw new Error("Redis client not initialized");
+  const results = await client.multi()
+    .lRange(key, 0, -1)
+    .del(key)
+    .exec();
+  return results[0] ?? [];
 }
 
 // ------------------------------------------------
@@ -671,10 +714,24 @@ async function isLoginLocked(email, portal) {
 
 // ------------------------------------------------
 
+/**
+ * Returns the raw node-redis client instance.
+ * Useful for calling .duplicate() when creating dedicated pub/sub clients
+ * (e.g., for @socket.io/redis-adapter).
+ * Throws if called before initRedis().
+ *
+ * @returns {import('redis').RedisClientType}
+ */
+function getClient() {
+  if (!client) throw new Error('Redis client not initialized. Call initRedis() first.');
+  return client;
+}
+
 module.exports = {
   connection,
   redisConfig,
   initRedis,
+  getClient,
   setKey,
   getKey,
   delKey,
@@ -682,6 +739,11 @@ module.exports = {
   sMembersKey,
   sRemKey,
   sCardKey,
+  rPushKey,
+  lRangeKey,
+  lTrimKey,
+  lLenKey,
+  lRangeDelKey,
   setOTP,
   verifyOTP,
   deleteOTP,

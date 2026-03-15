@@ -5,76 +5,62 @@ const logger = require("../../../../../utils/logger.js");
 
 const Query = {
   _getMedicalItems: async (_, { category, active, offset = 0, limit = 20 }, { res }) => {
-    let sql = 'SELECT * FROM "MedicalItems" WHERE 1=1';
     const params = [];
-    let idx = 1;
+    const conditions = [];
 
-    if (category) {
-      sql += ' AND category = $' + idx;
-      params.push(category);
-      idx++;
-    }
+    if (category) conditions.push(`category = $${params.push(category)}`);
+    if (active !== undefined && active !== null) conditions.push(`active = $${params.push(active)}`);
 
-    if (active !== undefined && active !== null) {
-      sql += ' AND active = $' + idx;
-      params.push(active);
-      idx++;
-    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    sql += ' ORDER BY item_name ASC OFFSET $' + idx + ' LIMIT $' + (idx + 1);
-    params.push(offset, limit);
+    const sql = `
+      SELECT * FROM "MedicalItems"
+      ${where}
+      ORDER BY item_name ASC
+      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+    `;
 
     const result = await db.query(sql, params);
     return result.rows;
   },
 
   _getMedicalItem: async (_, { id }, { res }) => {
-    const result = await db.query(
-      'SELECT * FROM "MedicalItems" WHERE id = $1 LIMIT 1',
-      [id]
-    );
+    const sql = `SELECT * FROM "MedicalItems" WHERE id = $1 LIMIT 1`;
+    const result = await db.query(sql, [id]);
     return result.rows[0] || null;
   },
 
   _getMedicalSupply: async (_, { medicalItemId, location, availableOnly, offset = 0, limit = 20 }, { res }) => {
-    let sql = 'SELECT * FROM "MedicineBatch" WHERE "medicalItemId" = $1';
     const params = [medicalItemId];
-    let idx = 2;
+    const conditions = [`"medicalItemId" = $1`];
 
-    if (location) {
-      sql += ' AND location = $' + idx;
-      params.push(location);
-      idx++;
-    }
+    if (location) conditions.push(`location = $${params.push(location)}`);
+    if (availableOnly) conditions.push(`"expiryDate" > CURRENT_DATE`);
 
-    if (availableOnly) {
-      sql += ' AND "expiryDate" > CURRENT_DATE';
-    }
-
-    sql += ' ORDER BY "expiryDate" ASC OFFSET $' + idx + ' LIMIT $' + (idx + 1);
-    params.push(offset, limit);
+    const sql = `
+      SELECT * FROM "MedicineBatch"
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY "expiryDate" ASC
+      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+    `;
 
     const result = await db.query(sql, params);
     return result.rows;
   },
 
   _getSupplyBatches: async (_, { supplyItemId, location, availableOnly, offset = 0, limit = 20 }, { res }) => {
-    let sql = 'SELECT * FROM "SupplyBatch" WHERE "supplyItemId" = $1';
     const params = [supplyItemId];
-    let idx = 2;
+    const conditions = [`"supplyItemId" = $1`];
 
-    if (location) {
-      sql += ' AND location = $' + idx;
-      params.push(location);
-      idx++;
-    }
+    if (location) conditions.push(`location = $${params.push(location)}`);
+    if (availableOnly) conditions.push(`"currentQuantity" > 0 AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)`);
 
-    if (availableOnly) {
-      sql += ' AND "currentQuantity" > 0 AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)';
-    }
-
-    sql += ' ORDER BY expiry_date ASC OFFSET $' + idx + ' LIMIT $' + (idx + 1);
-    params.push(offset, limit);
+    const sql = `
+      SELECT * FROM "SupplyBatch"
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY expiry_date ASC
+      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+    `;
 
     const result = await db.query(sql, params);
     return result.rows;
@@ -83,13 +69,15 @@ const Query = {
 
 const Mutation = {
   _createMedicalItems: async (_, { input }, { res }) => {
-    const sql =
-      'INSERT INTO "MedicalItems" (item_code, item_name, category, description) ' +
-      'VALUES ($1, $2, $3, $4) RETURNING *';
+    const sql = `
+      INSERT INTO "MedicalItems" (item_code, item_name, category, description)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `;
 
     try {
       const result = await db.query(sql, [
-        input.item_code, input.item_name, input.category, input.description || null
+        input.item_code, input.item_name, input.category, input.description || null,
       ]);
       return result.rows[0];
     } catch (err) {
@@ -102,30 +90,29 @@ const Mutation = {
   },
 
   _updateMedicalItems: async (_, { id, input }, { res }) => {
-    const allowedFields = ["item_code", "item_name", "category", "description", "active"];
-    const fields = [];
-    const values = [];
-    let idx = 1;
+    const allowed = ['item_code', 'item_name', 'category', 'description', 'active'];
+    const params = [];
 
-    for (const [key, value] of Object.entries(input)) {
-      if (value !== null && value !== undefined && allowedFields.includes(key)) {
-        fields.push('"' + key + '" = $' + idx);
-        values.push(value);
-        idx++;
-      }
-    }
+    const sets = Object.entries(input)
+      .filter(([key, value]) => value !== null && value !== undefined && allowed.includes(key))
+      .map(([key, value]) => `"${key}" = $${params.push(value)}`);
 
-    if (fields.length === 0) {
+    if (sets.length === 0) {
       throwGraphQLError(res).message("No fields to update").status(400).throw();
     }
 
-    fields.push('"updated_at" = current_timestamp');
-    values.push(id);
+    sets.push('"updated_at" = current_timestamp');
+    params.push(id);
 
-    const sql = 'UPDATE "MedicalItems" SET ' + fields.join(", ") + ' WHERE id = $' + idx + ' RETURNING *';
+    const sql = `
+      UPDATE "MedicalItems"
+      SET ${sets.join(', ')}
+      WHERE id = $${params.length}
+      RETURNING *
+    `;
 
     try {
-      const result = await db.query(sql, values);
+      const result = await db.query(sql, params);
       if (result.rows.length === 0) {
         throwGraphQLError(res).message("Medical item not found").status(404).throw();
       }
@@ -140,7 +127,13 @@ const Mutation = {
   },
 
   _deleteMedicalItems: async (_, { id }, { res }) => {
-    const sql = 'UPDATE "MedicalItems" SET active = false, updated_at = current_timestamp WHERE id = $1 RETURNING id';
+    const sql = `
+      UPDATE "MedicalItems"
+      SET active = false, updated_at = current_timestamp
+      WHERE id = $1
+      RETURNING id
+    `;
+
     const result = await db.query(sql, [id]);
     if (result.rows.length === 0) {
       throwGraphQLError(res).message("Medical item not found").status(404).throw();
@@ -151,27 +144,32 @@ const Mutation = {
   _addMedicalSupply: async (_, { input, receivedBy }, { res }) => {
     await validateItemActive(input.medicalItemId, res);
 
-    const sql =
-      'INSERT INTO "MedicineBatch" ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location, "receivedBy", notes) ' +
-      'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *';
+    const sql = `
+      INSERT INTO "MedicineBatch"
+        ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location, "receivedBy", notes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `;
 
     try {
       const result = await db.query(sql, [
         input.medicalItemId, input.supplierName || null, input.batchNumber,
         input.dosageUnit, input.dosageValue, input.expiryDate,
-        input.location, receivedBy, input.notes || null
+        input.location, receivedBy, input.notes || null,
       ]);
-      
+
       const batch = result.rows[0];
       const quantity = input.quantity || 1;
-      
+
       // Bulk insert individual MedicineEntity records for each unit
       if (quantity > 0) {
-        const placeholders = Array(quantity).fill('($1)').join(',');
-        const bulkSql = `INSERT INTO "MedicineEntity" ("batchId") VALUES ${placeholders}`;
-        await db.query(bulkSql, [batch.id]);
+        const placeholders = Array(quantity).fill('($1)').join(', ');
+        await db.query(
+          `INSERT INTO "MedicineEntity" ("batchId") VALUES ${placeholders}`,
+          [batch.id],
+        );
       }
-      
+
       return batch;
     } catch (err) {
       logger.error("Error in _addMedicalSupply:", err);
@@ -182,15 +180,19 @@ const Mutation = {
   _addSupplyBatch: async (_, { input, receivedBy }, { res }) => {
     await validateItemActive(input.supplyItemId, res);
 
-    const sql =
-      'INSERT INTO "SupplyBatch" ("supplyItemId", batch_number, "initialQuantity", "currentQuantity", unit, expiry_date, location, received_at, "receivedBy", supplier_name, notes) ' +
-      'VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *';
+    // $3 is used twice: initialQuantity and currentQuantity start equal
+    const sql = `
+      INSERT INTO "SupplyBatch"
+        ("supplyItemId", batch_number, "initialQuantity", "currentQuantity", unit, expiry_date, location, received_at, "receivedBy", supplier_name, notes)
+      VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *
+    `;
 
     try {
       const result = await db.query(sql, [
         input.supplyItemId, input.batch_number, input.initialQuantity,
         input.unit, input.expiry_date || null, input.location,
-        input.received_at || null, receivedBy, input.supplier_name || null, input.notes || null
+        input.received_at || null, receivedBy, input.supplier_name || null, input.notes || null,
       ]);
       return result.rows[0];
     } catch (err) {
@@ -201,8 +203,8 @@ const Mutation = {
 
   _splitMedicalSupply: async (_, { batchId, input }, { res }) => {
     const source = await db.query(
-      'SELECT * FROM "SupplyBatch" WHERE id = $1 LIMIT 1',
-      [batchId]
+      `SELECT * FROM "SupplyBatch" WHERE id = $1 LIMIT 1`,
+      [batchId],
     );
 
     if (source.rows.length === 0) {
@@ -219,50 +221,50 @@ const Mutation = {
       throwGraphQLError(res).message("Target location must differ from source").status(400).throw();
     }
 
-    // Reduce source quantity
+    // Deduct from source batch
     await db.query(
-      'UPDATE "SupplyBatch" SET "currentQuantity" = "currentQuantity" - $1 WHERE id = $2',
-      [input.quantity, batchId]
+      `UPDATE "SupplyBatch" SET "currentQuantity" = "currentQuantity" - $1 WHERE id = $2`,
+      [input.quantity, batchId],
     );
 
-    // Create new batch at target location
-    const sql =
-      'INSERT INTO "SupplyBatch" ("supplyItemId", batch_number, "initialQuantity", "currentQuantity", unit, expiry_date, location, "receivedBy", supplier_name, notes) ' +
-      'VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9) RETURNING *';
+    // Create new batch at target location — $3 used twice for initial/current quantity
+    const sql = `
+      INSERT INTO "SupplyBatch"
+        ("supplyItemId", batch_number, "initialQuantity", "currentQuantity", unit, expiry_date, location, "receivedBy", supplier_name, notes)
+      VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `;
 
     const result = await db.query(sql, [
       batch.supplyItemId, batch.batch_number, input.quantity,
       batch.unit, batch.expiry_date, input.targetLocation,
-      batch.receivedBy, batch.supplier_name, input.notes || batch.notes
+      batch.receivedBy, batch.supplier_name, input.notes || batch.notes,
     ]);
 
     return result.rows[0];
   },
 
   _updateMedicalSupply: async (_, { batchId, input }, { res }) => {
-    const fields = [];
-    const values = [];
-    let idx = 1;
+    const params = [];
+    const sets = [];
 
-    if (input.expiryDate !== undefined) {
-      fields.push('"expiryDate" = $' + idx);
-      values.push(input.expiryDate);
-      idx++;
-    }
-    if (input.notes !== undefined) {
-      fields.push('notes = $' + idx);
-      values.push(input.notes);
-      idx++;
-    }
+    if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
+    if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
 
-    if (fields.length === 0) {
+    if (sets.length === 0) {
       throwGraphQLError(res).message("No fields to update").status(400).throw();
     }
 
-    values.push(batchId);
-    const sql = 'UPDATE "MedicineBatch" SET ' + fields.join(", ") + ' WHERE id = $' + idx + ' RETURNING *';
+    params.push(batchId);
 
-    const result = await db.query(sql, values);
+    const sql = `
+      UPDATE "MedicineBatch"
+      SET ${sets.join(', ')}
+      WHERE id = $${params.length}
+      RETURNING *
+    `;
+
+    const result = await db.query(sql, params);
     if (result.rows.length === 0) {
       throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
     }
@@ -270,29 +272,26 @@ const Mutation = {
   },
 
   _updateSupplyBatch: async (_, { batchId, input }, { res }) => {
-    const fields = [];
-    const values = [];
-    let idx = 1;
+    const params = [];
+    const sets = [];
 
-    if (input.expiryDate !== undefined) {
-      fields.push('expiry_date = $' + idx);
-      values.push(input.expiryDate);
-      idx++;
-    }
-    if (input.notes !== undefined) {
-      fields.push('notes = $' + idx);
-      values.push(input.notes);
-      idx++;
-    }
+    if (input.expiryDate !== undefined) sets.push(`expiry_date = $${params.push(input.expiryDate)}`);
+    if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
 
-    if (fields.length === 0) {
+    if (sets.length === 0) {
       throwGraphQLError(res).message("No fields to update").status(400).throw();
     }
 
-    values.push(batchId);
-    const sql = 'UPDATE "SupplyBatch" SET ' + fields.join(", ") + ' WHERE id = $' + idx + ' RETURNING *';
+    params.push(batchId);
 
-    const result = await db.query(sql, values);
+    const sql = `
+      UPDATE "SupplyBatch"
+      SET ${sets.join(', ')}
+      WHERE id = $${params.length}
+      RETURNING *
+    `;
+
+    const result = await db.query(sql, params);
     if (result.rows.length === 0) {
       throwGraphQLError(res).message("Supply batch not found").status(404).throw();
     }

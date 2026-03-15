@@ -1,20 +1,24 @@
 const { Server } = require('socket.io');
+const { createAdapter } = require('@socket.io/redis-adapter');
 const logger = require('../../utils/logger');
 const { createAuthMiddleware } = require('./socket-auth');
 const { trackConnection, untrackConnection } = require('./socket-store');
 const { bindHandlersToSocket } = require('./socket-events');
+const { flushPending } = require('./notification-store');
+const { getClient } = require('../redis');
 
 let io = null;
 
 /**
  * Initialize Socket.IO and attach to an HTTP server.
+ * Attaches a Redis adapter so events are fanned out across all server instances.
  * Safe to call multiple times — returns existing instance if already initialized.
  *
  * @param {import('http').Server} server - HTTP server from app.listen()
  * @param {Object} [options] - Additional Socket.IO server options
- * @returns {import('socket.io').Server}
+ * @returns {Promise<import('socket.io').Server>}
  */
-function initSocket(server, options = {}) {
+async function initSocket(server, options = {}) {
   if (io) {
     logger.warn('[SOCKET] Socket.IO already initialized');
     return io;
@@ -34,6 +38,20 @@ function initSocket(server, options = {}) {
     transports: ['websocket', 'polling'],
     ...options,
   });
+
+  // --- Redis adapter (cross-node fan-out) ---
+  // Two dedicated clients are required: one for publishing, one for subscribing.
+  // They are duplicated from the main client to reuse the same connection config.
+  try {
+    const pubClient = getClient().duplicate();
+    const subClient = getClient().duplicate();
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    logger.info('[SOCKET] Redis adapter attached (cross-node fan-out enabled)');
+  } catch (err) {
+    logger.error('[SOCKET] Failed to attach Redis adapter:', err.message);
+    throw err;
+  }
 
   // Wire JWT authentication
   io.use(createAuthMiddleware());
@@ -55,6 +73,15 @@ function initSocket(server, options = {}) {
 
     // Confirm connection to client
     socket.emit('socket:connected', { socketId: socket.id });
+
+    // Deliver any notifications that arrived while the user was offline
+    const pending = await flushPending(userId);
+    if (pending.length > 0) {
+      logger.info(`[SOCKET] Delivering ${pending.length} pending notification(s) to user:${userId}`);
+      for (const { event, data } of pending) {
+        socket.emit(event, data);
+      }
+    }
 
     // Disconnect
     socket.on('disconnect', async (reason) => {

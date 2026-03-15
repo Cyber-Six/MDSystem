@@ -32,13 +32,6 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
 
-// initialize DB
-redis.initRedis().then(() => {
-  logger.info('✅ Redis initialized');
-}).catch((err) => {
-  logger.error('Failed to initialize Redis', {  error: err  });
-});
-
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -109,30 +102,33 @@ app.get('*path', (req, res) => {
 
 const PORT = process.env.MEDICAL_PORT || 3001;
 const HOST = process.env.HOST;
-const server = app.listen(PORT, HOST, () => {
-  logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
-});
 
-// Initialize Socket.IO
-initSocket(server);
+async function start() {
+  await redis.initRedis();
+  logger.info('✅ Redis initialized');
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down staff server gracefully...');
-  const io = getIO();
-  if (io) io.close();
-  server.close(() => {
-    logger.info('Staff server closed');
-    process.exit(0);
+  const server = app.listen(PORT, HOST, () => {
+    logger.info(`⚙️ Staff server running on ${HOST}:${PORT}`);
   });
-});
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down staff server gracefully...');
-  const io = getIO();
-  if (io) io.close();
-  server.close(() => {
-    logger.info('Staff server closed');
-    process.exit(0);
-  });
+  await initSocket(server);
+
+  // Graceful shutdown
+  function shutdown(signal) {
+    logger.info(`${signal} received, shutting down staff server gracefully...`);
+    const io = getIO();
+    if (io) io.close();
+    server.close(() => {
+      logger.info('Staff server closed');
+      process.exit(0);
+    });
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
+
+start().catch((err) => {
+  logger.error('Failed to start staff server:', err);
+  process.exit(1);
 });

@@ -96,10 +96,31 @@ function getConnectedCount() {
   return connectedUsers.size;
 }
 
+/**
+ * Check if a user has any active connections across ALL server nodes.
+ * Queries Redis — use this when you need cluster-wide presence (e.g., in a
+ * background worker or a different process than where the socket connected).
+ * Falls back to the local in-memory check if Redis is unavailable.
+ *
+ * @param {string} userId
+ * @returns {Promise<boolean>}
+ */
+async function isConnectedAnywhere(userId) {
+  try {
+    const key = `socket:user:${userId}`;
+    const count = await redis.sCardKey(key);
+    return count > 0;
+  } catch (error) {
+    logger.error('[SOCKET_STORE] Redis isConnectedAnywhere failed, falling back to local:', error.message);
+    return isConnected(userId);
+  }
+}
+
 module.exports = {
   trackConnection,
   untrackConnection,
   isConnected,
+  isConnectedAnywhere,
   getSocketIds,
   getConnectedCount,
 };

@@ -1,45 +1,52 @@
 const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
-const { enqueuePrescriptionNotification } = require("../../../../../services/emailservice.js");
+const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
 const { findEmailByUserId } = require("../../../../../config/query.js");
 
 const Query = {
   _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { res }) => {
-    let sql =
-      'SELECT mi.id, mi.item_code, mi.item_name, mi.category, mi.description, ' +
-      'mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", ' +
-      'mb."dosageValue", mb."expiryDate", mb.location ' +
-      'FROM "MedicalItems" mi ' +
-      'JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id ' +
-      'WHERE mi.active = true AND mi.category = ' + "'Medicine'" + ' AND mb."expiryDate" > CURRENT_DATE';
     const params = [];
-    let idx = 1;
+    const conditions = [
+      `mi.active = true`,
+      `mi.category = 'Medicine'`,
+      `mb."expiryDate" > CURRENT_DATE`,
+    ];
 
-    if (location) {
-      sql += ' AND mb.location = $' + idx;
-      params.push(location);
-      idx++;
-    }
+    if (location) conditions.push(`mb.location = $${params.push(location)}`);
 
-    sql += ' ORDER BY mi.item_name, mb."expiryDate" OFFSET $' + idx + ' LIMIT $' + (idx + 1);
-    params.push(offset, limit);
+    const sql = `
+      SELECT
+        mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
+        mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
+      FROM "MedicalItems" mi
+      JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY mi.item_name, mb."expiryDate"
+      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+    `;
 
     const result = await db.query(sql, params);
     return result.rows;
   },
 
   _getPatientPrescriptions: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
-    const sql =
-      'SELECT mtl.*, ' +
-      'COALESCE(json_agg(' +
-      'json_build_object(' + "'id'" + ', me.id, ' + "'batchId'" + ', me."batchId", ' + "'transactionId'" + ', me."transactionId")' +
-      ') FILTER (WHERE me.id IS NOT NULL), ' + "'[]'" + ') AS items ' +
-      'FROM "MedicineTransactionLog" mtl ' +
-      'LEFT JOIN "MedicineEntity" me ON me."transactionId" = mtl.id ' +
-      'WHERE mtl."patientId" = $1 ' +
-      'GROUP BY mtl.id ORDER BY mtl."issuedAt" DESC ' +
-      'OFFSET $2 LIMIT $3';
+    const sql = `
+      SELECT mtl.*,
+        COALESCE(
+          json_agg(
+            json_build_object('id', me.id, 'batchId', me."batchId", 'transactionId', me."transactionId")
+          ) FILTER (WHERE me.id IS NOT NULL),
+          '[]'
+        ) AS items
+      FROM "MedicineTransactionLog" mtl
+      LEFT JOIN "MedicineEntity" me ON me."transactionId" = mtl.id
+      WHERE mtl."patientId" = $1
+      GROUP BY mtl.id
+      ORDER BY mtl."issuedAt" DESC
+      OFFSET $2 LIMIT $3
+    `;
+
     const result = await db.query(sql, [patientId, offset, limit]);
     return result.rows;
   },
@@ -47,23 +54,28 @@ const Query = {
 
 const Mutation = {
   _issuePrescription: async (_, { input, issuedBy }, { res }) => {
-    const totalQuantity = input.items.reduce(function(sum, item) { return sum + item.quantity; }, 0);
+    const totalQuantity = input.items.reduce((sum, item) => sum + item.quantity, 0);
 
-    const txSql =
-      'INSERT INTO "MedicineTransactionLog" ("patientId", action, quantity, "issuedBy", notes) ' +
-      'VALUES ($1, ' + "'Issue'" + ', $2, $3, $4) RETURNING *';
+    const txSql = `
+      INSERT INTO "MedicineTransactionLog" ("patientId", action, quantity, "issuedBy", notes)
+      VALUES ($1, 'Issue', $2, $3, $4)
+      RETURNING *
+    `;
+
+    const entitySql = `
+      INSERT INTO "MedicineEntity" ("batchId", "transactionId")
+      VALUES ($1, $2)
+      RETURNING *
+    `;
 
     try {
       const txResult = await db.query(txSql, [
-        input.patientId, totalQuantity, issuedBy, input.notes || null
+        input.patientId, totalQuantity, issuedBy, input.notes || null,
       ]);
       const transaction = txResult.rows[0];
 
       const items = [];
       for (const item of input.items) {
-        const entitySql =
-          'INSERT INTO "MedicineEntity" ("batchId", "transactionId") ' +
-          'VALUES ($1, $2) RETURNING *';
         const entityResult = await db.query(entitySql, [item.batchId, transaction.id]);
         items.push(entityResult.rows[0]);
       }
@@ -74,7 +86,12 @@ const Mutation = {
       try {
         const patientEmail = await findEmailByUserId(input.patientId);
         if (patientEmail) {
-          await enqueuePrescriptionNotification(patientEmail, transaction.id, input.notes);
+          await enqueueNotificationEmail(
+            patientEmail,
+            'Prescription Issued',
+            `A prescription <strong>#${transaction.id}</strong> has been <span style="color:green;font-weight:bold;">issued</span> for you by the medical staff. Please visit the clinic to collect your prescribed medicine.`,
+            input.notes ?? null,
+          );
         }
       } catch (emailErr) {
         logger.error("Failed to enqueue prescription email:", emailErr);

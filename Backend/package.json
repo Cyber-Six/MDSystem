@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "@graphql-tools/schema": "^10.0.31",
+    "@socket.io/redis-adapter": "^8.3.0",
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.65.0",
