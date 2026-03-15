@@ -4,19 +4,28 @@
  * Frontend-only utility to tell apart Initial Record submissions from
  * Record Update requests — no backend changes required.
  *
- * Logic:
- *   - Initial-record tickets and personal-record logs are created as part of
- *     the same workflow and share near-identical creation timestamps.
- *   - Update-request tickets are created later, while personal-record log
- *     creation time remains anchored to the initial workflow.
+ * Classification logic (in priority order):
  *
- * We therefore classify scope='Both' tickets by comparing ticket.created_at
- * to the latest personal-record-log created_at for the same user.
+ *   1. scope === 'Medical' | 'Dental'  → always UPDATE
+ *      The backend blocks unverified patients from creating partial-scope tickets,
+ *      so Medical/Dental scope is 100% guaranteed to come from a verified patient.
  *
- * Shortcut (always safe):
- *   scope === 'Medical' | 'Dental' → always UPDATE
- *   The backend blocks unverified patients from creating partial-scope tickets,
- *   so Medical/Dental scope is 100% guaranteed to come from a verified patient.
+ *   2. scope === 'Both' + credentials_status = 'Unverified'
+ *      → always INITIAL — patient has never been approved, no ambiguity.
+ *
+ *   3. scope === 'Both' + credentials_status = 'Active' + ticket.status ≠ 'Approved'
+ *      → always UPDATE — the initial record was already approved (that is what made
+ *      them Active). Any new pending/revision ticket from an Active patient is an update.
+ *
+ *   4. scope === 'Both' + credentials_status = 'Active' + ticket.status === 'Approved'
+ *      → check count of Approved personal-record-log entries:
+ *          count = 1  →  INITIAL  (their initial is the only thing ever approved)
+ *          count ≥ 2  →  UPDATE   (at least one update was also approved)
+ *      UsersPersonalLog is append-only; only the final approved submission in any
+ *      workflow gets status='Approved', so revision cycles do not inflate this count.
+ *
+ *   5. Fallback (APIs unavailable) → timestamp comparison against the latest
+ *      personal-record-log created_at as a last resort.
  */
 
 import { axiosRequest } from '../../../packages-core-adapter';
@@ -45,7 +54,8 @@ export const getUserCredentialStatus = async (userId) => {
 
 /**
  * Fetches the latest personal-record log metadata for a patient.
- * We only need created_at/status for initial-vs-update classification.
+ * Kept as a public export for backward-compatibility and used as a timestamp
+ * fallback inside enrichWithInitialFlag when other APIs are unavailable.
  *
  * @param {string} userId
  * @returns {Promise<{created_at?: string, status?: string}|null>}
@@ -71,7 +81,40 @@ export const getLatestPersonalRecordLogMeta = async (userId) => {
   }
 };
 
-const INITIAL_MATCH_WINDOW_MS = 24 * 60 * 60 * 1000; // 24-hour window for initial record submission
+/**
+ * Fetches the personal-record log history for a patient (up to 50 entries).
+ * Used internally to count how many submissions have ever been Approved,
+ * which is the reliable non-time-based signal for initial-vs-update classification.
+ *
+ * UsersPersonalLog is append-only — each submission inserts a fresh row. Only the
+ * final accepted submission in any workflow ever receives status='Approved', so
+ * revision cycles do not inflate the approved count.
+ *
+ * @param {string} userId
+ * @returns {Promise<Array<{id: string, status: string, created_at: string}>|null>}
+ */
+const _getPersonalRecordLogs = async (userId) => {
+  try {
+    const response = await axiosRequest.post('/profile/medical', {
+      query: `query GetPersonalRecordLogs($userId: ID!, $limit: Int) {
+        getUserPersonalRecordLog(userId: $userId, limit: $limit) {
+          id
+          status
+          created_at
+        }
+      }`,
+      variables: { userId, limit: 50 },
+    });
+    const rows = response.data?.data?.getUserPersonalRecordLog;
+    return Array.isArray(rows) ? rows : null;
+  } catch (err) {
+    console.error('[MDSystem] ticket-type-helper _getPersonalRecordLogs error:', err?.message ?? err);
+    return null;
+  }
+};
+
+// Used only as a last-resort fallback when all status-based checks are unavailable.
+const INITIAL_MATCH_WINDOW_MS = 10 * 60 * 1000; // 10-minute window
 
 const isNearSameTimestamp = (a, b) => {
   const aMs = a ? new Date(a).getTime() : NaN;
@@ -82,24 +125,18 @@ const isNearSameTimestamp = (a, b) => {
 
 /**
  * Adds `is_initial: boolean` to every ticket in the list.
- * All look-ups run in parallel.
+ * All look-ups are cached per-user and run in parallel.
  *
- * Fallback strategy when timestamp-based check is unavailable:
- * use credential-status heuristic for backward compatibility.
+ * Primary classification is purely status-based (no time needed for cases 1–4).
+ * Timestamp comparison is only used as a last-resort fallback when both the
+ * credential-status API and the personal-record-log API are unavailable.
  *
- * @param {Array<{patientId: string, scope: string, created_at?: string}>} tickets
+ * @param {Array<{patientId: string, scope: string, status: string, created_at?: string}>} tickets
  * @returns {Promise<Array<{...ticket, is_initial: boolean}>>}
  */
 export const enrichWithInitialFlag = async (tickets) => {
-  const logMetaCache = new Map();
   const credentialCache = new Map();
-
-  const getCachedLogMeta = async (userId) => {
-    if (!logMetaCache.has(userId)) {
-      logMetaCache.set(userId, await getLatestPersonalRecordLogMeta(userId));
-    }
-    return logMetaCache.get(userId);
-  };
+  const logCache = new Map();
 
   const getCachedCredentialStatus = async (userId) => {
     if (!credentialCache.has(userId)) {
@@ -108,23 +145,60 @@ export const enrichWithInitialFlag = async (tickets) => {
     return credentialCache.get(userId);
   };
 
+  const getCachedLogs = async (userId) => {
+    if (!logCache.has(userId)) {
+      logCache.set(userId, await _getPersonalRecordLogs(userId));
+    }
+    return logCache.get(userId);
+  };
+
   return Promise.all(
     tickets.map(async (ticket) => {
+      // ── Step 1 ──────────────────────────────────────────────────────────────
       // Partial-scope tickets are only submitted by verified patients → always UPDATE
       if (ticket.scope === 'Medical' || ticket.scope === 'Dental') {
         return { ...ticket, is_initial: false };
       }
 
-      const latestPersonalLog = await getCachedLogMeta(ticket.patientId);
+      const credStatus = await getCachedCredentialStatus(ticket.patientId);
 
-      if (latestPersonalLog?.created_at && isNearSameTimestamp(ticket.created_at, latestPersonalLog.created_at)) {
+      // ── Step 2 ──────────────────────────────────────────────────────────────
+      // Unverified → patient has never been approved → definitely INITIAL.
+      if (credStatus !== null && credStatus.toLowerCase() !== 'active') {
         return { ...ticket, is_initial: true };
       }
 
-      // Backward-compatible fallback when log metadata is unavailable.
-      if (!latestPersonalLog) {
-        const status = await getCachedCredentialStatus(ticket.patientId);
-        return { ...ticket, is_initial: status?.toLowerCase() !== 'active' };
+      if (credStatus !== null) {
+        // ── Step 3 ────────────────────────────────────────────────────────────
+        // Active + non-Approved ticket → UPDATE.
+        // The initial was already approved before this patient became Active.
+        // Any new pending/revision submission from them is an update.
+        if (ticket.status !== 'Approved') {
+          return { ...ticket, is_initial: false };
+        }
+
+        // ── Step 4 ────────────────────────────────────────────────────────────
+        // Active + Approved ticket → count Approved log entries.
+        // Exactly 1 Approved entry = only the initial was ever approved → INITIAL.
+        // 2 or more = at least one update was also approved → UPDATE.
+        const logs = await getCachedLogs(ticket.patientId);
+        if (logs !== null) {
+          const approvedCount = logs.filter((l) => l.status === 'Approved').length;
+          return { ...ticket, is_initial: approvedCount === 1 };
+        }
+      }
+
+      // ── Step 5 (fallback) ────────────────────────────────────────────────────
+      // Both APIs unavailable — fall back to timestamp comparison as last resort.
+      const logs = await getCachedLogs(ticket.patientId);
+      const latestLog = Array.isArray(logs) ? logs[0] : null;
+      if (latestLog?.created_at) {
+        return { ...ticket, is_initial: isNearSameTimestamp(ticket.created_at, latestLog.created_at) };
+      }
+
+      // Absolute last resort: credential status alone (Unverified=initial, else update).
+      if (credStatus !== null) {
+        return { ...ticket, is_initial: credStatus.toLowerCase() !== 'active' };
       }
 
       return { ...ticket, is_initial: false };
