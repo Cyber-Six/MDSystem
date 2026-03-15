@@ -76,8 +76,21 @@ const Mutation = {
 
       const items = [];
       for (const item of input.items) {
-        const entityResult = await db.query(entitySql, [item.batchId, transaction.id]);
-        items.push(entityResult.rows[0]);
+        // Assign existing unassigned entities (FEFO: First-Expiry-First-Out)
+        const assignSql = `
+          UPDATE "MedicineEntity" SET "transactionId" = $1 
+          WHERE id IN (
+            SELECT me.id 
+            FROM "MedicineEntity" me
+            JOIN "MedicineBatch" mb ON mb.id = me."batchId"
+            WHERE me."batchId" = $2 AND me."transactionId" IS NULL
+            ORDER BY mb."expiryDate" ASC
+            LIMIT $3
+          )
+          RETURNING *
+        `;
+        const assignResult = await db.query(assignSql, [transaction.id, item.batchId, item.quantity]);
+        items.push(...assignResult.rows);
       }
 
       transaction.items = items;

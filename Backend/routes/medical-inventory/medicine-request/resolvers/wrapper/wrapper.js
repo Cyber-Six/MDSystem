@@ -160,6 +160,12 @@ const Mutation = {
         [requestId],
       );
       const totalQuantity = itemsResult.rows.reduce((sum, item) => sum + item.quantity, 0);
+      
+      // Validate available units for each batch before approval
+      const { validateBatchAvailable } = require('./helper.js');
+      for (const item of itemsResult.rows) {
+        await validateBatchAvailable(item.batchId, item.quantity, res);
+      }
 
       // Dedicated client so BEGIN/COMMIT/ROLLBACK stay on the same connection.
       // SET CONSTRAINTS ALL DEFERRED resolves the circular FK between
@@ -179,11 +185,20 @@ const Mutation = {
         ]);
         const transactionId = txResult.rows[0].id;
 
+        // Assign existing unassigned entities instead of creating new ones (FEFO)
         for (const item of itemsResult.rows) {
-          await client.query(
-            `INSERT INTO "MedicineEntity" ("batchId", "transactionId") VALUES ($1, $2)`,
-            [item.batchId, transactionId],
-          );
+          const assignSql = `
+            UPDATE "MedicineEntity" SET "transactionId" = $1 
+            WHERE id IN (
+              SELECT me.id 
+              FROM "MedicineEntity" me
+              JOIN "MedicineBatch" mb ON mb.id = me."batchId"
+              WHERE me."batchId" = $2 AND me."transactionId" IS NULL
+              ORDER BY mb."expiryDate" ASC
+              LIMIT $3
+            )
+          `;
+          await client.query(assignSql, [transactionId, item.batchId, item.quantity]);
         }
 
         const updateSql = `
