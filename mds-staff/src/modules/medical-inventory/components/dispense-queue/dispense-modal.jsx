@@ -261,7 +261,6 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                     Not all items are fully allocated
                   </span>
                 )}
-                )}
               </div>
             </div>
           )}

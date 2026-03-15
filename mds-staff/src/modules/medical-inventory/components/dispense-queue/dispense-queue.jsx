@@ -9,6 +9,8 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
   const [search, setSearch] = useState('');
   const [filterLocation, setFilterLocation] = useState('Casal');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Helper to format date safely
   const formatDate = (dateValue) => {
@@ -70,7 +72,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
     });
   }, [requests, search, filterLocation, filterStatus, itemMap, batchMap]);
 
-  const statusOptions = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
+  const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
   const locations = ['Casal', 'Arlegui', 'QuezonCity'];
 
   const getLocationDisplay = (loc) => {
@@ -147,7 +149,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                   </td>
                 </tr>
               ) : (
-                filtered.map((req) => {
+                filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((req) => {
                   const item = itemMap[req.items?.[0]?.itemId];
                   const badge = STATUS_BADGES[req.status] || 'bg-neutral-100 text-neutral-700';
                   const isStudentReq = req.items?.[0]?.quantity === null;
@@ -202,6 +204,9 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                             Dispense
                           </button>
                         )}
+                        {req.status === 'Completed' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-success-700 dark:text-success-400 bg-success-100 dark:bg-success-900/30 rounded-lg">Completed</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -210,6 +215,39 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {Math.ceil(filtered.length / itemsPerPage) > 1 && (
+          <div className="mt-4 px-4 py-3 flex items-center justify-center gap-2 border-t border-neutral-200 dark:border-neutral-700">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+            >
+              Previous
+            </button>
+            {Array.from({ length: Math.ceil(filtered.length / itemsPerPage) }, (_, i) => (
+              <button
+                key={i + 1}
+                onClick={() => setCurrentPage(i + 1)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  currentPage === i + 1
+                    ? 'bg-primary-500 text-white'
+                    : 'border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filtered.length / itemsPerPage), prev + 1))}
+              disabled={currentPage === Math.ceil(filtered.length / itemsPerPage)}
+              className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

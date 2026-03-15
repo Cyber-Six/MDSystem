@@ -437,7 +437,7 @@ const MedicalInventory = () => {
     }));
     
     // Update request status locally to reflect dispense
-    setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Dispensed' } : r));
+    setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Completed' } : r));
     
     // Record transaction locally
     const req = requests.find((r) => r.id === requestId) || request;
