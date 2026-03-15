@@ -198,12 +198,15 @@ const STATUS_BANNER = {
  * Patient Record View Page
  * Displays comprehensive patient information in tabs, loaded from /emr/medical GraphQL.
  */
-const PatientRecord = () => {
-  const { patientId } = useParams();
+const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, embedded = false }) => {
+  const { patientId: routePatientId } = useParams();
   const [searchParams] = useSearchParams();
+  const patientId = propPatientId || routePatientId;
   const VALID_TABS = ['personal', 'medical', 'dental', 'obgyne', 'history', 'appointments', 'medicines', 'documents'];
-  const initialTab = VALID_TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'personal';
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const resolvedTab = propInitialTab || searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(
+    VALID_TABS.includes(resolvedTab) ? resolvedTab : 'personal'
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -395,10 +398,12 @@ const PatientRecord = () => {
   if (loadError || !basicInfo) {
     return (
       <div className="space-y-4">
-        <Link to="/search" className="inline-flex items-center gap-1 text-sm text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          Back to Search
-        </Link>
+        {!embedded && (
+          <Link to="/search" className="inline-flex items-center gap-1 text-sm text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Back to Search
+          </Link>
+        )}
         <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg p-6 text-center">
           <p className="text-sm font-medium text-error-700 dark:text-error-400">{loadError || 'Patient not found.'}</p>
           <p className="text-xs text-error-500 dark:text-error-500 mt-1">ID: {patientId}</p>
@@ -981,15 +986,17 @@ const PatientRecord = () => {
   return (
     <div className="space-y-4">
       {/* Back Button */}
-      <Link
-        to="/search"
-        className="inline-flex items-center gap-1 text-sm text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to Search
-      </Link>
+      {!embedded && (
+        <Link
+          to="/search"
+          className="inline-flex items-center gap-1 text-sm text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Search
+        </Link>
+      )}
 
       {/* Record Status Banner */}
       {bannerCfg && (

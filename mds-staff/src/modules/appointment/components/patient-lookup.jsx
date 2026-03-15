@@ -1,6 +1,10 @@
-import React, { useState, useCallback } from 'react';
-import { resolvePatientByIdentifier, getPatientStatus, getPatientRecords, respondToAppointment, recordAttendance, STATUS } from '../staff-appointment-service';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { getPatientStatus, getPatientRecords, respondToAppointment, recordAttendance, STATUS } from '../staff-appointment-service';
+import { searchPatients, formatPatientName, getProfileLabel } from '../../../services/patient-search-service';
 import AppointmentDetailModal from './appointment-detail-modal';
+
+// ── Change this value to adjust the search debounce delay ───────────────────
+const LOOKUP_DEBOUNCE_MS = 1000;
 
 const PAGE_SIZE = 10;
 
@@ -17,18 +21,57 @@ const STATUS_COLORS = {
 };
 
 const PatientLookup = () => {
-  const [inputId, setInputId] = useState('');
-  const [searchedIdentifier, setSearchedIdentifier] = useState(null); // student/employee ID shown in UI
-  const [resolvedUserId, setResolvedUserId] = useState(null);           // internal DB userId
-  const [currentStatus, setCurrentStatus] = useState(null);
-  const [records, setRecords] = useState([]);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState('');
-  const [selectedRecord, setSelectedRecord] = useState(null);
+  // ── Search state ───────────────────────────────────────────────────────────
+  const [searchInput, setSearchInput]       = useState('');
+  const [searchResults, setSearchResults]   = useState([]);
+  const [isSearching, setIsSearching]       = useState(false);
+  const [searchFired, setSearchFired]       = useState(false);
+  const [searchError, setSearchError]       = useState('');
+  const inputRef = useRef(null);
 
+  // ── Selected patient & appointment records state ───────────────────────────
+  const [selectedPatient, setSelectedPatient] = useState(null);   // full patient object
+  const [resolvedUserId,  setResolvedUserId]  = useState(null);
+  const [currentStatus,   setCurrentStatus]   = useState(null);
+  const [records,         setRecords]         = useState([]);
+  const [offset,          setOffset]          = useState(0);
+  const [hasMore,         setHasMore]         = useState(false);
+  const [loading,         setLoading]         = useState(false);
+  const [loadingMore,     setLoadingMore]     = useState(false);
+  const [recordsError,    setRecordsError]    = useState('');
+  const [selectedRecord,  setSelectedRecord]  = useState(null);
+
+  // ── Debounced search ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed.length < 2) {
+      setSearchResults([]);
+      setSearchFired(false);
+      setIsSearching(false);
+      setSearchError('');
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchFired(true);
+    setSearchError('');
+
+    const timer = setTimeout(async () => {
+      try {
+        const data = await searchPatients(trimmed);
+        setSearchResults(data);
+      } catch (err) {
+        setSearchError(err.message || 'Search failed');
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, LOOKUP_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // ── Fetch appointment records for a resolved userId ────────────────────────
   const fetchRecords = useCallback(async (internalId, pageOffset, append = false) => {
     const data = await getPatientRecords(internalId, pageOffset, PAGE_SIZE);
     if (append) {
@@ -40,40 +83,46 @@ const PatientLookup = () => {
     return data;
   }, []);
 
-  const handleSearch = async () => {
-    const raw = inputId.trim();
-    if (!raw) return;
-    const identifierNum = Number(raw);
-    if (!Number.isInteger(identifierNum) || identifierNum <= 0) {
-      setError('Please enter a valid student or employee ID number.');
-      return;
-    }
-    setError('');
-    setLoading(true);
-    setSearchedIdentifier(null);
+  // ── Select a patient from search results ──────────────────────────────────
+  const handleSelectPatient = async (patient) => {
+    setSelectedPatient(patient);
     setResolvedUserId(null);
     setCurrentStatus(null);
     setRecords([]);
     setOffset(0);
     setHasMore(false);
+    setRecordsError('');
+    setLoading(true);
+    // Clear the picker once a patient is selected
+    setSearchResults([]);
+    setSearchInput('');
+    setSearchFired(false);
+
     try {
-      const internalId = await resolvePatientByIdentifier(identifierNum);
-      if (!internalId) {
-        setError('No patient found with that student / employee ID.');
-        return;
-      }
+      const internalId = String(patient.id);
       const [status] = await Promise.all([
         getPatientStatus(internalId),
         fetchRecords(internalId, 0),
       ]);
       setCurrentStatus(status);
-      setSearchedIdentifier(identifierNum);
       setResolvedUserId(internalId);
     } catch (err) {
-      setError(err.message || 'Lookup failed. Check the ID and try again.');
+      setRecordsError(err.message || 'Failed to load appointment records.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Clear selected patient, go back to search ─────────────────────────────
+  const handleClearPatient = () => {
+    setSelectedPatient(null);
+    setResolvedUserId(null);
+    setCurrentStatus(null);
+    setRecords([]);
+    setOffset(0);
+    setHasMore(false);
+    setRecordsError('');
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const refreshRecords = useCallback(async () => {
@@ -121,7 +170,7 @@ const PatientLookup = () => {
       await fetchRecords(resolvedUserId, nextOffset, true);
       setOffset(nextOffset);
     } catch (err) {
-      setError(err.message);
+      setRecordsError(err.message);
     } finally {
       setLoadingMore(false);
     }
@@ -129,39 +178,151 @@ const PatientLookup = () => {
 
   return (
     <div className="space-y-3">
-      {/* Search bar */}
+      {/* ── Search bar ──────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
-        <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-3">Patient Appointment Lookup by Student / Employee ID</h3>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={inputId}
-            onChange={(e) => setInputId(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-            placeholder="Enter student / employee ID..."
-            className="flex-1 px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-          />
-          <button
-            onClick={handleSearch}
-            disabled={!inputId.trim() || loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Searching…' : 'Search'}
-          </button>
-        </div>
-        {error && (
-          <p className="mt-2 text-xs text-error-600 dark:text-error-400">{error}</p>
+        <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-3">
+          Patient Appointment Lookup
+        </h3>
+
+        {selectedPatient ? (
+          /* Selected patient chip */
+          <div className="flex items-center gap-3 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-md">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+              {selectedPatient.first_name?.[0] || '?'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-secondary-900 dark:text-white truncate">
+                {formatPatientName(selectedPatient)}
+              </p>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                {selectedPatient.identifier ? `ID: ${selectedPatient.identifier}` : ''}
+                {selectedPatient.identifier && selectedPatient.profile_type ? ' · ' : ''}
+                {selectedPatient.profile_type || ''}
+              </p>
+            </div>
+            <button
+              onClick={handleClearPatient}
+              className="p-1 rounded text-secondary-400 hover:text-secondary-700 dark:text-neutral-500 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex-shrink-0"
+              title="Search again"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          /* Search input */
+          <div className="relative">
+            <div className="flex items-center gap-2 px-3 py-2 border border-neutral-200 dark:border-neutral-600 rounded-md bg-neutral-50 dark:bg-neutral-700 focus-within:ring-1 focus-within:ring-primary-500 focus-within:border-primary-500 transition-all">
+              {isSearching ? (
+                <span className="w-4 h-4 rounded-full border-2 border-neutral-200 dark:border-neutral-600 border-t-primary-500 animate-spin flex-shrink-0 inline-block" />
+              ) : (
+                <svg className="w-4 h-4 text-secondary-400 dark:text-neutral-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              )}
+              <input
+                ref={inputRef}
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search by name, student/employee ID, or email…"
+                autoComplete="off"
+                className="flex-1 bg-transparent text-sm text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none"
+              />
+              {searchInput && (
+                <button
+                  onClick={() => { setSearchInput(''); setSearchResults([]); setSearchFired(false); }}
+                  className="text-secondary-300 hover:text-secondary-500 dark:text-neutral-600 dark:hover:text-neutral-400 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Hint */}
+            {searchInput.trim().length > 0 && searchInput.trim().length < 2 && (
+              <p className="mt-1.5 text-xs text-secondary-400 dark:text-neutral-500">
+                Type at least 2 characters to search…
+              </p>
+            )}
+
+            {/* Search error */}
+            {searchError && (
+              <p className="mt-1.5 text-xs text-error-600 dark:text-error-400">{searchError}</p>
+            )}
+
+            {/* Results picker */}
+            {searchFired && !isSearching && searchResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
+                {searchResults.map((patient) => (
+                  <button
+                    key={patient.id}
+                    onClick={() => handleSelectPatient(patient)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors text-left border-b border-neutral-100 dark:border-neutral-700/60 last:border-b-0"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                      {patient.first_name?.[0] || '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">
+                        {formatPatientName(patient)}
+                      </p>
+                      <p className="text-xs text-secondary-400 dark:text-neutral-500 truncate">
+                        {patient.identifier ? `ID: ${patient.identifier}` : 'No ID'}
+                        {' · '}
+                        {getProfileLabel(patient)}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
+                      patient.profile_type === 'Student'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                        : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                    }`}>
+                      {patient.profile_type}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* No results */}
+            {searchFired && !isSearching && searchResults.length === 0 && !searchError && searchInput.trim().length >= 2 && (
+              <p className="mt-1.5 text-xs text-secondary-400 dark:text-neutral-500">
+                No patients found for "{searchInput.trim()}"
+              </p>
+            )}
+          </div>
+        )}
+
+        {recordsError && (
+          <p className="mt-2 text-xs text-error-600 dark:text-error-400">{recordsError}</p>
         )}
       </div>
 
-      {/* Results */}
-      {searchedIdentifier && !loading && (
+      {/* ── Appointment records ──────────────────────────────────────────────── */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <span className="animate-spin w-8 h-8 rounded-full border-2 border-neutral-200 dark:border-neutral-700 border-t-primary-500 inline-block" />
+        </div>
+      )}
+
+      {selectedPatient && !loading && resolvedUserId && (
         <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
           {/* Patient summary header */}
           <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
             <div>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">Student / Employee ID</p>
-              <p className="text-sm font-semibold text-secondary-800 dark:text-white">{searchedIdentifier}</p>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400">Patient</p>
+              <p className="text-sm font-semibold text-secondary-800 dark:text-white">
+                {formatPatientName(selectedPatient)}
+                {selectedPatient.identifier ? (
+                  <span className="ml-2 font-normal text-secondary-500 dark:text-neutral-400 font-mono">
+                    #{selectedPatient.identifier}
+                  </span>
+                ) : null}
+              </p>
             </div>
             <div className="text-right">
               <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-0.5">Latest Status</p>
@@ -188,7 +349,6 @@ const PatientLookup = () => {
                   onClick={() => setSelectedRecord(rec)}
                   className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-neutral-50 dark:hover:bg-neutral-700/40 transition-colors group"
                 >
-                  {/* Index dot */}
                   <div className="mt-0.5 w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-700 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/30 text-[10px] font-bold text-secondary-500 dark:text-neutral-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                     {idx + 1}
                   </div>
@@ -239,7 +399,7 @@ const PatientLookup = () => {
         </div>
       )}
 
-      {/* Detail modal for a clicked record */}
+      {/* Detail modal */}
       {selectedRecord && (
         <AppointmentDetailModal
           appointment={selectedRecord}

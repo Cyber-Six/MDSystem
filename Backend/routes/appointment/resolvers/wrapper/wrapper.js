@@ -302,12 +302,14 @@ const Query = {
     const query = `
       SELECT ps.*, ss.location,
         up."identifier" AS "patientIdentifier",
-        CONCAT(up.first_name, ' ', up.last_name) AS "patientName",
+        CONCAT(COALESCE(up.first_name, ''), ' ', COALESCE(up.last_name, '')) AS "patientName",
+        uc.email AS "patientEmail",
         CONCAT(staff.first_name, ' ', staff.last_name) AS "approvedBy"
       FROM "patientSlot" ps
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
       LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
+      LEFT JOIN "UserCredentials" uc ON uc.id = ps."patientId"
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
 
       WHERE ps.status = $1
@@ -333,6 +335,20 @@ const Query = {
     }
 
     return slots.map(s => ({ ...s, requirements: reqBySlot[s.id] || [] }));
+  },
+
+  _getAppointmentStatusCounts: async (_, _args, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const result = await db.query(`
+      SELECT status, COUNT(*)::int AS count
+      FROM "patientSlot"
+      GROUP BY status;
+    `);
+
+    return result.rows;
   }
 };
 
