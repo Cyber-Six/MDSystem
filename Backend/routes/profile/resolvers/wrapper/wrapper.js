@@ -226,21 +226,31 @@ const Mutation = {
       RETURNING *;
     `;
 
-      const { rows } = await db.query(query, [status, userId]);
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(query, [status, userId]);
       if (rows.length === 0) {
         return null;
       }
 
       if (status === "Approved") {
         logger.info(`Applying approved personal record update for user ${userId}, log ID ${rows[0].id}`);
-        await applyUpdatePersonalRecord(_, { userId, input: rows[0] }, { res, db });
+        await Mutation._reloadCredentialStatus(_, { userId, client }, { user, res }); // reload credential status after approval
+        await applyUpdatePersonalRecord(_, { userId, input: rows[0], client }, { res, db });
         }
         
       return rows[0].status;
-
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _setPersonalRecordLog:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
+    }
   },
 
-  _reloadCredentialStatus: async (_, { userId }, { user, res }) => {
+  _reloadCredentialStatus: async (_, { userId, client=db }, { user, res }) => {
     const checkQuery = `
       SELECT EXISTS (
         SELECT 1
@@ -253,14 +263,14 @@ const Mutation = {
       );
     `;
     
-    const result = await db.query(checkQuery, [userId]);
+    const result = await client.query(checkQuery, [userId]);
     if (result.rows[0].exists) {
       const updateQuery = `
         UPDATE "UserCredentials"
         SET credentials_status = 'Active'
         WHERE id = $1;
       `;
-      await db.query(updateQuery, [userId]);
+      await client.query(updateQuery, [userId]);
       return { success: true, message: "Credential status updated to Active." };
     } else {
       return { success: false, message: "User is not yet verified. Submit account and medical/dental information." };
@@ -374,8 +384,7 @@ const Mutation = {
 
 };
 
-const applyUpdatePersonalRecord = async (_, { userId, input }, { user, res }) => {
-
+const applyUpdatePersonalRecord = async (_, { userId, input, client=db }, { user, res }) => {
 
   // Whitelist of allowed fields
   const allowedFields = [
@@ -420,7 +429,7 @@ const applyUpdatePersonalRecord = async (_, { userId, input }, { user, res }) =>
   `;
 
   try {
-    const result = await db.query(updateQuery, values);
+    const result = await client.query(updateQuery, values);
 
     if (result.rows.length === 0) {
       // No row found → insert new record with only allowed fields
@@ -435,7 +444,7 @@ const applyUpdatePersonalRecord = async (_, { userId, input }, { user, res }) =>
         RETURNING *;
       `;
 
-      const insertResult = await db.query(insertQuery, insertValues);
+      const insertResult = await client.query(insertQuery, insertValues);
       return insertResult.rows[0];
     }
 

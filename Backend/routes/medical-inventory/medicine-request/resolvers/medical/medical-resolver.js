@@ -3,6 +3,10 @@ const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const permit = require("../../../../../services/permit.js");
 const logger = require("../../../../../utils/logger.js");
 
+const { isConnectedAnywhere, emitToUserWithAck } = require("../../../../../config/sockets");
+const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
+const { findEmailByUserId } = require("../../../../../config/query.js");
+
 const Query = {
   getAvailableMedicine: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -53,7 +57,39 @@ const Mutation = {
       logger.warn("Unauthorized medicine request status change attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId, status, approvedBy: user.id, notes }, { res });
+
+    if (!['Approved', 'Rejected'].includes(status)) {
+      throwGraphQLError(res).message("Invalid status. Must be Approved or Rejected").status(400).throw();
+    }
+
+    const result = await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId, status, approvedBy: user.id, notes }, { res });
+    
+    // Notify patient: socket with ack, fall back to email if not acked or offline
+    try {
+      const patientId = result.patientId;
+      const approved = status === 'Approved';
+
+      const acked = (await isConnectedAnywhere(patientId))
+        && await emitToUserWithAck(patientId, `medicine:request:${status.toLowerCase()}`, { requestId, status, notes });
+
+      if (!acked) {
+        const patientEmail = await findEmailByUserId(patientId);
+        if (patientEmail) {
+          await enqueueNotificationEmail(
+            patientEmail,
+            approved ? 'Medicine Request Approved' : 'Medicine Request Rejected',
+            approved
+              ? `Your medicine request <strong>#${requestId}</strong> has been <span style="color:green;font-weight:bold;">approved</span> by the medical staff. You may now proceed to the clinic to collect your medicine.`
+              : `Your medicine request <strong>#${requestId}</strong> has been <span style="color:red;font-weight:bold;">rejected</span> by the medical staff. Please contact the clinic if you believe this is an error or to submit a new request.`,
+            notes ?? null,
+          );
+        }
+      }
+    } catch (notifErr) {
+      logger.error("Failed to send medicine request notification:", notifErr);
+    }
+    
+    return result;
   },
 };
 

@@ -28,7 +28,7 @@
  */
 
 const { initSocket, getIO } = require('./socket-server');
-const { emitToUser, emitToUsers, emitToAll, emitToRoom, emitToRole, notifyUser, notifyUsers } = require('./socket-emitter');
+const { emitToUser, emitToUsers, emitToAll, emitToRoom, emitToRole, emitToUserWithAck, notifyUser, notifyUsers } = require('./socket-emitter');
 const { isConnected, getSocketIds, getConnectedCount, isConnectedAnywhere } = require('./socket-store');
 const { registerHandler, registerHandlers, getRegisteredEvents } = require('./socket-events');
 const { getPendingCount } = require('./notification-store');
@@ -44,6 +44,10 @@ module.exports = {
   emitToAll,
   emitToRoom,
   emitToRole,
+
+  // Emit with acknowledgement — returns true if user acked, false if timed-out or offline.
+  // Use this when you need confirmation; fall back to email when it returns false.
+  emitToUserWithAck,
 
   // Notification system (online → emit, offline → queue + deliver on reconnect)
   notifyUser,

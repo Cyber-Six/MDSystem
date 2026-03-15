@@ -166,12 +166,52 @@ async function notifyUsers(userIds, eventName, data) {
   );
 }
 
+/**
+ * Emit an event to a user and wait for acknowledgement from at least one of their sockets.
+ * Uses Socket.IO's built-in timeout + ack mechanism (v4.5+).
+ *
+ * The CLIENT must call the ack callback in their event handler, e.g.:
+ *   socket.on('medicine:prescription:issued', (data, ack) => { / handle / ack(); });
+ *
+ * Returns true  → at least one socket acknowledged within the timeout.
+ * Returns false → user not connected, or no socket acked in time (app backgrounded, tab inactive, etc.).
+ * Callers should send an email when this returns false.
+ *
+ * Timeout is configurable via SOCKET_ACK_TIMEOUT_MS env var (default: 5000ms).
+ *
+ * @param {string} userId
+ * @param {string} eventName
+ * @param {*}      data
+ * @param {number} [timeoutMs]
+ * @returns {Promise<boolean>}
+ */
+async function emitToUserWithAck(userId, eventName, data, timeoutMs = Number(process.env.SOCKET_ACK_TIMEOUT_MS) || 5000) {
+  const io = getIO();
+  if (!io) {
+    logger.warn(`[SOCKET_EMIT] Not initialized, dropping ack emit: ${eventName} -> user:${userId}`);
+    return false;
+  }
+  try {
+    const responses = await io.timeout(timeoutMs).to(`user:${userId}`).emitWithAck(eventName, data);
+    // responses = array of acks from every socket in the room
+    const acked = responses.length > 0;
+    logger.debug(`[SOCKET_EMIT] ${eventName} -> user:${userId} ack=${acked}`);
+    return acked;
+  } catch (err) {
+    // Timeout before all sockets responded — check if any acked before the deadline
+    const partialAck = Array.isArray(err.responses) && err.responses.length > 0;
+    logger.debug(`[SOCKET_EMIT] ${eventName} -> user:${userId} timeout, partial_ack=${partialAck}`);
+    return partialAck;
+  }
+}
+
 module.exports = {
   emitToUser,
   emitToUsers,
   emitToAll,
   emitToRoom,
   emitToRole,
+  emitToUserWithAck,
   notifyUser,
   notifyUsers,
 };

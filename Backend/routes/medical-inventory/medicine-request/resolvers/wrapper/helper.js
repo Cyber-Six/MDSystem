@@ -28,4 +28,22 @@ async function validateBatchAvailable(batchId, res) {
   return batch;
 }
 
-module.exports = { hasActiveRequest, validateBatchAvailable };
+async function validateBatchesAvailable(batchIds, res) {
+  const placeholders = batchIds.map((_, i) => `$${i + 1}`).join(', ');
+  const result = await db.query(
+    `SELECT mb.id, mb."expiryDate", mi.active FROM "MedicineBatch" mb
+     JOIN "MedicalItems" mi ON mi.id = mb."medicalItemId"
+     WHERE mb.id IN (${placeholders})`,
+    batchIds,
+  );
+
+  const found = new Map(result.rows.map(r => [r.id, r]));
+  for (const batchId of batchIds) {
+    const batch = found.get(batchId);
+    if (!batch) throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
+    if (!batch.active) throwGraphQLError(res).message("Medicine item is inactive").status(400).throw();
+    if (new Date(batch.expiryDate) <= new Date()) throwGraphQLError(res).message("Medicine batch has expired").status(400).throw();
+  }
+}
+
+module.exports = { hasActiveRequest, validateBatchAvailable, validateBatchesAvailable };

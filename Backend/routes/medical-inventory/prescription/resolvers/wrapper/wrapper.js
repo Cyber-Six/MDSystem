@@ -1,6 +1,7 @@
 const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
+const { isConnectedAnywhere, emitToUserWithAck } = require("../../../../../config/sockets");
 const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
 const { findEmailByUserId } = require("../../../../../config/query.js");
 
@@ -82,19 +83,24 @@ const Mutation = {
 
       transaction.items = items;
 
-      // Send email notification to patient
+      // Notify patient: socket with ack, fall back to email if not acked or offline
       try {
-        const patientEmail = await findEmailByUserId(input.patientId);
-        if (patientEmail) {
-          await enqueueNotificationEmail(
-            patientEmail,
-            'Prescription Issued',
-            `A prescription <strong>#${transaction.id}</strong> has been <span style="color:green;font-weight:bold;">issued</span> for you by the medical staff. Please visit the clinic to collect your prescribed medicine.`,
-            input.notes ?? null,
-          );
+        const acked = (await isConnectedAnywhere(input.patientId))
+          && await emitToUserWithAck(input.patientId, 'medicine:prescription:issued', { transactionId: transaction.id });
+
+        if (!acked) {
+          const patientEmail = await findEmailByUserId(input.patientId);
+          if (patientEmail) {
+            await enqueueNotificationEmail(
+              patientEmail,
+              'Prescription Issued',
+              `A prescription <strong>#${transaction.id}</strong> has been <span style="color:green;font-weight:bold;">issued</span> for you by the medical staff. Please visit the clinic to collect your prescribed medicine.`,
+              input.notes ?? null,
+            );
+          }
         }
-      } catch (emailErr) {
-        logger.error("Failed to enqueue prescription email:", emailErr);
+      } catch (notifErr) {
+        logger.error("Failed to send prescription notification:", notifErr);
       }
 
       return transaction;

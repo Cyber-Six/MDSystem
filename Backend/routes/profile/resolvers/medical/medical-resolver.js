@@ -129,6 +129,12 @@ const Mutation = {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to set personal record log of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    const validStatuses = ["Revision", "Approved", "Rejected"];
+    if (!validStatuses.includes(status)) {
+      throwGraphQLError(res).message("Invalid status").status(400).throw();
+    }
+
     const result = await Wrapper.Mutation._setPersonalRecordLog(_, { userId, status }, { user, res });
     await Wrapper.Mutation._reloadCredentialStatus(_, { userId }, { user, res }); // reload credential status after approval
     return result;

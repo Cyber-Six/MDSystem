@@ -1,6 +1,9 @@
 const Wrapper = require("../wrapper/wrapper.js");
-const { hasActiveRequest, validateBatchAvailable } = require("../wrapper/helper.js");
+const { hasActiveRequest, validateBatchesAvailable } = require("../wrapper/helper.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
+const { emitToRoom } = require("../../../../../config/sockets");
+const db = require("../../../../../config/query.js");
+const logger = require("../../../../../utils/logger.js");
 
 const Query = {
   getAvailableMedicine: async (_, args, { user, res }) => {
@@ -23,11 +26,29 @@ const Mutation = {
       throwGraphQLError(res).message("You already have a pending medicine request. Please wait for it to be processed.").status(400).throw();
     }
 
-    for (const item of input.items) {
-      await validateBatchAvailable(item.batchId, res);
+    await validateBatchesAvailable(input.items.map(i => i.batchId), res);
+
+    const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
+
+    // Notify medical staff on the branch channel for the location of the first batch
+    try {
+      const batch = await db.query(
+        `SELECT location FROM "MedicineBatch" WHERE id = $1 LIMIT 1`,
+        [input.items[0].batchId],
+      );
+      if (batch.rows.length > 0) {
+        const { location } = batch.rows[0];
+        emitToRoom(`branch:${location}`, 'medicine:request:new', {
+          requestId: result.id,
+          patientId: user.id,
+          location,
+        });
+      }
+    } catch (notifErr) {
+      logger.error("Failed to emit new medicine request to branch channel:", notifErr);
     }
 
-    return await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
+    return result;
   },
 
   setStatusMedicineRequest: async (_, { requestId, status, notes }, { user, res }) => {

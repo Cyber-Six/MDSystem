@@ -1,6 +1,7 @@
 const db  = require("../../../../config/query.js");
-
-const { validateUpdateTicket } = require("../record-validator.js");
+const { findEmailByUserId } = require("../../../../config/query.js");
+const { isConnectedAnywhere, emitToUserWithAck } = require("../../../../config/sockets");
+const { enqueueNotificationEmail } = require("../../../../services/emailservice.js");
 
 const { assertActiveUpdateTicket } = require("./helper.js");
 const Wrapper = require("../../wrapper/mutation.js");
@@ -9,9 +10,6 @@ const logger = require("../../../../utils/logger.js");
 const permit = require("../../../../services/permit.js");
 
 const Query = require("./query.js");
-
-const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
-    require("../../../profile/resolvers/wrapper/wrapper.js");
 
 const Mutation = {
   staffUpdateTicket: async (_, args, { user, res }) => {
@@ -24,42 +22,8 @@ const Mutation = {
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res);
     
-    let newStatus = args.status;
-    if (newStatus !== "Approved" && newStatus !== "Revision" && newStatus !== "Rejected") {
-      throwGraphQLError(res)
-        .status(400)
-        .message("Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.")
-        .throw();
-      }
-    
-    if (newStatus === 'Approved') { // approval require check again
-      const missingRecords = await validateUpdateTicket(record.id, record.scope);
-      if (missingRecords.length > 0) {
-        throwGraphQLError(res)
-          .status(400)
-          .message(`Cannot submit update ticket. Required records are missing or incomplete: ${missingRecords.join(", ")}`)
-          .throw();
-        }
-      }
-
-    await db.query(`UPDATE "patientUpdateLog" SET status = $1, notes = $2 WHERE id = $3;`,
-      [newStatus, args.notes, record.id]
-    );
-
-    if (newStatus === 'Approved') {
-      await db.query(
-        `UPDATE "EmergencyNumber" en
-         SET "isVerified" = true
-         FROM "EmergencyContact" ec
-         WHERE (en.id = ec."firstNumber" OR en.id = ec."secondNumber")
-           AND ec.id = $1;`,
-        [record.id]
-      );
-    }
-
-    await reloadCredentialStatus(_, { userId: args.userId }, { user, res }); // reload credential status after approval
-    logger.info(`User ID ${user.id} updated ticket ID ${record.id} to status ${newStatus}`);
-    return newStatus;
+    const result = await Wrapper._StaffUpdateTicket(_, {args, recordId: record.id}, { user, res });
+    return result;
   },
 
 

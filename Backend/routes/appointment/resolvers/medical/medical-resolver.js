@@ -3,6 +3,7 @@ const dotenv = require("dotenv");
 const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const permit = require("../../../../services/permit.js");
+const { notifyUser } = require('../../../../../../config/sockets/socket-emitter');
 
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
@@ -95,7 +96,22 @@ const Mutation = {
       throwGraphQLError(res).message("No appointment record found for the user").status(404).throw();
     }
 
-    return await Wrapper.Mutation._respondAppointment(_, { slotId: record[0].id, status, notes }, { user, res });
+    const result = await Wrapper.Mutation._respondAppointment(_, { slotId: record[0].id, status, notes }, { user, res });
+    
+    // Notify user of appointment response
+    await notifyUser(
+      userId,
+      'appointment:responded',
+      { status, notes, slotId: record[0].id },
+      {
+        email: record[0].userEmail,
+        title: 'Appointment Response',
+        message: `Your appointment request has been ${status}.`,
+        notes: notes || null,
+      }
+    );
+    
+    return result;
   },
 
   recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
@@ -104,7 +120,21 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    return await Wrapper.Mutation._recordAppointmentAttendance(_, { slotId, arrived_at }, { user, res });
+    const result = await Wrapper.Mutation._recordAppointmentAttendance(_, { slotId, arrived_at }, { user, res });
+    
+    // Notify user of attendance record
+    await notifyUser(
+      result.userId,
+      'appointment:attendance-recorded',
+      { slotId, arrived_at },
+      {
+        email: result.userEmail,
+        title: 'Attendance Recorded',
+        message: 'Your appointment attendance has been recorded.',
+      }
+    );
+    
+    return result;
   },
 
   createScheduler: async (_, { input }, { user, res }) => {

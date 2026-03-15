@@ -1,8 +1,6 @@
 const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
-const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
-const { findEmailByUserId } = require("../../../../../config/query.js");
 
 // Reused in all request list queries: aggregates request line items as a JSON array
 const ITEMS_AGG = `
@@ -109,23 +107,19 @@ const Mutation = {
       RETURNING *
     `;
 
-    const entitySql = `
-      INSERT INTO "MedicineRequestEntity" ("batchId", "requestId", quantity)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    `;
-
     try {
       const logResult = await db.query(logSql, [
         patientId, input.purpose, Math.floor(Date.now() / 1000),
       ]);
       const request = logResult.rows[0];
 
-      const items = [];
-      for (const item of input.items) {
-        const entityResult = await db.query(entitySql, [item.batchId, request.id, item.quantity]);
-        items.push(entityResult.rows[0]);
-      }
+      const valuePlaceholders = input.items.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(', ');
+      const entityParams = input.items.flatMap(item => [item.batchId, request.id, item.quantity]);
+      const entityResult = await db.query(
+        `INSERT INTO "MedicineRequestEntity" ("batchId", "requestId", quantity) VALUES ${valuePlaceholders} RETURNING *`,
+        entityParams,
+      );
+      const items = entityResult.rows;
 
       request.items = items;
       return request;
@@ -179,12 +173,12 @@ const Mutation = {
         ]);
         const transactionId = txResult.rows[0].id;
 
-        for (const item of itemsResult.rows) {
-          await client.query(
-            `INSERT INTO "MedicineEntity" ("batchId", "transactionId") VALUES ($1, $2)`,
-            [item.batchId, transactionId],
-          );
-        }
+        const entityPlaceholders = itemsResult.rows.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ');
+        const entityParams = itemsResult.rows.flatMap(item => [item.batchId, transactionId]);
+        await client.query(
+          `INSERT INTO "MedicineEntity" ("batchId", "transactionId") VALUES ${entityPlaceholders}`,
+          entityParams,
+        );
 
         const updateSql = `
           UPDATE "MedicineRequestLog"
@@ -216,27 +210,7 @@ const Mutation = {
       `SELECT * FROM "MedicineRequestEntity" WHERE "requestId" = $1`,
       [requestId],
     );
-    result.rows[0].items = items.rows;
-
-    // Email notification on approval or rejection
-    if (status === "Approved" || status === "Rejected") {
-      try {
-        const patientEmail = await findEmailByUserId(current.rows[0].patientId);
-        if (patientEmail) {
-          const approved = status === 'Approved';
-          await enqueueNotificationEmail(
-            patientEmail,
-            approved ? 'Medicine Request Approved' : 'Medicine Request Rejected',
-            approved
-              ? `Your medicine request <strong>#${requestId}</strong> has been <span style="color:green;font-weight:bold;">approved</span> by the medical staff. You may now proceed to the clinic to collect your medicine.`
-              : `Your medicine request <strong>#${requestId}</strong> has been <span style="color:red;font-weight:bold;">rejected</span> by the medical staff. Please contact the clinic if you believe this is an error or to submit a new request.`,
-            notes ?? null,
-          );
-        }
-      } catch (emailErr) {
-        logger.error("Failed to enqueue medicine request email:", emailErr);
-      }
-    }
+    result.rows[0].items = items.rows; 
 
     return result.rows[0];
   },

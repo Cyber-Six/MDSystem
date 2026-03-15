@@ -9,7 +9,64 @@ const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
 const { generateDomainCodes } = require("../../../utils/validator.js");
 
+const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
+    require("../../profile/resolvers/wrapper/wrapper.js");
+const { validateUpdateTicket } = require("../resolvers/record-validator.js");
+
+
 const Mutation = {
+  _StaffUpdateTicket: async (_, {args, recordId}, { user, res }) => {
+    let newStatus = args.status;
+    if (newStatus !== "Approved" && newStatus !== "Revision" && newStatus !== "Rejected") {
+      throwGraphQLError(res)
+        .status(400)
+        .message("Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.")
+        .throw();
+      }
+    
+    if (newStatus === 'Approved') { // approval require check again
+      const missingRecords = await validateUpdateTicket(recordId, record.scope);
+      if (missingRecords.length > 0) {
+        throwGraphQLError(res)
+          .status(400)
+          .message(`Cannot submit update ticket. Required records are missing or incomplete: ${missingRecords.join(", ")}`)
+          .throw();
+        }
+      }
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`UPDATE "patientUpdateLog" SET status = $1, notes = $2 WHERE id = $3;`,
+        [newStatus, args.notes, recordId]
+      );
+
+      if (newStatus === 'Approved') {
+        await client.query(
+          `UPDATE "EmergencyNumber" en
+           SET "isVerified" = true
+           FROM "EmergencyContact" ec
+           WHERE (en.id = ec."firstNumber" OR en.id = ec."secondNumber")
+             AND ec.id = $1;`,
+          [recordId]
+        );
+      }
+
+      await reloadCredentialStatus(_, { userId: args.userId, client }, { user, res }); // reload credential status after approval
+      
+      await client.query('COMMIT');
+      logger.info(`User ID ${user.id} updated ticket ID ${recordId} to status ${newStatus}`);
+
+      
+      return newStatus;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error updating ticket status:', error);
+      throwGraphQLError(res).message("Internal server error").status(500).throw();
+    } finally {
+      client.release();
+    }
+  },
+
   _StudentProfile: async (_, {args, recordId}, { user, res }) => {
     let identity = await db.getUserIdentity(user.id);
     if (identity !== "Student") {
