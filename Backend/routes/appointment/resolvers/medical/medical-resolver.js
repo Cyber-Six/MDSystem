@@ -3,7 +3,7 @@ const dotenv = require("dotenv");
 const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const permit = require("../../../../services/permit.js");
-const { notifyUser } = require('../../../../../../config/sockets/socket-emitter');
+const { notifyUser } = require('../../../../config/sockets/socket-emitter');
 
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
