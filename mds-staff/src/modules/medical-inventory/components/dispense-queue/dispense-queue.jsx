@@ -18,7 +18,13 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
       if (typeof dateValue === 'number') {
         date = new Date(dateValue * 1000);
       } else if (typeof dateValue === 'string') {
-        date = new Date(dateValue);
+        const trimmed = dateValue.trim();
+        if (/^\d+$/.test(trimmed)) {
+          const numeric = Number(trimmed);
+          date = new Date(trimmed.length >= 13 ? numeric : numeric * 1000);
+        } else {
+          date = new Date(trimmed);
+        }
       } else {
         date = dateValue;
       }
@@ -135,7 +141,7 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">{req.patientType}</span>
                       </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">
-                        {formatDate(req.created_at)}
+                        {formatDate(req.created_at ?? req.createdAt ?? req.requestDate)}
                       </td>
                       <td className="px-3 py-1.5">
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>

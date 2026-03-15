@@ -22,7 +22,13 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
       if (typeof dateValue === 'number') {
         date = new Date(dateValue * 1000);
       } else if (typeof dateValue === 'string') {
-        date = new Date(dateValue);
+        const trimmed = dateValue.trim();
+        if (/^\d+$/.test(trimmed)) {
+          const numeric = Number(trimmed);
+          date = new Date(trimmed.length >= 13 ? numeric : numeric * 1000);
+        } else {
+          date = new Date(trimmed);
+        }
       } else {
         date = dateValue;
       }
@@ -37,8 +43,14 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
   const clinicBatches = useMemo(() => {
     return batches
       .filter((b) => {
-        const qty = b.availableQuantity || b.currentQuantity || 0;
-        return b.medicalItemId === reqItem?.itemId && qty > 0;
+        const available = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
+        const sameItem = reqItem?.itemId
+          ? String(b.medicalItemId) === String(reqItem.itemId)
+          : false;
+        const sameBatch = reqItem?.batchId
+          ? String(b.id) === String(reqItem.batchId)
+          : false;
+        return (sameItem || sameBatch) && available > 0;
       })
       .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
   }, [batches, reqItem?.itemId]);
@@ -94,7 +106,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
           {/* Requested by info */}
           <div className="flex items-center gap-2 text-xs text-secondary-500 dark:text-neutral-400">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-            Requested by {request.patientType} patient on {formatDate(request.created_at)}
+            Requested by {request.patientType} patient on {formatDate(request.created_at ?? request.createdAt ?? request.requestDate)}
           </div>
 
           {/* Quantity input */}

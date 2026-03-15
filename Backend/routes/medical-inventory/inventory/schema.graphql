@@ -46,6 +46,7 @@ type MedicineBatch {
   batchNumber: String
   dosageUnit: DosageUnit
   dosageValue: Int
+  availableQuantity: Int
   expiryDate: Date
   location: LocationDesignation
   receivedBy: Int
