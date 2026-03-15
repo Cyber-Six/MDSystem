@@ -170,6 +170,7 @@ const MEDICINE_BATCH_FIELDS = `
         batchNumber
         dosageUnit
         dosageValue
+        availableQuantity
         expiryDate
         location
         receivedBy

@@ -11,6 +11,7 @@ import SplitSupplyModal from './components/split-supply/split-supply-modal';
 import AdjustStockModal from './components/adjust-stock/adjust-stock-modal';
 import DispenseModal from './components/dispense-queue/dispense-modal';
 import DispenseMedicineModal from './components/dispense-medicine/dispense-medicine-modal';
+import RequestActionModal from './components/dispense-queue/request-action-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, setMedicineRequestStatus } from './medicine-request-service';
@@ -53,6 +54,9 @@ const MedicalInventory = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingItem, setDeletingItem] = useState(null);
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [actionType, setActionType] = useState(null); // 'approve' or 'reject'
+  const [selectedActionRequest, setSelectedActionRequest] = useState(null);
 
   // Context for modals
   const [supplyContext, setSupplyContext] = useState(null); // { itemId }
@@ -400,25 +404,43 @@ const MedicalInventory = () => {
 
   const handleDispense = async ({ request, quantity, allocation }) => {
     const requestId = request?.id;
+    console.log('🔵 handleDispense called:', { requestId, quantity, allocation });
+    
+    if (!requestId) {
+      console.error('❌ Missing requestId in dispense request');
+      setError('Invalid request ID. Cannot proceed with dispense.');
+      return;
+    }
+    
     // Decrement batches locally (allocation items have .id = batchId, .allocate = qty)
     const batchUpdates = {};
     (allocation || []).forEach(({ id: batchId, allocate: qty }) => {
-      if (batchId && qty) batchUpdates[batchId] = (batchUpdates[batchId] || 0) + qty;
-    });
-    setBatches(batches.map((b) => batchUpdates[b.id] ? { ...b, currentQuantity: Math.max(0, b.currentQuantity - batchUpdates[b.id]) } : b));
-    // Update request status locally
-    setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Approved' } : r));
-    // For real patient requests: persist approval to backend
-    if (request?._isRealRequest) {
-      try {
-        await setMedicineRequestStatus(requestId, 'Approved');
-      } catch (err) {
-        console.error('Failed to update medicine request status in backend:', err);
+      console.log('📦 Allocation item:', { batchId, allocate: qty, hasId: !!batchId });
+      if (batchId && qty) {
+        batchUpdates[batchId] = (batchUpdates[batchId] || 0) + qty;
       }
-    }
+    });
+    console.log('📊 Batch updates to apply:', batchUpdates);
+    
+    const totalQty = (allocation || []).reduce((s, a) => s + (a.allocate || 0), 0);
+    console.log('📈 Total quantity to dispense:', totalQty);
+    
+    setBatches(batches.map((b) => {
+      const updateQty = batchUpdates[b.id];
+      if (updateQty) {
+        const oldAvailable = b.availableQuantity || 0;
+        const newAvailable = Math.max(0, oldAvailable - updateQty);
+        console.log(`🔄 Updating batch ${b.id}: availableQuantity ${oldAvailable} - ${updateQty} = ${newAvailable}`);
+        return { ...b, availableQuantity: newAvailable };
+      }
+      return b;
+    }));
+    
+    // Update request status locally to reflect dispense
+    setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Completed' } : r));
+    
     // Record transaction locally
     const req = requests.find((r) => r.id === requestId) || request;
-    const totalQty = (allocation || []).reduce((s, a) => s + (a.allocate || 0), 0);
     const txId = Math.max(0, ...transactions.map((t) => t.id)) + 1;
     setTransactions([{
       id: txId, patientId: req?.patientId, patientName: req?.patientName, action: 'issue',
@@ -433,28 +455,42 @@ const MedicalInventory = () => {
   };
 
   const handleApprove = async (request) => {
-    const requestId = request?.id;
-    if (!requestId) return;
-    try {
-      await setMedicineRequestStatus(requestId, 'Approved');
-      setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Approved' } : r));
-      setSuccessMsg(`Medicine request #${requestId} approved!`);
-    } catch (err) {
-      setError(err.message || 'Failed to approve medicine request.');
-      console.error('Error approving medicine request:', err);
-    }
+    if (!request?.id) return;
+    setSelectedActionRequest(request);
+    setActionType('approve');
+    setShowActionModal(true);
   };
 
   const handleReject = async (request) => {
+    if (!request?.id) return;
+    setSelectedActionRequest(request);
+    setActionType('reject');
+    setShowActionModal(true);
+  };
+
+  const handleConfirmAction = async (request, notes) => {
     const requestId = request?.id;
     if (!requestId) return;
+
     try {
-      await setMedicineRequestStatus(requestId, 'Rejected');
-      setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Rejected' } : r));
-      setSuccessMsg(`Medicine request #${requestId} rejected!`);
+      const isApprove = actionType === 'approve';
+      const status = isApprove ? 'Approved' : 'Rejected';
+      
+      // Call backend with notes parameter for both actions
+      await setMedicineRequestStatus(requestId, status, notes || undefined);
+      
+      // Update local state
+      setRequests(requests.map((r) => 
+        r.id === requestId ? { ...r, status, notes: notes || null } : r
+      ));
+      
+      setSuccessMsg(`Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
+      setShowActionModal(false);
+      setSelectedActionRequest(null);
+      setActionType(null);
     } catch (err) {
-      setError(err.message || 'Failed to reject medicine request.');
-      console.error('Error rejecting medicine request:', err);
+      setError(err.message || `Failed to ${actionType} medicine request.`);
+      console.error(`Error ${actionType}ing medicine request:`, err);
     }
   };
 
@@ -628,7 +664,7 @@ const MedicalInventory = () => {
             </div>
           </div>
 
-          <DispenseQueue requests={requests} items={items} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} />
+          <DispenseQueue requests={requests} items={items} batches={batches} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} />
         </div>
       )}
 
@@ -704,6 +740,19 @@ const MedicalInventory = () => {
           onSuccess={(result) => {
             setSuccessMsg(`Dispensed medicine to ${dispenseMedicineContext.patientName}. Transaction ID: ${result.id}`);
             setShowDispenseMedicine(false);
+          }}
+        />
+      )}
+
+      {showActionModal && selectedActionRequest && (
+        <RequestActionModal
+          request={selectedActionRequest}
+          action={actionType}
+          onConfirm={handleConfirmAction}
+          onCancel={() => {
+            setShowActionModal(false);
+            setSelectedActionRequest(null);
+            setActionType(null);
           }}
         />
       )}
