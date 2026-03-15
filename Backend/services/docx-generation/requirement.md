@@ -9,6 +9,7 @@ Express (JS) → HTTP POST → FastAPI (Python) → rendered HTML preview / DOCX
 ```
 
 From any JS file in the backend:
+
 ```js
 // axios.post(`http://127.0.0.1:${DOCX_GENERATED_PORT}/generate-docx`, { tags: { NAME: 'Juan', DATE: '2026-03-09' } })
 ```
@@ -20,6 +21,7 @@ The service must be running separately before the Express server uses it.
 ## Tag System (docxtpl)
 
 Templates are `.docx` files using Jinja2-style tags via `docxtpl`:
+
 - Use `{{ TAG_NAME }}` inside the `.docx` template file
 - Pass `tags: { TAG_NAME: "value" }` in the POST body to `/generate-docx`
 - Common tags per document type should be defined and standardized (see Tasks below)
@@ -29,6 +31,7 @@ Templates are `.docx` files using Jinja2-style tags via `docxtpl`:
 ## Setup
 
 ### Paths
+
 - **Service root:** `Backend/services/docx-generation/`
 - **Virtual environment:** `Backend/services/docx-generation/venv/`
 - **Templates:** stored path configured via `TEMPLATE_PATH` in `Backend/.env`
@@ -61,7 +64,7 @@ Templates are `.docx` files using Jinja2-style tags via `docxtpl`:
 
 ---
 
-## Tasks
+## Tasks~
 
 - [ ] FastAPI service with `POST /generate-docx` and `GET /health` endpoints
 - [ ] Template rendering using `docxtpl` (Jinja2 tags inside `.docx`)
@@ -77,4 +80,3 @@ Templates are `.docx` files using Jinja2-style tags via `docxtpl`:
 - [ ] Create `.docx` template files per document type and place them in the configured `TEMPLATE_PATH` directory
 - [ ] Support multiple templates — update the endpoint to accept a `template` selector in the request body
 - [ ] Optionally manage the service lifecycle from the Node.js backend using `child_process` to auto-start/stop it
-

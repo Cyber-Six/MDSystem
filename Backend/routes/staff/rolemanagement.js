@@ -148,8 +148,10 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
     if (!isAdmin) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required.' });
     }
+    const narrowCredentialStatus = req.query?.status; // optional filter: Active, Suspended, Pending
 
-    // Fetch all registered users with .mds@tip.edu.ph email
+
+    // Fetch all registered users with identity = 'Medical'
     const result = await db.query(
       `SELECT
          uc.id,
@@ -162,9 +164,9 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
          up.branch
        FROM "UserCredentials" uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-       WHERE uc.email ILIKE '%.mds@tip.edu.ph'
-         AND LOWER(TRIM(COALESCE(uc.credentials_status, ''))) = 'active'
-         AND uc.identity IN ('Employee','Medical')
+       WHERE 
+          uc.identity = 'Medical'
+          AND COALESCE($1, uc.credentials_status) = uc.credentials_status
        ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`
     );
 
@@ -249,7 +251,9 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
     return res.json({ ok: true, staff: staffList });
   } catch (err) {
     logger.error('Error fetching staff accounts:', err);
-    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' }
+      , err.message || 'Unknown error.' // remove in production for security
+    );
   }
 });
 
@@ -283,15 +287,9 @@ router.put('/accounts/:userId', jwtProtect('medical'), async (req, res) => {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Can only manage .mds@tip.edu.ph staff accounts.' });
     }
 
-    // Ensure the target is a staff credential (avoid touching patient/student rows)
-    const targetIdentity = String(targetResult.rows[0].identity || '');
-    if (!['Employee', 'Medical'].includes(targetIdentity)) {
-      return res.status(403).json({ error: 'FORBIDDEN', message: 'Target account is not a staff account.' });
-    }
-
     // Only active/verified staff accounts can be managed in role management.
     const targetCredentialStatus = String(targetResult.rows[0].credentials_status || '').toLowerCase();
-    if (targetCredentialStatus !== 'active') {
+    if (targetCredentialStatus !== 'Active') {
       return res.status(403).json({
         error: 'STAFF_NOT_VERIFIED',
         message: 'This account is not yet verified. Please approve the initial record first.',

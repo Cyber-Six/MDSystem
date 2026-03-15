@@ -62,14 +62,14 @@ The first time you set up the service, generate the standard `.docx` templates:
 python create_templates.py
 ```
 
-This creates four `.docx` files in `templates/`:
+This creates four `.docx` files `templates/`:
 
-| File | Document Type |
-|------|---------------|
+| File                         | Document Type       |
+| ---------------------------- | ------------------- |
 | `medical_certificate.docx` | Medical Certificate |
-| `medical_clearance.docx` | Medical Clearance |
-| `prescription.docx` | Prescription |
-| `lab_referral.docx` | Lab Referral |
+| `medical_clearance.docx`   | Medical Clearance   |
+| `prescription.docx`        | Prescription        |
+| `lab_referral.docx`        | Lab Referral        |
 
 ---
 
@@ -89,15 +89,15 @@ DOCX_LOG_LEVEL=INFO                  # Logging level: DEBUG, INFO, WARNING, ERRO
 
 ### Config Variables Reference
 
-| Variable | `config.py` Name | Default | Description |
-|----------|-------------------|---------|-------------|
-| `DOCX_GENERATED_PORT` | `SERVICE_PORT` | `3002` | Port the service listens on |
-| `DOCX_SERVICE_HOST` | `SERVICE_HOST` | `127.0.0.1` | Bind address |
-| `TEMPLATE_PATH` | `TEMPLATE_DIR` | `""` | Directory containing `.docx` templates. Relative paths are resolved from `Backend/` |
-| `DOCX_LOG_LEVEL` | `LOG_LEVEL` | `INFO` | Python logging level |
-| *(internal)* | `GENERATED_DIR` | `./generated/` | Output directory for debug artifacts |
-| *(internal)* | `PREVIEW_TEMPLATES_DIR` | `./templates/preview/` | Jinja2 HTML preview templates |
-| *(internal)* | `REPORT_TEMPLATES_DIR` | `./templates/reports/` | Jinja2 HTML report templates |
+| Variable                | `config.py` Name        | Default                  | Description                                                                             |
+| ----------------------- | ------------------------- | ------------------------ | --------------------------------------------------------------------------------------- |
+| `DOCX_GENERATED_PORT` | `SERVICE_PORT`          | `3002`                 | Port the service listens on                                                             |
+| `DOCX_SERVICE_HOST`   | `SERVICE_HOST`          | `127.0.0.1`            | Bind address                                                                            |
+| `TEMPLATE_PATH`       | `TEMPLATE_DIR`          | `""`                   | Directory containing `.docx` templates. Relative paths are resolved from `Backend/` |
+| `DOCX_LOG_LEVEL`      | `LOG_LEVEL`             | `INFO`                 | Python logging level                                                                    |
+| *(internal)*          | `GENERATED_DIR`         | `./generated/`         | Output directory for debug artifacts                                                    |
+| *(internal)*          | `PREVIEW_TEMPLATES_DIR` | `./templates/preview/` | Jinja2 HTML preview templates                                                           |
+| *(internal)*          | `REPORT_TEMPLATES_DIR`  | `./templates/reports/` | Jinja2 HTML report templates                                                            |
 
 ---
 
@@ -130,10 +130,10 @@ All POST endpoints accept `Content-Type: application/json`.
 
 The `/documents/generate` and `/documents/pdf` endpoints support two response modes based on the `Accept` header:
 
-| `Accept` Header | Response | Use Case |
-|-----------------|----------|----------|
-| *(default / omitted)* | Raw binary stream | Browser downloads, Express proxy |
-| `application/json` | JSON with base64-encoded content | Node.js API calls, programmatic use |
+| `Accept` Header       | Response                         | Use Case                            |
+| ----------------------- | -------------------------------- | ----------------------------------- |
+| *(default / omitted)* | Raw binary stream                | Browser downloads, Express proxy    |
+| `application/json`    | JSON with base64-encoded content | Node.js API calls, programmatic use |
 
 ---
 
@@ -217,13 +217,14 @@ Pick any `.docx` template from the `TEMPLATE_PATH` directory and pass key-value 
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `template` | string | yes | Template filename — with or without `.docx` extension (e.g. `"medical_certificate.docx"` or `"medical_certificate"`) |
-| `data` | object | yes* | Key-value pairs for placeholders. Keys can use angle brackets (`<NAME>`) or plain (`NAME`) — brackets are stripped automatically |
-| `tags` | object | no | Legacy alias for `data`. If both are provided, `data` takes priority |
+| Field        | Type   | Required | Description                                                                                                                           |
+| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `template` | string | yes      | Template filename — with or without `.docx` extension (e.g. `"medical_certificate.docx"` or `"medical_certificate"`)           |
+| `data`     | object | yes*     | Key-value pairs for placeholders. Keys can use angle brackets (`<NAME>`) or plain (`NAME`) — brackets are stripped automatically |
+| `tags`     | object | no       | Legacy alias for `data`. If both are provided, `data` takes priority                                                              |
 
 > **Backward compatible:** The old `{ "template": "...", "tags": {...} }` format still works.
+
 ```
 
 **Binary Response** *(default)*: Raw `.docx` bytes with `Content-Disposition` header.
@@ -241,10 +242,10 @@ Pick any `.docx` template from the `TEMPLATE_PATH` directory and pass key-value 
 
 **Errors:**
 
-| Status | When |
-|--------|------|
+| Status  | When                  |
+| ------- | --------------------- |
 | `400` | Missing required tags |
-| `404` | Template not found |
+| `404` | Template not found    |
 
 ---
 
@@ -279,10 +280,10 @@ Generate a DOCX then convert it to PDF using mammoth (DOCX → HTML) and WeasyPr
 
 **Errors:**
 
-| Status | When |
-|--------|------|
-| `400` | Missing required tags |
-| `404` | Template not found |
+| Status  | When                   |
+| ------- | ---------------------- |
+| `400` | Missing required tags  |
+| `404` | Template not found     |
 | `500` | PDF conversion failure |
 
 ---
@@ -319,15 +320,15 @@ Generate a PDF report from structured tabular data (analytics, consultation summ
 }
 ```
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `title` | string | yes | — | Report title |
-| `report_type` | string | yes | — | Report category (for filename) |
-| `columns` | array | yes | — | Column definitions `[{key, label}]` |
-| `data` | array | yes | — | Row data as list of dicts |
-| `filters` | object | no | `{}` | Filter summary shown in header |
-| `orientation` | string | no | `"portrait"` | `"portrait"` or `"landscape"` |
-| `template` | string | no | `"base.html"` | Report Jinja2 template name |
+| Field           | Type   | Required | Default         | Description                           |
+| --------------- | ------ | -------- | --------------- | ------------------------------------- |
+| `title`       | string | yes      | —              | Report title                          |
+| `report_type` | string | yes      | —              | Report category (for filename)        |
+| `columns`     | array  | yes      | —              | Column definitions `[{key, label}]` |
+| `data`        | array  | yes      | —              | Row data as list of dicts             |
+| `filters`     | object | no       | `{}`          | Filter summary shown in header        |
+| `orientation` | string | no       | `"portrait"`  | `"portrait"` or `"landscape"`     |
+| `template`    | string | no       | `"base.html"` | Report Jinja2 template name           |
 
 **Response:** Raw PDF bytes.
 
@@ -455,12 +456,12 @@ Each document type has a defined set of required tags. The service validates the
 
 You can pass the keys with or without angle brackets — `<NAME>` and `NAME` are treated identically.
 
-| Template | Required Tags |
-|----------|---------------|
-| `medical_certificate` | `NAME`, `DATE`, `DIAGNOSIS`, `LICENSE_NO` |
-| `medical_clearance` | `NAME`, `DATE`, `PURPOSE`, `LICENSE_NO` |
-| `prescription` | `NAME`, `DATE`, `MEDICATION`, `LICENSE_NO`, `PTR_NO` |
-| `lab_referral` | `NAME`, `DATE`, `TEST_TYPE`, `LICENSE_NO` |
+| Template                | Required Tags                                                  |
+| ----------------------- | -------------------------------------------------------------- |
+| `medical_certificate` | `NAME`, `DATE`, `DIAGNOSIS`, `LICENSE_NO`              |
+| `medical_clearance`   | `NAME`, `DATE`, `PURPOSE`, `LICENSE_NO`                |
+| `prescription`        | `NAME`, `DATE`, `MEDICATION`, `LICENSE_NO`, `PTR_NO` |
+| `lab_referral`        | `NAME`, `DATE`, `TEST_TYPE`, `LICENSE_NO`              |
 
 Contracts are defined in `models/tag_contracts.py`. To add a new document type, add a `TemplateContract` entry there.
 
@@ -469,9 +470,7 @@ Contracts are defined in `models/tag_contracts.py`. To add a new document type, 
 ## Creating New Templates
 
 1. **Create the `.docx` file** using Word or the `create_templates.py` script. Use Jinja2-style `{{ TAG_NAME }}` placeholders in the document text.
-
 2. **Place it in the template directory** configured by `TEMPLATE_PATH` (default: `Backend/services/docx-generation/templates/`).
-
 3. **(Optional) Register a tag contract** in `models/tag_contracts.py`:
 
    ```python
@@ -491,7 +490,6 @@ Contracts are defined in `models/tag_contracts.py`. To add a new document type, 
        for c in [MEDICAL_CERTIFICATE, MEDICAL_CLEARANCE, PRESCRIPTION, LAB_REFERRAL, MY_NEW_DOC]
    }
    ```
-
 4. **Restart the service** — the new template will appear in `/documents/templates` and `/documents/contracts`.
 
 ---
@@ -561,11 +559,11 @@ const healthy = await docService.isHealthy();
 
 ### API
 
-| Method | Description |
-|--------|-------------|
-| `start()` | Spawns the Python service, waits for `/health` to respond (retries up to 15 times). No-op if already running. |
-| `stop()` | Sends `SIGTERM` to the child process. |
-| `isHealthy()` | Returns `true` if `/health` responds 200. |
+| Method          | Description                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------- |
+| `start()`     | Spawns the Python service, waits for `/health` to respond (retries up to 15 times). No-op if already running. |
+| `stop()`      | Sends `SIGTERM` to the child process.                                                                         |
+| `isHealthy()` | Returns `true` if `/health` responds 200.                                                                   |
 
 ### How it Works
 
@@ -587,15 +585,15 @@ app.use('/documents', require('./routes/documents/documents.js'));
 
 This adds JWT-protected routes that forward to the Python service:
 
-| Express Route | Proxied To |
-|---------------|------------|
-| `POST /documents/generate` | `POST /documents/generate` |
-| `POST /documents/generate-docx` | `POST /generate-docx` |
-| `POST /documents/preview` | `POST /documents/preview` |
-| `POST /documents/pdf` | `POST /documents/pdf` |
-| `GET  /documents/templates` | `GET  /documents/templates` |
-| `GET  /documents/contracts` | `GET  /documents/contracts` |
-| `POST /documents/reports/pdf` | `POST /reports/pdf` |
-| `POST /documents/reports/preview` | `POST /reports/preview` |
+| Express Route                       | Proxied To                    |
+| ----------------------------------- | ----------------------------- |
+| `POST /documents/generate`        | `POST /documents/generate`  |
+| `POST /documents/generate-docx`   | `POST /generate-docx`       |
+| `POST /documents/preview`         | `POST /documents/preview`   |
+| `POST /documents/pdf`             | `POST /documents/pdf`       |
+| `GET  /documents/templates`       | `GET  /documents/templates` |
+| `GET  /documents/contracts`       | `GET  /documents/contracts` |
+| `POST /documents/reports/pdf`     | `POST /reports/pdf`         |
+| `POST /documents/reports/preview` | `POST /reports/preview`     |
 
 All Express routes require `jwtProtect('medical')` middleware.
