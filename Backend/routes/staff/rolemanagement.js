@@ -167,8 +167,8 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
        WHERE 
           uc.identity = 'Medical'
           AND COALESCE($1, uc.credentials_status) = uc.credentials_status
-       ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`
-    );
+       ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST
+       `, [narrowCredentialStatus]);
 
     // Fetch last login dates
     let lastLoginMap = {};
