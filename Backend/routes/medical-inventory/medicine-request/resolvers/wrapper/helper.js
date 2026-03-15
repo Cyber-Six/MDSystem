@@ -9,7 +9,7 @@ async function hasActiveRequest(patientId, res) {
   return result.rows.length > 0;
 }
 
-async function validateBatchAvailable(batchId, res) {
+async function validateBatchAvailable(batchId, quantity, res) {
   const result = await db.query(
     'SELECT mb.id, mb."expiryDate", mi.active FROM "MedicineBatch" mb ' +
     'JOIN "MedicalItems" mi ON mi.id = mb."medicalItemId" WHERE mb.id = $1 LIMIT 1',
@@ -25,6 +25,17 @@ async function validateBatchAvailable(batchId, res) {
   if (new Date(batch.expiryDate) <= new Date()) {
     throwGraphQLError(res).message("Medicine batch has expired").status(400).throw();
   }
+  
+  // Check available unassigned units
+  const availResult = await db.query(
+    'SELECT COUNT(*) as count FROM "MedicineEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL',
+    [batchId]
+  );
+  const availableCount = parseInt(availResult.rows[0].count);
+  if (availableCount < quantity) {
+    throwGraphQLError(res).message(`Only ${availableCount} units available, requested ${quantity}`).status(400).throw();
+  }
+  
   return batch;
 }
 
@@ -46,4 +57,29 @@ async function validateBatchesAvailable(batchIds, res) {
   }
 }
 
-module.exports = { hasActiveRequest, validateBatchAvailable, validateBatchesAvailable };
+async function validateBatchesWithQuantity(items, res) {
+  const batchIds = items.map(i => i.batchId);
+  const placeholders = batchIds.map((_, i) => `$${i + 1}`).join(', ');
+  const result = await db.query(
+    `SELECT mb.id, mb."expiryDate", mi.active,
+            COUNT(me.id) FILTER (WHERE me."transactionId" IS NULL) AS available
+     FROM "MedicineBatch" mb
+     JOIN "MedicalItems" mi ON mi.id = mb."medicalItemId"
+     LEFT JOIN "MedicineEntity" me ON me."batchId" = mb.id
+     WHERE mb.id IN (${placeholders})
+     GROUP BY mb.id, mb."expiryDate", mi.active`,
+    batchIds,
+  );
+
+  const found = new Map(result.rows.map(r => [r.id, r]));
+  for (const { batchId, quantity } of items) {
+    const batch = found.get(batchId);
+    if (!batch) throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
+    if (!batch.active) throwGraphQLError(res).message("Medicine item is inactive").status(400).throw();
+    if (new Date(batch.expiryDate) <= new Date()) throwGraphQLError(res).message("Medicine batch has expired").status(400).throw();
+    const available = parseInt(batch.available);
+    if (available < quantity) throwGraphQLError(res).message(`Only ${available} units available, requested ${quantity}`).status(400).throw();
+  }
+}
+
+module.exports = { hasActiveRequest, validateBatchAvailable, validateBatchesAvailable, validateBatchesWithQuantity };

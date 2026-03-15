@@ -8,6 +8,12 @@ export const LOCATIONS = ['Casal', 'Arlegui', 'QuezonCity'];
 export const CATEGORIES = [
   { value: 'medicine', label: 'Medicine' },
   { value: 'supply', label: 'Supply' },
+];
+
+// Note: Equipment and Vaccine categories kept internally but hidden from UI
+const ALL_CATEGORIES = [
+  { value: 'medicine', label: 'Medicine' },
+  { value: 'supply', label: 'Supply' },
   { value: 'equipment', label: 'Equipment' },
   { value: 'vaccine', label: 'Vaccine' },
 ];
@@ -159,10 +165,11 @@ export const computeItemStats = (items, batches) => {
     const casalBatches = itemBatches.filter((b) => b.location === 'Casal');
     const arleguiBatches = itemBatches.filter((b) => b.location === 'Arlegui');
     const quezonCityBatches = itemBatches.filter((b) => b.location === 'QuezonCity');
-    const totalStock = itemBatches.reduce((sum, b) => sum + b.currentQuantity, 0);
-    const casalStock = casalBatches.reduce((sum, b) => sum + b.currentQuantity, 0);
-    const arlegui = arleguiBatches.reduce((sum, b) => sum + b.currentQuantity, 0);
-    const quezonCity = quezonCityBatches.reduce((sum, b) => sum + b.currentQuantity, 0);
+    const getStock = (b) => b.availableQuantity ?? b.currentQuantity ?? 0;
+    const totalStock = itemBatches.reduce((sum, b) => sum + getStock(b), 0);
+    const casalStock = casalBatches.reduce((sum, b) => sum + getStock(b), 0);
+    const arlegui = arleguiBatches.reduce((sum, b) => sum + getStock(b), 0);
+    const quezonCity = quezonCityBatches.reduce((sum, b) => sum + getStock(b), 0);
     const isLowStock = totalStock <= item.reorder_level;
     const hasExpired = itemBatches.some((b) => b.expiryDate && new Date(b.expiryDate) < new Date());
     const hasExpiringSoon = itemBatches.some((b) => {
@@ -170,6 +177,22 @@ export const computeItemStats = (items, batches) => {
       const days = Math.ceil((new Date(b.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
       return days > 0 && days <= 30;
     });
-    return { ...item, batches: itemBatches, totalStock, casalStock, arlegui, quezonCity, isLowStock, hasExpired, hasExpiringSoon, batchCount: itemBatches.length };
+    
+    // Ensure category is normalized to lowercase
+    const category = item.category ? item.category.toLowerCase() : 'supply';
+    
+    return { 
+      ...item, 
+      category, // Override with normalized lowercase version
+      batches: itemBatches, 
+      totalStock, 
+      casalStock, 
+      arlegui, 
+      quezonCity, 
+      isLowStock, 
+      hasExpired, 
+      hasExpiringSoon, 
+      batchCount: itemBatches.length 
+    };
   });
 };

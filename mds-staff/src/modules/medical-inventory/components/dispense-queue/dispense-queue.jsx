@@ -5,10 +5,37 @@ import { STATUS_BADGES } from '../../inventory-seed-data';
  * Dispense Queue — shows pending doctor / student medicine requests.
  * Key feature: "QTY PENDING" badge when quantity is null (student self-request).
  */
-const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => {
+const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject }) => {
   const [search, setSearch] = useState('');
-  const [filterClinic, setFilterClinic] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('Pending');
+  const [filterLocation, setFilterLocation] = useState('Casal');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // Helper to format date safely
+  const formatDate = (dateValue) => {
+    if (!dateValue) return '—';
+    try {
+      let date;
+      if (typeof dateValue === 'number') {
+        date = new Date(dateValue * 1000);
+      } else if (typeof dateValue === 'string') {
+        const trimmed = dateValue.trim();
+        if (/^\d+$/.test(trimmed)) {
+          const numeric = Number(trimmed);
+          date = new Date(trimmed.length >= 13 ? numeric : numeric * 1000);
+        } else {
+          date = new Date(trimmed);
+        }
+      } else {
+        date = dateValue;
+      }
+      if (isNaN(date.getTime())) return '—';
+      return date.toLocaleDateString();
+    } catch (err) {
+      return '—';
+    }
+  };
 
   const itemMap = useMemo(() => {
     const m = {};
@@ -16,9 +43,20 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
     return m;
   }, [items]);
 
+  const batchMap = useMemo(() => {
+    const m = {};
+    (batches || []).forEach((b) => (m[b.id] = b));
+    return m;
+  }, [batches]);
+
   const filtered = useMemo(() => {
     return (requests || []).filter((r) => {
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
+      // Filter by location from batch
+      const batchId = r.items?.[0]?.batchId;
+      const reqLocation = batchId ? (batchMap[batchId]?.location || 'Casal') : 'Casal';
+      if (reqLocation !== filterLocation) return false;
+      // Search
       if (search) {
         const q = search.toLowerCase();
         const itemId = r.items?.[0]?.itemId;
@@ -32,12 +70,35 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
       }
       return true;
     });
-  }, [requests, search, filterClinic, filterStatus, itemMap]);
+  }, [requests, search, filterLocation, filterStatus, itemMap, batchMap]);
 
-  const statusOptions = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
+  const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
+  const locations = ['Casal', 'Arlegui', 'QuezonCity'];
+
+  const getLocationDisplay = (loc) => {
+    const map = { Casal: 'Casal', Arlegui: 'Arlegui', QuezonCity: 'Quezon City' };
+    return map[loc] || loc;
+  };
 
   return (
     <div className="space-y-2">
+      {/* Location Tabs */}
+      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-700">
+        {locations.map((loc) => (
+          <button
+            key={loc}
+            onClick={() => setFilterLocation(loc)}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 ${
+              filterLocation === loc
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+            }`}
+          >
+            {getLocationDisplay(loc)}
+          </button>
+        ))}
+      </div>
+
       {/* Filters bar */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-2.5">
         <div className="flex flex-wrap items-center gap-2">
@@ -88,7 +149,7 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
                   </td>
                 </tr>
               ) : (
-                filtered.map((req) => {
+                filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((req) => {
                   const item = itemMap[req.items?.[0]?.itemId];
                   const badge = STATUS_BADGES[req.status] || 'bg-neutral-100 text-neutral-700';
                   const isStudentReq = req.items?.[0]?.quantity === null;
@@ -99,19 +160,25 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
                         <p className="text-xs font-medium text-secondary-800 dark:text-white leading-none m-0">{req.patientName}</p>
                         {req.patientId && <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none m-0">ID: {req.patientId}</p>}
                       </td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300">{req.items?.[0]?.itemName || '—'}{req.items?.length > 1 ? ` +${req.items.length - 1} more` : ''}</td>
+                      <td className="px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+                        {req.items?.map((item, idx) => (
+                          <div key={idx} className="text-xs">{item.itemName || '—'}{item.quantity && ` (qty: ${item.quantity})`}</div>
+                        )) || '—'}
+                      </td>
                       <td className="px-3 py-1.5">
-                        {isStudentReq ? (
-                          <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">QTY PENDING</span>
+                        {req.items?.length > 0 ? (
+                          <span className="text-xs font-medium text-secondary-800 dark:text-white">{req.items?.reduce((sum, i) => sum + (i.quantity || 0), 0)}</span>
                         ) : (
-                          <span className="text-xs font-medium text-secondary-800 dark:text-white">{req.items?.[0]?.quantity}</span>
+                          <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">QTY PENDING</span>
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400 max-w-[160px] truncate" title={req.purpose}>{req.purpose || '—'}</td>
                       <td className="px-3 py-1.5">
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">{req.patientType}</span>
                       </td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">{new Date(req.created_at).toLocaleDateString()}</td>
+                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">
+                        {formatDate(req.created_at ?? req.createdAt ?? req.requestDate)}
+                      </td>
                       <td className="px-3 py-1.5">
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>
                       </td>
@@ -137,6 +204,9 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
                             Dispense
                           </button>
                         )}
+                        {req.status === 'Completed' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-success-700 dark:text-success-400 bg-success-100 dark:bg-success-900/30 rounded-lg">Completed</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -145,6 +215,39 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {Math.ceil(filtered.length / itemsPerPage) > 1 && (
+          <div className="mt-4 px-4 py-3 flex items-center justify-center gap-2 border-t border-neutral-200 dark:border-neutral-700">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+            >
+              Previous
+            </button>
+            {Array.from({ length: Math.ceil(filtered.length / itemsPerPage) }, (_, i) => (
+              <button
+                key={i + 1}
+                onClick={() => setCurrentPage(i + 1)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  currentPage === i + 1
+                    ? 'bg-primary-500 text-white'
+                    : 'border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filtered.length / itemsPerPage), prev + 1))}
+              disabled={currentPage === Math.ceil(filtered.length / itemsPerPage)}
+              className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

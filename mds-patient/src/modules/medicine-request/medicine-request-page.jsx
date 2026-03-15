@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { sendGraphQLRequest } from '../../utils/graphql-client';
 import { getMyPersonalEmail } from '../../services/emr-service';
+import RequestNotificationModal from './components/request-notification-modal';
 
 const MedicineRequestPage = () => {
   // User info
@@ -28,10 +29,28 @@ const MedicineRequestPage = () => {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [pendingSubmitPayload, setPendingSubmitPayload] = useState(null);
 
+  // Notification modal state - persist dismissed notifications in localStorage
+  const [dismissedNotifications, setDismissedNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dismissedMedicalNotifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [notificationRequest, setNotificationRequest] = useState(null);
+
+  // Persist dismissed notifications to localStorage
+  useEffect(() => {
+    localStorage.setItem('dismissedMedicalNotifications', JSON.stringify(dismissedNotifications));
+  }, [dismissedNotifications]);
+
   // Data
   const [availableMedicines, setAvailableMedicines] = useState([]);
   const [groupedMedicines, setGroupedMedicines] = useState({});
   const [requests, setRequests] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // Track selected medicines by item_code
   const [selectedMedicinesByCode, setSelectedMedicinesByCode] = useState({});
@@ -148,6 +167,7 @@ const MedicineRequestPage = () => {
               status
               transactionId
               purpose
+              notes
               approved_by
               created_at
               items {
@@ -177,6 +197,28 @@ const MedicineRequestPage = () => {
 
     fetchRequestHistory();
   }, []);
+
+  // Check for notification-worthy requests (approved/rejected)
+  useEffect(() => {
+    if (!requests || requests.length === 0) return;
+
+    // Find first approved or rejected request that hasn't been dismissed
+    const notificationReq = requests.find((r) => {
+      const status = r.status?.toLowerCase();
+      const isNotificationStatus = status === 'approved' || status === 'rejected';
+      const isNotDismissed = !dismissedNotifications.includes(r.id);
+      return isNotificationStatus && isNotDismissed;
+    });
+
+    setNotificationRequest(notificationReq || null);
+  }, [requests, dismissedNotifications]);
+
+  const handleDismissNotification = () => {
+    if (notificationRequest) {
+      setDismissedNotifications([...dismissedNotifications, notificationRequest.id]);
+      setNotificationRequest(null);
+    }
+  };
 
   const handleMedicineToggle = (itemCode, medicineGroup) => {
     const isSelected = formData.items.some(item => item.itemCode === itemCode);
@@ -401,6 +443,9 @@ const MedicineRequestPage = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
+
+      {/* Request Notification Modal */}
+      <RequestNotificationModal request={notificationRequest} onDismiss={handleDismissNotification} batches={availableMedicines} />
 
       {/* Cancel-and-Resubmit Confirmation Modal */}
       {showCancelConfirm && (
@@ -701,34 +746,69 @@ const MedicineRequestPage = () => {
             Loading request history...
           </div>
         ) : requests.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Date</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Purpose</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Items</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map((request) => (
-                  <tr key={request.id} className="border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
-                    <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{formatDate(request.created_at)}</td>
-                    <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{request.purpose}</td>
-                    <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">
-                      {request.items?.length || 0} item(s)
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
-                        {request.status}
-                      </span>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-neutral-200 dark:border-neutral-700">
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Date</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Purpose</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Items</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Status</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {requests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((request) => (
+                    <tr key={request.id} className="border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
+                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{formatDate(request.created_at)}</td>
+                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{request.purpose}</td>
+                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">
+                        {request.items?.length || 0} item(s)
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
+                          {request.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {Math.ceil(requests.length / itemsPerPage) > 1 && (
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: Math.ceil(requests.length / itemsPerPage) }, (_, i) => (
+                  <button
+                    key={i + 1}
+                    onClick={() => setCurrentPage(i + 1)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      currentPage === i + 1
+                        ? 'bg-primary-500 text-white'
+                        : 'border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
                 ))}
-              </tbody>
-            </table>
-          </div>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(Math.ceil(requests.length / itemsPerPage), prev + 1))}
+                  disabled={currentPage === Math.ceil(requests.length / itemsPerPage)}
+                  className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-12">
             <svg className="mx-auto h-12 w-12 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

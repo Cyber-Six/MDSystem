@@ -154,6 +154,10 @@ const Mutation = {
         [requestId],
       );
       const totalQuantity = itemsResult.rows.reduce((sum, item) => sum + item.quantity, 0);
+      
+      // Validate available units for each batch before approval
+      const { validateBatchesWithQuantity } = require('./helper.js');
+      await validateBatchesWithQuantity(itemsResult.rows.map(r => ({ batchId: r.batchId, quantity: r.quantity })), res);
 
       // Dedicated client so BEGIN/COMMIT/ROLLBACK stay on the same connection.
       // SET CONSTRAINTS ALL DEFERRED resolves the circular FK between
@@ -173,11 +177,28 @@ const Mutation = {
         ]);
         const transactionId = txResult.rows[0].id;
 
-        const entityPlaceholders = itemsResult.rows.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ');
-        const entityParams = itemsResult.rows.flatMap(item => [item.batchId, transactionId]);
+        // Assign existing unassigned entities instead of creating new ones (FEFO)
+        // Single UPDATE using a window function to rank unassigned units per batch
+        // by expiry date (ASC) and assign only the requested quantity for each batch.
+        const batchParams = itemsResult.rows.flatMap(item => [item.batchId, item.quantity]);
+        const valuesList = itemsResult.rows
+          .map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`)
+          .join(', ');
         await client.query(
-          `INSERT INTO "MedicineEntity" ("batchId", "transactionId") VALUES ${entityPlaceholders}`,
-          entityParams,
+          `WITH batch_requests(batch_id, qty) AS (
+             VALUES ${valuesList}
+           ),
+           ranked AS (
+             SELECT me.id, br.qty,
+               ROW_NUMBER() OVER (PARTITION BY me."batchId" ORDER BY mb."expiryDate" ASC) AS rn
+             FROM "MedicineEntity" me
+             JOIN "MedicineBatch" mb ON mb.id = me."batchId"
+             JOIN batch_requests br ON br.batch_id = me."batchId"
+             WHERE me."transactionId" IS NULL
+           )
+           UPDATE "MedicineEntity" SET "transactionId" = $${batchParams.length + 1}
+           WHERE id IN (SELECT id FROM ranked WHERE rn <= qty)`,
+          [...batchParams, transactionId],
         );
 
         const updateSql = `
