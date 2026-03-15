@@ -17,9 +17,11 @@ def report_to_pdf(request: ReportGenerateRequest):
     """
     Generate a PDF report from structured data.
     Used for analytics: consultations, morbidity, inventory reports.
+    Supports optional chart generation via matplotlib.
     """
     try:
         columns = [c.model_dump() for c in request.columns]
+        charts = [c.model_dump() for c in request.charts] if request.charts else None
         pdf_bytes = generate_report_pdf(
             title=request.title,
             columns=columns,
@@ -27,6 +29,7 @@ def report_to_pdf(request: ReportGenerateRequest):
             filters=request.filters,
             orientation=request.orientation,
             template_name=request.template,
+            charts=charts,
         )
         safe_name = sanitize_filename(f"{request.report_type}_report")
 
@@ -47,6 +50,7 @@ def preview_report(request: ReportGenerateRequest):
     """
     try:
         columns = [c.model_dump() for c in request.columns]
+        charts = [c.model_dump() for c in request.charts] if request.charts else None
         html = render_report_html(
             title=request.title,
             columns=columns,
@@ -54,6 +58,7 @@ def preview_report(request: ReportGenerateRequest):
             filters=request.filters,
             orientation=request.orientation,
             template_name=request.template,
+            charts=charts,
         )
         return HTMLResponse(content=html)
     except Exception as exc:

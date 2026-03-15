@@ -3,7 +3,10 @@ import os
 import logging
 from pathlib import Path
 
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
+from docx.shared import Mm
+
+from modules.chart_generator import generate_chart_image, is_chart_spec
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +44,13 @@ def generate_docx_bytes(tags: dict, template_path: str) -> bytes:
     """
     Render a .docx template with the given tag values and return raw bytes.
 
+    Tag values can be:
+    - str: plain text replacement
+    - dict with 'graph' + 'datas': generates a chart image via matplotlib
+      and embeds it as an InlineImage in the document.
+
     Args:
-        tags: Dictionary of Jinja2 tag values.
+        tags: Dictionary of Jinja2 tag values (str or chart spec dict).
         template_path: Absolute path to the .docx template.
 
     Returns:
@@ -51,7 +59,18 @@ def generate_docx_bytes(tags: dict, template_path: str) -> bytes:
     logger.info("Generating DOCX with tags: %s", list(tags.keys()))
 
     doc = DocxTemplate(template_path)
-    doc.render(tags)
+
+    # Process tags: convert chart specs into InlineImage objects
+    rendered_tags = {}
+    for key, value in tags.items():
+        if is_chart_spec(value):
+            logger.info("Tag '%s' is a chart spec (type=%s), generating image", key, value.get("graph"))
+            chart_bytes = generate_chart_image(value)
+            rendered_tags[key] = InlineImage(doc, io.BytesIO(chart_bytes), width=Mm(140))
+        else:
+            rendered_tags[key] = value
+
+    doc.render(rendered_tags)
 
     buf = io.BytesIO()
     doc.save(buf)

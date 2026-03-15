@@ -13,5 +13,8 @@ mammoth>=1.6
 # PDF from HTML (both document PDF export and analytics reports)
 weasyprint>=60
 
+# Chart generation (bar, line, pie charts for documents and reports)
+matplotlib>=3.8
+
 # Jinja2 templating (pulled by FastAPI, pinned for clarity)
 Jinja2>=3.1
