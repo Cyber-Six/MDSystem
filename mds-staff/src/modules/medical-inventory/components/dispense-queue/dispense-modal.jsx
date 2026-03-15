@@ -11,16 +11,39 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
   const item = (items || []).find((i) => i.id === reqItem?.itemId) || null;
   const isStudentReq = reqItem?.quantity === null || reqItem?.quantity === undefined;
   const [manualQty, setManualQty] = useState(isStudentReq ? '' : String(reqItem?.quantity ?? ''));
+  const [notes, setNotes] = useState('');
   const qty = parseInt(manualQty) || 0;
+
+  // Helper to format date safely
+  const formatDate = (dateValue) => {
+    if (!dateValue) return '—';
+    try {
+      let date;
+      if (typeof dateValue === 'number') {
+        date = new Date(dateValue * 1000);
+      } else if (typeof dateValue === 'string') {
+        date = new Date(dateValue);
+      } else {
+        date = dateValue;
+      }
+      if (isNaN(date.getTime())) return '—';
+      return date.toLocaleDateString();
+    } catch (err) {
+      return '—';
+    }
+  };
 
   /* FEFO batch allocation: sort by expiry ASC, then allocate qty */
   const clinicBatches = useMemo(() => {
     return batches
-      .filter((b) => b.medicalItemId === reqItem?.itemId && b.currentQuantity > 0)
+      .filter((b) => {
+        const qty = b.availableQuantity || b.currentQuantity || 0;
+        return b.medicalItemId === reqItem?.itemId && qty > 0;
+      })
       .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
   }, [batches, reqItem?.itemId]);
 
-  const totalAvailable = clinicBatches.reduce((s, b) => s + b.currentQuantity, 0);
+  const totalAvailable = clinicBatches.reduce((s, b) => s + (b.availableQuantity || b.currentQuantity || 0), 0);
 
   const allocation = useMemo(() => {
     if (qty <= 0) return [];
@@ -28,8 +51,9 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
     const result = [];
     for (const b of clinicBatches) {
       if (remaining <= 0) break;
-      const take = Math.min(remaining, b.currentQuantity);
-      result.push({ ...b, allocate: take, remainAfter: b.currentQuantity - take });
+      const available = b.availableQuantity || b.currentQuantity || 0;
+      const take = Math.min(remaining, available);
+      result.push({ ...b, allocate: take, remainAfter: available - take });
       remaining -= take;
     }
     return result;
@@ -40,7 +64,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
 
   const handleSubmit = () => {
     if (!isValid) return;
-    onConfirm({ request, quantity: qty, allocation });
+    onConfirm({ request, quantity: qty, allocation, notes });
   };
 
   return (
@@ -70,7 +94,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
           {/* Requested by info */}
           <div className="flex items-center gap-2 text-xs text-secondary-500 dark:text-neutral-400">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-            Requested by {request.patientType} patient on {new Date(request.created_at).toLocaleDateString()}
+            Requested by {request.patientType} patient on {formatDate(request.created_at)}
           </div>
 
           {/* Quantity input */}
@@ -91,6 +115,20 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
             {qty > totalAvailable && (
               <p className="text-[10px] text-error-500 mt-1">Insufficient stock. Only {totalAvailable} available.</p>
             )}
+          </div>
+
+          {/* Dispense Notes */}
+          <div>
+            <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
+              Dispense Notes
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional: Add instructions or notes (e.g., dosage instructions, special requirements)…"
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+            />
           </div>
 
           {/* FEFO Allocation Preview */}
@@ -120,8 +158,8 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                       return (
                         <tr key={a.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50">
                           <td className="px-3 py-2 text-xs font-mono text-secondary-700 dark:text-neutral-300">{a.batchNumber}</td>
-                          <td className={`px-3 py-2 text-xs ${expColor}`}>{new Date(a.expiryDate).toLocaleDateString()}</td>
-                          <td className="px-3 py-2 text-xs text-right text-secondary-600 dark:text-neutral-400">{a.currentQuantity}</td>
+                          <td className={`px-3 py-2 text-xs ${expColor}`}>{formatDate(a.expiryDate)}</td>
+                          <td className="px-3 py-2 text-xs text-right text-secondary-600 dark:text-neutral-400">{a.availableQuantity || a.currentQuantity || 0}</td>
                           <td className="px-3 py-2 text-xs text-right font-bold text-primary-600 dark:text-primary-400">{a.allocate}</td>
                           <td className="px-3 py-2 text-xs text-right text-secondary-500 dark:text-neutral-400">{a.remainAfter}</td>
                         </tr>
