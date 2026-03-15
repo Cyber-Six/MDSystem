@@ -32,15 +32,17 @@ const Query = {
 
   _getMedicalSupply: async (_, { medicalItemId, location, availableOnly, offset = 0, limit = 20 }, { res }) => {
     const params = [medicalItemId];
-    const conditions = [`"medicalItemId" = $1`];
+    const conditions = [`mb."medicalItemId" = $1`];
 
-    if (location) conditions.push(`location = $${params.push(location)}`);
-    if (availableOnly) conditions.push(`"expiryDate" > CURRENT_DATE`);
+    if (location) conditions.push(`mb.location = $${params.push(location)}`);
+    if (availableOnly) conditions.push(`mb."expiryDate" > CURRENT_DATE`);
 
     const sql = `
-      SELECT * FROM "MedicineBatch"
+      SELECT mb.*, 
+        COALESCE((SELECT COUNT(*) FROM "MedicineEntity" WHERE "batchId" = mb.id AND "transactionId" IS NULL), 0) AS "availableQuantity"
+      FROM "MedicineBatch" mb
       WHERE ${conditions.join(' AND ')}
-      ORDER BY "expiryDate" ASC
+      ORDER BY mb."expiryDate" ASC
       OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
     `;
 

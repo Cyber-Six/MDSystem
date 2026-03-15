@@ -10,6 +10,25 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
   const [filterClinic, setFilterClinic] = useState('All');
   const [filterStatus, setFilterStatus] = useState('Pending');
 
+  // Helper to format date safely
+  const formatDate = (dateValue) => {
+    if (!dateValue) return '—';
+    try {
+      let date;
+      if (typeof dateValue === 'number') {
+        date = new Date(dateValue * 1000);
+      } else if (typeof dateValue === 'string') {
+        date = new Date(dateValue);
+      } else {
+        date = dateValue;
+      }
+      if (isNaN(date.getTime())) return '—';
+      return date.toLocaleDateString();
+    } catch (err) {
+      return '—';
+    }
+  };
+
   const itemMap = useMemo(() => {
     const m = {};
     (items || []).forEach((i) => (m[i.id] = i));
@@ -99,19 +118,25 @@ const DispenseQueue = ({ requests, items, onDispense, onApprove, onReject }) => 
                         <p className="text-xs font-medium text-secondary-800 dark:text-white leading-none m-0">{req.patientName}</p>
                         {req.patientId && <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none m-0">ID: {req.patientId}</p>}
                       </td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300">{req.items?.[0]?.itemName || '—'}{req.items?.length > 1 ? ` +${req.items.length - 1} more` : ''}</td>
+                      <td className="px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300">
+                        {req.items?.map((item, idx) => (
+                          <div key={idx} className="text-xs">{item.itemName || '—'}{item.quantity && ` (qty: ${item.quantity})`}</div>
+                        )) || '—'}
+                      </td>
                       <td className="px-3 py-1.5">
-                        {isStudentReq ? (
-                          <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">QTY PENDING</span>
+                        {req.items?.length > 0 ? (
+                          <span className="text-xs font-medium text-secondary-800 dark:text-white">{req.items?.reduce((sum, i) => sum + (i.quantity || 0), 0)}</span>
                         ) : (
-                          <span className="text-xs font-medium text-secondary-800 dark:text-white">{req.items?.[0]?.quantity}</span>
+                          <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">QTY PENDING</span>
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400 max-w-[160px] truncate" title={req.purpose}>{req.purpose || '—'}</td>
                       <td className="px-3 py-1.5">
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">{req.patientType}</span>
                       </td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">{new Date(req.created_at).toLocaleDateString()}</td>
+                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">
+                        {formatDate(req.created_at)}
+                      </td>
                       <td className="px-3 py-1.5">
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>
                       </td>
