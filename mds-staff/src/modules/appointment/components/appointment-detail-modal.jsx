@@ -101,6 +101,16 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
   const canMarkComplete = status === 'InProgress';
   const canMarkNoShow = status === 'Scheduled' || status === 'InProgress';
 
+  const handledByLabel = {
+    Scheduled:          'Approved By',
+    InProgress:         'Approved By',
+    Completed:          'Approved By',
+    Rejected:           'Rejected By',
+    NoShow:             'Marked By',
+    CancelledByPatient: 'Noted By',
+    CancelledByMedical: 'Cancelled By',
+  }[status] ?? 'Handled By';
+
   const handleCancel = () => {
     if (!cancelReason.trim()) return;
     if (status === 'Pending') {
@@ -255,7 +265,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                 { label: 'Student / Employee ID', value: patientIdentifier ?? '—' },
                 { label: 'Session', value: session },
                 { label: 'Status', value: status },
-                { label: 'Approved By', value: approvedBy || '—' },
+                { label: handledByLabel, value: approvedBy || '—' },
                 { label: 'Arrived At', value: arrived_at ? new Date(arrived_at).toLocaleString() : '—' },
                 { label: 'Created', value: created_at ? new Date(created_at).toLocaleString() : '—' },
               ].map(({ label, value }) => (
