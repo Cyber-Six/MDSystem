@@ -487,10 +487,11 @@ const Mutation = {
     }
 
     // Valid state transitions per appointment state machine
+    // NoShow is system-only (not a manual staff action)
     const validTransitions = {
       Pending: ["Scheduled", "Rejected"],
-      Scheduled: ["CancelledByMedical", "NoShow"],
-      InProgress: ["Completed", "NoShow"],
+      Scheduled: ["CancelledByMedical"],
+      InProgress: ["Completed", "CancelledByMedical"],
     };
 
     // Step 1: Check current slot status
@@ -650,9 +651,9 @@ const Mutation = {
       values.push(input.location);
     }
 
-    if (input.patientType !== undefined && input.patientType !== null) {
+    if (input.patientType !== undefined) {
       fields.push(`"patientType" = $${idx++}`);
-      values.push(input.patientType);
+      values.push(input.patientType ?? null);
     }
 
     if (input.schedulePerWeek !== undefined && input.schedulePerWeek !== null) {

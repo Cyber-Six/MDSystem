@@ -111,6 +111,7 @@ const AvailabilityManager = () => {
       const updated = await updateScheduler(formData.id, {
         label: formData.label,
         location: formData.location,
+        patientType: formData.patientType ?? null,
         schedulePerWeek: formData.schedulePerWeek,
         morningAllowed: formData.morningAllowed,
         afternoonAllowed: formData.afternoonAllowed,
@@ -124,6 +125,7 @@ const AvailabilityManager = () => {
       const created = await createScheduler({
         label: formData.label,
         location: formData.location,
+        patientType: formData.patientType ?? null,
         schedulePerWeek: formData.schedulePerWeek,
         morningAllowed: formData.morningAllowed,
         afternoonAllowed: formData.afternoonAllowed,
@@ -249,6 +251,15 @@ const AvailabilityManager = () => {
                 <div className="flex items-center gap-2 min-w-0">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sched.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
                   <span className="text-sm font-medium text-secondary-800 dark:text-white truncate">{sched.label}</span>
+                  {sched.patientType && (
+                    <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full flex-shrink-0 ${
+                      sched.patientType === 'Employee'
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                        : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                    }`}>
+                      {sched.patientType}
+                    </span>
+                  )}
                   <span className="text-xs text-secondary-400 dark:text-neutral-500">·</span>
                   <span className="text-xs text-secondary-500 dark:text-neutral-400 whitespace-nowrap">
                     {sched.location} · AM {sched.morningAllowed} · PM {sched.afternoonAllowed}

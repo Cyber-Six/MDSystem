@@ -79,6 +79,7 @@ export const listOpenAppointments = async (offset = 0, limit = 20) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed

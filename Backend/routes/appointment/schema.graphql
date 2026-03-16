@@ -191,7 +191,7 @@ type Mutation {
   acknowledgeRejection: Boolean
 
   #----------- --^ Patient and --v Medical
-  respondAppointment(userId: ID!, status: SCHEDULING_STATUS!, notes: String): patientSlot
+  respondAppointment(userId: ID!, slotId: ID, status: SCHEDULING_STATUS!, notes: String): patientSlot
   recordAppointmentAttendance(slotId: ID!, arrived_at: Date!): patientSlot
 
   createScheduler(input: SlotSchedulerInput!): SlotScheduler

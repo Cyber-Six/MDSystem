@@ -9,8 +9,10 @@ import { getPatientStatus, getPatientRecords, fetchRequirementFile } from '../st
  *
  * Actions align to the appointment state machine:
  *   Pending     → Approve (Scheduled), Reject
- *   Scheduled   → Record Attendance (InProgress), Cancel (CancelledByMedical), No-Show
- *   InProgress  → Complete, No-Show
+ *   Scheduled   → Record Attendance (InProgress), Cancel (CancelledByMedical)
+ *   InProgress  → Complete, Cancel (CancelledByMedical)
+ *
+ * NoShow is system-only — staff cannot manually mark No-Show.
  */
 const STATUS_COLORS = {
   Pending:            'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
@@ -24,7 +26,7 @@ const STATUS_COLORS = {
   Expired:            'bg-neutral-100 dark:bg-neutral-700     text-neutral-500 dark:text-neutral-400',
 };
 
-const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onMarkDone, onMarkNoShow, onMarkComplete, hideHistory = false }) => {
+const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onMarkDone, onMarkComplete, hideHistory = false }) => {
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [history, setHistory] = useState([]);
@@ -97,9 +99,8 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
   const canConfirm = status === 'Pending';
   const canReject = status === 'Pending';
   const canRecordAttendance = status === 'Scheduled';
-  const canCancelByMedical = status === 'Scheduled';
+  const canCancelByMedical = status === 'Scheduled' || status === 'InProgress';
   const canMarkComplete = status === 'InProgress';
-  const canMarkNoShow = status === 'Scheduled' || status === 'InProgress';
 
   const handledByLabel = {
     Scheduled:          'Approved By',
@@ -114,15 +115,15 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
   const handleCancel = () => {
     if (!cancelReason.trim()) return;
     if (status === 'Pending') {
-      onCancel?.(patientId, cancelReason);
-    } else if (status === 'Scheduled') {
-      onCancel?.(patientId, cancelReason, 'CancelledByMedical');
+      onCancel?.(patientId, cancelReason, undefined, id);
+    } else if (status === 'Scheduled' || status === 'InProgress') {
+      onCancel?.(patientId, cancelReason, 'CancelledByMedical', id);
     }
     onClose();
   };
 
   const handleConfirm = () => {
-    onConfirm?.(patientId);
+    onConfirm?.(patientId, id);
     onClose();
   };
 
@@ -132,12 +133,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
   };
 
   const handleMarkComplete = () => {
-    onMarkComplete?.(patientId);
-    onClose();
-  };
-
-  const handleMarkNoShow = () => {
-    onMarkNoShow?.(patientId);
+    onMarkComplete?.(patientId, id);
     onClose();
   };
 
@@ -378,7 +374,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
           {showCancelForm && (
             <div className="border border-error-200 dark:border-error-800 rounded-lg p-3 bg-error-50 dark:bg-error-900/20">
               <label className="text-xs font-medium text-error-700 dark:text-error-400 mb-1.5 block">
-                Reason for Rejection
+                {canReject ? 'Reason for Rejection' : 'Reason for Cancellation'}
               </label>
               <textarea
                 value={cancelReason}
@@ -393,7 +389,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                   disabled={!cancelReason.trim()}
                   className="px-3 py-1.5 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Confirm Reject
+                  {canReject ? 'Confirm Reject' : 'Confirm Cancel'}
                 </button>
                 <button
                   onClick={() => { setShowCancelForm(false); setCancelReason(''); }}
@@ -415,14 +411,6 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                 className="px-4 py-2 text-sm font-medium text-error-600 dark:text-error-400 border border-error-200 dark:border-error-700 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-md transition-colors"
               >
                 {canReject ? 'Reject' : 'Cancel'}
-              </button>
-            )}
-            {canMarkNoShow && (
-              <button
-                onClick={handleMarkNoShow}
-                className="px-4 py-2 text-sm font-medium text-warning-600 dark:text-warning-400 border border-warning-200 dark:border-warning-700 hover:bg-warning-50 dark:hover:bg-warning-900/20 rounded-md transition-colors"
-              >
-                No-Show
               </button>
             )}
             {canConfirm && (

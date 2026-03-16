@@ -87,31 +87,39 @@ const Query = {
 };
 
 const Mutation = {
-  respondAppointment: async (_, { userId, status, notes }, { user, res }) => {
+  respondAppointment: async (_, { userId, slotId, status, notes }, { user, res }) => {
     const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval, null);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    const record = await Wrapper.Query._getUserAppointmentRecords(_, { userId, offset: 0, limit: 1 }, { user, res });
-    if (!record || record.length === 0) {
-      throwGraphQLError(res).message("No appointment record found for the user").status(404).throw();
+
+    let targetSlotId = slotId;
+
+    if (!targetSlotId) {
+      // Fall back to finding the latest slot by userId when slotId is not provided
+      const record = await Wrapper.Query._getUserAppointmentRecords(_, { userId, offset: 0, limit: 1 }, { user, res });
+      if (!record || record.length === 0) {
+        throwGraphQLError(res).message("No appointment record found for the user").status(404).throw();
+      }
+      targetSlotId = record[0].id;
     }
 
-    const result = await Wrapper.Mutation._respondAppointment(_, { slotId: record[0].id, status, notes }, { user, res });
-    
-    // Notify user of appointment response
+    const result = await Wrapper.Mutation._respondAppointment(_, { slotId: targetSlotId, status, notes }, { user, res });
+
+    // Notify the patient of the appointment response
+    const notifyUserId = userId || result.patientId;
     await notifyUser(
-      userId,
+      notifyUserId,
       'appointment:responded',
-      { status, notes, slotId: record[0].id },
+      { status, notes, slotId: targetSlotId },
       {
-        email: await db.findEmailByUserId(record[0].patientId),
+        email: await db.findEmailByUserId(result.patientId),
         title: 'Appointment Response',
         message: `Your appointment request has been ${status}.`,
         notes: notes || null,
       }
     );
-    
+
     return result;
   },
 

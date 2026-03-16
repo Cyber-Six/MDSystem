@@ -3,6 +3,8 @@ import { searchByStatus, getStatusCounts } from '../staff-appointment-service';
 
 /* ── constants ─────────────────────────────────────── */
 
+const PAGE_SIZE = 20;
+
 const STATUS_STYLES = {
   Pending:             'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
   Scheduled:           'bg-accent-100  dark:bg-accent-900/30  text-accent-700  dark:text-accent-400',
@@ -27,6 +29,12 @@ const TABS = [
   { key: 'Rejected',           label: 'Rejected',    icon: 'M6 18L18 6M6 6l12 12' },
 ];
 
+/** Format count for badge display: 99+ if >= 100 */
+const formatCount = (count) => {
+  if (count >= 100) return '99+';
+  return count;
+};
+
 /* ── component ─────────────────────────────────────── */
 const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [activeTab,   setActiveTab]   = useState('Pending');
@@ -35,6 +43,25 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [loading,      setLoading]      = useState(false);
   const [tabCounts,    setTabCounts]    = useState({});
   const [loadingCounts, setLoadingCounts] = useState(true);
+
+  // Pagination state
+  const [offset,      setOffset]      = useState(0);
+  const [hasMore,     setHasMore]     = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  /** Fetch fresh status counts from server */
+  const refreshCounts = useCallback(async () => {
+    try {
+      const counts = await getStatusCounts();
+      const updated = {};
+      for (const tab of TABS) {
+        updated[tab.key] = counts[tab.key] || 0;
+      }
+      setTabCounts(updated);
+    } catch (err) {
+      console.error('Failed to load appointment counts:', err);
+    }
+  }, []);
 
   /* Expose removeAppointment so the parent can optimistically move an item
      out of the current tab after a status-changing action, and update counts */
@@ -47,53 +74,67 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         if (updated[activeTab] !== undefined) {
           updated[activeTab] = Math.max(0, (updated[activeTab] || 1) - 1);
         }
-        // Increment new status count
-        if (newStatus && updated[newStatus] !== undefined) {
+        // Increment new status count (always increment, even if was 0/undefined)
+        if (newStatus) {
           updated[newStatus] = (updated[newStatus] || 0) + 1;
         }
         return updated;
       });
+      // Also re-fetch actual counts from server to stay in sync
+      refreshCounts();
     },
-  }), [activeTab]);
+  }), [activeTab, refreshCounts]);
 
   /* Load status counts once on mount */
   useEffect(() => {
     const loadCounts = async () => {
       try {
         setLoadingCounts(true);
-        const counts = await getStatusCounts();
-        // Initialize with 0 for all tab statuses
-        const initialCounts = {};
-        for (const tab of TABS) {
-          initialCounts[tab.key] = counts[tab.key] || 0;
-        }
-        setTabCounts(initialCounts);
-      } catch (err) {
-        console.error('Failed to load appointment counts:', err);
+        await refreshCounts();
       } finally {
         setLoadingCounts(false);
       }
     };
     loadCounts();
-  }, []);
+  }, [refreshCounts]);
 
-  /* Fetch appointments whenever the active tab changes */
+  /* Fetch appointments (first page or fresh load) */
   const fetchAppointments = useCallback(async (status) => {
     setLoading(true);
+    setOffset(0);
     try {
-      const data = await searchByStatus(status, 0, 50);
+      const data = await searchByStatus(status, 0, PAGE_SIZE);
       setAppointments(data || []);
+      setHasMore((data?.length ?? 0) === PAGE_SIZE);
     } catch (err) {
       console.error('Failed to fetch appointments:', err);
       setAppointments([]);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  /* Fetch appointments whenever the active tab changes */
   useEffect(() => {
     fetchAppointments(activeTab);
   }, [activeTab, fetchAppointments]);
+
+  /* Load more (pagination) */
+  const handleLoadMore = useCallback(async () => {
+    const nextOffset = offset + PAGE_SIZE;
+    setLoadingMore(true);
+    try {
+      const data = await searchByStatus(activeTab, nextOffset, PAGE_SIZE);
+      setAppointments((prev) => [...prev, ...(data || [])]);
+      setHasMore((data?.length ?? 0) === PAGE_SIZE);
+      setOffset(nextOffset);
+    } catch (err) {
+      console.error('Failed to load more appointments:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [activeTab, offset]);
 
   /* Client-side search filter on patientIdentifier / name / email */
   const rows = useMemo(() => {
@@ -108,8 +149,15 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     );
   }, [appointments, search]);
 
+  /* Allow clicking the active tab to refresh data */
   const handleTabChange = (key) => {
-    setActiveTab(key);
+    if (key === activeTab) {
+      // Same tab clicked — force refresh
+      fetchAppointments(key);
+      refreshCounts();
+    } else {
+      setActiveTab(key);
+    }
   };
 
   return (
@@ -146,7 +194,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                     ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                     : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
                 }`}>
-                  {tabCounts[tab.key]}
+                  {formatCount(tabCounts[tab.key])}
                 </span>
               )
             )}
@@ -171,7 +219,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         </div>
         {/* Result count + refresh */}
         <button
-          onClick={() => fetchAppointments(activeTab)}
+          onClick={() => { fetchAppointments(activeTab); refreshCounts(); }}
           className="px-2.5 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-600 transition-colors"
         >
           Refresh
@@ -189,6 +237,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading appointments...</p>
           </div>
         ) : (
+          <>
           <table className="w-full" style={{ minWidth: 480 }}>
             <thead>
               <tr className="bg-neutral-50/60 dark:bg-neutral-700/30">
@@ -242,6 +291,20 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
               )}
             </tbody>
           </table>
+
+          {/* ─── Load More (Pagination) ─── */}
+          {hasMore && (
+            <div className="px-4 py-3 border-t border-neutral-100 dark:border-neutral-700/60 text-center">
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="px-4 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors disabled:opacity-50"
+              >
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

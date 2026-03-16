@@ -167,6 +167,31 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
             </div>
           </div>
 
+          {/* Visible To */}
+          <div>
+            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Visible To</label>
+            <div className="flex gap-2">
+              {[
+                { label: 'Both', value: null },
+                { label: 'Employee Only', value: 'Employee' },
+                { label: 'Student Only', value: 'Student' },
+              ].map(({ label, value }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, patientType: value }))}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    formData.patientType === value
+                      ? 'bg-accent-500 text-white'
+                      : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Schedule Days */}
           <div>
             <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Schedule Days</label>
@@ -368,6 +393,7 @@ function getDefaults(scheduler) {
   return {
     label: scheduler?.label || '',
     location: scheduler?.location || 'Arlegui',
+    patientType: scheduler?.patientType ?? null,
     schedulePerWeek: scheduler?.schedulePerWeek || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
     morningAllowed: scheduler?.morningAllowed ?? 20,
     afternoonAllowed: scheduler?.afternoonAllowed ?? 15,
