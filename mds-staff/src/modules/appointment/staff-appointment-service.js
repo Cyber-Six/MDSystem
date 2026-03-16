@@ -196,6 +196,7 @@ export const listAllSchedulers = async (offset = 0, limit = 50) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
@@ -333,6 +334,7 @@ export const createScheduler = async (input) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
@@ -360,6 +362,7 @@ export const updateScheduler = async (schedulerId, input) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed

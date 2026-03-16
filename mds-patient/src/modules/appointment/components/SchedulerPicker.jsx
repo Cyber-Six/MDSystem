@@ -20,9 +20,20 @@ const SchedulerPicker = ({ schedulers, onSelect }) => (
             onClick={() => onSelect(s)}
             className="text-left p-5 border border-stone-200 dark:border-neutral-700 rounded-xl shadow-md bg-white dark:bg-neutral-800 hover:border-primary-400 dark:hover:border-primary-600 hover:shadow-lg transition-all group"
           >
-            <h3 className="font-semibold text-neutral-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 mb-1">
-              {s.label}
-            </h3>
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <h3 className="font-semibold text-neutral-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
+                {s.label}
+              </h3>
+              {s.patientType && (
+                <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full flex-shrink-0 ${
+                  s.patientType === 'Employee'
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                }`}>
+                  {s.patientType === 'Employee' ? 'Employees' : 'Students'}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{s.location}</p>
             <div className="flex flex-wrap gap-1 mb-2">
               {s.schedulePerWeek?.map((day) => (

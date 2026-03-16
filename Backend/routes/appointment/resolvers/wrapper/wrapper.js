@@ -650,9 +650,9 @@ const Mutation = {
       values.push(input.location);
     }
 
-    if (input.patientType !== undefined && input.patientType !== null) {
+    if (input.patientType !== undefined) {
       fields.push(`"patientType" = $${idx++}`);
-      values.push(input.patientType);
+      values.push(input.patientType ?? null);
     }
 
     if (input.schedulePerWeek !== undefined && input.schedulePerWeek !== null) {
