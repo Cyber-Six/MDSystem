@@ -328,7 +328,7 @@ const Mutation = {
   // Catalog mutations
   
   createDomainCatalogs: async (_, args, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -337,7 +337,7 @@ const Mutation = {
   },
 
   createAllergenCatalogs: async (_, args, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -346,7 +346,7 @@ const Mutation = {
   },
 
   createOralApplianceCatalogs: async (_, args, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -361,7 +361,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
       
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -376,7 +376,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -391,7 +391,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
