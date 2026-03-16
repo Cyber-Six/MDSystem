@@ -29,7 +29,7 @@ const Mutation = {
     if (!Array.isArray(input.items) || input.items.length === 0) {
       throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
     }
-
+    /*
     // Combine duplicate batch entries before validation to avoid undercount checks.
     const mergedItems = Array.from(
       input.items.reduce((acc, item) => {
@@ -42,6 +42,7 @@ const Mutation = {
     ).map(([batchId, quantity]) => ({ batchId, quantity }));
 
     await validateBatchesWithQuantity(mergedItems, res);
+    */
 
     const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
 

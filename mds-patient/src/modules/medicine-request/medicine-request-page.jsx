@@ -113,7 +113,6 @@ const MedicineRequestPage = () => {
               item_code
               item_name
               category
-              batchId
             }
           }
         `;
@@ -272,7 +271,7 @@ const MedicineRequestPage = () => {
     try {
       itemsWithBatchId = formData.items.map(item => {
         const medicineGroup = selectedMedicinesByCode[item.itemCode];
-        const batchId = medicineGroup.batches[0]?.batchId;
+        const batchId = medicineGroup.batches[0]?.id;
         if (!batchId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
         return { batchId: parseInt(batchId, 10), quantity: 1 };
       });
@@ -374,7 +373,7 @@ const MedicineRequestPage = () => {
         {
           input: {
             purpose: formData.purpose,
-
+            location: formData.location,
             items: itemsWithBatchId
           }
         },

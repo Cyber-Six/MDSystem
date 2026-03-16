@@ -105,8 +105,10 @@ const Mutation = {
       RETURNING *
     `;
 
+    const client = await db.connect();
     try {
-      const result = await db.query(query, [
+      client.query('BEGIN');
+      const result = await client.query(query, [
         patientId, 
         input.location, 
         input.purpose, 
@@ -117,9 +119,9 @@ const Mutation = {
       const values = input.items
         .map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`)
         .join(', ');
-      const params = [request.id, ...input.items.flatMap(item => [item.batchId, item.quantity])];
+      const params = [request.id, ...input.items.flatMap(item => [item.medicineId, item.quantity])];
 
-      const entityQuery = await db.query(
+      const entityQuery = await client.query(
         `INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId", quantity)
          VALUES ${values}
          RETURNING id, "requestId", "medicineId" AS "batchId", quantity`,
@@ -127,10 +129,14 @@ const Mutation = {
       );
 
       request.items = entityQuery.rows;
+      client.query('COMMIT');
       return request;
     } catch (err) {
+      client.query('ROLLBACK');
       logger.error("Error in _createMedicineRequest:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 
