@@ -358,14 +358,17 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
+    let allowedScheduler;
+    let scheduleData;
+
     try {  // validation block with detailed error handling
-      const allowedScheduler = await Query._listOpenAppointments(_, { offset: 0, limit: 1, schedulerId }, { user, res });
+      allowedScheduler = await Query._listOpenAppointments(_, { offset: 0, limit: 1, schedulerId }, { user, res });
       if (allowedScheduler.length === 0) {
         throwGraphQLError(res).message("Scheduler not found or not allowed.").status(404).throw();
       }
 
       // 1. Validate scheduler/date and session availability
-      const scheduleData = await Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
+      scheduleData = await Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
       if (session === "Morning" && scheduleData.morningAllowed <= (scheduleData.morningRegistered + scheduleData.morningPending)) {
         throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
       } else if (session === "Afternoon" && scheduleData.afternoonAllowed <= (scheduleData.afternoonRegistered + scheduleData.afternoonPending)) {
@@ -434,7 +437,7 @@ const Mutation = {
       if (requirements && requirements.length > 0) {
         for (const requirement of requirements) {
           if (requirement.filename) {
-            await deleteFile(requirement.filename, "appointmentRequirement");
+            await deleteFile("appointmentRequirement", requirement.filename);
           }
         }
       }
@@ -484,10 +487,11 @@ const Mutation = {
     }
 
     // Valid state transitions per appointment state machine
+    // NoShow is system-only (not a manual staff action)
     const validTransitions = {
       Pending: ["Scheduled", "Rejected"],
-      Scheduled: ["CancelledByMedical", "NoShow"],
-      InProgress: ["Completed", "NoShow"],
+      Scheduled: ["CancelledByMedical"],
+      InProgress: ["Completed", "CancelledByMedical"],
     };
 
     // Step 1: Check current slot status
@@ -647,9 +651,9 @@ const Mutation = {
       values.push(input.location);
     }
 
-    if (input.patientType !== undefined && input.patientType !== null) {
+    if (input.patientType !== undefined) {
       fields.push(`"patientType" = $${idx++}`);
-      values.push(input.patientType);
+      values.push(input.patientType ?? null);
     }
 
     if (input.schedulePerWeek !== undefined && input.schedulePerWeek !== null) {

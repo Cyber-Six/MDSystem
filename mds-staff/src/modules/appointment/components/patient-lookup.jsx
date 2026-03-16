@@ -133,14 +133,14 @@ const PatientLookup = () => {
     setHasMore((data?.length ?? 0) === PAGE_SIZE);
   }, [resolvedUserId]);
 
-  const handleModalConfirm = async (patientId) => {
-    await respondToAppointment(patientId, STATUS.SCHEDULED);
+  const handleModalConfirm = async (patientId, slotId) => {
+    await respondToAppointment(patientId, STATUS.SCHEDULED, undefined, slotId);
     setSelectedRecord(null);
     await refreshRecords();
   };
 
-  const handleModalCancel = async (patientId, reason, cancelStatus) => {
-    await respondToAppointment(patientId, cancelStatus || STATUS.REJECTED, reason);
+  const handleModalCancel = async (patientId, reason, cancelStatus, slotId) => {
+    await respondToAppointment(patientId, cancelStatus || STATUS.REJECTED, reason, slotId);
     setSelectedRecord(null);
     await refreshRecords();
   };
@@ -151,14 +151,8 @@ const PatientLookup = () => {
     await refreshRecords();
   };
 
-  const handleModalMarkComplete = async (patientId) => {
-    await respondToAppointment(patientId, STATUS.COMPLETED);
-    setSelectedRecord(null);
-    await refreshRecords();
-  };
-
-  const handleModalMarkNoShow = async (patientId) => {
-    await respondToAppointment(patientId, STATUS.NO_SHOW);
+  const handleModalMarkComplete = async (patientId, slotId) => {
+    await respondToAppointment(patientId, STATUS.COMPLETED, undefined, slotId);
     setSelectedRecord(null);
     await refreshRecords();
   };
@@ -408,7 +402,6 @@ const PatientLookup = () => {
           onCancel={handleModalCancel}
           onMarkDone={handleModalMarkDone}
           onMarkComplete={handleModalMarkComplete}
-          onMarkNoShow={handleModalMarkNoShow}
           hideHistory
         />
       )}

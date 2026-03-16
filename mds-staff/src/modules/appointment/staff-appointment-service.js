@@ -196,6 +196,7 @@ export const listAllSchedulers = async (offset = 0, limit = 50) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
@@ -280,14 +281,15 @@ export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
 /**
  * Approve or reject a pending appointment.
  * @param {string} userId
- * @param {'Scheduled'|'Rejected'} status
+ * @param {'Scheduled'|'Rejected'|'CancelledByMedical'|'Completed'} status
  * @param {string} [notes]
+ * @param {string} [slotId] - Preferred: pass the slot ID directly to avoid stale-lookup bugs
  * @returns {Promise<object>} patientSlot
  */
-export const respondToAppointment = async (userId, status, notes) => {
+export const respondToAppointment = async (userId, status, notes, slotId = null) => {
   const data = await sendGraphQL(`
-    mutation RespondAppointment($userId: ID!, $status: SCHEDULING_STATUS!, $notes: String) {
-      respondAppointment(userId: $userId, status: $status, notes: $notes) {
+    mutation RespondAppointment($userId: ID!, $slotId: ID, $status: SCHEDULING_STATUS!, $notes: String) {
+      respondAppointment(userId: $userId, slotId: $slotId, status: $status, notes: $notes) {
         id
         patientId
         status
@@ -295,7 +297,7 @@ export const respondToAppointment = async (userId, status, notes) => {
         notes
       }
     }
-  `, { userId, status, notes });
+  `, { userId, slotId, status, notes });
   return data.respondAppointment;
 };
 
@@ -333,6 +335,7 @@ export const createScheduler = async (input) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
@@ -360,6 +363,7 @@ export const updateScheduler = async (schedulerId, input) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
