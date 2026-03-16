@@ -13,41 +13,37 @@ const ITEMS_AGG = `
 
 const Query = {
   _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { res }) => {
-    const params = [];
-    const conditions = [
-      `mi.active = true`,
-      `mi.category = 'Medicine'`,
-      `mb."expiryDate" > CURRENT_DATE`,
-    ];
-
-    if (location) conditions.push(`mb.location = $${params.push(location)}`);
-
     const sql = `
-      SELECT
+      SELECT DISTINCT ON (mi.id)
         mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
         mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
       FROM "MedicalItems" mi
       JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY mi.item_name, mb."expiryDate"
-      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+      JOIN "MedicineEntity" me ON me."batchId" = mb.id
+      WHERE 
+        mi.active = true AND
+        mi.category = 'Medicine' AND
+        mb."expiryDate" > CURRENT_DATE AND
+        mb.location = COALESCE($1, mb.location) AND
+        me."transactionId" IS NULL
+      ORDER BY mi.id, mi.item_name, mb."expiryDate"
+      OFFSET $2 LIMIT $3
     `;
 
-    const result = await db.query(sql, params);
+    const result = await db.query(sql, [location, offset, limit]);
     return result.rows;
   },
 
-  _getMedicineStatus: async (_, { patientId }, { res }) => {
+  _getMedicineStatus: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
     const sql = `
-      SELECT mrl.*, ${ITEMS_AGG}
-      FROM "MedicineRequestLog" mrl
-      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
-      WHERE mrl."patientId" = $1
-      GROUP BY mrl.id
-      ORDER BY mrl.created_at DESC
+      SELECT status
+      FROM "MedicineRequestLog"
+      WHERE "patientId" = $1
+      ORDER BY created_at DESC
+      OFFSET $2 LIMIT $3 
     `;
 
-    const result = await db.query(sql, [patientId]);
+    const result = await db.query(sql, [patientId, offset, limit]);
     return result.rows;
   },
 
@@ -67,11 +63,9 @@ const Query = {
 
   _getMedicineRequests: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
     const sql = `
-      SELECT mrl.*, ${ITEMS_AGG}
+      SELECT mrl.*
       FROM "MedicineRequestLog" mrl
-      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
       WHERE mrl."patientId" = $1
-      GROUP BY mrl.id
       ORDER BY mrl.created_at DESC
       OFFSET $2 LIMIT $3
     `;
@@ -81,45 +75,52 @@ const Query = {
   },
 
   _getAllMedicineRequests: async (_, { status, offset = 0, limit = 50 }, { res }) => {
-    const params = [];
-    const where = status ? `WHERE mrl.status = $${params.push(status)}` : '';
-
     const sql = `
-      SELECT mrl.*, ${ITEMS_AGG}
+      SELECT mrl.*
       FROM "MedicineRequestLog" mrl
-      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
-      ${where}
-      GROUP BY mrl.id
+      WHERE 
+        location = COALESCE($1, location) AND 
+        status = COALESCE($2, status)
       ORDER BY mrl.created_at DESC
-      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+      OFFSET $3 LIMIT $4
     `;
 
-    const result = await db.query(sql, params);
+    const result = await db.query(sql, [location, status, offset, limit]);
     return result.rows;
   },
 };
 
 const Mutation = {
   _createMedicineRequest: async (_, { patientId, input }, { res }) => {
-    const logSql = `
-      INSERT INTO "MedicineRequestLog" ("patientId", status, purpose, created_at)
-      VALUES ($1, 'Pending', $2, $3)
+    const query = `
+      INSERT INTO "MedicineRequestLog" ("patientId", status, location, purpose, created_at)
+      VALUES ($1, 'Pending', $2, $3, $4)
       RETURNING *
     `;
 
     try {
-      const logResult = await db.query(logSql, [
-        patientId, input.purpose, Math.floor(Date.now() / 1000),
+      const result = await db.query(query, [
+        patientId, 
+        input.location, 
+        input.purpose, 
+        Math.floor(Date.now() / 1000), // implement on backend on next version
       ]);
-      const request = logResult.rows[0];
+      const request = result.rows[0];
 
-      const valuePlaceholders = input.items.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`).join(', ');
-      const entityParams = input.items.flatMap(item => [item.batchId, request.id, item.quantity]);
-      const entityResult = await db.query(
-        `INSERT INTO "MedicineRequestEntity" ("batchId", "requestId", quantity) VALUES ${valuePlaceholders} RETURNING *`,
-        entityParams,
+      // Build VALUES placeholders dynamically
+      const values = input.medicineIds.map((_, i) => `($1, $${i + 2})`).join(', ');
+      const params = [request.id, ...input.medicineIds];
+
+      const entityQuery = await db.query(
+        `INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId")
+         VALUES ${values}
+         RETURNING *`,
+        params
       );
-      const items = entityResult.rows;
+
+      const items = entityQuery.rows;
+      request.items = items;
+
 
       request.items = items;
       return request;

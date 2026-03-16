@@ -26,6 +26,7 @@ const Mutation = {
       throwGraphQLError(res).message("You already have a pending medicine request. Please wait for it to be processed.").status(400).throw();
     }
 
+    // issue should be looking on the overall availability of the batches instead of just validating the batch existence and status
     await validateBatchesAvailable(input.items.map(i => i.batchId), res);
 
     const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
@@ -51,24 +52,20 @@ const Mutation = {
     return result;
   },
 
-  setStatusMedicineRequest: async (_, { requestId, status, notes }, { user, res }) => {
+  cancelMedicineRequest: async (_, __, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
 
-    // Patients can only cancel their own requests
-    if (status !== 'Cancelled') {
-      throwGraphQLError(res).message("Patients can only cancel requests").status(400).throw();
-    }
-
-    // Verify request belongs to this patient
-    const request = await Wrapper.Query._getMedicineRequestById(_, { requestId }, { res });
+    // Validate that the user has a pending request to cancel
+    const request = await Wrapper.Query._getMedicineRequests(_, { patientId: user.id, offset: 0, limit: 1 }, { res });
     if (!request) {
       throwGraphQLError(res).message("Request not found").status(404).throw();
     }
-    if (request.patientId !== user.id) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+
+    if (request[0].status !== "Pending") {
+      throwGraphQLError(res).message("Only pending requests can be cancelled").status(400).throw();
     }
 
-    return await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId, status: 'Cancelled', approvedBy: user.id, notes }, { res });
+    return await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId: request[0].id, status: 'Cancelled', approvedBy: user.id, notes }, { res });
   },
 };
 
