@@ -68,11 +68,10 @@ const StaffAppointment = () => {
     setSelectedAppointment(null);
   };
 
-  const handleConfirm = async (id) => {
+  const handleConfirm = async (userId, slotId) => {
     try {
-      await respondToAppointment(id, STATUS.SCHEDULED);
+      await respondToAppointment(userId, STATUS.SCHEDULED, undefined, slotId);
       setSuccessMsg('Appointment confirmed.');
-      const slotId = selectedAppointment?.id;
       handleCloseModal();
       queueRef.current?.removeAppointment(slotId, STATUS.SCHEDULED);
     } catch (err) {
@@ -80,12 +79,11 @@ const StaffAppointment = () => {
     }
   };
 
-  const handleCancel = async (id, reason, cancelStatus) => {
+  const handleCancel = async (userId, reason, cancelStatus, slotId) => {
     try {
       const status = cancelStatus || STATUS.REJECTED;
-      await respondToAppointment(id, status, reason);
+      await respondToAppointment(userId, status, reason, slotId);
       setSuccessMsg(status === STATUS.REJECTED ? 'Appointment rejected.' : 'Appointment cancelled.');
-      const slotId = selectedAppointment?.id;
       handleCloseModal();
       queueRef.current?.removeAppointment(slotId, status);
     } catch (err) {
@@ -97,33 +95,19 @@ const StaffAppointment = () => {
     try {
       await recordAttendance(id, new Date().toISOString());
       setSuccessMsg('Attendance recorded.');
-      const slotId = selectedAppointment?.id;
       handleCloseModal();
-      queueRef.current?.removeAppointment(slotId, STATUS.IN_PROGRESS);
+      queueRef.current?.removeAppointment(id, STATUS.IN_PROGRESS);
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const handleMarkComplete = async (userId) => {
+  const handleMarkComplete = async (userId, slotId) => {
     try {
-      await respondToAppointment(userId, STATUS.COMPLETED);
+      await respondToAppointment(userId, STATUS.COMPLETED, undefined, slotId);
       setSuccessMsg('Appointment marked as completed.');
-      const slotId = selectedAppointment?.id;
       handleCloseModal();
       queueRef.current?.removeAppointment(slotId, STATUS.COMPLETED);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleMarkNoShow = async (userId) => {
-    try {
-      await respondToAppointment(userId, STATUS.NO_SHOW);
-      setSuccessMsg('Appointment marked as no-show.');
-      const slotId = selectedAppointment?.id;
-      handleCloseModal();
-      queueRef.current?.removeAppointment(slotId, STATUS.NO_SHOW);
     } catch (err) {
       setError(err.message);
     }
@@ -221,7 +205,6 @@ const StaffAppointment = () => {
           onCancel={handleCancel}
           onMarkDone={handleMarkDone}
           onMarkComplete={handleMarkComplete}
-          onMarkNoShow={handleMarkNoShow}
           hideHistory
         />
       )}
