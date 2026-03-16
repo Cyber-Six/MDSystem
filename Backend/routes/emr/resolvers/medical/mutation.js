@@ -12,33 +12,46 @@ const Query = require("./query.js");
 
 const Mutation = {
   staffUpdateTicket: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval, args.userId);
+    const isPermitted = await permit.isMedicalPermitted(
+      user.id,
+      permit.permissions.emr_allow_approval,
+      args.userId
+    );
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to ApproveUpdateTicket`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
+    }
 
+    // Fetch the ticket record
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res);
-    
-    const result = await Wrapper._StaffUpdateTicket(_, {args, recordId: record.id}, { user, res });
+
+    // Update the ticket
+    const updateResult = await Wrapper._StaffUpdateTicket(
+      _,
+      { args, recordId: record.id },
+      { user, res }
+    );
+
     // Notify patient about the update ticket status change
     try {
-      const result = await notifyUser(args.userId, "updateTicket:statusChanged", {
+      const notification = await notifyUser(args.userId, "updateTicket:statusChanged", {
         email: await findEmailByUserId(args.userId),
         recordId: record.id,
-        newStatus: result.status,
-        message: `Your update ticket has been ${result.status.toLowerCase()}.`,
+        newStatus: updateResult.status,
+        message: `Your update ticket has been ${updateResult.status.toLowerCase()}.`,
         subject: "Update Ticket Status Changed"
       });
 
-      logger.info(`Notification sent to user ${args.userId} notification ${result}`);
+      logger.info(`Notification sent to user ${args.userId}: ${notification}`);
     } catch (error) {
       logger.error(`Failed to send notification for update ticket status change: ${error.message}`);
     }
 
-    return result;
+    // Return the updated ticket record
+    return updateResult;
   },
+
 
 
   updateStudentProfile: async (_, args, { user, res }) => {
