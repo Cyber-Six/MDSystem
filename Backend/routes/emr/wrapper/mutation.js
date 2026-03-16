@@ -25,7 +25,7 @@ const Mutation = {
       }
     
     if (newStatus === 'Approved') { // approval require check again
-      const missingRecords = await validateUpdateTicket(recordId, record.scope);
+      const missingRecords = await validateUpdateTicket(recordId, args.scope);
       if (missingRecords.length > 0) {
         throwGraphQLError(res)
           .status(400)
