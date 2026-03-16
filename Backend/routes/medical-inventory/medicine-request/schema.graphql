@@ -57,9 +57,14 @@ type MedicineRequest {
 
 type MedicineRequestItem {
   id: ID!
-  medicineId: Int
+  batchId: Int
   requestId: Int
   quantity: Int
+}
+
+input MedicineRequestItemInput {
+  batchId: Int!
+  quantity: Int!
 }
 
 
@@ -67,7 +72,7 @@ input CreateMedicineRequestInput {
   purpose: String!
   location: LocationDesignation!
   notes: String
-  medicinesIds: [Int!]!
+  items: [MedicineRequestItemInput!]!
 }
 
 type Query {

@@ -35,12 +35,20 @@ const Query = {
     const conditions = [`mb."medicalItemId" = $1`];
 
     if (location) conditions.push(`mb.location = $${params.push(location)}`);
-    if (availableOnly) conditions.push(`mb."expiryDate" > CURRENT_DATE`);
+    if (availableOnly) {
+      conditions.push(`mb."expiryDate" > CURRENT_DATE`);
+      conditions.push(`COALESCE(av.available_count, 0) > 0`);
+    }
 
     const sql = `
-      SELECT mb.*, 
-        COALESCE((SELECT COUNT(*) FROM "MedicineEntity" WHERE "batchId" = mb.id AND "transactionId" IS NULL), 0) AS "availableQuantity"
+      SELECT mb.*, COALESCE(av.available_count, 0) AS "availableQuantity"
       FROM "MedicineBatch" mb
+      LEFT JOIN (
+        SELECT "batchId", COUNT(*)::int AS available_count
+        FROM "MedicineEntity"
+        WHERE "transactionId" IS NULL
+        GROUP BY "batchId"
+      ) av ON av."batchId" = mb.id
       WHERE ${conditions.join(' AND ')}
       ORDER BY mb."expiryDate" ASC
       OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}

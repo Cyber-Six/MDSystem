@@ -23,6 +23,11 @@ const Query = {
       FROM "MedicalItems" mi
       JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
       WHERE ${conditions.join(' AND ')}
+        AND EXISTS (
+          SELECT 1
+          FROM "MedicineEntity" me
+          WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
+        )
       ORDER BY mi.item_name, mb."expiryDate"
       OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
     `;
@@ -55,7 +60,14 @@ const Query = {
 
 const Mutation = {
   _issuePrescription: async (_, { input, issuedBy }, { res }) => {
-    const totalQuantity = input.items.reduce((sum, item) => sum + item.quantity, 0);
+    const mergedItems = Array.from(
+      input.items.reduce((acc, item) => {
+        acc.set(item.batchId, (acc.get(item.batchId) || 0) + item.quantity);
+        return acc;
+      }, new Map()).entries()
+    ).map(([batchId, quantity]) => ({ batchId, quantity }));
+
+    const totalQuantity = mergedItems.reduce((sum, item) => sum + item.quantity, 0);
 
     const txSql = `
       INSERT INTO "MedicineTransactionLog" ("patientId", action, quantity, "issuedBy", notes)
@@ -63,38 +75,47 @@ const Mutation = {
       RETURNING *
     `;
 
-    const entitySql = `
-      INSERT INTO "MedicineEntity" ("batchId", "transactionId")
-      VALUES ($1, $2)
-      RETURNING *
-    `;
+    const client = await db.connect();
+    let transaction;
 
     try {
-      const txResult = await db.query(txSql, [
+      await client.query('BEGIN');
+
+      const txResult = await client.query(txSql, [
         input.patientId, totalQuantity, issuedBy, input.notes || null,
       ]);
-      const transaction = txResult.rows[0];
+      transaction = txResult.rows[0];
 
       const items = [];
-      for (const item of input.items) {
+      for (const item of mergedItems) {
         // Assign existing unassigned entities (FEFO: First-Expiry-First-Out)
         const assignSql = `
-          UPDATE "MedicineEntity" SET "transactionId" = $1 
-          WHERE id IN (
-            SELECT me.id 
+          WITH selected AS (
+            SELECT me.id
             FROM "MedicineEntity" me
-            JOIN "MedicineBatch" mb ON mb.id = me."batchId"
             WHERE me."batchId" = $2 AND me."transactionId" IS NULL
-            ORDER BY mb."expiryDate" ASC
+            ORDER BY me.id ASC
             LIMIT $3
           )
-          RETURNING *
+          UPDATE "MedicineEntity" me
+          SET "transactionId" = $1
+          FROM selected
+          WHERE me.id = selected.id
+          RETURNING me.id, me."batchId", me."transactionId"
         `;
-        const assignResult = await db.query(assignSql, [transaction.id, item.batchId, item.quantity]);
+        const assignResult = await client.query(assignSql, [transaction.id, item.batchId, item.quantity]);
+        if (assignResult.rows.length !== item.quantity) {
+          throwGraphQLError(res)
+            .message(`Insufficient available units for batch ${item.batchId}`)
+            .status(400)
+            .throw();
+        }
         items.push(...assignResult.rows);
       }
 
       transaction.items = items;
+
+      await client.query('COMMIT');
 
       // Notify patient: socket with ack, fall back to email if not acked or offline
       try {
@@ -118,8 +139,14 @@ const Mutation = {
 
       return transaction;
     } catch (err) {
+      await client.query('ROLLBACK');
       logger.error("Error in _issuePrescription:", err);
+      if (err?.extensions?.http?.status) {
+        throw err;
+      }
       throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 };

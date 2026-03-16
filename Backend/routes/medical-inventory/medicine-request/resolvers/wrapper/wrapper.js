@@ -6,7 +6,7 @@ const logger = require("../../../../../utils/logger.js");
 const ITEMS_AGG = `
   COALESCE(
     json_agg(
-      json_build_object('id', mre.id, 'batchId', mre."batchId", 'requestId', mre."requestId", 'quantity', mre.quantity)
+      json_build_object('id', mre.id, 'batchId', mre."medicineId", 'requestId', mre."requestId", 'quantity', mre.quantity)
     ) FILTER (WHERE mre.id IS NOT NULL),
     '[]'
   ) AS items`.trim();
@@ -14,19 +14,22 @@ const ITEMS_AGG = `
 const Query = {
   _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { res }) => {
     const sql = `
-      SELECT DISTINCT ON (mi.id)
+      SELECT
         mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
         mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
       FROM "MedicalItems" mi
       JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
-      JOIN "MedicineEntity" me ON me."batchId" = mb.id
       WHERE 
         mi.active = true AND
         mi.category = 'Medicine' AND
         mb."expiryDate" > CURRENT_DATE AND
         mb.location = COALESCE($1, mb.location) AND
-        me."transactionId" IS NULL
-      ORDER BY mi.id, mi.item_name, mb."expiryDate"
+        EXISTS (
+          SELECT 1
+          FROM "MedicineEntity" me
+          WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
+        )
+      ORDER BY mi.item_name, mb."expiryDate"
       OFFSET $2 LIMIT $3
     `;
 
@@ -36,7 +39,7 @@ const Query = {
 
   _getMedicineStatus: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
     const sql = `
-      SELECT status
+      SELECT id, status
       FROM "MedicineRequestLog"
       WHERE "patientId" = $1
       ORDER BY created_at DESC
@@ -74,7 +77,7 @@ const Query = {
     return result.rows;
   },
 
-  _getAllMedicineRequests: async (_, { status, offset = 0, limit = 50 }, { res }) => {
+  _getAllMedicineRequests: async (_, { location, status, offset = 0, limit = 50 }, { res }) => {
     const sql = `
       SELECT mrl.*
       FROM "MedicineRequestLog" mrl
@@ -92,8 +95,12 @@ const Query = {
 
 const Mutation = {
   _createMedicineRequest: async (_, { patientId, input }, { res }) => {
+    if (!Array.isArray(input.items) || input.items.length === 0) {
+      throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
+    }
+
     const query = `
-      INSERT INTO "MedicineRequestLog" ("patientId", status, location, purpose, created_at)
+      INSERT INTO "MedicineRequestLog" ("patientId", status, location, purpose, notes)
       VALUES ($1, 'Pending', $2, $3, $4)
       RETURNING *
     `;
@@ -103,26 +110,23 @@ const Mutation = {
         patientId, 
         input.location, 
         input.purpose, 
-        Math.floor(Date.now() / 1000), // implement on backend on next version
+        input.notes || null,
       ]);
       const request = result.rows[0];
 
-      // Build VALUES placeholders dynamically
-      const values = input.medicineIds.map((_, i) => `($1, $${i + 2})`).join(', ');
-      const params = [request.id, ...input.medicineIds];
+      const values = input.items
+        .map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`)
+        .join(', ');
+      const params = [request.id, ...input.items.flatMap(item => [item.batchId, item.quantity])];
 
       const entityQuery = await db.query(
-        `INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId")
+        `INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId", quantity)
          VALUES ${values}
-         RETURNING *`,
+         RETURNING id, "requestId", "medicineId" AS "batchId", quantity`,
         params
       );
 
-      const items = entityQuery.rows;
-      request.items = items;
-
-
-      request.items = items;
+      request.items = entityQuery.rows;
       return request;
     } catch (err) {
       logger.error("Error in _createMedicineRequest:", err);
@@ -151,9 +155,16 @@ const Mutation = {
 
     if (status === "Approved") {
       const itemsResult = await db.query(
-        `SELECT * FROM "MedicineRequestEntity" WHERE "requestId" = $1`,
+        `SELECT id, "requestId", "medicineId" AS "batchId", quantity
+         FROM "MedicineRequestEntity"
+         WHERE "requestId" = $1`,
         [requestId],
       );
+
+      if (itemsResult.rows.length === 0) {
+        throwGraphQLError(res).message("Medicine request has no items").status(400).throw();
+      }
+
       const totalQuantity = itemsResult.rows.reduce((sum, item) => sum + item.quantity, 0);
       
       // Validate available units for each batch before approval
@@ -229,7 +240,9 @@ const Mutation = {
     }
 
     const items = await db.query(
-      `SELECT * FROM "MedicineRequestEntity" WHERE "requestId" = $1`,
+      `SELECT id, "requestId", "medicineId" AS "batchId", quantity
+       FROM "MedicineRequestEntity"
+       WHERE "requestId" = $1`,
       [requestId],
     );
     result.rows[0].items = items.rows; 

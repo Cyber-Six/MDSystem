@@ -1,5 +1,5 @@
 const Wrapper = require("../wrapper/wrapper.js");
-const { validateBatchAvailable } = require("../wrapper/helper.js");
+const { validateBatchesWithQuantity } = require("../wrapper/helper.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const permit = require("../../../../../services/permit.js");
 const logger = require("../../../../../utils/logger.js");
@@ -35,9 +35,17 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    for (const item of input.items) {
-      await validateBatchAvailable(item.batchId, res);
-    }
+    const mergedItems = Array.from(
+      input.items.reduce((acc, item) => {
+        if (!item || !Number.isInteger(item.batchId) || !Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throwGraphQLError(res).message("Each item must include a valid batchId and positive quantity").status(400).throw();
+        }
+        acc.set(item.batchId, (acc.get(item.batchId) || 0) + item.quantity);
+        return acc;
+      }, new Map()).entries()
+    ).map(([batchId, quantity]) => ({ batchId, quantity }));
+
+    await validateBatchesWithQuantity(mergedItems, res);
 
     return await Wrapper.Mutation._issuePrescription(_, { input, issuedBy: user.id }, { res });
   },

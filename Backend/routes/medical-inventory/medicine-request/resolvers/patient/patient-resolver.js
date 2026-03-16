@@ -1,5 +1,5 @@
 const Wrapper = require("../wrapper/wrapper.js");
-const { hasActiveRequest, validateBatchesAvailable } = require("../wrapper/helper.js");
+const { hasActiveRequest, validateBatchesWithQuantity } = require("../wrapper/helper.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const { emitToRoom } = require("../../../../../config/sockets");
 const db = require("../../../../../config/query.js");
@@ -26,8 +26,22 @@ const Mutation = {
       throwGraphQLError(res).message("You already have a pending medicine request. Please wait for it to be processed.").status(400).throw();
     }
 
-    // issue should be looking on the overall availability of the batches instead of just validating the batch existence and status
-    await validateBatchesAvailable(input.items.map(i => i.batchId), res);
+    if (!Array.isArray(input.items) || input.items.length === 0) {
+      throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
+    }
+
+    // Combine duplicate batch entries before validation to avoid undercount checks.
+    const mergedItems = Array.from(
+      input.items.reduce((acc, item) => {
+        if (!item || !Number.isInteger(item.batchId) || !Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throwGraphQLError(res).message("Each item must include a valid batchId and positive quantity").status(400).throw();
+        }
+        acc.set(item.batchId, (acc.get(item.batchId) || 0) + item.quantity);
+        return acc;
+      }, new Map()).entries()
+    ).map(([batchId, quantity]) => ({ batchId, quantity }));
+
+    await validateBatchesWithQuantity(mergedItems, res);
 
     const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
 
@@ -55,17 +69,25 @@ const Mutation = {
   cancelMedicineRequest: async (_, __, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
 
-    // Validate that the user has a pending request to cancel
-    const request = await Wrapper.Query._getMedicineRequests(_, { patientId: user.id, offset: 0, limit: 1 }, { res });
-    if (!request) {
+    // Fetch pending request directly to avoid false positives from non-pending latest requests.
+    const pendingResult = await db.query(
+      `SELECT id, status
+       FROM "MedicineRequestLog"
+       WHERE "patientId" = $1 AND status = 'Pending'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [user.id],
+    );
+
+    if (pendingResult.rows.length === 0) {
       throwGraphQLError(res).message("Request not found").status(404).throw();
     }
 
-    if (request[0].status !== "Pending") {
-      throwGraphQLError(res).message("Only pending requests can be cancelled").status(400).throw();
-    }
-
-    return await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId: request[0].id, status: 'Cancelled', approvedBy: user.id, notes }, { res });
+    return await Wrapper.Mutation._setStatusMedicineRequest(
+      _,
+      { requestId: pendingResult.rows[0].id, status: 'Cancelled', approvedBy: user.id, notes: null },
+      { res },
+    );
   },
 };
 

@@ -5,6 +5,7 @@ const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const permit = require("../../../../services/permit.js");
 const { notifyUser } = require('../../../../config/sockets/socket-emitter');
 
+const db = require("../../../../config/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 // creating of updateTicket
@@ -104,7 +105,7 @@ const Mutation = {
       'appointment:responded',
       { status, notes, slotId: record[0].id },
       {
-        email: record[0].userEmail,
+        email: await db.findEmailByUserId(record[0].patientId),
         title: 'Appointment Response',
         message: `Your appointment request has been ${status}.`,
         notes: notes || null,
@@ -128,7 +129,7 @@ const Mutation = {
       'appointment:attendance-recorded',
       { slotId, arrived_at },
       {
-        email: result.userEmail,
+        email: await db.findEmailByUserId(result.userId),
         title: 'Attendance Recorded',
         message: 'Your appointment attendance has been recorded.',
       }
