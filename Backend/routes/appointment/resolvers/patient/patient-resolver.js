@@ -3,6 +3,8 @@ const path = require("path");
 const dotenv = require("dotenv");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { getStudentBranchFromEmail } = require("../../../../utils/validator.js");
+const { emitToRoom } = require("../../../../config/sockets");
+const logger = require("../../../../utils/logger.js");
 const db = require("../../../../config/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
@@ -42,6 +44,24 @@ const Mutation = {
     }
 
     const result = await Wrapper.Mutation._submitAppointment(_, { schedulerId, date, session, requirements }, { user, res });
+
+    // Notify medical staff in the target branch room for real-time queue visibility.
+    try {
+      const location = result.location;
+      if (location) {
+        emitToRoom(`branch:${location}`, "appointment:submitted", {
+          slotId: result.id,
+          patientId: user.id,
+          schedulerId,
+          date,
+          session,
+          location,
+        });
+      }
+    } catch (notifErr) {
+      logger.error("Failed to emit appointment submission notification:", notifErr);
+    }
+
     return result;
   },
 

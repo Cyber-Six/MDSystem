@@ -1,7 +1,6 @@
 const db  = require("../../../../config/query.js");
 const { findEmailByUserId } = require("../../../../config/query.js");
-const { isConnectedAnywhere, emitToUserWithAck } = require("../../../../config/sockets");
-const { enqueueNotificationEmail } = require("../../../../services/emailservice.js");
+const { notifyUser } = require("../../../../config/sockets");
 
 const { assertActiveUpdateTicket } = require("./helper.js");
 const Wrapper = require("../../wrapper/mutation.js");
@@ -23,6 +22,21 @@ const Mutation = {
     assertActiveUpdateTicket(record, res);
     
     const result = await Wrapper._StaffUpdateTicket(_, {args, recordId: record.id}, { user, res });
+    // Notify patient about the update ticket status change
+    try {
+      const result = await notifyUser(args.userId, "updateTicket:statusChanged", {
+        email: await findEmailByUserId(args.userId),
+        recordId: record.id,
+        newStatus: result.status,
+        message: `Your update ticket has been ${result.status.toLowerCase()}.`,
+        subject: "Update Ticket Status Changed"
+      });
+
+      logger.info(`Notification sent to user ${args.userId} notification ${result}`);
+    } catch (error) {
+      logger.error(`Failed to send notification for update ticket status change: ${error.message}`);
+    }
+
     return result;
   },
 

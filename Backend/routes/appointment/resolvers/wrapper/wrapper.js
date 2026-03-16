@@ -428,7 +428,7 @@ const Mutation = {
         [patientSlotId]
       );
 
-      return { ...psResult.rows[0], requirements: reqResult.rows };
+      return { ...psResult.rows[0], requirements: reqResult.rows, location: allowedScheduler[0].location };
     } catch (err) {
       // On any error, attempt to clean up any promoted files for this request
       if (requirements && requirements.length > 0) {

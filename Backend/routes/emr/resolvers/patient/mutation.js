@@ -3,6 +3,7 @@ const db  = require("../../../../config/query.js");
 const { assertActiveUpdateTicket } = require("./helper.js");
 const Wrapper = require("../../wrapper/mutation.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
+const { emitToRole } = require("../../../../config/sockets");
 
 const { validateUpdateTicket } = require("../record-validator.js");
 const Query = require("./query.js");
@@ -47,6 +48,15 @@ const Mutation = {
     await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
       [newStatus, record.id]
     );
+
+    const location = await db.getUserBranch(user.id);
+    await emitToRole(`${location}::staff`, "updateTicket", {
+      ticketId: record.id,
+      patientId: user.id,
+      status: newStatus,
+      scope: record.scope,
+    });
+
     return newStatus;
   },
 
@@ -62,6 +72,15 @@ const Mutation = {
     await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
       [newStatus, record.id]
     );
+
+
+    const location = await db.getUserBranch(user.id);
+    await emitToRole(`${location}::staff`, "updateTicket", {
+      ticketId: record.id,
+      patientId: user.id,
+      scope: record.scope,
+      status: newStatus,
+    });
     return newStatus;
   },
 
