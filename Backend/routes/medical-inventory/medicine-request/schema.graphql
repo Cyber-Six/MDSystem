@@ -57,13 +57,15 @@ type MedicineRequest {
 
 type MedicineRequestItem {
   id: ID!
+  batchId: Int
   medicineId: Int
   requestId: Int
   quantity: Int
 }
 
 input MedicineRequestItemInput {
-  medicineId: Int!
+  batchId: Int
+  medicineId: Int
   quantity: Int!
 }
 

@@ -54,7 +54,7 @@ export const fetchPatientMedicineRequests = async (patientId, offset = 0, limit 
         created_at
         items {
           id
-          batchId
+          medicineId
           requestId
           quantity
         }
@@ -86,7 +86,7 @@ export const fetchAllMedicineRequests = async (status = null, offset = 0, limit 
         created_at
         items {
           id
-          batchId
+          medicineId
           requestId
           quantity
         }
@@ -95,6 +95,37 @@ export const fetchAllMedicineRequests = async (status = null, offset = 0, limit 
     { status, offset, limit },
   );
   return data.getAllMedicineRequests ?? [];
+};
+
+/**
+ * Fetch one medicine request by ID (includes request items).
+ * @param {string|number} requestId
+ * @returns {Promise<Object|null>} MedicineRequest
+ */
+export const fetchMedicineRequestById = async (requestId) => {
+  const data = await sendGraphQL(
+    `query GetMedicineRequestById($requestId: ID!) {
+      getMedicineRequestById(requestId: $requestId) {
+        id
+        patientId
+        status
+        transactionId
+        purpose
+        notes
+        approved_by
+        created_at
+        items {
+          id
+          medicineId
+          requestId
+          quantity
+        }
+      }
+    }`,
+    { requestId },
+  );
+
+  return data.getMedicineRequestById ?? null;
 };
 
 /**
@@ -120,7 +151,7 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
         created_at
         items {
           id
-          batchId
+          medicineId
           requestId
           quantity
         }

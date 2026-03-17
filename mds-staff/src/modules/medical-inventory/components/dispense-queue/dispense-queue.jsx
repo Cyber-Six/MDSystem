@@ -53,7 +53,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
     return (requests || []).filter((r) => {
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
       // Filter by location from batch
-      const batchId = r.items?.[0]?.batchId;
+      const batchId = r.items?.[0]?.batchId ?? r.items?.[0]?.medicineId;
       const reqLocation = batchId ? (batchMap[batchId]?.location || 'Casal') : 'Casal';
       if (reqLocation !== filterLocation) return false;
       // Search

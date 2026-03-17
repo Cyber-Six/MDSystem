@@ -12,9 +12,9 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
 
   if (!isApproved && !isRejected) return null;
 
-  // Look up medicine name from batch
-  const batchId = request.items?.[0]?.batchId;
-  const batch = batches?.find((b) => b.id === batchId);
+  // Look up medicine name from selected medicine entry
+  const medicineId = request.items?.[0]?.medicineId;
+  const batch = batches?.find((b) => String(b.id) === String(medicineId));
   const itemName = batch?.item_name || 'Your medicine';
   const purpose = request.purpose || 'Medicine request';
   const notes = request.notes || '';

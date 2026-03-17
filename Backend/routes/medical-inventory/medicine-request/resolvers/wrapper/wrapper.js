@@ -6,7 +6,7 @@ const logger = require("../../../../../utils/logger.js");
 const ITEMS_AGG = `
   COALESCE(
     json_agg(
-      json_build_object('id', mre.id, 'batchId', mre."medicineId", 'requestId', mre."requestId", 'quantity', mre.quantity)
+      json_build_object('id', mre.id, 'batchId', mre."medicineId", 'medicineId', mre."medicineId", 'requestId', mre."requestId", 'quantity', mre.quantity)
     ) FILTER (WHERE mre.id IS NOT NULL),
     '[]'
   ) AS items`.trim();
@@ -39,11 +39,13 @@ const Query = {
 
   _getMedicineStatus: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
     const sql = `
-      SELECT id, status
-      FROM "MedicineRequestLog"
-      WHERE "patientId" = $1
-      ORDER BY created_at DESC
-      OFFSET $2 LIMIT $3 
+      SELECT mrl.*, ${ITEMS_AGG}
+      FROM "MedicineRequestLog" mrl
+      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
+      WHERE mrl."patientId" = $1
+      GROUP BY mrl.id
+      ORDER BY mrl.created_at DESC
+      OFFSET $2 LIMIT $3
     `;
 
     const result = await db.query(sql, [patientId, offset, limit]);
@@ -66,9 +68,11 @@ const Query = {
 
   _getMedicineRequests: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
     const sql = `
-      SELECT mrl.*
+      SELECT mrl.*, ${ITEMS_AGG}
       FROM "MedicineRequestLog" mrl
+      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
       WHERE mrl."patientId" = $1
+      GROUP BY mrl.id
       ORDER BY mrl.created_at DESC
       OFFSET $2 LIMIT $3
     `;
@@ -79,11 +83,13 @@ const Query = {
 
   _getAllMedicineRequests: async (_, { location, status, offset = 0, limit = 50 }, { res }) => {
     const sql = `
-      SELECT mrl.*
+      SELECT mrl.*, ${ITEMS_AGG}
       FROM "MedicineRequestLog" mrl
+      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
       WHERE 
         location = COALESCE($1, location) AND 
         status = COALESCE($2, status)
+      GROUP BY mrl.id
       ORDER BY mrl.created_at DESC
       OFFSET $3 LIMIT $4
     `;
@@ -107,7 +113,7 @@ const Mutation = {
 
     const client = await db.connect();
     try {
-      client.query('BEGIN');
+      await client.query('BEGIN');
       const result = await client.query(query, [
         patientId, 
         input.location, 
@@ -119,20 +125,23 @@ const Mutation = {
       const values = input.items
         .map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`)
         .join(', ');
-      const params = [request.id, ...input.items.flatMap(item => [item.medicineId, item.quantity])];
+      const params = [
+        request.id,
+        ...input.items.flatMap((item) => [item.batchId ?? item.medicineId, item.quantity]),
+      ];
 
       const entityQuery = await client.query(
         `INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId", quantity)
          VALUES ${values}
-         RETURNING id, "requestId", "medicineId" AS "batchId", quantity`,
+         RETURNING id, "requestId", "medicineId" AS "batchId", "medicineId", quantity`,
         params
       );
 
       request.items = entityQuery.rows;
-      client.query('COMMIT');
+      await client.query('COMMIT');
       return request;
     } catch (err) {
-      client.query('ROLLBACK');
+      await client.query('ROLLBACK');
       logger.error("Error in _createMedicineRequest:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
     } finally {
@@ -246,7 +255,7 @@ const Mutation = {
     }
 
     const items = await db.query(
-      `SELECT id, "requestId", "medicineId" AS "batchId", quantity
+      `SELECT id, "requestId", "medicineId" AS "batchId", "medicineId", quantity
        FROM "MedicineRequestEntity"
        WHERE "requestId" = $1`,
       [requestId],

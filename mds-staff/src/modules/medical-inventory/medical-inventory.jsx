@@ -14,7 +14,7 @@ import DispenseMedicineModal from './components/dispense-medicine/dispense-medic
 import RequestActionModal from './components/dispense-queue/request-action-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
-import { fetchPatientMedicineRequests, fetchAllMedicineRequests, setMedicineRequestStatus } from './medicine-request-service';
+import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import {
   SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
@@ -135,6 +135,21 @@ const MedicalInventory = () => {
 
   // Compute enriched items
   const enrichedItems = useMemo(() => computeItemStats(items, batches), [items, batches]);
+
+  const enrichRequestItems = useCallback((requestItems = []) => {
+    return requestItems.map((item) => {
+      const batchId = item?.medicineId ?? item?.batchId;
+      const batch = batches.find((b) => String(b.id) === String(batchId));
+      const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
+      return {
+        ...item,
+        batchId,
+        medicineId: item?.medicineId ?? batchId,
+        itemId: medicine?.id || batch?.medicalItemId || null,
+        itemName: medicine?.item_name || `Batch #${batchId}`,
+      };
+    });
+  }, [batches, items]);
 
   // Find enriched selected item
   const selectedEnriched = useMemo(() => {
@@ -317,15 +332,7 @@ const MedicalInventory = () => {
         patientName: `Patient #${req.patientId}`,
         patientType: 'Self-Request',
         _isRealRequest: true,
-        items: (req.items || []).map((item) => {
-          const batch = batches.find((b) => String(b.id) === String(item.batchId));
-          const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
-          return {
-            ...item,
-            itemId: medicine?.id || batch?.medicalItemId || null,
-            itemName: medicine?.item_name || `Batch #${item.batchId}`,
-          };
-        }),
+        items: enrichRequestItems(req.items || []),
       }));
       setRequests(enriched);
     } catch (err) {
@@ -333,7 +340,7 @@ const MedicalInventory = () => {
     } finally {
       setIsLoadingRequests(false);
     }
-  }, [batches, items]);
+  }, [enrichRequestItems]);
 
   useEffect(() => {
     if (!itemsLoading) loadAllMedicineRequests();
@@ -353,15 +360,7 @@ const MedicalInventory = () => {
         patientName: `Patient #${req.patientId}`,
         patientType: 'Self-Request',
         _isRealRequest: true,
-        items: (req.items || []).map((item) => {
-          const batch = batches.find((b) => String(b.id) === String(item.batchId));
-          const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
-          return {
-            ...item,
-            itemId: medicine?.id || batch?.medicalItemId || null,
-            itemName: medicine?.item_name || `Batch #${item.batchId}`,
-          };
-        }),
+        items: enrichRequestItems(req.items || []),
       }));
 
       // Merge into queue — update existing, prepend new
@@ -498,7 +497,40 @@ const MedicalInventory = () => {
   const openAddSupply = (itemId) => { setSupplyContext({ itemId }); setShowAddSupply(true); };
   const openSplit = (batch) => { setSplitContext({ batch }); setShowSplitSupply(true); };
   const openAdjust = (batch) => { setAdjustContext({ batch }); setShowAdjustStock(true); };
-  const openDispense = (request) => { setDispenseContext({ request }); setShowDispense(true); };
+  const openDispense = async (request) => {
+    if (!request?.id) {
+      setError('Invalid request. Please refresh and try again.');
+      return;
+    }
+
+    try {
+      let fullRequest = request;
+      const hasUsableItems = Array.isArray(request.items) && request.items.length > 0;
+
+      if (!hasUsableItems) {
+        const fetched = await fetchMedicineRequestById(request.id);
+        if (fetched) {
+          fullRequest = { ...request, ...fetched };
+        }
+      }
+
+      const normalizedItems = enrichRequestItems(fullRequest.items || []);
+      if (normalizedItems.length === 0) {
+        setError('This request has no medicine items yet. Please reload the queue and try again.');
+        return;
+      }
+
+      setDispenseContext({
+        request: {
+          ...fullRequest,
+          items: normalizedItems,
+        },
+      });
+      setShowDispense(true);
+    } catch (err) {
+      setError(err.message || 'Unable to load request details for dispensing.');
+    }
+  };
   const openDispenseMedicine = (patientId, patientName) => { setDispenseMedicineContext({ patientId, patientName }); setShowDispenseMedicine(true); };
 
   /* ── Section tabs ───────────────────────────────────────────────────── */

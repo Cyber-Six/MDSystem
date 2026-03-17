@@ -171,7 +171,7 @@ const MedicineRequestPage = () => {
               created_at
               items {
                 id
-                batchId
+                medicineId
                 requestId
                 quantity
               }
@@ -267,13 +267,13 @@ const MedicineRequestPage = () => {
     }
 
     // Build the submission payload once (reused after confirmation if needed)
-    let itemsWithBatchId;
+    let requestItems;
     try {
-      itemsWithBatchId = formData.items.map(item => {
+      requestItems = formData.items.map(item => {
         const medicineGroup = selectedMedicinesByCode[item.itemCode];
-        const batchId = medicineGroup.batches[0]?.id;
-        if (!batchId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
-        return { batchId: parseInt(batchId, 10), quantity: 1 };
+        const medicineId = medicineGroup.batches[0]?.id;
+        if (!medicineId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
+        return { medicineId: parseInt(medicineId, 10), quantity: 1 };
       });
     } catch (error) {
       setErrorMessage(error.message);
@@ -285,12 +285,12 @@ const MedicineRequestPage = () => {
       (r) => r.status?.toLowerCase() === 'pending'
     );
     if (hasPending) {
-      setPendingSubmitPayload({ itemsWithBatchId });
+      setPendingSubmitPayload({ requestItems });
       setShowCancelConfirm(true);
       return;
     }
 
-    await submitRequest(itemsWithBatchId);
+    await submitRequest(requestItems);
   };
 
   const cancelPendingAndResubmit = async () => {
@@ -336,7 +336,7 @@ const MedicineRequestPage = () => {
           r.status?.toLowerCase() === 'pending' ? { ...r, status: 'Cancelled' } : r
         )
       );
-      await submitRequest(pendingSubmitPayload.itemsWithBatchId);
+      await submitRequest(pendingSubmitPayload.requestItems);
     } catch (error) {
       console.error('Error cancelling and resubmitting:', error);
       setErrorMessage(
@@ -348,7 +348,7 @@ const MedicineRequestPage = () => {
     }
   };
 
-  const submitRequest = async (itemsWithBatchId) => {
+  const submitRequest = async (requestItems) => {
     setIsSubmitting(true);
     try {
       const mutation = `
@@ -361,7 +361,7 @@ const MedicineRequestPage = () => {
             created_at
             items {
               id
-              batchId
+              medicineId
               quantity
             }
           }
@@ -374,7 +374,7 @@ const MedicineRequestPage = () => {
           input: {
             purpose: formData.purpose,
             location: formData.location,
-            items: itemsWithBatchId
+            items: requestItems
           }
         },
         { endpoint: '/medical-inventory/medicine-request/patient' }

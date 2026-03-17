@@ -29,6 +29,19 @@ const Mutation = {
     if (!Array.isArray(input.items) || input.items.length === 0) {
       throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
     }
+
+    const mergedItems = Array.from(
+      input.items.reduce((acc, item) => {
+        const batchId = item?.batchId ?? item?.medicineId;
+        if (!item || !Number.isInteger(batchId) || !Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throwGraphQLError(res).message("Each item must include a valid batchId and positive quantity").status(400).throw();
+        }
+        acc.set(batchId, (acc.get(batchId) || 0) + item.quantity);
+        return acc;
+      }, new Map()).entries()
+    ).map(([batchId, quantity]) => ({ batchId, quantity }));
+
+    await validateBatchesWithQuantity(mergedItems, res);
     /*
     // Combine duplicate batch entries before validation to avoid undercount checks.
     const mergedItems = Array.from(
@@ -50,7 +63,7 @@ const Mutation = {
     try {
       const batch = await db.query(
         `SELECT location FROM "MedicineBatch" WHERE id = $1 LIMIT 1`,
-        [input.items[0].batchId],
+        [input.items[0].batchId ?? input.items[0].medicineId],
       );
       if (batch.rows.length > 0) {
         const { location } = batch.rows[0];
