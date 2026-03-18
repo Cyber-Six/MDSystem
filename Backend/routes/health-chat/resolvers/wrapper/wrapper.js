@@ -1,6 +1,7 @@
 const db = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
+const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
 const {
   calculateExpiryDate,
   isChatExpired,
@@ -10,6 +11,7 @@ const {
   formatChatRecord,
   formatMessage,
   hasActiveTicket,
+  getParticipantInfo,
   CHAT_EXPIRY_DAYS
 } = require("./helper.js");
 
@@ -271,6 +273,9 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
+    // Notify all medical staff about new ticket
+    emitToRole('medical', 'healthchat:ticket-created', { chat });
+
     return {
       success: true,
       chat,
@@ -323,6 +328,13 @@ const Mutation = {
 
     const message = await formatMessage(result.rows[0]);
 
+    // Emit to chat room for real-time delivery
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:new-message', {
+      chatId,
+      message,
+      senderType: 'Patient'
+    });
+
     return {
       success: true,
       message
@@ -364,6 +376,13 @@ const Mutation = {
     );
 
     const chat = await formatChatRecord(result.rows[0]);
+
+    // Emit to chat room about ticket closure
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-closed', {
+      chatId,
+      closedBy: 'Patient',
+      chat
+    });
 
     return {
       success: true,
@@ -427,6 +446,11 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
+    // Notify patient about ticket approval
+    if (chat.patientId) {
+      notifyUser(chat.patientId, 'healthchat:ticket-approved', { chat });
+    }
+
     return {
       success: true,
       chat,
@@ -483,6 +507,14 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
+    // Notify patient about ticket rejection
+    if (chat.patientId) {
+      notifyUser(chat.patientId, 'healthchat:ticket-rejected', {
+        chat,
+        reason: reason || 'Not specified'
+      });
+    }
+
     return {
       success: true,
       chat,
@@ -529,6 +561,13 @@ const Mutation = {
 
     const message = await formatMessage(result.rows[0]);
 
+    // Emit to chat room for real-time delivery
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:new-message', {
+      chatId,
+      message,
+      senderType: 'Medical'
+    });
+
     return {
       success: true,
       message
@@ -568,6 +607,22 @@ const Mutation = {
     );
 
     const chat = await formatChatRecord(result.rows[0]);
+
+    // Emit to chat room about ticket closure
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-closed', {
+      chatId,
+      closedBy: 'Medical',
+      chat
+    });
+
+    // Also notify patient if they're offline
+    if (chat.patientId) {
+      notifyUser(chat.patientId, 'healthchat:ticket-closed', {
+        chatId,
+        closedBy: 'Medical',
+        chat
+      });
+    }
 
     return {
       success: true,

@@ -24,6 +24,7 @@ const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { initSocket, getIO } = require('./config/sockets');
+require('./config/sockets/health-chat-events'); // Register health chat socket handlers
 const { initPatientMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
 const { initPatientHealthChatGraphQL, initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 

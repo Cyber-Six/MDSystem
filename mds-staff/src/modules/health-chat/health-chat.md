@@ -12,4 +12,4 @@ This is staff health chat requirements
 [ ] Each patient are only allowed to have one ticket or chat.
 [ ] Date and time of all chats are recorded, also the close or archive date and time recorded too.
 [ ] once a conversation on the patient side is freezed since it was closed or accomplished, then it will appear a button to create a new ticket then it will unfreeze and continue the chat, but there will be a divider line between the previous ticket conversation and the new. The staff side will be unarchived and will appear on the chat panel
-[ ] The 
+[ ] should be indicated on the chat if patient or staff closed the ticket
