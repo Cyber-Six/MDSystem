@@ -41,7 +41,7 @@ const Query = {
       SELECT mtl.*,
         COALESCE(
           json_agg(
-            json_build_object('id', me.id, 'batchId', me."batchId", 'transactionId', me."transactionId")
+            json_build_object('id', me.id, 'batchId', me."batchId", me."transactionId")
           ) FILTER (WHERE me.id IS NOT NULL),
           '[]'
         ) AS items
@@ -84,7 +84,7 @@ const Mutation = {
       let linkedRequest = null;
       if (input.requestId !== undefined && input.requestId !== null) {
         const requestResult = await client.query(
-          `SELECT id, "patientId", status, "transactionId"
+          `SELECT *
            FROM "MedicineRequestLog"
            WHERE id = $1
            LIMIT 1`,
@@ -144,9 +144,9 @@ const Mutation = {
       if (linkedRequest) {
         await client.query(
           `UPDATE "MedicineRequestLog"
-           SET status = 'Completed', "transactionId" = $1, approved_by = COALESCE(approved_by, $2), notes = COALESCE($3, notes)
-           WHERE id = $4`,
-          [transaction.id, issuedBy, input.notes || null, linkedRequest.id],
+           SET status = 'Completed', approved_by = COALESCE(approved_by, $1), notes = COALESCE($2, notes)
+           WHERE id = $3`,
+          [issuedBy, input.notes || null, linkedRequest.id],
         );
       }
 
