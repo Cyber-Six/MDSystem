@@ -25,6 +25,7 @@ const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { initSocket, getIO } = require('./config/sockets');
 const { initPatientMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
+const { initPatientHealthChatGraphQL, initMedicalHealthChatGraphQL } = require('./routes/healthchat/graphql.js');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
 
@@ -61,7 +62,10 @@ app.use((err, req, res, next) => {
 initPatientEMRGraphQL(app);
 initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
+initMedicalAppointmentGraphQL(app);
 initPatientMedicineRequestGraphQL(app);
+initPatientHealthChatGraphQL(app);
+initMedicalHealthChatGraphQL(app);
 
 // AI Medical Chatbot — proxied to MDS-Chatbot microservice
 // Requests to /econsultation/chat/* are forwarded to CHATBOT_URL (localhost or remote)
