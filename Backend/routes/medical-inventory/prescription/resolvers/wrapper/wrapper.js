@@ -144,7 +144,7 @@ const Mutation = {
       if (linkedRequest) {
         await client.query(
           `UPDATE "MedicineRequestLog"
-           SET status = 'Completed', approved_by = COALESCE(approved_by, $1), notes = COALESCE($2, notes)
+           SET status = 'Approved', approved_by = COALESCE(approved_by, $1), notes = COALESCE($2, notes)
            WHERE id = $3`,
           [issuedBy, input.notes || null, linkedRequest.id],
         );
