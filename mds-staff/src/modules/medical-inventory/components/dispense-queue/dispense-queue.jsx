@@ -134,7 +134,6 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Type</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Date</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
-                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Transaction ID</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Notes</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Approved By</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider text-right">Actions</th>
@@ -143,7 +142,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-10 text-center">
+                  <td colSpan={11} className="px-4 py-10 text-center">
                     <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                     <p className="text-sm text-secondary-400 dark:text-neutral-500">No requests match your filters</p>
                   </td>
@@ -182,7 +181,6 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                       <td className="px-3 py-1.5">
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>
                       </td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.transactionId ? `#${req.transactionId}` : '—'}</td>
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400 max-w-[120px] truncate" title={req.notes}>{req.notes || '—'}</td>
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.approved_by ? `Staff #${req.approved_by}` : '—'}</td>
                       <td className="px-3 py-1.5 text-right">
@@ -198,7 +196,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                             </button>
                           </div>
                         )}
-                        {(req.status === 'InProgress' || req.status === 'Approved') && (
+                        {req.status === 'Approved' && (
                           <button onClick={() => onDispense(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                             Dispense

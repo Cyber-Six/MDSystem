@@ -81,6 +81,32 @@ const Mutation = {
     try {
       await client.query('BEGIN');
 
+      let linkedRequest = null;
+      if (input.requestId !== undefined && input.requestId !== null) {
+        const requestResult = await client.query(
+          `SELECT id, "patientId", status, "transactionId"
+           FROM "MedicineRequestLog"
+           WHERE id = $1
+           LIMIT 1`,
+          [input.requestId],
+        );
+
+        if (requestResult.rows.length === 0) {
+          throwGraphQLError(res).message('Medicine request not found').status(404).throw();
+        }
+
+        linkedRequest = requestResult.rows[0];
+        if (Number(linkedRequest.patientId) !== Number(input.patientId)) {
+          throwGraphQLError(res).message('Medicine request does not belong to this patient').status(400).throw();
+        }
+        if (linkedRequest.status !== 'Approved') {
+          throwGraphQLError(res).message('Only approved medicine requests can be dispensed').status(400).throw();
+        }
+        if (linkedRequest.transactionId) {
+          throwGraphQLError(res).message('This medicine request has already been dispensed').status(400).throw();
+        }
+      }
+
       const txResult = await client.query(txSql, [
         input.patientId, totalQuantity, issuedBy, input.notes || null,
       ]);
@@ -114,6 +140,15 @@ const Mutation = {
       }
 
       transaction.items = items;
+
+      if (linkedRequest) {
+        await client.query(
+          `UPDATE "MedicineRequestLog"
+           SET status = 'Completed', "transactionId" = $1, approved_by = COALESCE(approved_by, $2), notes = COALESCE($3, notes)
+           WHERE id = $4`,
+          [transaction.id, issuedBy, input.notes || null, linkedRequest.id],
+        );
+      }
 
       await client.query('COMMIT');
 

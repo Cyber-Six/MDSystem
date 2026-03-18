@@ -23,6 +23,7 @@ enum LocationDesignation {
 enum RequestStatus {
   InProgress
   Pending
+  Completed
   Revision
   RevisionSubmitted
   Cancelled
@@ -47,7 +48,6 @@ type MedicineRequest {
   id: ID!
   patientId: Int
   status: RequestStatus
-  transactionId: Int
   purpose: String
   notes: String
   approved_by: Int

@@ -2,25 +2,19 @@ const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const { validateItemActive } = require("./helper.js");
 const logger = require("../../../../../utils/logger.js");
+const { bool } = require("joi");
 
 const Query = {
   _getMedicalItems: async (_, { category, active, offset = 0, limit = 20 }, { res }) => {
-    const params = [];
-    const conditions = [];
-
-    if (category) conditions.push(`category = $${params.push(category)}`);
-    if (active !== undefined && active !== null) conditions.push(`active = $${params.push(active)}`);
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const sql = `
       SELECT * FROM "MedicalItems"
-      ${where}
+      WHERE category = COALESCE($1, category) AND active = COALESCE($2, active)
       ORDER BY item_name ASC
-      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+      OFFSET $3 LIMIT $4
     `;
 
-    const result = await db.query(sql, params);
+    const result = await db.query(sql, [category, active, offset, limit]);
     return result.rows;
   },
 
@@ -31,13 +25,11 @@ const Query = {
   },
 
   _getMedicalSupply: async (_, { medicalItemId, location, availableOnly, offset = 0, limit = 20 }, { res }) => {
-    const params = [medicalItemId];
-    const conditions = [`mb."medicalItemId" = $1`];
-
-    if (location) conditions.push(`mb.location = $${params.push(location)}`);
-    if (availableOnly) {
-      conditions.push(`mb."expiryDate" > CURRENT_DATE`);
-      conditions.push(`COALESCE(av.available_count, 0) > 0`);
+    if (typeof availableOnly !== "boolean") {
+      throwGraphQLError(res)
+        .message("Invalid value for availableOnly")
+        .status(400)
+        .throw();
     }
 
     const sql = `
@@ -49,30 +41,33 @@ const Query = {
         WHERE "transactionId" IS NULL
         GROUP BY "batchId"
       ) av ON av."batchId" = mb.id
-      WHERE ${conditions.join(' AND ')}
+      WHERE 
+        mb."medicalItemId" = $1 AND
+        mb.location = COALESCE($2, mb.location) AND
+        ($3::boolean IS NOT TRUE OR mb."expiryDate" > CURRENT_DATE) AND
+        ($3::boolean IS NOT TRUE OR COALESCE(av.available_count, 0) > 0)
       ORDER BY mb."expiryDate" ASC
-      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+      OFFSET $4 LIMIT $5
     `;
 
-    const result = await db.query(sql, params);
+    const result = await db.query(sql, [medicalItemId, location, availableOnly, offset, limit]);
     return result.rows;
   },
 
   _getSupplyBatches: async (_, { supplyItemId, location, availableOnly, offset = 0, limit = 20 }, { res }) => {
-    const params = [supplyItemId];
-    const conditions = [`"supplyItemId" = $1`];
-
-    if (location) conditions.push(`location = $${params.push(location)}`);
-    if (availableOnly) conditions.push(`"currentQuantity" > 0 AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)`);
 
     const sql = `
-      SELECT * FROM "SupplyBatch"
-      WHERE ${conditions.join(' AND ')}
+      SELECT sb.* FROM "SupplyBatch" sb
+      WHERE
+        sb."supplyItemId" = $1 AND
+        sb.location = COALESCE($2, sb.location) AND
+        ($3::boolean IS NOT TRUE OR sb."currentQuantity" > 0) AND
+        ($3::boolean IS NOT TRUE OR sb.expiry_date IS NULL OR sb.expiry_date > CURRENT_DATE)
       ORDER BY expiry_date ASC
-      OFFSET $${params.push(offset)} LIMIT $${params.push(limit)}
+      OFFSET $4 LIMIT $5
     `;
 
-    const result = await db.query(sql, params);
+    const result = await db.query(sql, [supplyItemId, location, availableOnly, offset, limit]);
     return result.rows;
   },
 };

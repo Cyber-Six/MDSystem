@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import InventoryDashboard from './components/inventory-dashboard/inventory-dashboard';
 import MedicalItemList from './components/medical-item/medical-item-list';
 import MedicalItemDetail from './components/medical-item/medical-item-detail';
@@ -15,6 +15,7 @@ import RequestActionModal from './components/dispense-queue/request-action-modal
 import TransactionHistory from './components/transaction-history/transaction-history';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
+import { issuePrescription } from './prescription-service';
 import {
   SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
@@ -68,6 +69,7 @@ const MedicalInventory = () => {
   // Feedback
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const hasLoadedRequestsRef = useRef(false);
 
   // ── Fetch items from API ───────────────────────────────────────────────
   const loadItems = useCallback(async () => {
@@ -138,7 +140,7 @@ const MedicalInventory = () => {
 
   const enrichRequestItems = useCallback((requestItems = []) => {
     return requestItems.map((item) => {
-      const batchId = item?.medicineId ?? item?.batchId;
+      const batchId = item?.batchId ?? item?.medicineId;
       const batch = batches.find((b) => String(b.id) === String(batchId));
       const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
       return {
@@ -343,7 +345,9 @@ const MedicalInventory = () => {
   }, [enrichRequestItems]);
 
   useEffect(() => {
-    if (!itemsLoading) loadAllMedicineRequests();
+    if (itemsLoading || hasLoadedRequestsRef.current) return;
+    hasLoadedRequestsRef.current = true;
+    loadAllMedicineRequests();
   }, [itemsLoading, loadAllMedicineRequests]);
 
   // Load real patient medicine requests into the dispense queue
@@ -401,7 +405,7 @@ const MedicalInventory = () => {
     setSuccessMsg(`Stock adjusted by ${delta > 0 ? '+' : ''}${delta} units.`);
   };
 
-  const handleDispense = async ({ request, quantity, allocation }) => {
+  const handleDispense = async ({ request, quantity, allocation, notes }) => {
     const requestId = request?.id;
     console.log('🔵 handleDispense called:', { requestId, quantity, allocation });
     
@@ -411,46 +415,70 @@ const MedicalInventory = () => {
       return;
     }
     
-    // Decrement batches locally (allocation items have .id = batchId, .allocate = qty)
-    const batchUpdates = {};
-    (allocation || []).forEach(({ id: batchId, allocate: qty }) => {
-      console.log('📦 Allocation item:', { batchId, allocate: qty, hasId: !!batchId });
-      if (batchId && qty) {
-        batchUpdates[batchId] = (batchUpdates[batchId] || 0) + qty;
+    try {
+      // Convert FEFO allocation into mutation input payload
+      const itemsPayload = (allocation || [])
+        .filter((a) => a?.id && a?.allocate)
+        .map((a) => ({ batchId: Number(a.id), quantity: Number(a.allocate) }));
+
+      if (itemsPayload.length === 0) {
+        setError('No valid allocation found to dispense.');
+        return;
       }
-    });
-    console.log('📊 Batch updates to apply:', batchUpdates);
-    
-    const totalQty = (allocation || []).reduce((s, a) => s + (a.allocate || 0), 0);
-    console.log('📈 Total quantity to dispense:', totalQty);
-    
-    setBatches(batches.map((b) => {
-      const updateQty = batchUpdates[b.id];
-      if (updateQty) {
-        const oldAvailable = b.availableQuantity || 0;
-        const newAvailable = Math.max(0, oldAvailable - updateQty);
-        console.log(`🔄 Updating batch ${b.id}: availableQuantity ${oldAvailable} - ${updateQty} = ${newAvailable}`);
-        return { ...b, availableQuantity: newAvailable };
-      }
-      return b;
-    }));
-    
-    // Update request status locally to reflect dispense
-    setRequests(requests.map((r) => r.id === requestId ? { ...r, status: 'Completed' } : r));
-    
-    // Record transaction locally
-    const req = requests.find((r) => r.id === requestId) || request;
-    const txId = Math.max(0, ...transactions.map((t) => t.id)) + 1;
-    setTransactions([{
-      id: txId, patientId: req?.patientId, patientName: req?.patientName, action: 'issue',
-      quantity: totalQty, issuedBy: 101, issuedByName: 'Current User',
-      issuedAt: new Date().toISOString(),
-      notes: `Dispensed for: ${req?.purpose || 'N/A'}`,
-      itemName: req?.items?.[0]?.itemName || '',
-      batchNumber: (allocation || []).map((a) => batches.find((b) => b.id === a.id)?.batchNumber).filter(Boolean).join(', '),
-    }, ...transactions]);
-    setShowDispense(false);
-    setSuccessMsg(`Dispensed ${totalQty} units to ${req?.patientName || 'patient'}.`);
+
+      const totalQty = itemsPayload.reduce((sum, item) => sum + item.quantity, 0);
+      const prescriptionResult = await issuePrescription({
+        patientId: Number(request.patientId),
+        requestId: requestId,
+        items: itemsPayload,
+        notes: notes || `Dispensed for request #${requestId}`,
+      });
+
+      // Decrement batches locally after backend mutation succeeds
+      const batchUpdates = {};
+      itemsPayload.forEach(({ batchId, quantity: allocatedQty }) => {
+        batchUpdates[batchId] = (batchUpdates[batchId] || 0) + allocatedQty;
+      });
+
+      setBatches(batches.map((b) => {
+        const updateQty = batchUpdates[b.id];
+        if (updateQty) {
+          const oldAvailable = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
+          const newAvailable = Math.max(0, oldAvailable - updateQty);
+          return { ...b, availableQuantity: newAvailable };
+        }
+        return b;
+      }));
+
+      // Keep local queue row aligned with successful dispense transaction
+      setRequests(requests.map((r) =>
+        r.id === requestId
+          ? { ...r, status: 'Completed', notes: notes || r.notes }
+          : r
+      ));
+
+      const req = requests.find((r) => r.id === requestId) || request;
+      const txId = Number(prescriptionResult?.id) || Math.max(0, ...transactions.map((t) => t.id)) + 1;
+      setTransactions([{
+        id: txId,
+        patientId: req?.patientId,
+        patientName: req?.patientName,
+        action: 'issue',
+        quantity: totalQty,
+        issuedBy: prescriptionResult?.issuedBy || 101,
+        issuedByName: 'Current User',
+        issuedAt: prescriptionResult?.issuedAt || new Date().toISOString(),
+        notes: notes || `Dispensed for: ${req?.purpose || 'N/A'}`,
+        itemName: req?.items?.[0]?.itemName || '',
+        batchNumber: (allocation || []).map((a) => batches.find((b) => b.id === a.id)?.batchNumber).filter(Boolean).join(', '),
+      }, ...transactions]);
+
+      setShowDispense(false);
+      setSuccessMsg(`Dispensed ${totalQty} units to ${req?.patientName || 'patient'}. Transaction #${txId}`);
+    } catch (err) {
+      console.error('❌ Dispense mutation failed:', err);
+      setError(err.message || 'Failed to dispense medicine. Please try again.');
+    }
   };
 
   const handleApprove = async (request) => {

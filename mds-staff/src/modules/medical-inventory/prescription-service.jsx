@@ -87,7 +87,7 @@ export const fetchPatientPrescriptions = async (patientId, offset = 0, limit = 2
 /**
  * Issue a prescription (dispense medicine to patient).
  * Creates MedicineEntity assignments and PrescriptionTransaction record.
- * @param {{ patientId: number, items: Array<{batchId: number, quantity: number}>, notes?: string }} input
+ * @param {{ patientId: number, requestId?: string|number, items: Array<{batchId: number, quantity: number}>, notes?: string }} input
  * @returns {Promise<Object>} PrescriptionTransaction with items
  */
 export const issuePrescription = async (input) => {

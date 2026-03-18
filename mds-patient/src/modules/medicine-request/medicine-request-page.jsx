@@ -164,7 +164,6 @@ const MedicineRequestPage = () => {
               id
               patientId
               status
-              transactionId
               purpose
               notes
               approved_by
@@ -271,9 +270,9 @@ const MedicineRequestPage = () => {
     try {
       requestItems = formData.items.map(item => {
         const medicineGroup = selectedMedicinesByCode[item.itemCode];
-        const medicineId = medicineGroup.batches[0]?.id;
-        if (!medicineId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
-        return { medicineId: parseInt(medicineId, 10), quantity: 1 };
+        const batchId = medicineGroup.batches[0]?.id;
+        if (!batchId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
+        return { batchId: parseInt(batchId, 10), quantity: 1 };
       });
     } catch (error) {
       setErrorMessage(error.message);

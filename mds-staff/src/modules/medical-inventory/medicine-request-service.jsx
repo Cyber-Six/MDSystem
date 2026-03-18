@@ -47,7 +47,6 @@ export const fetchPatientMedicineRequests = async (patientId, offset = 0, limit 
         id
         patientId
         status
-        transactionId
         purpose
         notes
         approved_by
@@ -79,7 +78,6 @@ export const fetchAllMedicineRequests = async (status = null, offset = 0, limit 
         id
         patientId
         status
-        transactionId
         purpose
         notes
         approved_by
@@ -109,7 +107,6 @@ export const fetchMedicineRequestById = async (requestId) => {
         id
         patientId
         status
-        transactionId
         purpose
         notes
         approved_by
@@ -144,7 +141,6 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
         id
         patientId
         status
-        transactionId
         purpose
         notes
         approved_by

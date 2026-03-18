@@ -64,6 +64,7 @@ input PrescriptionItemInput {
 
 input IssuePrescriptionInput {
   patientId: Int!
+  requestId: ID
   items: [PrescriptionItemInput!]!
   notes: String
 }

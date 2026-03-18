@@ -166,94 +166,14 @@ const Mutation = {
       throwGraphQLError(res).message("Only pending requests can be updated").status(400).throw();
     }
 
-    let result;
-
-    if (status === "Approved") {
-      const itemsResult = await db.query(
-        `SELECT id, "requestId", "medicineId" AS "batchId", quantity
-         FROM "MedicineRequestEntity"
-         WHERE "requestId" = $1`,
-        [requestId],
-      );
-
-      if (itemsResult.rows.length === 0) {
-        throwGraphQLError(res).message("Medicine request has no items").status(400).throw();
-      }
-
-      const totalQuantity = itemsResult.rows.reduce((sum, item) => sum + item.quantity, 0);
-      
-      // Validate available units for each batch before approval
-      const { validateBatchesWithQuantity } = require('./helper.js');
-      await validateBatchesWithQuantity(itemsResult.rows.map(r => ({ batchId: r.batchId, quantity: r.quantity })), res);
-
-      // Dedicated client so BEGIN/COMMIT/ROLLBACK stay on the same connection.
-      // SET CONSTRAINTS ALL DEFERRED resolves the circular FK between
-      // MedicineTransactionLog and MedicineRequestLog (DEFERRABLE INITIALLY IMMEDIATE).
-      const client = await db.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query('SET CONSTRAINTS ALL DEFERRED');
-
-        const txSql = `
-          INSERT INTO "MedicineTransactionLog" ("patientId", action, quantity, "issuedBy", notes)
-          VALUES ($1, 'Issue', $2, $3, $4)
-          RETURNING *
-        `;
-        const txResult = await client.query(txSql, [
-          current.rows[0].patientId, totalQuantity, approvedBy, notes || null,
-        ]);
-        const transactionId = txResult.rows[0].id;
-
-        // Assign existing unassigned entities instead of creating new ones (FEFO)
-        // Single UPDATE using a window function to rank unassigned units per batch
-        // by expiry date (ASC) and assign only the requested quantity for each batch.
-        const batchParams = itemsResult.rows.flatMap(item => [item.batchId, item.quantity]);
-        const valuesList = itemsResult.rows
-          .map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`)
-          .join(', ');
-        await client.query(
-          `WITH batch_requests(batch_id, qty) AS (
-             VALUES ${valuesList}
-           ),
-           ranked AS (
-             SELECT me.id, br.qty,
-               ROW_NUMBER() OVER (PARTITION BY me."batchId" ORDER BY mb."expiryDate" ASC) AS rn
-             FROM "MedicineEntity" me
-             JOIN "MedicineBatch" mb ON mb.id = me."batchId"
-             JOIN batch_requests br ON br.batch_id = me."batchId"
-             WHERE me."transactionId" IS NULL
-           )
-           UPDATE "MedicineEntity" SET "transactionId" = $${batchParams.length + 1}
-           WHERE id IN (SELECT id FROM ranked WHERE rn <= qty)`,
-          [...batchParams, transactionId],
-        );
-
-        const updateSql = `
-          UPDATE "MedicineRequestLog"
-          SET status = $1, approved_by = $2, "transactionId" = $3, notes = COALESCE($4, notes)
-          WHERE id = $5
-          RETURNING *
-        `;
-        result = await client.query(updateSql, [status, approvedBy, transactionId, notes, requestId]);
-
-        await client.query('COMMIT');
-      } catch (err) {
-        await client.query('ROLLBACK');
-        logger.error("Error in _setStatusMedicineRequest approval:", err);
-        throwGraphQLError(res).message("Database error").status(500).throw();
-      } finally {
-        client.release();
-      }
-    } else {
-      const updateSql = `
-        UPDATE "MedicineRequestLog"
-        SET status = $1, approved_by = $2, notes = COALESCE($3, notes)
-        WHERE id = $4
-        RETURNING *
-      `;
-      result = await db.query(updateSql, [status, approvedBy, notes, requestId]);
-    }
-
+    const updateSql = `
+      UPDATE "MedicineRequestLog"
+      SET status = $1, approved_by = $2, notes = COALESCE($3, notes)
+      WHERE id = $4
+      RETURNING *
+    `;
+    const result = await db.query(updateSql, [status, approvedBy, notes, requestId]);
+    
     const items = await db.query(
       `SELECT id, "requestId", "medicineId" AS "batchId", "medicineId", quantity
        FROM "MedicineRequestEntity"
