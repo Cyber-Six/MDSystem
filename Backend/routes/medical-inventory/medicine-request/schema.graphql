@@ -23,7 +23,6 @@ enum LocationDesignation {
 enum RequestStatus {
   InProgress
   Pending
-  Completed
   Revision
   RevisionSubmitted
   Cancelled
