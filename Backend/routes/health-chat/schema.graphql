@@ -44,7 +44,7 @@ type HealthChatPrompt {
   text: String
   filename: UUID
   promptType: PromptType!
-  userId: Int!
+  userId: Int  # Nullable for system messages
   userType: UserType!
   stamp: Date!
   sender: ChatParticipant

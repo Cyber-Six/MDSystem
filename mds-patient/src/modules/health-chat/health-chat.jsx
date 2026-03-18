@@ -415,35 +415,7 @@ const HealthChat = () => {
           </div>
         )}
 
-        {/* Chat Box - Show when ticket exists and is not showing create form */}
-        {ticket && !shouldShowCreateForm && (
-          <div className="h-[600px]">
-            <ChatBox
-              messages={messages}
-              isLoading={isLoading}
-              isInitializing={isInitializing}
-              connectionStatus={connectionStatus}
-              error={error}
-              inputValue={inputValue}
-              inputRef={inputRef}
-              messagesEndRef={messagesEndRef}
-              onInputChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onSubmit={handleSendMessage}
-              onCloseTicket={handleCloseTicket}
-              formatTime={formatTime}
-              onRetry={initializeHealthChat}
-              ticketStatus={ticket.status}
-              isStaffTyping={isStaffTyping}
-              attachedFile={attachedFile}
-              onFileStaged={setAttachedFile}
-              onFileRemoved={() => setAttachedFile(null)}
-              isSocketConnected={isSocketConnected}
-            />
-          </div>
-        )}
-
-        {/* Show active chat (Open or Ongoing) */}
+        {/* Chat Box - Show when ticket exists and is active (Open or Ongoing) */}
         {ticket && ['Open', 'Ongoing'].includes(ticket.status) && (
           <div className="h-[600px]">
             <ChatBox
