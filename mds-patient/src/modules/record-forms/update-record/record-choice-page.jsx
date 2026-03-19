@@ -38,9 +38,9 @@ const RecordChoicePage = ({ onSelect }) => {
   ];
 
   const colorStyles = {
-    blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-blue-200/60',
-    green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/30 hover:border-green-400 dark:hover:border-green-500 hover:shadow-green-200/60',
-    purple: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30 hover:border-purple-400 dark:hover:border-purple-500 hover:shadow-purple-200/60'
+    blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/25 hover:shadow-sm',
+    green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/25 hover:shadow-sm',
+    purple: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/25 hover:shadow-sm'
   };
 
   const iconBgStyles = {
@@ -78,7 +78,7 @@ const RecordChoicePage = ({ onSelect }) => {
           <button
             key={choice.id}
             onClick={() => onSelect(choice.id)}
-            className={`p-6 rounded-2xl border-2 shadow-md transition-all duration-200 text-left hover:shadow-xl hover:scale-105 ${colorStyles[choice.color]}`}
+            className={`p-6 rounded-2xl border-2 shadow-md transition-all duration-200 text-left hover:scale-105 ${colorStyles[choice.color]}`}
           >
             <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 shadow-sm ${iconBgStyles[choice.color]} ${iconStyles[choice.color]}`}>
               {choice.icon}
