@@ -12,13 +12,22 @@ const ActiveAppointmentCard = ({ appointment, onCancel, cancelling }) => {
 
   if (!appointment) return null;
 
-  const { status, session, created_at, notes } = appointment;
+  const { status, session, created_at, notes, schedulerLabel } = appointment;
 
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
       <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-4">Your Current Appointment</h2>
 
       <div className="space-y-3 mb-6">
+        {schedulerLabel && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-neutral-600 dark:text-neutral-400">Appointment:</span>
+            <span className="text-sm font-medium text-neutral-900 dark:text-white">
+              {schedulerLabel}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <span className="text-sm text-neutral-600 dark:text-neutral-400">Status:</span>
           <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor(status)}`}>

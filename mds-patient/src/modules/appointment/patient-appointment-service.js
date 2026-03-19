@@ -51,6 +51,7 @@ export const getAppointmentStatus = async () => {
         notes
         rejection_acknowledged
         created_at
+        schedulerLabel
       }
     }
   `);
