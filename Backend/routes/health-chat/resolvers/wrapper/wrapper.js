@@ -71,6 +71,9 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
+    // Auto-expire any expired ongoing tickets for this patient
+    await autoExpireTickets(user.id);
+
     const result = await db.query(
       `SELECT * FROM "HealthChat" WHERE id = $1 AND "patientId" = $2`,
       [chatId, user.id]
@@ -118,6 +121,9 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
+    // Auto-expire any expired ongoing tickets
+    await autoExpireTickets();
+
     const result = await db.query(
       `SELECT * FROM "HealthChat"
        WHERE status = 'Open'
@@ -146,6 +152,9 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
+    // Auto-expire any expired ongoing tickets (critical for this query)
+    await autoExpireTickets();
+
     const result = await db.query(
       `SELECT * FROM "HealthChat"
        WHERE status = 'Ongoing'
@@ -173,6 +182,9 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    // Auto-expire any expired ongoing tickets
+    await autoExpireTickets();
 
     let query = `SELECT * FROM "HealthChat"`;
     const params = [];
@@ -211,6 +223,9 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    // Auto-expire any expired ongoing tickets
+    await autoExpireTickets();
 
     const result = await db.query(
       `SELECT * FROM "HealthChat" WHERE id = $1`,
