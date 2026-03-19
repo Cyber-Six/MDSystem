@@ -85,6 +85,8 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
         slotEntityId
         status
         session
+        scheduledDate
+        schedulerLabel
         approvedBy
         notes
         arrived_at
