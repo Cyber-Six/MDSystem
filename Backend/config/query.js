@@ -366,7 +366,6 @@ async function getUserPatientType(userId) {
     throw err;
   }
 }
-
 module.exports = {
     connect,
     query,

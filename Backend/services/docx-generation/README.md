@@ -136,10 +136,10 @@ Chart generation is powered by **Matplotlib** (`modules/chart_generator.py`) and
 
 Tag values in a document or report request can be either:
 
-| Value type | Behaviour |
-|---|---|
-| `"string"` | Plain text replacement — inserted at the `{{ TAG_NAME }}` placeholder |
-| `{ "graph": "...", "datas": {...} }` | Matplotlib chart image generated and embedded in the output |
+| Value type                             | Behaviour                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------ |
+| `"string"`                           | Plain text replacement — inserted at the `{{ TAG_NAME }}` placeholder |
+| `{ "graph": "...", "datas": {...} }` | Matplotlib chart image generated and embedded in the output              |
 
 ### Chart Spec Format
 
@@ -157,23 +157,23 @@ Tag values in a document or report request can be either:
 }
 ```
 
-| Field     | Type            | Required | Description                                            |
-|-----------|-----------------|----------|--------------------------------------------------------|
-| `graph`   | string          | yes      | Chart type: `"bar"`, `"line"`, or `"pie"`            |
-| `labels`  | array of string | yes      | Category labels (x-axis for bar/line, slices for pie) |
-| `values`  | array of number | yes      | Numeric values — must match length of `labels`        |
-| `title`   | string          | no       | Chart title (bold, above the chart)                    |
-| `xlabel`  | string          | no       | X-axis label (bar and line only)                       |
-| `ylabel`  | string          | no       | Y-axis label (bar and line only)                       |
-| `colors`  | array of string | no       | Hex color codes; falls back to defaults if omitted     |
+| Field      | Type            | Required | Description                                           |
+| ---------- | --------------- | -------- | ----------------------------------------------------- |
+| `graph`  | string          | yes      | Chart type:`"bar"`, `"line"`, or `"pie"`        |
+| `labels` | array of string | yes      | Category labels (x-axis for bar/line, slices for pie) |
+| `values` | array of number | yes      | Numeric values — must match length of `labels`     |
+| `title`  | string          | no       | Chart title (bold, above the chart)                   |
+| `xlabel` | string          | no       | X-axis label (bar and line only)                      |
+| `ylabel` | string          | no       | Y-axis label (bar and line only)                      |
+| `colors` | array of string | no       | Hex color codes; falls back to defaults if omitted    |
 
 ### Supported Chart Types
 
-| Type    | Description                                                      |
-|---------|------------------------------------------------------------------|
-| `bar`   | Vertical bar chart; auto-rotates x labels if more than 6 items  |
-| `line`  | Line chart with circular markers and light grid lines            |
-| `pie`   | Pie chart with percentage labels; uses `Set3` palette by default |
+| Type     | Description                                                        |
+| -------- | ------------------------------------------------------------------ |
+| `bar`  | Vertical bar chart; auto-rotates x labels if more than 6 items     |
+| `line` | Line chart with circular markers and light grid lines              |
+| `pie`  | Pie chart with percentage labels; uses `Set3` palette by default |
 
 ### In Documents (DOCX/PDF)
 
@@ -337,10 +337,10 @@ Pick any `.docx` template from the `TEMPLATE_PATH` directory and pass key-value 
 }
 ```
 
-| Field        | Type   | Required | Description                                                                                                                                  |
-| ------------ | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `template` | string | yes      | Template filename — with or without `.docx` extension                                                                                      |
-| `data`     | object | yes*     | Tag values. String → text replacement. `{ graph, datas }` → chart image. Keys may use angle brackets (`<NAME>`) — stripped automatically |
+| Field        | Type   | Required | Description                                                                                                                                    |
+| ------------ | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `template` | string | yes      | Template filename — with or without `.docx` extension                                                                                       |
+| `data`     | object | yes*     | Tag values. String → text replacement.`{ graph, datas }` → chart image. Keys may use angle brackets (`<NAME>`) — stripped automatically |
 | `tags`     | object | no       | Legacy alias for `data`. If both are provided, `data` takes priority                                                                       |
 
 **Binary Response** *(default)*: Raw `.docx` bytes with `Content-Disposition` header.
@@ -446,16 +446,16 @@ Generate a PDF report from structured tabular data (analytics, consultation summ
 }
 ```
 
-| Field           | Type   | Required | Default         | Description                                                       |
-| --------------- | ------ | -------- | --------------- | ----------------------------------------------------------------- |
-| `title`       | string | yes      | —              | Report title                                                      |
-| `report_type` | string | yes      | —              | Report category (used for filename)                               |
-| `columns`     | array  | yes      | —              | Column definitions `[{ key, label }]`                          |
-| `data`        | array  | yes      | —              | Row data as list of dicts                                         |
-| `charts`      | array  | no       | `[]`          | Chart specs to embed above the table — see [Chart Generation](#chart-generation) |
-| `filters`     | object | no       | `{}`          | Filter summary shown in the report header                         |
-| `orientation` | string | no       | `"portrait"`  | `"portrait"` or `"landscape"`                                 |
-| `template`    | string | no       | `"base.html"` | Report Jinja2 template name                                       |
+| Field           | Type   | Required | Default         | Description                                                                   |
+| --------------- | ------ | -------- | --------------- | ----------------------------------------------------------------------------- |
+| `title`       | string | yes      | —              | Report title                                                                  |
+| `report_type` | string | yes      | —              | Report category (used for filename)                                           |
+| `columns`     | array  | yes      | —              | Column definitions `[{ key, label }]`                                       |
+| `data`        | array  | yes      | —              | Row data as list of dicts                                                     |
+| `charts`      | array  | no       | `[]`          | Chart specs to embed above the table — see[Chart Generation](#chart-generation) |
+| `filters`     | object | no       | `{}`          | Filter summary shown in the report header                                     |
+| `orientation` | string | no       | `"portrait"`  | `"portrait"` or `"landscape"`                                             |
+| `template`    | string | no       | `"base.html"` | Report Jinja2 template name                                                   |
 
 **Response:** Raw PDF bytes. Charts appear above the data table in the PDF.
 
@@ -505,6 +505,7 @@ These routes have Node.js orchestrate DB queries **before** calling FastAPI. Fas
 ### `POST /documents/create/document/:template`
 
 Orchestrated document generation. Node.js:
+
 1. Fetches the template contract from FastAPI to get required tags.
 2. Optionally queries PostgreSQL for additional tag values.
 3. Merges DB columns with explicit `data` (explicit values take priority).
@@ -542,12 +543,12 @@ Tag values support both plain strings (text replacement) and chart specs (`{ gra
 }
 ```
 
-| Field          | Type   | Required | Default    | Description                                                                           |
-| -------------- | ------ | -------- | ---------- | ------------------------------------------------------------------------------------- |
-| `data`       | object | no       | `{}`     | Tag values (string or chart spec). DB query results are merged in for any missing keys |
-| `format`     | string | no       | `"docx"` | Output format: `"docx"` or `"pdf"`                                                |
-| `query.sql`  | string | no       | —         | Parameterized SQL (`$1`, `$2`, ...) to fetch additional tag values from PostgreSQL    |
-| `query.params` | array | no      | `[]`     | Parameters for the SQL query                                                          |
+| Field            | Type   | Required | Default    | Description                                                                            |
+| ---------------- | ------ | -------- | ---------- | -------------------------------------------------------------------------------------- |
+| `data`         | object | no       | `{}`     | Tag values (string or chart spec). DB query results are merged in for any missing keys |
+| `format`       | string | no       | `"docx"` | Output format:`"docx"` or `"pdf"`                                                  |
+| `query.sql`    | string | no       | —         | Parameterized SQL (`$1`, `$2`, ...) to fetch additional tag values from PostgreSQL |
+| `query.params` | array  | no       | `[]`     | Parameters for the SQL query                                                           |
 
 **How DB merging works:** The first row returned by `query.sql` is treated as a flat key-value map. Column names are upper-cased and merged as tag values. Explicit `data` values always override DB columns for the same key.
 
@@ -564,6 +565,7 @@ Tag values support both plain strings (text replacement) and chart specs (`{ gra
 ### `POST /documents/create/report/:template`
 
 Orchestrated report generation. Node.js:
+
 1. Accepts structured report data directly or queries PostgreSQL for rows.
 2. Builds the payload including optional `charts` array for chart generation.
 3. Forwards `{ title, report_type, columns, data, charts, filters, template }` to FastAPI `/reports/pdf`.
@@ -610,17 +612,17 @@ Orchestrated report generation. Node.js:
 }
 ```
 
-| Field           | Type   | Required | Default         | Description                                                                          |
-| --------------- | ------ | -------- | --------------- | ------------------------------------------------------------------------------------ |
-| `title`       | string | yes      | —              | Report title displayed in the header                                                 |
-| `report_type` | string | yes      | —              | Report category (used for filename)                                                  |
-| `columns`     | array  | yes      | —              | Column definitions `[{ key, label }]` — keys must match data row properties        |
-| `data`        | array  | no       | `[]`          | Row data to use directly. Ignored if `query` is provided                            |
-| `query.sql`   | string | no       | —              | Parameterized SQL to fetch rows. All returned rows are used as data                  |
-| `query.params`| array  | no       | `[]`          | Parameters for the SQL query                                                         |
-| `charts`      | array  | no       | `[]`          | Chart specs to embed in the report — see [Chart Generation](#chart-generation)      |
-| `filters`     | object | no       | `{}`          | Key/value pairs shown as filter summary in the report header                         |
-| `orientation` | string | no       | `"portrait"`  | Page orientation: `"portrait"` or `"landscape"`                                  |
+| Field            | Type   | Required | Default        | Description                                                                    |
+| ---------------- | ------ | -------- | -------------- | ------------------------------------------------------------------------------ |
+| `title`        | string | yes      | —             | Report title displayed in the header                                           |
+| `report_type`  | string | yes      | —             | Report category (used for filename)                                            |
+| `columns`      | array  | yes      | —             | Column definitions `[{ key, label }]` — keys must match data row properties |
+| `data`         | array  | no       | `[]`         | Row data to use directly. Ignored if `query` is provided                     |
+| `query.sql`    | string | no       | —             | Parameterized SQL to fetch rows. All returned rows are used as data            |
+| `query.params` | array  | no       | `[]`         | Parameters for the SQL query                                                   |
+| `charts`       | array  | no       | `[]`         | Chart specs to embed in the report — see[Chart Generation](#chart-generation)    |
+| `filters`      | object | no       | `{}`         | Key/value pairs shown as filter summary in the report header                   |
+| `orientation`  | string | no       | `"portrait"` | Page orientation:`"portrait"` or `"landscape"`                             |
 
 > Either `data` or `query` must provide rows. A `400` is returned if no rows are available.
 
