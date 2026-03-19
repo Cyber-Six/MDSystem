@@ -55,6 +55,8 @@ type ChatParticipant {
   firstName: String!
   lastName: String!
   email: String
+  identifier: Int
+  branch: String
 }
 
 type HealthChatList {

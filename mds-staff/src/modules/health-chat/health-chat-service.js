@@ -56,6 +56,8 @@ export const getPendingTickets = async (offset = 0, limit = 50) => {
             firstName
             lastName
             email
+            identifier
+            branch
           }
           medical {
             id
@@ -96,6 +98,8 @@ export const getActiveTickets = async (offset = 0, limit = 50) => {
             firstName
             lastName
             email
+            identifier
+            branch
           }
           medical {
             id
@@ -136,6 +140,8 @@ export const getAllTickets = async (status = null, offset = 0, limit = 50) => {
             firstName
             lastName
             email
+            identifier
+            branch
           }
           medical {
             id

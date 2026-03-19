@@ -4,6 +4,7 @@ import { searchByStatus, getStatusCounts } from '../staff-appointment-service';
 /* ── constants ─────────────────────────────────────── */
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const STATUS_STYLES = {
   Pending:             'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
@@ -15,6 +16,11 @@ const STATUS_STYLES = {
   NoShow:              'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
   CancelledByPatient:  'bg-error-100   dark:bg-error-900/30   text-error-700   dark:text-error-400',
   CancelledByMedical:  'bg-error-100   dark:bg-error-900/30   text-error-700   dark:text-error-400',
+};
+
+const SESSION_STYLES = {
+  Morning:   'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400',
+  Afternoon: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
 };
 
 /* Each tab maps to a backend SCHEDULING_STATUS for searchAppointmentStatuses */
@@ -39,6 +45,7 @@ const formatCount = (count) => {
 const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [activeTab,   setActiveTab]   = useState('Pending');
   const [search,      setSearch]      = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [tabCounts,    setTabCounts]    = useState({});
@@ -48,6 +55,14 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [offset,      setOffset]      = useState(0);
   const [hasMore,     setHasMore]     = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   /** Fetch fresh status counts from server */
   const refreshCounts = useCallback(async () => {
@@ -70,9 +85,9 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       setAppointments((prev) => prev.filter((a) => a.id !== id));
       setTabCounts((prev) => {
         const updated = { ...prev };
-        // Decrement old status count
-        if (updated[activeTab] !== undefined) {
-          updated[activeTab] = Math.max(0, (updated[activeTab] || 1) - 1);
+        // Decrement old status count (current active tab)
+        if (updated[activeTab] !== undefined && updated[activeTab] > 0) {
+          updated[activeTab] = updated[activeTab] - 1;
         }
         // Increment new status count (always increment, even if was 0/undefined)
         if (newStatus) {
@@ -138,8 +153,8 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
 
   /* Client-side search filter on patientIdentifier / name / email */
   const rows = useMemo(() => {
-    if (!search.trim()) return appointments;
-    const q = search.toLowerCase();
+    if (!debouncedSearch.trim()) return appointments;
+    const q = debouncedSearch.toLowerCase();
     return appointments.filter((a) =>
       String(a.patientIdentifier ?? '').includes(q) ||
       String(a.patientId ?? '').includes(q) ||
@@ -147,7 +162,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       (a.patientEmail ?? '').toLowerCase().includes(q) ||
       (a.id ?? '').toLowerCase().includes(q)
     );
-  }, [appointments, search]);
+  }, [appointments, debouncedSearch]);
 
   /* Allow clicking the active tab to refresh data */
   const handleTabChange = (key) => {
@@ -238,10 +253,10 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           </div>
         ) : (
           <>
-          <table className="w-full" style={{ minWidth: 480 }}>
+          <table className="w-full" style={{ minWidth: 600 }}>
             <thead>
               <tr className="bg-neutral-50/60 dark:bg-neutral-700/30">
-                {['Patient', 'Session', 'Status', 'Notes', 'Created'].map((h) => (
+                {['Patient', 'Scheduled', 'Session', 'Type', 'Status', 'Notes'].map((h) => (
                   <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
@@ -263,8 +278,24 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                       <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">{apt.patientName}</p>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-secondary-600 dark:text-neutral-300 whitespace-nowrap">
-                    {apt.session}
+                  <td className="px-4 py-2.5">
+                    {apt.scheduledDate ? (
+                      <div>
+                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
+                          {new Date(apt.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
+                        </p>
+                        {apt.schedulerLabel && (
+                          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-0.5 truncate max-w-[120px]">{apt.schedulerLabel}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-secondary-400 dark:text-neutral-500">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300'}`}>
+                      {apt.session}
+                    </span>
                   </td>
                   <td className="px-4 py-2.5">
                     <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-600'}`}>
@@ -274,13 +305,10 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                   <td className="px-4 py-2.5 text-xs text-secondary-500 dark:text-neutral-400 max-w-[200px] truncate">
                     {apt.notes || '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-secondary-600 dark:text-neutral-300 whitespace-nowrap">
-                    {apt.created_at ? new Date(apt.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—'}
-                  </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center">
+                  <td colSpan={6} className="px-4 py-12 text-center">
                     <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>

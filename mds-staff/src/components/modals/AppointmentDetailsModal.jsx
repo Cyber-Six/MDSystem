@@ -9,7 +9,6 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
   const [editedData, setEditedData] = useState({
     date: appointment?.scheduledDate || '',
     time: appointment?.scheduledTime || '',
-    type: appointment?.appointmentType || '',
     notes: appointment?.notes || '',
   });
   const [rejectReason, setRejectReason] = useState('');
@@ -30,7 +29,6 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
     setEditedData({
       date: appointment.scheduledDate,
       time: appointment.scheduledTime,
-      type: appointment.appointmentType,
       notes: appointment.notes,
     });
     setIsEditing(false);
@@ -49,15 +47,6 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
     onReject?.(appointment.id, rejectReason);
     onClose();
   };
-
-  const appointmentTypes = [
-    'Medical Consultation',
-    'Dental Checkup',
-    'Medical Clearance',
-    'Follow-up Consultation',
-    'Vaccination',
-    'Physical Examination',
-  ];
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -161,26 +150,6 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
                     <p className="text-sm font-semibold text-secondary-900 dark:text-white">{appointment.scheduledTime}</p>
                   )}
                 </div>
-              </div>
-
-              {/* Appointment Type */}
-              <div>
-                <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-2">
-                  Appointment Type
-                </label>
-                {isEditing ? (
-                  <select
-                    value={editedData.type}
-                    onChange={(e) => setEditedData({ ...editedData, type: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    {appointmentTypes.map((type) => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="text-sm font-semibold text-secondary-900 dark:text-white">{appointment.appointmentType}</p>
-                )}
               </div>
 
               {/* Reason/Purpose */}

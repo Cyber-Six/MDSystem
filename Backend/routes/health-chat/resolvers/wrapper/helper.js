@@ -40,7 +40,9 @@ async function getParticipantInfo(userId) {
       uc.id,
       up.first_name AS "firstName",
       up.last_name AS "lastName",
-      uc.email
+      uc.email,
+      up.identifier,
+      up.branch
      FROM "UserCredentials" uc
      LEFT JOIN "UsersPersonal" up ON up.id = uc.id
      WHERE uc.id = $1`,

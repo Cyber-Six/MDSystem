@@ -79,7 +79,6 @@ const PendingRequests = () => {
       email: 'maria.santos@tip.edu.ph',
       scheduledDate: '2026-02-10',
       scheduledTime: '10:00 AM',
-      appointmentType: 'Dental Checkup',
       reason: 'Routine dental checkup and cleaning',
       notes: 'Preferred morning schedule',
       submittedDate: '2026-02-04 09:30 AM'
@@ -149,7 +148,6 @@ const PendingRequests = () => {
       email: 'carlos.tan@tip.edu.ph',
       scheduledDate: '2026-02-08',
       scheduledTime: '2:00 PM',
-      appointmentType: 'Medical Clearance',
       reason: 'Required for OJT clearance documentation',
       notes: 'Needs medical certificate',
       submittedDate: '2026-02-02 11:15 AM'

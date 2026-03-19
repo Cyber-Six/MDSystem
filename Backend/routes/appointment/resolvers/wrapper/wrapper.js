@@ -300,7 +300,8 @@ const Query = {
     }
 
     const query = `
-      SELECT ps.*, ss.location,
+      SELECT ps.*, ss.location, ss.label AS "schedulerLabel",
+        sde."scheduledDate",
         up."identifier" AS "patientIdentifier",
         CONCAT(COALESCE(up.first_name, ''), ' ', COALESCE(up.last_name, '')) AS "patientName",
         uc.email AS "patientEmail",
