@@ -10,7 +10,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     { path: '/record-update', icon: 'edit', label: 'Record Update' },
     { path: '/appointments', icon: 'calendar', label: 'Appointment' },
     { path: '/medicine-request', icon: 'medication', label: 'Medicine Request' },
-    { path: '/e-consultation', icon: 'chat', label: 'E-Consultation' },
+    { path: '/health-chat', icon: 'chat', label: 'Health Chat' },
   ];
 
   const icons = {

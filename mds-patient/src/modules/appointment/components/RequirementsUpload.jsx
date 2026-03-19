@@ -6,8 +6,47 @@ const RequirementsUpload = ({ requirements, uploadedFiles, onFileUpload, onNext,
   const [uploading, setUploading] = useState({});
   const [uploadErrors, setUploadErrors] = useState({});
 
+  // File validation constants
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  const ALLOWED_FILE_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ];
+
+  const validateFile = (file) => {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return 'File size must be less than 10MB';
+    }
+
+    // Check file type
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      return 'File type not allowed. Please upload an image, PDF, or document file';
+    }
+
+    // Check filename for potential security issues
+    const dangerousChars = /[<>:"|?*\x00-\x1f]/;
+    if (dangerousChars.test(file.name)) {
+      return 'Filename contains invalid characters';
+    }
+
+    return null;
+  };
+
   const handleFileChange = async (reqId, file) => {
     if (!file) return;
+
+    // Validate file before uploading
+    const validationError = validateFile(file);
+    if (validationError) {
+      setUploadErrors((prev) => ({ ...prev, [reqId]: validationError }));
+      return;
+    }
 
     setUploading((prev) => ({ ...prev, [reqId]: true }));
     setUploadErrors((prev) => ({ ...prev, [reqId]: null }));
@@ -41,6 +80,7 @@ const RequirementsUpload = ({ requirements, uploadedFiles, onFileUpload, onNext,
             {req.notes && <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{req.notes}</p>}
             <input
               type="file"
+              accept="image/*,.pdf,.doc,.docx"
               disabled={uploading[req.id]}
               onChange={(e) => {
                 const file = e.target.files?.[0];

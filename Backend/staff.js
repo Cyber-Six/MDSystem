@@ -13,6 +13,7 @@ const { initMedicalConsultationGraphQL } = require('./routes/consultation/consul
 const { initMedicalInventoryGraphQL } = require('./routes/medical-inventory/inventory/graphql.js');
 const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
 const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
+const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 
@@ -26,6 +27,7 @@ const documentRoutes = require('./routes/documents/documents.js');
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
 const { initSocket, getIO } = require('./config/sockets');
+require('./config/sockets/health-chat-events'); // Register health chat socket handlers
 
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -63,6 +65,7 @@ initMedicalConsultationGraphQL(app);
 initMedicalInventoryGraphQL(app);
 initMedicalMedicineRequestGraphQL(app);
 initPrescriptionGraphQL(app);
+initMedicalHealthChatGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);

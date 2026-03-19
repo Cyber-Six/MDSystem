@@ -74,7 +74,7 @@ const category_lookup = {
   "dentalPhoto": MEDIA_PATH.dentalPhoto,
   "appointmentRequirement": MEDIA_PATH.appointmentRequirement,
   "announcement": MEDIA_PATH.announcement,
-  "eConsultation" : MEDIA_PATH.eConsultation
+  "eConsultation": MEDIA_PATH.eConsultation  // Used for Health Chat feature (legacy name for backward compatibility)
 };
 
 mediaRouter.get('/record/:category/:fileId', jwtProtect("all"), async (req, res) => {

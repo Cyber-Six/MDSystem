@@ -40,7 +40,9 @@ async function getParticipantInfo(userId) {
       uc.id,
       up.first_name AS "firstName",
       up.last_name AS "lastName",
-      uc.email
+      uc.email,
+      up.identifier,
+      up.branch
      FROM "UserCredentials" uc
      LEFT JOIN "UsersPersonal" up ON up.id = uc.id
      WHERE uc.id = $1`,
@@ -140,11 +142,54 @@ async function formatMessage(message) {
 }
 
 /**
+ * Auto-expire tickets that have passed their expiry date.
+ * Self-sufficient expiry check - no background process required.
+ * Called on relevant queries to ensure data consistency.
+ * @param {number|null} patientId - Optional patient ID filter
+ * @returns {Promise<number>} Number of tickets expired
+ */
+async function autoExpireTickets(patientId = null) {
+  let query = `
+    UPDATE "HealthChat"
+    SET status = 'Expired', session_end = NOW()
+    WHERE status = 'Ongoing'
+    AND session_start IS NOT NULL
+    AND session_start + INTERVAL '${CHAT_EXPIRY_DAYS} days' < NOW()
+  `;
+  const params = [];
+
+  if (patientId) {
+    query += ` AND "patientId" = $1`;
+    params.push(patientId);
+  }
+
+  query += ` RETURNING id`;
+
+  const result = await db.query(query, params);
+
+  // Add system message to each expired chat
+  for (const row of result.rows) {
+    await db.query(
+      `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ($1, $2, 'system', NULL, 'Medical')`,
+      [row.id, `This conversation has expired after ${CHAT_EXPIRY_DAYS} days.`]
+    );
+  }
+
+  return result.rowCount;
+}
+
+/**
  * Check if patient has an active (non-closed/expired) ticket
+ * Also handles auto-expiry check for ongoing tickets
  * @param {number} patientId - Patient ID
  * @returns {Promise<boolean>}
  */
 async function hasActiveTicket(patientId) {
+  // First, auto-expire any expired ongoing tickets for this patient
+  await autoExpireTickets(patientId);
+
   const result = await db.query(
     `SELECT 1 FROM "HealthChat"
      WHERE "patientId" = $1
@@ -165,5 +210,6 @@ module.exports = {
   checkChatStatus,
   formatChatRecord,
   formatMessage,
-  hasActiveTicket
+  hasActiveTicket,
+  autoExpireTickets
 };

@@ -210,10 +210,6 @@ const Mutation = {
   },
 
   _setPersonalRecordLog: async (_, { userId, status }, { user, res }) => {
-    const validStatuses = ["Revision", "Approved", "Rejected"];
-    if (!validStatuses.includes(status)) {
-      throwGraphQLError(res).message("Invalid status").status(400).throw();
-    }
     const BI = await Query._getBranchIdentifier(_, { userId }, { user, res });
     if (!(BI?.identifier && BI?.branch)) {
       throwGraphQLError(res).message("Branch identifier not set. Please notify the patient to set their branch identifier.").status(400).throw();
