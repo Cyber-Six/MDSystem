@@ -38,6 +38,50 @@ const HealthChat = () => {
   const hasInitialized = useRef(false);
   const typingTimeoutRef = useRef(null);
 
+  // Load messages for a ticket (defined early for use in callbacks)
+  const loadMessages = useCallback(async (chatId) => {
+    try {
+      const fetchedMessages = await getTicketMessages(chatId);
+      setMessages(fetchedMessages || []);
+    } catch (err) {
+      console.error('[HealthChat] Failed to load messages:', err);
+      setError('Failed to load messages.');
+    }
+  }, []);
+
+  // Socket event handlers (must be defined before useHealthChatSocket)
+  // Handle new message from socket
+  const handleNewMessage = useCallback((newMessage) => {
+    setMessages(prev => [...prev, newMessage]);
+    // Clear typing indicator when message received
+    setIsStaffTyping(false);
+  }, []);
+
+  // Handle typing indicator from socket
+  const handleTypingIndicator = useCallback((isTyping) => {
+    setIsStaffTyping(isTyping);
+  }, []);
+
+  // Handle ticket approved via socket
+  const handleTicketApproved = useCallback((updatedTicket) => {
+    console.log('[HealthChat] Ticket approved event received:', updatedTicket);
+    setTicket(updatedTicket);
+    // Reload messages in case there's a system message
+    if (updatedTicket?.id) {
+      loadMessages(updatedTicket.id);
+    }
+  }, [loadMessages]);
+
+  // Handle ticket closed via socket
+  const handleTicketClosed = useCallback((data) => {
+    console.log('[HealthChat] Ticket closed event received:', data);
+    setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
+    // Reload messages to show system message
+    if (data?.chatId) {
+      loadMessages(data.chatId);
+    }
+  }, [loadMessages]);
+
   // Socket hook
   const { isConnected: isSocketConnected, socketError, emitTyping } = useHealthChatSocket({
     chatId: ticket?.id,
@@ -93,38 +137,6 @@ const HealthChat = () => {
     };
   }, [ticket?.id, ticket?.status, loadMessages]);
 
-  // Handle new message from socket
-  const handleNewMessage = useCallback((newMessage) => {
-    setMessages(prev => [...prev, newMessage]);
-    // Clear typing indicator when message received
-    setIsStaffTyping(false);
-  }, []);
-
-  // Handle typing indicator from socket
-  const handleTypingIndicator = useCallback((isTyping) => {
-    setIsStaffTyping(isTyping);
-  }, []);
-
-  // Handle ticket approved via socket
-  const handleTicketApproved = useCallback((updatedTicket) => {
-    console.log('[HealthChat] Ticket approved event received:', updatedTicket);
-    setTicket(updatedTicket);
-    // Reload messages in case there's a system message
-    if (updatedTicket?.id) {
-      loadMessages(updatedTicket.id);
-    }
-  }, [loadMessages]);
-
-  // Handle ticket closed via socket
-  const handleTicketClosed = useCallback((data) => {
-    console.log('[HealthChat] Ticket closed event received:', data);
-    setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
-    // Reload messages to show system message
-    if (data?.chatId) {
-      loadMessages(data.chatId);
-    }
-  }, [loadMessages]);
-
   // Initialize health chat - load existing ticket or show create form
   async function initializeHealthChat() {
     try {
@@ -154,17 +166,6 @@ const HealthChat = () => {
       setIsInitializing(false);
     }
   }
-
-  // Load messages for a ticket
-  const loadMessages = useCallback(async (chatId) => {
-    try {
-      const fetchedMessages = await getTicketMessages(chatId);
-      setMessages(fetchedMessages || []);
-    } catch (err) {
-      console.error('[HealthChat] Failed to load messages:', err);
-      setError('Failed to load messages.');
-    }
-  }, []);
 
   // Refresh messages (manual refresh via HTTP when sockets fail)
   async function refreshMessages() {
