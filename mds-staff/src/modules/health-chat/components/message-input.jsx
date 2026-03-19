@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Send, Paperclip, X, Loader2, File, Image, Film } from 'lucide-react';
+import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { useHealthChatSocket } from '../hooks/use-health-chat-socket';
 import { uploadFile, unstageFile } from '../health-chat-service';
@@ -8,17 +8,20 @@ const ACCEPTED_TYPES = 'image/jpeg,image/png,application/pdf,video/mp4,video/qui
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 const MessageInput = () => {
-  const { selectedChatId, selectedTicket, sendMessage } = useHealthChat();
+  const { selectedChatId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
   const { emitTyping } = useHealthChatSocket();
 
   const [inputValue, setInputValue] = useState('');
   const [attachedFile, setAttachedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null); // 'approve' | 'reject' | null
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
 
+  const isPending = selectedTicket?.status === 'Open';
   const isActive = selectedTicket?.status === 'Ongoing';
+  const isClosed = ['Closed', 'Expired'].includes(selectedTicket?.status);
   const canSend = isActive && (inputValue.trim() || attachedFile) && !isSending;
 
   const handleFileSelect = async (e) => {
@@ -113,6 +116,99 @@ const MessageInput = () => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const handleApprove = async () => {
+    if (!selectedChatId || actionLoading) return;
+
+    try {
+      setActionLoading('approve');
+      await approveTicket(selectedChatId);
+    } catch (err) {
+      console.error('Failed to approve ticket:', err);
+      alert('Failed to approve ticket. Please try again.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedChatId || actionLoading) return;
+
+    const reason = window.prompt('Reason for rejection (optional):');
+    if (reason === null) return; // User cancelled
+
+    try {
+      setActionLoading('reject');
+      await rejectTicket(selectedChatId, reason || null);
+    } catch (err) {
+      console.error('Failed to reject ticket:', err);
+      alert('Failed to reject ticket. Please try again.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Pending ticket - show accept/reject buttons
+  if (isPending) {
+    return (
+      <div className="border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+        <div className="px-4 py-4">
+          <div className="text-center mb-3">
+            <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-1">
+              This patient is waiting for your response
+            </p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-500">
+              Accept to start the conversation or reject with a reason
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleReject}
+              disabled={actionLoading !== null}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3
+                       border-2 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400
+                       rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30
+                       disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+            >
+              {actionLoading === 'reject' ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <XCircle className="w-5 h-5" />
+              )}
+              Reject
+            </button>
+            <button
+              onClick={handleApprove}
+              disabled={actionLoading !== null}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3
+                       bg-emerald-500 text-white rounded-lg
+                       hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed
+                       transition-colors font-medium shadow-sm"
+            >
+              {actionLoading === 'approve' ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <CheckCircle className="w-5 h-5" />
+              )}
+              Accept
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Closed/Expired ticket
+  if (isClosed) {
+    return (
+      <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+        <div className="text-sm text-center text-neutral-500 dark:text-neutral-400">
+          This conversation has ended
+        </div>
+      </div>
+    );
+  }
+
+  // Not active (shouldn't happen, but fallback)
   if (!isActive) {
     return (
       <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">

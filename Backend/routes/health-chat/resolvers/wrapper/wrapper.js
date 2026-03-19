@@ -486,6 +486,13 @@ const Mutation = {
       notifyUser(chat.patientId, 'healthchat:ticket-approved', { chat });
     }
 
+    // Notify all medical staff about ticket status change (so other staff can update their UI)
+    emitToRole('medical', 'healthchat:ticket-status-changed', {
+      chatId: chat.id,
+      status: 'Ongoing',
+      approvedBy: user.id
+    });
+
     return {
       success: true,
       chat,
@@ -549,6 +556,14 @@ const Mutation = {
         reason: reason || 'Not specified'
       });
     }
+
+    // Notify all medical staff about ticket status change (so other staff can update their UI)
+    emitToRole('medical', 'healthchat:ticket-status-changed', {
+      chatId: chat.id,
+      status: 'Closed',
+      rejectedBy: user.id,
+      reason: reason || 'Not specified'
+    });
 
     return {
       success: true,

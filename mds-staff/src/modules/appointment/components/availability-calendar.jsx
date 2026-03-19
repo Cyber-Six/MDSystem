@@ -6,7 +6,7 @@ import React, { useState, useMemo } from 'react';
  * Color-coded: Green (open) / Yellow (>70% booked) / Red (full/suspended) / Blue (event override)
  * SRS §3.4.2
  */
-const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults }) => {
+const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults, activeScheduler }) => {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth()); // Current month
@@ -22,8 +22,18 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  // Map day of week index to day name for schedulePerWeek lookup
+  const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
   const navigateMonth = (delta) => {
     setCurrentMonth(new Date(year, month + delta));
+  };
+
+  // Check if a day is available based on schedulePerWeek
+  const isDayAvailable = (dayOfWeek) => {
+    if (!activeScheduler?.schedulePerWeek?.length) return false;
+    const dayName = dayIndexToName[dayOfWeek];
+    return activeScheduler.schedulePerWeek.includes(dayName);
   };
 
   // Mock booked data per day
@@ -32,16 +42,16 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(year, month, d).getDay();
-      
-      // No slots on weekends
-      if (dayOfWeek === 0 || dayOfWeek === 6) {
+
+      // Check if day is available based on scheduler's schedulePerWeek
+      if (!isDayAvailable(dayOfWeek)) {
         data[dateStr] = { medical: { morning: 0, afternoon: 0 }, dental: { morning: 0, afternoon: 0 }, isClosed: true };
         continue;
       }
 
       // Check if event overrides this day
       const dayEvent = events.find((e) => dateStr >= e.startDate && dateStr <= e.endDate);
-      
+
       if (dayEvent && dayEvent.effect === 'Suspend') {
         data[dateStr] = { medical: { morning: 0, afternoon: 0 }, dental: { morning: 0, afternoon: 0 }, isSuspended: true, event: dayEvent };
         continue;
@@ -55,7 +65,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       };
     }
     return data;
-  }, [year, month, daysInMonth, events, slotDefaults]);
+  }, [year, month, daysInMonth, events, activeScheduler?.schedulePerWeek]);
 
   const getDayStatus = (dateStr) => {
     const info = bookedSlots[dateStr];
@@ -64,9 +74,9 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     if (info.isSuspended) return 'suspended';
     if (info.event) return 'event';
 
-    const totalCapacity = slotDefaults.medical.morning + slotDefaults.medical.afternoon;
+    const totalCapacity = (slotDefaults?.morning || 0) + (slotDefaults?.afternoon || 0);
     const totalBooked = info.medical.morning + info.medical.afternoon;
-    const ratio = totalBooked / totalCapacity;
+    const ratio = totalCapacity > 0 ? totalBooked / totalCapacity : 0;
 
     if (ratio >= 1) return 'full';
     if (ratio >= 0.7) return 'partial';
@@ -140,9 +150,10 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
 
       {/* Day labels */}
       <div className="grid grid-cols-7 border-b border-neutral-200 dark:border-neutral-700">
-        {dayLabels.map((label) => (
-          <div key={label} className="text-center py-2 text-xs font-medium text-secondary-500 dark:text-neutral-400">
-            {label}
+        {dayLabels.map((label, idx) => (
+          <div key={label} className="text-center py-2 text-[10px] sm:text-xs font-medium text-secondary-500 dark:text-neutral-400">
+            <span className="sm:hidden">{label.charAt(0)}</span>
+            <span className="hidden sm:inline">{label}</span>
           </div>
         ))}
       </div>
@@ -152,8 +163,8 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         {calendarCells.map((cell, idx) => {
           if (cell.isOtherMonth) {
             return (
-              <div key={`other-${idx}`} className="p-1.5 min-h-[52px] border-b border-r border-neutral-100 dark:border-neutral-700/50">
-                <span className="text-xs text-neutral-300 dark:text-neutral-600">{cell.day}</span>
+              <div key={`other-${idx}`} className="p-1 sm:p-1.5 min-h-[40px] sm:min-h-[52px] border-b border-r border-neutral-100 dark:border-neutral-700/50">
+                <span className="text-[10px] sm:text-xs text-neutral-300 dark:text-neutral-600">{cell.day}</span>
               </div>
             );
           }
@@ -166,7 +177,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
             <div
               key={cell.dateStr}
               onClick={() => isClickable && onSelectDate(cell.dateStr)}
-              className={`p-1.5 min-h-[52px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative ${
+              className={`p-1 sm:p-1.5 min-h-[40px] sm:min-h-[52px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative ${
                 isSelected
                   ? 'ring-2 ring-primary-500 ring-inset bg-primary-50 dark:bg-primary-900/20'
                   : isClickable
@@ -175,26 +186,26 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className={`text-xs font-medium ${isSelected ? 'text-primary-700 dark:text-primary-400' : ''}`}>
+                <span className={`text-[10px] sm:text-xs font-medium ${isSelected ? 'text-primary-700 dark:text-primary-400' : ''}`}>
                   {cell.day}
                 </span>
                 {statusDots[status] && (
-                  <span className={`w-1.5 h-1.5 rounded-full ${statusDots[status]}`} />
+                  <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${statusDots[status]}`} />
                 )}
               </div>
               {status !== 'closed' && status !== 'none' && bookedSlots[cell.dateStr] && !bookedSlots[cell.dateStr].isSuspended && (
-                <div className="mt-1">
-                  <p className="text-[10px] text-secondary-500 dark:text-neutral-400 leading-tight">
+                <div className="mt-0.5 sm:mt-1">
+                  <p className="text-[8px] sm:text-[10px] text-secondary-500 dark:text-neutral-400 leading-tight">
                     {bookedSlots[cell.dateStr].medical.morning + bookedSlots[cell.dateStr].medical.afternoon}/
-                    {slotDefaults.medical.morning + slotDefaults.medical.afternoon}
+                    {(slotDefaults?.morning || 0) + (slotDefaults?.afternoon || 0)}
                   </p>
                 </div>
               )}
               {bookedSlots[cell.dateStr]?.isSuspended && (
-                <p className="text-[10px] text-error-500 dark:text-error-400 mt-1 leading-tight">Closed</p>
+                <p className="text-[8px] sm:text-[10px] text-error-500 dark:text-error-400 mt-0.5 sm:mt-1 leading-tight">Closed</p>
               )}
               {bookedSlots[cell.dateStr]?.event && !bookedSlots[cell.dateStr]?.isSuspended && (
-                <p className="text-[10px] text-accent-600 dark:text-accent-400 mt-0.5 truncate leading-tight">
+                <p className="text-[8px] sm:text-[10px] text-accent-600 dark:text-accent-400 mt-0.5 truncate leading-tight hidden sm:block">
                   {bookedSlots[cell.dateStr].event.name}
                 </p>
               )}
@@ -204,16 +215,16 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       </div>
 
       {/* Legend */}
-      <div className="p-2 border-t border-neutral-200 dark:border-neutral-700 flex flex-wrap gap-3">
+      <div className="p-2 border-t border-neutral-200 dark:border-neutral-700 flex flex-wrap gap-2 sm:gap-3">
         {[
           { color: 'bg-success-500', label: 'Open' },
-          { color: 'bg-primary-500', label: '>70% Booked' },
-          { color: 'bg-error-500', label: 'Full / Suspended' },
-          { color: 'bg-accent-500', label: 'Event Override' },
+          { color: 'bg-primary-500', label: '>70%' },
+          { color: 'bg-error-500', label: 'Full' },
+          { color: 'bg-accent-500', label: 'Event' },
         ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${color}`} />
-            <span className="text-[10px] text-secondary-500 dark:text-neutral-400">{label}</span>
+          <div key={label} className="flex items-center gap-1 sm:gap-1.5">
+            <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${color}`} />
+            <span className="text-[9px] sm:text-[10px] text-secondary-500 dark:text-neutral-400">{label}</span>
           </div>
         ))}
       </div>
