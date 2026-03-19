@@ -1,5 +1,16 @@
 const express = require("express");
 const router = express.Router();
+const fs = require("fs");
+const path = require("path");
+
+const consentFilePath = process.env.DATA_CONSENT_VERSION
+  ? path.join(__dirname, "consents", `${process.env.DATA_CONSENT_VERSION}.html`)
+  : null;
+
+const consentText = consentFilePath && fs.existsSync(consentFilePath)
+  ? fs.readFileSync(consentFilePath, "utf8")
+  : "Default consent text here.";
+
 
 const { getVerificationSession, updateConsentInSession } = require('../../../config/redis.js');
 
@@ -48,7 +59,7 @@ router.get("/:purpose", async (req, res) => {
     data_consent: session.data_consent === "true",
     data_consent_version: session.data_consent_version,
     required_version: process.env.DATA_CONSENT_VERSION,
-    consent_text: process.env.DATA_CONSENT_TEXT || "Default consent text here."
+    consent_text: consentText
   });
 });
 
@@ -86,7 +97,8 @@ router.post("/:purpose", async (req, res) => {
     return res.status(200).json({
         ok: true,
         message: "Consent recorded successfully.",
-        version: process.env.DATA_CONSENT_VERSION
+        version: process.env.DATA_CONSENT_VERSION,
+        consent_text: consentText
     });
 });
 

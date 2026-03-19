@@ -50,8 +50,10 @@ function encodeSchedulingFlags(days) {
 }
 
 async function validateSchedulerDate(schedulerId, date) {
-  // Derive the weekday name from the given date
-  const dayName = new Date(date).toLocaleDateString("en-US", { weekday: "long" });
+  // Parse the date-only string as LOCAL midnight (avoids UTC off-by-one in
+  // non-UTC timezones — `new Date("YYYY-MM-DD")` is UTC midnight per spec).
+  const [y, m, d] = date.split('-').map(Number);
+  const dayName = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long" });
   console.log(`Validating scheduler date: Scheduler ID ${schedulerId}, Date ${date} (${dayName})`);
   // First check weekly schedule flags
   const queryScheduler = `
@@ -87,9 +89,9 @@ async function validateSchedulerDate(schedulerId, date) {
 async function getAppointmentCounts(schedulerId, date) {
   const query = `
     SELECT 
-      COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0) AS "morningRegistered",
       COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0) AS "morningPending",
-      COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
+      COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0) AS "afternoonRegistered",
       COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0) AS "afternoonPending"
     FROM "patientSlot" ps
     JOIN "ScheduleDateEntity" sde
@@ -104,11 +106,12 @@ async function getAppointmentCounts(schedulerId, date) {
 
 function isWithinFutureTimeframe(date, nDays) {
   const today = new Date();
-  const targetDate = new Date(date);
+  // Parse date-only string as local midnight to avoid UTC off-by-one.
+  const [y, m, d] = date.split('-').map(Number);
+  const targetDate = new Date(y, m - 1, d);
 
-  // Normalize to midnight for consistent comparison
+  // Normalize today to local midnight for consistent comparison
   today.setHours(0, 0, 0, 0);
-  targetDate.setHours(0, 0, 0, 0);
 
   // Calculate latest allowed date
   const latestAllowed = new Date(today);
@@ -126,12 +129,13 @@ async function validateSatisfiedAllRequirements(scheduleId, requirements, res) {
     [scheduleId]
   );
 
-  const requiredIds = result.rows.map(r => r.id);
+  const requiredIds = result.rows.map(r => String(r.id));
 
   // Extract provided IDs from array of patientScheduleRequirement objects
   const providedIds = (requirements || [])
     .map(r => r.scheduleRequirementId)
-    .filter(id => id != null);
+    .filter(id => id != null)
+    .map(id => String(id));
 
   // Case: no requirements defined in DB
   if (requiredIds.length === 0) {

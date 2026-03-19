@@ -9,18 +9,18 @@ function isStudentEmail(email) {
 
 // not yet verified
 function isEmployeeEmail(email) {
-  const regex = /^[a-z]+(\.[a-z]+)+@tip\.edu\.ph$/;
+  const regex = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+@tip\.edu\.ph$/;
   return regex.test(email);
 }
 
 
 function isMedicalEmail(email) {
-  const regex = /^[a-z]+(\.[a-z]+)*\.mds@tip\.edu\.ph$/;
+  const regex = /^[a-z][a-z0-9]*(\.([a-z][a-z0-9]*))*\.mds@tip\.edu\.ph$/;
   return regex.test(email);
 }
 
 function isSuperiorEmail(email) {
-  const regex = /^[a-z]+(\.[a-z]+)*\.superior@tip\.edu\.ph$/;
+  const regex = /^[a-z][a-z0-9]*(\.([a-z][a-z0-9]*))*\.superior@tip\.edu\.ph$/;
   return regex.test(email);
 }
 
@@ -47,7 +47,7 @@ function PatientRoleFromEmail(email) {
 }
 
 function isValidEmail(email) {
-  const regex = /^[^\s@]+@tip\.edu\.ph$/;
+  const regex = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*@tip\.edu\.ph$/;
   return regex.test(email);
 }
 

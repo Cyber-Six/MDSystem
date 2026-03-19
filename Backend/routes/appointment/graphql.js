@@ -2,6 +2,7 @@
 
 const { graphqlHTTP } = require("express-graphql");
 const { makeExecutableSchema } = require("@graphql-tools/schema");
+const { checkCredentialsStatus } = require("../../config/middleware/activeCredential.js");
 const fs = require("fs");
 const path = require("path");
 
@@ -33,6 +34,7 @@ function initPatientAppointmentGraphQL(app) {
   app.use(
     "/appointment/patient",
     jwtProtect("patient"),
+    checkCredentialsStatus,
     graphqlHTTP((req) => {
       if (!req.body || !req.body.query) {
         throw new Error("Empty GraphQL request");

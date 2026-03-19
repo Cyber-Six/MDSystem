@@ -98,7 +98,7 @@ async function createUser({ email, password, role, data_consent_version }) {
             credentials_status,
             locked_until
         )
-        VALUES ($1, $2, $3, true, $4, NOW(), 'unverified', NULL)
+        VALUES ($1, $2, $3, true, $4, NOW(), 'Unverified', NULL)
         RETURNING id;
     `;
 
@@ -232,6 +232,7 @@ async function setExpiredUpdateTickets(id) {
       logger.info(`Expired ${result.rowCount} update tickets.`);
     } catch (err) {
       logger.error("Error expiring update tickets:", err);
+      throw err;
     }
   }
 
@@ -247,6 +248,7 @@ async function setExpiredPersonalTickets(id) {
       logger.info(`Expired ${result.rowCount} personal update tickets.`);
     } catch (err) {
       logger.error("Error expiring personal update tickets:", err);
+      throw err;
     }
   }
 
@@ -266,7 +268,29 @@ async function isUserValidated(userId) {
     }
 
     const status = result.rows[0].status?.toLowerCase();
-    return status !== "unverified"; // true if verified or other
+    return status !== "Unverified"; // true if verified or other
+  } catch (err) {
+    logger.error(`Error fetching credential status for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
+async function getUserCredentialStatus(userId) {
+  const sql = `
+    SELECT credentials_status AS status
+    FROM "UserCredentials"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return result.rows[0].status || null;
   } catch (err) {
     logger.error(`Error fetching credential status for userId=${userId}:`, err);
     throw err;
@@ -295,6 +319,53 @@ async function getUserBranch(userId) {
   }
 }
 
+async function recordLoginAttempt(email, wasSuccessful) {
+  const sql = `
+    INSERT INTO "UserLoginAttempt" (user_id, was_successful)
+    VALUES (
+      (SELECT id FROM "UserCredentials" WHERE email = $1),
+      $2
+    );
+  `;
+
+  try {
+    await query(sql, [email, wasSuccessful]);
+  } catch (err) {
+    logger.error("Error recording login attempt:", err);
+    throw err;
+  }
+}
+
+
+async function updateUserIdentity(userId, identity) {
+  const sql = `
+    UPDATE "UserCredentials"
+    SET identity = $1
+    WHERE id = $2
+    RETURNING id, identity;
+  `;
+  const result = await query(sql, [identity, userId]);
+  return result.rows[0] || null;
+}
+
+async function getUserPatientType(userId) { 
+  const sql = `
+    SELECT profile
+    FROM "Patients"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+    if (result.rows.length === 0) return null; // patient not found
+
+    return result.rows[0].profile; 
+  } catch (err) {
+    logger.error(`Error fetching patient type for userId=${userId}:`, err);
+    throw err;
+  }
+}
 module.exports = {
     connect,
     query,
@@ -308,8 +379,12 @@ module.exports = {
     getUserConsentStateByEmail,
     updateUserConsent,
     getUserIdentity,
+    getUserCredentialStatus,
+    updateUserIdentity,
     isUserValidated,
     setExpiredUpdateTickets,
     setExpiredPersonalTickets,
-    getUserBranch
+    getUserBranch,
+    recordLoginAttempt,
+    getUserPatientType
 };

@@ -8,6 +8,9 @@ const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
+// 
+const reviewable_statuses = ["InProgress", "Pending", "RevisionSubmitted"];
+
 const Query = {
   getUserUpdateTicket: async (_, args, { user, res }) => {
     const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
@@ -29,7 +32,7 @@ const Query = {
 
     const result = await Wrapper._getUserProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -44,7 +47,7 @@ const Query = {
 
     const result = await Wrapper._getUserDentalPhotoRecord(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -58,7 +61,7 @@ const Query = {
 
     const result = await Wrapper._getUserObgynHistory(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -72,7 +75,7 @@ const Query = {
 
     const result = await Wrapper._getUserLifestyle(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -86,7 +89,7 @@ const Query = {
 
     const result = await Wrapper._getUserDentalHistory(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -100,7 +103,7 @@ const Query = {
 
     const result = await Wrapper._getUserDentalRecord(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -114,7 +117,7 @@ const Query = {
 
     const result = await Wrapper._getUserVitalSigns(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -128,7 +131,7 @@ const Query = {
 
     const result = await Wrapper._getUserOralApplianceProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -142,7 +145,7 @@ const Query = {
 
     const result = await Wrapper._getUserEmergencyContact(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -156,7 +159,7 @@ const Query = {
 
     const result = await Wrapper._getUserAllergyProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -170,7 +173,7 @@ const Query = {
 
     const result = await Wrapper._getUserMedicationProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -184,7 +187,7 @@ const Query = {
 
     const result = await Wrapper._getUserDentalProcedureProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -198,7 +201,7 @@ const Query = {
 
     const result = await Wrapper._getUserImmunizationProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -212,7 +215,7 @@ const Query = {
 
     const result = await Wrapper._getUserOperationProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -226,7 +229,7 @@ const Query = {
 
     const result = await Wrapper._getUserHospitalizationProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -240,7 +243,7 @@ const Query = {
 
     const result = await Wrapper._getUserMedicalHistory(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
@@ -254,7 +257,7 @@ const Query = {
 
     const result = await Wrapper._getUserVisualAcuityProfile(_, args, { user, res });
     if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress") return result[0];
+    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },

@@ -2,14 +2,15 @@ const express = require('express');
 const path = require('path');
 const dotenv = require("dotenv");
 const logger = require('../../utils/logger.js');
-const { v4: uuidv4 } = require('uuid');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 // Import helpers from config/multer.js
 const {
   upload,
+  MEDIA_PATH, 
   validateFileType,
   stageFile,
   unstageFile,
+  checkFileByUuid
 } = require('../../config/multer.js');
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
@@ -19,7 +20,7 @@ const mediaRouter = express.Router();
 // --------------------
 // POST - Stage upload
 // --------------------
-mediaRouter.post('/', jwtProtect(""), upload.single('file'), async (req, res) => {
+mediaRouter.post('/stage/', jwtProtect("all"), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'NO_FILE_UPLOADED' });
@@ -51,7 +52,7 @@ mediaRouter.post('/', jwtProtect(""), upload.single('file'), async (req, res) =>
 // --------------------
 // DELETE - Unstage file
 // --------------------
-mediaRouter.delete('/:fileId', jwtProtect(""), async (req, res) => {
+mediaRouter.delete('/unstage/:fileId', jwtProtect("all"), async (req, res) => {
   try {
     const { fileId } = req.params;
 
@@ -65,6 +66,46 @@ mediaRouter.delete('/:fileId', jwtProtect(""), async (req, res) => {
     }
     logger.error('Media deletion error', { error: err.message });
     res.status(500).json({ error: 'MEDIA_DELETION_FAILED' });
+  }
+});
+
+const category_lookup = {
+  "staging": MEDIA_PATH.staging,
+  "dentalPhoto": MEDIA_PATH.dentalPhoto,
+  "appointmentRequirement": MEDIA_PATH.appointmentRequirement,
+  "announcement": MEDIA_PATH.announcement,
+  "eConsultation": MEDIA_PATH.eConsultation  // Used for Health Chat feature (legacy name for backward compatibility)
+};
+
+mediaRouter.get('/record/:category/:fileId', jwtProtect("all"), async (req, res) => {
+  const { category, fileId } = req.params;
+  const basePath = category_lookup[category];
+
+  if (!basePath) {
+    return res.status(400).json({ error: 'INVALID_CATEGORY' });
+  }
+
+  try {
+    const fileName = await checkFileByUuid(category, fileId);
+    if (!fileName) {
+      return res.status(404).json({ error: 'FILE_NOT_FOUND' });
+    }
+
+    const filePath = path.join(basePath, fileName);
+    if (!filePath.startsWith(basePath)) {
+      logger.error('Path traversal attempt detected', { category, fileId });
+      return res.status(400).json({ error: 'INVALID_FILE_PATH' });
+    }
+
+    res.sendFile(filePath, (err) => {
+      if (err) {
+        logger.error('Error sending media file', { error: err.message, filePath });
+        res.status(404).json({ error: 'FILE_NOT_FOUND' });
+      }
+    });
+  } catch (err) {
+    logger.error('Error retrieving media file', { error: err.message, category, fileId });
+    res.status(500).json({ error: 'MEDIA_RETRIEVAL_FAILED' });
   }
 });
 

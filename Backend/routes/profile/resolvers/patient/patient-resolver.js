@@ -2,10 +2,11 @@ const Wrapper = require("../wrapper/wrapper.js");
 const path = require("path");
 const dotenv = require("dotenv");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
-const { getStudentBranchFromEmail } = require("../../../../utils/validator.js");
+const { getStudentBranchFromEmail, isStudentEmail, isEmployeeEmail, isMedicalEmail } = require("../../../../utils/validator.js");
 const db = require("../../../../config/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
-
+const logger = require("../../../../utils/logger.js");
+const { get } = require("http");
 // creating of updateTicket
 // In-progress do expire after nth time
 // Unless if the user is unverified where the first ticket never expires
@@ -27,6 +28,14 @@ Query = {
     return await Wrapper.Query._getUserPersonalRecord(_, { userId: user.id }, { user, res });
   },
 
+  getPersonalRecordLog: async (_, __, { user, res }) => { // getting the update status of the logged in user
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const rows = await Wrapper.Query._getUserPersonalRecordLog(_, { userId: user.id, offset: 0, limit: 1 }, { user, res });
+    return rows?.[0] || null;
+  },
+
   getPersonalRecordLogStatus: async (_, __, { user, res }) => { // getting the update status of the logged in user
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -40,6 +49,15 @@ Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Query._getBranchIdentifier(_, { userId: user.id }, { user, res });
+  },
+
+  getLoginEmail: async (_, __, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    // Queries UserCredentials directly — reliable for all users including unverified
+    const email = await db.findEmailByUserId(user.id);
+    return email || null;
   },
 };
 
@@ -72,12 +90,12 @@ Mutation = {
     return await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
   },
 
-  createBranchIdentifier: async (_, { identifier }, { user, res }) => {
+  createBranchIdentifier: async (_, { input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     const credentialStatus = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
-    if (credentialStatus !== "unverified") {
+    if (credentialStatus !== "Unverified") {
       throwGraphQLError(res).message("For patients, branch and identifier can only be set for unverified users.").status(400).throw();
       }
    
@@ -85,7 +103,19 @@ Mutation = {
     if (!getEmail) {
       throwGraphQLError(res).message("Email not found for the user.").status(400).throw();
     }
-    const input =  { branch: getStudentBranchFromEmail(getEmail), identifier};
+    
+    if (isStudentEmail(getEmail)) { // derive Manila/QuezonCity from the student email prefix
+      input.branch = getStudentBranchFromEmail(getEmail);
+      if (!input.branch) {
+        throwGraphQLError(res).message("Unable to determine branch from email. Please provide a valid student email.").status(400).throw();
+      }
+    } else if (isEmployeeEmail(getEmail) || isMedicalEmail(getEmail)) {
+      // Use user-supplied branch if provided; fall back to 'Both'
+      if (!input.branch) input.branch = 'Both';
+    } else {
+      throwGraphQLError(res).message("Unable to determine branch from email. Unrecognized email format.").status(400).throw();
+    }
+
     return await Wrapper.Mutation._UserBranchIdentifier(_, { userId: user.id, input }, { user, res });
   },
   
@@ -106,16 +136,7 @@ Mutation = {
     }
     const result = await Wrapper.Mutation._reloadCredentialStatus(_, { userId: user.id }, { user, res });
     return result;
-  },
-
-  setPersonalRecordLog: async (_, { userId, status }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const result = await Wrapper.Mutation._setPersonalRecordLog(_, { userId, status }, { user, res });
-    return result;
-  },
-
+  }
 };
 
 

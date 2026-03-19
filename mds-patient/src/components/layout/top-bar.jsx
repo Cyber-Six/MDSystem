@@ -9,7 +9,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [themeMode, setThemeMode] = useState(() => {
     // Initialize from localStorage or default to 'system'
-    return localStorage.getItem('themeMode') || 'system';
+    return localStorage.getItem('patient_themeMode') || 'system';
   });
   const notifRef = useRef(null);
 
@@ -27,7 +27,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
     };
 
     applyTheme(themeMode);
-    localStorage.setItem('themeMode', themeMode);
+    localStorage.setItem('patient_themeMode', themeMode);
 
     // Listen for system theme changes when in system mode
     if (themeMode === 'system') {
@@ -46,7 +46,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
     if (path.includes('/record-update')) return 'Update Record';
     if (path.includes('/appointments')) return 'Appointment';
     if (path.includes('/medicine-request')) return 'Medicine Request';
-    if (path.includes('/e-consultation')) return 'E-Consultation';
+    if (path.includes('/health-chat')) return 'Health Chat';
     if (path.includes('/dashboard') || path === '/') return 'Dashboard';
     return 'MDSystem';
   };
@@ -86,6 +86,9 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
       // Clear e-consultation session data to prevent session leakage across users
       localStorage.removeItem('econsultation_session_id');
       sessionStorage.removeItem('econsultation_initialized');
+      // Clear stored role used for routing
+      localStorage.removeItem('patient_role');
+      localStorage.removeItem('patient_email'); // remove legacy key too
 
       // Call the proper logout function from token service
       // This clears tokens, calls backend logout, and navigates to /auth

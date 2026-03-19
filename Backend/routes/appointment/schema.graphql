@@ -10,6 +10,7 @@ enum LOCATION_DESIGNATION {
 enum SCHEDULING_STATUS {
   Pending
   Scheduled
+  InProgress
   Rejected
   Expired
   Completed
@@ -23,41 +24,50 @@ enum SCHEDULE_SESSION {
   Afternoon
 }
 
+
+enum PATIENT_TYPE {
+  Student
+  Employee
+}
+
 type SlotScheduler {
   id: ID!
   label: String!
   location: LOCATION_DESIGNATION!
+  patientType: PATIENT_TYPE
   schedulePerWeek: [String!]!
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
   isActive: Boolean!
   containsCustomDates: Boolean!
-  whiteListOnly: Boolean
+  whitelistOnly: Boolean
   created_at: Date
 }
 
 input SlotSchedulerInput {
   label: String!
   location: LOCATION_DESIGNATION!
+  patientType: PATIENT_TYPE
   schedulePerWeek: [String!]!
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
   slotCustomDates: [Date!]!
   whiteLists: [ID!]!
-  whiteListOnly: Boolean!
+  whitelistOnly: Boolean!
 }
 
 input SlotSchedulerUpdateInput {
   label: String
   location: LOCATION_DESIGNATION
-  schedulePerWeek: [String!]!
+  patientType: PATIENT_TYPE
+  schedulePerWeek: [String!]
   morningAllowed: Int
   afternoonAllowed: Int
   notes: String
   isActive: Boolean
-  whiteListOnly: Boolean
+  whitelistOnly: Boolean
 }
 
 
@@ -85,15 +95,15 @@ type ScheduleDateEntity{
   afternoonAllowed: Int!
   afternoonRegistered: Int!
   afternoonPending: Int!
-  allowDuring: Date!
+  allowDuring: Boolean!
   scheduledDate: Date!
 }
 
 input ScheduleDateEntityUpdate {
   morningAllowed: Int
   afternoonAllowed: Int
-  allowDuring: Date
-  scheduledDate: Date!
+  allowDuring: Boolean
+  scheduledDate: Date
 }
 
 type ScheduleRequirement {
@@ -127,14 +137,25 @@ input patientScheduleRequirementInput {
 type patientSlot {
   id: ID!
   patientId: ID!
+  patientIdentifier: Int
+  patientName: String
+  patientEmail: String
   slotEntityId: ID!
   status: SCHEDULING_STATUS!
   session: SCHEDULE_SESSION!
+  scheduledDate: Date
+  schedulerLabel: String
   requirements: [patientScheduleRequirement!]!
-  approvedBy: ID
+  approvedBy: String
   notes: String
   arrived_at: Date
+  rejection_acknowledged: Boolean
   created_at: Date!
+}
+
+type StatusCount {
+  status: SCHEDULING_STATUS!
+  count: Int!
 }
 
 input patientSlotInput { # for medical only
@@ -151,25 +172,28 @@ type Query {
   listAppointmentSchedule(schedulerId: ID!, date: Date!): ScheduleDateEntity 
   listAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
 
-  getAppointmentStatus: SCHEDULING_STATUS
+  getAppointmentStatus: patientSlot
   #----------- --^ Patient and --v Medical
   getUserAppointmentStatus(userId: ID!): SCHEDULING_STATUS
 
   getUserAppointmentRecords(userId: ID!, offset: Int, limit: Int): [patientSlot!]
+  resolvePatientByIdentifier(identifier: Int!): ID
 
   listAllOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]
   listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
 
   searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]
+  getAppointmentStatusCounts: [StatusCount!]
 }
 
 # Mutations
 type Mutation {
   submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!): patientSlot
   cancelAppointment: Boolean
+  acknowledgeRejection: Boolean
 
   #----------- --^ Patient and --v Medical
-  respondAppointment(userId: ID!, status: SCHEDULING_STATUS!, notes: String): patientSlot
+  respondAppointment(userId: ID!, slotId: ID, status: SCHEDULING_STATUS!, notes: String): patientSlot
   recordAppointmentAttendance(slotId: ID!, arrived_at: Date!): patientSlot
 
   createScheduler(input: SlotSchedulerInput!): SlotScheduler

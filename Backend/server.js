@@ -23,19 +23,16 @@ const { initPatientEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
+const { initSocket, getIO } = require('./config/sockets');
+require('./config/sockets/health-chat-events'); // Register health chat socket handlers
+const { initPatientMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
+const { initPatientHealthChatGraphQL, initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
-
-// initialize DB
-redis.initRedis().then(() => {
-  logger.info('✅ Redis initialized');
-}).catch((err) => {
-  logger.error('Failed to initialize Redis', {  error: err  });
-});
 
 // Middleware
 app.use(cors());
@@ -66,8 +63,12 @@ app.use((err, req, res, next) => {
 initPatientEMRGraphQL(app);
 initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
+initMedicalAppointmentGraphQL(app);
+initPatientMedicineRequestGraphQL(app);
+initPatientHealthChatGraphQL(app);
+initMedicalHealthChatGraphQL(app);
 
-// AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice
+// AI Medical Chatbot — proxied to MDS-Chatbot microservice
 // Requests to /econsultation/chat/* are forwarded to CHATBOT_URL (localhost or remote)
 app.use('/econsultation/chat', chatbotProxy);
 logger.info(`✅ Chatbot proxy registered at /econsultation/chat → ${process.env.CHATBOT_URL || '(not configured)'}`);
@@ -99,25 +100,35 @@ app.get('*path', (req, res) => {
 
 // =======================================
 // Start server
-const PORT = process.env.PATIENT_PORT || 3001;
+const PORT = process.env.PATIENT_PORT || 3000;
 const HOST = process.env.HOST;
-const server = app.listen(PORT, HOST, () => {
-  logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
-});
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    logger.info('Server closed');
-    process.exit(0);
-  });
-});
+async function start() {
+  await redis.initRedis();
+  logger.info('✅ Redis initialized');
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down gracefully...');
-  server.close(() => {
-    logger.info('Server closed');
-    process.exit(0);
+  const server = app.listen(PORT, HOST, () => {
+    logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
   });
+
+  await initSocket(server);
+
+  // Graceful shutdown
+  function shutdown(signal) {
+    logger.info(`${signal} received, shutting down gracefully...`);
+    const io = getIO();
+    if (io) io.close();
+    server.close(() => {
+      logger.info('Server closed');
+      process.exit(0);
+    });
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
+
+start().catch((err) => {
+  logger.error('Failed to start server:', err);
+  process.exit(1);
 });

@@ -9,7 +9,64 @@ const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
 const { generateDomainCodes } = require("../../../utils/validator.js");
 
+const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
+    require("../../profile/resolvers/wrapper/wrapper.js");
+const { validateUpdateTicket } = require("../resolvers/record-validator.js");
+
+
 const Mutation = {
+  _StaffUpdateTicket: async (_, {args, recordId}, { user, res }) => {
+    let newStatus = args.status;
+    if (newStatus !== "Approved" && newStatus !== "Revision" && newStatus !== "Rejected") {
+      throwGraphQLError(res)
+        .status(400)
+        .message("Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.")
+        .throw();
+      }
+    
+    if (newStatus === 'Approved') { // approval require check again
+      const missingRecords = await validateUpdateTicket(recordId, args.scope);
+      if (missingRecords.length > 0) {
+        throwGraphQLError(res)
+          .status(400)
+          .message(`Cannot submit update ticket. Required records are missing or incomplete: ${missingRecords.join(", ")}`)
+          .throw();
+        }
+      }
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`UPDATE "patientUpdateLog" SET status = $1, notes = $2 WHERE id = $3;`,
+        [newStatus, args.notes, recordId]
+      );
+
+      if (newStatus === 'Approved') {
+        await client.query(
+          `UPDATE "EmergencyNumber" en
+           SET "isVerified" = true
+           FROM "EmergencyContact" ec
+           WHERE (en.id = ec."firstNumber" OR en.id = ec."secondNumber")
+             AND ec.id = $1;`,
+          [recordId]
+        );
+      }
+
+      await reloadCredentialStatus(_, { userId: args.userId, client }, { user, res }); // reload credential status after approval
+      
+      await client.query('COMMIT');
+      logger.info(`User ID ${user.id} updated ticket ID ${recordId} to status ${newStatus}`);
+
+      
+      return newStatus;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error updating ticket status:', error);
+      throwGraphQLError(res).message("Internal server error").status(500).throw();
+    } finally {
+      client.release();
+    }
+  },
+
   _StudentProfile: async (_, {args, recordId}, { user, res }) => {
     let identity = await db.getUserIdentity(user.id);
     if (identity !== "Student") {
@@ -27,9 +84,9 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "student_profile" 
-        (id, program, year)
+        ("profileId", program, year)
        VALUES ($1, $2, $3)
-       ON CONFLICT (id) DO UPDATE
+       ON CONFLICT ("profileId") DO UPDATE
          SET program = EXCLUDED.program,
              year = EXCLUDED.year
              RETURNING *;`,
@@ -46,24 +103,27 @@ const Mutation = {
 
   _EmployeeProfile: async (_, {args, recordId}, { user, res }) => {
     let identity = await db.getUserIdentity(user.id);
-    if (identity !== "Employee") {
+    // Allow 'Medical' users (staff) to create employee profiles as well.
+    if (identity !== "Employee" && identity !== "Medical") {
       throwGraphQLError(res)
         .status(400)
         .message("User identity mismatch. Only employees can create employee profiles.")
         .throw();
       }
-    
+
+    // Always record profile_type as 'Employee' so downstream queries expecting
+    // Employee profile_type continue to work even if the user's identity is 'Medical'.
     await db.query(
       `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
         ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,
-      [recordId, identity]
+      [recordId, "Employee"]
     );
 
     const result = await db.query(
       `INSERT INTO "employee_profile" 
-        (id, department, role, position)
+        ("profileId", department, role, position)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (id) DO UPDATE
+       ON CONFLICT ("profileId") DO UPDATE
          SET department = EXCLUDED.department,
              role = EXCLUDED.role,
              position = EXCLUDED.position
@@ -480,13 +540,12 @@ const Mutation = {
       try {
         const result = await db.queryControlled(
           `INSERT INTO "HospitalizationRecord"
-            ("hospitalizationId", "hospitalName", "reason", "admissionDate", "dischargeDate", "notes")
-           VALUES ($1, $2, $3, $4, $5, $6)
+            ("hospitalizationId", "conditionId", "admissionDate", "dischargeDate", "notes")
+           VALUES ($1, $2, $3, $4, $5)
            RETURNING *;`,
           [
             recordId,
-            hospitalization.hospitalName,
-            hospitalization.reason,
+            hospitalization.conditionId,
             hospitalization.admissionDate,
             hospitalization.dischargeDate || null,
             hospitalization.notes || null
@@ -659,7 +718,7 @@ const Mutation = {
            RETURNING *;`,
           [
             recordId,
-            allergy.allergenId,
+            allergy.allergenCatalogId,
             allergy.status,
             allergy.severity,
             allergy.notes || null,
@@ -672,7 +731,7 @@ const Mutation = {
         if (err.code === '23503') { // foreign key violation
           throwGraphQLError(res)
             .status(400)
-            .message(`Invalid allergenId: ${allergy.allergenId}`)
+            .message(`Invalid allergenCatalogId: ${allergy.allergenCatalogId}`)
             .throw();
         }
         else { throw err; }

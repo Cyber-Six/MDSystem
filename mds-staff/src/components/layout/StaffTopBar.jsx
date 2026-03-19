@@ -11,7 +11,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [themeMode, setThemeMode] = useState(() => {
-    return localStorage.getItem('themeMode') || 'system';
+    return localStorage.getItem('staff_themeMode') || 'system';
   });
   
   const notifRef = useRef(null);
@@ -30,7 +30,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
       }
     };
     applyTheme(themeMode);
-    localStorage.setItem('themeMode', themeMode);
+    localStorage.setItem('staff_themeMode', themeMode);
   }, [themeMode]);
 
   // Get page title - Dashboard shows "Staff Portal", other pages show their name
@@ -101,7 +101,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   };
 
   return (
-    <header className="h-14 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between px-4 sticky top-0 z-30">
+    <header className="h-14 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between px-4 sticky top-0 z-10">
       {/* Left: Menu + Title */}
       <div className="flex items-center gap-3">
         {/* Mobile Menu Button */}

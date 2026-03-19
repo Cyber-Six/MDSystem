@@ -36,7 +36,8 @@ type userProfile{
   province_address: String!
   status: UpdateStatus!
   email: String
-  entityId: ID
+  branch: USER_BRANCH
+  identifier: ID
   updated_at: Date
   created_at: Date
 }
@@ -79,7 +80,7 @@ type BranchIdentifier{
 }
 
 input BranchIdentifierInput{
-  branch: USER_BRANCH!
+  branch: USER_BRANCH
   identifier: ID!
 }
 
@@ -99,10 +100,10 @@ enum UpdateStatus{
 }
 
 enum CredentialStatus{
-  unverified
-  active
-  locked
-  disabled
+  Unverified
+  Active
+  Locked
+  Disabled
 }
 
 # Queries
@@ -117,10 +118,13 @@ type Query {
   getPersonalRecordLogStatus: String # get the update status of the logged in user
   getUserPersonalRecordLogStatus(userId: ID!): String
 
+  getPersonalRecordLog: userProfile
   getUserPersonalRecordLog(userId: ID!, from: Date, offset: Int, limit: Int): [userProfile!]
 
   getBranchIdentifier: BranchIdentifier
   getUserBranchIdentifier(userId: ID!): BranchIdentifier
+
+  getLoginEmail: String # returns the user's login email from UserCredentials (works before initial record is submitted)
 
 }
 
@@ -133,7 +137,7 @@ type Mutation {
 
   updatePersonalRecordLog(userId: ID!, input: userProfileUpdateInput!): userProfile
 
-  createBranchIdentifier(identifier: ID!): BranchIdentifier
+  createBranchIdentifier(input: BranchIdentifierInput!): BranchIdentifier 
   updateUserBranchIdentifier(userId: ID!, input: BranchIdentifierUpdateInput!): BranchIdentifier
 
   setPersonalRecordLog(userId: ID!, status: UpdateStatus!): UpdateStatus

@@ -1,0 +1,129 @@
+scalar Date
+scalar UUID
+
+# Enums matching database
+enum ChatStatus {
+  Open
+  Ongoing
+  Closed
+  Expired
+}
+
+enum PromptType {
+  text
+  file
+  system
+}
+
+enum UserType {
+  Patient
+  Medical
+}
+
+# Types
+type HealthChat {
+  id: ID!
+  patientId: Int!
+  medicalId: Int
+  purpose: String!
+  notes: String
+  status: ChatStatus!
+  session_start: Date
+  session_end: Date
+  consent_logged: Boolean
+  archived_at: Date
+  patient: ChatParticipant
+  medical: ChatParticipant
+  messages: [HealthChatPrompt!]
+  expiresAt: Date
+}
+
+type HealthChatPrompt {
+  id: ID!
+  consultationVirtualId: Int!
+  text: String
+  filename: UUID
+  promptType: PromptType!
+  userId: Int  # Nullable for system messages
+  userType: UserType!
+  stamp: Date!
+  sender: ChatParticipant
+}
+
+type ChatParticipant {
+  id: ID!
+  firstName: String
+  lastName: String
+  email: String
+  identifier: Int
+  branch: String
+}
+
+type HealthChatList {
+  chats: [HealthChat!]!
+  total: Int!
+}
+
+type MessageResult {
+  success: Boolean!
+  message: HealthChatPrompt
+}
+
+type TicketResult {
+  success: Boolean!
+  chat: HealthChat
+  message: String
+}
+
+# Input types
+input CreateTicketInput {
+  purpose: String!
+  notes: String
+}
+
+input SendMessageInput {
+  chatId: ID!
+  text: String
+  filename: UUID
+  promptType: PromptType!
+}
+
+input ApproveTicketInput {
+  chatId: ID!
+  notes: String
+}
+
+input CloseTicketInput {
+  chatId: ID!
+  notes: String
+}
+
+# Queries
+type Query {
+  # Patient queries
+  getMyTickets(status: ChatStatus, offset: Int, limit: Int): HealthChatList!
+  getMyTicket(chatId: ID!): HealthChat
+  getTicketMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
+
+  # Medical queries
+  getPendingTickets(offset: Int, limit: Int): HealthChatList!
+  getActiveTickets(offset: Int, limit: Int): HealthChatList!
+  getAllTickets(status: ChatStatus, offset: Int, limit: Int): HealthChatList!
+  getTicket(chatId: ID!): HealthChat
+  getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
+}
+
+# Mutations
+type Mutation {
+  # Patient mutations
+  createTicket(input: CreateTicketInput!): TicketResult!
+  sendPatientMessage(input: SendMessageInput!): MessageResult!
+  closeMyTicket(chatId: ID!): TicketResult!
+
+  # Medical mutations
+  approveTicket(input: ApproveTicketInput!): TicketResult!
+  rejectTicket(chatId: ID!, reason: String): TicketResult!
+  sendMedicalMessage(input: SendMessageInput!): MessageResult!
+  closeTicket(input: CloseTicketInput!): TicketResult!
+  expireOldTickets: Int!
+}

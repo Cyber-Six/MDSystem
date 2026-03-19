@@ -165,5 +165,15 @@ export const hasCustomPermissions = (staffPerms, roleId, roles = DEFAULT_ROLE_TE
   return JSON.stringify(staffPerms) !== JSON.stringify(role.permissions);
 };
 
+// ─── Helper: detect which template a permissions object matches ───────────
+export const detectRole = (staffPerms) => {
+  for (const template of DEFAULT_ROLE_TEMPLATES) {
+    if (JSON.stringify(staffPerms) === JSON.stringify(template.permissions)) {
+      return template.id;
+    }
+  }
+  return 'custom';
+};
+
 // ─── Available role colors ───────────────────────────────────────────────
 export const ROLE_COLORS = ['error', 'accent', 'primary', 'success', 'purple', 'warning'];

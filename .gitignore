@@ -5,6 +5,7 @@
 # ============================================
 Database/setup.psql
 .MDSystem-Drive/
+*.service
 
 
 # ============================================
@@ -17,6 +18,11 @@ Backend/node_modules/
 Backend/Patients/node_modules/
 Backend/.env
 Backend/commands/
+
+Backend/services/docx-generation/__pycache__/
+Backend/services/docx-generation/templates/
+Backend/services/docx-generation/generated/
+Backend/services/docx-generation/venv/
 
 /media
 media/promoted/
@@ -130,4 +136,6 @@ dist-ssr/
 *.sw?
 Backend/config/data/initialadmin.sql
 
-MDS-AI-Chatbot
+MDS-Chatbot
+
+use_case.md

@@ -1,94 +1,70 @@
 import React, { useState } from 'react';
-import { Checkbox, Input, Textarea, Select } from './form-elements';
+import { Checkbox, Input, Textarea } from './form-elements';
 
-// Immunization/Vaccine options (catalog - can grow over time)
-const immunizationOptions = [
-  { id: 'bcg', label: 'BCG' },
-  { id: 'chickenPox', label: 'Chicken Pox' },
-  { id: 'hepatitisA', label: 'Hepatitis A' },
-  { id: 'hepatitisB', label: 'Hepatitis B' },
-  { id: 'hpv', label: 'HPV' },
-  { id: 'mmr', label: 'MMR' },
-  { id: 'antiTetanus', label: 'Anti-Tetanus' },
-  { id: 'covidVaccine', label: 'COVID Vaccine (1st and 2nd Dose)' },
-  { id: 'covidBooster', label: 'COVID Vaccine Booster' },
-];
+// Allergen type display order
+const ALLERGEN_TYPE_ORDER = ['Food', 'Drug', 'Environmental', 'Insect', 'Chemical', 'Other'];
 
-// COVID Vaccine Types (catalog)
-const covidVaccineTypes = [
-  { id: 'astrazeneca', label: 'Astrazeneca' },
-  { id: 'janssen', label: 'Janssen' },
-  { id: 'moderna', label: 'Moderna' },
-  { id: 'pfizer', label: 'Pfizer' },
-  { id: 'sinovac', label: 'Sinovac' },
-  { id: 'sinopharm', label: 'Sinopharm' },
-  { id: 'sputnik', label: 'Sputnik' },
-];
-
-// Allergy categories (catalog)
-const allergyCategories = [
-  { id: 'beverages', label: 'Beverages' },
-  { id: 'food', label: 'Food' },
-  { id: 'medicine', label: 'Medicine' },
-  { id: 'dustSmoke', label: 'Dust, Smoke' },
-  { id: 'soapsLotions', label: 'Soaps, Lotions, Fabric conditioner' },
-  { id: 'colognePerfume', label: 'Cologne, Perfume' },
-  { id: 'fur', label: 'Fur, Animal hair' },
-];
-
-// Hospitalization reasons (catalog)
-const hospitalizationReasons = [
-  { id: 'vehicleAccident', label: 'Vehicle Accident' },
-  { id: 'sportsInjury', label: 'Sports Injury' },
-  { id: 'fallInjury', label: 'Fall/Slip Injury' },
-  { id: 'workAccident', label: 'Work/School Accident' },
-  { id: 'medicalCondition', label: 'Medical Condition/Illness' },
-  { id: 'surgery', label: 'Scheduled Surgery' },
-  { id: 'other', label: 'Other' },
-];
-
-// Medication categories (catalog)
-const medicationCategories = [
-  { id: 'antibiotics', label: 'Antibiotics' },
-  { id: 'painRelievers', label: 'Pain Relievers' },
-  { id: 'vitamins', label: 'Vitamins/Supplements' },
-  { id: 'maintenance', label: 'Maintenance Medication' },
-  { id: 'contraceptives', label: 'Contraceptives' },
-  { id: 'antiHistamines', label: 'Anti-Histamines' },
-  { id: 'other', label: 'Other' },
-];
-
-const MedicalBackgroundForm = ({ data, onChange }) => {
+/**
+ * MedicalBackgroundForm
+ *
+ * Renders immunizations, allergies, hospitalizations, operations, medications,
+ * lifestyle, and visual acuity sections entirely from backend catalogs.
+ *
+ * Props:
+ *  data                    - medicalBackground form state
+ *  onChange                - update handler
+ *  immunizationCatalog     - [{ id, code, name }]
+ *  allergenCatalog         - [{ id, allergen, type }]
+ *  hospitalizationCatalog  - [{ id, code, name }]
+ *  operationCatalog        - [{ id, code, name }]
+ *  medicationCatalog       - [{ id, code, name }]
+ *  catalogsLoading         - boolean
+ */
+const MedicalBackgroundForm = ({
+  data,
+  onChange,
+  immunizationCatalog = [],
+  allergenCatalog = [],
+  hospitalizationCatalog = [],
+  operationCatalog = [],
+  medicationCatalog = [],
+  catalogsLoading = false,
+}) => {
   const [activeAccordion, setActiveAccordion] = useState('immunizations');
 
   const handleChange = (field, value) => {
     onChange({ ...data, [field]: value });
   };
 
-  const handleImmunizationChange = (vaccine, checked) => {
-    onChange({
-      ...data,
-      immunizations: { ...data.immunizations, [vaccine]: checked },
-    });
+  const handleCatalogToggle = (field, id, checked) => {
+    onChange({ ...data, [field]: { ...data[field], [id]: checked } });
   };
 
-  const handleCovidVaccineTypeChange = (type, checked) => {
-    onChange({
-      ...data,
-      covidVaccineType: { ...data.covidVaccineType, [type]: checked },
-    });
+  const handleAllergyToggle = (allergenId, checked) => {
+    const current = data.allergies?.[allergenId];
+    const severity = (typeof current === 'object' && current?.severity) ? current.severity : 'Unknown';
+    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked, severity } } });
   };
 
-  const handleAllergyChange = (allergyId, checked) => {
-    onChange({
-      ...data,
-      allergies: { ...data.allergies, [allergyId]: checked },
-    });
+  const handleAllergySeverity = (allergenId, severity) => {
+    const current = data.allergies?.[allergenId];
+    const prevChecked = typeof current === 'object' ? !!current?.checked : !!current;
+    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked: prevChecked, severity } } });
   };
 
   const toggleAccordion = (section) => {
     setActiveAccordion(activeAccordion === section ? '' : section);
   };
+
+  const CatalogLoader = () => (
+    <div className="flex items-center gap-2 text-sm text-secondary-500 py-4">
+      <svg className="animate-spin w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+      Loading options...
+    </div>
+  );
 
   const AccordionSection = ({ title, icon, id, children }) => (
     <div className="border-2 border-neutral-200 rounded-xl mb-4 overflow-hidden">
@@ -136,34 +112,22 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
           }
         >
           <p className="text-sm text-secondary-600 mb-4">Select all immunizations/vaccines you have received:</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            {immunizationOptions.map((option) => (
-              <Checkbox
-                key={option.id}
-                label={option.label}
-                checked={data.immunizations?.[option.id] || false}
-                onChange={(e) => handleImmunizationChange(option.id, e.target.checked)}
-              />
-            ))}
-          </div>
-
-          {/* COVID Vaccine Type Selection */}
-          {(data.immunizations?.covidVaccine || data.immunizations?.covidBooster) && (
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <label className="form-label mb-3">Specify COVID Vaccine Type(s):</label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {covidVaccineTypes.map((type) => (
-                  <Checkbox
-                    key={type.id}
-                    label={type.label}
-                    checked={data.covidVaccineType?.[type.id] || false}
-                    onChange={(e) => handleCovidVaccineTypeChange(type.id, e.target.checked)}
-                  />
-                ))}
-              </div>
+          {catalogsLoading ? (
+            <CatalogLoader />
+          ) : immunizationCatalog.length === 0 ? (
+            <p className="text-sm text-secondary-400 italic">No vaccines available.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              {immunizationCatalog.map((vaccine) => (
+                <Checkbox
+                  key={vaccine.id}
+                  label={vaccine.name}
+                  checked={data.immunizations?.[vaccine.id] || false}
+                  onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
+                />
+              ))}
             </div>
           )}
-
           <div className="mt-4">
             <Input
               label="Other Vaccines (specify):"
@@ -215,17 +179,53 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
           {data.hasAllergies === 'Yes' && (
             <div className="mt-4">
               <p className="text-sm text-secondary-600 mb-3">What are you allergic to? (Select all that apply)</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {allergyCategories.map((allergy) => (
-                  <div key={allergy.id} className="flex items-start gap-2">
-                    <Checkbox
-                      label={allergy.label}
-                      checked={data.allergies?.[allergy.id] || false}
-                      onChange={(e) => handleAllergyChange(allergy.id, e.target.checked)}
-                    />
-                  </div>
-                ))}
-              </div>
+              {catalogsLoading ? (
+                <CatalogLoader />
+              ) : allergenCatalog.length === 0 ? (
+                <p className="text-sm text-secondary-400 italic">No allergens available.</p>
+              ) : (
+                <div className="space-y-4">
+                  {ALLERGEN_TYPE_ORDER.filter(type =>
+                    allergenCatalog.some(a => a.type === type)
+                  ).map((type) => (
+                    <div key={type}>
+                      <p className="text-xs font-semibold text-secondary-500 uppercase tracking-wide mb-2">{type}</p>
+                      <div className="space-y-2 ml-2">
+                        {allergenCatalog
+                          .filter(a => a.type === type)
+                          .map((allergen) => {
+                            const allergyVal = data.allergies?.[allergen.id];
+                            const isChecked = typeof allergyVal === 'object' ? !!allergyVal?.checked : !!allergyVal;
+                            const severity = typeof allergyVal === 'object' ? (allergyVal?.severity || 'Unknown') : 'Unknown';
+                            return (
+                              <div key={allergen.id}>
+                                <Checkbox
+                                  label={allergen.allergen}
+                                  checked={isChecked}
+                                  onChange={(e) => handleAllergyToggle(allergen.id, e.target.checked)}
+                                />
+                                {isChecked && (
+                                  <div className="ml-6 mt-1 mb-1">
+                                    <select
+                                      className="form-input text-xs py-1 px-2"
+                                      value={severity}
+                                      onChange={(e) => handleAllergySeverity(allergen.id, e.target.value)}
+                                    >
+                                      <option value="Unknown">Severity: Unknown</option>
+                                      <option value="Mild">Severity: Mild</option>
+                                      <option value="Moderate">Severity: Moderate</option>
+                                      <option value="Severe">Severity: Severe</option>
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="mt-4">
                 <Input
                   label="Other allergies or specify details:"
@@ -280,24 +280,24 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
           {data.hasHospitalization === 'Yes' && (
             <div className="mt-4 space-y-4">
               <div>
-                <label className="form-label mb-2">Reason for Hospitalization:</label>
-                <div className="space-y-2">
-                  {hospitalizationReasons.map((reason) => (
-                    <label key={reason.id} className="flex items-center">
-                      <input
-                        type="radio"
-                        name="hospitalizationReason"
-                        value={reason.id}
-                        checked={data.hospitalizationReason === reason.id}
-                        onChange={(e) => handleChange('hospitalizationReason', e.target.value)}
-                        className="form-checkbox"
+                <label className="form-label mb-2">Reason(s) for Hospitalization: <span className="text-xs text-secondary-500">(Select all that apply)</span></label>
+                {catalogsLoading ? (
+                  <CatalogLoader />
+                ) : hospitalizationCatalog.length === 0 ? (
+                  <p className="text-sm text-secondary-400 italic">No conditions available.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                    {hospitalizationCatalog.map((condition) => (
+                      <Checkbox
+                        key={condition.id}
+                        label={condition.name}
+                        checked={data.hospitalizationConditions?.[condition.id] || false}
+                        onChange={(e) => handleCatalogToggle('hospitalizationConditions', condition.id, e.target.checked)}
                       />
-                      <span className="ml-2 text-secondary-700">{reason.label}</span>
-                    </label>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              
               <div>
                 <Input
                   label="Date of Admission:"
@@ -306,7 +306,6 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
                   onChange={(e) => handleChange('hospitalizationDate', e.target.value)}
                 />
               </div>
-              
               <div>
                 <Textarea
                   label="Additional Notes (optional):"
@@ -362,14 +361,24 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
           {data.hasOperation === 'Yes' && (
             <div className="mt-4 space-y-4">
               <div>
-                <Input
-                  label="What procedure was performed?"
-                  placeholder="e.g., Appendectomy, Cesarean Section..."
-                  value={data.operationProcedure || ''}
-                  onChange={(e) => handleChange('operationProcedure', e.target.value)}
-                />
+                <label className="form-label mb-2">Type of Operation(s): <span className="text-xs text-secondary-500">(Select all that apply)</span></label>
+                {catalogsLoading ? (
+                  <CatalogLoader />
+                ) : operationCatalog.length === 0 ? (
+                  <p className="text-sm text-secondary-400 italic">No procedures available.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                    {operationCatalog.map((procedure) => (
+                      <Checkbox
+                        key={procedure.id}
+                        label={procedure.name}
+                        checked={data.operationConditions?.[procedure.id] || false}
+                        onChange={(e) => handleCatalogToggle('operationConditions', procedure.id, e.target.checked)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-              
               <div>
                 <Input
                   label="Date of Operation:"
@@ -378,7 +387,6 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
                   onChange={(e) => handleChange('operationDate', e.target.value)}
                 />
               </div>
-              
               <div>
                 <Textarea
                   label="Additional Notes (optional):"
@@ -433,25 +441,24 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
           {data.hasMedications === 'Yes' && (
             <div className="mt-4 space-y-4">
               <div>
-                <label className="form-label mb-2">Medication Category:</label>
-                <div className="flex flex-wrap gap-2">
-                  {medicationCategories.map((category) => (
-                    <button
-                      key={category.id}
-                      type="button"
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                        data.medicationCategory === category.id
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-neutral-100 text-secondary-700 hover:bg-neutral-200'
-                      }`}
-                      onClick={() => handleChange('medicationCategory', category.id)}
-                    >
-                      {category.label}
-                    </button>
-                  ))}
-                </div>
+                <label className="form-label mb-2">Select Medication(s): <span className="text-xs text-secondary-500">(Select all that apply)</span></label>
+                {catalogsLoading ? (
+                  <CatalogLoader />
+                ) : medicationCatalog.length === 0 ? (
+                  <p className="text-sm text-secondary-400 italic">No medications available.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                    {medicationCatalog.map((medicine) => (
+                      <Checkbox
+                        key={medicine.id}
+                        label={medicine.name}
+                        checked={data.selectedMedications?.[medicine.id] || false}
+                        onChange={(e) => handleCatalogToggle('selectedMedications', medicine.id, e.target.checked)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-              
               <div>
                 <Textarea
                   label="Reason for taking medication:"
@@ -461,13 +468,13 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
                   rows={2}
                 />
               </div>
-              
               <div>
-                <Input
-                  label="Medication Name(s):"
-                  placeholder="List the medication names..."
-                  value={data.medicationDetails || ''}
-                  onChange={(e) => handleChange('medicationDetails', e.target.value)}
+                <Textarea
+                  label="Additional notes (optional):"
+                  placeholder="Any other medications or details..."
+                  value={data.medicationNotes || ''}
+                  onChange={(e) => handleChange('medicationNotes', e.target.value)}
+                  rows={2}
                 />
               </div>
             </div>
@@ -510,6 +517,28 @@ const MedicalBackgroundForm = ({ data, onChange }) => {
                     className="form-checkbox"
                   />
                   <span className="ml-2">Yes</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="smoker"
+                    value="quit"
+                    checked={data.smoker === 'quit'}
+                    onChange={(e) => handleChange('smoker', e.target.value)}
+                    className="form-checkbox"
+                  />
+                  <span className="ml-2">Yes, But I quit</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="smoker"
+                    value="vape"
+                    checked={data.smoker === 'vape'}
+                    onChange={(e) => handleChange('smoker', e.target.value)}
+                    className="form-checkbox"
+                  />
+                  <span className="ml-2">Vape</span>
                 </label>
               </div>
               {data.smoker === 'yes' && (

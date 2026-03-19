@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, clonePermissions, hasCustomPermissions } from '../role-permissions';
+import { DEFAULT_ROLE_TEMPLATES, clonePermissions, hasCustomPermissions, allActions } from '../role-permissions';
+import { axiosRequest } from '../../../packages-core-adapter.js';
 import PermissionMatrix from './permission-matrix';
 import ActivityLog from './activity-log';
 
@@ -8,11 +9,19 @@ import ActivityLog from './activity-log';
  * Centered modal with 3 tabs: Info, Permissions, Activity Log
  */
 const StaffDetail = ({ staff, onClose, onSave }) => {
+  const isPending = staff.status === 'Pending';
+
   const [activeTab, setActiveTab] = useState('info');
-  const [role, setRole] = useState(staff.role);
-  const [permissions, setPermissions] = useState(clonePermissions(staff.permissions));
-  const [status, setStatus] = useState(staff.status);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [role, setRole] = useState(isPending ? DEFAULT_ROLE_TEMPLATES[1]?.id || 'doctor' : staff.role);
+  const [permissions, setPermissions] = useState(
+    isPending
+      ? clonePermissions(DEFAULT_ROLE_TEMPLATES.find(r => r.id !== 'admin')?.permissions || allActions(false))
+      : clonePermissions(staff.permissions)
+  );
+  const [status, setStatus] = useState(isPending ? 'Active' : staff.status);
+  const [hasChanges, setHasChanges] = useState(isPending); // pending always has unsaved state
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   const isCustom = hasCustomPermissions(permissions, role);
 
@@ -38,9 +47,21 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
     }
   };
 
-  const handleSave = () => {
-    onSave({ ...staff, role, permissions: clonePermissions(permissions), status });
-    setHasChanges(false);
+  const handleSave = async () => {
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      await axiosRequest.put(`/admin/staff/accounts/${staff.id}`, {
+        permissions: clonePermissions(permissions),
+        status,
+      });
+      onSave({ ...staff, role, permissions: clonePermissions(permissions), status });
+      setHasChanges(false);
+    } catch (err) {
+      setSaveError(err.response?.data?.message || 'Failed to save changes. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const tabs = [
@@ -67,13 +88,19 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-secondary-900 dark:text-white truncate">{staff.name}</h3>
-                {isCustom && (
+                {isPending ? (
                   <span className="text-[9px] px-1.5 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium flex-shrink-0">
+                    Pending
+                  </span>
+                ) : isCustom && (
+                  <span className="text-[9px] px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-800 text-secondary-500 dark:text-neutral-400 rounded font-medium flex-shrink-0">
                     Custom
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-secondary-500 dark:text-neutral-400 truncate">{roleTemplate?.name || role} · {staff.email}</p>
+              <p className="text-[11px] text-secondary-500 dark:text-neutral-400 truncate">
+                {isPending ? 'No role assigned yet' : (roleTemplate?.name || role)} · {staff.email}
+              </p>
             </div>
           </div>
           <button
@@ -159,22 +186,28 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                   <h4 className="text-[10px] font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Status</h4>
                 </div>
                 <div className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-secondary-800 dark:text-white">Account Active</p>
-                      <p className="text-[10px] text-secondary-400 dark:text-neutral-500">Suspended accounts cannot log in</p>
+                  {isPending ? (
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                      This account is <span className="font-semibold text-warning-600 dark:text-warning-400">pending</span>. Assign a role and save to grant staff portal access.
+                    </p>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-secondary-800 dark:text-white">Account Active</p>
+                        <p className="text-[10px] text-secondary-400 dark:text-neutral-500">Suspended accounts cannot access the staff portal</p>
+                      </div>
+                      <button
+                        onClick={() => { setStatus(status === 'Active' ? 'Suspended' : 'Active'); setHasChanges(true); }}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${
+                          status === 'Active' ? 'bg-success-500' : 'bg-neutral-300 dark:bg-neutral-600'
+                        }`}
+                      >
+                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${
+                          status === 'Active' ? 'left-5' : 'left-0.5'
+                        }`} />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => { setStatus(status === 'Active' ? 'Suspended' : 'Active'); setHasChanges(true); }}
-                      className={`relative w-10 h-5 rounded-full transition-colors ${
-                        status === 'Active' ? 'bg-success-500' : 'bg-neutral-300 dark:bg-neutral-600'
-                      }`}
-                    >
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${
-                        status === 'Active' ? 'left-5' : 'left-0.5'
-                      }`} />
-                    </button>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -216,20 +249,32 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
         </div>
 
         {/* Footer — Save / Cancel */}
-        {hasChanges && (
-          <div className="px-5 py-2.5 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-end gap-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800/50 rounded-b-xl">
-            <button
-              onClick={() => { setRole(staff.role); setPermissions(clonePermissions(staff.permissions)); setStatus(staff.status); setHasChanges(false); }}
-              className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors"
-            >
-              Discard
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-4 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-            >
-              Save Changes
-            </button>
+        {(hasChanges || saveError) && (
+          <div className="px-5 py-2.5 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800/50 rounded-b-xl">
+            <div className="flex-1 min-w-0">
+              {saveError && (
+                <p className="text-[10px] text-error-600 dark:text-error-400 truncate">{saveError}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {!isPending && (
+                <button
+                  disabled={isSaving}
+                  onClick={() => { setRole(staff.role); setPermissions(clonePermissions(staff.permissions)); setStatus(staff.status); setHasChanges(false); setSaveError(null); }}
+                  className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors disabled:opacity-50"
+                >
+                  Discard
+                </button>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-4 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-60 flex items-center gap-1.5"
+              >
+                {isSaving && <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />}
+                {isPending ? 'Activate Staff Account' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         )}
       </div>

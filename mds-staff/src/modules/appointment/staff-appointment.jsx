@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AppointmentQueue from './components/appointment-queue';
 import AvailabilityManager from './components/availability-manager';
 import AppointmentDetailModal from './components/appointment-detail-modal';
+import PatientLookup from './components/patient-lookup';
 import {
   STATUS,
   SESSION,
@@ -47,6 +48,7 @@ const StaffAppointment = () => {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const queueRef = useRef(null);
 
   // Auto-dismiss feedback messages
   useEffect(() => {
@@ -66,19 +68,24 @@ const StaffAppointment = () => {
     setSelectedAppointment(null);
   };
 
-  const handleConfirm = async (id) => {
+  const handleConfirm = async (userId, slotId) => {
     try {
-      await respondToAppointment(id, STATUS.SCHEDULED);
+      await respondToAppointment(userId, STATUS.SCHEDULED, undefined, slotId);
       setSuccessMsg('Appointment confirmed.');
+      handleCloseModal();
+      queueRef.current?.removeAppointment(slotId, STATUS.SCHEDULED);
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const handleCancel = async (id, reason) => {
+  const handleCancel = async (userId, reason, cancelStatus, slotId) => {
     try {
-      await respondToAppointment(id, STATUS.REJECTED, reason);
-      setSuccessMsg('Appointment rejected.');
+      const status = cancelStatus || STATUS.REJECTED;
+      await respondToAppointment(userId, status, reason, slotId);
+      setSuccessMsg(status === STATUS.REJECTED ? 'Appointment rejected.' : 'Appointment cancelled.');
+      handleCloseModal();
+      queueRef.current?.removeAppointment(slotId, status);
     } catch (err) {
       setError(err.message);
     }
@@ -88,14 +95,22 @@ const StaffAppointment = () => {
     try {
       await recordAttendance(id, new Date().toISOString());
       setSuccessMsg('Attendance recorded.');
+      handleCloseModal();
+      queueRef.current?.removeAppointment(id, STATUS.IN_PROGRESS);
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const handleReschedule = (id) => {
-    // TODO: Implement reschedule flow via updateDateIdentity / respondToAppointment
-    console.log('Reschedule:', id);
+  const handleMarkComplete = async (userId, slotId) => {
+    try {
+      await respondToAppointment(userId, STATUS.COMPLETED, undefined, slotId);
+      setSuccessMsg('Appointment marked as completed.');
+      handleCloseModal();
+      queueRef.current?.removeAppointment(slotId, STATUS.COMPLETED);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   /* ── Section switcher tabs ───────────────────────────────────────────── */
@@ -116,6 +131,15 @@ const StaffAppointment = () => {
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'lookup',
+      label: 'Patient Lookup',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
         </svg>
       ),
     },
@@ -161,11 +185,15 @@ const StaffAppointment = () => {
 
       {/* Content */}
       {activeSection === 'queue' && (
-        <AppointmentQueue onViewDetails={handleViewDetails} />
+        <AppointmentQueue ref={queueRef} onViewDetails={handleViewDetails} />
       )}
 
       {activeSection === 'availability' && (
         <AvailabilityManager />
+      )}
+
+      {activeSection === 'lookup' && (
+        <PatientLookup />
       )}
 
       {/* Appointment Detail Modal */}
@@ -176,7 +204,8 @@ const StaffAppointment = () => {
           onConfirm={handleConfirm}
           onCancel={handleCancel}
           onMarkDone={handleMarkDone}
-          onReschedule={handleReschedule}
+          onMarkComplete={handleMarkComplete}
+          hideHistory
         />
       )}
     </div>

@@ -5,12 +5,14 @@
  */
 
 import { sendGraphQLRequest } from '../../utils/graphql-client';
+import { axiosRequest } from '../../packages-core-adapter';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 export const STATUS = {
   PENDING: 'Pending',
   SCHEDULED: 'Scheduled',
+  IN_PROGRESS: 'InProgress',
   REJECTED: 'Rejected',
   EXPIRED: 'Expired',
   COMPLETED: 'Completed',
@@ -25,7 +27,7 @@ export const SESSION = {
 };
 
 // Active statuses that block a new booking
-export const ACTIVE_STATUSES = [STATUS.PENDING, STATUS.SCHEDULED];
+export const ACTIVE_STATUSES = [STATUS.PENDING, STATUS.SCHEDULED, STATUS.IN_PROGRESS];
 
 // ── Internal helper ──────────────────────────────────────────────────────────
 
@@ -42,10 +44,26 @@ const sendGraphQL = async (query, variables = {}) => {
 export const getAppointmentStatus = async () => {
   const data = await sendGraphQL(`
     query {
-      getAppointmentStatus
+      getAppointmentStatus {
+        id
+        status
+        session
+        notes
+        rejection_acknowledged
+        created_at
+      }
     }
   `);
   return data.getAppointmentStatus;
+};
+
+export const acknowledgeRejection = async () => {
+  const data = await sendGraphQL(`
+    mutation {
+      acknowledgeRejection
+    }
+  `);
+  return data.acknowledgeRejection;
 };
 
 /**
@@ -61,13 +79,14 @@ export const listOpenAppointments = async (offset = 0, limit = 20) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
         notes
         isActive
         containsCustomDates
-        whiteListOnly
+        whitelistOnly
       }
     }
   `, { offset, limit });
@@ -188,3 +207,30 @@ export const cancelAppointment = async () => {
   `);
   return data.cancelAppointment;
 };
+
+// ── Media Staging ────────────────────────────────────────────────────────────
+
+/**
+ * Upload a file to the media staging area.
+ * @param {File} file - Browser File object
+ * @returns {Promise<string>} fileId (UUID) from the staging server
+ */
+export const stageFile = async (file) => {
+  const body = new FormData();
+  body.append('file', file);
+  const response = await axiosRequest.post('/media/stage/', body, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data.fileId;
+};
+
+/**
+ * Remove a previously staged file.
+ * @param {string} fileId - UUID returned by stageFile
+ */
+export const unstageFile = async (fileId) => {
+  if (!fileId) return;
+  await axiosRequest.delete(`/media/unstage/${fileId}`);
+};
+
+

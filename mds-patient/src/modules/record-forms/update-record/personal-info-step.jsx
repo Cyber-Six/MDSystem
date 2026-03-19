@@ -40,6 +40,9 @@ const PersonalInfoStep = ({ formData, onChange }) => {
     onChange({ ...formData, [field]: value });
   };
 
+  // Strip any character that is not a digit, +, -, space, or parenthesis
+  const filterPhone = (val) => val.replace(/[^\d+\-\s()]/g, '');
+
   return (
     <div className="space-y-6">
       {/* School Information Card */}
@@ -55,7 +58,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="mb-6">
           <Select
             label="Program"
             required
@@ -63,60 +66,24 @@ const PersonalInfoStep = ({ formData, onChange }) => {
             value={formData.program || ''}
             onChange={(e) => handleInputChange('program', e.target.value)}
           />
-          <Input
-            label="Department"
-            required
-            placeholder="e.g., College of Engineering"
-            value={formData.department || ''}
-            onChange={(e) => handleInputChange('department', e.target.value)}
-          />
-          <Input
-            label="Student Number"
-            required
-            placeholder="Enter student number"
-            value={formData.studentNumber || ''}
-            onChange={(e) => handleInputChange('studentNumber', e.target.value)}
-          />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Select
-            label="School Year"
-            required
-            options={[
-              { value: '1st Year', label: '1st Year' },
-              { value: '2nd Year', label: '2nd Year' },
-              { value: '3rd Year', label: '3rd Year' },
-              { value: '4th Year', label: '4th Year' },
-              { value: '5th Year', label: '5th Year' }
-            ]}
-            value={formData.schoolYear || ''}
-            onChange={(e) => handleInputChange('schoolYear', e.target.value)}
-          />
-          <Select
-            label="Semester"
-            required
-            options={[
-              { value: '1st Semester', label: '1st Semester' },
-              { value: '2nd Semester', label: '2nd Semester' },
-              { value: 'Summer', label: 'Summer' }
-            ]}
-            value={formData.semester || ''}
-            onChange={(e) => handleInputChange('semester', e.target.value)}
-          />
-          <Select
-            label="Student Category"
-            required
-            options={[
-              { value: 'Regular', label: 'Regular' },
-              { value: 'Irregular', label: 'Irregular' },
-              { value: 'Transferee', label: 'Transferee' },
-              { value: 'Returning', label: 'Returning' }
-            ]}
-            value={formData.studentCategory || ''}
-            onChange={(e) => handleInputChange('studentCategory', e.target.value)}
-          />
-        </div>
+        <Select
+          label="Student Year"
+          required
+          options={[
+            { value: 'Grade11', label: 'Grade 11' },
+            { value: 'Grade12', label: 'Grade 12' },
+            { value: 'Freshman', label: 'Freshman' },
+            { value: 'Sophomore', label: 'Sophomore' },
+            { value: 'Junior', label: 'Junior' },
+            { value: 'Senior', label: 'Senior' },
+            { value: 'Masteral', label: 'Masteral' },
+            { value: 'Doctorate', label: 'Doctorate' }
+          ]}
+          value={formData.schoolYear || ''}
+          onChange={(e) => handleInputChange('schoolYear', e.target.value)}
+        />
       </div>
 
       {/* Emergency Contact Card */}
@@ -156,7 +123,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               placeholder="Contact Number"
               value={formData.emergencyContact1Number || ''}
-              onChange={(e) => handleInputChange('emergencyContact1Number', e.target.value)}
+              onChange={(e) => handleInputChange('emergencyContact1Number', filterPhone(e.target.value))}
             />
           </div>
         </div>
@@ -185,7 +152,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               placeholder="Contact Number"
               value={formData.emergencyContact2Number || ''}
-              onChange={(e) => handleInputChange('emergencyContact2Number', e.target.value)}
+              onChange={(e) => handleInputChange('emergencyContact2Number', filterPhone(e.target.value))}
             />
           </div>
         </div>

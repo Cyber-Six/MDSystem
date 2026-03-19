@@ -1,3 +1,14 @@
+-- Medicine request rejection reason column (added post-initial build)
+ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
+
+-- Role management: insert new permission labels (idempotent)
+INSERT INTO "rolesTable" (label) VALUES
+  ('ALLOW_TO_VIEW_INVENTORY'),
+  ('ALLOW_TO_ADD_INVENTORY'),
+  ('ALLOW_TO_DISPENSE_MEDICINE'),
+  ('ALLOW_TO_APPROVE_MEDICINE_REQUEST')
+ON CONFLICT (label) DO NOTHING;
+
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);
 CREATE INDEX ON "patientUpdateLog"(status);
@@ -61,33 +72,52 @@ VALUES
 INSERT INTO "AllergenCatalog" (type, allergen, "isValid", created_by)
 VALUES
 -- Food Allergies
-('food', 'Seafood', true, 1),
-('food', 'Peanuts', true, 1),
-('food', 'Tree Nuts', true, 1),
-('food', 'Eggs', true, 1),
-('food', 'Milk/Dairy', true, 1),
+('Food', 'Seafood', true, 1),
+('Food', 'Peanuts', true, 1),
+('Food', 'Tree Nuts', true, 1),
+('Food', 'Eggs', true, 1),
+('Food', 'Milk/Dairy', true, 1),
 -- Drug Allergies
-('drug', 'Antibiotics (Penicillin)', true, 1),
-('drug', 'Sulfa Drugs', true, 1),
-('drug', 'NSAIDs (Aspirin, Ibuprofen)', true, 1),
+('Drug', 'Antibiotics (Penicillin)', true, 1),
+('Drug', 'Sulfa Drugs', true, 1),
+('Drug', 'NSAIDs (Aspirin, Ibuprofen)', true, 1),
 -- Environmental Allergies
-('environment', 'Dust Mites', true, 1),
-('environment', 'Mold', true, 1),
-('environment', 'Pollen', true, 1),
-('environment', 'Animal Fur/Dander', true, 1),
+('Environmental', 'Dust Mites', true, 1),
+('Environmental', 'Mold', true, 1),
+('Environmental', 'Pollen', true, 1),
+('Environmental', 'Animal Fur/Dander', true, 1),
 -- Insect Allergies
-('insect', 'Mosquito Bites', true, 1),
-('insect', 'Bee Stings', true, 1),
-('insect', 'Ant Bites', true, 1),
+('Insect', 'Mosquito Bites', true, 1),
+('Insect', 'Bee Stings', true, 1),
+('Insect', 'Ant Bites', true, 1),
 -- Chemical Allergies
-('chemical', 'Latex', true, 1),
-('chemical', 'Nickel/Metal', true, 1),
-('chemical', 'Cleaning Agents', true, 1),
-('chemical', 'Fabric Conditioner', true, 1),
+('Chemical', 'Latex', true, 1),
+('Chemical', 'Nickel/Metal', true, 1),
+('Chemical', 'Cleaning Agents', true, 1),
+('Chemical', 'Fabric Conditioner', true, 1),
 -- Other / Irritant-type
-('other', 'Smoke', true, 1),
-('other', 'Perfume/Cologne', true, 1),
-('other', 'Soaps/Lotions', true, 1);
+('Other', 'Smoke', true, 1),
+('Other', 'Perfume/Cologne', true, 1),
+('Other', 'Soaps/Lotions', true, 1);
+
+INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
+VALUES
+-- Medical Conditions
+('MedicalCondition', 'HEART', 'Heart Condition', 'History of heart-related conditions', true, 1),
+('MedicalCondition', 'HBP', 'High Blood Pressure', 'History of hypertension', true, 1),
+('MedicalCondition', 'EPILEPSY', 'Epilepsy/Seizure', 'History of epilepsy or seizure disorder', true, 1),
+('MedicalCondition', 'PSYCH', 'Psychiatric Illness', 'History of psychiatric condition', true, 1),
+('MedicalCondition', 'ASTHMA', 'Bronchial Asthma', 'Chronic respiratory condition', true, 1),
+('MedicalCondition', 'DIABETES_I', 'Diabetes Type I', 'Insulin-dependent diabetes mellitus', true, 1),
+('MedicalCondition', 'DIABETES_II', 'Diabetes Type II', 'Non-insulin-dependent diabetes mellitus', true, 1),
+('MedicalCondition', 'HEPA', 'Hepatitis A', 'History of Hepatitis A infection', true, 1),
+('MedicalCondition', 'HEPB', 'Hepatitis B', 'History of Hepatitis B infection', true, 1),
+('MedicalCondition', 'HEPC', 'Hepatitis C', 'History of Hepatitis C infection', true, 1),
+('MedicalCondition', 'HEPD', 'Hepatitis D', 'History of Hepatitis D infection', true, 1),
+('MedicalCondition', 'HEPE', 'Hepatitis E', 'History of Hepatitis E infection', true, 1),
+('MedicalCondition', 'AMOEBIASIS', 'Amoebiasis', 'History of amoebic infection', true, 1),
+('MedicalCondition', 'TB', 'Tuberculosis', 'History of pulmonary tuberculosis', true, 1),
+('MedicalCondition', 'TYPHOID', 'Typhoid Fever', 'History of typhoid infection', true, 1);
 
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
@@ -214,3 +244,35 @@ VALUES
 ('System Maintenance Notice', 'The system will be down for maintenance on Saturday, 10:00 PM - 12:00 AM.', 'd6067d73-64e3-4b1a-a593-5a80b70c9120', true),
 ('New Feature Release: Patient Portal', 'We are excited to announce the launch of our new patient portal, allowing you to easily access your medical records and appointments online.', 'a1f5c8e2-3b9d-4c2e-9f8a-7b6d5c4e3f21', true),
 ('COVID-19 Vaccination Drive', 'Join us for our upcoming COVID-19 vaccination drive on Friday, 9:00 AM - 4:00 PM at all branches. Walk-ins welcome!', 'c3e8f9a1-2d4b-4e5f-8a7c-6b5d4e3f2a10', true);
+
+INSERT INTO "rolesTable" (label, data)
+VALUES
+('IS_ADMIN', 'Grants full administrative privileges'),
+('IS_STAFF', 'Marks user as an active staff member'),
+('PRIVILEGED_TO_PERFORM_ON_SUPERIOR', 'Allows actions on superior accounts'),
+
+('ALLOW_TO_APPROVE_EMR', 'Permission to approve electronic medical records'),
+('ALLOW_TO_EDIT_EMR', 'Permission to edit electronic medical records'),
+('ALLOW_TO_VIEW_EMR', 'Permission to view electronic medical records'),
+('ALLOW_TO_SET_DENTAL_RECORD', 'Permission to set dental records'),
+('ALLOW_TO_EDIT_CATALOGS', 'Permission to edit EMR catalogs'),
+
+('ALLOW_TO_APPROVE_PROFILE', 'Permission to approve user profiles'),
+('ALLOW_TO_VIEW_PROFILE', 'Permission to view user profiles'),
+('ALLOW_TO_EDIT_PROFILE', 'Permission to edit user profiles'),
+('ALLOW_TO_UPDATE_EMAIL_IDENTIFIER', 'Permission to update email identifiers'),
+
+('ALLOW_TO_APPROVE_APPOINTMENT', 'Permission to approve appointments'),
+('ALLOW_TO_VIEW_APPOINTMENT', 'Permission to view appointment records'),
+('ALLOW_TO_VIEW_APPOINTMENT_CONFIGURATION', 'Permission to view appointment configuration'),
+('ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION', 'Permission to edit appointment configuration'),
+
+('ALLOW_TO_CRUD_ANNOUNCEMENT', 'Permission to create, read, update, and delete announcements'),
+
+('ALLOW_TO_VIEW_CONSULTATION', 'Permission to view consultations'),
+('ALLOW_TO_EDIT_CONSULTATION', 'Permission to edit consultations'),
+
+('ALLOW_TO_VIEW_INVENTORY', 'Permission to view inventory'),
+('ALLOW_TO_EDIT_INVENTORY', 'Permission to edit inventory'),
+('ALLOW_TO_MANAGE_MEDICINE_REQUESTS', 'Permission to manage medicine requests'),
+('ALLOW_TO_PRESCRIBE', 'Permission to prescribe medicines');

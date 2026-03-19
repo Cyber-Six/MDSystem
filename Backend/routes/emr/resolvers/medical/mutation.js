@@ -1,6 +1,6 @@
 const db  = require("../../../../config/query.js");
-
-const { validateUpdateTicket } = require("../record-validator.js");
+const { findEmailByUserId } = require("../../../../config/query.js");
+const { notifyUser } = require("../../../../config/sockets");
 
 const { assertActiveUpdateTicket } = require("./helper.js");
 const Wrapper = require("../../wrapper/mutation.js");
@@ -12,39 +12,46 @@ const Query = require("./query.js");
 
 const Mutation = {
   staffUpdateTicket: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval, args.userId);
+    const isPermitted = await permit.isMedicalPermitted(
+      user.id,
+      permit.permissions.emr_allow_approval,
+      args.userId
+    );
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to ApproveUpdateTicket`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
+    }
 
+    // Fetch the ticket record
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res);
-    
-    let newStatus = args.status;
-    if (newStatus !== "Approved" && newStatus !== "Revision" && newStatus !== "Rejected") {
-      throwGraphQLError(res)
-        .status(400)
-        .message("Invalid status. Must be 'Approved', 'Revision', or 'Rejected'.")
-        .throw();
-      }
-    
-    if (newStatus === 'Approved') { // approval require check again
-      const missingRecords = await validateUpdateTicket(record.id, record.scope);
-      if (missingRecords.length > 0) {
-        throwGraphQLError(res)
-          .status(400)
-          .message(`Cannot submit update ticket. Required records are missing or incomplete: ${missingRecords.join(", ")}`)
-          .throw();
-        }
-      }
 
-    await db.query(`UPDATE "patientUpdateLog" SET status = $1 WHERE id = $2;`,
-      [newStatus, record.id]
+    // Update the ticket
+    const updateResult = await Wrapper._StaffUpdateTicket(
+      _,
+      { args, recordId: record.id },
+      { user, res }
     );
-    logger.info(`User ID ${user.id} updated ticket ID ${record.id} to status ${newStatus}`);
-    return newStatus;
+
+    // Notify patient about the update ticket status change
+    try {
+      const notification = await notifyUser(args.userId, "updateTicket:statusChanged", {
+        email: await findEmailByUserId(args.userId),
+        recordId: record.id,
+        newStatus: updateResult.status,
+        message: `Your update ticket has been ${updateResult.status.toLowerCase()}.`,
+        subject: "Update Ticket Status Changed"
+      });
+
+      logger.info(`Notification sent to user ${args.userId}: ${notification}`);
+    } catch (error) {
+      logger.error(`Failed to send notification for update ticket status change: ${error.message}`);
+    }
+
+    // Return the updated ticket record
+    return updateResult;
   },
+
 
 
   updateStudentProfile: async (_, args, { user, res }) => {
@@ -321,7 +328,7 @@ const Mutation = {
   // Catalog mutations
   
   createDomainCatalogs: async (_, args, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -330,7 +337,7 @@ const Mutation = {
   },
 
   createAllergenCatalogs: async (_, args, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -339,7 +346,7 @@ const Mutation = {
   },
 
   createOralApplianceCatalogs: async (_, args, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -354,7 +361,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
       
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -369,7 +376,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 
@@ -384,7 +391,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
     console.log(args.input);
 

@@ -6,11 +6,27 @@
 
 import { axiosRequest } from '../../packages-core-adapter';
 
+/**
+ * Fetch a submitted appointment requirement file as a blob object URL.
+ * Endpoint: GET /media/record/appointmentRequirement/:uuid  (JWT: medical)
+ * @param {string} uuid - The filename UUID from patientScheduleRequirement
+ * @returns {Promise<{ blobUrl: string, contentType: string }>}
+ */
+export const fetchRequirementFile = async (uuid) => {
+  const response = await axiosRequest.get(`/media/record/appointmentRequirement/${uuid}`, {
+    responseType: 'blob',
+  });
+  const contentType = response.headers?.['content-type'] || '';
+  const blobUrl = URL.createObjectURL(response.data);
+  return { blobUrl, contentType };
+};
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 export const STATUS = {
   PENDING: 'Pending',
   SCHEDULED: 'Scheduled',
+  IN_PROGRESS: 'InProgress',
   REJECTED: 'Rejected',
   EXPIRED: 'Expired',
   COMPLETED: 'Completed',
@@ -63,9 +79,14 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
       searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit) {
         id
         patientId
+        patientIdentifier
+        patientName
+        patientEmail
         slotEntityId
         status
         session
+        scheduledDate
+        schedulerLabel
         approvedBy
         notes
         arrived_at
@@ -83,10 +104,44 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
 };
 
 /**
+ * Get appointment counts grouped by status (single query).
+ * @returns {Promise<Object>} e.g. { Pending: 5, Scheduled: 10, ... }
+ */
+export const getStatusCounts = async () => {
+  const data = await sendGraphQL(`
+    query GetAppointmentStatusCounts {
+      getAppointmentStatusCounts {
+        status
+        count
+      }
+    }
+  `);
+  const counts = {};
+  for (const { status, count } of data.getAppointmentStatusCounts) {
+    counts[status] = count;
+  }
+  return counts;
+};
+
+/**
  * Get a specific patient's current appointment status.
  * @param {string} userId
  * @returns {Promise<string|null>}
  */
+/**
+ * Resolve a patient's internal userId from their student/employee identifier.
+ * @param {number} identifier - Student or employee ID number
+ * @returns {Promise<string|null>}
+ */
+export const resolvePatientByIdentifier = async (identifier) => {
+  const data = await sendGraphQL(`
+    query ResolvePatientByIdentifier($identifier: Int!) {
+      resolvePatientByIdentifier(identifier: $identifier)
+    }
+  `, { identifier: Number(identifier) });
+  return data.resolvePatientByIdentifier;
+};
+
 export const getPatientStatus = async (userId) => {
   const data = await sendGraphQL(`
     query GetUserAppointmentStatus($userId: ID!) {
@@ -109,6 +164,8 @@ export const getPatientRecords = async (userId, offset = 0, limit = 20) => {
       getUserAppointmentRecords(userId: $userId, offset: $offset, limit: $limit) {
         id
         patientId
+        patientIdentifier
+        patientName
         slotEntityId
         status
         session
@@ -141,13 +198,14 @@ export const listAllSchedulers = async (offset = 0, limit = 50) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
         notes
         isActive
         containsCustomDates
-        whiteListOnly
+        whitelistOnly
         created_at
       }
     }
@@ -178,19 +236,62 @@ export const listAllRequirements = async (schedulerId, offset = 0, limit = 50) =
   return data.listAllAppointmentRequirements;
 };
 
+/**
+ * Get slot availability for a specific scheduler + date.
+ * @param {string} schedulerId
+ * @param {string} date - ISO date string (YYYY-MM-DD)
+ * @returns {Promise<object>} ScheduleDateEntity with morning/afternoon counts
+ */
+export const getScheduleAvailability = async (schedulerId, date) => {
+  const data = await sendGraphQL(`
+    query ListAppointmentSchedule($schedulerId: ID!, $date: Date!) {
+      listAppointmentSchedule(schedulerId: $schedulerId, date: $date) {
+        id
+        slotId
+        morningAllowed
+        morningRegistered
+        morningPending
+        afternoonAllowed
+        afternoonRegistered
+        afternoonPending
+        allowDuring
+        scheduledDate
+      }
+    }
+  `, { schedulerId, date });
+  return data.listAppointmentSchedule;
+};
+
+/**
+ * List custom dates for a scheduler.
+ * @param {string} schedulerId
+ * @param {number} [offset=0]
+ * @param {number} [limit=100]
+ * @returns {Promise<string[]>}
+ */
+export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
+  const data = await sendGraphQL(`
+    query ListCustomDates($schedulerId: ID!, $offset: Int, $limit: Int) {
+      listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit)
+    }
+  `, { schedulerId, offset, limit });
+  return data.listCustomDates;
+};
+
 // ── Mutations — Appointment Responses ────────────────────────────────────────
 
 /**
  * Approve or reject a pending appointment.
  * @param {string} userId
- * @param {'Scheduled'|'Rejected'} status
+ * @param {'Scheduled'|'Rejected'|'CancelledByMedical'|'Completed'} status
  * @param {string} [notes]
+ * @param {string} [slotId] - Preferred: pass the slot ID directly to avoid stale-lookup bugs
  * @returns {Promise<object>} patientSlot
  */
-export const respondToAppointment = async (userId, status, notes) => {
+export const respondToAppointment = async (userId, status, notes, slotId = null) => {
   const data = await sendGraphQL(`
-    mutation RespondAppointment($userId: ID!, $status: SCHEDULING_STATUS!, $notes: String) {
-      respondAppointment(userId: $userId, status: $status, notes: $notes) {
+    mutation RespondAppointment($userId: ID!, $slotId: ID, $status: SCHEDULING_STATUS!, $notes: String) {
+      respondAppointment(userId: $userId, slotId: $slotId, status: $status, notes: $notes) {
         id
         patientId
         status
@@ -198,7 +299,7 @@ export const respondToAppointment = async (userId, status, notes) => {
         notes
       }
     }
-  `, { userId, status, notes });
+  `, { userId, slotId, status, notes });
   return data.respondAppointment;
 };
 
@@ -236,13 +337,14 @@ export const createScheduler = async (input) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
         notes
         isActive
         containsCustomDates
-        whiteListOnly
+        whitelistOnly
         created_at
       }
     }
@@ -263,13 +365,14 @@ export const updateScheduler = async (schedulerId, input) => {
         id
         label
         location
+        patientType
         schedulePerWeek
         morningAllowed
         afternoonAllowed
         notes
         isActive
         containsCustomDates
-        whiteListOnly
+        whitelistOnly
       }
     }
   `, { schedulerId, input });

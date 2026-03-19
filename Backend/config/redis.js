@@ -64,6 +64,74 @@ async function delKey(key) {
   await client.del(key);
 }
 
+// --- Set key helpers (for socket tracking) ---
+
+async function sAddKey(key, member, expireSeconds) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (expireSeconds) {
+    // Single round trip via pipeline
+    await client.multi()
+      .sAdd(key, member)
+      .expire(key, expireSeconds)
+      .exec();
+  } else {
+    await client.sAdd(key, member);
+  }
+}
+
+async function sMembersKey(key) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.sMembers(key);
+}
+
+async function sRemKey(key, member) {
+  if (!client) throw new Error("Redis client not initialized");
+  await client.sRem(key, member);
+}
+
+async function sCardKey(key) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.sCard(key);
+}
+
+// --- List key helpers (for notification queuing) ---
+
+async function rPushKey(key, value) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.rPush(key, value);
+}
+
+async function lRangeKey(key, start, stop) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.lRange(key, start, stop);
+}
+
+async function lTrimKey(key, start, stop) {
+  if (!client) throw new Error("Redis client not initialized");
+  await client.lTrim(key, start, stop);
+}
+
+async function lLenKey(key) {
+  if (!client) throw new Error("Redis client not initialized");
+  return await client.lLen(key);
+}
+
+/**
+ * Atomically read the entire list and delete it in a single MULTI/EXEC transaction.
+ * Prevents double-delivery when two connections flush the same user simultaneously.
+ *
+ * @param {string} key
+ * @returns {Promise<string[]>}
+ */
+async function lRangeDelKey(key) {
+  if (!client) throw new Error("Redis client not initialized");
+  const results = await client.multi()
+    .lRange(key, 0, -1)
+    .del(key)
+    .exec();
+  return results[0] ?? [];
+}
+
 // ------------------------------------------------
 
 async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
@@ -594,16 +662,88 @@ async function decrementMediaStagingCount(userId) {
   return newCount;
 }
 
+const LoginFailureMatrix = {
+  patient: {
+    prefix: "login:patient",
+    failTtl: Number(process.env.PATIENT_LOGIN_FAIL_TTL) || 300,
+    lockdownSeconds: Number(process.env.PATIENT_LOGIN_FAIL_LOCKDOWN_SECONDS) || 300,
+    threshold: Number(process.env.PATIENT_FAILED_LOGIN_THRESHOLD) || 5,
+  },
+  medical: {
+    prefix: "login:staff",
+    failTtl: Number(process.env.STAFF_LOGIN_FAIL_TTL) || 300,
+    lockdownSeconds: Number(process.env.STAFF_LOGIN_FAIL_LOCKDOWN_SECONDS) || 300,
+    threshold: Number(process.env.STAFF_FAILED_LOGIN_THRESHOLD) || 3,
+  },
+};
+
+async function incrementLoginFailure(email, portal) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!LoginFailureMatrix[portal]) throw new Error(`Unknown portal for login failure: ${portal}`);
+  
+  const prefix = LoginFailureMatrix[portal].prefix;
+  const failKey = `${prefix}:fail:${email}`;
+  const count = await client.incr(failKey);
+
+  if (count === 1) { // first failure → set TTL
+    await client.expire(failKey, LoginFailureMatrix[portal].failTtl);
+  }
+
+  const threshold = LoginFailureMatrix[portal].threshold;
+  if (count >= threshold) {
+    const lockdownSeconds = LoginFailureMatrix[portal].lockdownSeconds;
+    await client.set(`${prefix}:lock:${email}`, "1", { EX: lockdownSeconds });
+    logger.warn("Login failure threshold exceeded", { email, portal, count, threshold });
+  }
+
+  return count;
+}
+
+async function isLoginLocked(email, portal) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!LoginFailureMatrix[portal]) throw new Error(`Unknown portal for login lock: ${portal}`);
+  const prefix = LoginFailureMatrix[portal].prefix;
+  const lockKey = `${prefix}:lock:${email}`;
+
+  const exists = await client.exists(lockKey);
+  if (exists !== 1) return 0; // not locked
+
+  const ttl = await client.ttl(lockKey);
+  return ttl > 0 ? ttl : 0; // return remaining lockout time in seconds
+}
 
 // ------------------------------------------------
+
+/**
+ * Returns the raw node-redis client instance.
+ * Useful for calling .duplicate() when creating dedicated pub/sub clients
+ * (e.g., for @socket.io/redis-adapter).
+ * Throws if called before initRedis().
+ *
+ * @returns {import('redis').RedisClientType}
+ */
+function getClient() {
+  if (!client) throw new Error('Redis client not initialized. Call initRedis() first.');
+  return client;
+}
 
 module.exports = {
   connection,
   redisConfig,
   initRedis,
+  getClient,
   setKey,
   getKey,
   delKey,
+  sAddKey,
+  sMembersKey,
+  sRemKey,
+  sCardKey,
+  rPushKey,
+  lRangeKey,
+  lTrimKey,
+  lLenKey,
+  lRangeDelKey,
   setOTP,
   verifyOTP,
   deleteOTP,
@@ -614,7 +754,9 @@ module.exports = {
   deleteEmailAttempts,
   getOTPFailureCount,
   getOTPLockoutTTL,
-  
+  incrementLoginFailure,
+  isLoginLocked,
+
   createVerificationSession,
   getVerificationSession,
   updateConsentInSession,

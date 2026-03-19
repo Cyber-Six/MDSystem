@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup } from './form-elements';
 import { fetchAllMedicalCatalogs } from './medical-history-service';
-import { useBanner } from '../../../context/banner-context';
+import { useBanner } from '../../../context/use-banner.js';
 
 const MedicalHistoryStep = ({ formData, onChange }) => {
   const { clearAllBanners } = useBanner();
@@ -295,7 +295,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
           isOpen={activeAccordion === 'lifestyle'}
           onToggle={toggleAccordion}
         >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Do you smoke?"
               required
@@ -317,17 +317,6 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               ]}
               value={formData.alcohol || ''}
               onChange={(e) => handleInputChange('alcohol', e.target.value)}
-            />
-            <Select
-              label="Do you vape?"
-              required
-              options={[
-                { value: 'Never', label: 'Never' },
-                { value: 'Former', label: 'Former' },
-                { value: 'Current', label: 'Current' }
-              ]}
-              value={formData.vape || ''}
-              onChange={(e) => handleInputChange('vape', e.target.value)}
             />
           </div>
           <div className="mt-4">
@@ -568,7 +557,9 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
             </div>
             {formData.hasHospitalizations === 'yes' && (
               <div className="space-y-4">
-                {catalogs.hospitalizations.length > 0 && (
+                {catalogs.isLoading ? (
+                  <p className="text-sm text-secondary-500 italic">Loading...</p>
+                ) : catalogs.hospitalizations.length > 0 ? (
                   <Select
                     label="Condition requiring hospitalization *"
                     required
@@ -579,6 +570,13 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                     value={formData.hospitalizationCondition || ''}
                     onChange={(e) => handleInputChange('hospitalizationCondition', e.target.value)}
                   />
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-secondary-700">Condition requiring hospitalization *</label>
+                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                      Hospitalization catalog unavailable. Please try again later.
+                    </p>
+                  </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
@@ -642,7 +640,9 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
             </div>
             {formData.hasSurgeries === 'yes' && (
               <div className="space-y-4">
-                {catalogs.operations.length > 0 && (
+                {catalogs.isLoading ? (
+                  <p className="text-sm text-secondary-500 italic">Loading...</p>
+                ) : catalogs.operations.length > 0 ? (
                   <Select
                     label="Type of surgery/operation *"
                     required
@@ -653,6 +653,13 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                     value={formData.surgeryType || ''}
                     onChange={(e) => handleInputChange('surgeryType', e.target.value)}
                   />
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-secondary-700">Type of surgery/operation *</label>
+                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                      Surgery catalog unavailable. Please try again later.
+                    </p>
+                  </div>
                 )}
                 <Input
                   label="Operation Date *"
@@ -689,7 +696,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   name="hasMedications"
                   value="yes"
                   checked={formData.hasMedications === 'yes'}
-                  onChange={(e) => handleInputChange('hasMedications', e.target.value)}
+                  onChange={() => onChange({ ...formData, hasMedications: 'yes', currentMedications: formData.currentMedications?.length ? formData.currentMedications : [{ medicineId: '', description: '' }] })}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
                 <span className="text-sm text-secondary-700">Yes</span>
@@ -700,7 +707,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   name="hasMedications"
                   value="no"
                   checked={formData.hasMedications === 'no'}
-                  onChange={(e) => handleInputChange('hasMedications', e.target.value)}
+                  onChange={() => onChange({ ...formData, hasMedications: 'no', currentMedications: [] })}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
                 <span className="text-sm text-secondary-700">No</span>
@@ -708,82 +715,34 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
             </div>
             {formData.hasMedications === 'yes' && (
               <div className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-secondary-700">Current Medications:</h4>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const currentMeds = formData.currentMedications || [];
-                        handleInputChange('currentMedications', [...currentMeds, { medicineId: '', description: '' }]);
-                      }}
-                      className="px-3 py-1 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700"
-                    >
-                      Add Medication
-                    </button>
+                {catalogs.medications.length > 0 ? (
+                  <Select
+                    label="Medication *"
+                    required
+                    options={catalogs.medications.map(m => ({ value: m.id, label: m.name }))}
+                    value={formData.currentMedications?.[0]?.medicineId || ''}
+                    onChange={(e) => {
+                      const entry = { ...(formData.currentMedications?.[0] || {}), medicineId: e.target.value };
+                      handleInputChange('currentMedications', [entry]);
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-secondary-700">Medication *</label>
+                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                      Medication catalog unavailable. Please try again later.
+                    </p>
                   </div>
-                  {(formData.currentMedications || []).map((medication, index) => (
-                    <div key={index} className="bg-neutral-50 p-3 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Medication #{index + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const meds = [...(formData.currentMedications || [])];
-                            meds.splice(index, 1);
-                            handleInputChange('currentMedications', meds);
-                          }}
-                          className="text-error-600 text-sm hover:underline"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                      <div className="space-y-3">
-                        {catalogs.medications.length > 0 ? (
-                          <Select
-                            label="Medication *"
-                            required
-                            options={catalogs.medications.map(m => ({
-                              value: m.id,
-                              label: m.name
-                            }))}
-                            value={medication.medicineId || ''}
-                            onChange={(e) => {
-                              const meds = [...(formData.currentMedications || [])];
-                              meds[index] = { ...meds[index], medicineId: e.target.value };
-                              handleInputChange('currentMedications', meds);
-                            }}
-                          />
-                        ) : (
-                          <Input
-                            label="Medication Name *"
-                            required
-                            placeholder="e.g., Aspirin, Metformin"
-                            value={medication.medicineId || ''}
-                            onChange={(e) => {
-                              const meds = [...(formData.currentMedications || [])];
-                              meds[index] = { ...meds[index], medicineId: e.target.value };
-                              handleInputChange('currentMedications', meds);
-                            }}
-                          />
-                        )}
-                        <Textarea
-                          label="Description/Dosage"
-                          placeholder="e.g., 500mg twice daily for diabetes"
-                          value={medication.description || ''}
-                          onChange={(e) => {
-                            const meds = [...(formData.currentMedications || [])];
-                            meds[index] = { ...meds[index], description: e.target.value };
-                            handleInputChange('currentMedications', meds);
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  {(!formData.currentMedications || formData.currentMedications.length === 0) && (
-                    <p className="text-sm text-secondary-500 italic">No medications added yet. Click "Add Medication" to start.</p>
-                  )}
-                </div>
+                )}
+                <Textarea
+                  label="Description/Dosage"
+                  placeholder="e.g., 500mg twice daily for diabetes"
+                  value={formData.currentMedications?.[0]?.description || ''}
+                  onChange={(e) => {
+                    const entry = { ...(formData.currentMedications?.[0] || {}), description: e.target.value };
+                    handleInputChange('currentMedications', [entry]);
+                  }}
+                />
                 <Textarea
                   label="Medication Notes (Optional)"
                   placeholder="Any additional information about your medications."

@@ -1,0 +1,20 @@
+# Core
+fastapi>=0.104
+uvicorn>=0.24
+pydantic>=2.5
+python-dotenv>=1.0
+
+# DOCX template rendering
+docxtpl>=0.16
+
+# DOCX → HTML (for PDF conversion)
+mammoth>=1.6
+
+# PDF from HTML (both document PDF export and analytics reports)
+weasyprint>=60
+
+# Chart generation (bar, line, pie charts for documents and reports)
+matplotlib>=3.8
+
+# Jinja2 templating (pulled by FastAPI, pinned for clarity)
+Jinja2>=3.1

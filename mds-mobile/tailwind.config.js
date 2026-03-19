@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  presets: [require('nativewind/preset')],
   content: [
     "./App.{js,jsx,ts,tsx}",
     "./src/**/*.{js,jsx,ts,tsx}"
@@ -37,22 +38,30 @@ module.exports = {
         accent: {
           50: '#eff6ff',
           100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
           400: '#60a5fa',
           500: '#3b82f6',
           600: '#2563eb',
+          700: '#1d4ed8',
         },
         // Success - Green
         success: {
           50: '#f0fdf4',
           100: '#dcfce7',
+          200: '#bbf7d0',
+          300: '#86efac',
           400: '#4ade80',
           500: '#22c55e',
           600: '#16a34a',
+          700: '#15803d',
         },
         // Error - Red
         error: {
           50: '#fef2f2',
           100: '#fee2e2',
+          200: '#fecaca',
+          300: '#fca5a5',
           400: '#f87171',
           500: '#ef4444',
           600: '#dc2626',
@@ -60,9 +69,13 @@ module.exports = {
         },
         // Warning - Orange
         warning: {
+          50: '#fff7ed',
+          100: '#ffedd5',
+          400: '#fb923c',
           500: '#f97316',
+          600: '#ea580c',
         },
-        // Neutral - Warm Stone tones (easy on the eyes)
+        // Neutral - Warm Stone tones
         neutral: {
           50: '#faf9f7',
           100: '#f4f2ef',

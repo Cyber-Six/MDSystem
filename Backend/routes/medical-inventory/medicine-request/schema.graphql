@@ -1,0 +1,91 @@
+scalar Date
+
+enum ItemCategory {
+  Medicine
+  Supply
+}
+
+enum DosageUnit {
+  mg
+  g
+  mcg
+  ml
+  L
+  IU
+}
+
+enum LocationDesignation {
+  Arlegui
+  Casal
+  QuezonCity
+}
+
+enum RequestStatus {
+  InProgress
+  Pending
+  Revision
+  RevisionSubmitted
+  Cancelled
+  Expired
+  Approved
+  Rejected
+}
+
+type AvailableMedicine {
+  id: ID!
+  item_code: String
+  item_name: String
+  category: ItemCategory
+  description: String
+  dosageUnit: DosageUnit
+  dosageValue: Int
+  expiryDate: Date
+  location: LocationDesignation
+}
+
+type MedicineRequest {
+  id: ID!
+  patientId: Int
+  status: RequestStatus
+  purpose: String
+  notes: String
+  approved_by: Int
+  created_at: String
+  items: [MedicineRequestItem]
+}
+
+type MedicineRequestItem {
+  id: ID!
+  batchId: Int
+  medicineId: Int
+  requestId: Int
+  quantity: Int
+}
+
+input MedicineRequestItemInput {
+  batchId: Int
+  medicineId: Int
+  quantity: Int!
+}
+
+
+input CreateMedicineRequestInput {
+  purpose: String!
+  location: LocationDesignation!
+  notes: String
+  items: [MedicineRequestItemInput!]!
+}
+
+type Query {
+  getAvailableMedicine(location: LocationDesignation, offset: Int, limit: Int): [AvailableMedicine!]
+  getMedicineStatus: [MedicineRequest!]
+  getMedicineRequestById(requestId: ID!): MedicineRequest
+  getMedicineRequests(patientId: ID!, offset: Int, limit: Int): [MedicineRequest!]
+  getAllMedicineRequests(status: RequestStatus, location: LocationDesignation, offset: Int, limit: Int): [MedicineRequest!]
+}
+
+type Mutation {
+  createMedicineRequest(input: CreateMedicineRequestInput!): MedicineRequest
+  setStatusMedicineRequest(requestId: ID!, status: RequestStatus!, notes: String): MedicineRequest
+  cancelMedicineRequest: MedicineRequest
+}

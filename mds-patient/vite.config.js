@@ -90,8 +90,29 @@ export default defineConfig(({ mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: true,
+          bypass: function(req) {
+            // Don't proxy GET requests (browser navigation) - let React Router handle them
+            if (req.method === 'GET') {
+              return '/index.html';
+            }
+          },
         },
         '/media': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/profile': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/medical-inventory': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/healthchat': {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: true,

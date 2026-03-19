@@ -3,7 +3,8 @@ const express = require("express");
 const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
 
-const {createVerificationSession, getVerificationSession, deleteVerificationSession } = require("../../../config/redis.js");
+const {createVerificationSession, getVerificationSession, deleteVerificationSession,
+        incrementLoginFailure, isLoginLocked } = require("../../../config/redis.js");
 
 const { verifyRecaptcha } = require("../../../services/recaptcha.js");
 
@@ -11,6 +12,7 @@ const query = require("../../../config/query.js");
 const { verifyPassword, generateRandomKey } = require("../../../utils/security.js");
 
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
+const { permissions: medicalPermissions, isMedicalPermitted } = require("../../../services/permit.js");
 const AuthSession = require("../../../utils/authSession.js");
 const router = express.Router();
 
@@ -18,12 +20,21 @@ const VERIFICATIONKEY_PURPOSE = "2fa";
 
 router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   const { email, password, recaptchaToken } = req.body;
+  const account_type = detectPortalFromSubdomain(req);
 
   // ✅ Required fields
   if (!email || !password || !recaptchaToken) {
     return res.status(400).json({
       error: "MISSING_FIELDS",
       message: "Email, password, and reCAPTCHA token are required."
+    });
+  }
+
+  const loginTtl = await isLoginLocked(email, account_type);
+  if (loginTtl > 0) {
+    return res.status(403).json({
+      error: "ACCOUNT_LOCKED",
+      message: `Too many failed login attempts. Please try in ${loginTtl} seconds.`
     });
   }
 
@@ -47,23 +58,34 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Fetch user
   const user = await query.findUserByEmail(email);
   if (!user) {
+    const count = await incrementLoginFailure(email, account_type);
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
-      message: "Email or password is incorrect."
+      message: `Email or password is incorrect. ${count} failed attempts.`
     });
   }
 
-  // ✅ Password check
-  const passwordValid = await verifyPassword(password, user.password_hash);
-  if (!passwordValid) {
+  // ✅ Check if account type matches portal
+  if (account_type === "medical" && user.identity !== "Medical") {
+    const count = await incrementLoginFailure(email, account_type);
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
-      message: "Email or password is incorrect."
+      message: `Email or password is incorrect. ${count} failed attempts.`
+    });
+  }
+
+  // ✅ Check password
+  const passwordValid = await verifyPassword(password, user.password_hash);
+  if (!passwordValid) {
+    const count = await incrementLoginFailure(email, account_type);
+    await query.recordLoginAttempt(email, false); // record failed attempt
+    return res.status(400).json({
+      error: "INVALID_CREDENTIALS",
+      message: `Email or password is incorrect. ${count} failed attempts.`
     });
   }
 
   // ✅ Create login verification session (always the same purpose)
-  const account_type = detectPortalFromSubdomain(req);
   const verificationKey = await createVerificationSession(email, VERIFICATIONKEY_PURPOSE, account_type);
 
   // ✅ If 2FA is disabled → mark validated inside Redis and return
@@ -118,9 +140,42 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   }
 
   deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
+
+  // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
+  const portal = detectPortalFromSubdomain(req);
+  if (portal === "medical") {
+    const normalizedEmail = String(session.email || '').toLowerCase();
+    if (normalizedEmail.endsWith('.mds@tip.edu.ph')) {
+      const credentialsStatus = await query.getUserCredentialStatus(session.user_id);
+      const isActiveCredential = String(credentialsStatus || '').toLowerCase() === 'active';
+      if (!isActiveCredential) {
+        return res.status(403).json({
+          error: "STAFF_ACCOUNT_NOT_VERIFIED",
+          message: "Please ask your admin to verify your account first.",
+        });
+      }
+    }
+
+    const identity = await query.getUserIdentity(session.user_id);
+    if (identity !== "Medical") {
+      const hasStaffRole = await isMedicalPermitted(session.user_id, medicalPermissions.is_staff);
+      if (hasStaffRole) {
+        return res.status(403).json({
+          error: "STAFF_ACCOUNT_SUSPENDED",
+          message: "Your staff account is currently suspended. Contact your administrator.",
+        });
+      }
+      return res.status(403).json({
+        error: "STAFF_ACCOUNT_PENDING",
+        message: "Your account does not yet have staff access. Ask your administrator to activate your account.",
+      });
+    }
+  }
+
   // ✅ Create actual auth session (JWT, cookie, etc.)
   //const authToken = await query.createAuthToken(session.user_id);
 
+  await query.recordLoginAttempt(session.email, true); // record successful login
   const tokens = await AuthSession.create(req, session.user_id);
   return res.status(200).json({
     ok: true,

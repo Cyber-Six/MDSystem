@@ -17,7 +17,7 @@ const Query = {
     }
 
     const result = await db.query(
-       `SELECT log.id, log.status, log.scope, log.created_at
+       `SELECT log.id, log.status, log.scope, log.notes, log.created_at
         FROM "patientUpdateLog" AS log
         JOIN "Patients" AS p ON p.id = log."patientId"
         WHERE p.id = $1
@@ -34,14 +34,14 @@ const Query = {
       const createdAt = new Date(ticket.created_at).getTime();
 
       if (createdAt >= cutoff || !(await db.isUserValidated(userId))) {
-        return {id: ticket.id, patientId: userId, status: "InProgress", scope: ticket.scope}; 
+        return {id: ticket.id, patientId: userId, status: "InProgress", scope: ticket.scope, notes: ticket.notes}; 
         } // still valid until nth days or the first ticket
 
       await db.setExpiredUpdateTickets(ticket.id); // mark expired
-      return {id: ticket.id, patientId: userId, status: "Expired", scope: ticket.scope};
+      return {id: ticket.id, patientId: userId, status: "Expired", scope: ticket.scope, notes: ticket.notes};
     }
 
-    return {id: ticket?.id, patientId: userId, status: ticket?.status, scope: ticket?.scope}; // return scalar ID
+    return {id: ticket?.id, patientId: userId, status: ticket?.status, scope: ticket?.scope, notes: ticket?.notes}; // return scalar ID
   },
 
 
@@ -53,11 +53,10 @@ const Query = {
     const query = `
       SELECT pr.id, pr.profile_type,
              sp.program, sp.year,
-             sp.guardian_name, sp.guardian_relation, sp.guardian_contact,
              ep.department, ep.role, ep.position,
              pul.created_at, pul."patientId", pul.status
       FROM "profileRecord" pr
-      LEFT JOIN "patientUpdateLog" pul ON pul.id = pr.id
+      JOIN "patientUpdateLog" pul ON pul.id = pr.id
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4
@@ -83,9 +82,6 @@ const Query = {
           profile_type: row.profile_type,
           program: row.program,
           year: row.year,
-          guardian_name: row.guardian_name,
-          guardian_relation: row.guardian_relation,
-          guardian_contact: row.guardian_contact,
           created_at: row.created_at,
           status: row.status,
         };
@@ -305,9 +301,9 @@ const Query = {
 
     for (const row of result.rows) {
       const appliancesQuery = `
-        SELECT status, dateIssued, tagId, arch
+        SELECT id, status, "dateIssued", "tagId", arch
         FROM "OralApplianceRecord"
-        WHERE "oralApplianceId" = $1;
+        WHERE "applianceId" = $1;
       `;
       const ApplianceProfiles = await db.query(appliancesQuery, [row.id]);
       row.appliances = ApplianceProfiles.rows;
@@ -346,10 +342,10 @@ const Query = {
         WHERE "id" = $1 OR "id" = $2
         ORDER BY "id" ASC;
       `;
-      const ContactNumbers = await db.query(numbersQuery, [row.firstNumber, row.secondNumber  ]);
-      const f1 = row.firstNumber > row.secondNumber ? 1 : 0;
-      row.firstContact = ContactNumbers?.rows[f1] || null;
-      row.secondContact = ContactNumbers?.rows[!f1] || null;
+      const ContactNumbers = await db.query(numbersQuery, [row.firstNumber, row.secondNumber]);
+      const numbers = ContactNumbers?.rows || [];
+      row.firstContact = numbers.find(n => n.id === row.firstNumber) || null;
+      row.secondContact = numbers.find(n => n.id === row.secondNumber) || null;
     }
 
     logger.debug("User Emergency Contact with Numbers:", result.rows);
@@ -912,6 +908,7 @@ const Query = {
         latest.created_at   AS latest_updated_at
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
+      JOIN "UserCredentials" uc ON uc.id = up.id
       -- latest personal name snapshot
       LEFT JOIN LATERAL (
         SELECT l.first_name, l.last_name, l.middle_name, l.suffix
@@ -942,14 +939,15 @@ const Query = {
       WHERE
         ($1::text IS NULL OR up.branch::text = $1::text)
         AND (
-          up.identifier ILIKE $2
-          OR (upl.first_name || ' ' || upl.last_name) ILIKE $3
-          OR (upl.last_name  || ', ' || upl.first_name) ILIKE $3
-          OR upl.first_name ILIKE $3
-          OR upl.last_name  ILIKE $3
+          up.identifier::text ILIKE $2
+          OR (COALESCE(upl.first_name, '') || ' ' || COALESCE(upl.last_name, '')) ILIKE $3
+          OR (COALESCE(upl.last_name, '')  || ', ' || COALESCE(upl.first_name, '')) ILIKE $3
+          OR COALESCE(upl.first_name, '') ILIKE $3
+          OR COALESCE(upl.last_name, '') ILIKE $3
+          OR uc.email ILIKE $3
         )
       ORDER BY
-        CASE WHEN up.identifier ILIKE $2 THEN 0 ELSE 1 END,
+        CASE WHEN up.identifier::text ILIKE $2 THEN 0 ELSE 1 END,
         upl.last_name, upl.first_name
       LIMIT $4 OFFSET $5;
     `;

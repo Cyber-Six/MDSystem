@@ -10,28 +10,29 @@ const { initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initMedicalProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { initMedicalConsultationGraphQL } = require('./routes/consultation/consult/graphql.js');
+const { initMedicalInventoryGraphQL } = require('./routes/medical-inventory/inventory/graphql.js');
+const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
+const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
+const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 const staffRoutes = require('./routes/staff/staff.js');
-
+const roleManagementRoutes = require('./routes/staff/rolemanagement.js');
+const mediaRoutes = require('./routes/media/media.js');
+const documentRoutes = require('./routes/documents/documents.js');
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
+const { initSocket, getIO } = require('./config/sockets');
+require('./config/sockets/health-chat-events'); // Register health chat socket handlers
 
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
-
-// initialize DB
-redis.initRedis().then(() => {
-  logger.info('✅ Redis initialized');
-}).catch((err) => {
-  logger.error('Failed to initialize Redis', {  error: err  });
-});
 
 // Middleware
 app.use(cors());
@@ -61,15 +62,22 @@ initMedicalEMRGraphQL(app);
 initMedicalProfileGraphQL(app);
 initMedicalAppointmentGraphQL(app);
 initMedicalConsultationGraphQL(app);
+initMedicalInventoryGraphQL(app);
+initMedicalMedicineRequestGraphQL(app);
+initPrescriptionGraphQL(app);
+initMedicalHealthChatGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
+app.use('/admin/staff', roleManagementRoutes);
+app.use('/media', mediaRoutes);
+app.use('/documents', documentRoutes);
 
 // ======================================
-// AI Medical Chatbot — proxied to MDS-AI-Chatbot microservice
+// AI Medical Chatbot — proxied to MDS-Chatbot microservice
 // Staff routes: JWT validated first, then forwarded with staff identity
 // Patient routes on staff portal are also proxied (for staff-side patient chat views)
 // IMPORTANT: Single mount point so Express doesn't strip the /staff prefix
@@ -97,23 +105,33 @@ app.get('*path', (req, res) => {
 
 const PORT = process.env.MEDICAL_PORT || 3001;
 const HOST = process.env.HOST;
-const server = app.listen(PORT, HOST, () => {
-  logger.info(`⚙️ Server running on ${HOST}:${PORT}`);
-});
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down staff server gracefully...');
-  server.close(() => {
-    logger.info('Staff server closed');
-    process.exit(0);
-  });
-});
+async function start() {
+  await redis.initRedis();
+  logger.info('✅ Redis initialized');
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down staff server gracefully...');
-  server.close(() => {
-    logger.info('Staff server closed');
-    process.exit(0);
+  const server = app.listen(PORT, HOST, () => {
+    logger.info(`⚙️ Staff server running on ${HOST}:${PORT}`);
   });
+
+  await initSocket(server);
+
+  // Graceful shutdown
+  function shutdown(signal) {
+    logger.info(`${signal} received, shutting down staff server gracefully...`);
+    const io = getIO();
+    if (io) io.close();
+    server.close(() => {
+      logger.info('Staff server closed');
+      process.exit(0);
+    });
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
+
+start().catch((err) => {
+  logger.error('Failed to start staff server:', err);
+  process.exit(1);
 });

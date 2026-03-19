@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useState, useEffect, useRef } from 'react';
 import { bannerService } from '../packages-core-adapter.js';
 
 const BannerContext = createContext();
+
+export default BannerContext;
 
 export const BannerProvider = ({ children }) => {
   const [banners, setBanners] = useState([]);
@@ -38,12 +40,4 @@ export const BannerProvider = ({ children }) => {
       {children}
     </BannerContext.Provider>
   );
-};
-
-export const useBanner = () => {
-  const context = useContext(BannerContext);
-  if (!context) {
-    throw new Error('useBanner must be used within a BannerProvider');
-  }
-  return context;
 };
