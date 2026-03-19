@@ -29,6 +29,7 @@ enum RequestStatus {
   Expired
   Approved
   Rejected
+  Completed
 }
 
 type AvailableMedicine {

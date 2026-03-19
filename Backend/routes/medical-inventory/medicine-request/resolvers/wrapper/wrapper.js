@@ -150,9 +150,9 @@ const Mutation = {
   },
 
   _setStatusMedicineRequest: async (_, { requestId, status, approvedBy, notes }, { res }) => {
-    const validStatuses = ["Approved", "Rejected", "Cancelled"];
+    const validStatuses = ["Approved", "Rejected", "Cancelled", "Completed"];
     if (!validStatuses.includes(status)) {
-      throwGraphQLError(res).message("Invalid status. Must be Approved, Rejected, or Cancelled").status(400).throw();
+      throwGraphQLError(res).message("Invalid status. Must be Approved, Rejected, Cancelled, or Completed").status(400).throw();
     }
 
     const current = await db.query(
@@ -162,8 +162,16 @@ const Mutation = {
     if (current.rows.length === 0) {
       throwGraphQLError(res).message("Medicine request not found").status(404).throw();
     }
-    if (current.rows[0].status !== "Pending") {
-      throwGraphQLError(res).message("Only pending requests can be updated").status(400).throw();
+    
+    // Allow transitions: Pending -> Approved/Rejected/Cancelled, Approved -> Completed
+    const currentStatus = current.rows[0].status;
+    const allowedTransitions = {
+      "Pending": ["Approved", "Rejected", "Cancelled"],
+      "Approved": ["Completed", "Rejected"],
+    };
+    
+    if (!allowedTransitions[currentStatus]?.includes(status)) {
+      throwGraphQLError(res).message(`Cannot transition from ${currentStatus} to ${status}`).status(400).throw();
     }
 
     const updateSql = `

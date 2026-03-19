@@ -441,12 +441,17 @@ const MedicalInventory = () => {
       }
 
       const totalQty = itemsPayload.reduce((sum, item) => sum + item.quantity, 0);
+      
+      // Issue prescription
       const prescriptionResult = await issuePrescription({
         patientId: Number(request.patientId),
         requestId: requestId,
         items: itemsPayload,
         notes: notes || `Dispensed for request #${requestId}`,
       });
+
+      // Mark medicine request as Completed in backend
+      await setMedicineRequestStatus(requestId, 'Completed', notes || `Dispensed for request #${requestId}`);
 
       // Decrement batches locally after backend mutation succeeds
       const batchUpdates = {};
