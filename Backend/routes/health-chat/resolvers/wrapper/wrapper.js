@@ -439,17 +439,18 @@ const Mutation = {
 
     // Check if ticket is still pending
     const checkResult = await db.query(
-      `SELECT status FROM "HealthChat" WHERE id = $1`,
+      `SELECT status, id FROM "HealthChat" WHERE id = $1`,
       [chatId]
     );
 
     if (checkResult.rowCount === 0) {
-      throwGraphQLError(res).message("Ticket not found").status(404).throw();
+      throwGraphQLError(res).message(`Ticket with ID ${chatId} not found`).status(404).throw();
     }
 
-    if (checkResult.rows[0].status !== 'Open') {
+    const currentStatus = checkResult.rows[0].status;
+    if (currentStatus !== 'Open') {
       throwGraphQLError(res)
-        .message("Ticket is not in pending state")
+        .message(`Ticket cannot be approved. Current status: ${currentStatus}. Only tickets with status 'Open' can be approved.`)
         .status(400)
         .throw();
     }

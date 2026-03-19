@@ -38,6 +38,12 @@ export function useHealthChatSocket() {
       getToken: () => tokenService.TokenStorage.getAccessToken(),
       onAuthError: async () => {
         await tokenService.refreshAccessToken();
+      },
+      options: {
+        reconnectionDelay: 500,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+        transports: ['websocket', 'polling'],
       }
     });
 
@@ -74,7 +80,9 @@ export function useHealthChatSocket() {
       });
     }).catch((err) => {
       console.error('[HealthChatSocket] Connection failed:', err);
+      console.error('[HealthChatSocket] Details:', err.message);
       setIsConnected(false);
+      // Note: Socket.io client will auto-retry based on reconnectionAttempts
     });
 
     // Cleanup on unmount
