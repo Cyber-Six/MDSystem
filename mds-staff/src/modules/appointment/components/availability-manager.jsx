@@ -38,11 +38,8 @@ const AvailabilityManager = () => {
 
   // Derive slot defaults from the active scheduler
   const slotDefaults = activeScheduler
-    ? {
-        medical: { morning: activeScheduler.morningAllowed, afternoon: activeScheduler.afternoonAllowed },
-        dental: { morning: 1, afternoon: 1 },
-      }
-    : { medical: { morning: 60, afternoon: 60 }, dental: { morning: 1, afternoon: 1 } };
+    ? { morning: activeScheduler.morningAllowed, afternoon: activeScheduler.afternoonAllowed }
+    : { morning: 60, afternoon: 60 };
 
   // Load schedulers from API
   const loadSchedulers = useCallback(async (preserveId = null) => {

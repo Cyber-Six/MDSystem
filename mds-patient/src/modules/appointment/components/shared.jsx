@@ -9,8 +9,6 @@ export const Spinner = () => (
 
 export const STEP_LABELS = ['Select Type', 'Date & Session', 'Requirements', 'Review & Submit'];
 
-export const DAY_INDEX = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
-
 export const statusColor = (status) => {
   const map = {
     Pending: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',

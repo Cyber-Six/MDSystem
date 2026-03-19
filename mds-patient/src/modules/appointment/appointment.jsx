@@ -25,7 +25,7 @@ import InfoCard from './components/InfoCard';
 
 const PatientAppointment = () => {
   // Top-level state
-  const [currentStatus, setCurrentStatus] = useState(null);
+  const [currentAppointment, setCurrentAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -74,7 +74,7 @@ const PatientAppointment = () => {
     try {
       const record = await getAppointmentStatus();
       const status = record?.status ?? null;
-      setCurrentStatus(status);
+      setCurrentAppointment(record);
 
       if (status === STATUS.REJECTED) {
         setRejectionRecord(record);
@@ -230,8 +230,8 @@ const PatientAppointment = () => {
       )}
 
       {/* ── Active Appointment Card ─────────────────────────────────────────── */}
-      {currentStatus && ACTIVE_STATUSES.includes(currentStatus) ? (
-        <ActiveAppointmentCard currentStatus={currentStatus} onCancel={handleCancel} cancelling={cancelling} />
+      {currentAppointment && ACTIVE_STATUSES.includes(currentAppointment.status) ? (
+        <ActiveAppointmentCard appointment={currentAppointment} onCancel={handleCancel} cancelling={cancelling} />
       ) : rejectionRecord && !rejectionAcknowledged ? (
         /* ── Rejection Notice ────────────────────────────────────────────────── */
         <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-lg p-6">

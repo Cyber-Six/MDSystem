@@ -34,26 +34,24 @@ const SchedulerPicker = ({ schedulers, onSelect }) => (
                     {s.patientType === 'Employee' ? 'Employees' : 'Students'}
                   </span>
                 )}
-                  )}
-                </div>
               </div>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{s.location}</p>
-              <div className="flex flex-wrap gap-1 mb-2">
-                {s.schedulePerWeek?.map((day) => (
-                  <span key={day} className="px-2 py-0.5 text-xs bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded">
-                    {day.slice(0, 3)}
-                  </span>
-                ))}
-              </div>
-              <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                <span>AM: {s.morningAllowed} slots</span>
-                <span className="mx-2">|</span>
-                <span>PM: {s.afternoonAllowed} slots</span>
-              </div>
-              {s.notes && <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-2 italic">{s.notes}</p>}
-            </button>
-          );
-        })}
+            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{s.location}</p>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {s.schedulePerWeek?.map((day) => (
+                <span key={day} className="px-2 py-0.5 text-xs bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded">
+                  {day.slice(0, 3)}
+                </span>
+              ))}
+            </div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400">
+              <span>AM: {s.morningAllowed} slots</span>
+              <span className="mx-2">|</span>
+              <span>PM: {s.afternoonAllowed} slots</span>
+            </div>
+            {s.notes && <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-2 italic">{s.notes}</p>}
+          </button>
+        ))}
       </div>
     )}
   </div>

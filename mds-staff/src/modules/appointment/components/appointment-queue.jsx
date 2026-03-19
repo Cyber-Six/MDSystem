@@ -4,6 +4,7 @@ import { searchByStatus, getStatusCounts } from '../staff-appointment-service';
 /* ── constants ─────────────────────────────────────── */
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const STATUS_STYLES = {
   Pending:             'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
@@ -44,6 +45,7 @@ const formatCount = (count) => {
 const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [activeTab,   setActiveTab]   = useState('Pending');
   const [search,      setSearch]      = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [tabCounts,    setTabCounts]    = useState({});
@@ -53,6 +55,14 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [offset,      setOffset]      = useState(0);
   const [hasMore,     setHasMore]     = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   /** Fetch fresh status counts from server */
   const refreshCounts = useCallback(async () => {
@@ -75,9 +85,9 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       setAppointments((prev) => prev.filter((a) => a.id !== id));
       setTabCounts((prev) => {
         const updated = { ...prev };
-        // Decrement old status count
-        if (updated[activeTab] !== undefined) {
-          updated[activeTab] = Math.max(0, (updated[activeTab] || 1) - 1);
+        // Decrement old status count (current active tab)
+        if (updated[activeTab] !== undefined && updated[activeTab] > 0) {
+          updated[activeTab] = updated[activeTab] - 1;
         }
         // Increment new status count (always increment, even if was 0/undefined)
         if (newStatus) {
@@ -143,8 +153,8 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
 
   /* Client-side search filter on patientIdentifier / name / email */
   const rows = useMemo(() => {
-    if (!search.trim()) return appointments;
-    const q = search.toLowerCase();
+    if (!debouncedSearch.trim()) return appointments;
+    const q = debouncedSearch.toLowerCase();
     return appointments.filter((a) =>
       String(a.patientIdentifier ?? '').includes(q) ||
       String(a.patientId ?? '').includes(q) ||
@@ -152,7 +162,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       (a.patientEmail ?? '').toLowerCase().includes(q) ||
       (a.id ?? '').toLowerCase().includes(q)
     );
-  }, [appointments, search]);
+  }, [appointments, debouncedSearch]);
 
   /* Allow clicking the active tab to refresh data */
   const handleTabChange = (key) => {
