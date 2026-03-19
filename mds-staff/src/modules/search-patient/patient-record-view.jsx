@@ -294,11 +294,6 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       diagnosis: entry?.diagnosis || 'General consultation',
       diagnoses: Array.isArray(entry?.diagnoses) ? entry.diagnoses : [],
       doctor: entry?.doctor || 'Clinic Staff',
-      vitalSigns: {
-        bp: entry?.vitalSigns?.bp || '',
-        temp: entry?.vitalSigns?.temp || '',
-        heartRate: entry?.vitalSigns?.heartRate || '',
-      },
       treatment: entry?.treatment || '',
       notes: entry?.notes || '',
     };

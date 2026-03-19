@@ -93,28 +93,7 @@ export default function PatientConsultationHistoryTab({ patient, consultations: 
                 </div>
               )}
 
-              {/* Row 3: vitals inline strip (if present) */}
-              {consult.vitalSigns && (
-                <div className="flex items-center gap-4 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-700/60">
-                  {consult.vitalSigns.bp && (
-                    <span className="text-xs text-secondary-600 dark:text-neutral-300">
-                      <span className="text-secondary-400 dark:text-neutral-500">BP </span>{consult.vitalSigns.bp}
-                    </span>
-                  )}
-                  {consult.vitalSigns.temp && (
-                    <span className="text-xs text-secondary-600 dark:text-neutral-300">
-                      <span className="text-secondary-400 dark:text-neutral-500">Temp </span>{consult.vitalSigns.temp}°C
-                    </span>
-                  )}
-                  {consult.vitalSigns.heartRate && (
-                    <span className="text-xs text-secondary-600 dark:text-neutral-300">
-                      <span className="text-secondary-400 dark:text-neutral-500">HR </span>{consult.vitalSigns.heartRate} bpm
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Row 4: treatment + notes */}
+              {/* Row 3: treatment + notes */}
               {(consult.treatment || consult.notes) && (
                 <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-700/60">
                   {consult.treatment && (
