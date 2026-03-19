@@ -52,8 +52,8 @@ type HealthChatPrompt {
 
 type ChatParticipant {
   id: ID!
-  firstName: String!
-  lastName: String!
+  firstName: String
+  lastName: String
   email: String
   identifier: Int
   branch: String
