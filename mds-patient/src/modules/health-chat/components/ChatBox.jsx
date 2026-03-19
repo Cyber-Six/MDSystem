@@ -1,5 +1,5 @@
 import React from 'react';
-import { Send, AlertCircle, Heart, X, Lock, RefreshCw } from 'lucide-react';
+import { Send, AlertCircle, Heart, X, Lock, RefreshCw, Clock } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
 import { FileAttachButton, FilePreview } from './FileAttachment';
@@ -28,7 +28,8 @@ const ChatBox = ({
   attachedFile,
   onFileStaged,
   onFileRemoved,
-  isSocketConnected
+  isSocketConnected,
+  socketError
 }) => {
   // Determine if input should be disabled
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
@@ -104,11 +105,11 @@ const ChatBox = ({
       <div className="flex-1 overflow-y-auto bg-white dark:bg-neutral-900">
         <div className="px-6 py-6 space-y-4">
           {/* Socket connection issue warning */}
-          {!isSocketConnected && !isInitializing && isActive && (
+          {(!isSocketConnected || socketError) && !isInitializing && isActive && (
             <div className="flex items-center gap-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
               <div className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
               <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
-                Connection issue - using manual refresh
+                {socketError ? 'Connection error - using manual refresh' : 'Connecting - using manual refresh'}
               </span>
               <button
                 onClick={onRefresh}
@@ -155,18 +156,6 @@ const ChatBox = ({
                     {formatTime(ticketCreatedAt)}
                   </p>
                 )}
-              </div>
-            </div>
-          )}
-
-          {/* Pending status indicator after initial message */}
-          {isPending && (
-            <div className="flex justify-center my-4">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-                  Waiting for staff to accept your request
-                </span>
               </div>
             </div>
           )}
@@ -223,8 +212,8 @@ const ChatBox = ({
         {/* Pending state message */}
         {isPending && (
           <div className="flex items-center justify-center gap-2 text-amber-600 dark:text-amber-400 py-2">
-            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm">Waiting for staff approval...</span>
+            <Clock className="w-4 h-4" />
+            <span className="text-sm">Waiting for staff approval</span>
           </div>
         )}
 

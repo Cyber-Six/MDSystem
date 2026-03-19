@@ -49,7 +49,7 @@ export function HealthChatProvider({ children }) {
       setMessagesLoading(true);
       setError(null);
       const fetchedMessages = await getMessages(selectedChatId);
-      setMessages(fetchedMessages);
+      setMessages(fetchedMessages || []);
     } catch (err) {
       console.error('[HealthChatContext] Failed to refresh messages:', err);
       setError(err.message || 'Failed to refresh messages');
@@ -117,7 +117,7 @@ export function HealthChatProvider({ children }) {
     try {
       setMessagesLoading(true);
       const fetchedMessages = await getMessages(chatId);
-      setMessages(fetchedMessages);
+      setMessages(fetchedMessages || []);
     } catch (err) {
       console.error('[HealthChatContext] Failed to load messages:', err);
       setError(err.message || 'Failed to load messages');
@@ -189,18 +189,35 @@ export function HealthChatProvider({ children }) {
   const approveTicket = useCallback(async (chatId, notes = null) => {
     try {
       const result = await approveTicketService(chatId, notes);
-      if (result.success) {
-        // Remove from pending list, add to active
-        removeTicket(chatId);
-        // Refresh to get updated lists
-        refreshTickets();
+      if (result.success && result.chat) {
+        // Remove from current (pending) list
+        setTickets(prev => prev.filter(t => String(t.id) !== String(chatId)));
+        setTicketsTotal(prev => Math.max(0, prev - 1));
+
+        // Update selected ticket with new data if it's currently selected
+        if (String(chatId) === String(selectedChatId)) {
+          setSelectedTicket(result.chat);
+          // Reload messages to show system approval message
+          const fetchedMessages = await getMessages(chatId);
+          setMessages(fetchedMessages || []);
+        }
+
+        // Switch to active filter
+        setFilter('active');
+
+        // Add the approved ticket to the active list
+        // Use setTimeout to ensure filter state has propagated
+        setTimeout(() => {
+          setTickets(prev => [result.chat, ...prev]);
+          setTicketsTotal(prev => prev + 1);
+        }, 100);
       }
       return result;
     } catch (err) {
       console.error('[HealthChatContext] Failed to approve ticket:', err);
       throw err;
     }
-  }, [removeTicket, refreshTickets]);
+  }, [selectedChatId]);
 
   /**
    * Reject a ticket
@@ -249,7 +266,7 @@ export function HealthChatProvider({ children }) {
         // Reload messages to show system message
         if (String(chatId) === String(selectedChatId)) {
           const fetchedMessages = await getMessages(chatId);
-          setMessages(fetchedMessages);
+          setMessages(fetchedMessages || []);
         }
       }
       return result;

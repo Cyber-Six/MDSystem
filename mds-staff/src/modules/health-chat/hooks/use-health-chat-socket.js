@@ -27,10 +27,23 @@ export function useHealthChatSocket() {
     addMessage,
     addTicket,
     updateTicketStatus,
+    removeTicket,
     setUserTyping,
     refreshTickets,
-    setSocketError
+    setSocketError,
+    filter
   } = useHealthChat();
+
+  // Use refs for callbacks to avoid socket reconnection on every filter change
+  const refreshTicketsRef = useRef(refreshTickets);
+  const removeTicketRef = useRef(removeTicket);
+  const filterRef = useRef(filter);
+
+  useEffect(() => {
+    refreshTicketsRef.current = refreshTickets;
+    removeTicketRef.current = removeTicket;
+    filterRef.current = filter;
+  }, [refreshTickets, removeTicket, filter]);
 
   // Connect on mount
   useEffect(() => {
@@ -84,8 +97,13 @@ export function useHealthChatSocket() {
       // Listen for ticket status changes by other staff (approve/reject)
       socketService.on('healthchat:ticket-status-changed', (data) => {
         if (data.chatId && data.status) {
-          // Refresh the tickets list to reflect the change
-          refreshTickets();
+          // If ticket was approved (now Ongoing) and we're viewing pending, remove it
+          if (data.status === 'Ongoing' && filterRef.current === 'pending') {
+            removeTicketRef.current(data.chatId);
+          } else {
+            // Otherwise refresh to get updated data
+            refreshTicketsRef.current();
+          }
         }
       });
     }).catch((err) => {
@@ -93,8 +111,6 @@ export function useHealthChatSocket() {
       console.error('[HealthChatSocket] Details:', err.message);
       setIsConnected(false);
       setSocketError(true);
-      // Note: Socket.io client will auto-retry based on reconnectionAttempts
-      // Users can still use HTTP requests to fetch messages
     });
 
     // Cleanup on unmount
@@ -110,7 +126,7 @@ export function useHealthChatSocket() {
         setIsConnected(false);
       }
     };
-  }, [addMessage, addTicket, updateTicketStatus, setUserTyping, refreshTickets, setSocketError]);
+  }, [addMessage, addTicket, updateTicketStatus, setUserTyping, setSocketError]);
 
   // Join room when chat is selected
   useEffect(() => {

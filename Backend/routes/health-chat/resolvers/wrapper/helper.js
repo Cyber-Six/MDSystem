@@ -38,8 +38,8 @@ async function getParticipantInfo(userId) {
   const result = await db.query(
     `SELECT
       uc.id,
-      up.first_name AS "firstName",
-      up.last_name AS "lastName",
+      COALESCE(up.first_name, 'Unknown') AS "firstName",
+      COALESCE(up.last_name, 'User') AS "lastName",
       uc.email,
       up.identifier,
       up.branch
