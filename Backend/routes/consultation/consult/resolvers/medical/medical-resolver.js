@@ -94,21 +94,21 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    return await Wrapper.Query._getIcdViaCode(code);
+    return await Wrapper.Query._getIcdViaCode(_, { code }, { user, res });
   },
 
   getIcdViaTitle: async (_, { title }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getIcdViaTitle(title);
+    return await Wrapper.Query._getIcdViaTitle(_, { title }, { user, res });
   },
 
   getIcdDetails: async (_, { id }, { user, res }) => {
      if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getIcdDetails(id);         
+    return await Wrapper.Query._getIcdDetails(_, { id }, { user, res });
   }
 };
 
