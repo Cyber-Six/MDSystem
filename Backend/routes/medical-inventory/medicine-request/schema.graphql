@@ -62,6 +62,7 @@ type MedicineRequestItem {
   medicineId: Int
   requestId: Int
   quantity: Int
+  itemName: String
 }
 
 input MedicineRequestItemInput {

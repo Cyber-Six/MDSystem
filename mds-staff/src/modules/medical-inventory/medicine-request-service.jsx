@@ -57,6 +57,7 @@ export const fetchPatientMedicineRequests = async (patientId, offset = 0, limit 
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }`,
@@ -89,6 +90,7 @@ export const fetchAllMedicineRequests = async (status = null, offset = 0, limit 
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }`,
@@ -119,6 +121,7 @@ export const fetchMedicineRequestById = async (requestId) => {
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }`,
@@ -154,6 +157,7 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }`,
