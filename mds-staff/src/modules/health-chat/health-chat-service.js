@@ -255,23 +255,7 @@ export const approveTicket = async (chatId, notes = null) => {
         message
         chat {
           id
-          patientId
-          medicalId
-          purpose
-          notes
           status
-          session_start
-          expiresAt
-          patient {
-            id
-            firstName
-            lastName
-          }
-          medical {
-            id
-            firstName
-            lastName
-          }
         }
       }
     }
