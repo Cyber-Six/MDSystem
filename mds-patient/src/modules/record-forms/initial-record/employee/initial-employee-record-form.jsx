@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProgressStepper from '../medical/progress-stepper';
 import EmployeePersonalInfoForm from './personal-info';
@@ -22,9 +22,11 @@ import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer
  */
 const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData = null, isRevision = false }) => {
   const navigate = useNavigate();
+  const formContentRef = useRef(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState([]);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [dbErrors, setDbErrors] = useState([]);
   const [showDbErrorModal, setShowDbErrorModal] = useState(false);
@@ -260,6 +262,73 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
   };
 
   /**
+   * Maps validation error messages to field-level errors for a specific step
+   */
+  const extractFieldErrorsForStep = (stepIndex, validationErrors) => {
+    const stepErrors = validationErrors.filter(err => err.sectionIndex === stepIndex);
+    const errors = {};
+
+    stepErrors.forEach(err => {
+      const msg = err.message.toLowerCase();
+
+      // Personal Information (Step 0)
+      if (stepIndex === 0) {
+        if (msg.includes('surname')) errors.surname = err.message;
+        if (msg.includes('first name') || msg.includes('given name')) errors.firstName = err.message;
+        if (msg.includes('birthday') || msg.includes('date of birth')) errors.birthday = err.message;
+        if (msg.includes('gender') && !msg.includes('emergency')) errors.gender = err.message;
+        if (msg.includes('civil status')) errors.civilStatus = err.message;
+        if (msg.includes('nationality')) errors.nationality = err.message;
+        if (msg.includes('contact number') && !msg.includes('emergency')) errors.contactNumber = err.message;
+        if (msg.includes('address') && !msg.includes('emergency')) errors.address = err.message;
+        if (msg.includes('employee id')) errors.employeeId = err.message;
+        if (msg.includes('department')) errors.department = err.message;
+        if (msg.includes('employment category') && !msg.includes('specify')) errors.employmentCategory = err.message;
+        if (msg.includes('specify') && msg.includes('employment category')) errors.employmentCategoryOther = err.message;
+        if (msg.includes('employment status')) errors.employmentStatus = err.message;
+        if (msg.includes('campus branch') || msg.includes('branch')) errors.branch = err.message;
+        if (msg.includes('emergency contact name') && !msg.includes('additional')) errors.emergencyContact1Name = err.message;
+        if (msg.includes('emergency contact relationship') && !msg.includes('additional')) errors.emergencyContact1Relationship = err.message;
+        if (msg.includes('emergency contact address') && !msg.includes('additional')) errors.emergencyContact1Address = err.message;
+        if (msg.includes('emergency contact number') && !msg.includes('additional')) errors.emergencyContact1ContactNumber = err.message;
+        if (msg.includes('additional emergency contact name')) errors.emergencyContact2Name = err.message;
+        if (msg.includes('additional emergency contact relationship')) errors.emergencyContact2Relationship = err.message;
+        if (msg.includes('additional emergency contact address')) errors.emergencyContact2Address = err.message;
+        if (msg.includes('additional emergency contact number')) errors.emergencyContact2ContactNumber = err.message;
+      }
+
+      // Medical Background (Step 2)
+      if (stepIndex === 2) {
+        if (msg.includes('hospitalization question')) errors.hasHospitalization = err.message;
+        if (msg.includes('surgery') || msg.includes('operation question')) errors.hasOperation = err.message;
+      }
+
+      // Dental History (Step 3)
+      if (stepIndex === 3) {
+        if (msg.includes('first time dentist')) errors.firstTimeDentist = err.message;
+        if (msg.includes('last dental cleaning')) errors.lastDentalCleaning = err.message;
+        if (msg.includes('intra-oral appliance')) errors.hasIntraOralAppliance = err.message;
+        if (msg.includes('tooth extraction')) errors.toothExtraction = err.message;
+        if (msg.includes('dental filling')) errors.dentalFilling = err.message;
+        if (msg.includes('upper teeth photo')) errors.upperTeethPhoto = err.message;
+        if (msg.includes('lower teeth photo')) errors.lowerTeethPhoto = err.message;
+      }
+
+      // OB-GYNE (Step 4)
+      if (stepIndex === 4) {
+        if (msg.includes('last menstrual period')) errors.lastMenstrualPeriod = err.message;
+      }
+
+      // Certification (Step 5)
+      if (stepIndex === 5) {
+        if (msg.includes('certification')) errors.verified = err.message;
+      }
+    });
+
+    return errors;
+  };
+
+  /**
    * Converts a backend/network error into a list of error objects
    */
   const parseSubmissionError = (error) => {
@@ -314,7 +383,19 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
 
   const validateStep = () => true;
 
+  // Clear a specific field's error when user starts typing
+  const clearFieldError = (fieldName) => {
+    setFieldErrors((prev) => {
+      const updated = { ...prev };
+      delete updated[fieldName];
+      return updated;
+    });
+  };
+
   const handleNext = () => {
+    // Clear field errors when navigating to a different step
+    setFieldErrors({});
+
     if (validateStep(currentStep)) {
       // Skip OB-GYNE step if gender is not Female
       if (currentStep === 3 && formData.personalInfo.gender !== 'Female') {
@@ -326,6 +407,9 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
   };
 
   const handleBack = () => {
+    // Clear field errors when navigating to a different step
+    setFieldErrors({});
+
     if (currentStep === 5 && formData.personalInfo.gender !== 'Female') {
       setCurrentStep(3);
     } else {
@@ -381,9 +465,11 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
     switch (currentStep) {
       case 0:
         return (
-          <EmployeePersonalInfoForm 
-            data={formData.personalInfo} 
-            onChange={handlePersonalInfoChange} 
+          <EmployeePersonalInfoForm
+            data={formData.personalInfo}
+            onChange={handlePersonalInfoChange}
+            fieldErrors={fieldErrors}
+            onClearFieldError={clearFieldError}
           />
         );
       case 1:
@@ -406,6 +492,8 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
             operationCatalog={catalogs.operationCatalog}
             medicationCatalog={catalogs.medicationCatalog}
             catalogsLoading={catalogs.catalogsLoading}
+            fieldErrors={fieldErrors}
+            onClearFieldError={clearFieldError}
           />
         );
       case 3:
@@ -416,22 +504,29 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
             oralApplianceCatalog={catalogs.oralApplianceCatalog}
             dentalProcedureCatalog={catalogs.dentalProcedureCatalog}
             catalogsLoading={catalogs.catalogsLoading}
+            fieldErrors={fieldErrors}
+            onClearFieldError={clearFieldError}
           />
         );
       case 4:
         return (
-          <EmployeeOBGYNEForm 
-            data={formData.obgyne} 
-            onChange={handleOBGYNEChange} 
+          <EmployeeOBGYNEForm
+            data={formData.obgyne}
+            onChange={handleOBGYNEChange}
+            fieldErrors={fieldErrors}
+            onClearFieldError={clearFieldError}
           />
         );
       case 5:
         return (
-          <EmployeeReviewForm 
-            formData={formData} 
+          <EmployeeReviewForm
+            formData={formData}
             onEdit={handleEdit}
             certification={formData.certification}
             onCertificationChange={handleCertificationChange}
+            catalogs={catalogs}
+            fieldErrors={fieldErrors}
+            onClearFieldError={clearFieldError}
           />
         );
       default:
@@ -500,7 +595,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
         : 'min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-50 py-8 px-4'
     }`}>
 
-      <div className={`${
+      <div ref={formContentRef} className={`${
         isModal
           ? 'flex-1 overflow-y-auto min-h-0 bg-stone-100 p-4 sm:p-5'
           : 'max-w-5xl mx-auto'
@@ -556,9 +651,30 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
 
       <ValidationWarningModal
         isOpen={showValidationModal}
-        onClose={() => setShowValidationModal(false)}
+        onClose={() => {
+          setShowValidationModal(false);
+          setFieldErrors({});
+        }}
         errors={validationErrors}
-        onGoToSection={(stepIndex) => setCurrentStep(stepIndex)}
+        onGoToSection={(stepIndex) => {
+          // Close the modal first
+          setShowValidationModal(false);
+          // Navigate to the step
+          setCurrentStep(stepIndex);
+          // Extract field-level errors for this step
+          const errors = extractFieldErrorsForStep(stepIndex, validationErrors);
+          setFieldErrors(errors);
+          // Scroll to appropriate position
+          setTimeout(() => {
+            // For Review page with certification error, scroll to bottom to show checkbox
+            if (stepIndex === 5 && errors.verified) {
+              formContentRef.current?.scrollTo({ top: formContentRef.current.scrollHeight, behavior: 'smooth' });
+            } else {
+              // For all other pages, scroll to top
+              formContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }, 100);
+        }}
       />
 
       <ValidationWarningModal
