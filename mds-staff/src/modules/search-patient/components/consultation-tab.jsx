@@ -4,6 +4,7 @@ import { axiosRequest } from '../../../packages-core-adapter';
 
 const INITIAL_FORM = {
   type: 'Medical',
+  mode: 'Onsite',
   doctor: '',
   diagnosis: '',
   treatment: '',
@@ -43,7 +44,10 @@ function InputField({ label, value, onChange, placeholder, type = 'text', disabl
 }
 
 function isLikelyCode(value) {
-  return /^[A-Za-z][A-Za-z0-9.\-]*$/.test(value.trim());
+  const trimmed = value.trim();
+  // ICD codes must contain at least one number (e.g. A01, CA40, 8A61.41)
+  // Plain words like "fever" should NOT match
+  return /^[A-Z0-9]{1,3}[\dA-Z.\-]*$/i.test(trimmed) && /\d/.test(trimmed);
 }
 
 function codeFromDiagnosis(item) {
@@ -232,12 +236,20 @@ export default function PatientConsultationTab({ patient, consultations = [], on
     setSelectedDiagnoses((prev) => prev.map((entry) => (String(entry.id) === String(id) ? { ...entry, notes: value } : entry)));
   };
 
-  const mapToBackendDiagnosis = (entry) => ({
-    diagnosisName: entry.title,
-    icdId: Number(entry.id),
-    type: entry.diagnosisType,
-    notes: entry.notes?.trim() || null,
-  });
+  const mapToBackendDiagnosis = (entry) => {
+    // Ensure type is always a valid DIAGNOSIS_TYPE enum value
+    const validTypes = ['Primary', 'Secondary', 'Differential', 'RuledOut', 'Provisional', 'Complication', 'Chronic', 'FollowUp'];
+    const diagnosisType = entry.diagnosisType || 'Secondary'; // Default to Secondary
+    const validType = validTypes.includes(diagnosisType) ? diagnosisType : 'Secondary';
+
+    return {
+      outcomeId: "0", // Placeholder - Backend will populate the real outcomeId
+      diagnosisName: entry.title,
+      icdId: Number(entry.id),
+      type: validType, // Ensure this is always a valid enum value
+      notes: entry.notes?.trim() || null,
+    };
+  };
 
   // Update diagnosis field when primary diagnosis changes
   useEffect(() => {
@@ -291,7 +303,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
           consultationInput: {
             patientId: String(patient?.id || ''),
             followUpId: null,
-            mode: 'Onsite',
+            mode: form.mode,
             type: form.type,
             notes: form.notes.trim() || null,
           },
@@ -322,7 +334,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
         right={<span className="text-xs text-secondary-400 dark:text-neutral-500">Patient ID: {patient?.id || 'N/A'}</span>}
       >
         <div className="space-y-4">
-          <div className="grid md:grid-cols-3 gap-3">
+          <div className="grid md:grid-cols-4 gap-3">
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Consultation Type</span>
               <select
@@ -332,6 +344,18 @@ export default function PatientConsultationTab({ patient, consultations = [], on
               >
                 <option value="Medical">Medical</option>
                 <option value="Dental">Dental</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Consultation Mode</span>
+              <select
+                value={form.mode}
+                onChange={(e) => setField('mode', e.target.value)}
+                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-300"
+              >
+                <option value="Onsite">Onsite</option>
+                <option value="Virtual">Virtual</option>
               </select>
             </label>
 

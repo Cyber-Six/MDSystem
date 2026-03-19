@@ -280,26 +280,354 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
   const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient), [patientId, recordData, mockPatient]);
 
+  // Fetch consultations from backend on page load
   useEffect(() => {
-    setConsultations(patient?.history?.consultations || []);
-  }, [patientId, patient]);
+    if (!patientId || isMockPatient) {
+      setConsultations(patient?.history?.consultations || []);
+      return;
+    }
 
-  const handleSaveConsultation = (entry) => {
-    const now = new Date();
-    const newEntry = {
-      id: `CONS-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`,
-      type: entry?.type || 'Medical',
-      date: now.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
-      time: now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-      diagnosis: entry?.diagnosis || 'General consultation',
-      diagnoses: Array.isArray(entry?.diagnoses) ? entry.diagnoses : [],
-      doctor: entry?.doctor || 'Clinic Staff',
-      treatment: entry?.treatment || '',
-      notes: entry?.notes || '',
+    let cancelled = false;
+
+    const fetchConsultations = async () => {
+      try {
+        const { data } = await axiosRequest.post('/consultation', {
+          query: `
+            query GetConsultations($patientId: ID!) {
+              getConsultations(patientId: $patientId, offset: 0, limit: 50) {
+                id
+                followUpId
+                patientId
+                mode
+                type
+                status
+                notes
+                updatedAt
+                createdAt
+              }
+            }
+          `,
+          variables: { patientId: String(patientId) },
+        });
+
+        if (cancelled) return;
+
+        const consultationList = data?.data?.getConsultations || [];
+
+        // Fetch outcomes for each consultation
+        const consultationsWithDetails = await Promise.all(
+          consultationList.map(async (consultation) => {
+            try {
+              const { data: outcomeData } = await axiosRequest.post('/consultation', {
+                query: `
+                  query GetOutcomes($consultationId: ID!) {
+                    getOutcomes(consultationId: $consultationId, offset: 0, limit: 10) {
+                      id
+                      consultationId
+                      remarks
+                      recordedAt
+                    }
+                  }
+                `,
+                variables: { consultationId: consultation.id },
+              });
+
+              const outcomes = outcomeData?.data?.getOutcomes || [];
+              const latestOutcome = outcomes[0] || null;
+
+              // Fetch diagnoses if outcome exists
+              let diagnoses = [];
+              if (latestOutcome) {
+                try {
+                  const { data: diagnosisData } = await axiosRequest.post('/consultation', {
+                    query: `
+                      query GetDiagnoses($outcomeId: ID!) {
+                        getDiagnoses(outcomeId: $outcomeId, offset: 0, limit: 20) {
+                          id
+                          diagnosisName
+                          icdId
+                          type
+                          notes
+                        }
+                      }
+                    `,
+                    variables: { outcomeId: latestOutcome.id },
+                  });
+
+                  const rawDiagnoses = diagnosisData?.data?.getDiagnoses || [];
+
+                  // Filter out diagnoses with invalid/null type and provide defaults
+                  diagnoses = rawDiagnoses
+                    .filter((d) => d && d.diagnosisName) // Only include valid entries
+                    .map((d) => ({
+                      ...d,
+                      type: d.type || 'Secondary', // Default to Secondary if type is null/undefined
+                    }));
+                } catch (err) {
+                  console.error('Error fetching diagnoses:', err);
+                  diagnoses = []; // Set to empty array on error
+                }
+              }
+
+              const primaryDiagnosis = diagnoses.find((d) => d.type === 'Primary') || diagnoses[0];
+
+              return {
+                id: consultation.id,
+                type: consultation.type,
+                date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+                time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+                diagnosis: primaryDiagnosis?.diagnosisName || 'General consultation',
+                diagnoses: diagnoses,
+                doctor: 'Clinic Staff',
+                treatment: '',
+                notes: consultation.notes || '',
+                status: consultation.status,
+                mode: consultation.mode,
+              };
+            } catch (err) {
+              console.error('Error fetching outcomes:', err);
+              return {
+                id: consultation.id,
+                type: consultation.type,
+                date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+                time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+                diagnosis: 'General consultation',
+                diagnoses: [],
+                doctor: 'Clinic Staff',
+                treatment: '',
+                notes: consultation.notes || '',
+                status: consultation.status,
+                mode: consultation.mode,
+              };
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setConsultations(consultationsWithDetails);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Error fetching consultations:', err);
+          setConsultations([]);
+        }
+      }
     };
 
-    setConsultations((prev) => [newEntry, ...prev]);
-    setActiveTab('history');
+    fetchConsultations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId, isMockPatient, patient]);
+
+  const handleSaveConsultation = async (entry) => {
+    if (isMockPatient) {
+      // For mock patients, just add to local state
+      const now = new Date();
+      const newEntry = {
+        id: `CONS-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`,
+        type: entry?.type || 'Medical',
+        date: now.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+        time: now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+        diagnosis: entry?.diagnosis || 'General consultation',
+        diagnoses: Array.isArray(entry?.diagnoses) ? entry.diagnoses : [],
+        doctor: entry?.doctor || 'Clinic Staff',
+        treatment: entry?.treatment || '',
+        notes: entry?.notes || '',
+      };
+
+      setConsultations((prev) => [newEntry, ...prev]);
+      setActiveTab('history');
+      return;
+    }
+
+    // Save to backend
+    try {
+      if (!entry?.backendPayload) {
+        console.error('No backend payload provided');
+        return;
+      }
+
+      const { consultationInput, consultationOutcomeInput } = entry.backendPayload;
+
+      // Step 1: Create consultation
+      const { data: createData } = await axiosRequest.post('/consultation', {
+        query: `
+          mutation CreateConsultation($input: ConsultationInput) {
+            createConsultation(input: $input) {
+              id
+              patientId
+              mode
+              type
+              status
+              notes
+              createdAt
+            }
+          }
+        `,
+        variables: { input: consultationInput },
+      });
+
+      const newConsultation = createData?.data?.createConsultation;
+      if (!newConsultation) {
+        throw new Error('Failed to create consultation');
+      }
+
+      // Step 2: Open consultation with outcome data
+      const outcomeInput = {
+        ...consultationOutcomeInput,
+        consultationId: newConsultation.id,
+      };
+
+      const { data: outcomeData } = await axiosRequest.post('/consultation', {
+        query: `
+          mutation OpenConsultation($input: ConsultationOutcomeInput!) {
+            openConsultation(input: $input) {
+              id
+              consultationId
+              remarks
+              recordedAt
+            }
+          }
+        `,
+        variables: { input: outcomeInput },
+      });
+
+      const outcome = outcomeData?.data?.openConsultation;
+      if (!outcome) {
+        throw new Error('Failed to open consultation');
+      }
+
+      // Step 3: Submit consultation as Completed
+      await axiosRequest.post('/consultation', {
+        query: `
+          mutation SubmitConsultation($consultationId: ID!, $status: CONSULTATION_STATUS_INPUT!) {
+            submitConsultation(consultationId: $consultationId, status: $status)
+          }
+        `,
+        variables: {
+          consultationId: newConsultation.id,
+          status: 'Completed',
+        },
+      });
+
+      // Step 4: Fetch updated consultations from backend
+      const { data: fetchData } = await axiosRequest.post('/consultation', {
+        query: `
+          query GetConsultations($patientId: ID!) {
+            getConsultations(patientId: $patientId, offset: 0, limit: 50) {
+              id
+              followUpId
+              patientId
+              mode
+              type
+              status
+              notes
+              updatedAt
+              createdAt
+            }
+          }
+        `,
+        variables: { patientId: String(patientId) },
+      });
+
+      const consultationList = fetchData?.data?.getConsultations || [];
+
+      // Fetch outcomes and diagnoses for display
+      const consultationsWithDetails = await Promise.all(
+        consultationList.map(async (consultation) => {
+          try {
+            const { data: outcomeDetailData } = await axiosRequest.post('/consultation', {
+              query: `
+                query GetOutcomes($consultationId: ID!) {
+                  getOutcomes(consultationId: $consultationId, offset: 0, limit: 10) {
+                    id
+                    consultationId
+                    remarks
+                    recordedAt
+                  }
+                }
+              `,
+              variables: { consultationId: consultation.id },
+            });
+
+            const outcomes = outcomeDetailData?.data?.getOutcomes || [];
+            const latestOutcome = outcomes[0] || null;
+
+            let diagnoses = [];
+            if (latestOutcome) {
+              try {
+                const { data: diagnosisData } = await axiosRequest.post('/consultation', {
+                  query: `
+                    query GetDiagnoses($outcomeId: ID!) {
+                      getDiagnoses(outcomeId: $outcomeId, offset: 0, limit: 20) {
+                        id
+                        diagnosisName
+                        icdId
+                        type
+                        notes
+                      }
+                    }
+                  `,
+                  variables: { outcomeId: latestOutcome.id },
+                });
+
+                const rawDiagnoses = diagnosisData?.data?.getDiagnoses || [];
+
+                // Filter out diagnoses with invalid/null type and provide defaults
+                diagnoses = rawDiagnoses
+                  .filter((d) => d && d.diagnosisName) // Only include valid entries
+                  .map((d) => ({
+                    ...d,
+                    type: d.type || 'Secondary', // Default to Secondary if type is null/undefined
+                  }));
+              } catch (err) {
+                console.error('Error fetching diagnoses:', err);
+                diagnoses = []; // Set to empty array on error
+              }
+            }
+
+            const primaryDiagnosis = diagnoses.find((d) => d.type === 'Primary') || diagnoses[0];
+
+            return {
+              id: consultation.id,
+              type: consultation.type,
+              date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+              time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+              diagnosis: primaryDiagnosis?.diagnosisName || 'General consultation',
+              diagnoses: diagnoses,
+              doctor: 'Clinic Staff',
+              treatment: '',
+              notes: consultation.notes || '',
+              status: consultation.status,
+              mode: consultation.mode,
+            };
+          } catch (err) {
+            console.error('Error fetching consultation details:', err);
+            return {
+              id: consultation.id,
+              type: consultation.type,
+              date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+              time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+              diagnosis: 'General consultation',
+              diagnoses: [],
+              doctor: 'Clinic Staff',
+              treatment: '',
+              notes: consultation.notes || '',
+              status: consultation.status,
+              mode: consultation.mode,
+            };
+          }
+        })
+      );
+
+      setConsultations(consultationsWithDetails);
+      setActiveTab('history');
+    } catch (err) {
+      console.error('Error saving consultation:', err);
+      alert('Failed to save consultation. Please try again.');
+    }
   };
 
   if (isLoading) return <LoadingBlock label="Loading patient record..." />;
@@ -360,7 +688,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           />
         );
       case 'history':
-        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} />;
+        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} onRefreshConsultations={() => window.location.reload()} />;
       case 'appointments':
         return <PatientAppointmentsTab patient={patient} />;
       case 'medicines':
