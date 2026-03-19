@@ -37,6 +37,26 @@ export function HealthChatProvider({ children }) {
 
   // Error state
   const [error, setError] = useState(null);
+  const [socketError, setSocketError] = useState(false);
+
+  /**
+   * Refresh messages for current chat (manual refresh via HTTP)
+   */
+  const refreshMessages = useCallback(async () => {
+    if (!selectedChatId) return;
+
+    try {
+      setMessagesLoading(true);
+      setError(null);
+      const fetchedMessages = await getMessages(selectedChatId);
+      setMessages(fetchedMessages);
+    } catch (err) {
+      console.error('[HealthChatContext] Failed to refresh messages:', err);
+      setError(err.message || 'Failed to refresh messages');
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, [selectedChatId]);
 
   /**
    * Load tickets based on current filter
@@ -264,6 +284,7 @@ export function HealthChatProvider({ children }) {
     messages,
     messagesLoading,
     selectChat,
+    refreshMessages,
 
     // Typing
     typingUsers,
@@ -285,9 +306,11 @@ export function HealthChatProvider({ children }) {
     searchTerm,
     setSearchTerm,
 
-    // Error
+    // Error & Socket
     error,
-    setError
+    setError,
+    socketError,
+    setSocketError
   };
 
   return (

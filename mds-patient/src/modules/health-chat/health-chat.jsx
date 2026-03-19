@@ -134,6 +134,18 @@ const HealthChat = () => {
     }
   }
 
+  // Refresh messages (manual refresh via HTTP when sockets fail)
+  async function refreshMessages() {
+    if (!ticket?.id) return;
+    try {
+      setError(null);
+      await loadMessages(ticket.id);
+    } catch (err) {
+      console.error('[HealthChat] Failed to refresh messages:', err);
+      setError('Failed to refresh messages. Please try again.');
+    }
+  }
+
   // Load previous closed tickets
   async function loadPreviousTickets() {
     try {
@@ -433,7 +445,10 @@ const HealthChat = () => {
               onCloseTicket={handleCloseTicket}
               formatTime={formatTime}
               onRetry={initializeHealthChat}
+              onRefresh={refreshMessages}
               ticketStatus={ticket.status}
+              ticketPurpose={ticket.purpose}
+              ticketCreatedAt={ticket.session_start}
               isStaffTyping={isStaffTyping}
               attachedFile={attachedFile}
               onFileStaged={setAttachedFile}

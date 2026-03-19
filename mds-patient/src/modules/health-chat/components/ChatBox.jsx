@@ -1,5 +1,5 @@
 import React from 'react';
-import { Send, AlertCircle, Heart, X, Lock } from 'lucide-react';
+import { Send, AlertCircle, Heart, X, Lock, RefreshCw } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
 import { FileAttachButton, FilePreview } from './FileAttachment';
@@ -19,8 +19,11 @@ const ChatBox = ({
   onCloseTicket,
   formatTime,
   onRetry,
+  onRefresh,
   // Health chat specific props
   ticketStatus,
+  ticketPurpose,
+  ticketCreatedAt,
   isStaffTyping,
   attachedFile,
   onFileStaged,
@@ -100,8 +103,26 @@ const ChatBox = ({
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto bg-white dark:bg-neutral-900">
         <div className="px-6 py-6 space-y-4">
+          {/* Socket connection issue warning */}
+          {!isSocketConnected && !isInitializing && isActive && (
+            <div className="flex items-center gap-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
+              <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
+                Connection issue - using manual refresh
+              </span>
+              <button
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="p-1 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded transition-colors disabled:opacity-50"
+                title="Refresh messages"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          )}
+
           {/* Empty state when initializing */}
-          {messages.length === 0 && isInitializing && (
+          {messages.length === 0 && isInitializing && !ticketPurpose && (
             <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
               <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-3" />
               <p className="text-sm">Loading conversation...</p>
@@ -122,23 +143,36 @@ const ChatBox = ({
             </div>
           )}
 
-          {/* Pending approval state */}
-          {isPending && messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
-              <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-4">
-                <Heart className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+          {/* Show ticket purpose as the first "message" */}
+          {ticketPurpose && (
+            <div className="flex justify-end">
+              <div className="max-w-[85%]">
+                <div className="px-4 py-3 rounded-2xl rounded-br-sm bg-primary-500 text-white">
+                  <p className="text-sm whitespace-pre-wrap">{ticketPurpose}</p>
+                </div>
+                {ticketCreatedAt && (
+                  <p className="text-[10px] text-neutral-400 mt-1 text-right">
+                    {formatTime(ticketCreatedAt)}
+                  </p>
+                )}
               </div>
-              <p className="text-base font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                Ticket Submitted
-              </p>
-              <p className="text-sm text-center max-w-xs">
-                Your health consultation request has been submitted. Please wait for a staff member to approve it.
-              </p>
+            </div>
+          )}
+
+          {/* Pending status indicator after initial message */}
+          {isPending && (
+            <div className="flex justify-center my-4">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                  Waiting for staff to accept your request
+                </span>
+              </div>
             </div>
           )}
 
           {/* Frozen state indicator */}
-          {isFrozen && messages.length === 0 && (
+          {isFrozen && messages.length === 0 && !ticketPurpose && (
             <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
               <Lock className="w-12 h-12 mb-3 text-neutral-400" />
               <p className="text-sm">This conversation has ended</p>

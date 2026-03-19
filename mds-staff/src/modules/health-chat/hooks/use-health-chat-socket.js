@@ -28,7 +28,8 @@ export function useHealthChatSocket() {
     addTicket,
     updateTicketStatus,
     setUserTyping,
-    refreshTickets
+    refreshTickets,
+    setSocketError
   } = useHealthChat();
 
   // Connect on mount
@@ -50,6 +51,7 @@ export function useHealthChatSocket() {
     socketService.connect().then(() => {
       socketRef.current = socketService;
       setIsConnected(true);
+      setSocketError(false);
 
       // Listen for new ticket created by patient
       socketService.on('healthchat:ticket-created', (data) => {
@@ -78,11 +80,21 @@ export function useHealthChatSocket() {
           updateTicketStatus(data.chatId, 'Closed');
         }
       });
+
+      // Listen for ticket status changes by other staff (approve/reject)
+      socketService.on('healthchat:ticket-status-changed', (data) => {
+        if (data.chatId && data.status) {
+          // Refresh the tickets list to reflect the change
+          refreshTickets();
+        }
+      });
     }).catch((err) => {
       console.error('[HealthChatSocket] Connection failed:', err);
       console.error('[HealthChatSocket] Details:', err.message);
       setIsConnected(false);
+      setSocketError(true);
       // Note: Socket.io client will auto-retry based on reconnectionAttempts
+      // Users can still use HTTP requests to fetch messages
     });
 
     // Cleanup on unmount
@@ -98,7 +110,7 @@ export function useHealthChatSocket() {
         setIsConnected(false);
       }
     };
-  }, [addMessage, addTicket, updateTicketStatus, setUserTyping]);
+  }, [addMessage, addTicket, updateTicketStatus, setUserTyping, refreshTickets, setSocketError]);
 
   // Join room when chat is selected
   useEffect(() => {

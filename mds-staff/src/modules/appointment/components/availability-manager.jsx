@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check, X, Trash2, Save, FileText, Trash } from 'lucide-react';
 import AvailabilityCalendar from './availability-calendar';
 import EventModal from './event-modal';
-import SchedulerModal from './scheduler-modal';
 import {
   listAllSchedulers,
   createScheduler,
   updateScheduler,
   deleteScheduler,
   updateRequirement,
+  deleteRequirement,
+  listAllRequirements,
   updateDateIdentity,
 } from '../staff-appointment-service';
 
@@ -15,7 +17,7 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 
 /**
  * Availability Manager Component
- * Redesigned for better UX - bigger scheduler display with inline editing
+ * Redesigned for better UX - compact selector, inline editing, side-by-side layout
  * SRS §3.4.2
  */
 const AvailabilityManager = () => {
@@ -23,19 +25,30 @@ const AvailabilityManager = () => {
   const [showEventModal, setShowEventModal] = useState(false);
   const [eventModalDate, setEventModalDate] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
-  const [dayOverrides, setDayOverrides] = useState({});
   const [schedulers, setSchedulers] = useState([]);
   const [activeScheduler, setActiveScheduler] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Scheduler modal (for creating new)
-  const [showSchedulerModal, setShowSchedulerModal] = useState(false);
-  const [editingScheduler, setEditingScheduler] = useState(null);
-
   // Dropdown state
   const [showDropdown, setShowDropdown] = useState(false);
+
+  // Inline edit form state
+  const [editForm, setEditForm] = useState(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+
+  const [events, setEvents] = useState([]);
+
+  // Requirements state
+  const [requirements, setRequirements] = useState([]);
+  const [pendingRequirements, setPendingRequirements] = useState([]); // For new scheduler
+  const [requirementForm, setRequirementForm] = useState({ label: '', isActive: true });
+  const [requirementSaving, setRequirementSaving] = useState(false);
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   // Derive slot defaults from the active scheduler
   const slotDefaults = activeScheduler
@@ -51,9 +64,13 @@ const AvailabilityManager = () => {
       setSchedulers(list || []);
       if (list?.length > 0) {
         const kept = preserveId ? list.find((s) => String(s.id) === String(preserveId)) : null;
-        setActiveScheduler(kept || list[0]);
+        const selected = kept || list[0];
+        setActiveScheduler(selected);
+        setEditForm(selected);
+        setIsCreatingNew(false);
       } else {
         setActiveScheduler(null);
+        setEditForm(null);
       }
     } catch (err) {
       setError(err.message || 'Failed to load schedulers');
@@ -67,28 +84,154 @@ const AvailabilityManager = () => {
     loadSchedulers();
   }, [loadSchedulers]);
 
-  const [events, setEvents] = useState([]);
+  // Update edit form when scheduler changes
+  useEffect(() => {
+    if (activeScheduler && !isCreatingNew) {
+      setEditForm({ ...activeScheduler });
+      // Load requirements for this scheduler
+      loadRequirements(activeScheduler.id);
+    }
+  }, [activeScheduler, isCreatingNew]);
 
-  const handleSaveDay = async (dayData) => {
-    if (activeScheduler && dayData.date) {
-      try {
-        await updateDateIdentity(activeScheduler.id, dayData.date, {
-          morningAllowed: dayData.morning,
-          afternoonAllowed: dayData.afternoon,
-          scheduledDate: dayData.date,
+  const handleSelectScheduler = (sched) => {
+    setActiveScheduler(sched);
+    setEditForm({ ...sched });
+    setIsCreatingNew(false);
+    setShowDropdown(false);
+  };
+
+  const handleCreateNew = () => {
+    setIsCreatingNew(true);
+    setEditForm({
+      label: '',
+      location: 'Arlegui',
+      patientType: null,
+      schedulePerWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      morningAllowed: 60,
+      afternoonAllowed: 60,
+      notes: '',
+      isActive: true,
+      whitelistOnly: false,
+    });
+    setRequirements([]);
+    setPendingRequirements([]);
+    setRequirementForm({ label: '', isActive: true });
+    setShowDropdown(false);
+  };
+
+  const handleSaveScheduler = async () => {
+    if (!editForm) return;
+    if (!editForm.label?.trim()) {
+      setError('Scheduler name is required');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      if (editForm.id) {
+        // Update existing
+        const updated = await updateScheduler(editForm.id, {
+          label: editForm.label,
+          location: editForm.location,
+          patientType: editForm.patientType ?? null,
+          schedulePerWeek: editForm.schedulePerWeek,
+          morningAllowed: editForm.morningAllowed,
+          afternoonAllowed: editForm.afternoonAllowed,
+          notes: editForm.notes || null,
+          isActive: editForm.isActive,
+          whitelistOnly: editForm.whitelistOnly,
         });
-        setDayOverrides((prev) => ({ ...prev, [dayData.date]: dayData }));
-      } catch (err) {
-        setError(err.message || 'Failed to update date');
-        console.error('Error updating date identity:', err);
+        await loadSchedulers(updated?.id ?? editForm.id);
+      } else {
+        // Create new
+        const created = await createScheduler({
+          label: editForm.label,
+          location: editForm.location,
+          patientType: editForm.patientType ?? null,
+          schedulePerWeek: editForm.schedulePerWeek,
+          morningAllowed: editForm.morningAllowed,
+          afternoonAllowed: editForm.afternoonAllowed,
+          notes: editForm.notes || null,
+          whitelistOnly: editForm.whitelistOnly ?? false,
+          slotCustomDates: [],
+          whiteLists: [],
+        });
+
+        // After scheduler created, add any pending requirements
+        if (created?.id && pendingRequirements.length > 0) {
+          for (const req of pendingRequirements) {
+            await updateRequirement(created.id, {
+              label: req.label,
+              isActive: req.isActive
+            });
+          }
+          setPendingRequirements([]);
+        }
+
+        await loadSchedulers(created?.id);
+        setIsCreatingNew(false);
       }
+    } catch (err) {
+      setError(err.message || 'Failed to save scheduler');
+      console.error('Error saving scheduler:', err);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleCreateEvent = (date) => {
-    setEventModalDate(date);
-    setEditingEvent(null);
-    setShowEventModal(true);
+  const handleDeleteScheduler = async () => {
+    if (!editForm?.id) return;
+    setDeleteTarget({ type: 'scheduler', id: editForm.id, label: editForm.label });
+    setDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setSaving(true);
+    setError('');
+    try {
+      if (deleteTarget.type === 'scheduler') {
+        await deleteScheduler(deleteTarget.id);
+        await loadSchedulers();
+        setIsCreatingNew(false);
+      } else if (deleteTarget.type === 'requirement') {
+        await deleteRequirement(activeScheduler.id, deleteTarget.label);
+        await loadRequirements(activeScheduler.id);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to delete');
+      console.error('Error deleting:', err);
+    } finally {
+      setSaving(false);
+      setDeleteModal(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    if (isCreatingNew) {
+      setIsCreatingNew(false);
+      setPendingRequirements([]);
+      setRequirementForm({ label: '', isActive: true });
+      if (activeScheduler) {
+        setEditForm({ ...activeScheduler });
+      } else {
+        setEditForm(null);
+      }
+    } else if (activeScheduler) {
+      setEditForm({ ...activeScheduler });
+    }
+  };
+
+  const toggleDay = (day) => {
+    if (!editForm) return;
+    const current = editForm.schedulePerWeek || [];
+    const updated = current.includes(day)
+      ? current.filter((d) => d !== day)
+      : [...current, day];
+    setEditForm({ ...editForm, schedulePerWeek: updated });
   };
 
   const handleSaveEvent = (eventData) => {
@@ -103,73 +246,62 @@ const AvailabilityManager = () => {
     });
   };
 
-  const handleOpenSchedulerModal = (scheduler = null) => {
-    setEditingScheduler(scheduler);
-    setShowSchedulerModal(true);
-  };
-
-  const handleSaveScheduler = async (formData, pendingReqs) => {
-    setSaving(true);
-    setError('');
+  // Load requirements for a scheduler
+  const loadRequirements = useCallback(async (schedulerId) => {
+    if (!schedulerId) {
+      setRequirements([]);
+      return;
+    }
     try {
-      if (formData.id) {
-        const updated = await updateScheduler(formData.id, {
-          label: formData.label,
-          location: formData.location,
-          patientType: formData.patientType ?? null,
-          schedulePerWeek: formData.schedulePerWeek,
-          morningAllowed: formData.morningAllowed,
-          afternoonAllowed: formData.afternoonAllowed,
-          notes: formData.notes || null,
-          isActive: formData.isActive,
-          whitelistOnly: formData.whitelistOnly,
-        });
-        await loadSchedulers(updated?.id ?? formData.id);
-      } else {
-        const created = await createScheduler({
-          label: formData.label,
-          location: formData.location,
-          patientType: formData.patientType ?? null,
-          schedulePerWeek: formData.schedulePerWeek,
-          morningAllowed: formData.morningAllowed,
-          afternoonAllowed: formData.afternoonAllowed,
-          notes: formData.notes || null,
-          whitelistOnly: formData.whitelistOnly ?? false,
-          slotCustomDates: [],
-          whiteLists: [],
-        });
-        if (pendingReqs?.length > 0 && created?.id) {
-          for (const req of pendingReqs) {
-            await updateRequirement(created.id, { label: req.label, isDigital: true, isActive: true });
-          }
-        }
-        await loadSchedulers(created?.id);
-      }
-      setShowSchedulerModal(false);
-      setEditingScheduler(null);
+      const reqs = await listAllRequirements(schedulerId, 0, 50);
+      setRequirements(reqs || []);
     } catch (err) {
-      setError(err.message || 'Failed to save scheduler');
-      console.error('Error saving scheduler:', err);
-      throw err;
+      console.error('Failed to load requirements:', err);
+    }
+  }, []);
+
+  // Save requirement
+  const handleSaveRequirement = async () => {
+    if (!requirementForm.label?.trim()) {
+      setError('Requirement label is required');
+      return;
+    }
+
+    try {
+      setRequirementSaving(true);
+
+      if (isCreatingNew) {
+        // Add to pending requirements (will be saved when scheduler is created)
+        setPendingRequirements([...pendingRequirements, {
+          label: requirementForm.label.trim(),
+          isActive: requirementForm.isActive
+        }]);
+      } else if (activeScheduler?.id) {
+        // Save immediately for existing scheduler
+        await updateRequirement(activeScheduler.id, {
+          label: requirementForm.label.trim(),
+          isActive: requirementForm.isActive
+        });
+        await loadRequirements(activeScheduler.id);
+      }
+
+      setRequirementForm({ label: '', isActive: true });
+    } catch (err) {
+      console.error('Failed to save requirement:', err);
+      setError(err.message || 'Failed to save requirement');
     } finally {
-      setSaving(false);
+      setRequirementSaving(false);
     }
   };
 
-  const handleDeleteScheduler = async (schedulerId) => {
-    setSaving(true);
-    setError('');
-    try {
-      await deleteScheduler(schedulerId);
-      await loadSchedulers();
-      setShowSchedulerModal(false);
-      setEditingScheduler(null);
-    } catch (err) {
-      setError(err.message || 'Failed to delete scheduler');
-      console.error('Error deleting scheduler:', err);
-      throw err;
-    } finally {
-      setSaving(false);
+  // Delete requirement
+  const handleDeleteRequirement = async (label) => {
+    if (isCreatingNew) {
+      // Remove from pending requirements
+      setPendingRequirements(pendingRequirements.filter(r => r.label !== label));
+    } else if (activeScheduler?.id) {
+      setDeleteTarget({ type: 'requirement', id: activeScheduler.id, label });
+      setDeleteModal(true);
     }
   };
 
@@ -185,6 +317,9 @@ const AvailabilityManager = () => {
     );
   }
 
+  // Check if form has unsaved changes
+  const hasChanges = editForm && activeScheduler && JSON.stringify(editForm) !== JSON.stringify(activeScheduler);
+
   return (
     <div className="space-y-4">
       {/* Error */}
@@ -195,170 +330,92 @@ const AvailabilityManager = () => {
         </div>
       )}
 
-      {/* Scheduler Selector Header */}
-      <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 shadow-sm">
-        <div className="p-3 md:p-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            {/* Scheduler Dropdown */}
-            <div className="relative flex-1 w-full sm:w-auto">
-              <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="w-full flex items-center justify-between gap-3 px-4 py-2.5 bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-600 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {activeScheduler ? (
-                    <>
-                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${activeScheduler.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
-                      <div className="text-left min-w-0">
-                        <p className="font-semibold text-secondary-900 dark:text-white truncate">{activeScheduler.label}</p>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
-                          {activeScheduler.location} • AM {activeScheduler.morningAllowed} • PM {activeScheduler.afternoonAllowed}
+      {/* Top Bar: Compact Scheduler Selector + Create Button */}
+      <div className="flex items-center gap-3">
+        {/* Compact Scheduler Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors shadow-sm min-w-[180px] max-w-[280px]"
+          >
+            {activeScheduler ? (
+              <>
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${activeScheduler.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
+                <span className="text-sm font-medium text-secondary-900 dark:text-white truncate">
+                  {activeScheduler.label}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-secondary-500 dark:text-neutral-400">Select scheduler...</span>
+            )}
+            <ChevronDown className={`w-4 h-4 text-secondary-400 ml-auto transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Dropdown Menu - Longer to show more schedulers */}
+          {showDropdown && (
+            <div className="absolute z-30 top-full left-0 mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl min-w-[280px] max-h-[400px] overflow-y-auto">
+              {schedulers.length > 0 ? (
+                schedulers.map((sched) => {
+                  const isSelected = activeScheduler?.id === sched.id;
+                  return (
+                    <button
+                      key={sched.id}
+                      onClick={() => handleSelectScheduler(sched)}
+                      className={`w-full px-3 py-2.5 flex items-center gap-2.5 text-left hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors ${
+                        isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : ''
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sched.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-sm font-medium truncate ${isSelected ? 'text-primary-700 dark:text-primary-400' : 'text-secondary-800 dark:text-white'}`}>
+                            {sched.label}
+                          </span>
+                          {sched.patientType && (
+                            <span className={`px-1 py-0.5 text-[9px] font-medium rounded ${
+                              sched.patientType === 'Employee'
+                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                                : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                            }`}>
+                              {sched.patientType}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-secondary-500 dark:text-neutral-400 mt-0.5">
+                          {sched.location} • AM {sched.morningAllowed} • PM {sched.afternoonAllowed}
                         </p>
                       </div>
-                    </>
-                  ) : (
-                    <span className="text-secondary-500 dark:text-neutral-400">Select a scheduler...</span>
-                  )}
-                </div>
-                <svg className={`w-5 h-5 text-secondary-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {/* Dropdown Menu */}
-              {showDropdown && (
-                <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                  {schedulers.length > 0 ? (
-                    schedulers.map((sched) => {
-                      const isSelected = activeScheduler?.id === sched.id;
-                      return (
-                        <button
-                          key={sched.id}
-                          onClick={() => { setActiveScheduler(sched); setShowDropdown(false); }}
-                          className={`w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors ${
-                            isSelected ? 'bg-primary-50 dark:bg-primary-900/20' : ''
-                          }`}
-                        >
-                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${sched.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-medium truncate ${isSelected ? 'text-primary-700 dark:text-primary-400' : 'text-secondary-800 dark:text-white'}`}>
-                                {sched.label}
-                              </span>
-                              {sched.patientType && (
-                                <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
-                                  sched.patientType === 'Employee'
-                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                }`}>
-                                  {sched.patientType}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
-                              {sched.location} • AM {sched.morningAllowed} • PM {sched.afternoonAllowed}
-                              {sched.schedulePerWeek?.length > 0 && ` • ${sched.schedulePerWeek.map((d) => d.slice(0, 3)).join(', ')}`}
-                            </p>
-                          </div>
-                          {isSelected && (
-                            <svg className="w-4 h-4 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="px-4 py-6 text-center text-sm text-secondary-500 dark:text-neutral-400">
-                      No schedulers configured
-                    </div>
-                  )}
-                  {/* Add New Scheduler Option */}
-                  <button
-                    onClick={() => { handleOpenSchedulerModal(null); setShowDropdown(false); }}
-                    className="w-full px-4 py-3 flex items-center gap-3 text-left border-t border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
-                  >
-                    <span className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                    </span>
-                    <span className="font-medium text-primary-600 dark:text-primary-400">Create New Scheduler</span>
-                  </button>
+                      {isSelected && <Check className="w-4 h-4 text-primary-500 flex-shrink-0" />}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="px-3 py-4 text-center text-sm text-secondary-500 dark:text-neutral-400">
+                  No schedulers yet
                 </div>
               )}
             </div>
-
-            {/* Settings Button */}
-            {activeScheduler && (
-              <button
-                onClick={() => handleOpenSchedulerModal(activeScheduler)}
-                className="px-4 py-2 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Settings
-              </button>
-            )}
-          </div>
-
-          {/* Compact Info Bar */}
-          {activeScheduler && (
-            <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-700">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-                {/* Slots Info */}
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5 text-accent-600 dark:text-accent-400">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                    <span className="font-medium">AM: {activeScheduler.morningAllowed}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-warning-600 dark:text-warning-400">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                    </svg>
-                    <span className="font-medium">PM: {activeScheduler.afternoonAllowed}</span>
-                  </div>
-                </div>
-                {/* Divider */}
-                <span className="hidden sm:inline text-neutral-300 dark:text-neutral-600">|</span>
-                {/* Days */}
-                <div className="flex items-center gap-1.5">
-                  {DAYS.map((day) => {
-                    const isActive = activeScheduler.schedulePerWeek?.includes(day);
-                    return (
-                      <span
-                        key={day}
-                        className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
-                          isActive
-                            ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
-                            : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500 line-through'
-                        }`}
-                      >
-                        {day.slice(0, 2)}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
           )}
         </div>
+
+        {/* Create New Scheduler Button - Always visible */}
+        <button
+          onClick={handleCreateNew}
+          className="flex items-center gap-2 px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+        >
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">New Scheduler</span>
+        </button>
       </div>
 
       {/* No Scheduler State */}
-      {!activeScheduler && schedulers.length === 0 && (
+      {!activeScheduler && schedulers.length === 0 && !isCreatingNew && (
         <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 text-center">
-          <svg className="w-12 h-12 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
+          <Calendar className="w-12 h-12 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" />
           <h3 className="text-lg font-semibold text-secondary-700 dark:text-neutral-300 mb-2">No Schedulers</h3>
           <p className="text-sm text-secondary-500 dark:text-neutral-400 mb-4">Create a scheduler to start managing appointments</p>
           <button
-            onClick={() => handleOpenSchedulerModal(null)}
+            onClick={handleCreateNew}
             className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
           >
             Create Scheduler
@@ -366,16 +423,380 @@ const AvailabilityManager = () => {
         </div>
       )}
 
-      {/* Calendar */}
-      {activeScheduler && (
-        <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-          <AvailabilityCalendar
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            events={events}
-            slotDefaults={slotDefaults}
-            activeScheduler={activeScheduler}
-          />
+      {/* Main Content: Calendar (Left) + Settings Panel (Right) */}
+      {(activeScheduler || isCreatingNew) && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Calendar Panel - 2/3 width */}
+          <div className="lg:col-span-8 flex flex-col gap-4">
+            {/* Scheduler Stats Card */}
+            {!isCreatingNew && activeScheduler && (
+              <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Morning Slots */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center">
+                      <Sun className="w-5 h-5 text-accent-600 dark:text-accent-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">Morning Slots</p>
+                      <p className="text-lg font-semibold text-secondary-900 dark:text-white">{activeScheduler.morningAllowed}</p>
+                    </div>
+                  </div>
+
+                  {/* Afternoon Slots */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center">
+                      <Moon className="w-5 h-5 text-warning-600 dark:text-warning-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">Afternoon Slots</p>
+                      <p className="text-lg font-semibold text-secondary-900 dark:text-white">{activeScheduler.afternoonAllowed}</p>
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      activeScheduler.isActive
+                        ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                        : 'bg-neutral-100 dark:bg-neutral-700'
+                    }`}>
+                      <Check className={`w-5 h-5 ${
+                        activeScheduler.isActive
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-secondary-600 dark:text-neutral-400'
+                      }`} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">Status</p>
+                      <p className="text-lg font-semibold text-secondary-900 dark:text-white">
+                        {activeScheduler.isActive ? 'Active' : 'Inactive'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Available Days */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">Available Days</p>
+                      <p className="text-lg font-semibold text-secondary-900 dark:text-white">
+                        {activeScheduler.schedulePerWeek?.length || 0}/7
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Calendar */}
+            <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden flex-1">
+              {!isCreatingNew && activeScheduler ? (
+                <AvailabilityCalendar
+                  selectedDate={selectedDate}
+                  onSelectDate={setSelectedDate}
+                  events={events}
+                  slotDefaults={slotDefaults}
+                  activeScheduler={activeScheduler}
+                />
+              ) : (
+                <div className="p-8 text-center text-secondary-500 dark:text-neutral-400">
+                  <Calendar className="w-10 h-10 mx-auto mb-3 text-neutral-300 dark:text-neutral-600" />
+                  <p className="text-sm">Save the scheduler to view calendar</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Settings Panel - 1/3 width */}
+          <div className="lg:col-span-4">
+            <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+              {/* Panel Header */}
+              <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-secondary-500 dark:text-neutral-400" />
+                  <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
+                    {isCreatingNew ? 'New Scheduler' : 'Scheduler Settings'}
+                  </h3>
+                </div>
+                {hasChanges && !isCreatingNew && (
+                  <span className="px-2 py-0.5 text-[10px] font-medium bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 rounded">
+                    Unsaved changes
+                  </span>
+                )}
+              </div>
+
+              {/* Edit Form */}
+              {editForm && (
+                <div className="p-4 space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
+                  {/* Name */}
+                  <div>
+                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                      Scheduler Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.label || ''}
+                      onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
+                      placeholder="e.g., General Consultation"
+                      className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Location & Patient Type */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                        <MapPin className="w-3.5 h-3.5 inline mr-1.5" />
+                        Location
+                      </label>
+                      <select
+                        value={editForm.location || 'Arlegui'}
+                        onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="Arlegui">Arlegui</option>
+                        <option value="Casal">Casal</option>
+                        <option value="QuezonCity">Quezon City</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                        <Users className="w-3.5 h-3.5 inline mr-1.5" />
+                        Patient Type
+                      </label>
+                      <select
+                        value={editForm.patientType || ''}
+                        onChange={(e) => setEditForm({ ...editForm, patientType: e.target.value || null })}
+                        className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">All Types</option>
+                        <option value="Student">Student</option>
+                        <option value="Employee">Employee</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Slots */}
+                  <div>
+                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                      Available Slots per Session
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center gap-2 p-1.5 bg-accent-50 dark:bg-accent-900/20 rounded-lg border border-accent-200 dark:border-accent-800">
+                        <Sun className="w-4 h-4 text-accent-600 dark:text-accent-400 flex-shrink-0" />
+                        <p className="text-xs font-semibold text-accent-600 dark:text-accent-400 min-w-fit">Morning</p>
+                        <input
+                          type="number"
+                          min="0"
+                          max="200"
+                          value={editForm.morningAllowed || 0}
+                          onChange={(e) => setEditForm({ ...editForm, morningAllowed: parseInt(e.target.value) || 0 })}
+                          className="w-12 px-1.5 py-0.5 text-sm font-semibold bg-white dark:bg-neutral-700 border border-accent-200 dark:border-accent-700 rounded text-secondary-900 dark:text-white focus:ring-1 focus:ring-accent-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 p-1.5 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-800">
+                        <Moon className="w-4 h-4 text-warning-600 dark:text-warning-400 flex-shrink-0" />
+                        <p className="text-xs font-semibold text-warning-600 dark:text-warning-400 min-w-fit">Afternoon</p>
+                        <input
+                          type="number"
+                          min="0"
+                          max="200"
+                          value={editForm.afternoonAllowed || 0}
+                          onChange={(e) => setEditForm({ ...editForm, afternoonAllowed: parseInt(e.target.value) || 0 })}
+                          className="w-12 px-1.5 py-0.5 text-sm font-semibold bg-white dark:bg-neutral-700 border border-warning-200 dark:border-warning-700 rounded text-secondary-900 dark:text-white focus:ring-1 focus:ring-warning-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Available Days */}
+                  <div>
+                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                      Available Days
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {DAYS.map((day) => {
+                        const isActive = editForm.schedulePerWeek?.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => toggleDay(day)}
+                            className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                              isActive
+                                ? 'bg-primary-500 text-white shadow-sm'
+                                : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+                            }`}
+                          >
+                            {day.slice(0, 3)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Options */}
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={editForm.isActive ?? true}
+                        onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })}
+                        className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
+                      />
+                      <div>
+                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Active</p>
+                        <p className="text-[8px] text-secondary-500 dark:text-neutral-400 leading-tight">Accepting appointments</p>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={editForm.whitelistOnly ?? false}
+                        onChange={(e) => setEditForm({ ...editForm, whitelistOnly: e.target.checked })}
+                        className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
+                      />
+                      <div>
+                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Whitelist Only</p>
+                        <p className="text-[8px] text-secondary-500 dark:text-neutral-400 leading-tight">Only whitelisted patients</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                      Notes (Optional)
+                    </label>
+                    <textarea
+                      value={editForm.notes || ''}
+                      onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                      placeholder="Internal notes about this scheduler..."
+                      rows={2}
+                      className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 resize-none"
+                    />
+                  </div>
+
+                  {/* Requirements Section */}
+                  <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
+                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-3">
+                      <FileText className="w-4 h-4 inline mr-2" />
+                      Required Documents
+                    </label>
+
+                    <>
+                      {/* Add Requirement Form - Inline */}
+                      <div className="mb-3 flex gap-2">
+                        <input
+                          type="text"
+                          value={requirementForm.label}
+                          onChange={(e) => setRequirementForm({ ...requirementForm, label: e.target.value })}
+                          placeholder="e.g., Medical Certificate"
+                          className="flex-1 px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500"
+                        />
+                        <button
+                          onClick={handleSaveRequirement}
+                          disabled={requirementSaving || !requirementForm.label.trim()}
+                          className="flex items-center gap-2 px-3 py-2 text-sm bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                          title="Add requirement"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span className="hidden sm:inline">Add</span>
+                        </button>
+                      </div>
+
+                      {/* Requirements List */}
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {(isCreatingNew ? pendingRequirements : requirements).length === 0 ? (
+                          <p className="text-sm text-neutral-500 dark:text-neutral-400 py-2 text-center">
+                            No requirements added yet
+                          </p>
+                        ) : (
+                          (isCreatingNew ? pendingRequirements : requirements).map((req) => (
+                            <div
+                              key={req.label}
+                              className="flex items-center justify-between p-2.5 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg border border-neutral-200 dark:border-neutral-600"
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <input
+                                  type="checkbox"
+                                  checked={req.isActive ?? req.isRequired ?? false}
+                                  readOnly
+                                  className="w-3.5 h-3.5 rounded"
+                                />
+                                <span className="text-sm text-secondary-700 dark:text-neutral-300 truncate">
+                                  {req.label}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteRequirement(req.label)}
+                                disabled={saving}
+                                className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+                                title="Delete requirement"
+                              >
+                                <Trash className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-2">
+                {/* Delete Button (only for existing) */}
+                {!isCreatingNew && editForm?.id && (
+                  <button
+                    onClick={handleDeleteScheduler}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2 ml-auto">
+                  {/* Cancel Button */}
+                  {(hasChanges || isCreatingNew) && (
+                    <button
+                      onClick={handleCancelEdit}
+                      disabled={saving}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Cancel
+                    </button>
+                  )}
+
+                  {/* Save Button */}
+                  <button
+                    onClick={handleSaveScheduler}
+                    disabled={saving || (!hasChanges && !isCreatingNew)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3.5 h-3.5" />
+                        {isCreatingNew ? 'Create' : 'Save Changes'}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -388,15 +809,56 @@ const AvailabilityManager = () => {
         editingEvent={editingEvent}
       />
 
-      {/* Scheduler Modal */}
-      <SchedulerModal
-        isOpen={showSchedulerModal}
-        onClose={() => { setShowSchedulerModal(false); setEditingScheduler(null); }}
-        onSave={handleSaveScheduler}
-        onDelete={handleDeleteScheduler}
-        editingScheduler={editingScheduler}
-        saving={saving}
-      />
+      {/* Delete Confirmation Modal */}
+      {deleteModal && deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-sm mx-4 p-6 border border-neutral-200 dark:border-neutral-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">
+                Confirm Deletion
+              </h3>
+            </div>
+
+            <p className="text-secondary-700 dark:text-neutral-300 mb-6">
+              Are you sure you want to delete <span className="font-semibold text-secondary-900 dark:text-white">"{deleteTarget.label}"</span>?
+              {deleteTarget.type === 'scheduler' && ' This cannot be undone.'}
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setDeleteModal(false);
+                  setDeleteTarget(null);
+                }}
+                disabled={saving}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-secondary-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={saving}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {saving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
