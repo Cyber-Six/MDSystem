@@ -2,7 +2,7 @@ import React from 'react';
 
 const SchedulerPicker = ({ schedulers, onSelect }) => (
   <div className="bg-stone-50 dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-6">
-    <h2 className="text-xl font-semibold text-secondary-900 dark:text-white mb-6" style={{ margin: 0 }}>Select Appointment Scheduler</h2>
+    <h2 className="text-xl font-semibold text-secondary-900 dark:text-white mb-6">Select Appointment Scheduler</h2>
     {schedulers.length === 0 ? (
       <div className="text-center py-8">
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-stone-100 dark:bg-neutral-800 flex items-center justify-center">
@@ -18,7 +18,7 @@ const SchedulerPicker = ({ schedulers, onSelect }) => (
           <button
             key={s.id}
             onClick={() => onSelect(s)}
-            className="text-left p-5 border border-stone-200 dark:border-neutral-700 rounded-xl shadow-md bg-white dark:bg-neutral-800 hover:border-primary-400 dark:hover:border-primary-600 hover:shadow-lg transition-all group"
+            className="text-left p-5 rounded-2xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-md hover:shadow-lg hover:border-primary-400 dark:hover:border-primary-500 transition-all duration-200 group"
           >
             <div className="flex items-start justify-between gap-2 mb-1">
               <h3 className="font-semibold text-neutral-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
@@ -36,8 +36,8 @@ const SchedulerPicker = ({ schedulers, onSelect }) => (
                 )}
               </div>
             </div>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{s.location}</p>
-            <div className="flex flex-wrap gap-1 mb-2">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">{s.location}</p>
+            <div className="flex flex-wrap gap-1 mb-3">
               {s.schedulePerWeek?.map((day) => (
                 <span key={day} className="px-2 py-0.5 text-xs bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded">
                   {day.slice(0, 3)}
