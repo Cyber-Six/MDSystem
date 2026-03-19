@@ -115,6 +115,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
+        '/healthchat': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: true,
+        },
       },
     }
   }

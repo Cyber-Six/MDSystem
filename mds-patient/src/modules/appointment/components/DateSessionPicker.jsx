@@ -2,6 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { Spinner, BackButton } from './shared';
 import { SESSION } from '../patient-appointment-service';
 
+// Constants
+const MS_PER_DAY = 86400000; // Milliseconds in one day
+const CALENDAR_CELLS = 42; // 6 weeks × 7 days
+
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -61,7 +65,10 @@ const DateSessionPicker = ({
   const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
 
   // Compute how many days ahead from the maxDate prop
-  const schedulingDays = Math.round((maxDateObj - new Date(today + 'T00:00:00')) / 86400000);
+  const schedulingDays = useMemo(() =>
+    Math.round((maxDateObj - new Date(today + 'T00:00:00')) / MS_PER_DAY),
+    [maxDateObj, today]
+  );
 
   // ── Date helpers ──────────────────────────────────────────────────────────
 
@@ -99,7 +106,7 @@ const DateSessionPicker = ({
       cells.push({ day: prevMonthDays - i, isOtherMonth: true });
     for (let d = 1; d <= daysInMonth; d++)
       cells.push({ day: d, isOtherMonth: false, dateStr: fmtDate(viewYear, viewMonth, d) });
-    const remaining = 42 - cells.length;
+    const remaining = CALENDAR_CELLS - cells.length;
     for (let i = 1; i <= remaining; i++)
       cells.push({ day: i, isOtherMonth: true });
     return cells;

@@ -143,6 +143,8 @@ type patientSlot {
   slotEntityId: ID!
   status: SCHEDULING_STATUS!
   session: SCHEDULE_SESSION!
+  scheduledDate: Date
+  schedulerLabel: String
   requirements: [patientScheduleRequirement!]!
   approvedBy: String
   notes: String

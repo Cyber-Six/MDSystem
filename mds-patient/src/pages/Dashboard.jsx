@@ -41,7 +41,7 @@ const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx
 const RecordUpdateForm = lazy(() => import('../modules/record-forms/update-record/record-update-form.jsx'));
 const AppointmentPage = lazy(() => import('../modules/appointment/appointment.jsx'));
 const MedicineRequestPage = lazy(() => import('../modules/medicine-request/medicine-request-page.jsx'));
-const EConsultation = lazy(() => import('../modules/e-consultation/e-consultation.jsx'));
+const HealthChat = lazy(() => import('../modules/health-chat/health-chat.jsx'));
 
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-[50vh]">
@@ -319,7 +319,9 @@ const Dashboard = () => {
               <Route path="/record-update" element={<RecordUpdateForm />} />
               <Route path="/appointments" element={<AppointmentPage />} />
               <Route path="/medicine-request" element={<MedicineRequestPage />} />
-              <Route path="/e-consultation" element={<EConsultation />} />
+              <Route path="/health-chat" element={<HealthChat />} />
+              {/* Redirect old e-consultation path to new health-chat path */}
+              <Route path="/e-consultation" element={<Navigate to="/health-chat" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
