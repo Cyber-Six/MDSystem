@@ -1,6 +1,7 @@
 const db = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
+const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
 const {
   calculateExpiryDate,
   isChatExpired,
@@ -10,6 +11,8 @@ const {
   formatChatRecord,
   formatMessage,
   hasActiveTicket,
+  getParticipantInfo,
+  autoExpireTickets,
   CHAT_EXPIRY_DAYS
 } = require("./helper.js");
 
@@ -23,6 +26,9 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    // Auto-expire any expired ongoing tickets for this patient
+    await autoExpireTickets(user.id);
 
     let query = `
       SELECT * FROM "HealthChat"
@@ -64,6 +70,9 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    // Auto-expire any expired ongoing tickets for this patient
+    await autoExpireTickets(user.id);
 
     const result = await db.query(
       `SELECT * FROM "HealthChat" WHERE id = $1 AND "patientId" = $2`,
@@ -112,6 +121,9 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
+    // Auto-expire any expired ongoing tickets
+    await autoExpireTickets();
+
     const result = await db.query(
       `SELECT * FROM "HealthChat"
        WHERE status = 'Open'
@@ -140,6 +152,9 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
+    // Auto-expire any expired ongoing tickets (critical for this query)
+    await autoExpireTickets();
+
     const result = await db.query(
       `SELECT * FROM "HealthChat"
        WHERE status = 'Ongoing'
@@ -167,6 +182,9 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    // Auto-expire any expired ongoing tickets
+    await autoExpireTickets();
 
     let query = `SELECT * FROM "HealthChat"`;
     const params = [];
@@ -205,6 +223,9 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    // Auto-expire any expired ongoing tickets
+    await autoExpireTickets();
 
     const result = await db.query(
       `SELECT * FROM "HealthChat" WHERE id = $1`,
@@ -271,6 +292,9 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
+    // Notify all medical staff about new ticket
+    emitToRole('medical', 'healthchat:ticket-created', { chat });
+
     return {
       success: true,
       chat,
@@ -288,11 +312,25 @@ const Mutation = {
 
     const { chatId, text, filename, promptType } = input;
 
+    // Validate that at least text or filename is provided
+    const hasText = text && text.trim().length > 0;
+    const hasFile = filename && promptType === 'file';
+
+    if (!hasText && !hasFile) {
+      throwGraphQLError(res)
+        .message("Message must contain either text or a file.")
+        .status(400)
+        .throw();
+    }
+
     // Verify patient owns this chat
     const owns = await verifyPatientOwnsChat(chatId, user.id);
     if (!owns) {
       throwGraphQLError(res).message("Chat not found").status(404).throw();
     }
+
+    // Auto-expire any expired tickets before checking status
+    await autoExpireTickets(user.id);
 
     // Check chat status
     const { isActive, status } = await checkChatStatus(chatId);
@@ -304,6 +342,7 @@ const Mutation = {
     }
 
     // Promote file if uploading
+    // Note: Using "eConsultation" category for Health Chat files (legacy name for backward compatibility)
     let finalFilename = filename;
     if (filename && promptType === 'file') {
       finalFilename = await promoteFile(user.id, filename, "eConsultation");
@@ -322,6 +361,13 @@ const Mutation = {
     }
 
     const message = await formatMessage(result.rows[0]);
+
+    // Emit to chat room for real-time delivery
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:new-message', {
+      chatId,
+      message,
+      senderType: 'Patient'
+    });
 
     return {
       success: true,
@@ -364,6 +410,13 @@ const Mutation = {
     );
 
     const chat = await formatChatRecord(result.rows[0]);
+
+    // Emit to chat room about ticket closure
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-closed', {
+      chatId,
+      closedBy: 'Patient',
+      chat
+    });
 
     return {
       success: true,
@@ -427,6 +480,11 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
+    // Notify patient about ticket approval
+    if (chat.patientId) {
+      notifyUser(chat.patientId, 'healthchat:ticket-approved', { chat });
+    }
+
     return {
       success: true,
       chat,
@@ -483,6 +541,14 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
+    // Notify patient about ticket rejection
+    if (chat.patientId) {
+      notifyUser(chat.patientId, 'healthchat:ticket-rejected', {
+        chat,
+        reason: reason || 'Not specified'
+      });
+    }
+
     return {
       success: true,
       chat,
@@ -500,6 +566,20 @@ const Mutation = {
 
     const { chatId, text, filename, promptType } = input;
 
+    // Validate that at least text or filename is provided
+    const hasText = text && text.trim().length > 0;
+    const hasFile = filename && promptType === 'file';
+
+    if (!hasText && !hasFile) {
+      throwGraphQLError(res)
+        .message("Message must contain either text or a file.")
+        .status(400)
+        .throw();
+    }
+
+    // Auto-expire any expired tickets before checking status
+    await autoExpireTickets();
+
     // Check chat status
     const { isActive, status } = await checkChatStatus(chatId);
     if (!isActive) {
@@ -510,6 +590,7 @@ const Mutation = {
     }
 
     // Promote file if uploading
+    // Note: Using "eConsultation" category for Health Chat files (legacy name for backward compatibility)
     let finalFilename = filename;
     if (filename && promptType === 'file') {
       finalFilename = await promoteFile(user.id, filename, "eConsultation");
@@ -528,6 +609,13 @@ const Mutation = {
     }
 
     const message = await formatMessage(result.rows[0]);
+
+    // Emit to chat room for real-time delivery
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:new-message', {
+      chatId,
+      message,
+      senderType: 'Medical'
+    });
 
     return {
       success: true,
@@ -569,6 +657,22 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
+    // Emit to chat room about ticket closure
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-closed', {
+      chatId,
+      closedBy: 'Medical',
+      chat
+    });
+
+    // Also notify patient if they're offline
+    if (chat.patientId) {
+      notifyUser(chat.patientId, 'healthchat:ticket-closed', {
+        chatId,
+        closedBy: 'Medical',
+        chat
+      });
+    }
+
     return {
       success: true,
       chat,
@@ -577,34 +681,18 @@ const Mutation = {
   },
 
   /**
-   * Expire old tickets (to be called by cron job or admin)
+   * Expire old tickets (self-sufficient, no background process required)
+   * Can be called by admin or automated job
    */
   _expireOldTickets: async (_, __, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Update all ongoing chats that have expired
-    const result = await db.query(
-      `UPDATE "HealthChat"
-       SET status = 'Expired', session_end = NOW()
-       WHERE status = 'Ongoing'
-       AND session_start IS NOT NULL
-       AND session_start + INTERVAL '${CHAT_EXPIRY_DAYS} days' < NOW()
-       RETURNING id`
-    );
+    // Use the self-sufficient autoExpireTickets helper
+    const count = await autoExpireTickets();
 
-    // Add system message to each expired chat
-    for (const row of result.rows) {
-      await db.query(
-        `INSERT INTO "HealthChatPrompt"
-         ("consultationVirtualId", "text", "promptType", "userId", "userType")
-         VALUES ($1, 'This conversation has expired after ${CHAT_EXPIRY_DAYS} days.', 'system', $2, 'Medical')`,
-        [row.id, user.id]
-      );
-    }
-
-    return result.rowCount;
+    return count;
   }
 };
 

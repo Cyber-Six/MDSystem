@@ -12,6 +12,7 @@ const PendingRequests = lazy(() => import('./PendingRequests.jsx'));
 const StaffAppointment = lazy(() => import('../modules/appointment/staff-appointment.jsx'));
 const RoleManagementPage = lazy(() => import('../modules/role-management/pages/RoleManagementPage.jsx'));
 const MedicalInventory = lazy(() => import('../modules/medical-inventory/medical-inventory.jsx'));
+const HealthChatView = lazy(() => import('../modules/health-chat/health-chat-view.jsx'));
 
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-[50vh]">
@@ -36,6 +37,7 @@ const Dashboard = () => {
               <Route path="/pending" element={<PendingRequests />} />
               <Route path="/appointments" element={<StaffAppointment />} />
               <Route path="/inventory" element={<MedicalInventory />} />
+              <Route path="/health-chat" element={<HealthChatView />} />
               <Route path="/settings/roles" element={<RoleManagementPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

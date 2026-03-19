@@ -22,7 +22,7 @@ const MEDIA_PATH = {
   promoted: path.join(MEDIA_PATH_ENV, 'committed'),
   dentalPhoto: path.join(MEDIA_PATH_ENV, 'committed', 'dental_photos'),
   appointmentRequirement: path.join(MEDIA_PATH_ENV, 'committed', 'appointment_requirements'),
-  eConsultation: path.join(MEDIA_PATH_ENV, 'committed', 'e_consultation'),
+  eConsultation: path.join(MEDIA_PATH_ENV, 'committed', 'e_consultation'), // Used for Health Chat feature
   announcement: path.join(MEDIA_PATH_ENV, 'committed', 'announcement'),
 };
 
@@ -33,6 +33,7 @@ const MEDIA_PATH = {
     await fs.mkdir(MEDIA_PATH.promoted, { recursive: true });
     await fs.mkdir(MEDIA_PATH.dentalPhoto, { recursive: true });
     await fs.mkdir(MEDIA_PATH.appointmentRequirement, { recursive: true });
+    await fs.mkdir(MEDIA_PATH.eConsultation, { recursive: true }); // Health Chat files
     await fs.mkdir(MEDIA_PATH.announcement, { recursive: true });
   } catch (err) {
     logger.error('Failed to create media directories', { error: err.message });
