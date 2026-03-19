@@ -20,6 +20,9 @@ import InitialRecordDetailModal from './initial-record-detail-modal';
  * The component reflects the backend's UpdateTicket shape:
  *   { id, patientId, status, scope, created_at, first_name, last_name, branch }
  */
+
+const PAGE_SIZE = 10;
+
 const InitialRecordList = ({
   staffRole = 'both',
   externalStatusFilter = null,
@@ -31,6 +34,7 @@ const InitialRecordList = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const effectiveStatusFilter = externalStatusFilter ?? statusFilter;
   const queryStatuses = useMemo(
@@ -49,6 +53,9 @@ const InitialRecordList = ({
     ),
     [effectiveStatusFilter],
   );
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => { setCurrentPage(1); }, [branch, effectiveStatusFilter]);
 
   // ── Fetch ----------------------------------------------------------------
 
@@ -73,8 +80,12 @@ const InitialRecordList = ({
   // ── After approve / revision ─────────────────────────────────────────────
 
   const handleAction = (updatedTicket) => {
-    // Optimistically remove the acted-on ticket from the current filtered view
-    setTickets((prev) => prev.filter((t) => t.id !== updatedTicket.id));
+    setTickets((prev) => {
+      const next = prev.filter((t) => t.id !== updatedTicket.id);
+      // Clamp current page if it becomes empty after removal
+      setCurrentPage((p) => Math.min(p, Math.max(1, Math.ceil(next.length / PAGE_SIZE))));
+      return next;
+    });
   };
 
   // ── Status badge helpers ─────────────────────────────────────────────────
@@ -91,6 +102,11 @@ const InitialRecordList = ({
     };
     return map[status] ?? 'bg-neutral-100 text-neutral-600';
   };
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+
+  const totalPages = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE));
+  const pagedTickets = tickets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -187,63 +203,94 @@ const InitialRecordList = ({
             <p className="text-sm text-secondary-500 dark:text-neutral-400">No submissions found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-neutral-50 dark:bg-neutral-700/50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
-                    Ticket ID
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
-                    Patient
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
-                    Submitted
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-4 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                {tickets.map((ticket) => (
-                  <tr
-                    key={ticket.id}
-                    onClick={() => setSelectedTicket(ticket)}
-                    className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50 cursor-pointer"
-                  >
-                    <td className="px-4 py-3 text-xs font-mono text-secondary-700 dark:text-neutral-300">
-                      #{ticket.id}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-secondary-700 dark:text-neutral-300">
-                      {ticket.first_name || ticket.last_name
-                        ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
-                        : <span className="italic text-secondary-400 dark:text-neutral-500">ID&nbsp;{ticket.patientId}</span>}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-secondary-500 dark:text-neutral-400">
-                      {ticket.created_at
-                        ? new Date(ticket.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${statusBadge(ticket.status)}`}>
-                        {ticket.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedTicket(ticket); }}
-                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
-                      >
-                        Review
-                      </button>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-neutral-50 dark:bg-neutral-700/50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Ticket ID
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Patient
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Submitted
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-4 py-2" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
+                  {pagedTickets.map((ticket) => (
+                    <tr
+                      key={ticket.id}
+                      onClick={() => setSelectedTicket(ticket)}
+                      className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50 cursor-pointer"
+                    >
+                      <td className="px-4 py-3 text-xs font-mono text-secondary-700 dark:text-neutral-300">
+                        #{ticket.id}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-secondary-700 dark:text-neutral-300">
+                        {ticket.first_name || ticket.last_name
+                          ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
+                          : <span className="italic text-secondary-400 dark:text-neutral-500">ID&nbsp;{ticket.patientId}</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-secondary-500 dark:text-neutral-400">
+                        {ticket.created_at
+                          ? new Date(ticket.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded ${statusBadge(ticket.status)}`}>
+                          {ticket.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedTicket(ticket); }}
+                          className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                        >
+                          Review
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-md text-secondary-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Previous page"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <span className="text-xs text-secondary-500 dark:text-neutral-400 min-w-[72px] text-center">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-md text-secondary-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Next page"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
