@@ -1,8 +1,9 @@
 import React from 'react';
 import { Input, Textarea, Checkbox } from './form-elements';
 
-const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalProcedureCatalog = [], catalogsLoading = false }) => {
+const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalProcedureCatalog = [], catalogsLoading = false, fieldErrors = {}, onClearFieldError = () => {} }) => {
   const handleChange = (field, value) => {
+    onClearFieldError(field);
     onChange({ ...data, [field]: value });
   };
 
@@ -57,7 +58,7 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ── Dental Visit History Card ── */}
       <div className="form-section">
         <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
@@ -71,11 +72,11 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
 
         <div className="space-y-5">
           {/* First Time to See Dentist */}
-          <div>
+          <div className={`${fieldErrors.firstTimeDentist ? 'border-2 border-error-500 rounded-lg p-4 bg-error-50' : ''}`}>
             <label className="form-label">
               IS THIS YOUR FIRST TIME TO BE SEEN BY A DENTIST ? <span className="text-error-500">*</span>
             </label>
-            <div className="flex gap-6 mt-2 ml-6">
+            <div className="flex gap-4 mt-2 ml-6">
               <label className="flex items-center">
                 <input
                   type="radio"
@@ -99,6 +100,9 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
                 <span className="ml-2 text-secondary-700">No</span>
               </label>
             </div>
+            {fieldErrors.firstTimeDentist && (
+              <p className="text-sm text-error-600 mt-2 ml-6">{fieldErrors.firstTimeDentist}</p>
+            )}
           </div>
 
           {/* Last Dental Consultation */}
@@ -107,6 +111,7 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
               <label className="form-label">IF "NO"... WHEN WAS YOUR LAST DENTAL CONSULTATION ?</label>
               <Input
                 type="month"
+                placeholder="YYYY-MM"
                 value={data.lastDentalConsultation || ''}
                 onChange={(e) => handleChange('lastDentalConsultation', e.target.value)}
               />
@@ -114,7 +119,7 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
           )}
 
           {/* Last Dental Cleaning */}
-          <div>
+          <div className={`${fieldErrors.lastDentalCleaning ? 'border-2 border-error-500 rounded-lg p-4 bg-error-50' : ''}`}>
             <label className="form-label">
               WHEN WAS YOUR LAST DENTAL CLEANING? <span className="text-error-500">*</span>
             </label>
@@ -132,6 +137,9 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
                 <span className="ml-2 text-secondary-700">1 year or more</span>
               </label>
             </div>
+            {fieldErrors.lastDentalCleaning && (
+              <p className="text-sm text-error-600 mt-2 ml-6">{fieldErrors.lastDentalCleaning}</p>
+            )}
           </div>
         </div>
       </div>
@@ -148,11 +156,11 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
         </h3>
 
         <div className="space-y-5">
-          <div>
+          <div className={`${fieldErrors.hasIntraOralAppliance ? 'border-2 border-error-500 rounded-lg p-4 bg-error-50' : ''}`}>
             <label className="form-label">
               ARE YOU WEARING ANY INTRA-ORAL APPLIANCE (e.g. braces, dentures, etc.) <span className="text-error-500">*</span>
             </label>
-            <div className="flex gap-6 mt-2 ml-6">
+            <div className="flex gap-4 mt-2 ml-6">
               <label className="flex items-center">
                 <input type="radio" name="hasIntraOralAppliance" value="yes" checked={data.hasIntraOralAppliance === 'yes'} onChange={(e) => handleChange('hasIntraOralAppliance', e.target.value)} className="form-checkbox" />
                 <span className="ml-2 text-secondary-700">Yes</span>
@@ -162,6 +170,9 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
                 <span className="ml-2 text-secondary-700">No</span>
               </label>
             </div>
+            {fieldErrors.hasIntraOralAppliance && (
+              <p className="text-sm text-error-600 mt-2 ml-6">{fieldErrors.hasIntraOralAppliance}</p>
+            )}
           </div>
 
         {/* Appliance Types */}
@@ -192,7 +203,7 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
                         onChange={(e) => handleApplianceChange(appliance.id, e.target.checked)}
                       />
                       {isChecked && (
-                        <div className="ml-6 mt-1 mb-2 flex gap-4">
+                        <div className="ml-6 mt-1 mb-2 flex gap-2">
                           {['Upper', 'Lower', 'Both'].map((loc) => (
                             <label key={loc} className="flex items-center text-sm">
                               <input
@@ -315,24 +326,27 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
         </h3>
 
         <div className="space-y-5">
-        <div className="border-2 border-dashed border-secondary-300 rounded-lg p-6">
+        <div className={`border-2 ${fieldErrors.upperTeethPhoto ? 'border-error-500 bg-error-50' : 'border-dashed border-secondary-300'} rounded-lg p-6`}>
           <label className="form-label">
             UPLOAD PHOTO OF UPPER TEETH <span className="text-error-500">*</span>
           </label>
           <p className="text-xs text-secondary-600 mb-4">Please upload your DENTAL PHOTOS AS SEEN IN THE PHOTO</p>
-          
+          {fieldErrors.upperTeethPhoto && (
+            <p className="text-sm text-error-600 mb-3 font-semibold">{fieldErrors.upperTeethPhoto}</p>
+          )}
+
           {data.upperTeethPhoto?.preview && (
             <div className="mb-4">
-              <img 
-                src={data.upperTeethPhoto.preview} 
-                alt="Upper teeth preview" 
+              <img
+                src={data.upperTeethPhoto.preview}
+                alt="Upper teeth preview"
                 className="max-w-md rounded-lg border border-secondary-200"
               />
               <p className="text-xs text-secondary-500 mt-2">UPPER PHOTO SAMPLE</p>
               <p className="text-xs text-secondary-500">Upload 1 supported file. Max 10 MB.</p>
             </div>
           )}
-          
+
           <label className="cursor-pointer inline-flex items-center px-4 py-2 border border-primary-600 text-primary-600 rounded-md hover:bg-primary-50 transition-colors">
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -351,24 +365,27 @@ const DentalHistoryForm = ({ data, onChange, oralApplianceCatalog = [], dentalPr
         </div>
 
         {/* Upload Lower Teeth Photo */}
-        <div className="border-2 border-dashed border-secondary-300 rounded-lg p-6">
+        <div className={`border-2 ${fieldErrors.lowerTeethPhoto ? 'border-error-500 bg-error-50' : 'border-dashed border-secondary-300'} rounded-lg p-6`}>
           <label className="form-label">
             UPLOAD PHOTO OF LOWER TEETH <span className="text-error-500">*</span>
           </label>
           <p className="text-xs text-secondary-600 mb-4">Please upload your DENTAL PHOTOS AS SEEN IN THE PHOTO</p>
-          
+          {fieldErrors.lowerTeethPhoto && (
+            <p className="text-sm text-error-600 mb-3 font-semibold">{fieldErrors.lowerTeethPhoto}</p>
+          )}
+
           {data.lowerTeethPhoto?.preview && (
             <div className="mb-4">
-              <img 
-                src={data.lowerTeethPhoto.preview} 
-                alt="Lower teeth preview" 
+              <img
+                src={data.lowerTeethPhoto.preview}
+                alt="Lower teeth preview"
                 className="max-w-md rounded-lg border border-secondary-200"
               />
               <p className="text-xs text-secondary-500 mt-2">LOWER PHOTO SAMPLE</p>
               <p className="text-xs text-secondary-500">Upload 1 supported file. Max 10 MB.</p>
             </div>
           )}
-          
+
           <label className="cursor-pointer inline-flex items-center px-4 py-2 border border-primary-600 text-primary-600 rounded-md hover:bg-primary-50 transition-colors">
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />

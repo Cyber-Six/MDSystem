@@ -1,5 +1,5 @@
 import React from 'react';
-import { Send, AlertCircle, Heart, X, Lock } from 'lucide-react';
+import { Send, AlertCircle, X, Lock, RefreshCw, Stethoscope, Clock } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
 import { FileAttachButton, FilePreview } from './FileAttachment';
@@ -19,149 +19,228 @@ const ChatBox = ({
   onCloseTicket,
   formatTime,
   onRetry,
-  // Health chat specific props
+  onRefresh,
   ticketStatus,
+  ticketPurpose,
+  ticketCreatedAt,
   isStaffTyping,
   attachedFile,
   onFileStaged,
   onFileRemoved,
-  isSocketConnected
+  isSocketConnected,
+  socketError
 }) => {
-  // Determine if input should be disabled
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
   const isPending = ticketStatus === 'Open';
   const isActive = ticketStatus === 'Ongoing';
   const canSendMessage = isActive && connectionStatus === 'connected' && !isInitializing;
 
-  const getStatusText = () => {
-    if (isInitializing) return 'Connecting...';
+  const getStatusDot = () => {
+    if (isFrozen) return '#a19b93';
+    if (isPending) return '#f4c430';
+    // Show green if socket connected OR polling fallback is working
+    if (isActive && (isSocketConnected || connectionStatus === 'connected')) return '#22c55e';
+    return '#f4c430';
+  };
+
+  const getStatusLabel = () => {
+    if (isInitializing) return 'Connecting…';
     if (connectionStatus === 'offline') return 'Service unavailable';
     if (connectionStatus === 'error') return 'Connection error';
     if (isFrozen) return 'Conversation closed';
-    if (isPending) return 'Waiting for staff approval';
-    if (isStaffTyping) return 'Staff is typing...';
+    if (isPending) return 'Waiting for staff';
+    if (isStaffTyping) return 'Typing…';
     if (isSocketConnected) return 'Online';
-    return 'Connecting...';
-  };
-
-  const getStatusColor = () => {
-    if (isFrozen) return 'bg-neutral-400';
-    if (isPending) return 'bg-amber-400';
-    if (isActive && isSocketConnected) return 'bg-emerald-500';
-    return 'bg-amber-400';
+    // Polling fallback is working - show Online instead of Connecting
+    if (connectionStatus === 'connected') return 'Online';
+    return 'Connecting…';
   };
 
   const getPlaceholder = () => {
-    if (isInitializing) return 'Connecting...';
-    if (connectionStatus === 'offline') return 'Service unavailable...';
-    if (connectionStatus === 'error') return 'Connection error. Please retry.';
+    if (isInitializing) return 'Connecting…';
+    if (connectionStatus === 'offline') return 'Service unavailable…';
+    if (connectionStatus === 'error') return 'Connection error — please retry.';
     if (isFrozen) return 'This conversation is closed';
-    if (isPending) return 'Waiting for staff approval...';
-    return 'Type your message...';
+    if (isPending) return 'Waiting for staff approval…';
+    return 'Type a message…';
   };
 
   return (
-    <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg overflow-hidden flex flex-col h-full">
-      {/* Chat Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 relative z-10 flex-shrink-0">
-        <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
-          <div className="relative flex-shrink-0">
-            <div className="w-11 h-11 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center shadow-lg">
-              <Heart className="w-5 h-5 text-white" />
-            </div>
-            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-neutral-900 ${getStatusColor()}`} />
+    <div
+      className="flex flex-col h-full font-sans bg-white dark:bg-neutral-900"
+    >
+
+      {/* ── Header ── */}
+      <div
+        className="flex items-center justify-between px-5 py-3.5 flex-shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700"
+      >
+        {/* Left: avatar + name + status */}
+        <div className="flex items-center gap-3">
+          <div
+            className="relative w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'rgba(244,196,48,0.12)',
+              border: '1.5px solid rgba(244,196,48,0.25)'
+            }}
+          >
+            <Stethoscope className="w-5 h-5 text-primary-500" />
+            {/* Status dot */}
+            <span
+              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-neutral-900 transition-all duration-300"
+              style={{ background: getStatusDot() }}
+            />
           </div>
-          <div className="flex flex-col justify-center min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-neutral-900 dark:text-white leading-tight truncate m-0 mb-0.5">
-              Health Chat
-            </h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-tight truncate m-0 mt-0.5">
-              {getStatusText()}
+          <div>
+            <p
+              className="font-heading font-semibold text-sm text-secondary-800 dark:text-white leading-tight m-0"
+            >
+              Medical Staff
+            </p>
+            <p
+              className="text-xs leading-tight m-0 mt-0.5 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400"
+            >
+              {isStaffTyping ? (
+                <span className="text-primary-600 font-medium">Typing…</span>
+              ) : (
+                getStatusLabel()
+              )}
             </p>
           </div>
         </div>
 
-        {/* Close ticket button - only show when active */}
-        {isActive && (
-          <button
-            onClick={onCloseTicket}
-            disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-400
-                     hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30
-                     rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Close this conversation"
-          >
-            <X className="w-4 h-4" />
-            <span className="hidden sm:inline">Close</span>
-          </button>
-        )}
+        {/* Right: refresh + close */}
+        <div className="flex items-center gap-2">
+          {/* Socket reconnect button */}
+          {!isSocketConnected && !isInitializing && isActive && (
+            <button
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="p-2 rounded-lg transition-colors disabled:opacity-50 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
+              title="Refresh messages"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+          {/* Close ticket button - only show when active */}
+          {isActive && (
+            <button
+              onClick={onCloseTicket}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
+                         transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+                         text-neutral-600 dark:text-neutral-300
+                         border border-neutral-200 dark:border-neutral-700 bg-transparent
+                         hover:text-red-600 dark:hover:text-red-400
+                         hover:border-red-300 dark:hover:border-red-700
+                         hover:bg-red-50 dark:hover:bg-red-900/30"
+            >
+              <X className="w-3.5 h-3.5" />
+              End chat
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto bg-white dark:bg-neutral-900">
-        <div className="px-6 py-6 space-y-4">
-          {/* Empty state when initializing */}
-          {messages.length === 0 && isInitializing && (
-            <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
-              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-3" />
-              <p className="text-sm">Loading conversation...</p>
+      {/* ── Messages area — ONLY this div scrolls ── */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto bg-neutral-100 dark:bg-neutral-800"
+      >
+        <div className="px-5 py-5 space-y-1">
+
+          {/* Initializing */}
+          {messages.length === 0 && isInitializing && !ticketPurpose && (
+            <div className="flex flex-col items-center justify-center py-16 text-neutral-400">
+              <div
+                className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mb-3"
+                style={{ borderColor: '#f4c430', borderTopColor: 'transparent' }}
+              />
+              <p className="text-sm">Loading your conversation…</p>
             </div>
           )}
 
-          {/* Empty state when offline */}
+          {/* Offline */}
           {messages.length === 0 && !isInitializing && connectionStatus === 'offline' && (
-            <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
-              <AlertCircle className="w-12 h-12 mb-3 text-neutral-400" />
-              <p className="text-sm mb-3">Service unavailable</p>
+            <div className="flex flex-col items-center justify-center py-16 text-neutral-400">
+              <AlertCircle className="w-10 h-10 mb-3 text-neutral-300" />
+              <p className="text-sm mb-4">Service unavailable right now</p>
               <button
                 onClick={onRetry}
-                className="px-4 py-2 text-sm bg-primary-500 text-white rounded-lg hover:bg-primary-600"
+                className="px-5 py-2 rounded-full text-sm font-medium text-secondary-900 transition-all"
+                style={{ background: '#f4c430', boxShadow: '0 2px 8px rgba(244,196,48,0.3)' }}
               >
-                Retry Connection
+                Retry
               </button>
             </div>
           )}
 
-          {/* Pending approval state */}
-          {isPending && messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
-              <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-4">
-                <Heart className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+          {/* Ticket purpose as first bubble */}
+          {ticketPurpose && (
+            <div className="flex justify-end mb-1">
+              <div style={{ maxWidth: '78%' }}>
+                <div
+                  className="px-4 py-3 rounded-2xl rounded-br-sm text-sm leading-relaxed text-secondary-900"
+                  style={{
+                    background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
+                    boxShadow: '0 3px 10px rgba(244,196,48,0.3)'
+                  }}
+                >
+                  {ticketPurpose}
+                </div>
+                {ticketCreatedAt && (
+                  <p className="text-[10px] text-right mt-1 flex items-center justify-end gap-1 text-neutral-400 dark:text-neutral-500">
+                    <Clock className="w-2.5 h-2.5" />
+                    {formatTime(ticketCreatedAt)}
+                  </p>
+                )}
               </div>
-              <p className="text-base font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                Ticket Submitted
-              </p>
-              <p className="text-sm text-center max-w-xs">
-                Your health consultation request has been submitted. Please wait for a staff member to approve it.
-              </p>
             </div>
           )}
 
-          {/* Frozen state indicator */}
-          {isFrozen && messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
-              <Lock className="w-12 h-12 mb-3 text-neutral-400" />
+          {/* Pending badge */}
+          {isPending && (
+            <div className="flex justify-center py-3">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium bg-primary-500/10 dark:bg-primary-500/20 border border-primary-500/30 dark:border-primary-500/40 text-primary-700 dark:text-primary-400">
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-primary-500" />
+                Waiting for a staff member to accept
+              </div>
+            </div>
+          )}
+
+          {/* Frozen empty */}
+          {isFrozen && messages.length === 0 && !ticketPurpose && (
+            <div className="flex flex-col items-center justify-center py-16 text-neutral-400">
+              <Lock className="w-10 h-10 mb-3 text-neutral-300" />
               <p className="text-sm">This conversation has ended</p>
             </div>
           )}
 
-          {/* Messages */}
-          {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              formatTime={formatTime}
-            />
-          ))}
+          {/* Messages — avatar grouped by consecutive sender */}
+          {messages.map((message, i) => {
+            const prev = messages[i - 1];
+            const next = messages[i + 1];
+            const isFirstInGroup = !prev || prev.userType !== message.userType || prev.promptType === 'system';
+            const isLastInGroup  = !next || next.userType !== message.userType || next.promptType === 'system';
+            return (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                formatTime={formatTime}
+                isFirstInGroup={isFirstInGroup}
+                isLastInGroup={isLastInGroup}
+              />
+            );
+          })}
 
-          {/* Typing Indicator */}
+          {/* Typing indicator */}
           <TypingIndicator isTyping={isStaffTyping} />
 
-          {/* Error Message */}
+          {/* Error inline */}
           {error && (
-            <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-xl">
-              <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-              <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+            <div
+              className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
+            >
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {error}
             </div>
           )}
 
@@ -169,73 +248,100 @@ const ChatBox = ({
         </div>
       </div>
 
-      {/* File Preview (if attached) */}
+      {/* ── File preview ── */}
       {attachedFile && (
-        <div className="px-6 py-2 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+        <div
+          className="px-5 py-3 flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900"
+        >
           <FilePreview file={attachedFile} onRemove={onFileRemoved} />
         </div>
       )}
 
-      {/* Input Area */}
-      <div className="bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 px-6 py-4 flex-shrink-0">
-        {/* Frozen state message */}
+      {/* ── Input area ── */}
+      <div
+        className="px-4 py-2.5 flex-shrink-0 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 shadow-lg dark:shadow-dark-sm"
+      >
+        {/* Frozen */}
         {isFrozen && (
-          <div className="flex items-center justify-center gap-2 text-neutral-500 py-2">
-            <Lock className="w-4 h-4" />
-            <span className="text-sm">This conversation is closed</span>
+          <div
+            className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            This conversation is closed
           </div>
         )}
 
-        {/* Pending state message */}
+        {/* Pending */}
         {isPending && (
-          <div className="flex items-center justify-center gap-2 text-amber-600 dark:text-amber-400 py-2">
-            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm">Waiting for staff approval...</span>
+          <div
+            className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-yellow-700 dark:text-yellow-400 bg-yellow-50/70 dark:bg-yellow-900/20"
+          >
+            <div
+              className="w-3.5 h-3.5 border-2 rounded-full animate-spin"
+              style={{ borderColor: '#f4c430', borderTopColor: 'transparent' }}
+            />
+            Waiting for staff approval…
           </div>
         )}
 
-        {/* Input form - only show when active */}
+        {/* Active input */}
         {isActive && (
-          <form onSubmit={onSubmit}>
-            <div className="flex items-end gap-2">
-              {/* File attachment button */}
-              <FileAttachButton
-                onFileStaged={onFileStaged}
-                disabled={!canSendMessage || isLoading || attachedFile}
+          <div className="flex items-center gap-2">
+            {/* Attach */}
+            <FileAttachButton
+              onFileStaged={onFileStaged}
+              disabled={!canSendMessage || isLoading || attachedFile}
+            />
+
+            {/* Textarea */}
+            <div className="flex-1 relative">
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={onInputChange}
+                onKeyDown={onKeyDown}
+                placeholder={getPlaceholder()}
+                disabled={!canSendMessage || isLoading}
+                className="w-full px-3.5 py-2 text-sm rounded-full resize-none leading-snug
+                           text-secondary-800 dark:text-white placeholder-neutral-400 transition-all duration-200
+                           focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
+                           bg-neutral-100 dark:bg-neutral-800
+                           border border-neutral-200 dark:border-neutral-700
+                           focus:border-primary-500 dark:focus:border-primary-400
+                           focus:shadow-lg focus:shadow-primary-500/10"
+                style={{
+                  maxHeight: '80px',
+                  scrollbarWidth: 'none'
+                }}
+                rows={1}
               />
-
-              {/* Text input */}
-              <div className="flex-1 relative">
-                <textarea
-                  ref={inputRef}
-                  value={inputValue}
-                  onChange={onInputChange}
-                  onKeyDown={onKeyDown}
-                  placeholder={getPlaceholder()}
-                  disabled={!canSendMessage || isLoading}
-                  className="w-full px-4 py-2.5 border border-neutral-300 dark:border-neutral-600 rounded-lg
-                           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                           bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white
-                           placeholder-neutral-400 dark:placeholder-neutral-500
-                           resize-none text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  rows="1"
-                />
-              </div>
-
-              {/* Send button */}
-              <button
-                type="submit"
-                disabled={!canSendMessage || isLoading || (!inputValue.trim() && !attachedFile)}
-                className="flex-shrink-0 w-10 h-10 rounded-lg transition-all duration-200 flex items-center justify-center
-                         shadow-sm hover:shadow-md disabled:shadow-none self-center
-                         bg-primary-500 hover:bg-primary-600 disabled:bg-neutral-300 dark:disabled:bg-neutral-700
-                         text-white disabled:cursor-not-allowed"
-                title="Send message"
-              >
-                <Send className="w-5 h-5" />
-              </button>
             </div>
-          </form>
+
+            {/* Send */}
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!canSendMessage || isLoading || (!inputValue.trim() && !attachedFile)}
+              className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center
+                         transition-all duration-200 active:scale-95 disabled:cursor-not-allowed
+                         text-secondary-900 dark:text-secondary-900
+                         hover:shadow-lg dark:hover:shadow-dark-md
+                         disabled:opacity-40 disabled:shadow-none"
+              style={{
+                background:
+                  canSendMessage && (inputValue.trim() || attachedFile)
+                    ? 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)'
+                    : '#e8e5e0',
+                color:
+                  canSendMessage && (inputValue.trim() || attachedFile)
+                    ? '#1c1a17'
+                    : '#a19b93'
+              }}
+              title="Send message"
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </div>
         )}
       </div>
     </div>

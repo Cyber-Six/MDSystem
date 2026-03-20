@@ -39,16 +39,16 @@ const ValidationWarningModal = ({
         btnBg: 'bg-red-600 hover:bg-red-700',
       }
     : {
-        bg: 'bg-amber-50',
-        border: 'border-amber-200',
-        iconBg: 'bg-amber-100',
-        iconColor: 'text-amber-600',
-        titleColor: 'text-amber-900',
-        subtitleColor: 'text-amber-700',
-        closeColor: 'text-amber-600 hover:text-amber-800 hover:bg-amber-100',
-        sectionLink: 'text-primary-600 hover:text-primary-800',
-        bulletColor: 'text-amber-500',
-        btnBg: 'bg-amber-600 hover:bg-amber-700',
+        bg: 'bg-yellow-100',
+        border: 'border-yellow-400',
+        iconBg: 'bg-yellow-200',
+        iconColor: 'text-yellow-700',
+        titleColor: 'text-yellow-900',
+        subtitleColor: 'text-yellow-800',
+        closeColor: 'text-yellow-700 hover:text-yellow-900 hover:bg-yellow-200',
+        sectionLink: 'text-primary-600 hover:text-primary-800 hover:underline',
+        bulletColor: 'text-yellow-600',
+        btnBg: 'bg-yellow-600 hover:bg-yellow-700',
       };
 
   // Group errors by section
@@ -95,7 +95,8 @@ const ValidationWarningModal = ({
   const handleGoToSection = (sectionIndex) => {
     if (onGoToSection && sectionIndex !== undefined && sectionIndex !== null) {
       onGoToSection(sectionIndex);
-      onClose();
+      // Don't call onClose() here - let the parent component handle closing
+      // onClose();
     }
   };
 

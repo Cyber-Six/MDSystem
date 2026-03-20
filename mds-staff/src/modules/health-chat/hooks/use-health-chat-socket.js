@@ -27,9 +27,23 @@ export function useHealthChatSocket() {
     addMessage,
     addTicket,
     updateTicketStatus,
+    removeTicket,
     setUserTyping,
-    refreshTickets
+    refreshTickets,
+    setSocketError,
+    filter
   } = useHealthChat();
+
+  // Use refs for callbacks to avoid socket reconnection on every filter change
+  const refreshTicketsRef = useRef(refreshTickets);
+  const removeTicketRef = useRef(removeTicket);
+  const filterRef = useRef(filter);
+
+  useEffect(() => {
+    refreshTicketsRef.current = refreshTickets;
+    removeTicketRef.current = removeTicket;
+    filterRef.current = filter;
+  }, [refreshTickets, removeTicket, filter]);
 
   // Connect on mount
   useEffect(() => {
@@ -50,6 +64,7 @@ export function useHealthChatSocket() {
     socketService.connect().then(() => {
       socketRef.current = socketService;
       setIsConnected(true);
+      setSocketError(false);
 
       // Listen for new ticket created by patient
       socketService.on('healthchat:ticket-created', (data) => {
@@ -78,11 +93,24 @@ export function useHealthChatSocket() {
           updateTicketStatus(data.chatId, 'Closed');
         }
       });
+
+      // Listen for ticket status changes by other staff (approve/reject)
+      socketService.on('healthchat:ticket-status-changed', (data) => {
+        if (data.chatId && data.status) {
+          // If ticket was approved (now Ongoing) and we're viewing pending, remove it
+          if (data.status === 'Ongoing' && filterRef.current === 'pending') {
+            removeTicketRef.current(data.chatId);
+          } else {
+            // Otherwise refresh to get updated data
+            refreshTicketsRef.current();
+          }
+        }
+      });
     }).catch((err) => {
       console.error('[HealthChatSocket] Connection failed:', err);
       console.error('[HealthChatSocket] Details:', err.message);
       setIsConnected(false);
-      // Note: Socket.io client will auto-retry based on reconnectionAttempts
+      setSocketError(true);
     });
 
     // Cleanup on unmount
@@ -98,7 +126,7 @@ export function useHealthChatSocket() {
         setIsConnected(false);
       }
     };
-  }, [addMessage, addTicket, updateTicketStatus, setUserTyping]);
+  }, [addMessage, addTicket, updateTicketStatus, setUserTyping, setSocketError]);
 
   // Join room when chat is selected
   useEffect(() => {

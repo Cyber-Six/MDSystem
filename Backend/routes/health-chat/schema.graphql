@@ -34,6 +34,8 @@ type HealthChat {
   archived_at: Date
   patient: ChatParticipant
   medical: ChatParticipant
+  closedBy: UserType
+  closedByUser: ChatParticipant
   messages: [HealthChatPrompt!]
   expiresAt: Date
 }
@@ -52,8 +54,8 @@ type HealthChatPrompt {
 
 type ChatParticipant {
   id: ID!
-  firstName: String!
-  lastName: String!
+  firstName: String
+  lastName: String
   email: String
   identifier: Int
   branch: String
@@ -125,5 +127,6 @@ type Mutation {
   rejectTicket(chatId: ID!, reason: String): TicketResult!
   sendMedicalMessage(input: SendMessageInput!): MessageResult!
   closeTicket(input: CloseTicketInput!): TicketResult!
+  deleteArchivedTicket(chatId: ID!): TicketResult!
   expireOldTickets: Int!
 }

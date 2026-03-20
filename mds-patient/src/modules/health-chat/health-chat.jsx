@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, MessageCircleHeart, Stethoscope } from 'lucide-react';
 import ChatBox from './components/ChatBox';
 import TicketDivider from './components/TicketDivider';
+import TicketStatusBanner from './components/TicketStatusBanner';
 import {
   getCurrentActiveTicket,
   getMyTickets,
@@ -13,12 +14,9 @@ import {
 import { useHealthChatSocket } from './hooks/use-health-chat-socket';
 
 const HealthChat = () => {
-  // Ticket state
   const [ticket, setTicket] = useState(null);
   const [messages, setMessages] = useState([]);
   const [previousTickets, setPreviousTickets] = useState([]);
-
-  // UI state
   const [inputValue, setInputValue] = useState('');
   const [attachedFile, setAttachedFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -26,19 +24,59 @@ const HealthChat = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState('checking');
   const [isStaffTyping, setIsStaffTyping] = useState(false);
-
-  // Create ticket form state
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [ticketPurpose, setTicketPurpose] = useState('');
 
-  // Refs
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const hasInitialized = useRef(false);
-  const typingTimeoutRef = useRef(null);
+
+  // Load messages for a ticket (defined early for use in callbacks)
+  const loadMessages = useCallback(async (chatId) => {
+    try {
+      const fetchedMessages = await getTicketMessages(chatId);
+      setMessages(fetchedMessages || []);
+    } catch (err) {
+      console.error('[HealthChat] Failed to load messages:', err);
+      setError('Failed to load messages.');
+    }
+  }, []);
+
+  // Socket event handlers (must be defined before useHealthChatSocket)
+  // Handle new message from socket
+  const handleNewMessage = useCallback((newMessage) => {
+    setMessages(prev => [...prev, newMessage]);
+    // Clear typing indicator when message received
+    setIsStaffTyping(false);
+  }, []);
+
+  // Handle typing indicator from socket
+  const handleTypingIndicator = useCallback((isTyping) => {
+    setIsStaffTyping(isTyping);
+  }, []);
+
+  // Handle ticket approved via socket
+  const handleTicketApproved = useCallback((updatedTicket) => {
+    console.log('[HealthChat] Ticket approved event received:', updatedTicket);
+    setTicket(updatedTicket);
+    // Reload messages in case there's a system message
+    if (updatedTicket?.id) {
+      loadMessages(updatedTicket.id);
+    }
+  }, [loadMessages]);
+
+  // Handle ticket closed via socket
+  const handleTicketClosed = useCallback((data) => {
+    console.log('[HealthChat] Ticket closed event received:', data);
+    setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
+    // Reload messages to show system message
+    if (data?.chatId) {
+      loadMessages(data.chatId);
+    }
+  }, [loadMessages]);
 
   // Socket hook
-  const { isConnected: isSocketConnected, emitTyping } = useHealthChatSocket({
+  const { isConnected: isSocketConnected, socketError, emitTyping } = useHealthChatSocket({
     chatId: ticket?.id,
     chatStatus: ticket?.status,
     onNewMessage: handleNewMessage,
@@ -47,75 +85,84 @@ const HealthChat = () => {
     onTicketClosed: handleTicketClosed
   });
 
-  // Scroll to bottom when messages change
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
 
-  // Initialize on mount
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
     initializeHealthChat();
   }, []);
 
-  // Handle new message from socket
-  function handleNewMessage(newMessage) {
-    setMessages(prev => [...prev, newMessage]);
-    // Clear typing indicator when message received
-    setIsStaffTyping(false);
-  }
+  // Poll for ticket status when pending (fallback for socket disconnection)
+  useEffect(() => {
+    // Only poll when ticket is pending (Open) and socket might not be connected
+    if (!ticket?.id || ticket?.status !== 'Open') return;
 
-  // Handle typing indicator from socket
-  function handleTypingIndicator(isTyping) {
-    setIsStaffTyping(isTyping);
-  }
+    console.log('[HealthChat] Starting status polling for ticket:', ticket.id);
 
-  // Handle ticket approved via socket
-  function handleTicketApproved(updatedTicket) {
-    setTicket(updatedTicket);
-    // Reload messages in case there's a system message
-    if (updatedTicket?.id) {
-      loadMessages(updatedTicket.id);
-    }
-  }
+    const pollInterval = setInterval(async () => {
+      try {
+        const updatedTicket = await getCurrentActiveTicket();
+        if (updatedTicket && updatedTicket.status !== 'Open') {
+          // Ticket status changed! Update local state
+          console.log('[HealthChat] Polling detected status change:', updatedTicket.status);
+          setTicket(updatedTicket);
+          if (updatedTicket.id) {
+            await loadMessages(updatedTicket.id);
+          }
+        }
+      } catch (err) {
+        console.error('[HealthChat] Polling failed:', err);
+      }
+    }, 15000); // Poll every 15 seconds
 
-  // Handle ticket closed via socket
-  function handleTicketClosed(data) {
-    setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
-    // Reload messages to show system message
-    if (data?.chatId) {
-      loadMessages(data.chatId);
-    }
-  }
+    return () => {
+      console.log('[HealthChat] Stopping status polling');
+      clearInterval(pollInterval);
+    };
+  }, [ticket?.id, ticket?.status, loadMessages]);
 
-  // Initialize health chat - load existing ticket or show create form
+  // Poll for new messages when socket is disconnected (fallback mechanism)
+  useEffect(() => {
+    // Only poll when socket is disconnected and ticket is active (Ongoing)
+    if (!ticket?.id || ticket?.status !== 'Ongoing') return;
+    if (isSocketConnected && !socketError) return; // Socket is working, no need to poll
+
+    console.log('[HealthChat] Socket disconnected - starting message polling for ticket:', ticket.id);
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await loadMessages(ticket.id);
+      } catch (err) {
+        console.error('[HealthChat] Message polling failed:', err);
+      }
+    }, 10000); // Poll every 10 seconds
+
+    return () => {
+      console.log('[HealthChat] Stopping message polling');
+      clearInterval(pollInterval);
+    };
+  }, [ticket?.id, ticket?.status, isSocketConnected, socketError, loadMessages]);
+
   async function initializeHealthChat() {
     try {
       setIsInitializing(true);
       setConnectionStatus('checking');
       setError(null);
-
-      // Get current active ticket
       const activeTicket = await getCurrentActiveTicket();
-
       if (activeTicket) {
         setTicket(activeTicket);
         await loadMessages(activeTicket.id);
         setConnectionStatus('connected');
       } else {
-        // Load previous closed tickets for history
         await loadPreviousTickets();
         setConnectionStatus('connected');
-        // If has previous tickets, show them with create button
-        // If no tickets at all, show create form
       }
     } catch (err) {
-      console.error('[HealthChat] Initialization failed:', err);
       setError('Failed to load health chat. Please try again.');
       setConnectionStatus('error');
     } finally {
@@ -123,125 +170,122 @@ const HealthChat = () => {
     }
   }
 
-  // Load messages for a ticket
-  async function loadMessages(chatId) {
+  // Refresh messages (manual refresh via HTTP when sockets fail)
+  async function refreshMessages() {
+    if (!ticket?.id) return;
     try {
-      const fetchedMessages = await getTicketMessages(chatId);
-      setMessages(fetchedMessages);
+      setError(null);
+      await loadMessages(ticket.id);
     } catch (err) {
-      console.error('[HealthChat] Failed to load messages:', err);
-      setError('Failed to load messages.');
+      setError('Failed to refresh messages. Please try again.');
     }
   }
 
-  // Load previous closed tickets
   async function loadPreviousTickets() {
     try {
       const closedResult = await getMyTickets('Closed', 0, 10);
       const expiredResult = await getMyTickets('Expired', 0, 10);
-      setPreviousTickets([...closedResult.chats, ...expiredResult.chats]);
+      setPreviousTickets([
+        ...(closedResult?.chats || []),
+        ...(expiredResult?.chats || [])
+      ]);
     } catch (err) {
       console.error('[HealthChat] Failed to load previous tickets:', err);
     }
   }
 
-  // Handle creating a new ticket
   async function handleCreateTicket(e) {
     e.preventDefault();
-
-    if (!ticketPurpose.trim()) {
-      setError('Please describe your health concern.');
-      return;
-    }
-
+    if (!ticketPurpose.trim()) { setError('Please describe your health concern.'); return; }
     try {
       setIsLoading(true);
       setError(null);
-
       const result = await createTicket(ticketPurpose.trim());
-
       if (result.success && result.chat) {
         setTicket(result.chat);
         setMessages([]);
         setShowCreateForm(false);
         setTicketPurpose('');
+        setConnectionStatus('connected');
+        // Load any initial messages (like system messages)
+        if (result.chat.id) {
+          await loadMessages(result.chat.id);
+        }
       } else {
         setError(result.message || 'Failed to create ticket.');
       }
     } catch (err) {
-      console.error('[HealthChat] Create ticket failed:', err);
       setError(err.message || 'Failed to create ticket. Please try again.');
     } finally {
       setIsLoading(false);
     }
   }
 
-  // Handle sending a message
   async function handleSendMessage(e) {
     e.preventDefault();
-
     const hasText = inputValue.trim().length > 0;
     const hasFile = attachedFile !== null;
-
     if (!hasText && !hasFile) return;
     if (!ticket?.id) return;
-
     try {
       setIsLoading(true);
       setError(null);
-
-      // Stop typing indicator
       emitTyping(false);
-
       if (hasFile) {
-        // Send file message
         const result = await sendMessage(ticket.id, null, attachedFile.fileId, 'file');
-        if (result.success && result.message) {
-          setMessages(prev => [...prev, result.message]);
-        }
+        if (result.success && result.message) setMessages(prev => [...prev, result.message]);
         setAttachedFile(null);
       }
-
       if (hasText) {
-        // Send text message
         const result = await sendMessage(ticket.id, inputValue.trim(), null, 'text');
-        if (result.success && result.message) {
-          setMessages(prev => [...prev, result.message]);
-        }
+        if (result.success && result.message) setMessages(prev => [...prev, result.message]);
         setInputValue('');
       }
-
-      inputRef.current?.focus();
     } catch (err) {
-      console.error('[HealthChat] Send message failed:', err);
       setError(err.message || 'Failed to send message.');
     } finally {
       setIsLoading(false);
     }
   }
 
-  // Handle closing ticket
   async function handleCloseTicket() {
     if (!ticket?.id) return;
-
-    const confirmed = window.confirm(
-      'Are you sure you want to close this conversation? You can start a new one later.'
-    );
-
-    if (!confirmed) return;
-
     try {
       setIsLoading(true);
       const result = await closeTicket(ticket.id);
-
       if (result.success) {
         setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
-        // Reload messages to show system message
         await loadMessages(ticket.id);
       }
     } catch (err) {
-      console.error('[HealthChat] Close ticket failed:', err);
       setError(err.message || 'Failed to close conversation.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Handle canceling pending ticket
+  async function handleCancelTicket() {
+    if (!ticket?.id) return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const result = await closeTicket(ticket.id);
+
+      if (result.success) {
+        // Clear the ticket and messages
+        setTicket(null);
+        setMessages([]);
+        // Load previous tickets
+        await loadPreviousTickets();
+      } else {
+        setError(result.message || 'Failed to cancel request.');
+      }
+    } catch (err) {
+      console.error('[HealthChat] Cancel ticket failed:', err);
+      setError(err.message || 'Failed to cancel request.');
     } finally {
       setIsLoading(false);
     }
@@ -250,14 +294,9 @@ const HealthChat = () => {
   // Handle input change with typing indicator
   function handleInputChange(e) {
     setInputValue(e.target.value);
-
-    // Emit typing indicator
-    if (e.target.value.trim()) {
-      emitTyping(true);
-    }
+    if (e.target.value.trim()) emitTyping(true);
   }
 
-  // Handle key down (Enter to send)
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -265,35 +304,33 @@ const HealthChat = () => {
     }
   }
 
-  // Format timestamp
   function formatTime(dateStr) {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 
   // Check if we should show create form
-  const shouldShowCreateForm = !ticket || ['Closed', 'Expired'].includes(ticket?.status);
+  // Don't show during initialization to prevent flash
+  const shouldShowCreateForm = !isInitializing && (!ticket || ['Closed', 'Expired'].includes(ticket?.status));
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      {/* Header Banner */}
-      <div className="rounded-2xl p-6 mb-6 bg-primary-500">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-12 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
+    <div className="max-w-2xl mx-auto px-4 py-6 font-sans">
+
+      {/* ── Page Header ── */}
+      <div className="relative rounded-2xl overflow-hidden mb-6 bg-primary-500">
+        <div className="flex items-center gap-4 px-7 py-6">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(255,255,255,0.2)', border: '1.5px solid rgba(255,255,255,0.3)' }}
+          >
+            <MessageCircleHeart className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-heading font-bold text-white" style={{ margin: 0 }}>
+            <h1 className="font-heading font-bold text-2xl m-0 leading-tight" style={{ color: '#ffffff' }}>
               Health Chat
             </h1>
-            <p className="text-white/80 text-sm mt-1" style={{ margin: 0 }}>
-              Connect with our medical staff for health consultations
+            <p className="text-sm mt-0.5 m-0" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              Talk to our medical team, anytime
             </p>
           </div>
         </div>
@@ -301,25 +338,43 @@ const HealthChat = () => {
 
       {/* Main Content */}
       <div className="grid grid-cols-1 gap-8">
+        {/* Loading state during initialization */}
+        {isInitializing && (
+          <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-12">
+            <div className="flex flex-col items-center justify-center text-neutral-500">
+              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-4" />
+              <p className="text-sm">Loading health chat...</p>
+            </div>
+          </div>
+        )}
+
         {/* Create Ticket Form - Show when no active ticket or ticket is closed */}
         {shouldShowCreateForm && !showCreateForm && (
-          <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
-            {/* Show previous conversation if exists */}
+          <div
+            className="rounded-2xl overflow-hidden bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800"
+            style={{
+              boxShadow: '0 4px 16px rgba(28,25,23,0.06)'
+            }}
+          >
+            {/* Previous conversation preview */}
             {ticket && ['Closed', 'Expired'].includes(ticket.status) && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-neutral-800 dark:text-white mb-4">
-                  Previous Conversation
-                </h3>
-                <div className="max-h-[300px] overflow-y-auto space-y-3 mb-4 p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
+              <div className="p-5 border-b border-neutral-200 dark:border-neutral-700">
+                <p className="text-xs font-medium uppercase tracking-wider text-neutral-400 mb-3">
+                  Previous conversation
+                </p>
+                <div
+                  className="max-h-56 overflow-y-auto space-y-2.5 rounded-xl p-4"
+                  style={{ background: '#f4f2ef' }}
+                >
                   {messages.map((msg) => (
                     <div
                       key={msg.id}
-                      className={`text-sm ${
+                      className={`text-sm leading-relaxed ${
                         msg.promptType === 'system'
-                          ? 'text-center text-neutral-500'
+                          ? 'text-center text-neutral-400 italic'
                           : msg.userType === 'Patient'
-                          ? 'text-right text-blue-600 dark:text-blue-400'
-                          : 'text-left text-neutral-700 dark:text-neutral-300'
+                          ? 'text-right text-secondary-700 dark:text-secondary-300'
+                          : 'text-left text-neutral-600 dark:text-neutral-400'
                       }`}
                     >
                       {msg.text}
@@ -328,120 +383,184 @@ const HealthChat = () => {
                 </div>
                 <TicketDivider
                   closedAt={ticket.session_end}
-                  closedBy={ticket.status === 'Expired' ? 'System' : 'Unknown'}
+                  closedBy={ticket.closedBy || (ticket.status === 'Expired' ? 'System' : 'Unknown')}
                 />
               </div>
             )}
 
-            <div className="text-center">
-              <p className="text-neutral-600 dark:text-neutral-400 mb-4">
-                {ticket ? 'Start a new consultation' : 'Need to speak with medical staff?'}
+            {/* CTA */}
+            <div className="p-7 text-center">
+              <div
+                className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center"
+                style={{ background: 'rgba(244,196,48,0.12)', border: '1.5px solid rgba(244,196,48,0.25)' }}
+              >
+                <Stethoscope className="w-7 h-7 text-primary-500" />
+              </div>
+              <p className="font-heading font-semibold text-secondary-800 dark:text-white text-lg mb-1">
+                {ticket ? 'Start a new consultation' : 'Need to talk to our medical team?'}
+              </p>
+              <p className="text-sm text-neutral-500 mb-6">
+                Ask questions, share concerns — we're here to help.
               </p>
               <button
                 onClick={() => setShowCreateForm(true)}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-lg
-                         hover:bg-primary-600 transition-colors font-medium"
+                className="inline-flex items-center gap-2.5 px-7 py-3 rounded-full font-medium text-sm
+                           text-secondary-900 transition-all duration-200
+                           hover:brightness-105 active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
+                  boxShadow: '0 4px 14px rgba(244,196,48,0.35)'
+                }}
               >
-                <Plus className="w-5 h-5" />
-                Start Health Chat
+                <Plus className="w-4 h-4" />
+                {ticket ? 'New Consultation' : 'Start Health Chat'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Create Ticket Form */}
+        {/* Create ticket form */}
         {shouldShowCreateForm && showCreateForm && (
-          <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-semibold text-neutral-800 dark:text-white mb-4">
-              Start a Health Consultation
-            </h3>
-            <form onSubmit={handleCreateTicket}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  What would you like to discuss?
-                </label>
-                <textarea
-                  value={ticketPurpose}
-                  onChange={(e) => setTicketPurpose(e.target.value)}
-                  placeholder="Describe your health concern or question..."
-                  className="w-full px-4 py-3 border border-neutral-300 dark:border-neutral-600 rounded-lg
-                           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                           bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white
-                           placeholder-neutral-400 dark:placeholder-neutral-500"
-                  rows={4}
-                  disabled={isLoading}
-                />
-              </div>
+          <div
+            className="rounded-2xl overflow-hidden bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800"
+            style={{
+              boxShadow: '0 4px 16px rgba(28,25,23,0.06)'
+            }}
+          >
+            {/* Form header */}
+            <div
+              className="px-6 py-5 border-b border-neutral-200 dark:border-neutral-700"
+            >
+              <h3 className="font-heading font-semibold text-secondary-800 dark:text-white text-base m-0">
+                Tell us what's on your mind
+              </h3>
+              <p className="text-xs text-neutral-400 mt-0.5 m-0">
+                Be as detailed as you'd like — the more context, the better we can help.
+              </p>
+            </div>
 
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
-                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="p-6">
+              <form onSubmit={handleCreateTicket}>
+                <div className="mb-5">
+                  <textarea
+                    value={ticketPurpose}
+                    onChange={(e) => setTicketPurpose(e.target.value)}
+                    placeholder="e.g. I've had a headache for 3 days and it's not getting better..."
+                    className="w-full px-4 py-3.5 rounded-xl text-sm text-secondary-800 dark:text-white
+                               placeholder-neutral-400 resize-none transition-all duration-200
+                               focus:outline-none bg-neutral-100 dark:bg-neutral-800
+                               border border-neutral-200 dark:border-neutral-700
+                               focus:border-primary-500 dark:focus:border-primary-400
+                               focus:shadow-lg focus:shadow-primary-500/10"
+                    style={{
+                      minHeight: '120px',
+                    }}
+                    onFocus={e => {
+                      e.target.style.borderColor = '#f4c430';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(244,196,48,0.12)';
+                    }}
+                    onBlur={e => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                    rows={4}
+                    disabled={isLoading}
+                  />
+                  {/* Character feel — helpful hint */}
+                  <p className="text-xs text-neutral-400 mt-2 text-right">
+                    {ticketPurpose.length > 0 ? `${ticketPurpose.length} characters` : 'Tip: include duration, severity, and any relevant history'}
+                  </p>
                 </div>
-              )}
 
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateForm(false);
-                    setTicketPurpose('');
-                    setError(null);
-                  }}
-                  disabled={isLoading}
-                  className="flex-1 px-4 py-2.5 border border-neutral-300 dark:border-neutral-600
-                           text-neutral-700 dark:text-neutral-300 rounded-lg hover:bg-neutral-50
-                           dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !ticketPurpose.trim()}
-                  className="flex-1 px-4 py-2.5 bg-primary-500 text-white rounded-lg
-                           hover:bg-primary-600 transition-colors disabled:opacity-50
-                           disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    'Submit Request'
-                  )}
-                </button>
-              </div>
-            </form>
+                {error && (
+                  <div
+                    className="mb-4 px-4 py-3 rounded-xl flex items-center gap-2.5 text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
+                  >
+                    <span className="w-4 h-4 flex-shrink-0">⚠</span>
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setShowCreateForm(false); setTicketPurpose(''); setError(null); }}
+                    disabled={isLoading}
+                    className="flex-1 py-2.5 rounded-full text-sm font-medium text-neutral-600 dark:text-neutral-300
+                               transition-all duration-150 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-50
+                               border border-neutral-300 dark:border-neutral-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading || !ticketPurpose.trim()}
+                    className="flex-[2] py-2.5 rounded-full text-sm font-semibold text-secondary-900
+                               transition-all duration-200 hover:brightness-105 active:scale-95
+                               disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none
+                               flex items-center justify-center gap-2"
+                    style={{
+                      background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
+                      boxShadow: ticketPurpose.trim() ? '0 4px 14px rgba(244,196,48,0.35)' : 'none'
+                    }}
+                  >
+                    {isLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-secondary-800/40 border-t-secondary-800 rounded-full animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      'Send Request →'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 
         {/* Chat Box - Show when ticket exists and is active (Open or Ongoing) */}
-        {ticket && ['Open', 'Ongoing'].includes(ticket.status) && (
-          <div className="h-[600px]">
-            <ChatBox
-              messages={messages}
+        {!isInitializing && ticket && ['Open', 'Ongoing'].includes(ticket.status) && (
+          <div className="space-y-4">
+            {/* Status Banner */}
+            <TicketStatusBanner
+              status={ticket.status}
+              onCancel={handleCancelTicket}
               isLoading={isLoading}
-              isInitializing={isInitializing}
-              connectionStatus={connectionStatus}
-              error={error}
-              inputValue={inputValue}
-              inputRef={inputRef}
-              messagesEndRef={messagesEndRef}
-              onInputChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onSubmit={handleSendMessage}
-              onCloseTicket={handleCloseTicket}
-              formatTime={formatTime}
-              onRetry={initializeHealthChat}
-              ticketStatus={ticket.status}
-              isStaffTyping={isStaffTyping}
-              attachedFile={attachedFile}
-              onFileStaged={setAttachedFile}
-              onFileRemoved={() => setAttachedFile(null)}
-              isSocketConnected={isSocketConnected}
             />
+
+            {/* Chat Interface */}
+            <div className="h-[600px] rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-700 shadow-lg bg-white dark:bg-neutral-900">
+              <ChatBox
+                messages={messages}
+                isLoading={isLoading}
+                isInitializing={isInitializing}
+                connectionStatus={connectionStatus}
+                error={error}
+                inputValue={inputValue}
+                inputRef={inputRef}
+                messagesEndRef={messagesEndRef}
+                onInputChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                onSubmit={handleSendMessage}
+                onCloseTicket={handleCloseTicket}
+                formatTime={formatTime}
+                onRetry={initializeHealthChat}
+                onRefresh={refreshMessages}
+                ticketStatus={ticket.status}
+                ticketPurpose={ticket.purpose}
+                ticketCreatedAt={ticket.session_start}
+                isStaffTyping={isStaffTyping}
+                attachedFile={attachedFile}
+                onFileStaged={setAttachedFile}
+                onFileRemoved={() => setAttachedFile(null)}
+                isSocketConnected={isSocketConnected}
+                socketError={socketError}
+              />
+            </div>
           </div>
         )}
+
       </div>
     </div>
   );

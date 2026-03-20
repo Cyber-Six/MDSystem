@@ -206,7 +206,7 @@ const DataConsent = ({
         />
 
         {/* Modal Container */}
-        <div className="relative w-full max-w-lg max-h-[90vh] bg-white rounded-xl shadow-xl flex flex-col overflow-hidden">
+        <div className="relative w-full max-w-3xl max-h-[90vh] bg-white rounded-xl shadow-xl flex flex-col overflow-hidden">
 
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">

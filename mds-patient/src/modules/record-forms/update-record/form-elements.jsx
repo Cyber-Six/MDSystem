@@ -136,14 +136,13 @@ export const Button = ({ variant = 'primary', children, className = '', ...props
 };
 
 // Accordion Section Component for collapsible sections
-export const AccordionSection = ({ 
-  id, 
-  title, 
-  icon, 
-  isOpen, 
-  onToggle, 
-  children,
-  accentColor = 'primary'
+export const AccordionSection = ({
+  id,
+  title,
+  icon,
+  isOpen,
+  onToggle,
+  children
 }) => (
   <div className={`border-2 rounded-xl overflow-hidden transition-all duration-300
                   ${isOpen 

@@ -38,8 +38,8 @@ async function getParticipantInfo(userId) {
   const result = await db.query(
     `SELECT
       uc.id,
-      up.first_name AS "firstName",
-      up.last_name AS "lastName",
+      COALESCE(up.first_name, 'Unknown') AS "firstName",
+      COALESCE(up.last_name, 'User') AS "lastName",
       uc.email,
       up.identifier,
       up.branch
@@ -115,15 +115,18 @@ async function checkChatStatus(chatId) {
  * @returns {Promise<Object>} - Formatted chat with participant info
  */
 async function formatChatRecord(chat) {
-  const [patient, medical] = await Promise.all([
+  const [patient, medical, closedByUser] = await Promise.all([
     getParticipantInfo(chat.patientId),
-    getParticipantInfo(chat.medicalId)
+    getParticipantInfo(chat.medicalId),
+    chat.closed_by_user_id ? getParticipantInfo(chat.closed_by_user_id) : Promise.resolve(null)
   ]);
 
   return {
     ...chat,
     patient,
     medical,
+    closedBy: chat.closed_by_type || (chat.status === 'Expired' ? 'System' : null),
+    closedByUser,
     expiresAt: calculateExpiryDate(chat.session_start)
   };
 }
@@ -151,7 +154,10 @@ async function formatMessage(message) {
 async function autoExpireTickets(patientId = null) {
   let query = `
     UPDATE "HealthChat"
-    SET status = 'Expired', session_end = NOW()
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_user_id = NULL,
+        closed_by_type = NULL
     WHERE status = 'Ongoing'
     AND session_start IS NOT NULL
     AND session_start + INTERVAL '${CHAT_EXPIRY_DAYS} days' < NOW()
@@ -173,7 +179,7 @@ async function autoExpireTickets(patientId = null) {
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
        VALUES ($1, $2, 'system', NULL, 'Medical')`,
-      [row.id, `This conversation has expired after ${CHAT_EXPIRY_DAYS} days.`]
+      [row.id, `This ticket has expired after ${CHAT_EXPIRY_DAYS} days.`]
     );
   }
 
