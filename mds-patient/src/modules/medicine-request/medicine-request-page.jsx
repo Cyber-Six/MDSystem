@@ -295,54 +295,52 @@ const MedicineRequestPage = () => {
   };
 
   const cancelPendingAndResubmit = async () => {
-    setShowCancelConfirm(false);
     if (!pendingSubmitPayload) return;
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      // Find and cancel all pending requests
-      const pendingRequests = requests.filter(
-        (r) => r.status?.toLowerCase() === 'pending'
-      );
+      // Use the cancelMedicineRequest mutation which handles the pending request directly
       const cancelMutation = `
-        mutation CancelMedicineRequest($requestId: ID!, $status: RequestStatus!) {
-          setStatusMedicineRequest(requestId: $requestId, status: $status) {
+        mutation CancelMedicineRequest {
+          cancelMedicineRequest {
             id
             status
           }
         }
       `;
-      const cancelResults = await Promise.all(
-        pendingRequests.map((r) =>
-          sendGraphQLRequest(
-            cancelMutation,
-            { requestId: r.id, status: 'Cancelled' },
-            { endpoint: '/medical-inventory/medicine-request/patient' }
-          )
-        )
+      const cancelResult = await sendGraphQLRequest(
+        cancelMutation,
+        {},
+        { endpoint: '/medical-inventory/medicine-request/patient' }
       );
-      // Verify the cancel actually worked (patient endpoint may not support it)
-      const anySucceeded = cancelResults.some(
-        (r) => r?.setStatusMedicineRequest !== null && r?.setStatusMedicineRequest !== undefined
-      );
-      if (!anySucceeded) {
+
+      // Verify the cancel actually worked
+      if (!cancelResult?.cancelMedicineRequest) {
         setErrorMessage(
           'Your pending request cannot be cancelled online. Please contact clinic staff to cancel your existing request before submitting a new one.'
         );
+        setShowCancelConfirm(false);
+        setIsSubmitting(false);
+        setPendingSubmitPayload(null);
         return;
       }
+
       // Update local state to reflect cancelled
       setRequests((prev) =>
         prev.map((r) =>
-          r.status?.toLowerCase() === 'pending' ? { ...r, status: 'Cancelled' } : r
+          r.id === cancelResult.cancelMedicineRequest.id ? { ...r, status: 'Cancelled' } : r
         )
       );
+
+      // Close modal and proceed with new submission
+      setShowCancelConfirm(false);
       await submitRequest(pendingSubmitPayload.requestItems);
     } catch (error) {
       console.error('Error cancelling and resubmitting:', error);
       setErrorMessage(
-        'Unable to cancel your existing request. Please contact clinic staff to cancel your pending request before submitting a new one.'
+        error.message || 'Unable to cancel your existing request. Please contact clinic staff to cancel your pending request before submitting a new one.'
       );
+      setShowCancelConfirm(false);
     } finally {
       setIsSubmitting(false);
       setPendingSubmitPayload(null);
