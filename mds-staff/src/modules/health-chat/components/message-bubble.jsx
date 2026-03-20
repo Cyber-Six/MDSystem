@@ -195,15 +195,13 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
               )}
               {isVideo && <video src={fileUrl} controls className="max-w-full max-h-52 block" preload="metadata" />}
               {!isImage && !isPdf && !isVideo && (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => setLightboxOpen(true)}
                   className="flex items-center gap-2 px-4 py-3 text-xs hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300"
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
-                  Download Attachment
-                </a>
+                  View Attachment
+                </button>
               )}
             </div>
           ) : (
@@ -228,15 +226,13 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
               )}
               {isVideo && <video src={fileUrl} controls className="max-w-full max-h-52 block" preload="metadata" />}
               {!isImage && !isPdf && !isVideo && (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => setLightboxOpen(true)}
                   className="flex items-center gap-2 px-4 py-3 text-xs hover:opacity-80 transition-opacity text-neutral-100"
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
-                  Download Attachment
-                </a>
+                  View Attachment
+                </button>
               )}
             </div>
           )}

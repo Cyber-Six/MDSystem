@@ -245,6 +245,11 @@ const HealthChat = () => {
       setError(err.message || 'Failed to send message.');
     } finally {
       setIsLoading(false);
+      // Refocus input after sending so user can continue typing
+      // Use setTimeout to ensure state updates have applied
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     }
   }
 

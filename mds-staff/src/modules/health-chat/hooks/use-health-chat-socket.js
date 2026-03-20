@@ -24,6 +24,7 @@ export function useHealthChatSocket() {
 
   const {
     selectedChatId,
+    selectedTicket,
     addMessage,
     addTicket,
     updateTicketStatus,
@@ -34,19 +35,36 @@ export function useHealthChatSocket() {
     filter
   } = useHealthChat();
 
-  // Use refs for callbacks to avoid socket reconnection on every filter change
+  // Use refs for ALL callbacks to avoid socket reconnection on dependency changes
+  // This is critical to prevent duplicate event listeners
+  const addMessageRef = useRef(addMessage);
+  const addTicketRef = useRef(addTicket);
+  const updateTicketStatusRef = useRef(updateTicketStatus);
+  const setUserTypingRef = useRef(setUserTyping);
+  const setSocketErrorRef = useRef(setSocketError);
   const refreshTicketsRef = useRef(refreshTickets);
   const removeTicketRef = useRef(removeTicket);
   const filterRef = useRef(filter);
 
+  // Keep refs up to date
   useEffect(() => {
+    addMessageRef.current = addMessage;
+    addTicketRef.current = addTicket;
+    updateTicketStatusRef.current = updateTicketStatus;
+    setUserTypingRef.current = setUserTyping;
+    setSocketErrorRef.current = setSocketError;
     refreshTicketsRef.current = refreshTickets;
     removeTicketRef.current = removeTicket;
     filterRef.current = filter;
-  }, [refreshTickets, removeTicket, filter]);
+  }, [addMessage, addTicket, updateTicketStatus, setUserTyping, setSocketError, refreshTickets, removeTicket, filter]);
 
-  // Connect on mount
+  // Check if selected chat is archived (should not receive typing events)
+  const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
+
+  // Connect on mount only - use empty dependency array to prevent reconnection
   useEffect(() => {
+    let isMounted = true;
+
     const socketService = createSocketService({
       getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
       getToken: () => tokenService.TokenStorage.getAccessToken(),
@@ -62,35 +80,43 @@ export function useHealthChatSocket() {
     });
 
     socketService.connect().then(() => {
+      // Check if component is still mounted before setting state
+      if (!isMounted) {
+        socketService.disconnect();
+        return;
+      }
+
       socketRef.current = socketService;
       setIsConnected(true);
-      setSocketError(false);
+      setSocketErrorRef.current(false);
 
       // Listen for new ticket created by patient
       socketService.on('healthchat:ticket-created', (data) => {
         if (data.chat) {
-          addTicket(data.chat);
+          addTicketRef.current(data.chat);
         }
       });
 
       // Listen for new messages (in any room we're in)
       socketService.on('healthchat:new-message', (data) => {
         if (data.chatId && data.message && data.senderType === 'Patient') {
-          addMessage(data.chatId, data.message);
+          addMessageRef.current(data.chatId, data.message);
         }
       });
 
       // Listen for typing indicators
       socketService.on('healthchat:user-typing', (data) => {
         if (data.chatId && data.userType === 'Patient') {
-          setUserTyping(data.chatId, data.userId, data.isTyping);
+          setUserTypingRef.current(data.chatId, data.userId, data.isTyping);
         }
       });
 
       // Listen for ticket closed by patient
       socketService.on('healthchat:ticket-closed', (data) => {
         if (data.chatId && data.closedBy === 'Patient') {
-          updateTicketStatus(data.chatId, 'Closed');
+          updateTicketStatusRef.current(data.chatId, 'Closed');
+          // Clear typing indicator when chat is closed
+          setUserTypingRef.current(data.chatId, null, false);
         }
       });
 
@@ -107,14 +133,16 @@ export function useHealthChatSocket() {
         }
       });
     }).catch((err) => {
+      if (!isMounted) return;
       console.error('[HealthChatSocket] Connection failed:', err);
       console.error('[HealthChatSocket] Details:', err.message);
       setIsConnected(false);
-      setSocketError(true);
+      setSocketErrorRef.current(true);
     });
 
-    // Cleanup on unmount
+    // Cleanup on unmount only
     return () => {
+      isMounted = false;
       if (socketRef.current) {
         // Leave all joined rooms
         joinedRoomsRef.current.forEach(roomId => {
@@ -126,9 +154,9 @@ export function useHealthChatSocket() {
         setIsConnected(false);
       }
     };
-  }, [addMessage, addTicket, updateTicketStatus, setUserTyping, setSocketError]);
+  }, []); // Empty dependency array - connect only once on mount
 
-  // Join room when chat is selected
+  // Join room when chat is selected (but NOT for archived chats)
   // Note: Must depend on both isConnected AND selectedChatId to handle the race condition
   // where socket connects AFTER a chat is already selected
   useEffect(() => {
@@ -142,12 +170,29 @@ export function useHealthChatSocket() {
       }
     });
 
-    // Join new room
+    // Don't join room for archived chats - no need for real-time updates
+    if (isArchived) {
+      // If we had joined this room before, leave it
+      if (joinedRoomsRef.current.has(selectedChatId)) {
+        socketRef.current.emit('healthchat:leave-room', { chatId: selectedChatId });
+        joinedRoomsRef.current.delete(selectedChatId);
+      }
+      return;
+    }
+
+    // Join new room (only for non-archived chats)
     if (!joinedRoomsRef.current.has(selectedChatId)) {
       socketRef.current.emit('healthchat:join-room', { chatId: selectedChatId });
       joinedRoomsRef.current.add(selectedChatId);
     }
-  }, [selectedChatId, isConnected]);
+  }, [selectedChatId, isConnected, isArchived]);
+
+  // Clear typing indicator when viewing archived chats
+  useEffect(() => {
+    if (isArchived && selectedChatId) {
+      setUserTypingRef.current(selectedChatId, null, false);
+    }
+  }, [isArchived, selectedChatId]);
 
   /**
    * Emit typing status to server

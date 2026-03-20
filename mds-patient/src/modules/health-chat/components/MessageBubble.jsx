@@ -203,15 +203,13 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
               )}
 
               {!isImage && !isPdf && !isVideo && (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => setLightboxOpen(true)}
                   className="flex items-center gap-2 px-4 py-3 text-sm hover:opacity-80 transition-opacity text-secondary-900"
                 >
                   {getIcon()}
-                  Download file
-                </a>
+                  View Attachment
+                </button>
               )}
             </div>
           ) : (
@@ -248,15 +246,13 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
               )}
 
               {!isImage && !isPdf && !isVideo && (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => setLightboxOpen(true)}
                   className="flex items-center gap-2 px-4 py-3 text-sm hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300"
                 >
                   {getIcon()}
-                  Download file
-                </a>
+                  View Attachment
+                </button>
               )}
             </div>
           )}
