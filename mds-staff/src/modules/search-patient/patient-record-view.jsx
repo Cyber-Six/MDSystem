@@ -292,7 +292,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
     const fetchConsultations = async () => {
       try {
-        const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
+        const consultationsWithDetails = await consultationService.getCachedConsultationsWithDetails(patientId);
 
         if (!cancelled) {
           setConsultations(consultationsWithDetails);
@@ -319,8 +319,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return;
       }
 
-      // Fetch updated consultations from backend
-      const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
+      // Clear cache to ensure fresh data, then fetch updated consultations
+      consultationService.clearConsultationCache(patientId);
+      const consultationsWithDetails = await consultationService.getCachedConsultationsWithDetails(patientId);
       setConsultations(consultationsWithDetails);
     } catch (err) {
       console.error('Error refreshing consultations:', err);
@@ -366,7 +367,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       );
 
       // Fetch updated consultations from backend using the service
-      const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
+      consultationService.clearConsultationCache(patientId); // Clear cache for fresh data
+      const consultationsWithDetails = await consultationService.getCachedConsultationsWithDetails(patientId);
 
       setConsultations(consultationsWithDetails);
       // Stay on consultation tab instead of redirecting to history

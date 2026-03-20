@@ -274,9 +274,9 @@ export default function ConsultationDetailModal({ consultation, onClose, onRefre
       try {
         let results;
         if (isLikelyCode(query)) {
-          results = await consultationService.getIcdViaCode(query);
+          results = await consultationService.getIcdViaCodeCached(query);
         } else {
-          results = await consultationService.getIcdViaTitle(query);
+          results = await consultationService.getIcdViaTitleCached(query);
         }
 
         const cleaned = (results || []).filter((item) => item?.id && item?.code && item?.title).slice(0, 12);
@@ -392,6 +392,9 @@ export default function ConsultationDetailModal({ consultation, onClose, onRefre
       // Refresh outcomes
       const updatedOutcomes = await consultationService.getOutcomes(consultation.id);
       setOutcomes(updatedOutcomes || []);
+
+      // Clear consultation cache to ensure fresh data on next load
+      consultationService.clearConsultationCache(consultation.patientId || consultation.patient?.id);
 
       if (onRefresh) onRefresh();
     } catch (err) {

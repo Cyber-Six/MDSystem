@@ -167,9 +167,9 @@ export default function PatientConsultationTab({ patient, consultations = [], on
       try {
         let results;
         if (isLikelyCode(query)) {
-          results = await consultationService.getIcdViaCode(query);
+          results = await consultationService.getIcdViaCodeCached(query);
         } else {
-          results = await consultationService.getIcdViaTitle(query);
+          results = await consultationService.getIcdViaTitleCached(query);
         }
 
         if (ignore) return;
