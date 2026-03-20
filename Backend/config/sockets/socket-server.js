@@ -29,13 +29,24 @@ async function initSocket(server, options = {}) {
     process.env.SOCKET_CORS_METHODS || 'GET,HEAD,PUT,PATCH,POST,DELETE'
   ).split(',');
 
+  // Determine the Socket.IO path based on environment
+  // This ensures compatibility with proxies in development
+  const path = process.env.SOCKET_PATH || '/socket.io';
+  const serveClientOption = process.env.NODE_ENV === 'production' ? false : true;
+
   io = new Server(server, {
+    path,
+    serveClient: serveClientOption,
     cors: {
       origin: corsOrigin,
       methods: corsMethods,
       credentials: true,
     },
     transports: ['websocket', 'polling'],
+    // Enhanced reconnection settings for reliability
+    maxHttpBufferSize: 1e6, // 1MB
+    pingInterval: 25000,
+    pingTimeout: 60000,
     ...options,
   });
 
