@@ -113,6 +113,8 @@ const MedicineRequestPage = () => {
               item_code
               item_name
               category
+              batchId
+              batchNumber
               dosageUnit
               dosageValue
             }
