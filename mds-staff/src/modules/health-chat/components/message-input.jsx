@@ -5,109 +5,64 @@ import { useHealthChatSocket } from '../hooks/use-health-chat-socket';
 import { uploadFile, unstageFile } from '../health-chat-service';
 
 const ACCEPTED_TYPES = 'image/jpeg,image/png,application/pdf,video/mp4,video/quicktime';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const MessageInput = () => {
   const { selectedChatId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
   const { emitTyping } = useHealthChatSocket();
 
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue]   = useState('');
   const [attachedFile, setAttachedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [actionLoading, setActionLoading] = useState(null); // 'approve' | 'reject' | null
+  const [isSending, setIsSending]     = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
   const fileInputRef = useRef(null);
-  const textareaRef = useRef(null);
+  const textareaRef  = useRef(null);
 
   const isPending = selectedTicket?.status === 'Open';
-  const isActive = selectedTicket?.status === 'Ongoing';
-  const isClosed = ['Closed', 'Expired'].includes(selectedTicket?.status);
-  const canSend = isActive && (inputValue.trim() || attachedFile) && !isSending;
+  const isActive  = selectedTicket?.status === 'Ongoing';
+  const isClosed  = ['Closed', 'Expired'].includes(selectedTicket?.status);
+  const canSend   = isActive && (inputValue.trim() || attachedFile) && !isSending;
 
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
-
-    if (file.size > MAX_FILE_SIZE) {
-      alert('File too large. Maximum size is 10MB.');
-      return;
-    }
-
+    if (file.size > MAX_FILE_SIZE) { alert('File too large. Max 10MB.'); return; }
     try {
       setIsUploading(true);
       const fileId = await uploadFile(file);
-      setAttachedFile({
-        fileId,
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size
-      });
-    } catch (err) {
-      console.error('Upload failed:', err);
-      alert('Failed to upload file. Please try again.');
-    } finally {
-      setIsUploading(false);
-    }
+      setAttachedFile({ fileId, fileName: file.name, fileType: file.type, fileSize: file.size });
+    } catch { alert('Upload failed. Please try again.'); }
+    finally { setIsUploading(false); }
   };
 
   const handleRemoveFile = async () => {
     if (attachedFile?.fileId) {
-      try {
-        await unstageFile(attachedFile.fileId);
-      } catch (err) {
-        console.error('Failed to unstage file:', err);
-      }
+      try { await unstageFile(attachedFile.fileId); } catch {}
     }
     setAttachedFile(null);
   };
 
   const handleInputChange = (e) => {
     setInputValue(e.target.value);
-    if (e.target.value.trim() && selectedChatId) {
-      emitTyping(selectedChatId, true);
-    }
+    if (e.target.value.trim() && selectedChatId) emitTyping(selectedChatId, true);
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
   const handleSend = async () => {
     if (!canSend || !selectedChatId) return;
-
     try {
       setIsSending(true);
       emitTyping(selectedChatId, false);
-
-      // Send file if attached
-      if (attachedFile) {
-        await sendMessage(selectedChatId, null, attachedFile.fileId, 'file');
-        setAttachedFile(null);
-      }
-
-      // Send text if present
-      if (inputValue.trim()) {
-        await sendMessage(selectedChatId, inputValue.trim(), null, 'text');
-        setInputValue('');
-      }
-
+      if (attachedFile) { await sendMessage(selectedChatId, null, attachedFile.fileId, 'file'); setAttachedFile(null); }
+      if (inputValue.trim()) { await sendMessage(selectedChatId, inputValue.trim(), null, 'text'); setInputValue(''); }
       textareaRef.current?.focus();
-    } catch (err) {
-      console.error('Failed to send message:', err);
-      alert('Failed to send message. Please try again.');
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const getFileIcon = () => {
-    if (attachedFile?.fileType?.startsWith('image/')) return <Image className="w-4 h-4 text-blue-500" />;
-    if (attachedFile?.fileType?.startsWith('video/')) return <Film className="w-4 h-4 text-purple-500" />;
-    return <File className="w-4 h-4 text-red-500" />;
+    } catch { alert('Failed to send. Please try again.'); }
+    finally { setIsSending(false); }
   };
 
   const formatFileSize = (bytes) => {
@@ -116,191 +71,189 @@ const MessageInput = () => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const handleApprove = async () => {
-    if (!selectedChatId || actionLoading) return;
+  const FileIcon = attachedFile?.fileType?.startsWith('image/') ? Image
+                 : attachedFile?.fileType?.startsWith('video/') ? Film
+                 : File;
 
-    try {
-      setActionLoading('approve');
-      await approveTicket(selectedChatId);
-    } catch (err) {
-      console.error('Failed to approve ticket:', err);
-      alert('Failed to approve ticket. Please try again.');
-    } finally {
-      setActionLoading(null);
-    }
+  const handleApprove = async () => {
+    if (actionLoading) return;
+    try { setActionLoading('approve'); await approveTicket(selectedChatId); }
+    catch { alert('Failed to approve.'); }
+    finally { setActionLoading(null); }
   };
 
   const handleReject = async () => {
-    if (!selectedChatId || actionLoading) return;
-
+    if (actionLoading) return;
     const reason = window.prompt('Reason for rejection (optional):');
-    if (reason === null) return; // User cancelled
-
-    try {
-      setActionLoading('reject');
-      await rejectTicket(selectedChatId, reason || null);
-    } catch (err) {
-      console.error('Failed to reject ticket:', err);
-      alert('Failed to reject ticket. Please try again.');
-    } finally {
-      setActionLoading(null);
-    }
+    if (reason === null) return;
+    try { setActionLoading('reject'); await rejectTicket(selectedChatId, reason || null); }
+    catch { alert('Failed to reject.'); }
+    finally { setActionLoading(null); }
   };
 
-  // Pending ticket - show accept/reject buttons
+  // ── Pending state ──
   if (isPending) {
     return (
-      <div className="border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
-        <div className="px-4 py-4">
-          <div className="text-center mb-3">
-            <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-1">
-              This patient is waiting for your response
-            </p>
-            <p className="text-xs text-neutral-500 dark:text-neutral-500">
-              Accept to start the conversation or reject with a reason
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={handleReject}
-              disabled={actionLoading !== null}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3
-                       border-2 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400
-                       rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30
-                       disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-            >
-              {actionLoading === 'reject' ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <XCircle className="w-5 h-5" />
-              )}
-              Reject
-            </button>
-            <button
-              onClick={handleApprove}
-              disabled={actionLoading !== null}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3
-                       bg-emerald-500 text-white rounded-lg
-                       hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed
-                       transition-colors font-medium shadow-sm"
-            >
-              {actionLoading === 'approve' ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <CheckCircle className="w-5 h-5" />
-              )}
-              Accept
-            </button>
-          </div>
+      <div
+        className="flex-shrink-0 px-5 py-4"
+        style={{ borderTop: '1px solid #e8e5e0', background: '#fdfcfa' }}
+      >
+        <p
+          className="text-xs text-center mb-3"
+          style={{ color: '#a19b93' }}
+        >
+          Patient is waiting — accept to start the conversation
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={handleReject}
+            disabled={!!actionLoading}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold
+                       transition-all duration-150 disabled:opacity-50"
+            style={{ border: '1.5px solid #FECACA', color: '#DC2626' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            {actionLoading === 'reject'
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <XCircle className="w-4 h-4" />
+            }
+            Reject
+          </button>
+          <button
+            onClick={handleApprove}
+            disabled={!!actionLoading}
+            className="flex-[2] flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold
+                       transition-all duration-150 disabled:opacity-50"
+            style={{ background: '#D1FAE5', color: '#065F46' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#A7F3D0'}
+            onMouseLeave={e => e.currentTarget.style.background = '#D1FAE5'}
+          >
+            {actionLoading === 'approve'
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <CheckCircle className="w-4 h-4" />
+            }
+            Accept Conversation
+          </button>
         </div>
       </div>
     );
   }
 
-  // Closed/Expired ticket
+  // ── Closed state ──
   if (isClosed) {
     return (
-      <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
-        <div className="text-sm text-center text-neutral-500 dark:text-neutral-400">
-          This conversation has ended
-        </div>
+      <div
+        className="flex-shrink-0 px-5 py-3 text-xs text-center"
+        style={{ borderTop: '1px solid #e8e5e0', background: '#f4f2ef', color: '#a19b93' }}
+      >
+        This conversation has ended
       </div>
     );
   }
 
-  // Not active (shouldn't happen, but fallback)
-  if (!isActive) {
-    return (
-      <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
-        <div className="text-sm text-center text-neutral-500 dark:text-neutral-400">
-          {selectedTicket?.status === 'Open'
-            ? 'Approve this ticket to start messaging'
-            : 'This conversation has ended'}
-        </div>
-      </div>
-    );
-  }
-
+  // ── Active input ──
   return (
-    <div className="border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
-      {/* File Preview */}
+    <div
+      className="flex-shrink-0"
+      style={{ borderTop: '1px solid #e8e5e0', background: '#fdfcfa' }}
+    >
+      {/* File preview bar */}
       {attachedFile && (
-        <div className="px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
-          <div className="flex items-center gap-2 p-2 bg-white dark:bg-neutral-800 rounded-lg">
-            {getFileIcon()}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 truncate">
-                {attachedFile.fileName}
-              </p>
-              <p className="text-xs text-neutral-500">{formatFileSize(attachedFile.fileSize)}</p>
-            </div>
-            <button
-              onClick={handleRemoveFile}
-              className="p-1 text-neutral-400 hover:text-red-500 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+        <div
+          className="flex items-center gap-2.5 px-4 py-2.5"
+          style={{ borderBottom: '1px solid #f4f2ef', background: '#f4f2ef' }}
+        >
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: '#e8e5e0' }}
+          >
+            <FileIcon className="w-3.5 h-3.5" style={{ color: '#78716c' }} />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium truncate" style={{ color: '#28251f' }}>
+              {attachedFile.fileName}
+            </p>
+            <p className="text-[10px]" style={{ color: '#a19b93' }}>
+              {formatFileSize(attachedFile.fileSize)}
+            </p>
+          </div>
+          <button
+            onClick={handleRemoveFile}
+            className="p-1 rounded transition-colors"
+            style={{ color: '#a19b93' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#DC2626'}
+            onMouseLeave={e => e.currentTarget.style.color = '#a19b93'}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
-      {/* Input Area */}
-      <div className="px-4 py-3">
-        <div className="flex items-end gap-2">
-          {/* File Button */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED_TYPES}
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading || isSending || attachedFile}
-            className="p-2 text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200
-                     disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isUploading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Paperclip className="w-5 h-5" />
-            )}
-          </button>
+      {/* Input row */}
+      <div className="flex items-center gap-2 px-4 py-2.5">
+        {/* Attach */}
+        <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES} onChange={handleFileSelect} className="hidden" />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading || isSending || !!attachedFile}
+          className="flex-shrink-0 p-1.5 rounded-lg transition-colors disabled:opacity-40"
+          style={{ color: '#a19b93' }}
+          onMouseEnter={e => e.currentTarget.style.color = '#57534e'}
+          onMouseLeave={e => e.currentTarget.style.color = '#a19b93'}
+        >
+          {isUploading
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <Paperclip className="w-4 h-4" />
+          }
+        </button>
 
-          {/* Text Input */}
-          <div className="flex-1">
-            <textarea
-              ref={textareaRef}
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
-              disabled={isSending}
-              className="w-full px-4 py-2.5 border border-neutral-300 dark:border-neutral-600 rounded-lg
-                       focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white
-                       placeholder-neutral-400 dark:placeholder-neutral-500
-                       resize-none text-sm disabled:opacity-50"
-              rows={1}
-            />
-          </div>
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={inputValue}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+          disabled={isSending}
+          rows={1}
+          className="flex-1 px-3.5 py-2 text-sm resize-none rounded-xl transition-all duration-150
+                     focus:outline-none disabled:opacity-50"
+          style={{
+            background: '#f4f2ef',
+            border: '1px solid #e8e5e0',
+            color: '#1c1a17',
+            maxHeight: '80px',
+            lineHeight: '1.4',
+            scrollbarWidth: 'none'
+          }}
+          onFocus={e => {
+            e.target.style.borderColor = '#f4c430';
+            e.target.style.boxShadow = '0 0 0 2px rgba(244,196,48,0.12)';
+          }}
+          onBlur={e => {
+            e.target.style.borderColor = '#e8e5e0';
+            e.target.style.boxShadow = 'none';
+          }}
+        />
 
-          {/* Send Button */}
-          <button
-            onClick={handleSend}
-            disabled={!canSend}
-            className="p-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600
-                     disabled:bg-neutral-300 dark:disabled:bg-neutral-700 disabled:cursor-not-allowed
-                     transition-colors shadow-sm hover:shadow-md disabled:shadow-none"
-          >
-            {isSending ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
-          </button>
-        </div>
+        {/* Send */}
+        <button
+          onClick={handleSend}
+          disabled={!canSend}
+          className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center
+                     transition-all duration-150 active:scale-95 disabled:cursor-not-allowed"
+          style={{
+            background: canSend ? 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)' : '#e8e5e0',
+            color: canSend ? '#1c1a17' : '#a19b93',
+            boxShadow: canSend ? '0 2px 8px rgba(244,196,48,0.3)' : 'none',
+          }}
+        >
+          {isSending
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <Send className="w-3.5 h-3.5" />
+          }
+        </button>
       </div>
     </div>
   );

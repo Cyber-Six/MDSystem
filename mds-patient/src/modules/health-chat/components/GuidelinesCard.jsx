@@ -1,36 +1,41 @@
 import React from 'react';
 
+const guidelines = [
+  'This chat is for general health questions, not emergencies.',
+  'Not a substitute for professional medical advice or diagnosis.',
+  'For emergencies, visit the clinic or call emergency services.',
+  'Your conversation is private and secure.',
+];
+
 const GuidelinesCard = () => {
   return (
-    <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-6">
-      <h3 className="text-lg font-semibold text-primary-900 dark:text-primary-100 mb-4">
-        Important Guidelines
-      </h3>
-      <ul className="space-y-3 text-sm text-primary-700 dark:text-primary-300">
-        <li className="flex items-start space-x-2">
-          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          <span>This AI assistant provides general health information only</span>
-        </li>
-        <li className="flex items-start space-x-2">
-          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          <span>Not a substitute for professional medical advice or diagnosis</span>
-        </li>
-        <li className="flex items-start space-x-2">
-          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          <span>For emergencies, please visit the clinic immediately</span>
-        </li>
-        <li className="flex items-start space-x-2">
-          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          <span>Your conversation is private and secure</span>
-        </li>
+    <div
+      className="rounded-2xl p-5"
+      style={{
+        background: 'rgba(244,196,48,0.06)',
+        border: '1.5px solid rgba(244,196,48,0.2)'
+      }}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#C9A01E' }}>
+        Good to know
+      </p>
+      <ul className="space-y-2.5">
+        {guidelines.map((item, i) => (
+          <li key={i} className="flex items-start gap-2.5">
+            <span
+              className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(244,196,48,0.2)' }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: '#f4c430' }}
+              />
+            </span>
+            <span className="text-sm leading-relaxed" style={{ color: '#57534e' }}>
+              {item}
+            </span>
+          </li>
+        ))}
       </ul>
     </div>
   );

@@ -14,16 +14,16 @@ const PatientList = () => {
 
   if (ticketsLoading && tickets.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <Loader2 className="w-6 h-6 text-neutral-400 animate-spin" />
+      <div className="flex-1 flex items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#d5d1cb' }} />
       </div>
     );
   }
 
   if (tickets.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center">
+      <div className="flex-1 flex items-center justify-center py-12 px-6 text-center">
+        <p className="text-xs" style={{ color: '#a19b93' }}>
           No conversations found
         </p>
       </div>
