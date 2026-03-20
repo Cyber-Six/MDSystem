@@ -2,6 +2,24 @@ const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
 
+// Enhanced aggregation: includes medicine name by joining with MedicalItems
+const getItemsWithNames = async (requestId) => {
+  const result = await db.query(`
+    SELECT 
+      mre.id, 
+      mre."medicineId" AS "batchId", 
+      mre."medicineId", 
+      mre."requestId", 
+      mre.quantity,
+      COALESCE(mi.item_name, 'Unknown Medicine') AS "itemName"
+    FROM "MedicineRequestEntity" mre
+    LEFT JOIN "MedicineBatch" mb ON mb.id = mre."medicineId"
+    LEFT JOIN "MedicalItems" mi ON mi.id = mb."medicalItemId"
+    WHERE mre."requestId" = $1
+  `, [requestId]);
+  return result.rows;
+};
+
 // Reused in all request list queries: aggregates request line items as a JSON array
 const ITEMS_AGG = `
   COALESCE(
@@ -49,6 +67,10 @@ const Query = {
     `;
 
     const result = await db.query(sql, [patientId, offset, limit]);
+    // Fetch items with names for each request
+    for (const request of result.rows) {
+      request.items = await getItemsWithNames(request.id);
+    }
     return result.rows;
   },
 
@@ -63,7 +85,12 @@ const Query = {
     `;
 
     const result = await db.query(sql, [requestId]);
-    return result.rows[0] || null;
+    if (result.rows.length === 0) return null;
+    
+    const request = result.rows[0];
+    // Fetch items with medicine names
+    request.items = await getItemsWithNames(requestId);
+    return request;
   },
 
   _getMedicineRequests: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
@@ -78,6 +105,10 @@ const Query = {
     `;
 
     const result = await db.query(sql, [patientId, offset, limit]);
+    // Fetch items with names for each request
+    for (const request of result.rows) {
+      request.items = await getItemsWithNames(request.id);
+    }
     return result.rows;
   },
 
@@ -87,14 +118,18 @@ const Query = {
       FROM "MedicineRequestLog" mrl
       LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
       WHERE 
-        location = COALESCE($1, location) AND 
-        status = COALESCE($2, status)
+        mrl.location = COALESCE($1, mrl.location) AND 
+        mrl.status = COALESCE($2, mrl.status)
       GROUP BY mrl.id
       ORDER BY mrl.created_at DESC
       OFFSET $3 LIMIT $4
     `;
 
     const result = await db.query(sql, [location, status, offset, limit]);
+    // Fetch items with names for each request
+    for (const request of result.rows) {
+      request.items = await getItemsWithNames(request.id);
+    }
     return result.rows;
   },
 };
@@ -137,8 +172,10 @@ const Mutation = {
         params
       );
 
-      request.items = entityQuery.rows;
       await client.query('COMMIT');
+      
+      // Fetch items with medicine names
+      request.items = await getItemsWithNames(request.id);
       return request;
     } catch (err) {
       await client.query('ROLLBACK');
@@ -150,9 +187,9 @@ const Mutation = {
   },
 
   _setStatusMedicineRequest: async (_, { requestId, status, approvedBy, notes }, { res }) => {
-    const validStatuses = ["Approved", "Rejected", "Cancelled"];
+    const validStatuses = ["Approved", "Rejected", "Cancelled", "Completed"];
     if (!validStatuses.includes(status)) {
-      throwGraphQLError(res).message("Invalid status. Must be Approved, Rejected, or Cancelled").status(400).throw();
+      throwGraphQLError(res).message("Invalid status. Must be Approved, Rejected, Cancelled, or Completed").status(400).throw();
     }
 
     const current = await db.query(
@@ -162,8 +199,16 @@ const Mutation = {
     if (current.rows.length === 0) {
       throwGraphQLError(res).message("Medicine request not found").status(404).throw();
     }
-    if (current.rows[0].status !== "Pending") {
-      throwGraphQLError(res).message("Only pending requests can be updated").status(400).throw();
+    
+    // Allow transitions: Pending -> Approved/Rejected/Cancelled, Approved -> Completed
+    const currentStatus = current.rows[0].status;
+    const allowedTransitions = {
+      "Pending": ["Approved", "Rejected", "Cancelled"],
+      "Approved": ["Completed", "Rejected"],
+    };
+    
+    if (!allowedTransitions[currentStatus]?.includes(status)) {
+      throwGraphQLError(res).message(`Cannot transition from ${currentStatus} to ${status}`).status(400).throw();
     }
 
     const updateSql = `
@@ -174,13 +219,8 @@ const Mutation = {
     `;
     const result = await db.query(updateSql, [status, approvedBy, notes, requestId]);
     
-    const items = await db.query(
-      `SELECT id, "requestId", "medicineId" AS "batchId", "medicineId", quantity
-       FROM "MedicineRequestEntity"
-       WHERE "requestId" = $1`,
-      [requestId],
-    );
-    result.rows[0].items = items.rows; 
+    // Fetch items with medicine names
+    result.rows[0].items = await getItemsWithNames(requestId);
 
     return result.rows[0];
   },

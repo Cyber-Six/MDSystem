@@ -34,6 +34,7 @@ export function useHealthChatSocket({
 }) {
   const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [socketError, setSocketError] = useState(false);
   const typingTimeoutRef = useRef(null);
 
   // Determine if we should be connected
@@ -52,12 +53,19 @@ export function useHealthChatSocket({
       return;
     }
 
-    // Create socket service
+    // Create socket service with reconnection options
     const socketService = createSocketService({
       getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
       getToken: () => tokenService.TokenStorage.getAccessToken(),
       onAuthError: async () => {
         await tokenService.refreshAccessToken();
+      },
+      options: {
+        reconnectionDelay: 500,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+        transports: ['websocket', 'polling'],
+        timeout: 10000,
       }
     });
 
@@ -65,6 +73,7 @@ export function useHealthChatSocket({
     socketService.connect().then(() => {
       socketRef.current = socketService;
       setIsConnected(true);
+      setSocketError(false);
 
       // Join the chat room
       socketService.emit('healthchat:join-room', { chatId });
@@ -105,7 +114,11 @@ export function useHealthChatSocket({
       });
     }).catch((err) => {
       console.error('[HealthChatSocket] Connection failed:', err);
+      console.error('[HealthChatSocket] Details:', err.message);
       setIsConnected(false);
+      setSocketError(true);
+      // Note: Socket.io client will auto-retry based on reconnectionAttempts
+      // Users can still use HTTP requests to fetch messages
     });
 
     // Cleanup on unmount or when chatId changes
@@ -167,6 +180,7 @@ export function useHealthChatSocket({
 
   return {
     isConnected,
+    socketError,
     emitTyping,
     disconnect
   };

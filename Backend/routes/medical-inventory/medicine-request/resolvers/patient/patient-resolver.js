@@ -103,6 +103,35 @@ const Mutation = {
       { res },
     );
   },
+
+  setStatusMedicineRequest: async (_, { requestId, status, notes }, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+
+    // Verify the request belongs to the patient
+    const requestResult = await db.query(
+      `SELECT "patientId", status FROM "MedicineRequestLog" WHERE id = $1 LIMIT 1`,
+      [requestId],
+    );
+
+    if (requestResult.rows.length === 0) {
+      throwGraphQLError(res).message("Request not found").status(404).throw();
+    }
+
+    if (requestResult.rows[0].patientId !== user.id) {
+      throwGraphQLError(res).message("Unauthorized: You can only cancel your own requests").status(403).throw();
+    }
+
+    // Patients can only cancel pending requests
+    if (requestResult.rows[0].status !== 'Pending' && status !== 'Cancelled') {
+      throwGraphQLError(res).message("Patients can only cancel pending requests").status(400).throw();
+    }
+
+    return await Wrapper.Mutation._setStatusMedicineRequest(
+      _,
+      { requestId, status, approvedBy: user.id, notes },
+      { res },
+    );
+  },
 };
 
 module.exports = { Query, Mutation };

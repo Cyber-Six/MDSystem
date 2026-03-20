@@ -52,10 +52,12 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
   const filtered = useMemo(() => {
     return (requests || []).filter((r) => {
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
-      // Filter by location from batch
-      const batchId = r.items?.[0]?.batchId ?? r.items?.[0]?.medicineId;
-      const reqLocation = batchId ? (batchMap[batchId]?.location || 'Casal') : 'Casal';
+      
+      // Use location directly from request (from backend)
+      const reqLocation = r.location || 'Casal';
+      
       if (reqLocation !== filterLocation) return false;
+      
       // Search
       if (search) {
         const q = search.toLowerCase();
@@ -70,7 +72,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
       }
       return true;
     });
-  }, [requests, search, filterLocation, filterStatus, itemMap, batchMap]);
+  }, [requests, search, filterLocation, filterStatus, itemMap]);
 
   const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
   const locations = ['Casal', 'Arlegui', 'QuezonCity'];

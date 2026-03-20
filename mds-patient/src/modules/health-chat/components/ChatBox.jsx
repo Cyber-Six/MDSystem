@@ -27,7 +27,8 @@ const ChatBox = ({
   attachedFile,
   onFileStaged,
   onFileRemoved,
-  isSocketConnected
+  isSocketConnected,
+  socketError
 }) => {
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
   const isPending = ticketStatus === 'Open';
@@ -127,6 +128,41 @@ const ChatBox = ({
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
+        {/* Close ticket button - only show when active */}
+        {isActive && (
+          <button
+            onClick={onCloseTicket}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-400
+                     hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30
+                     rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Close this conversation"
+          >
+            <X className="w-4 h-4" />
+            <span className="hidden sm:inline">Close</span>
+          </button>
+        )}
+      </div>
+
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto bg-white dark:bg-neutral-900">
+        <div className="px-6 py-6 space-y-4">
+          {/* Socket connection issue warning */}
+          {(!isSocketConnected || socketError) && !isInitializing && isActive && (
+            <div className="flex items-center gap-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
+              <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
+                {socketError ? 'Connection error - using manual refresh' : 'Connecting - using manual refresh'}
+              </span>
+              <button
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="p-1 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded transition-colors disabled:opacity-50"
+                title="Refresh messages"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           )}
 
           {isActive && (
@@ -346,6 +382,9 @@ const ChatBox = ({
               style={{ borderColor: '#f4c430', borderTopColor: 'transparent' }}
             />
             Waiting for staff approval…
+          <div className="flex items-center justify-center gap-2 text-amber-600 dark:text-amber-400 py-2">
+            <Clock className="w-4 h-4" />
+            <span className="text-sm">Waiting for staff approval</span>
           </div>
         )}
 

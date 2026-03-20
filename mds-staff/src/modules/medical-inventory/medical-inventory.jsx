@@ -329,16 +329,30 @@ const MedicalInventory = () => {
     setIsLoadingRequests(true);
     try {
       const rawRequests = await fetchAllMedicineRequests(null);
-      const enriched = rawRequests.map((req) => ({
-        ...req,
-        patientName: `Patient #${req.patientId}`,
-        patientType: 'Self-Request',
-        _isRealRequest: true,
-        items: enrichRequestItems(req.items || []),
-      }));
+      console.log('📋 Raw requests loaded:', rawRequests.length, 'requests');
+      
+      const enriched = rawRequests.map((req) => {
+        // Enrich items with batch/medicine info
+        const enrichedItems = enrichRequestItems(req.items || []);
+        
+        // Use location from API response (now available)
+        const requestLocation = req.location || 'Casal'; // Fallback to Casal if missing
+        
+        console.log(`✅ Request #${req.id}: Location = "${requestLocation}"`);
+        
+        return {
+          ...req,
+          location: requestLocation,
+          patientName: `Patient #${req.patientId}`,
+          patientType: 'Self-Request',
+          _isRealRequest: true,
+          items: enrichedItems,
+        };
+      });
       setRequests(enriched);
     } catch (err) {
       setError(err.message || 'Failed to load medicine requests.');
+      console.error('❌ Error loading requests:', err);
     } finally {
       setIsLoadingRequests(false);
     }
@@ -427,12 +441,17 @@ const MedicalInventory = () => {
       }
 
       const totalQty = itemsPayload.reduce((sum, item) => sum + item.quantity, 0);
+      
+      // Issue prescription
       const prescriptionResult = await issuePrescription({
         patientId: Number(request.patientId),
         requestId: requestId,
         items: itemsPayload,
         notes: notes || `Dispensed for request #${requestId}`,
       });
+
+      // Mark medicine request as Completed in backend
+      await setMedicineRequestStatus(requestId, 'Completed', notes || `Dispensed for request #${requestId}`);
 
       // Decrement batches locally after backend mutation succeeds
       const batchUpdates = {};

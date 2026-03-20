@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, MessageCircleHeart, Stethoscope } from 'lucide-react';
 import ChatBox from './components/ChatBox';
 import TicketDivider from './components/TicketDivider';
+import TicketStatusBanner from './components/TicketStatusBanner';
 import {
   getCurrentActiveTicket,
   getMyTickets,
@@ -31,6 +32,52 @@ const HealthChat = () => {
   const hasInitialized = useRef(false);
 
   const { isConnected: isSocketConnected, emitTyping } = useHealthChatSocket({
+  // Load messages for a ticket (defined early for use in callbacks)
+  const loadMessages = useCallback(async (chatId) => {
+    try {
+      const fetchedMessages = await getTicketMessages(chatId);
+      setMessages(fetchedMessages || []);
+    } catch (err) {
+      console.error('[HealthChat] Failed to load messages:', err);
+      setError('Failed to load messages.');
+    }
+  }, []);
+
+  // Socket event handlers (must be defined before useHealthChatSocket)
+  // Handle new message from socket
+  const handleNewMessage = useCallback((newMessage) => {
+    setMessages(prev => [...prev, newMessage]);
+    // Clear typing indicator when message received
+    setIsStaffTyping(false);
+  }, []);
+
+  // Handle typing indicator from socket
+  const handleTypingIndicator = useCallback((isTyping) => {
+    setIsStaffTyping(isTyping);
+  }, []);
+
+  // Handle ticket approved via socket
+  const handleTicketApproved = useCallback((updatedTicket) => {
+    console.log('[HealthChat] Ticket approved event received:', updatedTicket);
+    setTicket(updatedTicket);
+    // Reload messages in case there's a system message
+    if (updatedTicket?.id) {
+      loadMessages(updatedTicket.id);
+    }
+  }, [loadMessages]);
+
+  // Handle ticket closed via socket
+  const handleTicketClosed = useCallback((data) => {
+    console.log('[HealthChat] Ticket closed event received:', data);
+    setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
+    // Reload messages to show system message
+    if (data?.chatId) {
+      loadMessages(data.chatId);
+    }
+  }, [loadMessages]);
+
+  // Socket hook
+  const { isConnected: isSocketConnected, socketError, emitTyping } = useHealthChatSocket({
     chatId: ticket?.id,
     chatStatus: ticket?.status,
     onNewMessage: handleNewMessage,
@@ -64,6 +111,34 @@ const HealthChat = () => {
     setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
     if (data?.chatId) loadMessages(data.chatId);
   }
+  // Poll for ticket status when pending (fallback for socket disconnection)
+  useEffect(() => {
+    // Only poll when ticket is pending (Open) and socket might not be connected
+    if (!ticket?.id || ticket?.status !== 'Open') return;
+
+    console.log('[HealthChat] Starting status polling for ticket:', ticket.id);
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const updatedTicket = await getCurrentActiveTicket();
+        if (updatedTicket && updatedTicket.status !== 'Open') {
+          // Ticket status changed! Update local state
+          console.log('[HealthChat] Polling detected status change:', updatedTicket.status);
+          setTicket(updatedTicket);
+          if (updatedTicket.id) {
+            await loadMessages(updatedTicket.id);
+          }
+        }
+      } catch (err) {
+        console.error('[HealthChat] Polling failed:', err);
+      }
+    }, 10000); // Poll every 10 seconds
+
+    return () => {
+      console.log('[HealthChat] Stopping status polling');
+      clearInterval(pollInterval);
+    };
+  }, [ticket?.id, ticket?.status, loadMessages]);
 
   async function initializeHealthChat() {
     try {
@@ -96,6 +171,7 @@ const HealthChat = () => {
     }
   }
 
+  // Refresh messages (manual refresh via HTTP when sockets fail)
   async function refreshMessages() {
     if (!ticket?.id) return;
     try {
@@ -112,6 +188,13 @@ const HealthChat = () => {
       const expiredResult = await getMyTickets('Expired', 0, 10);
       setPreviousTickets([...closedResult.chats, ...expiredResult.chats]);
     } catch (err) {}
+      setPreviousTickets([
+        ...(closedResult?.chats || []),
+        ...(expiredResult?.chats || [])
+      ]);
+    } catch (err) {
+      console.error('[HealthChat] Failed to load previous tickets:', err);
+    }
   }
 
   async function handleCreateTicket(e) {
@@ -126,6 +209,11 @@ const HealthChat = () => {
         setMessages([]);
         setShowCreateForm(false);
         setTicketPurpose('');
+        setConnectionStatus('connected');
+        // Load any initial messages (like system messages)
+        if (result.chat.id) {
+          await loadMessages(result.chat.id);
+        }
       } else {
         setError(result.message || 'Failed to create ticket.');
       }
@@ -179,6 +267,34 @@ const HealthChat = () => {
     }
   }
 
+  // Handle canceling pending ticket
+  async function handleCancelTicket() {
+    if (!ticket?.id) return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const result = await closeTicket(ticket.id);
+
+      if (result.success) {
+        // Clear the ticket and messages
+        setTicket(null);
+        setMessages([]);
+        // Load previous tickets
+        await loadPreviousTickets();
+      } else {
+        setError(result.message || 'Failed to cancel request.');
+      }
+    } catch (err) {
+      console.error('[HealthChat] Cancel ticket failed:', err);
+      setError(err.message || 'Failed to cancel request.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Handle input change with typing indicator
   function handleInputChange(e) {
     setInputValue(e.target.value);
     if (e.target.value.trim()) emitTyping(true);
@@ -197,6 +313,9 @@ const HealthChat = () => {
   }
 
   const shouldShowCreateForm = !ticket || ['Closed', 'Expired'].includes(ticket?.status);
+  // Check if we should show create form
+  // Don't show during initialization to prevent flash
+  const shouldShowCreateForm = !isInitializing && (!ticket || ['Closed', 'Expired'].includes(ticket?.status));
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 font-sans">
@@ -225,6 +344,19 @@ const HealthChat = () => {
       <div className="space-y-4">
 
         {/* Landing — no active ticket, show start button */}
+      {/* Main Content */}
+      <div className="grid grid-cols-1 gap-8">
+        {/* Loading state during initialization */}
+        {isInitializing && (
+          <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-12">
+            <div className="flex flex-col items-center justify-center text-neutral-500">
+              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-4" />
+              <p className="text-sm">Loading health chat...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Create Ticket Form - Show when no active ticket or ticket is closed */}
         {shouldShowCreateForm && !showCreateForm && (
           <div
             className="rounded-2xl overflow-hidden"
@@ -414,29 +546,45 @@ const HealthChat = () => {
           >
             <ChatBox
               messages={messages}
+        {/* Chat Box - Show when ticket exists and is active (Open or Ongoing) */}
+        {!isInitializing && ticket && ['Open', 'Ongoing'].includes(ticket.status) && (
+          <div className="space-y-4">
+            {/* Status Banner */}
+            <TicketStatusBanner
+              status={ticket.status}
+              onCancel={handleCancelTicket}
               isLoading={isLoading}
-              isInitializing={isInitializing}
-              connectionStatus={connectionStatus}
-              error={error}
-              inputValue={inputValue}
-              inputRef={inputRef}
-              messagesEndRef={messagesEndRef}
-              onInputChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onSubmit={handleSendMessage}
-              onCloseTicket={handleCloseTicket}
-              formatTime={formatTime}
-              onRetry={initializeHealthChat}
-              onRefresh={refreshMessages}
-              ticketStatus={ticket.status}
-              ticketPurpose={ticket.purpose}
-              ticketCreatedAt={ticket.session_start}
-              isStaffTyping={isStaffTyping}
-              attachedFile={attachedFile}
-              onFileStaged={setAttachedFile}
-              onFileRemoved={() => setAttachedFile(null)}
-              isSocketConnected={isSocketConnected}
             />
+
+            {/* Chat Interface */}
+            <div className="h-[600px]">
+              <ChatBox
+                messages={messages}
+                isLoading={isLoading}
+                isInitializing={isInitializing}
+                connectionStatus={connectionStatus}
+                error={error}
+                inputValue={inputValue}
+                inputRef={inputRef}
+                messagesEndRef={messagesEndRef}
+                onInputChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                onSubmit={handleSendMessage}
+                onCloseTicket={handleCloseTicket}
+                formatTime={formatTime}
+                onRetry={initializeHealthChat}
+                onRefresh={refreshMessages}
+                ticketStatus={ticket.status}
+                ticketPurpose={ticket.purpose}
+                ticketCreatedAt={ticket.session_start}
+                isStaffTyping={isStaffTyping}
+                attachedFile={attachedFile}
+                onFileStaged={setAttachedFile}
+                onFileRemoved={() => setAttachedFile(null)}
+                isSocketConnected={isSocketConnected}
+                socketError={socketError}
+              />
+            </div>
           </div>
         )}
 
