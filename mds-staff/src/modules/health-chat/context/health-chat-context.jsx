@@ -96,6 +96,20 @@ export function HealthChatProvider({ children }) {
     refreshTickets();
   }, [refreshTickets]);
 
+  // Keep selectedTicket in sync with tickets list (e.g., after refresh)
+  // This ensures the ticket data stays fresh when the list updates
+  useEffect(() => {
+    if (selectedChatId && tickets.length > 0) {
+      const updatedTicket = tickets.find(t => String(t.id) === String(selectedChatId));
+      if (updatedTicket) {
+        // Update selectedTicket with fresh data from list
+        setSelectedTicket(updatedTicket);
+      }
+      // Note: If ticket is not in list (e.g., wrong filter), we keep the existing selectedTicket
+      // This allows viewing a chat even when it's not in the current filter
+    }
+  }, [tickets, selectedChatId]);
+
   /**
    * Select a chat and load its messages
    */
@@ -191,34 +205,32 @@ export function HealthChatProvider({ children }) {
     try {
       const result = await approveTicketService(chatId, notes);
       if (result.success && result.chat) {
-        // Remove from current (pending) list
-        setTickets(prev => prev.filter(t => String(t.id) !== String(chatId)));
-        setTicketsTotal(prev => Math.max(0, prev - 1));
+        // Get the approved chat data
+        const approvedChat = result.chat;
 
-        // Update selected ticket with new data if it's currently selected
-        if (String(chatId) === String(selectedChatId)) {
-          setSelectedTicket(result.chat);
-          // Reload messages to show system approval message
-          const fetchedMessages = await getMessages(chatId);
-          setMessages(fetchedMessages || []);
-        }
+        // Always select the approved chat and load its messages
+        // This ensures staff enters the chat after approval
+        setSelectedChatId(approvedChat.id);
+        setSelectedTicket(approvedChat);
 
-        // Switch to active filter
+        // Reload messages to show system approval message
+        const fetchedMessages = await getMessages(chatId);
+        setMessages(fetchedMessages || []);
+
+        // Switch to active filter - this will trigger refreshTickets
+        // which will fetch fresh data from backend including our approved ticket
         setFilter('active');
 
-        // Add the approved ticket to the active list
-        // Use setTimeout to ensure filter state has propagated
-        setTimeout(() => {
-          setTickets(prev => [result.chat, ...prev]);
-          setTicketsTotal(prev => prev + 1);
-        }, 100);
+        // Note: We don't need setTimeout or manual ticket add anymore
+        // because refreshTickets will fetch the approved ticket from backend
+        // and the chat will stay selected via selectedChatId
       }
       return result;
     } catch (err) {
       console.error('[HealthChatContext] Failed to approve ticket:', err);
       throw err;
     }
-  }, [selectedChatId]);
+  }, []);
 
   /**
    * Reject a ticket
