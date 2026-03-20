@@ -115,18 +115,16 @@ async function checkChatStatus(chatId) {
  * @returns {Promise<Object>} - Formatted chat with participant info
  */
 async function formatChatRecord(chat) {
-  const [patient, medical, closedByUser] = await Promise.all([
+  const [patient, medical] = await Promise.all([
     getParticipantInfo(chat.patientId),
-    getParticipantInfo(chat.medicalId),
-    chat.closed_by_user_id ? getParticipantInfo(chat.closed_by_user_id) : Promise.resolve(null)
+    getParticipantInfo(chat.medicalId)
   ]);
 
   return {
     ...chat,
     patient,
     medical,
-    closedBy: chat.closed_by_type || (chat.status === 'Expired' ? 'System' : null),
-    closedByUser,
+    closedBy: chat.closed_by_type || null,
     expiresAt: calculateExpiryDate(chat.session_start)
   };
 }
@@ -145,27 +143,30 @@ async function formatMessage(message) {
 }
 
 /**
- * Auto-expire tickets that have passed their expiry date.
+ * Auto-expire tickets that have had no messages for CHAT_EXPIRY_DAYS.
+ * Uses the last message timestamp as reference for inactivity.
  * Self-sufficient expiry check - no background process required.
  * Called on relevant queries to ensure data consistency.
  * @param {number|null} patientId - Optional patient ID filter
  * @returns {Promise<number>} Number of tickets expired
  */
 async function autoExpireTickets(patientId = null) {
+  // Find tickets where the last message was more than CHAT_EXPIRY_DAYS ago
   let query = `
-    UPDATE "HealthChat"
+    UPDATE "HealthChat" hc
     SET status = 'Expired',
         session_end = NOW(),
-        closed_by_user_id = NULL,
-        closed_by_type = NULL
-    WHERE status = 'Ongoing'
-    AND session_start IS NOT NULL
-    AND session_start + INTERVAL '${CHAT_EXPIRY_DAYS} days' < NOW()
+        closed_by_type = 'System'
+    WHERE hc.status = 'Ongoing'
+    AND (
+      SELECT MAX(stamp) FROM "HealthChatPrompt"
+      WHERE "consultationVirtualId" = hc.id
+    ) < NOW() - INTERVAL '${CHAT_EXPIRY_DAYS} days'
   `;
   const params = [];
 
   if (patientId) {
-    query += ` AND "patientId" = $1`;
+    query += ` AND hc."patientId" = $1`;
     params.push(patientId);
   }
 
@@ -179,7 +180,7 @@ async function autoExpireTickets(patientId = null) {
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
        VALUES ($1, $2, 'system', NULL, 'Medical')`,
-      [row.id, `This ticket has expired after ${CHAT_EXPIRY_DAYS} days.`]
+      [row.id, `This ticket has been automatically closed after ${CHAT_EXPIRY_DAYS} days of inactivity.`]
     );
   }
 

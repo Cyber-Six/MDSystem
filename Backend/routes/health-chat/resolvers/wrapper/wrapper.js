@@ -393,7 +393,6 @@ const Mutation = {
       `UPDATE "HealthChat"
        SET status = 'Closed',
            session_end = NOW(),
-           closed_by_user_id = $2,
            closed_by_type = 'Patient'
        WHERE id = $1 AND "patientId" = $2
        RETURNING *`,
@@ -657,11 +656,10 @@ const Mutation = {
        SET status = 'Closed',
            session_end = NOW(),
            notes = COALESCE($1, notes),
-           closed_by_user_id = $3,
-           closed_by_type = 'Medical'
+           closed_by_type = 'Staff'
        WHERE id = $2
        RETURNING *`,
-      [notes, chatId, user.id]
+      [notes, chatId]
     );
 
     if (result.rowCount === 0) {

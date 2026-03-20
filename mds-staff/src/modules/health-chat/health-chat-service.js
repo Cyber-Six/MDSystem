@@ -51,6 +51,7 @@ export const getPendingTickets = async (offset = 0, limit = 50) => {
           session_end
           archived_at
           expiresAt
+          closedBy
           patient {
             id
             firstName
@@ -93,6 +94,7 @@ export const getActiveTickets = async (offset = 0, limit = 50) => {
           session_end
           archived_at
           expiresAt
+          closedBy
           patient {
             id
             firstName
@@ -135,6 +137,7 @@ export const getAllTickets = async (status = null, offset = 0, limit = 50) => {
           session_end
           archived_at
           expiresAt
+          closedBy
           patient {
             id
             firstName
@@ -193,6 +196,7 @@ export const getTicket = async (chatId) => {
         session_end
         archived_at
         expiresAt
+        closedBy
         patient {
           id
           firstName
