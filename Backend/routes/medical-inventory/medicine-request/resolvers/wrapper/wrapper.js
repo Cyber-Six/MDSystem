@@ -7,14 +7,12 @@ const getItemsWithNames = async (requestId) => {
   const result = await db.query(`
     SELECT 
       mre.id, 
-      mre."medicineId" AS "batchId", 
       mre."medicineId", 
       mre."requestId", 
       mre.quantity,
       COALESCE(mi.item_name, 'Unknown Medicine') AS "itemName"
     FROM "MedicineRequestEntity" mre
-    LEFT JOIN "MedicineBatch" mb ON mb.id = mre."medicineId"
-    LEFT JOIN "MedicalItems" mi ON mi.id = mb."medicalItemId"
+    LEFT JOIN "MedicalItems" mi ON mi.id = mre."medicineId"
     WHERE mre."requestId" = $1
   `, [requestId]);
   return result.rows;
