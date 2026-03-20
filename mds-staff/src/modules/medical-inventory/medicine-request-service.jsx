@@ -174,6 +174,7 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
           requestId
           quantity
           itemName
+          addedByStaff
         }
       }
     }`,
@@ -181,4 +182,39 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
   );
   console.log('✅ setMedicineRequestStatus response:', data.setStatusMedicineRequest);
   return data.setStatusMedicineRequest;
+};
+
+/**
+ * ✅ PART 2: Add extra medicine to an existing medicine request
+ * @param {string|number} requestId
+ * @param {Array<{medicineId: number, quantity: number}>} items
+ * @returns {Promise<Object>} Updated MedicineRequest
+ */
+export const addMedicineToRequest = async (requestId, items) => {
+  console.log('📤 addMedicineToRequest called:', { requestId, items });
+  const data = await sendGraphQL(
+    `mutation AddMedicineToRequest($requestId: ID!, $items: [MedicineRequestItemInput!]!) {
+      addMedicineToRequest(requestId: $requestId, items: $items) {
+        id
+        patientId
+        status
+        purpose
+        notes
+        approved_by
+        created_at
+        location
+        items {
+          id
+          medicineId
+          requestId
+          quantity
+          itemName
+          addedByStaff
+        }
+      }
+    }`,
+    { requestId, items },
+  );
+  console.log('✅ addMedicineToRequest response:', data.addMedicineToRequest);
+  return data.addMedicineToRequest;
 };

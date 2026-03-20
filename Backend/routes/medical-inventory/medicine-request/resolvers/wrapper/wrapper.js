@@ -10,6 +10,7 @@ const getItemsWithNames = async (requestId) => {
       mre."medicineId", 
       mre."requestId", 
       mre.quantity,
+      mre."addedByStaff",
       COALESCE(mi.item_name, 'Unknown Medicine') AS "itemName"
     FROM "MedicineRequestEntity" mre
     LEFT JOIN "MedicalItems" mi ON mi.id = mre."medicineId"
@@ -22,7 +23,7 @@ const getItemsWithNames = async (requestId) => {
 const ITEMS_AGG = `
   COALESCE(
     json_agg(
-      json_build_object('id', mre.id, 'batchId', mre."medicineId", 'medicineId', mre."medicineId", 'requestId', mre."requestId", 'quantity', mre.quantity)
+      json_build_object('id', mre.id, 'batchId', mre."medicineId", 'medicineId', mre."medicineId", 'requestId', mre."requestId", 'quantity', mre.quantity, 'addedByStaff', mre."addedByStaff")
     ) FILTER (WHERE mre.id IS NOT NULL),
     '[]'
   ) AS items`.trim();
@@ -240,6 +241,71 @@ const Mutation = {
 
     return result.rows[0];
   },
-};
 
-module.exports = { Query, Mutation };
+  // ✅ PART 2: Add medicine to existing request
+  _addMedicineToRequest: async (_, { requestId, items }, { res }) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
+    }
+
+    // Fetch current request
+    const requestResult = await db.query(
+      `SELECT * FROM "MedicineRequestLog" WHERE id = $1 LIMIT 1`,
+      [requestId]
+    );
+
+    if (requestResult.rows.length === 0) {
+      throwGraphQLError(res).message("Medicine request not found").status(404).throw();
+    }
+
+    const currentRequest = requestResult.rows[0];
+
+    // Only allow adding medicines to Pending requests
+    if (currentRequest.status !== 'Pending') {
+      throwGraphQLError(res)
+        .message(`Cannot add medicines to ${currentRequest.status} request. Only Pending requests can be modified.`)
+        .status(400)
+        .throw();
+    }
+
+    const client = await db.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // Insert new medicine request entities with addedByStaff = true
+      for (const item of items) {
+        const insertSql = `
+          INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId", quantity, "addedByStaff")
+          VALUES ($1, $2, $3, true)
+          RETURNING id
+        `;
+        await client.query(insertSql, [
+          requestId,
+          item.medicineId || item.batchId,
+          item.quantity || 1
+        ]);
+      }
+
+      await client.query('COMMIT');
+
+      // Fetch and return updated request with all items
+      const updatedRequest = await client.query(
+        `SELECT * FROM "MedicineRequestLog" WHERE id = $1`,
+        [requestId]
+      );
+
+      if (updatedRequest.rows.length > 0) {
+        updatedRequest.rows[0].items = await getItemsWithNames(requestId);
+      }
+
+      return updatedRequest.rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _addMedicineToRequest:", err);
+      throwGraphQLError(res).message("Failed to add medicine to request").status(500).throw();
+    } finally {
+      client.release();
+    }
+  },
+};
