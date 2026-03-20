@@ -98,6 +98,18 @@ const Mutation = {
     
     return result;
   },
+
+  // ✅ PART 2: Add medicine to existing request
+  addMedicineToRequest: async (_, { requestId, items }, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
+    if (!isPermitted) {
+      logger.warn("Unauthorized medicine request modification attempt by staff " + user.id);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    return await Wrapper.Mutation._addMedicineToRequest(_, { requestId, items }, { res });
+  },
 };
 
 module.exports = { Query, Mutation };

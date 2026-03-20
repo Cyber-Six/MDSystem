@@ -12,9 +12,10 @@ import AdjustStockModal from './components/adjust-stock/adjust-stock-modal';
 import DispenseModal from './components/dispense-queue/dispense-modal';
 import DispenseMedicineModal from './components/dispense-medicine/dispense-medicine-modal';
 import RequestActionModal from './components/dispense-queue/request-action-modal';
+import AddMedicineToRequestModal from './components/dispense-queue/add-medicine-to-request-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
-import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
+import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus, addMedicineToRequest } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
 import {
   SEED_BATCHES, SEED_TRANSACTIONS,
@@ -58,6 +59,8 @@ const MedicalInventory = () => {
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState(null); // 'approve' or 'reject'
   const [selectedActionRequest, setSelectedActionRequest] = useState(null);
+  const [showAddMedicineModal, setShowAddMedicineModal] = useState(false);
+  const [addMedicineContext, setAddMedicineContext] = useState(null); // { request }
 
   // Context for modals
   const [supplyContext, setSupplyContext] = useState(null); // { itemId }
@@ -541,10 +544,39 @@ const MedicalInventory = () => {
     }
   };
 
+  /**
+   * ✅ PART 2: Handle adding medicine to a pending request
+   * Staff selects a medicine from the modal, and it's added to the request
+   */
+  const handleAddMedicineToRequest = async (request, medicineData) => {
+    const requestId = request?.id;
+    if (!requestId || !medicineData) return;
+
+    try {
+      console.log('📤 Adding medicine to request:', { requestId, medicineData });
+      
+      // Call backend mutation
+      const updatedRequest = await addMedicineToRequest(requestId, [medicineData]);
+      
+      // Update local state with the new request data
+      setRequests(requests.map((r) => 
+        r.id === requestId ? updatedRequest : r
+      ));
+      
+      setSuccessMsg(`Medicine added to request #${requestId}!`);
+      setShowAddMedicineModal(false);
+      setAddMedicineContext(null);
+    } catch (err) {
+      setError(err.message || 'Failed to add medicine to request. Please try again.');
+      console.error('❌ Error adding medicine to request:', err);
+    }
+  };
+
   // Open modals with context
   const openAddSupply = (itemId) => { setSupplyContext({ itemId }); setShowAddSupply(true); };
   const openSplit = (batch) => { setSplitContext({ batch }); setShowSplitSupply(true); };
   const openAdjust = (batch) => { setAdjustContext({ batch }); setShowAdjustStock(true); };
+  const openAddMedicine = (request) => { setAddMedicineContext({ request }); setShowAddMedicineModal(true); };
   const openDispense = async (request) => {
     if (!request?.id) {
       setError('Invalid request. Please refresh and try again.');
@@ -744,7 +776,7 @@ const MedicalInventory = () => {
             </div>
           </div>
 
-          <DispenseQueue requests={requests} items={items} batches={batches} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} />
+          <DispenseQueue requests={requests} items={items} batches={batches} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} onAddMedicine={openAddMedicine} />
         </div>
       )}
 
@@ -833,6 +865,19 @@ const MedicalInventory = () => {
             setShowActionModal(false);
             setSelectedActionRequest(null);
             setActionType(null);
+          }}
+        />
+      )}
+
+      {showAddMedicineModal && addMedicineContext?.request && (
+        <AddMedicineToRequestModal
+          request={addMedicineContext.request}
+          items={items}
+          batchData={batches}
+          onConfirm={handleAddMedicineToRequest}
+          onCancel={() => {
+            setShowAddMedicineModal(false);
+            setAddMedicineContext(null);
           }}
         />
       )}
