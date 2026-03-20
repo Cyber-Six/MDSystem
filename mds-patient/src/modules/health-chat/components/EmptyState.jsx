@@ -7,10 +7,9 @@ const EmptyState = ({ type, error, onRetry }) => {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div
-            className="w-12 h-12 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4"
-            style={{ borderColor: '#f4c430', borderTopColor: 'transparent' }}
+            className="w-12 h-12 rounded-full border-2 border-primary-500 border-t-transparent animate-spin mx-auto mb-4"
           />
-          <p className="text-sm font-medium" style={{ color: '#78716c' }}>
+          <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
             Getting things ready…
           </p>
         </div>
@@ -22,16 +21,13 @@ const EmptyState = ({ type, error, onRetry }) => {
     return (
       <div className="flex items-center justify-center min-h-[400px] px-4">
         <div className="text-center max-w-xs">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: '#f4f2ef', border: '1.5px solid #e8e5e0' }}
-          >
-            <WifiOff className="w-7 h-7" style={{ color: '#a19b93' }} />
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-neutral-100 dark:bg-neutral-800 border-[1.5px] border-neutral-200 dark:border-neutral-700">
+            <WifiOff className="w-7 h-7 text-neutral-400 dark:text-neutral-500" />
           </div>
           <h2 className="font-heading font-semibold text-lg text-secondary-800 dark:text-white mb-2">
             Can't connect right now
           </h2>
-          <p className="text-sm mb-5" style={{ color: '#78716c' }}>
+          <p className="text-sm mb-5 text-neutral-500 dark:text-neutral-400">
             Check your network connection, then try again.
           </p>
           <button
@@ -54,16 +50,13 @@ const EmptyState = ({ type, error, onRetry }) => {
     return (
       <div className="flex items-center justify-center min-h-[400px] px-4">
         <div className="text-center max-w-xs">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: '#fef2f2', border: '1.5px solid #fecaca' }}
-          >
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-red-50 dark:bg-red-900/20 border-[1.5px] border-red-200 dark:border-red-800">
             <AlertCircle className="w-7 h-7 text-error-500" />
           </div>
           <h2 className="font-heading font-semibold text-lg text-secondary-800 dark:text-white mb-2">
             Something went wrong
           </h2>
-          <p className="text-sm mb-5" style={{ color: '#78716c' }}>
+          <p className="text-sm mb-5 text-neutral-500 dark:text-neutral-400">
             {error || 'An error occurred while connecting.'}
           </p>
           <button

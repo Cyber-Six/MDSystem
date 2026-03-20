@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Stethoscope, Info, File, Image, Film } from 'lucide-react';
 import { getFileUrl } from '../health-chat-service';
+import MediaLightbox from '../../../components/modals/MediaLightbox';
 
 /**
  * MessageBubble — patient side
@@ -17,14 +18,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
   if (isSystem) {
     return (
       <div className="flex justify-center py-3 px-4">
-        <div
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs"
-          style={{
-            background: '#f4f2ef',
-            border: '1px solid #e8e5e0',
-            color: '#78716c'
-          }}
-        >
+        <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400">
           <Info className="w-3 h-3 flex-shrink-0" />
           {message.text}
         </div>
@@ -54,12 +48,8 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
       {/* Avatar — staff only, hidden on patient side entirely */}
       {!isPatient && (
         <div
-          className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
-          style={
-            isLastInGroup
-              ? { background: 'rgba(244,196,48,0.15)', border: '1.5px solid rgba(244,196,48,0.3)' }
-              : { visibility: 'hidden' }
-          }
+          className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-primary-500/15 border-[1.5px] border-primary-500/30"
+          style={!isLastInGroup ? { visibility: 'hidden' } : undefined}
         >
           <Stethoscope className="w-3.5 h-3.5 text-primary-500" />
         </div>
@@ -72,49 +62,45 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
       >
         {/* Sender label — only on first bubble of a staff group */}
         {!isPatient && isFirstInGroup && (
-          <span
-            className="text-[10px] font-medium mb-1 px-1"
-            style={{ color: '#a19b93' }}
-          >
+          <span className="text-[10px] font-medium mb-1 px-1 text-neutral-400 dark:text-neutral-500">
             Medical Staff
           </span>
         )}
 
         {/* Bubble — corner radius adapts to position in group */}
-        <div
-          className="px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
-          style={
-            isPatient
-              ? {
-                  background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
-                  color: '#1c1a17',
-                  borderRadius: isFirstInGroup && isLastInGroup ? '18px 18px 4px 18px'
-                              : isFirstInGroup                  ? '18px 18px 18px 18px'
-                              : isLastInGroup                   ? '18px 18px 4px 18px'
-                              :                                   '18px 18px 18px 18px',
-                  boxShadow: '0 2px 8px rgba(244,196,48,0.25)'
-                }
-              : {
-                  background: '#fdfcfa',
-                  color: '#28251f',
-                  border: '1.5px solid #e8e5e0',
-                  borderRadius: isFirstInGroup && isLastInGroup ? '18px 18px 18px 4px'
-                              : isFirstInGroup                  ? '18px 18px 18px 18px'
-                              : isLastInGroup                   ? '18px 18px 18px 4px'
-                              :                                   '18px 18px 18px 18px',
-                  boxShadow: '0 1px 4px rgba(28,25,23,0.06)'
-                }
-          }
-        >
-          {message.text}
-        </div>
+        {isPatient ? (
+          // Patient bubble - keeps brand gradient (works in both modes)
+          <div
+            className="px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap text-secondary-900"
+            style={{
+              background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
+              borderRadius: isFirstInGroup && isLastInGroup ? '18px 18px 4px 18px'
+                          : isFirstInGroup                  ? '18px 18px 18px 18px'
+                          : isLastInGroup                   ? '18px 18px 4px 18px'
+                          :                                   '18px 18px 18px 18px',
+              boxShadow: '0 2px 8px rgba(244,196,48,0.25)'
+            }}
+          >
+            {message.text}
+          </div>
+        ) : (
+          // Staff bubble - needs dark mode
+          <div
+            className="px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap bg-white dark:bg-neutral-800 text-secondary-800 dark:text-neutral-100 border-[1.5px] border-neutral-200 dark:border-neutral-700 shadow-sm"
+            style={{
+              borderRadius: isFirstInGroup && isLastInGroup ? '18px 18px 18px 4px'
+                          : isFirstInGroup                  ? '18px 18px 18px 18px'
+                          : isLastInGroup                   ? '18px 18px 18px 4px'
+                          :                                   '18px 18px 18px 18px'
+            }}
+          >
+            {message.text}
+          </div>
+        )}
 
         {/* Timestamp — only on last bubble */}
         {isLastInGroup && (
-          <span
-            className="text-[10px] mt-1 px-1"
-            style={{ color: '#a19b93' }}
-          >
+          <span className="text-[10px] mt-1 px-1 text-neutral-400 dark:text-neutral-500">
             {formatTime(message.stamp)}
           </span>
         )}
@@ -127,11 +113,25 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
  * FileMessage — patient side
  */
 const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup = true, isLastInGroup = true }) => {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const fileUrl = getFileUrl(fileId);
   const extension = fileId?.split('.').pop()?.toLowerCase() || '';
   const isImage = ['jpg', 'jpeg', 'png'].includes(extension);
   const isPdf = extension === 'pdf';
   const isVideo = ['mp4', 'mov'].includes(extension);
+
+  const getContentType = () => {
+    if (isImage) {
+      const typeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
+      return typeMap[extension] || 'image/jpeg';
+    }
+    if (isPdf) return 'application/pdf';
+    if (isVideo) {
+      const typeMap = { mp4: 'video/mp4', mov: 'video/quicktime' };
+      return typeMap[extension] || 'video/mp4';
+    }
+    return 'application/octet-stream';
+  };
 
   const getIcon = () => {
     if (isImage) return <Image className="w-4 h-4" />;
@@ -140,99 +140,145 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
   };
 
   return (
-    <div className={`flex gap-2 ${isPatient ? 'flex-row-reverse' : 'flex-row'} items-end`}
-      style={{ marginBottom: isLastInGroup ? '6px' : '2px' }}
-    >
-      {/* Avatar — staff only */}
-      {!isPatient && (
-        <div
-          className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
-          style={
-            isLastInGroup
-              ? { background: 'rgba(244,196,48,0.15)', border: '1.5px solid rgba(244,196,48,0.3)' }
-              : { visibility: 'hidden' }
-          }
-        >
-          <Stethoscope className="w-3.5 h-3.5 text-primary-500" />
-        </div>
-      )}
-
-      <div
-        className={`flex flex-col ${isPatient ? 'items-end' : 'items-start'}`}
-        style={{ maxWidth: '76%' }}
+    <>
+      <div className={`flex gap-2 ${isPatient ? 'flex-row-reverse' : 'flex-row'} items-end`}
+        style={{ marginBottom: isLastInGroup ? '6px' : '2px' }}
       >
-        {!isPatient && isFirstInGroup && (
-          <span className="text-[10px] font-medium mb-1 px-1" style={{ color: '#a19b93' }}>
-            Medical Staff
-          </span>
+        {/* Avatar — staff only */}
+        {!isPatient && (
+          <div
+            className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-primary-500/15 border-[1.5px] border-primary-500/30"
+            style={!isLastInGroup ? { visibility: 'hidden' } : undefined}
+          >
+            <Stethoscope className="w-3.5 h-3.5 text-primary-500" />
+          </div>
         )}
 
         <div
-          className="rounded-2xl overflow-hidden"
-          style={
-            isPatient
-              ? {
-                  background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
-                  borderBottomRightRadius: '4px',
-                  boxShadow: '0 2px 8px rgba(244,196,48,0.25)'
-                }
-              : {
-                  background: '#fdfcfa',
-                  border: '1.5px solid #e8e5e0',
-                  borderBottomLeftRadius: '4px',
-                  boxShadow: '0 1px 4px rgba(28,25,23,0.06)'
-                }
-          }
+          className={`flex flex-col ${isPatient ? 'items-end' : 'items-start'}`}
+          style={{ maxWidth: '76%' }}
         >
-          {isImage && (
-            <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-              <img
-                src={fileUrl}
-                alt="Attachment"
-                className="max-w-full max-h-56 object-contain"
-                loading="lazy"
-              />
-            </a>
+          {!isPatient && isFirstInGroup && (
+            <span className="text-[10px] font-medium mb-1 px-1 text-neutral-400 dark:text-neutral-500">
+              Medical Staff
+            </span>
           )}
 
-          {isPdf && (
-            <a
-              href={fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:opacity-80 transition-opacity"
-              style={{ color: isPatient ? '#1c1a17' : '#44403c' }}
+          {isPatient ? (
+            // Patient file container - keeps brand gradient
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
+                borderBottomRightRadius: '4px',
+                boxShadow: '0 2px 8px rgba(244,196,48,0.25)'
+              }}
             >
-              {getIcon()}
-              View PDF
-            </a>
-          )}
+              {isImage && (
+                <button
+                  onClick={() => setLightboxOpen(true)}
+                  className="cursor-zoom-in block"
+                >
+                  <img
+                    src={fileUrl}
+                    alt="Attachment"
+                    className="max-w-full max-h-56 object-contain"
+                    loading="lazy"
+                  />
+                </button>
+              )}
 
-          {isVideo && (
-            <video src={fileUrl} controls className="max-w-full max-h-56" preload="metadata" />
-          )}
+              {isPdf && (
+                <button
+                  onClick={() => setLightboxOpen(true)}
+                  className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:opacity-80 transition-opacity text-secondary-900"
+                >
+                  {getIcon()}
+                  View PDF
+                </button>
+              )}
 
-          {!isImage && !isPdf && !isVideo && (
-            <a
-              href={fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-3 text-sm hover:opacity-80 transition-opacity"
-              style={{ color: isPatient ? '#1c1a17' : '#44403c' }}
+              {isVideo && (
+                <video src={fileUrl} controls className="max-w-full max-h-56" preload="metadata" />
+              )}
+
+              {!isImage && !isPdf && !isVideo && (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-3 text-sm hover:opacity-80 transition-opacity text-secondary-900"
+                >
+                  {getIcon()}
+                  Download file
+                </a>
+              )}
+            </div>
+          ) : (
+            // Staff file container - needs dark mode
+            <div className="rounded-2xl overflow-hidden bg-white dark:bg-neutral-800 border-[1.5px] border-neutral-200 dark:border-neutral-700 shadow-sm"
+              style={{ borderBottomLeftRadius: '4px' }}
             >
-              {getIcon()}
-              Download file
-            </a>
+              {isImage && (
+                <button
+                  onClick={() => setLightboxOpen(true)}
+                  className="cursor-zoom-in block"
+                >
+                  <img
+                    src={fileUrl}
+                    alt="Attachment"
+                    className="max-w-full max-h-56 object-contain"
+                    loading="lazy"
+                  />
+                </button>
+              )}
+
+              {isPdf && (
+                <button
+                  onClick={() => setLightboxOpen(true)}
+                  className="flex items-center gap-2 px-4 py-3 text-sm font-medium hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300"
+                >
+                  {getIcon()}
+                  View PDF
+                </button>
+              )}
+
+              {isVideo && (
+                <video src={fileUrl} controls className="max-w-full max-h-56" preload="metadata" />
+              )}
+
+              {!isImage && !isPdf && !isVideo && (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-3 text-sm hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300"
+                >
+                  {getIcon()}
+                  Download file
+                </a>
+              )}
+            </div>
+          )}
+
+          {isLastInGroup && (
+            <span className="text-[10px] mt-1 px-1 text-neutral-400 dark:text-neutral-500">
+              {formatTime(timestamp)}
+            </span>
           )}
         </div>
-
-        {isLastInGroup && (
-          <span className="text-[10px] mt-1 px-1" style={{ color: '#a19b93' }}>
-            {formatTime(timestamp)}
-          </span>
-        )}
       </div>
-    </div>
+
+      {/* Media Lightbox */}
+      {lightboxOpen && (
+        <MediaLightbox
+          url={fileUrl}
+          filename={fileId}
+          contentType={getContentType()}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+    </>
   );
 };
 
