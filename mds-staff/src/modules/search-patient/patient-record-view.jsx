@@ -292,7 +292,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
     const fetchConsultations = async () => {
       try {
-        const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
+        const consultationsWithDetails = await consultationService.getCachedConsultationsWithDetails(patientId);
 
         if (!cancelled) {
           setConsultations(consultationsWithDetails);
@@ -312,6 +312,23 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     };
   }, [patientId, isMockPatient, patient]);
 
+  const handleRefreshConsultations = async () => {
+    try {
+      if (isMockPatient) {
+        // For mock patients, no need to refresh from backend
+        return;
+      }
+
+      // Clear cache to ensure fresh data, then fetch updated consultations
+      consultationService.clearConsultationCache(patientId);
+      const consultationsWithDetails = await consultationService.getCachedConsultationsWithDetails(patientId);
+      setConsultations(consultationsWithDetails);
+    } catch (err) {
+      console.error('Error refreshing consultations:', err);
+      // Don't show alert for refresh errors, just log them
+    }
+  };
+
   const handleSaveConsultation = async (entry) => {
     if (isMockPatient) {
       // For mock patients, just add to local state
@@ -323,13 +340,13 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         time: now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
         diagnosis: entry?.diagnosis || 'General consultation',
         diagnoses: Array.isArray(entry?.diagnoses) ? entry.diagnoses : [],
-        doctor: entry?.doctor || 'Clinic Staff',
+        doctor: 'Clinic Staff', // Default doctor value
         treatment: entry?.treatment || '',
         notes: entry?.notes || '',
       };
 
       setConsultations((prev) => [newEntry, ...prev]);
-      setActiveTab('history');
+      // Stay on consultation tab instead of redirecting to history
       return;
     }
 
@@ -350,10 +367,11 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       );
 
       // Fetch updated consultations from backend using the service
-      const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
+      consultationService.clearConsultationCache(patientId); // Clear cache for fresh data
+      const consultationsWithDetails = await consultationService.getCachedConsultationsWithDetails(patientId);
 
       setConsultations(consultationsWithDetails);
-      setActiveTab('history');
+      // Stay on consultation tab instead of redirecting to history
     } catch (err) {
       console.error('Error saving consultation:', err);
       alert('Failed to save consultation. Please try again.');
@@ -418,7 +436,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           />
         );
       case 'history':
-        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} onRefreshConsultations={() => window.location.reload()} />;
+        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} onRefreshConsultations={handleRefreshConsultations} />;
       case 'appointments':
         return <PatientAppointmentsTab patient={patient} />;
       case 'medicines':

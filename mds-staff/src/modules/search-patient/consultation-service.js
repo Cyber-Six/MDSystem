@@ -490,7 +490,167 @@ export const mapToBackendDiagnosis = (entry) => {
 };
 
 /**
- * Fetch consultation with all details
+ * Fetch consultation with all details (OPTIMIZED - Batched Requests)
+ */
+export const getConsultationsWithDetailsOptimized = async (patientId, offset = 0, limit = 50) => {
+  try {
+    // Step 1: Get all consultations
+    const consultations = await getConsultations(patientId, offset, limit);
+
+    if (!consultations || consultations.length === 0) {
+      return [];
+    }
+
+    // Step 2: Batch fetch all outcomes in parallel (instead of sequential)
+    const outcomesPromises = consultations.map(consultation =>
+      getOutcomes(consultation.id, 0, 10).catch(err => {
+        console.error(`Error fetching outcomes for consultation ${consultation.id}:`, err);
+        return []; // Return empty array on error
+      })
+    );
+
+    // Wait for all outcome requests to complete in parallel
+    const allOutcomes = await Promise.all(outcomesPromises);
+
+    // Step 3: Process consultations with their outcomes
+    const consultationsWithDetails = consultations.map((consultation, index) => {
+      try {
+        const outcomes = allOutcomes[index] || [];
+        const latestOutcome = outcomes[0] || null;
+
+        let diagnoses = [];
+        if (latestOutcome?.diagnoses) {
+          diagnoses = latestOutcome.diagnoses
+            .filter((d) => d && d.diagnosisName)
+            .map((d) => ({
+              ...d,
+              diagnosisType: d.diagnosisType || 'Secondary',
+            }));
+        }
+
+        const primaryDiagnosis = diagnoses.find((d) => d.diagnosisType === 'Primary') || diagnoses[0];
+
+        return {
+          id: consultation.id,
+          type: consultation.type,
+          date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+          time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+          diagnosis: primaryDiagnosis?.diagnosisName || 'General consultation',
+          diagnoses: diagnoses,
+          doctor: 'Clinic Staff',
+          treatment: latestOutcome?.treatments?.[0]?.treatment || '',
+          complaints: latestOutcome?.complaints || [],
+          peFindings: latestOutcome?.peFindings || [],
+          notes: consultation.notes || '',
+          remarks: latestOutcome?.remarks || '',
+          status: consultation.status,
+          mode: consultation.mode,
+          outcome: latestOutcome,
+        };
+      } catch (err) {
+        console.error('Error processing consultation details:', err);
+        return {
+          id: consultation.id,
+          type: consultation.type,
+          date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+          time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+          diagnosis: 'General consultation',
+          diagnoses: [],
+          doctor: 'Clinic Staff',
+          treatment: '',
+          complaints: [],
+          peFindings: [],
+          notes: consultation.notes || '',
+          remarks: '',
+          status: consultation.status,
+          mode: consultation.mode,
+          outcome: null,
+        };
+      }
+    });
+
+    return consultationsWithDetails;
+  } catch (err) {
+    console.error('Optimized consultation fetch failed, falling back to original method:', err);
+    // Fallback to original method if optimized version fails
+    return getConsultationWithDetails(patientId);
+  }
+};
+
+// Add simple caching to reduce redundant calls
+const consultationCache = new Map();
+const CACHE_DURATION = 30000; // 30 seconds
+
+/**
+ * Fetch consultation with caching
+ */
+export const getCachedConsultationsWithDetails = async (patientId) => {
+  const cacheKey = `consultations_${patientId}`;
+  const cached = consultationCache.get(cacheKey);
+
+  // Check if cache is still valid
+  if (cached && (Date.now() - cached.timestamp < CACHE_DURATION)) {
+    return cached.data;
+  }
+
+  // Fetch fresh data
+  const consultations = await getConsultationsWithDetailsOptimized(patientId);
+
+  // Cache the result
+  consultationCache.set(cacheKey, {
+    data: consultations,
+    timestamp: Date.now()
+  });
+
+  return consultations;
+};
+
+/**
+ * Clear consultation cache for a patient
+ */
+export const clearConsultationCache = (patientId) => {
+  const cacheKey = `consultations_${patientId}`;
+  consultationCache.delete(cacheKey);
+};
+
+// ICD search caching to reduce redundant searches
+const icdCache = new Map();
+const ICD_CACHE_DURATION = 300000; // 5 minutes (ICD data doesn't change frequently)
+
+/**
+ * Search ICD by code with caching
+ */
+export const getIcdViaCodeCached = async (code) => {
+  const cacheKey = `icd_code_${code.toLowerCase()}`;
+  const cached = icdCache.get(cacheKey);
+
+  if (cached && (Date.now() - cached.timestamp < ICD_CACHE_DURATION)) {
+    return cached.data;
+  }
+
+  const data = await getIcdViaCode(code);
+  icdCache.set(cacheKey, { data, timestamp: Date.now() });
+  return data;
+};
+
+/**
+ * Search ICD by title with caching
+ */
+export const getIcdViaTitleCached = async (title) => {
+  const cacheKey = `icd_title_${title.toLowerCase()}`;
+  const cached = icdCache.get(cacheKey);
+
+  if (cached && (Date.now() - cached.timestamp < ICD_CACHE_DURATION)) {
+    return cached.data;
+  }
+
+  const data = await getIcdViaTitle(title);
+  icdCache.set(cacheKey, { data, timestamp: Date.now() });
+  return data;
+};
+
+/**
+ * Fetch consultation with all details (ORIGINAL - kept for fallback)
  */
 export const getConsultationWithDetails = async (patientId) => {
   const consultations = await getConsultations(patientId);

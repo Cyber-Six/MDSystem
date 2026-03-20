@@ -5,10 +5,10 @@ import * as consultationService from '../consultation-service';
 const INITIAL_FORM = {
   type: 'Medical',
   mode: 'Onsite',
-  doctor: '',
   diagnosis: '',
-  treatment: '',
-  chiefComplaint: '',
+  treatments: [''],
+  chiefComplaints: [''],
+  peFindings: [''],
   notes: '',
 };
 
@@ -40,6 +40,71 @@ function InputField({ label, value, onChange, placeholder, type = 'text', disabl
         }`}
       />
     </label>
+  );
+}
+
+function MultiInputField({ label, values, onChange, placeholder, isTextarea = false }) {
+  const handleAdd = () => {
+    onChange([...values, '']);
+  };
+
+  const handleRemove = (index) => {
+    if (values.length === 1) return;
+    const newValues = values.filter((_, i) => i !== index);
+    onChange(newValues);
+  };
+
+  const handleChange = (index, value) => {
+    const newValues = [...values];
+    newValues[index] = value;
+    onChange(newValues);
+  };
+
+  return (
+    <div className="block">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">{label}</span>
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="px-2 py-0.5 text-[10px] font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded border border-primary-200 dark:border-primary-800 transition-colors"
+        >
+          + Add
+        </button>
+      </div>
+      <div className="space-y-2">
+        {values.map((value, index) => (
+          <div key={index} className="flex gap-2">
+            {isTextarea ? (
+              <textarea
+                rows={2}
+                value={value}
+                onChange={(e) => handleChange(index, e.target.value)}
+                placeholder={`${placeholder} ${values.length > 1 ? `#${index + 1}` : ''}`}
+                className="flex-1 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+              />
+            ) : (
+              <input
+                type="text"
+                value={value}
+                onChange={(e) => handleChange(index, e.target.value)}
+                placeholder={`${placeholder} ${values.length > 1 ? `#${index + 1}` : ''}`}
+                className="flex-1 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+              />
+            )}
+            {values.length > 1 && (
+              <button
+                type="button"
+                onClick={() => handleRemove(index)}
+                className="px-2 py-1 rounded text-[11px] font-medium bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/40 transition-colors shrink-0"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -102,9 +167,9 @@ export default function PatientConsultationTab({ patient, consultations = [], on
       try {
         let results;
         if (isLikelyCode(query)) {
-          results = await consultationService.getIcdViaCode(query);
+          results = await consultationService.getIcdViaCodeCached(query);
         } else {
-          results = await consultationService.getIcdViaTitle(query);
+          results = await consultationService.getIcdViaTitleCached(query);
         }
 
         if (ignore) return;
@@ -211,8 +276,12 @@ export default function PatientConsultationTab({ patient, consultations = [], on
   }, [selectedDiagnoses]);
 
   const handleSave = () => {
-    if (!form.chiefComplaint.trim() || !form.notes.trim()) {
-      setSubmitState({ ok: false, message: 'Please complete chief complaint and notes.' });
+    const validComplaints = form.chiefComplaints.map(c => c.trim()).filter(Boolean);
+    const validTreatments = form.treatments.map(t => t.trim()).filter(Boolean);
+    const validPeFindings = form.peFindings.map(p => p.trim()).filter(Boolean);
+
+    if (validComplaints.length === 0 || !form.notes.trim()) {
+      setSubmitState({ ok: false, message: 'Please complete at least one chief complaint and notes.' });
       return;
     }
 
@@ -243,10 +312,11 @@ export default function PatientConsultationTab({ patient, consultations = [], on
 
       onSaveConsultation({
         type: form.type,
-        doctor: form.doctor,
         diagnosis: primary ? `${primary.code} - ${primary.title}` : (form.diagnosis.trim() || 'General consultation'),
         diagnoses: normalizedDiagnoses,
-        treatment: form.treatment,
+        treatment: validTreatments.join('; '),
+        treatments: validTreatments,
+        chiefComplaints: validComplaints,
         notes: form.notes.trim(),
         backendPayload: {
           consultationInput: {
@@ -259,9 +329,9 @@ export default function PatientConsultationTab({ patient, consultations = [], on
           consultationOutcomeInput: {
             consultationId: null,
             remarks: form.notes.trim() || null,
-            complaints: form.chiefComplaint.trim() ? [form.chiefComplaint.trim()] : [],
-            peFindings: [],
-            treatments: form.treatment.trim() ? [form.treatment.trim()] : [],
+            complaints: validComplaints,
+            peFindings: validPeFindings,
+            treatments: validTreatments,
             diagnoses: normalizedDiagnoses.map(mapToBackendDiagnosis),
           },
         },
@@ -283,7 +353,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
         right={<span className="text-xs text-secondary-400 dark:text-neutral-500">Patient ID: {patient?.id || 'N/A'}</span>}
       >
         <div className="space-y-4">
-          <div className="grid md:grid-cols-4 gap-3">
+          <div className="grid md:grid-cols-3 gap-3">
             <label className="block">
               <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Consultation Type</span>
               <select
@@ -307,13 +377,6 @@ export default function PatientConsultationTab({ patient, consultations = [], on
                 <option value="Virtual">Virtual</option>
               </select>
             </label>
-
-            <InputField
-              label="Attending Doctor"
-              value={form.doctor}
-              onChange={(e) => setField('doctor', e.target.value)}
-              placeholder="e.g. Dr. Dela Cruz"
-            />
 
             <InputField
               label={icdServiceUnavailable ? 'Diagnosis (Manual Fallback)' : 'Diagnosis System'}
@@ -437,18 +500,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
 
           <div className="grid md:grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Chief Complaint</span>
-              <textarea
-                rows={3}
-                value={form.chiefComplaint}
-                onChange={(e) => setField('chiefComplaint', e.target.value)}
-                placeholder="Main reason for consultation"
-                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Clinical Notes</span>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1 block">Clinical Notes</span>
               <textarea
                 rows={3}
                 value={form.notes}
@@ -457,14 +509,33 @@ export default function PatientConsultationTab({ patient, consultations = [], on
                 className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
               />
             </label>
+
+            <MultiInputField
+              label="PE Findings"
+              values={form.peFindings}
+              onChange={(values) => setField('peFindings', values)}
+              placeholder="Physical examination finding"
+              isTextarea={true}
+            />
           </div>
 
-          <InputField
-            label="Treatment / Plan"
-            value={form.treatment}
-            onChange={(e) => setField('treatment', e.target.value)}
-            placeholder="Medication, advice, and follow-up plan"
-          />
+          <div className="grid md:grid-cols-2 gap-3">
+            <MultiInputField
+              label="Chief Complaints"
+              values={form.chiefComplaints}
+              onChange={(values) => setField('chiefComplaints', values)}
+              placeholder="Main reason for consultation"
+              isTextarea={true}
+            />
+
+            <MultiInputField
+              label="Treatment / Plan"
+              values={form.treatments}
+              onChange={(values) => setField('treatments', values)}
+              placeholder="Medication, advice, and follow-up plan"
+              isTextarea={false}
+            />
+          </div>
 
           <div className="mt-4 flex items-center justify-between gap-3">
             <p className={`text-xs ${submitState.ok ? 'text-success-600 dark:text-success-400' : 'text-error-600 dark:text-error-400'}`}>
