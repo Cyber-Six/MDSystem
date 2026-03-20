@@ -383,7 +383,7 @@ const HealthChat = () => {
                 </div>
                 <TicketDivider
                   closedAt={ticket.session_end}
-                  closedBy={ticket.status === 'Expired' ? 'System' : 'Unknown'}
+                  closedBy={ticket.closedBy || (ticket.status === 'Expired' ? 'System' : 'Unknown')}
                 />
               </div>
             )}

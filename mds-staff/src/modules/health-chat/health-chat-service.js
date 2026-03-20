@@ -346,6 +346,23 @@ export const closeTicket = async (chatId, notes = null) => {
   return data.closeTicket;
 };
 
+/**
+ * Delete an archived ticket (admin only)
+ */
+export const deleteArchivedTicket = async (chatId) => {
+  const mutation = `
+    mutation DeleteArchivedTicket($chatId: ID!) {
+      deleteArchivedTicket(chatId: $chatId) {
+        success
+        message
+      }
+    }
+  `;
+
+  const data = await sendGraphQL(mutation, { chatId });
+  return data.deleteArchivedTicket;
+};
+
 // ==================== FILE HANDLING ====================
 
 /**
