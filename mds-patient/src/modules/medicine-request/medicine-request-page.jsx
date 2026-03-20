@@ -113,8 +113,6 @@ const MedicineRequestPage = () => {
               item_code
               item_name
               category
-              batchId
-              batchNumber
               dosageUnit
               dosageValue
             }
@@ -274,8 +272,7 @@ const MedicineRequestPage = () => {
     try {
       requestItems = formData.items.map(item => {
         const medicineGroup = selectedMedicinesByCode[item.itemCode];
-        // Use batchId (not id) - id is medicalItemId, batchId is the actual batch
-        const medicineId = medicineGroup.batches[0]?.batchId;
+        const medicineId = medicineGroup.batches[0]?.id;
         if (!medicineId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
         return { medicineId: parseInt(medicineId, 10), quantity: 1 };
       });
