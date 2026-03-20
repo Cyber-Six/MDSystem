@@ -140,18 +140,19 @@ const MedicalInventory = () => {
 
   const enrichRequestItems = useCallback((requestItems = []) => {
     return requestItems.map((item) => {
-      const batchId = item?.batchId ?? item?.medicineId;
-      const batch = batches.find((b) => String(b.id) === String(batchId));
-      const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
+      // Note: item.batchId and item.medicineId from backend are both actually medicineId (medicalItemId)
+      // We need to use medicineId to look up the actual medicine, then find available batches for it
+      const medicineId = item?.medicineId;
+      const medicine = items.find((i) => String(i.id) === String(medicineId));
+      
       return {
         ...item,
-        batchId,
-        medicineId: item?.medicineId ?? batchId,
-        itemId: medicine?.id || batch?.medicalItemId || null,
-        itemName: medicine?.item_name || `Batch #${batchId}`,
+        medicineId: medicineId,
+        itemId: medicineId, // This is the medicalItemId, used to filter batches during dispensing
+        itemName: item.itemName || medicine?.item_name || `Medicine #${medicineId}`,
       };
     });
-  }, [batches, items]);
+  }, [items]);
 
   // Find enriched selected item
   const selectedEnriched = useMemo(() => {

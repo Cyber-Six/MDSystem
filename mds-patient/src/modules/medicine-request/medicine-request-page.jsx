@@ -110,7 +110,6 @@ const MedicineRequestPage = () => {
           query GetAvailableMedicine($location: LocationDesignation, $offset: Int, $limit: Int) {
             getAvailableMedicine(location: $location, offset: $offset, limit: $limit) {
               id
-              batchId
               item_code
               item_name
               category
@@ -273,8 +272,8 @@ const MedicineRequestPage = () => {
     try {
       requestItems = formData.items.map(item => {
         const medicineGroup = selectedMedicinesByCode[item.itemCode];
-        // Use batchId from the first batch - backend returns mb.id AS "batchId"
-        const medicineId = medicineGroup.batches[0]?.batchId;
+        // Use id from the first batch - this is the medicineId
+        const medicineId = medicineGroup.batches[0]?.id;
         if (!medicineId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
         return { medicineId: parseInt(medicineId, 10), quantity: 1 };
       });
