@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../../packages-core-adapter';
 import { GQL_FULL_RECORD, MOCK_PATIENT_RECORDS, STATUS_BANNER } from './patient-record-data';
+import * as consultationService from './consultation-service';
 
 const GQL_BASIC_RECORD_FALLBACK = `
   query GetPatientBasicRecordFallback($userId: ID!) {
@@ -280,31 +281,83 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
   const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient), [patientId, recordData, mockPatient]);
 
+  // Fetch consultations from backend on page load
   useEffect(() => {
-    setConsultations(patient?.history?.consultations || []);
-  }, [patientId, patient]);
+    if (!patientId || isMockPatient) {
+      setConsultations(patient?.history?.consultations || []);
+      return;
+    }
 
-  const handleSaveConsultation = (entry) => {
-    const now = new Date();
-    const newEntry = {
-      id: `CONS-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`,
-      type: entry?.type || 'Medical',
-      date: now.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
-      time: now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-      diagnosis: entry?.diagnosis || 'General consultation',
-      diagnoses: Array.isArray(entry?.diagnoses) ? entry.diagnoses : [],
-      doctor: entry?.doctor || 'Clinic Staff',
-      vitalSigns: {
-        bp: entry?.vitalSigns?.bp || '',
-        temp: entry?.vitalSigns?.temp || '',
-        heartRate: entry?.vitalSigns?.heartRate || '',
-      },
-      treatment: entry?.treatment || '',
-      notes: entry?.notes || '',
+    let cancelled = false;
+
+    const fetchConsultations = async () => {
+      try {
+        const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
+
+        if (!cancelled) {
+          setConsultations(consultationsWithDetails);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Error fetching consultations:', err);
+          setConsultations([]);
+        }
+      }
     };
 
-    setConsultations((prev) => [newEntry, ...prev]);
-    setActiveTab('history');
+    fetchConsultations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId, isMockPatient, patient]);
+
+  const handleSaveConsultation = async (entry) => {
+    if (isMockPatient) {
+      // For mock patients, just add to local state
+      const now = new Date();
+      const newEntry = {
+        id: `CONS-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`,
+        type: entry?.type || 'Medical',
+        date: now.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+        time: now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+        diagnosis: entry?.diagnosis || 'General consultation',
+        diagnoses: Array.isArray(entry?.diagnoses) ? entry.diagnoses : [],
+        doctor: entry?.doctor || 'Clinic Staff',
+        treatment: entry?.treatment || '',
+        notes: entry?.notes || '',
+      };
+
+      setConsultations((prev) => [newEntry, ...prev]);
+      setActiveTab('history');
+      return;
+    }
+
+    // Save to backend using the consultation service
+    try {
+      if (!entry?.backendPayload) {
+        console.error('No backend payload provided');
+        return;
+      }
+
+      const { consultationInput, consultationOutcomeInput } = entry.backendPayload;
+
+      // Use the service to create and submit consultation
+      await consultationService.createAndSubmitConsultation(
+        consultationInput,
+        consultationOutcomeInput,
+        'Completed'
+      );
+
+      // Fetch updated consultations from backend using the service
+      const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
+
+      setConsultations(consultationsWithDetails);
+      setActiveTab('history');
+    } catch (err) {
+      console.error('Error saving consultation:', err);
+      alert('Failed to save consultation. Please try again.');
+    }
   };
 
   if (isLoading) return <LoadingBlock label="Loading patient record..." />;
@@ -365,7 +418,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           />
         );
       case 'history':
-        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} />;
+        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} onRefreshConsultations={() => window.location.reload()} />;
       case 'appointments':
         return <PatientAppointmentsTab patient={patient} />;
       case 'medicines':

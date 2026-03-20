@@ -105,7 +105,7 @@ type ConsultationDiagnosis{
   outcomeId: ID!
   diagnosisName: String!
   icdId: ID!
-  type: DIAGNOSIS_TYPE!
+  diagnosisType: DIAGNOSIS_TYPE!
   notes: String
 }
 
@@ -113,7 +113,7 @@ input ConsultationDiagnosisInput{
   outcomeId: ID!
   diagnosisName: String!
   icdId: ID!
-  type: DIAGNOSIS_TYPE!
+  diagnosisType: DIAGNOSIS_TYPE!
   notes: String
 }
 
