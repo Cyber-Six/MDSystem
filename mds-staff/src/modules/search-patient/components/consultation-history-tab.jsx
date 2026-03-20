@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import PatientSectionCard from './section-card';
-import { axiosRequest } from '../../../packages-core-adapter';
+import * as consultationService from '../consultation-service';
 
 const TYPE_STYLES = {
   Medical: 'bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400 border border-accent-200 dark:border-accent-800/50',
@@ -74,43 +74,17 @@ export default function PatientConsultationHistoryTab({ patient, consultations: 
     setReopening(consultation.id);
 
     try {
-      const { data } = await axiosRequest.post('/consultation', {
-        query: `
-          mutation ReOpenConsultation($input: ConsultationOutcomeInput!) {
-            reOpenConsultation(input: $input) {
-              id
-              consultationId
-              remarks
-              recordedAt
-            }
-          }
-        `,
-        variables: {
-          input: {
-            consultationId: consultation.id,
-            remarks: `Consultation reopened for additional details - ${new Date().toLocaleString('en-PH')}`,
-            complaints: [],
-            peFindings: [],
-            treatments: [],
-            diagnoses: consultation.diagnoses?.map(d => {
-              // Ensure type is always a valid DIAGNOSIS_TYPE enum value
-              const validTypes = ['Primary', 'Secondary', 'Differential', 'RuledOut', 'Provisional', 'Complication', 'Chronic', 'FollowUp'];
-              const diagnosisType = d.type || d.diagnosisType || 'Secondary'; // Default to Secondary
-              const validType = validTypes.includes(diagnosisType) ? diagnosisType : 'Secondary';
+      const input = {
+        consultationId: consultation.id,
+        remarks: `Consultation reopened for additional details - ${new Date().toLocaleString('en-PH')}`,
+        complaints: [],
+        peFindings: [],
+        treatments: [],
+        diagnoses: consultation.diagnoses?.map(d => consultationService.mapToBackendDiagnosis(d)) || [],
+      };
 
-              return {
-                outcomeId: "0", // Placeholder - Backend will populate the real outcomeId
-                diagnosisName: d.diagnosisName || d.title,
-                icdId: String(d.icdId || d.id),
-                type: validType, // Ensure this is always a valid enum value
-                notes: d.notes || null,
-              };
-            }) || [],
-          }
-        },
-      });
+      const reopenedOutcome = await consultationService.reOpenConsultation(input);
 
-      const reopenedOutcome = data?.data?.reOpenConsultation;
       if (reopenedOutcome) {
         alert(`Consultation ${consultation.id} has been reopened. You can now add additional details.`);
         // Refresh consultations list

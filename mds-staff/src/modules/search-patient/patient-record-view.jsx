@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../../packages-core-adapter';
 import { GQL_FULL_RECORD, MOCK_PATIENT_RECORDS, STATUS_BANNER } from './patient-record-data';
+import * as consultationService from './consultation-service';
 
 const GQL_BASIC_RECORD_FALLBACK = `
   query GetPatientBasicRecordFallback($userId: ID!) {
@@ -291,117 +292,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
     const fetchConsultations = async () => {
       try {
-        const { data } = await axiosRequest.post('/consultation', {
-          query: `
-            query GetConsultations($patientId: ID!) {
-              getConsultations(patientId: $patientId, offset: 0, limit: 50) {
-                id
-                followUpId
-                patientId
-                mode
-                type
-                status
-                notes
-                updatedAt
-                createdAt
-              }
-            }
-          `,
-          variables: { patientId: String(patientId) },
-        });
-
-        if (cancelled) return;
-
-        const consultationList = data?.data?.getConsultations || [];
-
-        // Fetch outcomes for each consultation
-        const consultationsWithDetails = await Promise.all(
-          consultationList.map(async (consultation) => {
-            try {
-              const { data: outcomeData } = await axiosRequest.post('/consultation', {
-                query: `
-                  query GetOutcomes($consultationId: ID!) {
-                    getOutcomes(consultationId: $consultationId, offset: 0, limit: 10) {
-                      id
-                      consultationId
-                      remarks
-                      recordedAt
-                    }
-                  }
-                `,
-                variables: { consultationId: consultation.id },
-              });
-
-              const outcomes = outcomeData?.data?.getOutcomes || [];
-              const latestOutcome = outcomes[0] || null;
-
-              // Fetch diagnoses if outcome exists
-              let diagnoses = [];
-              if (latestOutcome) {
-                try {
-                  const { data: diagnosisData } = await axiosRequest.post('/consultation', {
-                    query: `
-                      query GetDiagnoses($outcomeId: ID!) {
-                        getDiagnoses(outcomeId: $outcomeId, offset: 0, limit: 20) {
-                          id
-                          diagnosisName
-                          icdId
-                          type
-                          notes
-                        }
-                      }
-                    `,
-                    variables: { outcomeId: latestOutcome.id },
-                  });
-
-                  const rawDiagnoses = diagnosisData?.data?.getDiagnoses || [];
-
-                  // Filter out diagnoses with invalid/null type and provide defaults
-                  diagnoses = rawDiagnoses
-                    .filter((d) => d && d.diagnosisName) // Only include valid entries
-                    .map((d) => ({
-                      ...d,
-                      type: d.type || 'Secondary', // Default to Secondary if type is null/undefined
-                    }));
-                } catch (err) {
-                  console.error('Error fetching diagnoses:', err);
-                  diagnoses = []; // Set to empty array on error
-                }
-              }
-
-              const primaryDiagnosis = diagnoses.find((d) => d.type === 'Primary') || diagnoses[0];
-
-              return {
-                id: consultation.id,
-                type: consultation.type,
-                date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
-                time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-                diagnosis: primaryDiagnosis?.diagnosisName || 'General consultation',
-                diagnoses: diagnoses,
-                doctor: 'Clinic Staff',
-                treatment: '',
-                notes: consultation.notes || '',
-                status: consultation.status,
-                mode: consultation.mode,
-              };
-            } catch (err) {
-              console.error('Error fetching outcomes:', err);
-              return {
-                id: consultation.id,
-                type: consultation.type,
-                date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
-                time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-                diagnosis: 'General consultation',
-                diagnoses: [],
-                doctor: 'Clinic Staff',
-                treatment: '',
-                notes: consultation.notes || '',
-                status: consultation.status,
-                mode: consultation.mode,
-              };
-            }
-          })
-        );
+        const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
 
         if (!cancelled) {
           setConsultations(consultationsWithDetails);
@@ -442,7 +333,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       return;
     }
 
-    // Save to backend
+    // Save to backend using the consultation service
     try {
       if (!entry?.backendPayload) {
         console.error('No backend payload provided');
@@ -451,176 +342,15 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
       const { consultationInput, consultationOutcomeInput } = entry.backendPayload;
 
-      // Step 1: Create consultation
-      const { data: createData } = await axiosRequest.post('/consultation', {
-        query: `
-          mutation CreateConsultation($input: ConsultationInput) {
-            createConsultation(input: $input) {
-              id
-              patientId
-              mode
-              type
-              status
-              notes
-              createdAt
-            }
-          }
-        `,
-        variables: { input: consultationInput },
-      });
-
-      const newConsultation = createData?.data?.createConsultation;
-      if (!newConsultation) {
-        throw new Error('Failed to create consultation');
-      }
-
-      // Step 2: Open consultation with outcome data
-      const outcomeInput = {
-        ...consultationOutcomeInput,
-        consultationId: newConsultation.id,
-      };
-
-      const { data: outcomeData } = await axiosRequest.post('/consultation', {
-        query: `
-          mutation OpenConsultation($input: ConsultationOutcomeInput!) {
-            openConsultation(input: $input) {
-              id
-              consultationId
-              remarks
-              recordedAt
-            }
-          }
-        `,
-        variables: { input: outcomeInput },
-      });
-
-      const outcome = outcomeData?.data?.openConsultation;
-      if (!outcome) {
-        throw new Error('Failed to open consultation');
-      }
-
-      // Step 3: Submit consultation as Completed
-      await axiosRequest.post('/consultation', {
-        query: `
-          mutation SubmitConsultation($consultationId: ID!, $status: CONSULTATION_STATUS_INPUT!) {
-            submitConsultation(consultationId: $consultationId, status: $status)
-          }
-        `,
-        variables: {
-          consultationId: newConsultation.id,
-          status: 'Completed',
-        },
-      });
-
-      // Step 4: Fetch updated consultations from backend
-      const { data: fetchData } = await axiosRequest.post('/consultation', {
-        query: `
-          query GetConsultations($patientId: ID!) {
-            getConsultations(patientId: $patientId, offset: 0, limit: 50) {
-              id
-              followUpId
-              patientId
-              mode
-              type
-              status
-              notes
-              updatedAt
-              createdAt
-            }
-          }
-        `,
-        variables: { patientId: String(patientId) },
-      });
-
-      const consultationList = fetchData?.data?.getConsultations || [];
-
-      // Fetch outcomes and diagnoses for display
-      const consultationsWithDetails = await Promise.all(
-        consultationList.map(async (consultation) => {
-          try {
-            const { data: outcomeDetailData } = await axiosRequest.post('/consultation', {
-              query: `
-                query GetOutcomes($consultationId: ID!) {
-                  getOutcomes(consultationId: $consultationId, offset: 0, limit: 10) {
-                    id
-                    consultationId
-                    remarks
-                    recordedAt
-                  }
-                }
-              `,
-              variables: { consultationId: consultation.id },
-            });
-
-            const outcomes = outcomeDetailData?.data?.getOutcomes || [];
-            const latestOutcome = outcomes[0] || null;
-
-            let diagnoses = [];
-            if (latestOutcome) {
-              try {
-                const { data: diagnosisData } = await axiosRequest.post('/consultation', {
-                  query: `
-                    query GetDiagnoses($outcomeId: ID!) {
-                      getDiagnoses(outcomeId: $outcomeId, offset: 0, limit: 20) {
-                        id
-                        diagnosisName
-                        icdId
-                        type
-                        notes
-                      }
-                    }
-                  `,
-                  variables: { outcomeId: latestOutcome.id },
-                });
-
-                const rawDiagnoses = diagnosisData?.data?.getDiagnoses || [];
-
-                // Filter out diagnoses with invalid/null type and provide defaults
-                diagnoses = rawDiagnoses
-                  .filter((d) => d && d.diagnosisName) // Only include valid entries
-                  .map((d) => ({
-                    ...d,
-                    type: d.type || 'Secondary', // Default to Secondary if type is null/undefined
-                  }));
-              } catch (err) {
-                console.error('Error fetching diagnoses:', err);
-                diagnoses = []; // Set to empty array on error
-              }
-            }
-
-            const primaryDiagnosis = diagnoses.find((d) => d.type === 'Primary') || diagnoses[0];
-
-            return {
-              id: consultation.id,
-              type: consultation.type,
-              date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
-              time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-              diagnosis: primaryDiagnosis?.diagnosisName || 'General consultation',
-              diagnoses: diagnoses,
-              doctor: 'Clinic Staff',
-              treatment: '',
-              notes: consultation.notes || '',
-              status: consultation.status,
-              mode: consultation.mode,
-            };
-          } catch (err) {
-            console.error('Error fetching consultation details:', err);
-            return {
-              id: consultation.id,
-              type: consultation.type,
-              date: new Date(consultation.createdAt).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
-              time: new Date(consultation.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-              diagnosis: 'General consultation',
-              diagnoses: [],
-              doctor: 'Clinic Staff',
-              treatment: '',
-              notes: consultation.notes || '',
-              status: consultation.status,
-              mode: consultation.mode,
-            };
-          }
-        })
+      // Use the service to create and submit consultation
+      await consultationService.createAndSubmitConsultation(
+        consultationInput,
+        consultationOutcomeInput,
+        'Completed'
       );
+
+      // Fetch updated consultations from backend using the service
+      const consultationsWithDetails = await consultationService.getConsultationWithDetails(patientId);
 
       setConsultations(consultationsWithDetails);
       setActiveTab('history');

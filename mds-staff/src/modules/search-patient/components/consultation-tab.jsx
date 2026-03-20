@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import PatientSectionCard from './section-card';
-import { axiosRequest } from '../../../packages-core-adapter';
+import * as consultationService from '../consultation-service';
 
 const INITIAL_FORM = {
   type: 'Medical',
@@ -58,42 +58,6 @@ function titleFromDiagnosis(item) {
   return item?.title || item?.diagnosisName || item?.diagnosis || '';
 }
 
-function buildIcdSearchPayload(rawQuery) {
-  const query = typeof rawQuery === 'string' ? rawQuery.trim() : '';
-  if (query.length < 2) return null;
-
-  if (isLikelyCode(query)) {
-    return {
-      query: `
-        query SearchIcdByCode($code: String!) {
-          getIcdViaCode(code: $code) {
-            id
-            code
-            title
-          }
-        }
-      `,
-      variables: { code: query },
-    };
-  }
-
-  const title = query.replace(/\s+/g, ' ').trim();
-  if (!title) return null;
-
-  return {
-    query: `
-      query SearchIcdByTitle($title: String!) {
-        getIcdViaTitle(title: $title) {
-          id
-          code
-          title
-        }
-      }
-    `,
-    variables: { title },
-  };
-}
-
 export default function PatientConsultationTab({ patient, consultations = [], onSaveConsultation }) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [icdQuery, setIcdQuery] = useState('');
@@ -121,20 +85,10 @@ export default function PatientConsultationTab({ patient, consultations = [], on
       };
     }
 
-    const payload = buildIcdSearchPayload(icdQuery);
-
-    if (!payload) {
+    const query = typeof icdQuery === 'string' ? icdQuery.trim() : '';
+    if (query.length < 2) {
       setIcdResults([]);
       setIcdError('');
-      setIcdLoading(false);
-      return () => {
-        ignore = true;
-      };
-    }
-
-    if (!isLikelyCode(icdQuery) && !payload?.variables?.title) {
-      setIcdResults([]);
-      setIcdError('Please enter a valid ICD title.');
       setIcdLoading(false);
       return () => {
         ignore = true;
@@ -146,14 +100,19 @@ export default function PatientConsultationTab({ patient, consultations = [], on
 
     const timer = setTimeout(async () => {
       try {
-        const { data } = await axiosRequest.post('/consultation', payload);
+        let results;
+        if (isLikelyCode(query)) {
+          results = await consultationService.getIcdViaCode(query);
+        } else {
+          results = await consultationService.getIcdViaTitle(query);
+        }
+
         if (ignore) return;
 
-        const raw = data?.data?.getIcdViaCode || data?.data?.getIcdViaTitle || [];
-        const cleaned = raw.filter((item) => item?.id && item?.code && item?.title).slice(0, 12);
+        const cleaned = (results || []).filter((item) => item?.id && item?.code && item?.title).slice(0, 12);
 
         if (cleaned.length === 0) {
-          setIcdError(`No ICD ${isLikelyCode(icdQuery) ? 'code' : 'diagnosis'} found for "${icdQuery}". Try a different search term.`);
+          setIcdError(`No ICD ${isLikelyCode(query) ? 'code' : 'diagnosis'} found for "${query}". Try a different search term.`);
           setIcdResults([]);
         } else {
           setIcdResults(cleaned);
@@ -237,18 +196,8 @@ export default function PatientConsultationTab({ patient, consultations = [], on
   };
 
   const mapToBackendDiagnosis = (entry) => {
-    // Ensure type is always a valid DIAGNOSIS_TYPE enum value
-    const validTypes = ['Primary', 'Secondary', 'Differential', 'RuledOut', 'Provisional', 'Complication', 'Chronic', 'FollowUp'];
-    const diagnosisType = entry.diagnosisType || 'Secondary'; // Default to Secondary
-    const validType = validTypes.includes(diagnosisType) ? diagnosisType : 'Secondary';
-
-    return {
-      outcomeId: "0", // Placeholder - Backend will populate the real outcomeId
-      diagnosisName: entry.title,
-      icdId: Number(entry.id),
-      type: validType, // Ensure this is always a valid enum value
-      notes: entry.notes?.trim() || null,
-    };
+    // Use the centralized service function for mapping
+    return consultationService.mapToBackendDiagnosis(entry);
   };
 
   // Update diagnosis field when primary diagnosis changes

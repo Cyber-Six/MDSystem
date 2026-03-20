@@ -212,9 +212,9 @@ const Mutation = {
       // ✅ Corrected diagnoses insert
       const diagnosisResult = await client.query(`
         INSERT INTO "ConsultationDiagnosis" ("outcomeId", "diagnosisName", "icdId", "diagnosisType", "notes")
-        SELECT $1, d."diagnosisName", d."icdId", d.type::"DiagnosisType", d.notes
+        SELECT $1, d."diagnosisName", d."icdId", d."diagnosisType"::"DiagnosisType", d.notes
         FROM jsonb_to_recordset($2::jsonb)
-          AS d("diagnosisName" text, "icdId" int, type text, notes text)
+          AS d("diagnosisName" text, "icdId" int, "diagnosisType" text, notes text)
         RETURNING *;
       `, [
         outcomeId,
@@ -541,9 +541,9 @@ const Mutation = {
 
       const result = await client.query(`
         INSERT INTO "ConsultationDiagnosis" ("outcomeId", "diagnosisName", "icdId", "diagnosisType", "notes")
-        SELECT $1, d."diagnosisName", d."icdId", d.type::"DiagnosisType", d.notes
+        SELECT $1, d."diagnosisName", d."icdId", d."diagnosisType"::"DiagnosisType", d.notes
         FROM jsonb_to_recordset($2::jsonb)
-          AS d("diagnosisName" text, "icdId" int, type text, notes text)
+          AS d("diagnosisName" text, "icdId" int, "diagnosisType" text, notes text)
         RETURNING *;
       `, [
         outcomeId,
