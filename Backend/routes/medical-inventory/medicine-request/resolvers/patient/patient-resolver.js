@@ -33,6 +33,25 @@ const Query = {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
     return await Wrapper.Query._getMedicineStatus(_, { patientId: user.id }, { res });
   },
+
+  getMedicineRequestById: async (_, { requestId }, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    return await Wrapper.Query._getMedicineRequestById(_, { requestId }, { res });
+  },
+
+  getMedicineRequests: async (_, { patientId, offset, limit }, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    // Patients can only view their own requests
+    if (user.id !== Number(patientId)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._getMedicineRequests(_, { patientId, offset, limit }, { res });
+  },
+
+  getAllMedicineRequests: async (_, __, { user, res }) => {
+    // Patients cannot view all requests - this is staff only
+    throwGraphQLError(res).message("Unauthorized").status(401).throw();
+  },
 };
 
 const Mutation = {
@@ -120,6 +139,11 @@ const Mutation = {
       { requestId: pendingResult.rows[0].id, status: 'Cancelled', approvedBy: user.id, notes: null },
       { res },
     );
+  },
+
+  setStatusMedicineRequest: async (_, __, { user, res }) => {
+    // Patients cannot update medicine request status - this is staff only
+    throwGraphQLError(res).message("Unauthorized").status(401).throw();
   },
 };
 
