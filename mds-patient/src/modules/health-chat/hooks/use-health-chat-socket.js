@@ -37,6 +37,21 @@ export function useHealthChatSocket({
   const [socketError, setSocketError] = useState(false);
   const typingTimeoutRef = useRef(null);
 
+  // Use refs for callbacks to avoid stale closures in socket event listeners
+  // This ensures event handlers always call the latest callback version
+  const onNewMessageRef = useRef(onNewMessage);
+  const onTypingRef = useRef(onTyping);
+  const onTicketApprovedRef = useRef(onTicketApproved);
+  const onTicketClosedRef = useRef(onTicketClosed);
+
+  // Keep refs up to date with latest callbacks
+  useEffect(() => {
+    onNewMessageRef.current = onNewMessage;
+    onTypingRef.current = onTyping;
+    onTicketApprovedRef.current = onTicketApproved;
+    onTicketClosedRef.current = onTicketClosed;
+  }, [onNewMessage, onTyping, onTicketApproved, onTicketClosed]);
+
   // Determine if we should be connected
   // Only connect when chat is active (Ongoing) or pending (Open)
   const shouldConnect = chatId && ['Open', 'Ongoing'].includes(chatStatus);
@@ -80,36 +95,38 @@ export function useHealthChatSocket({
 
       // Listen for new messages
       socketService.on('healthchat:new-message', (data) => {
-        if (data.chatId === chatId && data.senderType === 'Medical') {
-          onNewMessage?.(data.message);
+        // Use String() coercion to handle potential type mismatch (string vs number)
+        if (String(data.chatId) === String(chatId) && data.senderType === 'Medical') {
+          onNewMessageRef.current?.(data.message);
         }
       });
 
       // Listen for typing indicators
       socketService.on('healthchat:user-typing', (data) => {
-        if (data.chatId === chatId && data.userType === 'Medical') {
-          onTyping?.(data.isTyping);
+        // Use String() coercion to handle potential type mismatch
+        if (String(data.chatId) === String(chatId) && data.userType === 'Medical') {
+          onTypingRef.current?.(data.isTyping);
         }
       });
 
       // Listen for ticket approval
       socketService.on('healthchat:ticket-approved', (data) => {
         if (data.chat?.id === chatId || String(data.chat?.id) === String(chatId)) {
-          onTicketApproved?.(data.chat);
+          onTicketApprovedRef.current?.(data.chat);
         }
       });
 
       // Listen for ticket closed
       socketService.on('healthchat:ticket-closed', (data) => {
         if (data.chatId === chatId || String(data.chatId) === String(chatId)) {
-          onTicketClosed?.(data);
+          onTicketClosedRef.current?.(data);
         }
       });
 
       // Listen for ticket rejection
       socketService.on('healthchat:ticket-rejected', (data) => {
         if (data.chat?.id === chatId || String(data.chat?.id) === String(chatId)) {
-          onTicketClosed?.(data);
+          onTicketClosedRef.current?.(data);
         }
       });
     }).catch((err) => {

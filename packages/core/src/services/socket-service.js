@@ -57,7 +57,12 @@ export const createSocketService = ({
       const baseUrl = getApiBaseUrl();
       let settled = false;
 
-      socket = ioClient(baseUrl || undefined, {
+      // In development with relative URLs, Socket.IO will connect to the current origin.
+      // The Vite proxy at /socket.io will forward requests to the backend.
+      // In production, we use relative URLs to avoid CORS issues (same origin).
+      const socketUrl = baseUrl ? baseUrl : undefined; // undefined = use current origin
+
+      socket = ioClient(socketUrl, {
         // Auth function called on every connection/reconnection.
         // Ensures token is always fresh.
         auth: (cb) => {
@@ -65,22 +70,29 @@ export const createSocketService = ({
             .then((token) => cb({ token: token || '' }))
             .catch(() => cb({ token: '' }));
         },
+        // Use both WebSocket and polling for maximum compatibility
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 10000,
         reconnectionAttempts: 10,
+        // Increase timeout for slow connections
+        timeout: 20000,
+        // Allow CORS for cross-origin connections
+        withCredentials: true,
         ...options,
       });
 
       socket.once('connect', () => {
         if (!settled) {
           settled = true;
+          console.log('[SocketService] Connected successfully');
           resolve();
         }
       });
 
       socket.on('connect_error', async (err) => {
+        console.error('[SocketService] Connection error:', err.message);
         if (err.message?.includes('SOCKET_AUTH_FAILED') && onAuthError) {
           try {
             await onAuthError();
@@ -94,6 +106,14 @@ export const createSocketService = ({
           settled = true;
           reject(err);
         }
+      });
+
+      socket.on('disconnect', (reason) => {
+        console.log('[SocketService] Disconnected:', reason);
+      });
+
+      socket.on('error', (error) => {
+        console.error('[SocketService] Socket error:', error);
       });
     });
   };

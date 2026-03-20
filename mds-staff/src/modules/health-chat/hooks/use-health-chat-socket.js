@@ -129,6 +129,8 @@ export function useHealthChatSocket() {
   }, [addMessage, addTicket, updateTicketStatus, setUserTyping, setSocketError]);
 
   // Join room when chat is selected
+  // Note: Must depend on both isConnected AND selectedChatId to handle the race condition
+  // where socket connects AFTER a chat is already selected
   useEffect(() => {
     if (!socketRef.current?.isConnected() || !selectedChatId) return;
 
@@ -145,7 +147,7 @@ export function useHealthChatSocket() {
       socketRef.current.emit('healthchat:join-room', { chatId: selectedChatId });
       joinedRoomsRef.current.add(selectedChatId);
     }
-  }, [selectedChatId]);
+  }, [selectedChatId, isConnected]);
 
   /**
    * Emit typing status to server
