@@ -272,6 +272,7 @@ const MedicineRequestPage = () => {
     try {
       requestItems = formData.items.map(item => {
         const medicineGroup = selectedMedicinesByCode[item.itemCode];
+        // Use id from the first batch - this is the medicineId
         const medicineId = medicineGroup.batches[0]?.id;
         if (!medicineId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
         return { medicineId: parseInt(medicineId, 10), quantity: 1 };

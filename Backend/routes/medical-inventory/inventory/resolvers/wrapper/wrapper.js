@@ -97,17 +97,31 @@ const Mutation = {
   _updateMedicalItems: async (_, { id, input }, { res }) => {
     const allowed = ['item_code', 'item_name', 'category', 'description', 'active'];
     const params = [];
+    const sets = [];
 
-    const sets = Object.entries(input)
+    logger.info("_updateMedicalItems called with id:", id, "input:", input);
+
+    // Build SET clauses with explicit parameter indexing
+    Object.entries(input)
       .filter(([key, value]) => value !== null && value !== undefined && allowed.includes(key))
-      .map(([key, value]) => `"${key}" = $${params.push(value)}`);
+      .forEach(([key, value]) => {
+        params.push(value);
+        sets.push(`"${key}" = $${params.length}`);
+      });
 
     if (sets.length === 0) {
       throwGraphQLError(res).message("No fields to update").status(400).throw();
     }
 
     sets.push('"updated_at" = current_timestamp');
-    params.push(id);
+    
+    // Parse id to integer, but be safe about it
+    const parsedId = Number(id);
+    if (isNaN(parsedId)) {
+      logger.error("Invalid id provided:", id);
+      throwGraphQLError(res).message("Invalid ID format").status(400).throw();
+    }
+    params.push(parsedId);
 
     const sql = `
       UPDATE "MedicalItems"
@@ -117,6 +131,8 @@ const Mutation = {
     `;
 
     try {
+      logger.info("_updateMedicalItems - SQL:", sql);
+      logger.info("_updateMedicalItems - Params:", params);
       const result = await db.query(sql, params);
       if (result.rows.length === 0) {
         throwGraphQLError(res).message("Medical item not found").status(404).throw();
@@ -126,8 +142,10 @@ const Mutation = {
       if (err.code === '23505') {
         throwGraphQLError(res).message("Item code already exists").status(409).throw();
       }
-      logger.error("Error in _updateMedicalItems:", err);
-      throwGraphQLError(res).message("Database error").status(500).throw();
+      logger.error("Error in _updateMedicalItems - SQL:", sql);
+      logger.error("Error in _updateMedicalItems - Params:", params);
+      logger.error("Error in _updateMedicalItems - Full Error:", err.message, err.code, err.detail);
+      throwGraphQLError(res).message(`Database error: ${err.message}`).status(500).throw();
     }
   },
 
