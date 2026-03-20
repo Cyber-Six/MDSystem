@@ -38,7 +38,8 @@ const ChatBox = ({
   const getStatusDot = () => {
     if (isFrozen) return '#a19b93';
     if (isPending) return '#f4c430';
-    if (isActive && isSocketConnected) return '#22c55e';
+    // Show green if socket connected OR polling fallback is working
+    if (isActive && (isSocketConnected || connectionStatus === 'connected')) return '#22c55e';
     return '#f4c430';
   };
 
@@ -50,6 +51,8 @@ const ChatBox = ({
     if (isPending) return 'Waiting for staff';
     if (isStaffTyping) return 'Typing…';
     if (isSocketConnected) return 'Online';
+    // Polling fallback is working - show Online instead of Connecting
+    if (connectionStatus === 'connected') return 'Online';
     return 'Connecting…';
   };
 
@@ -64,17 +67,12 @@ const ChatBox = ({
 
   return (
     <div
-      className="flex flex-col h-full font-sans"
-      style={{ background: '#fdfcfa' }}
+      className="flex flex-col h-full font-sans bg-white dark:bg-neutral-900"
     >
 
       {/* ── Header ── */}
       <div
-        className="flex items-center justify-between px-5 py-3.5 flex-shrink-0"
-        style={{
-          background: '#fdfcfa',
-          borderBottom: '1.5px solid #e8e5e0',
-        }}
+        className="flex items-center justify-between px-5 py-3.5 flex-shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700"
       >
         {/* Left: avatar + name + status */}
         <div className="flex items-center gap-3">
@@ -88,12 +86,8 @@ const ChatBox = ({
             <Stethoscope className="w-5 h-5 text-primary-500" />
             {/* Status dot */}
             <span
-              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
-              style={{
-                background: getStatusDot(),
-                borderColor: '#fdfcfa',
-                transition: 'background 0.3s'
-              }}
+              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-neutral-900 transition-all duration-300"
+              style={{ background: getStatusDot() }}
             />
           </div>
           <div>
@@ -103,8 +97,7 @@ const ChatBox = ({
               Medical Staff
             </p>
             <p
-              className="text-xs leading-tight m-0 mt-0.5 flex items-center gap-1.5"
-              style={{ color: '#a19b93' }}
+              className="text-xs leading-tight m-0 mt-0.5 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400"
             >
               {isStaffTyping ? (
                 <span className="text-primary-600 font-medium">Typing…</span>
@@ -115,77 +108,31 @@ const ChatBox = ({
           </div>
         </div>
 
-        {/* Right: expiry + close */}
+        {/* Right: refresh + close */}
         <div className="flex items-center gap-2">
           {/* Socket reconnect button */}
           {!isSocketConnected && !isInitializing && isActive && (
             <button
               onClick={onRefresh}
               disabled={isLoading}
-              className="p-2 rounded-lg transition-colors disabled:opacity-50"
-              style={{ color: '#a19b93' }}
+              className="p-2 rounded-lg transition-colors disabled:opacity-50 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
               title="Refresh messages"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
-        {/* Close ticket button - only show when active */}
-        {isActive && (
-          <button
-            onClick={onCloseTicket}
-            disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-400
-                     hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30
-                     rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Close this conversation"
-          >
-            <X className="w-4 h-4" />
-            <span className="hidden sm:inline">Close</span>
-          </button>
-        )}
-      </div>
-
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto bg-white dark:bg-neutral-900">
-        <div className="px-6 py-6 space-y-4">
-          {/* Socket connection issue warning */}
-          {(!isSocketConnected || socketError) && !isInitializing && isActive && (
-            <div className="flex items-center gap-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <div className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
-              <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
-                {socketError ? 'Connection error - using manual refresh' : 'Connecting - using manual refresh'}
-              </span>
-              <button
-                onClick={onRefresh}
-                disabled={isLoading}
-                className="p-1 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded transition-colors disabled:opacity-50"
-                title="Refresh messages"
-              >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
           )}
-
+          {/* Close ticket button - only show when active */}
           {isActive && (
             <button
               onClick={onCloseTicket}
               disabled={isLoading}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
-                         transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                color: '#78716c',
-                border: '1.5px solid #e8e5e0',
-                background: 'transparent'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = '#fca5a5';
-                e.currentTarget.style.color = '#dc2626';
-                e.currentTarget.style.background = '#fef2f2';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = '#e8e5e0';
-                e.currentTarget.style.color = '#78716c';
-                e.currentTarget.style.background = 'transparent';
-              }}
+                         transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+                         text-neutral-600 dark:text-neutral-300
+                         border border-neutral-200 dark:border-neutral-700 bg-transparent
+                         hover:text-red-600 dark:hover:text-red-400
+                         hover:border-red-300 dark:hover:border-red-700
+                         hover:bg-red-50 dark:hover:bg-red-900/30"
             >
               <X className="w-3.5 h-3.5" />
               End chat
@@ -194,28 +141,9 @@ const ChatBox = ({
         </div>
       </div>
 
-      {/* ── Connection warning banner ── */}
-      {!isSocketConnected && !isInitializing && isActive && (
-        <div
-          className="flex items-center gap-2 px-5 py-2.5 flex-shrink-0 text-xs"
-          style={{
-            background: '#fff7ed',
-            borderBottom: '1px solid #fed7aa',
-            color: '#c2410c'
-          }}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            style={{ background: '#f97316' }}
-          />
-          Connection issue — messages may be delayed
-        </div>
-      )}
-
       {/* ── Messages area — ONLY this div scrolls ── */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto"
-        style={{ background: '#f4f2ef' }}
+        className="flex-1 min-h-0 overflow-y-auto bg-neutral-100 dark:bg-neutral-800"
       >
         <div className="px-5 py-5 space-y-1">
 
@@ -259,10 +187,7 @@ const ChatBox = ({
                   {ticketPurpose}
                 </div>
                 {ticketCreatedAt && (
-                  <p
-                    className="text-[10px] text-right mt-1 flex items-center justify-end gap-1"
-                    style={{ color: '#a19b93' }}
-                  >
+                  <p className="text-[10px] text-right mt-1 flex items-center justify-end gap-1 text-neutral-400 dark:text-neutral-500">
                     <Clock className="w-2.5 h-2.5" />
                     {formatTime(ticketCreatedAt)}
                   </p>
@@ -274,18 +199,8 @@ const ChatBox = ({
           {/* Pending badge */}
           {isPending && (
             <div className="flex justify-center py-3">
-              <div
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium"
-                style={{
-                  background: 'rgba(244,196,48,0.1)',
-                  border: '1px solid rgba(244,196,48,0.3)',
-                  color: '#C9A01E'
-                }}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full animate-pulse"
-                  style={{ background: '#f4c430' }}
-                />
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium bg-primary-500/10 dark:bg-primary-500/20 border border-primary-500/30 dark:border-primary-500/40 text-primary-700 dark:text-primary-400">
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-primary-500" />
                 Waiting for a staff member to accept
               </div>
             </div>
@@ -322,12 +237,7 @@ const ChatBox = ({
           {/* Error inline */}
           {error && (
             <div
-              className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm"
-              style={{
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                color: '#dc2626'
-              }}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
             >
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {error}
@@ -341,11 +251,7 @@ const ChatBox = ({
       {/* ── File preview ── */}
       {attachedFile && (
         <div
-          className="px-5 py-3 flex-shrink-0"
-          style={{
-            borderTop: '1.5px solid #e8e5e0',
-            background: '#fdfcfa'
-          }}
+          className="px-5 py-3 flex-shrink-0 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900"
         >
           <FilePreview file={attachedFile} onRemove={onFileRemoved} />
         </div>
@@ -353,18 +259,12 @@ const ChatBox = ({
 
       {/* ── Input area ── */}
       <div
-        className="px-4 py-2.5 flex-shrink-0"
-        style={{
-          background: '#fdfcfa',
-          borderTop: '1.5px solid #e8e5e0',
-          boxShadow: '0 -2px 8px rgba(28,25,23,0.04)'
-        }}
+        className="px-4 py-2.5 flex-shrink-0 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 shadow-lg dark:shadow-dark-sm"
       >
         {/* Frozen */}
         {isFrozen && (
           <div
-            className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs"
-            style={{ color: '#a19b93', background: '#f4f2ef' }}
+            className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800"
           >
             <Lock className="w-3.5 h-3.5" />
             This conversation is closed
@@ -374,17 +274,13 @@ const ChatBox = ({
         {/* Pending */}
         {isPending && (
           <div
-            className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs"
-            style={{ color: '#C9A01E', background: 'rgba(244,196,48,0.07)' }}
+            className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-yellow-700 dark:text-yellow-400 bg-yellow-50/70 dark:bg-yellow-900/20"
           >
             <div
               className="w-3.5 h-3.5 border-2 rounded-full animate-spin"
               style={{ borderColor: '#f4c430', borderTopColor: 'transparent' }}
             />
             Waiting for staff approval…
-          <div className="flex items-center justify-center gap-2 text-amber-600 dark:text-amber-400 py-2">
-            <Clock className="w-4 h-4" />
-            <span className="text-sm">Waiting for staff approval</span>
           </div>
         )}
 
@@ -407,21 +303,15 @@ const ChatBox = ({
                 placeholder={getPlaceholder()}
                 disabled={!canSendMessage || isLoading}
                 className="w-full px-3.5 py-2 text-sm rounded-full resize-none leading-snug
-                           text-secondary-800 placeholder-neutral-400 transition-all duration-200
-                           focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                           text-secondary-800 dark:text-white placeholder-neutral-400 transition-all duration-200
+                           focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
+                           bg-neutral-100 dark:bg-neutral-800
+                           border border-neutral-200 dark:border-neutral-700
+                           focus:border-primary-500 dark:focus:border-primary-400
+                           focus:shadow-lg focus:shadow-primary-500/10"
                 style={{
-                  background: '#f4f2ef',
-                  border: '1.5px solid #e8e5e0',
                   maxHeight: '80px',
                   scrollbarWidth: 'none'
-                }}
-                onFocus={e => {
-                  e.target.style.borderColor = '#f4c430';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(244,196,48,0.12)';
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = '#e8e5e0';
-                  e.target.style.boxShadow = 'none';
                 }}
                 rows={1}
               />
@@ -433,16 +323,15 @@ const ChatBox = ({
               onClick={onSubmit}
               disabled={!canSendMessage || isLoading || (!inputValue.trim() && !attachedFile)}
               className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center
-                         transition-all duration-200 active:scale-95 disabled:cursor-not-allowed"
+                         transition-all duration-200 active:scale-95 disabled:cursor-not-allowed
+                         text-secondary-900 dark:text-secondary-900
+                         hover:shadow-lg dark:hover:shadow-dark-md
+                         disabled:opacity-40 disabled:shadow-none"
               style={{
                 background:
                   canSendMessage && (inputValue.trim() || attachedFile)
                     ? 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)'
                     : '#e8e5e0',
-                boxShadow:
-                  canSendMessage && (inputValue.trim() || attachedFile)
-                    ? '0 2px 8px rgba(244,196,48,0.35)'
-                    : 'none',
                 color:
                   canSendMessage && (inputValue.trim() || attachedFile)
                     ? '#1c1a17'

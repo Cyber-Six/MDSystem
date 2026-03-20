@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { RefreshCw, Stethoscope } from 'lucide-react';
 import { HealthChatProvider, useHealthChat } from './context/health-chat-context';
 import { useHealthChatSocket } from './hooks/use-health-chat-socket';
@@ -7,8 +7,8 @@ import PatientList from './components/patient-list';
 import ChatPanel from './components/chat-panel';
 
 const HealthChatContent = () => {
-  const { isConnected, refreshMessages } = useHealthChatSocket();
-  const { socketError } = useHealthChat();
+  const { isConnected } = useHealthChatSocket();
+  const { socketError, selectedChatId, selectedTicket, refreshMessages } = useHealthChat();
 
   const connStatus = socketError
     ? { dot: '#F59E0B', label: 'Manual refresh' }
@@ -16,16 +16,34 @@ const HealthChatContent = () => {
     ? { dot: '#10B981', label: 'Connected' }
     : { dot: '#F59E0B', label: 'Connecting…' };
 
+  // Poll for new messages when socket is disconnected (fallback mechanism)
+  useEffect(() => {
+    // Only poll when socket is disconnected or has error, and a chat is selected and active
+    if (!selectedChatId || selectedTicket?.status !== 'Ongoing') return;
+    if (isConnected && !socketError) return; // Socket is working, no need to poll
+
+    console.log('[HealthChat Staff] Socket disconnected - starting message polling for chat:', selectedChatId);
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await refreshMessages();
+      } catch (err) {
+        console.error('[HealthChat Staff] Message polling failed:', err);
+      }
+    }, 15000); // Poll every 15 seconds
+
+    return () => {
+      console.log('[HealthChat Staff] Stopping message polling');
+      clearInterval(pollInterval);
+    };
+  }, [selectedChatId, selectedTicket?.status, isConnected, socketError, refreshMessages]);
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f4f2ef' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="bg-neutral-100 dark:bg-neutral-800">
 
       {/* ── Page header ── */}
       <div
-        className="flex items-center justify-between px-6 py-3 flex-shrink-0"
-        style={{
-          background: '#fdfcfa',
-          borderBottom: '1px solid #e8e5e0',
-        }}
+        className="flex items-center justify-between px-6 py-3 flex-shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700"
       >
         <div className="flex items-center gap-3">
           {/* Icon */}
@@ -39,8 +57,8 @@ const HealthChatContent = () => {
           {/* Title + status — explicit line-heights, no leading-none */}
           <div className="flex flex-col justify-center" style={{ gap: '3px' }}>
             <h1
-              className="text-sm font-bold"
-              style={{ color: '#1c1a17', fontFamily: 'Poppins, sans-serif', lineHeight: 1.2, margin: 0 }}
+              className="text-sm font-bold text-secondary-900 dark:text-white"
+              style={{ fontFamily: 'Poppins, sans-serif', lineHeight: 1.2, margin: 0 }}
             >
               Health Chat
             </h1>
@@ -49,7 +67,7 @@ const HealthChatContent = () => {
                 className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                 style={{ background: connStatus.dot }}
               />
-              <span style={{ fontSize: '10px', color: '#a19b93', fontFamily: 'Fira Code, monospace', lineHeight: 1.2 }}>
+              <span className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: '10px', fontFamily: 'Fira Code, monospace', lineHeight: 1.2 }}>
                 {connStatus.label}
               </span>
             </span>
@@ -59,16 +77,9 @@ const HealthChatContent = () => {
         {/* Refresh */}
         <button
           onClick={refreshMessages}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors"
-          style={{ color: '#78716c', border: '1px solid #e8e5e0' }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = '#f4f2ef';
-            e.currentTarget.style.color = '#28251f';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = '#78716c';
-          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors
+                     text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700
+                     hover:bg-neutral-100 dark:hover:bg-neutral-800"
           title="Refresh all messages"
         >
           <RefreshCw className="w-3.5 h-3.5" />
@@ -81,14 +92,13 @@ const HealthChatContent = () => {
 
         {/* Left panel */}
         <div
+          className="bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-700"
           style={{
             width: '320px',
             flexShrink: 0,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            background: '#fdfcfa',
-            borderRight: '1px solid #e8e5e0',
           }}
         >
           <FilterTabs />

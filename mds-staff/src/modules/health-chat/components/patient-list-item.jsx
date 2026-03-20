@@ -9,59 +9,49 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
   return (
     <div
       onClick={onClick}
-      className="cursor-pointer transition-colors duration-100"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '7px 12px',
-        background: isSelected ? '#FFFBEB' : 'transparent',
-        borderLeft: isSelected ? '3px solid #f4c430' : '3px solid transparent',
-        borderBottom: '1px solid #f4f2ef',
-      }}
-      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#faf9f7'; }}
-      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+      className={`
+        flex items-center gap-2.5 px-3 py-[7px] cursor-pointer transition-colors duration-100
+        border-l-[3px] border-b
+        ${isSelected
+          ? 'bg-amber-50 dark:bg-amber-900/20 border-l-primary-500 border-b-neutral-100 dark:border-b-neutral-800'
+          : 'bg-transparent border-l-transparent border-b-neutral-100 dark:border-b-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+        }
+      `}
     >
       {/* Avatar */}
       <div
-        style={{
-          flexShrink: 0,
-          width: '28px',
-          height: '28px',
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '10px',
-          fontWeight: 700,
-          alignSelf: 'center',
-          background: isSelected ? '#f4c430' : '#e8e5e0',
-          color: isSelected ? '#1c1a17' : '#57534e',
-        }}
+        className={`
+          flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center
+          text-[10px] font-bold self-center
+          ${isSelected
+            ? 'bg-primary-500 text-secondary-900'
+            : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+          }
+        `}
       >
         {initials}
       </div>
 
       {/* Text block */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2px' }}>
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
         {/* Name + badge */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 600, color: '#1c1a17', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div className="flex items-center justify-between gap-1.5">
+          <span className="text-[11px] font-semibold text-secondary-900 dark:text-white overflow-hidden text-ellipsis whitespace-nowrap">
             {formatPatientName(patient)}
           </span>
           <TicketStatusBadge status={ticket.status} />
         </div>
 
         {/* Purpose */}
-        <p style={{ fontSize: '10px', color: isTyping ? '#C9A01E' : '#a19b93', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+        <p className={`text-[10px] overflow-hidden text-ellipsis whitespace-nowrap m-0 ${isTyping ? 'text-primary-600 dark:text-primary-400' : 'text-neutral-400 dark:text-neutral-500'}`}>
           {isTyping ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ display: 'flex', gap: '2px' }}>
+            <span className="flex items-center gap-1">
+              <span className="flex gap-0.5">
                 {[0, 150, 300].map((d, i) => (
                   <span
                     key={i}
-                    className="animate-bounce"
-                    style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#f4c430', animationDelay: `${d}ms`, animationDuration: '700ms', display: 'inline-block' }}
+                    className="inline-block w-1 h-1 rounded-full bg-primary-500 animate-bounce"
+                    style={{ animationDelay: `${d}ms`, animationDuration: '700ms' }}
                   />
                 ))}
               </span>
@@ -73,7 +63,7 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
         </p>
 
         {/* Timestamp */}
-        <p style={{ fontSize: '9px', color: '#d5d1cb', margin: 0 }}>
+        <p className="text-[9px] text-neutral-300 dark:text-neutral-600 m-0">
           {formatRelativeTime(ticket.session_start || ticket.archived_at)}
         </p>
       </div>

@@ -31,7 +31,6 @@ const HealthChat = () => {
   const inputRef = useRef(null);
   const hasInitialized = useRef(false);
 
-  const { isConnected: isSocketConnected, emitTyping } = useHealthChatSocket({
   // Load messages for a ticket (defined early for use in callbacks)
   const loadMessages = useCallback(async (chatId) => {
     try {
@@ -98,19 +97,6 @@ const HealthChat = () => {
     initializeHealthChat();
   }, []);
 
-  function handleNewMessage(newMessage) {
-    setMessages(prev => [...prev, newMessage]);
-    setIsStaffTyping(false);
-  }
-  function handleTypingIndicator(isTyping) { setIsStaffTyping(isTyping); }
-  function handleTicketApproved(updatedTicket) {
-    setTicket(updatedTicket);
-    if (updatedTicket?.id) loadMessages(updatedTicket.id);
-  }
-  function handleTicketClosed(data) {
-    setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
-    if (data?.chatId) loadMessages(data.chatId);
-  }
   // Poll for ticket status when pending (fallback for socket disconnection)
   useEffect(() => {
     // Only poll when ticket is pending (Open) and socket might not be connected
@@ -132,13 +118,35 @@ const HealthChat = () => {
       } catch (err) {
         console.error('[HealthChat] Polling failed:', err);
       }
-    }, 10000); // Poll every 10 seconds
+    }, 15000); // Poll every 15 seconds
 
     return () => {
       console.log('[HealthChat] Stopping status polling');
       clearInterval(pollInterval);
     };
   }, [ticket?.id, ticket?.status, loadMessages]);
+
+  // Poll for new messages when socket is disconnected (fallback mechanism)
+  useEffect(() => {
+    // Only poll when socket is disconnected and ticket is active (Ongoing)
+    if (!ticket?.id || ticket?.status !== 'Ongoing') return;
+    if (isSocketConnected && !socketError) return; // Socket is working, no need to poll
+
+    console.log('[HealthChat] Socket disconnected - starting message polling for ticket:', ticket.id);
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await loadMessages(ticket.id);
+      } catch (err) {
+        console.error('[HealthChat] Message polling failed:', err);
+      }
+    }, 10000); // Poll every 10 seconds
+
+    return () => {
+      console.log('[HealthChat] Stopping message polling');
+      clearInterval(pollInterval);
+    };
+  }, [ticket?.id, ticket?.status, isSocketConnected, socketError, loadMessages]);
 
   async function initializeHealthChat() {
     try {
@@ -162,15 +170,6 @@ const HealthChat = () => {
     }
   }
 
-  async function loadMessages(chatId) {
-    try {
-      const fetchedMessages = await getTicketMessages(chatId);
-      setMessages(fetchedMessages);
-    } catch (err) {
-      setError('Failed to load messages.');
-    }
-  }
-
   // Refresh messages (manual refresh via HTTP when sockets fail)
   async function refreshMessages() {
     if (!ticket?.id) return;
@@ -186,8 +185,6 @@ const HealthChat = () => {
     try {
       const closedResult = await getMyTickets('Closed', 0, 10);
       const expiredResult = await getMyTickets('Expired', 0, 10);
-      setPreviousTickets([...closedResult.chats, ...expiredResult.chats]);
-    } catch (err) {}
       setPreviousTickets([
         ...(closedResult?.chats || []),
         ...(expiredResult?.chats || [])
@@ -312,7 +309,6 @@ const HealthChat = () => {
     return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 
-  const shouldShowCreateForm = !ticket || ['Closed', 'Expired'].includes(ticket?.status);
   // Check if we should show create form
   // Don't show during initialization to prevent flash
   const shouldShowCreateForm = !isInitializing && (!ticket || ['Closed', 'Expired'].includes(ticket?.status));
@@ -340,10 +336,6 @@ const HealthChat = () => {
         </div>
       </div>
 
-      {/* ── Main Content ── */}
-      <div className="space-y-4">
-
-        {/* Landing — no active ticket, show start button */}
       {/* Main Content */}
       <div className="grid grid-cols-1 gap-8">
         {/* Loading state during initialization */}
@@ -359,10 +351,8 @@ const HealthChat = () => {
         {/* Create Ticket Form - Show when no active ticket or ticket is closed */}
         {shouldShowCreateForm && !showCreateForm && (
           <div
-            className="rounded-2xl overflow-hidden"
+            className="rounded-2xl overflow-hidden bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800"
             style={{
-              background: '#fdfcfa',
-              border: '1.5px solid #e8e5e0',
               boxShadow: '0 4px 16px rgba(28,25,23,0.06)'
             }}
           >
@@ -432,17 +422,14 @@ const HealthChat = () => {
         {/* Create ticket form */}
         {shouldShowCreateForm && showCreateForm && (
           <div
-            className="rounded-2xl overflow-hidden"
+            className="rounded-2xl overflow-hidden bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800"
             style={{
-              background: '#fdfcfa',
-              border: '1.5px solid #e8e5e0',
               boxShadow: '0 4px 16px rgba(28,25,23,0.06)'
             }}
           >
             {/* Form header */}
             <div
-              className="px-6 py-5 border-b"
-              style={{ borderColor: '#e8e5e0' }}
+              className="px-6 py-5 border-b border-neutral-200 dark:border-neutral-700"
             >
               <h3 className="font-heading font-semibold text-secondary-800 dark:text-white text-base m-0">
                 Tell us what's on your mind
@@ -461,10 +448,11 @@ const HealthChat = () => {
                     placeholder="e.g. I've had a headache for 3 days and it's not getting better..."
                     className="w-full px-4 py-3.5 rounded-xl text-sm text-secondary-800 dark:text-white
                                placeholder-neutral-400 resize-none transition-all duration-200
-                               focus:outline-none"
+                               focus:outline-none bg-neutral-100 dark:bg-neutral-800
+                               border border-neutral-200 dark:border-neutral-700
+                               focus:border-primary-500 dark:focus:border-primary-400
+                               focus:shadow-lg focus:shadow-primary-500/10"
                     style={{
-                      background: '#f4f2ef',
-                      border: '1.5px solid #e8e5e0',
                       minHeight: '120px',
                     }}
                     onFocus={e => {
@@ -472,7 +460,7 @@ const HealthChat = () => {
                       e.target.style.boxShadow = '0 0 0 3px rgba(244,196,48,0.12)';
                     }}
                     onBlur={e => {
-                      e.target.style.borderColor = '#e8e5e0';
+                      e.target.style.borderColor = '';
                       e.target.style.boxShadow = 'none';
                     }}
                     rows={4}
@@ -486,8 +474,7 @@ const HealthChat = () => {
 
                 {error && (
                   <div
-                    className="mb-4 px-4 py-3 rounded-xl flex items-center gap-2.5 text-sm"
-                    style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626' }}
+                    className="mb-4 px-4 py-3 rounded-xl flex items-center gap-2.5 text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
                   >
                     <span className="w-4 h-4 flex-shrink-0">⚠</span>
                     {error}
@@ -499,9 +486,9 @@ const HealthChat = () => {
                     type="button"
                     onClick={() => { setShowCreateForm(false); setTicketPurpose(''); setError(null); }}
                     disabled={isLoading}
-                    className="flex-1 py-2.5 rounded-full text-sm font-medium text-neutral-600
-                               transition-all duration-150 hover:bg-neutral-100 disabled:opacity-50"
-                    style={{ border: '1.5px solid #d5d1cb' }}
+                    className="flex-1 py-2.5 rounded-full text-sm font-medium text-neutral-600 dark:text-neutral-300
+                               transition-all duration-150 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-50
+                               border border-neutral-300 dark:border-neutral-700"
                   >
                     Cancel
                   </button>
@@ -532,20 +519,6 @@ const HealthChat = () => {
           </div>
         )}
 
-        {/* Active / Pending chat */}
-        {ticket && ['Open', 'Ongoing'].includes(ticket.status) && (
-          <div
-            className="rounded-2xl overflow-hidden flex flex-col"
-            style={{
-              height: 'calc(100vh - 220px)',
-              minHeight: '480px',
-              maxHeight: '720px',
-              border: '1.5px solid #e8e5e0',
-              boxShadow: '0 4px 24px rgba(28,25,23,0.07)'
-            }}
-          >
-            <ChatBox
-              messages={messages}
         {/* Chat Box - Show when ticket exists and is active (Open or Ongoing) */}
         {!isInitializing && ticket && ['Open', 'Ongoing'].includes(ticket.status) && (
           <div className="space-y-4">
@@ -557,7 +530,7 @@ const HealthChat = () => {
             />
 
             {/* Chat Interface */}
-            <div className="h-[600px]">
+            <div className="h-[600px] rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-700 shadow-lg bg-white dark:bg-neutral-900">
               <ChatBox
                 messages={messages}
                 isLoading={isLoading}

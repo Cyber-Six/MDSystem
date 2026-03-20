@@ -9,29 +9,17 @@ const guidelines = [
 
 const GuidelinesCard = () => {
   return (
-    <div
-      className="rounded-2xl p-5"
-      style={{
-        background: 'rgba(244,196,48,0.06)',
-        border: '1.5px solid rgba(244,196,48,0.2)'
-      }}
-    >
-      <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#C9A01E' }}>
+    <div className="rounded-2xl p-5 bg-primary-500/5 dark:bg-primary-500/10 border-[1.5px] border-primary-500/20 dark:border-primary-500/25">
+      <p className="text-xs font-semibold uppercase tracking-wider mb-3 text-primary-700 dark:text-primary-400">
         Good to know
       </p>
       <ul className="space-y-2.5">
         {guidelines.map((item, i) => (
           <li key={i} className="flex items-start gap-2.5">
-            <span
-              className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(244,196,48,0.2)' }}
-            >
-              <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ background: '#f4c430' }}
-              />
+            <span className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 bg-primary-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary-500" />
             </span>
-            <span className="text-sm leading-relaxed" style={{ color: '#57534e' }}>
+            <span className="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
               {item}
             </span>
           </li>

@@ -25,22 +25,12 @@ const TicketDivider = ({ closedAt, closedBy }) => {
 
   return (
     <div className="flex items-center gap-3 py-2 my-2">
-      <div className="flex-1 h-px" style={{ background: '#e8e5e0' }} />
-      <div
-        className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-medium whitespace-nowrap"
-        style={{
-          background: '#f4f2ef',
-          border: '1px solid #e8e5e0',
-          color: '#a19b93'
-        }}
-      >
-        <span
-          className="w-1 h-1 rounded-full flex-shrink-0"
-          style={{ background: '#d5d1cb' }}
-        />
+      <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
+      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-medium whitespace-nowrap bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-400 dark:text-neutral-500">
+        <span className="w-1 h-1 rounded-full flex-shrink-0 bg-neutral-300 dark:bg-neutral-600" />
         {closedByText} · {formatDate(closedAt)}
       </div>
-      <div className="flex-1 h-px" style={{ background: '#e8e5e0' }} />
+      <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
     </div>
   );
 };
