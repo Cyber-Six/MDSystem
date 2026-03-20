@@ -38,8 +38,6 @@ type AvailableMedicine {
   item_name: String
   category: ItemCategory
   description: String
-  batchId: Int
-  batchNumber: String
   dosageUnit: DosageUnit
   dosageValue: Int
   expiryDate: Date
