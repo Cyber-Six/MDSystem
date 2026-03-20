@@ -21,7 +21,9 @@ const TicketDivider = ({ closedAt, closedBy }) => {
       ? 'You closed this'
       : closedBy === 'System'
       ? 'Session expired'
-      : 'Staff closed this';
+      : closedBy === 'Staff'
+      ? 'Staff closed this'
+      : 'Ticket closed';
 
   return (
     <div className="flex items-center gap-3 py-2 my-2">
