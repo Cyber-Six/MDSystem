@@ -81,6 +81,28 @@ const Mutation = {
     try {
       await client.query('BEGIN');
 
+      // ✅ PART 1: Stock validation - prevent dispense if quantity exceeds available stock
+      for (const item of mergedItems) {
+        const batchCheckSql = `
+          SELECT COUNT(*) as available_count
+          FROM "MedicineEntity"
+          WHERE "batchId" = $1 AND "transactionId" IS NULL
+        `;
+        const batchCheckResult = await client.query(batchCheckSql, [item.batchId]);
+        const availableCount = parseInt(batchCheckResult.rows[0].available_count, 10);
+
+        // If trying to dispense more than available, reject
+        if (item.quantity > availableCount) {
+          throwGraphQLError(res)
+            .message(
+              `Cannot dispense. Medicine batch ${item.batchId} has only ${availableCount} unit${availableCount !== 1 ? 's' : ''} available. ` +
+              `Requested: ${item.quantity} units.`
+            )
+            .status(400)
+            .throw();
+        }
+      }
+
       let linkedRequest = null;
       if (input.requestId !== undefined && input.requestId !== null) {
         const requestResult = await client.query(
