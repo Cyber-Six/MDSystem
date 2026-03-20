@@ -90,22 +90,20 @@ const MedicineRequestPage = () => {
 
   // Fetch available medicines on mount and when location changes
   useEffect(() => {
-    // Only fetch if user location is determined
-    if (!assignedLocation && emailPrefix !== 'm') return;
+    // Determine which location to use
+    const locationToUse = assignedLocation || formData.location;
+    
+    // Don't fetch if no location is set
+    if (!locationToUse) {
+      setAvailableMedicines([]);
+      setGroupedMedicines({});
+      return;
+    }
     
     const fetchAvailableMedicines = async () => {
       setIsLoadingMedicines(true);
       setErrorMessage('');
       try {
-        // Use assigned location for 'q' profile, or selected location for 'm' profile
-        const locationFilter = assignedLocation || formData.location;
-        
-        if (!locationFilter) {
-          setAvailableMedicines([]);
-          setGroupedMedicines({});
-          return;
-        }
-
         const query = `
           query GetAvailableMedicine($location: LocationDesignation, $offset: Int, $limit: Int) {
             getAvailableMedicine(location: $location, offset: $offset, limit: $limit) {
@@ -121,22 +119,33 @@ const MedicineRequestPage = () => {
         
         const data = await sendGraphQLRequest(
           query,
-          { location: locationFilter, offset: 0, limit: 100 },
+          { location: locationToUse, offset: 0, limit: 100 },
           { endpoint: '/medical-inventory/medicine-request/patient' }
         );
         
-        const medicines = data.getAvailableMedicine || [];
+        // Handle response - data should be the GraphQL response object
+        const medicines = (data && data.getAvailableMedicine) ? data.getAvailableMedicine : [];
+        
+        if (!Array.isArray(medicines)) {
+          console.warn('Expected medicines to be an array, got:', typeof medicines, medicines);
+          setAvailableMedicines([]);
+          setGroupedMedicines({});
+          return;
+        }
+        
         setAvailableMedicines(medicines);
         
         // Group medicines by item_code
         const grouped = {};
         medicines.forEach(medicine => {
+          if (!medicine || !medicine.item_code) return;
+          
           const code = medicine.item_code;
           if (!grouped[code]) {
             grouped[code] = {
               item_code: code,
-              item_name: medicine.item_name,
-              category: medicine.category,
+              item_name: medicine.item_name || 'Unknown',
+              category: medicine.category || '',
               batches: []
             };
           }
@@ -147,6 +156,8 @@ const MedicineRequestPage = () => {
       } catch (error) {
         console.error('Error fetching medicines:', error);
         setErrorMessage('Failed to load available medicines. Please try again.');
+        setAvailableMedicines([]);
+        setGroupedMedicines({});
       } finally {
         setIsLoadingMedicines(false);
       }

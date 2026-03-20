@@ -30,106 +30,131 @@ const ITEMS_AGG = `
 
 const Query = {
   _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { res }) => {
-    const sql = `
-      SELECT
-        mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
-        mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
-      FROM "MedicalItems" mi
-      JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
-      WHERE 
-        mi.active = true AND
-        mi.category = 'Medicine' AND
-        mb."expiryDate" > CURRENT_DATE AND
-        mb.location = COALESCE($1, mb.location) AND
-        EXISTS (
-          SELECT 1
-          FROM "MedicineEntity" me
-          WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
-        )
-      ORDER BY mi.item_name, mb."expiryDate"
-      OFFSET $2 LIMIT $3
-    `;
+    try {
+      const sql = `
+        SELECT
+          mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
+          mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
+        FROM "MedicalItems" mi
+        JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
+        WHERE 
+          mi.active = true AND
+          mi.category = 'Medicine' AND
+          mb."expiryDate" > CURRENT_DATE AND
+          mb.location = COALESCE($1, mb.location) AND
+          EXISTS (
+            SELECT 1
+            FROM "MedicineEntity" me
+            WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
+          )
+        ORDER BY mi.item_name, mb."expiryDate"
+        OFFSET $2 LIMIT $3
+      `;
 
-    const result = await db.query(sql, [location, offset, limit]);
-    return result.rows;
+      const result = await db.query(sql, [location, offset, limit]);
+      return result.rows;
+    } catch (error) {
+      logger.error("Error in _getAvailableMedicine:", error);
+      throw error;
+    }
   },
 
   _getMedicineStatus: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
-    const sql = `
-      SELECT mrl.*, ${ITEMS_AGG}
-      FROM "MedicineRequestLog" mrl
-      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
-      WHERE mrl."patientId" = $1
-      GROUP BY mrl.id
-      ORDER BY mrl.created_at DESC
-      OFFSET $2 LIMIT $3
-    `;
+    try {
+      const sql = `
+        SELECT mrl.*, ${ITEMS_AGG}
+        FROM "MedicineRequestLog" mrl
+        LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
+        WHERE mrl."patientId" = $1
+        GROUP BY mrl.id
+        ORDER BY mrl.created_at DESC
+        OFFSET $2 LIMIT $3
+      `;
 
-    const result = await db.query(sql, [patientId, offset, limit]);
-    // Fetch items with names for each request
-    for (const request of result.rows) {
-      request.items = await getItemsWithNames(request.id);
+      const result = await db.query(sql, [patientId, offset, limit]);
+      // Fetch items with names for each request
+      for (const request of result.rows) {
+        request.items = await getItemsWithNames(request.id);
+      }
+      return result.rows;
+    } catch (error) {
+      logger.error("Error in _getMedicineStatus:", error);
+      throw error;
     }
-    return result.rows;
   },
 
   _getMedicineRequestById: async (_, { requestId }, { res }) => {
-    const sql = `
-      SELECT mrl.*, ${ITEMS_AGG}
-      FROM "MedicineRequestLog" mrl
-      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
-      WHERE mrl.id = $1
-      GROUP BY mrl.id
-      LIMIT 1
-    `;
+    try {
+      const sql = `
+        SELECT mrl.*, ${ITEMS_AGG}
+        FROM "MedicineRequestLog" mrl
+        LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
+        WHERE mrl.id = $1
+        GROUP BY mrl.id
+        LIMIT 1
+      `;
 
-    const result = await db.query(sql, [requestId]);
-    if (result.rows.length === 0) return null;
-    
-    const request = result.rows[0];
-    // Fetch items with medicine names
-    request.items = await getItemsWithNames(requestId);
-    return request;
+      const result = await db.query(sql, [requestId]);
+      if (result.rows.length === 0) return null;
+      
+      const request = result.rows[0];
+      // Fetch items with medicine names
+      request.items = await getItemsWithNames(requestId);
+      return request;
+    } catch (error) {
+      logger.error("Error in _getMedicineRequestById:", error);
+      throw error;
+    }
   },
 
   _getMedicineRequests: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
-    const sql = `
-      SELECT mrl.*, ${ITEMS_AGG}
-      FROM "MedicineRequestLog" mrl
-      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
-      WHERE mrl."patientId" = $1
-      GROUP BY mrl.id
-      ORDER BY mrl.created_at DESC
-      OFFSET $2 LIMIT $3
-    `;
+    try {
+      const sql = `
+        SELECT mrl.*, ${ITEMS_AGG}
+        FROM "MedicineRequestLog" mrl
+        LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
+        WHERE mrl."patientId" = $1
+        GROUP BY mrl.id
+        ORDER BY mrl.created_at DESC
+        OFFSET $2 LIMIT $3
+      `;
 
-    const result = await db.query(sql, [patientId, offset, limit]);
-    // Fetch items with names for each request
-    for (const request of result.rows) {
-      request.items = await getItemsWithNames(request.id);
+      const result = await db.query(sql, [patientId, offset, limit]);
+      // Fetch items with names for each request
+      for (const request of result.rows) {
+        request.items = await getItemsWithNames(request.id);
+      }
+      return result.rows;
+    } catch (error) {
+      logger.error("Error in _getMedicineRequests:", error);
+      throw error;
     }
-    return result.rows;
   },
 
   _getAllMedicineRequests: async (_, { location, status, offset = 0, limit = 50 }, { res }) => {
-    const sql = `
-      SELECT mrl.*, ${ITEMS_AGG}
-      FROM "MedicineRequestLog" mrl
-      LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
-      WHERE 
-        mrl.location = COALESCE($1, mrl.location) AND 
-        mrl.status = COALESCE($2, mrl.status)
-      GROUP BY mrl.id
-      ORDER BY mrl.created_at DESC
-      OFFSET $3 LIMIT $4
-    `;
+    try {
+      const sql = `
+        SELECT mrl.*, ${ITEMS_AGG}
+        FROM "MedicineRequestLog" mrl
+        LEFT JOIN "MedicineRequestEntity" mre ON mre."requestId" = mrl.id
+        WHERE 
+          mrl.location = COALESCE($1, mrl.location) AND 
+          mrl.status = COALESCE($2, mrl.status)
+        GROUP BY mrl.id
+        ORDER BY mrl.created_at DESC
+        OFFSET $3 LIMIT $4
+      `;
 
-    const result = await db.query(sql, [location, status, offset, limit]);
-    // Fetch items with names for each request
-    for (const request of result.rows) {
-      request.items = await getItemsWithNames(request.id);
+      const result = await db.query(sql, [location, status, offset, limit]);
+      // Fetch items with names for each request
+      for (const request of result.rows) {
+        request.items = await getItemsWithNames(request.id);
+      }
+      return result.rows;
+    } catch (error) {
+      logger.error("Error in _getAllMedicineRequests:", error);
+      throw error;
     }
-    return result.rows;
   },
 };
 
@@ -309,3 +334,7 @@ const Mutation = {
     }
   },
 };
+
+module.exports = { Query, Mutation };
+
+module.exports = { Query, Mutation };
