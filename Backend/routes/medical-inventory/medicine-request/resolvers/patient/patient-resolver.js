@@ -132,6 +132,16 @@ const Mutation = {
       { res },
     );
   },
+
+  addMedicineToRequest: async (_, { requestId, items }, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    
+    // This mutation is only available to medical staff, not patients
+    throwGraphQLError(res)
+      .message("This operation is only available to medical staff")
+      .status(403)
+      .throw();
+  },
 };
 
 module.exports = { Query, Mutation };
