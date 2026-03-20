@@ -99,7 +99,7 @@ const Mutation = {
 
     return await Wrapper.Mutation._setStatusMedicineRequest(
       _,
-      { requestId: pendingResult.rows[0].id, status: 'Cancelled', approvedBy: user.id, notes: null },
+      { requestId: pendingResult.rows[0].id, status: 'Cancelled', approvedBy: null, notes: null },
       { res },
     );
   },

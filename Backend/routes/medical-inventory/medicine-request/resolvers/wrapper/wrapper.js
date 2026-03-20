@@ -211,13 +211,31 @@ const Mutation = {
       throwGraphQLError(res).message(`Cannot transition from ${currentStatus} to ${status}`).status(400).throw();
     }
 
-    const updateSql = `
-      UPDATE "MedicineRequestLog"
-      SET status = $1, approved_by = $2, notes = COALESCE($3, notes)
-      WHERE id = $4
-      RETURNING *
-    `;
-    const result = await db.query(updateSql, [status, approvedBy, notes, requestId]);
+    // Build update query based on whether approvedBy is provided
+    let updateSql;
+    let params;
+    
+    if (approvedBy !== null && approvedBy !== undefined) {
+      // Update with approvedBy
+      updateSql = `
+        UPDATE "MedicineRequestLog"
+        SET status = $1, approved_by = $2, notes = COALESCE($3, notes)
+        WHERE id = $4
+        RETURNING *
+      `;
+      params = [status, approvedBy, notes, requestId];
+    } else {
+      // Update without approvedBy (for patient self-cancellation)
+      updateSql = `
+        UPDATE "MedicineRequestLog"
+        SET status = $1, notes = COALESCE($2, notes)
+        WHERE id = $3
+        RETURNING *
+      `;
+      params = [status, notes, requestId];
+    }
+    
+    const result = await db.query(updateSql, params);
     
     // Fetch items with medicine names
     result.rows[0].items = await getItemsWithNames(requestId);
