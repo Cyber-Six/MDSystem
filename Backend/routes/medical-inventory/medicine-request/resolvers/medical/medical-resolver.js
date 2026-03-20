@@ -58,8 +58,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    if (!['Approved', 'Rejected'].includes(status)) {
-      throwGraphQLError(res).message("Invalid status. Must be Approved or Rejected").status(400).throw();
+    if (!['Approved', 'Rejected', 'Completed'].includes(status)) {
+      throwGraphQLError(res).message("Invalid status. Must be Approved, Rejected, or Completed").status(400).throw();
     }
 
     const result = await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId, status, approvedBy: user.id, notes }, { res });
@@ -68,6 +68,7 @@ const Mutation = {
     try {
       const patientId = result.patientId;
       const approved = status === 'Approved';
+      const completed = status === 'Completed';
 
       const acked = (await isConnectedAnywhere(patientId))
         && await emitToUserWithAck(patientId, `medicine:request:${status.toLowerCase()}`, { requestId, status, notes });
@@ -75,14 +76,20 @@ const Mutation = {
       if (!acked) {
         const patientEmail = await findEmailByUserId(patientId);
         if (patientEmail) {
-          await enqueueNotificationEmail(
-            patientEmail,
-            approved ? 'Medicine Request Approved' : 'Medicine Request Rejected',
-            approved
-              ? `Your medicine request <strong>#${requestId}</strong> has been <span style="color:green;font-weight:bold;">approved</span> by the medical staff. You may now proceed to the clinic to collect your medicine.`
-              : `Your medicine request <strong>#${requestId}</strong> has been <span style="color:red;font-weight:bold;">rejected</span> by the medical staff. Please contact the clinic if you believe this is an error or to submit a new request.`,
-            notes ?? null,
-          );
+          let subject, message;
+          
+          if (completed) {
+            subject = 'Medicine Request Dispensed';
+            message = `Your medicine request <strong>#${requestId}</strong> has been <span style="color:green;font-weight:bold;">dispensed</span>. You have received your medicine from the clinic.`;
+          } else if (approved) {
+            subject = 'Medicine Request Approved';
+            message = `Your medicine request <strong>#${requestId}</strong> has been <span style="color:green;font-weight:bold;">approved</span> by the medical staff. You may now proceed to the clinic to collect your medicine.`;
+          } else {
+            subject = 'Medicine Request Rejected';
+            message = `Your medicine request <strong>#${requestId}</strong> has been <span style="color:red;font-weight:bold;">rejected</span> by the medical staff. Please contact the clinic if you believe this is an error or to submit a new request.`;
+          }
+          
+          await enqueueNotificationEmail(patientEmail, subject, message, notes ?? null);
         }
       }
     } catch (notifErr) {
