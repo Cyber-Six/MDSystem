@@ -391,7 +391,10 @@ const Mutation = {
 
     const result = await db.query(
       `UPDATE "HealthChat"
-       SET status = 'Closed', session_end = NOW()
+       SET status = 'Closed',
+           session_end = NOW(),
+           closed_by_user_id = $2,
+           closed_by_type = 'Patient'
        WHERE id = $1 AND "patientId" = $2
        RETURNING *`,
       [chatId, user.id]
@@ -405,7 +408,7 @@ const Mutation = {
     await db.query(
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, 'Patient closed this conversation.', 'system', $2, 'Patient')`,
+       VALUES ($1, 'Patient closed this ticket.', 'system', $2, 'Patient')`,
       [chatId, user.id]
     );
 
@@ -653,10 +656,12 @@ const Mutation = {
       `UPDATE "HealthChat"
        SET status = 'Closed',
            session_end = NOW(),
-           notes = COALESCE($1, notes)
+           notes = COALESCE($1, notes),
+           closed_by_user_id = $3,
+           closed_by_type = 'Medical'
        WHERE id = $2
        RETURNING *`,
-      [notes, chatId]
+      [notes, chatId, user.id]
     );
 
     if (result.rowCount === 0) {
@@ -667,7 +672,7 @@ const Mutation = {
     await db.query(
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, 'Staff has closed this conversation.', 'system', $2, 'Medical')`,
+       VALUES ($1, 'Staff closed this ticket.', 'system', $2, 'Medical')`,
       [chatId, user.id]
     );
 
@@ -693,6 +698,56 @@ const Mutation = {
       success: true,
       chat,
       message: "Ticket closed successfully."
+    };
+  },
+
+  /**
+   * Delete an archived ticket (admin only)
+   */
+  _deleteArchivedTicket: async (_, { chatId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
+
+    // Check if user is admin
+    const isAdmin = await isMedicalPermitted(user.id, medPermissions.is_admin, null);
+    if (!isAdmin) {
+      throwGraphQLError(res).message("Only administrators can delete archived tickets").status(403).throw();
+    }
+
+    // Verify ticket exists and is archived (Closed or Expired)
+    const ticketCheck = await db.query(
+      `SELECT status FROM "HealthChat" WHERE id = $1`,
+      [chatId]
+    );
+
+    if (ticketCheck.rowCount === 0) {
+      throwGraphQLError(res).message("Ticket not found").status(404).throw();
+    }
+
+    const { status } = ticketCheck.rows[0];
+    if (!['Closed', 'Expired'].includes(status)) {
+      throwGraphQLError(res).message("Only archived tickets (Closed or Expired) can be deleted").status(400).throw();
+    }
+
+    // Delete messages first (due to foreign key constraint)
+    await db.query(
+      `DELETE FROM "HealthChatPrompt" WHERE "consultationVirtualId" = $1`,
+      [chatId]
+    );
+
+    // Delete the ticket
+    const result = await db.query(
+      `DELETE FROM "HealthChat" WHERE id = $1 RETURNING *`,
+      [chatId]
+    );
+
+    return {
+      success: true,
+      chat: null,
+      message: "Ticket deleted successfully."
     };
   },
 

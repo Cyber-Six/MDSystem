@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { X, Check, Clock, User, ChevronDown, AlertCircle } from 'lucide-react';
+import { X, Check, Clock, User, ChevronDown, AlertCircle, Trash2 } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { formatPatientName, getPatientInitials } from '../health-chat-service';
 import TicketStatusBadge from './ticket-status-badge';
 
 const ChatHeader = () => {
-  const { selectedTicket, approveTicket, rejectTicket, closeTicket } = useHealthChat();
+  const { selectedTicket, approveTicket, rejectTicket, closeTicket, deleteTicket } = useHealthChat();
 
   const [actionLoading, setActionLoading] = useState(null);
   const [showPatientInfo, setShowPatientInfo] = useState(false);
@@ -57,6 +57,20 @@ const ChatHeader = () => {
       await closeTicket(selectedTicket.id);
     } catch (err) {
       setActionError(err.message || 'Failed to close');
+      setTimeout(() => setActionError(null), 4000);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this archived ticket? This action cannot be undone.')) return;
+    try {
+      setActionLoading('delete');
+      setActionError(null);
+      await deleteTicket(selectedTicket.id);
+    } catch (err) {
+      setActionError(err.message || 'Failed to delete');
       setTimeout(() => setActionError(null), 4000);
     } finally {
       setActionLoading(null);
@@ -160,10 +174,24 @@ const ChatHeader = () => {
           )}
 
           {isArchived && (
-            <span className="flex items-center gap-1.5 text-xs text-neutral-400 dark:text-neutral-500">
-              <Clock className="w-3.5 h-3.5" />
-              Conversation ended
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs text-neutral-400 dark:text-neutral-500">
+                <Clock className="w-3.5 h-3.5" />
+                Ticket ended
+              </span>
+              <button
+                onClick={handleDelete}
+                disabled={!!actionLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                           transition-all duration-150 disabled:opacity-50
+                           text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800
+                           hover:bg-red-50 dark:hover:bg-red-900/20"
+                title="Delete this archived ticket (admin only)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+            </div>
           )}
         </div>
       </div>

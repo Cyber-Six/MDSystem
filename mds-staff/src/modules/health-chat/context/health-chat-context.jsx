@@ -7,7 +7,8 @@ import {
   approveTicket as approveTicketService,
   rejectTicket as rejectTicketService,
   sendMessage as sendMessageService,
-  closeTicket as closeTicketService
+  closeTicket as closeTicketService,
+  deleteArchivedTicket as deleteArchivedTicketService
 } from '../health-chat-service';
 
 const HealthChatContext = createContext(null);
@@ -277,6 +278,29 @@ export function HealthChatProvider({ children }) {
   }, [updateTicketStatus, filter, removeTicket, selectedChatId]);
 
   /**
+   * Delete an archived ticket (admin only)
+   */
+  const deleteTicket = useCallback(async (chatId) => {
+    try {
+      const result = await deleteArchivedTicketService(chatId);
+      if (result.success) {
+        // Remove from list
+        removeTicket(chatId);
+        // Deselect if it was selected
+        if (String(chatId) === String(selectedChatId)) {
+          setSelectedChatId(null);
+          setSelectedTicket(null);
+          setMessages([]);
+        }
+      }
+      return result;
+    } catch (err) {
+      console.error('[HealthChatContext] Failed to delete ticket:', err);
+      throw err;
+    }
+  }, [removeTicket, selectedChatId]);
+
+  /**
    * Get filtered tickets by search term
    */
   const filteredTickets = searchTerm
@@ -316,6 +340,7 @@ export function HealthChatProvider({ children }) {
     rejectTicket,
     sendMessage,
     closeTicket,
+    deleteTicket,
 
     // Filter
     filter,
