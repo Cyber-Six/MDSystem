@@ -60,9 +60,15 @@ const MessageInput = () => {
       emitTyping(selectedChatId, false);
       if (attachedFile) { await sendMessage(selectedChatId, null, attachedFile.fileId, 'file'); setAttachedFile(null); }
       if (inputValue.trim()) { await sendMessage(selectedChatId, inputValue.trim(), null, 'text'); setInputValue(''); }
-      textareaRef.current?.focus();
     } catch { alert('Failed to send. Please try again.'); }
-    finally { setIsSending(false); }
+    finally {
+      setIsSending(false);
+      // Refocus input after sending so user can continue typing
+      // Use setTimeout to ensure state updates have applied
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
+    }
   };
 
   const formatFileSize = (bytes) => {
