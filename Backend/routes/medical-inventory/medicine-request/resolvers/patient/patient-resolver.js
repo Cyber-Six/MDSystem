@@ -5,10 +5,28 @@ const { emitToRoom } = require("../../../../../config/sockets");
 const db = require("../../../../../config/query.js");
 const logger = require("../../../../../utils/logger.js");
 
+// Check if Wrapper loaded properly
+if (!Wrapper || !Wrapper.Query || !Wrapper.Query._getAvailableMedicine) {
+  logger.error("❌ Wrapper module failed to load properly");
+  logger.error("Wrapper:", Wrapper);
+  logger.error("Wrapper.Query:", Wrapper?.Query);
+  throw new Error("Wrapper module not loaded correctly");
+}
+
+logger.info("✅ Wrapper module loaded successfully");
+
 const Query = {
   getAvailableMedicine: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return await Wrapper.Query._getAvailableMedicine(_, args, { res });
+    try {
+      logger.info("Fetching available medicines for location:", args.location);
+      const result = await Wrapper.Query._getAvailableMedicine(_, args, { res });
+      logger.info("Medicines fetched:", result?.length || 0);
+      return result;
+    } catch (error) {
+      logger.error("Error in getAvailableMedicine:", error);
+      throw error;
+    }
   },
 
   getMedicineStatus: async (_, __, { user, res }) => {

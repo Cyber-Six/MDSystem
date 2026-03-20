@@ -2,6 +2,8 @@ const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
 
+logger.info("🔧 Loading medicine-request wrapper module...");
+
 // Reused in all request list queries: aggregates request line items as a JSON array
 const ITEMS_AGG = `
   COALESCE(
@@ -13,28 +15,35 @@ const ITEMS_AGG = `
 
 const Query = {
   _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { res }) => {
-    const sql = `
-      SELECT
-        mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
-        mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
-      FROM "MedicalItems" mi
-      JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
-      WHERE 
-        mi.active = true AND
-        mi.category = 'Medicine' AND
-        mb."expiryDate" > CURRENT_DATE AND
-        mb.location = COALESCE($1, mb.location) AND
-        EXISTS (
-          SELECT 1
-          FROM "MedicineEntity" me
-          WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
-        )
-      ORDER BY mi.item_name, mb."expiryDate"
-      OFFSET $2 LIMIT $3
-    `;
+    try {
+      logger.info("_getAvailableMedicine called with location:", location);
+      const sql = `
+        SELECT
+          mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
+          mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
+        FROM "MedicalItems" mi
+        JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
+        WHERE
+          mi.active = true AND
+          mi.category = 'Medicine' AND
+          mb."expiryDate" > CURRENT_DATE AND
+          mb.location = COALESCE($1, mb.location) AND
+          EXISTS (
+            SELECT 1
+            FROM "MedicineEntity" me
+            WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
+          )
+        ORDER BY mi.item_name, mb."expiryDate"
+        OFFSET $2 LIMIT $3
+      `;
 
-    const result = await db.query(sql, [location, offset, limit]);
-    return result.rows;
+      const result = await db.query(sql, [location, offset, limit]);
+      logger.info("Query returned rows:", result.rows.length);
+      return result.rows;
+    } catch (error) {
+      logger.error("Error in _getAvailableMedicine:", error);
+      throw error;
+    }
   },
 
   _getMedicineStatus: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
@@ -185,5 +194,8 @@ const Mutation = {
     return result.rows[0];
   },
 };
+
+logger.info("✅ Medicine-request wrapper module loaded - Query methods:", Object.keys(Query));
+logger.info("✅ Medicine-request wrapper module loaded - Mutation methods:", Object.keys(Mutation));
 
 module.exports = { Query, Mutation };
