@@ -28,6 +28,7 @@ enum RequestStatus {
   Cancelled
   Expired
   Approved
+  Completed
   Rejected
 }
 

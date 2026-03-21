@@ -16,6 +16,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
     });
     return initial;
   });
+  const [manualBatchSelection, setManualBatchSelection] = useState({}); // Track manually selected batches per item idx
   const [notes, setNotes] = useState('');
 
   // Helper to format date safely
@@ -46,29 +47,35 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
   // Build allocation for all items
   const allocation = useMemo(() => {
     const allAllocations = [];
-    console.log('🔧 Building allocation from:', { requestItemsCount: requestItems.length, manualQties });
     
     requestItems.forEach((reqItem, itemIdx) => {
       const qty = parseInt(manualQties[itemIdx]) || 0;
-      if (qty <= 0) {
-        console.log(`  Item ${itemIdx}: qty=${qty} (skipped)`);
-        return;
-      }
+      if (qty <= 0) return;
       
-      console.log(`  Item ${itemIdx} (${reqItem.itemName}): requesting ${qty} units`);
-      
-      // Get batches for this specific item
-      const itemBatches = batches
+      // Get batches for this specific item, filtered by request location
+      let itemBatches = batches
         .filter((b) => {
           const available = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
           const sameItem = reqItem?.itemId
             ? String(b.medicalItemId) === String(reqItem.itemId)
             : false;
-          return sameItem && available > 0;
+          const sameLocation = request?.location
+            ? b.location === request.location
+            : true;
+          
+          return sameItem && available > 0 && sameLocation;
         })
         .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
       
-      console.log(`    Found ${itemBatches.length} available batches`);
+      // If a batch was manually selected for this item, prioritize it
+      const selectedBatchId = manualBatchSelection[itemIdx];
+      if (selectedBatchId) {
+        const selectedBatch = itemBatches.find(b => String(b.id) === String(selectedBatchId));
+        if (selectedBatch) {
+          // Put selected batch first in the order
+          itemBatches = [selectedBatch, ...itemBatches.filter(b => String(b.id) !== String(selectedBatchId))];
+        }
+      }
       
       // FEFO allocation for this item
       let remaining = qty;
@@ -76,7 +83,6 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
         if (remaining <= 0) break;
         const available = b.availableQuantity || b.currentQuantity || 0;
         const take = Math.min(remaining, available);
-        console.log(`    Batch ${b.id}: available=${available}, taking=${take}`);
         allAllocations.push({
           ...b,
           itemIdx,
@@ -87,13 +93,10 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
         });
         remaining -= take;
       }
-      console.log(`    Item ${itemIdx} remaining after allocation: ${remaining}`);
     });
     
-    const totalAllocated = allAllocations.reduce((s, a) => s + a.allocate, 0);
-    console.log('✅ Total allocation built:', { totalAllocations: allAllocations.length, totalAllocated });
     return allAllocations;
-  }, [batches, manualQties, requestItems]);
+  }, [batches, manualQties, requestItems, request, manualBatchSelection]);
 
   // Validate all items are fully allocated
   const allQtiesValid = requestItems.every((item, idx) => {
@@ -108,14 +111,6 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
 
   const handleSubmit = () => {
     if (!isValid) return;
-    const totalAllocated = allocation.reduce((s, a) => s + a.allocate, 0);
-    console.log('📋 Submission details:', {
-      itemCount: requestItems.length,
-      quantities: manualQties,
-      allocationCount: allocation.length,
-      totalAllocated,
-      allocation: allocation.map(a => ({ id: a.id, itemIdx: a.itemIdx, allocate: a.allocate }))
-    });
     onConfirm({ request, quantity: Object.values(manualQties).reduce((s, q) => s + (parseInt(q) || 0), 0), allocation, notes });
   };
 
@@ -152,7 +147,13 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
               const allocated = itemAllocations.reduce((s, a) => s + a.allocate, 0);
               const isFullyAllocated = allocated >= qty && qty > 0;
               const totalAvailable = batches
-                .filter(b => String(b.medicalItemId) === String(reqItem.itemId))
+                .filter(b => {
+                  const sameItem = String(b.medicalItemId) === String(reqItem.itemId);
+                  const sameLocation = request?.location
+                    ? b.location === request.location
+                    : true; // If no request location specified, allow all locations
+                  return sameItem && sameLocation;
+                })
                 .reduce((s, b) => s + (b.availableQuantity || b.currentQuantity || 0), 0);
               
               return (
@@ -187,6 +188,34 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                   )}
                   {qty > 0 && isFullyAllocated && (
                     <p className="text-[10px] text-success-600 dark:text-success-400 mt-1">✓ Fully allocated ({allocated} units)</p>
+                  )}
+
+                  {/* Batch Preference Selector */}
+                  {qty > 0 && (
+                    <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600">
+                      <label className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
+                        Batch Preference (Optional)
+                      </label>
+                      <select
+                        value={manualBatchSelection[idx] || ''}
+                        onChange={(e) => setManualBatchSelection({ ...manualBatchSelection, [idx]: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="">Auto (FEFO)</option>
+                        {batches
+                          .filter((b) => {
+                            const available = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
+                            const sameItem = String(b.medicalItemId) === String(reqItem.itemId);
+                            const sameLocation = request?.location ? b.location === request.location : true;
+                            return sameItem && available > 0 && sameLocation;
+                          })
+                          .map((batch) => (
+                            <option key={batch.id} value={batch.id}>
+                              {batch.batchNumber || batch.id} (Exp: {formatDate(batch.expiryDate)}) — {batch.availableQuantity || batch.currentQuantity || 0} avail
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   )}
                 </div>
               );

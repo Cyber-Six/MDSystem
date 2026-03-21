@@ -11,6 +11,8 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
   const [filterStatus, setFilterStatus] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [selectedPurpose, setSelectedPurpose] = useState(null);
+  const [selectedNotes, setSelectedNotes] = useState(null);
 
   // Helper to format date safely
   const formatDate = (dateValue) => {
@@ -52,15 +54,34 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
   const filtered = useMemo(() => {
     return (requests || []).filter((r) => {
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
-      // Filter by location from batch
-      const batchId = r.items?.[0]?.batchId ?? r.items?.[0]?.medicineId;
-      const reqLocation = batchId ? (batchMap[batchId]?.location || 'Casal') : 'Casal';
+      // For patient requests, use medicineId to find batch; for staff requests, use batchId
+      const medicineId = r.items?.[0]?.medicineId;
+      const batchId = r.items?.[0]?.batchId;
+      
+      let reqLocation = 'Casal';
+      if (batchId) {
+        // Staff request - look up batch directly
+        reqLocation = batchMap[batchId]?.location || 'Casal';
+      } else if (medicineId) {
+        // Patient request - find batch that contains this medicine, use its location
+        const batch = Object.values(batchMap).find(b => b.medicalItemId === medicineId);
+        reqLocation = batch?.location || 'Casal';
+      }
+      
       if (reqLocation !== filterLocation) return false;
+      
       // Search
       if (search) {
         const q = search.toLowerCase();
         const itemId = r.items?.[0]?.itemId;
-        const item = itemMap[itemId];
+        const medItemId = r.items?.[0]?.medicineId;
+        
+        let item = itemMap[itemId];
+        if (!item && medItemId) {
+          // For patient requests, look up by medicineId
+          item = itemMap[medItemId];
+        }
+        
         const name = item ? item.item_name.toLowerCase() : (r.items?.[0]?.itemName || '').toLowerCase();
         return (
           r.patientName.toLowerCase().includes(q) ||
@@ -149,7 +170,11 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                 </tr>
               ) : (
                 filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((req) => {
-                  const item = itemMap[req.items?.[0]?.itemId];
+                  // Handle both staff requests (itemId) and patient requests (medicineId)
+                  let item = itemMap[req.items?.[0]?.itemId];
+                  if (!item && req.items?.[0]?.medicineId) {
+                    item = itemMap[req.items?.[0]?.medicineId];
+                  }
                   const badge = STATUS_BADGES[req.status] || 'bg-neutral-100 text-neutral-700';
                   const isStudentReq = req.items?.[0]?.quantity === null;
                   return (
@@ -160,9 +185,17 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                         {req.patientId && <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none m-0">ID: {req.patientId}</p>}
                       </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300">
-                        {req.items?.map((item, idx) => (
-                          <div key={idx} className="text-xs">{item.itemName || '—'}{item.quantity && ` (qty: ${item.quantity})`}</div>
-                        )) || '—'}
+                        {req.items?.map((reqItem, idx) => {
+                          let itemName = reqItem.itemName || '—';
+                          // Try to look up correct item name
+                          const itemData = itemMap[reqItem.itemId] || itemMap[reqItem.medicineId];
+                          if (itemData) {
+                            itemName = itemData.item_name;
+                          }
+                          return (
+                            <div key={idx} className="text-xs">{itemName}{reqItem.quantity && ` (qty: ${reqItem.quantity})`}</div>
+                          );
+                        }) || '—'}
                       </td>
                       <td className="px-3 py-1.5">
                         {req.items?.length > 0 ? (
@@ -171,7 +204,19 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                           <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">QTY PENDING</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400 max-w-[160px] truncate" title={req.purpose}>{req.purpose || '—'}</td>
+                      <td className="px-3 py-1.5">
+                        {req.purpose && req.purpose.length > 30 ? (
+                          <button
+                            onClick={() => setSelectedPurpose(req.purpose)}
+                            className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[160px] hover:underline"
+                            title={req.purpose}
+                          >
+                            {req.purpose.substring(0, 30)}...
+                          </button>
+                        ) : (
+                          <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.purpose || '—'}</span>
+                        )}
+                      </td>
                       <td className="px-3 py-1.5">
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">{req.patientType}</span>
                       </td>
@@ -181,7 +226,19 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                       <td className="px-3 py-1.5">
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>
                       </td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400 max-w-[120px] truncate" title={req.notes}>{req.notes || '—'}</td>
+                      <td className="px-3 py-1.5">
+                        {req.notes && req.notes.length > 30 && (req.status === 'Approved' || req.status === 'Rejected') ? (
+                          <button
+                            onClick={() => setSelectedNotes(req.notes)}
+                            className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[120px] hover:underline"
+                            title={req.notes}
+                          >
+                            {req.notes.substring(0, 30)}...
+                          </button>
+                        ) : (
+                          <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.notes || '—'}</span>
+                        )}
+                      </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.approved_by ? `Staff #${req.approved_by}` : '—'}</td>
                       <td className="px-3 py-1.5 text-right">
                         {req.status === 'Pending' && (
@@ -247,6 +304,66 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
           </div>
         )}
       </div>
+
+      {/* Purpose Modal */}
+      {selectedPurpose && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">Medical Condition / Purpose</h3>
+              <button
+                onClick={() => setSelectedPurpose(null)}
+                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-4 mb-4 max-h-[300px] overflow-y-auto">
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
+                {selectedPurpose}
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedPurpose(null)}
+              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Notes Modal */}
+      {selectedNotes && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">Staff Notes</h3>
+              <button
+                onClick={() => setSelectedNotes(null)}
+                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-4 mb-4 max-h-[300px] overflow-y-auto">
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
+                {selectedNotes}
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedNotes(null)}
+              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

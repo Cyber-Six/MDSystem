@@ -58,23 +58,42 @@ async function validateBatchesAvailable(batchIds, res) {
 }
 
 async function validateBatchesWithQuantity(items, res) {
-  const batchIds = items.map(i => i.batchId);
-  const placeholders = batchIds.map((_, i) => `$${i + 1}`).join(', ');
-  const result = await db.query(
-    `SELECT mb.id, mb."expiryDate", mi.active,
-            COUNT(me.id) FILTER (WHERE me."transactionId" IS NULL) AS available
+  const medicineIds = items.map(i => i.batchId);
+  const placeholders = medicineIds.map((_, i) => `$${i + 1}`).join(', ');
+  
+  // First, get the latest batch for each medicine (treating batchId as medicineId)
+  const batchResult = await db.query(
+    `SELECT DISTINCT ON (mb."medicalItemId") mb.id, mb."medicalItemId", mb."expiryDate", mi.active
      FROM "MedicineBatch" mb
      JOIN "MedicalItems" mi ON mi.id = mb."medicalItemId"
-     LEFT JOIN "MedicineEntity" me ON me."batchId" = mb.id
-     WHERE mb.id IN (${placeholders})
-     GROUP BY mb.id, mb."expiryDate", mi.active`,
-    batchIds,
+     WHERE mb."medicalItemId" IN (${placeholders}) AND mb."expiryDate" > CURRENT_DATE
+     ORDER BY mb."medicalItemId", mb.created_at DESC`,
+    medicineIds,
   );
 
-  const found = new Map(result.rows.map(r => [r.id, r]));
+  // Now check available stock for each batch
+  const validBatches = batchResult.rows;
+  const batchIds = validBatches.map(b => b.id);
+  const batchPlaceholders = batchIds.map((_, i) => `$${i + 1}`).join(', ');
+  
+  let availabilityResult = { rows: [] };
+  if (batchIds.length > 0) {
+    availabilityResult = await db.query(
+      `SELECT mb.id, mb."expiryDate", mi.active, mb."medicalItemId",
+              COUNT(me.id) FILTER (WHERE me."transactionId" IS NULL) AS available
+       FROM "MedicineBatch" mb
+       JOIN "MedicalItems" mi ON mi.id = mb."medicalItemId"
+       LEFT JOIN "MedicineEntity" me ON me."batchId" = mb.id
+       WHERE mb.id IN (${batchPlaceholders})
+       GROUP BY mb.id, mb."expiryDate", mi.active, mb."medicalItemId"`,
+      batchIds,
+    );
+  }
+
+  const found = new Map(availabilityResult.rows.map(r => [r.medicalItemId, r]));
   for (const { batchId, quantity } of items) {
     const batch = found.get(batchId);
-    if (!batch) throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
+    if (!batch) throwGraphQLError(res).message("No available batches for this medicine").status(404).throw();
     if (!batch.active) throwGraphQLError(res).message("Medicine item is inactive").status(400).throw();
     if (new Date(batch.expiryDate) <= new Date()) throwGraphQLError(res).message("Medicine batch has expired").status(400).throw();
     const available = parseInt(batch.available);
