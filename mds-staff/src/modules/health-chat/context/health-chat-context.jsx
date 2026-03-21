@@ -33,8 +33,18 @@ export function HealthChatProvider({ children }) {
   const [typingUsers, setTypingUsers] = useState({});
 
   // Filter state
-  const [filter, setFilter] = useState('active'); // 'active' | 'pending' | 'archive'
+  const [filter, setFilter] = useState('active'); // 'active' | 'pending' | 'archive' (kept for backward compatibility)
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Multiple filter selection state (persisted in localStorage)
+  const [selectedFilters, setSelectedFilters] = useState(() => {
+    try {
+      const saved = localStorage.getItem('health-chat-selected-filters');
+      return saved ? JSON.parse(saved) : ['active', 'pending'];
+    } catch {
+      return ['active', 'pending'];
+    }
+  });
 
   // Error state
   const [error, setError] = useState(null);
@@ -91,10 +101,74 @@ export function HealthChatProvider({ children }) {
     }
   }, [filter]);
 
-  // Load tickets when filter changes
+  /**
+   * Load tickets from multiple selected filters and merge results
+   */
+  const refreshMultipleFilters = useCallback(async (filters) => {
+    if (!filters || filters.length === 0) {
+      setTickets([]);
+      setTicketsTotal(0);
+      return;
+    }
+
+    try {
+      setTicketsLoading(true);
+      setError(null);
+
+      const allTickets = [];
+      let totalCount = 0;
+
+      // Fetch tickets from each selected filter
+      for (const filterType of filters) {
+        let result;
+        switch (filterType) {
+          case 'pending':
+            result = await getPendingTickets(0, 100);
+            break;
+          case 'archive':
+            result = await getArchivedTickets(0, 100);
+            break;
+          case 'active':
+            result = await getActiveTickets(0, 100);
+            break;
+          default:
+            continue;
+        }
+
+        if (result?.chats) {
+          allTickets.push(...result.chats);
+        }
+        totalCount += result?.total || 0;
+      }
+
+      // Remove duplicates based on ID (in case of any overlap)
+      const uniqueTickets = Array.from(
+        new Map(allTickets.map(ticket => [ticket.id, ticket])).values()
+      );
+
+      setTickets(uniqueTickets);
+      setTicketsTotal(totalCount);
+    } catch (err) {
+      console.error('[HealthChatContext] Failed to load tickets:', err);
+      setError(err.message || 'Failed to load tickets');
+    } finally {
+      setTicketsLoading(false);
+    }
+  }, []);
+
+  /**
+   * Update selected filters and persist to localStorage
+   */
+  const updateSelectedFilters = useCallback((newFilters) => {
+    setSelectedFilters(newFilters);
+    localStorage.setItem('health-chat-selected-filters', JSON.stringify(newFilters));
+    refreshMultipleFilters(newFilters);
+  }, [refreshMultipleFilters]);
+
+  // Load tickets when selectedFilters changes
   useEffect(() => {
-    refreshTickets();
-  }, [refreshTickets]);
+    refreshMultipleFilters(selectedFilters);
+  }, [selectedFilters, refreshMultipleFilters]);
 
   // Keep selectedTicket in sync with tickets list (e.g., after refresh)
   // This ensures the ticket data stays fresh when the list updates
@@ -379,6 +453,8 @@ export function HealthChatProvider({ children }) {
     // Filter
     filter,
     setFilter,
+    selectedFilters,
+    updateSelectedFilters,
     searchTerm,
     setSearchTerm,
 

@@ -24,8 +24,8 @@ const ChatPanel = () => {
   const isPending = selectedTicket?.status === 'Open';
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isPatientTyping]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  }, [messages, isPatientTyping, selectedChatId]);
 
   const formatTime = (dateStr) => {
     if (!dateStr) return '';

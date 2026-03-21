@@ -607,6 +607,16 @@ const Mutation = {
         .throw();
     }
 
+    // Verify the chat exists (allows any medical staff to send messages)
+    const chatResult = await db.query(
+      `SELECT "medicalId", "patientId" FROM "HealthChat" WHERE id = $1`,
+      [chatId]
+    );
+
+    if (chatResult.rowCount === 0) {
+      throwGraphQLError(res).message("Chat not found").status(404).throw();
+    }
+
     // Promote file if uploading
     // Note: Using "eConsultation" category for Health Chat files (legacy name for backward compatibility)
     let finalFilename = filename;

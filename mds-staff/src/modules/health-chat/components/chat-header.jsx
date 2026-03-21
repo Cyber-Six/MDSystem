@@ -97,7 +97,7 @@ const ChatHeader = () => {
             {getPatientInitials(patient)}
           </div>
 
-          {/* Name + meta — three-line block */}
+          {/* Name + meta — two-line block */}
           <div className="min-w-0 flex flex-col justify-center gap-0.5">
             {/* Row 1: name + status + info button */}
             <div className="flex items-center gap-1.5 flex-wrap leading-none">
@@ -120,15 +120,10 @@ const ChatHeader = () => {
 
             {/* Row 2: Student ID or Employee No. */}
             {patient?.identifier && (
-              <span className="text-[11px] font-mono leading-none text-neutral-500 dark:text-neutral-400">
+              <span className="text-xs font-mono leading-none text-neutral-500 dark:text-neutral-400">
                 {getIdLabel()}: {patient.identifier}
               </span>
             )}
-
-            {/* Row 3: ticket purpose/title */}
-            <p className="text-[11px] truncate max-w-sm leading-none text-neutral-400 dark:text-neutral-500">
-              {selectedTicket.purpose}
-            </p>
           </div>
         </div>
 

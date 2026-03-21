@@ -118,7 +118,8 @@ export function useHealthChatSocket() {
           setSize: processedMessageIds.current.size
         });
 
-        if (data.chatId && data.message && data.senderType === 'Patient') {
+        // Handle both Patient and Medical messages
+        if (data.chatId && data.message && (data.senderType === 'Patient' || data.senderType === 'Medical')) {
           // Deduplicate messages by ID
           const messageId = String(data.message?.id);
           if (messageId && processedMessageIds.current.has(messageId)) {

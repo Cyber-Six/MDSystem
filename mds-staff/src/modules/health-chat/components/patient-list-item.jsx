@@ -36,14 +36,14 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
       <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
         {/* Name + badge */}
         <div className="flex items-center justify-between gap-1.5">
-          <span className="text-[11px] font-semibold text-secondary-900 dark:text-white overflow-hidden text-ellipsis whitespace-nowrap">
+          <span className="text-xs font-semibold text-secondary-900 dark:text-white overflow-hidden text-ellipsis whitespace-nowrap">
             {formatPatientName(patient)}
           </span>
           <TicketStatusBadge status={ticket.status} />
         </div>
 
         {/* Purpose */}
-        <p className={`text-[10px] overflow-hidden text-ellipsis whitespace-nowrap m-0 ${isTyping ? 'text-primary-600 dark:text-primary-400' : 'text-neutral-400 dark:text-neutral-500'}`}>
+        <p className={`text-xs overflow-hidden text-ellipsis whitespace-nowrap m-0 ${isTyping ? 'text-primary-600 dark:text-primary-400' : 'text-neutral-400 dark:text-neutral-500'}`}>
           {isTyping ? (
             <span className="flex items-center gap-1">
               <span className="flex gap-0.5">

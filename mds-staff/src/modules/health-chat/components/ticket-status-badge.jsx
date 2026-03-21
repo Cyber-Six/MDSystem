@@ -11,8 +11,8 @@ const TicketStatusBadge = ({ status }) => {
   const s = STATUS_MAP[status] || STATUS_MAP.Closed;
 
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none ${s.bg} ${s.color}`}>
-      <span className={`w-1 h-1 rounded-full flex-shrink-0 ${s.dot}`} />
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold leading-none ${s.bg} ${s.color}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.dot}`} />
       {s.label}
     </span>
   );
