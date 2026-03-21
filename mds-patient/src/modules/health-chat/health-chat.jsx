@@ -5,6 +5,7 @@ import TicketDivider from './components/TicketDivider';
 import TicketStatusBanner from './components/TicketStatusBanner';
 import {
   getCurrentActiveTicket,
+  getMostRecentTicket,
   getMyTickets,
   getTicketMessages,
   createTicket,
@@ -29,6 +30,7 @@ const HealthChat = () => {
   const [showCloseModal, setShowCloseModal] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const previousConversationEndRef = useRef(null);
   const inputRef = useRef(null);
   const hasInitialized = useRef(false);
 
@@ -92,6 +94,13 @@ const HealthChat = () => {
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
 
+  // Auto-scroll previous conversation to bottom when displayed
+  useEffect(() => {
+    if (ticket && ['Closed', 'Expired'].includes(ticket.status) && messages.length > 0) {
+      previousConversationEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [messages, ticket]);
+
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
@@ -154,15 +163,27 @@ const HealthChat = () => {
       setIsInitializing(true);
       setConnectionStatus('checking');
       setError(null);
+
+      // First, try to get an active ticket
       const activeTicket = await getCurrentActiveTicket();
       if (activeTicket) {
         setTicket(activeTicket);
         await loadMessages(activeTicket.id);
         setConnectionStatus('connected');
-      } else {
-        await loadPreviousTickets();
-        setConnectionStatus('connected');
+        return;
       }
+
+      // If no active ticket, load and show the most recent previous ticket
+      const mostRecent = await getMostRecentTicket();
+      if (mostRecent) {
+        setTicket(mostRecent);
+        await loadMessages(mostRecent.id);
+        setConnectionStatus('connected');
+        return;
+      }
+
+      // If no active and no previous tickets, just show empty state
+      setConnectionStatus('connected');
     } catch (err) {
       setError('Failed to load health chat. Please try again.');
       setConnectionStatus('error');
@@ -323,7 +344,7 @@ const HealthChat = () => {
   const shouldShowCreateForm = !isInitializing && (!ticket || ['Closed', 'Expired'].includes(ticket?.status));
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 font-sans">
+    <div className="max-w-2xl mx-auto px-4 font-sans">
 
       {/* ── Page Header ── */}
       <div className="relative rounded-2xl overflow-hidden mb-6 bg-primary-500">
@@ -367,28 +388,52 @@ const HealthChat = () => {
           >
             {/* Previous conversation preview */}
             {ticket && ['Closed', 'Expired'].includes(ticket.status) && (
-              <div className="p-5 border-b border-neutral-200 dark:border-neutral-700">
-                <p className="text-xs font-medium uppercase tracking-wider text-neutral-400 mb-3">
+              <div className="p-3 border-b border-neutral-200 dark:border-neutral-700">
+                <p className="text-xs font-medium uppercase tracking-wider text-neutral-400 mb-2">
                   Previous conversation
                 </p>
                 <div
-                  className="max-h-56 overflow-y-auto space-y-2.5 rounded-xl p-4"
-                  style={{ background: '#f4f2ef' }}
+                  className="max-h-52 overflow-y-auto space-y-2 rounded-xl p-3 bg-neutral-50 dark:bg-neutral-800/50 flex flex-col"
                 >
                   {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`text-sm leading-relaxed ${
-                        msg.promptType === 'system'
-                          ? 'text-center text-neutral-400 italic'
-                          : msg.userType === 'Patient'
-                          ? 'text-right text-secondary-700 dark:text-secondary-300'
-                          : 'text-left text-neutral-600 dark:text-neutral-400'
-                      }`}
-                    >
-                      {msg.text}
+                    <div key={msg.id} className="flex flex-col">
+                      {msg.promptType === 'system' ? (
+                        <div className="flex justify-center py-1.5 px-4">
+                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400">
+                            {msg.text}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className={`flex gap-2 ${msg.userType === 'Patient' ? 'flex-row-reverse' : 'flex-row'} items-end max-w-[85%] ${msg.userType === 'Patient' ? 'self-end' : 'self-start'}`}>
+                            {msg.userType === 'Patient' ? (
+                              <div
+                                className="px-3 py-1.5 text-sm leading-relaxed whitespace-pre-wrap text-secondary-900"
+                                style={{
+                                  background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
+                                  borderRadius: '18px 18px 4px 18px',
+                                  boxShadow: '0 2px 8px rgba(244,196,48,0.25)'
+                                }}
+                              >
+                                {msg.text}
+                              </div>
+                            ) : (
+                              <div
+                                className="px-3 py-1.5 text-sm leading-relaxed whitespace-pre-wrap bg-white dark:bg-neutral-800 text-secondary-800 dark:text-neutral-100 border-[1.5px] border-neutral-200 dark:border-neutral-700 shadow-sm"
+                                style={{ borderRadius: '18px 18px 18px 4px' }}
+                              >
+                                {msg.text}
+                              </div>
+                            )}
+                          </div>
+                          <span className={`text-xs text-neutral-400 dark:text-neutral-500 mt-0.5 ${msg.userType === 'Patient' ? 'self-end' : 'self-start'}`}>
+                            {formatTime(msg.stamp)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   ))}
+                  <div ref={previousConversationEndRef} />
                 </div>
                 <TicketDivider
                   closedAt={ticket.session_end}
@@ -455,14 +500,14 @@ const HealthChat = () => {
                     value={ticketPurpose}
                     onChange={(e) => setTicketPurpose(e.target.value)}
                     placeholder="e.g. I've had a headache for 3 days and it's not getting better..."
-                    className="w-full px-4 py-3.5 rounded-xl text-sm text-secondary-800 dark:text-white
+                    className="w-full px-4 py-2.5 rounded-xl text-sm text-secondary-800 dark:text-white
                                placeholder-neutral-400 resize-none transition-all duration-200
                                focus:outline-none bg-neutral-100 dark:bg-neutral-800
                                border border-neutral-200 dark:border-neutral-700
                                focus:border-primary-500 dark:focus:border-primary-400
                                focus:shadow-lg focus:shadow-primary-500/10"
                     style={{
-                      minHeight: '120px',
+                      minHeight: '90px',
                     }}
                     onFocus={e => {
                       e.target.style.borderColor = '#f4c430';
