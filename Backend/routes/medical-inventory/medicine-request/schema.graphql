@@ -28,8 +28,8 @@ enum RequestStatus {
   Cancelled
   Expired
   Approved
-  Rejected
   Completed
+  Rejected
 }
 
 type AvailableMedicine {
@@ -62,8 +62,6 @@ type MedicineRequestItem {
   medicineId: Int
   requestId: Int
   quantity: Int
-  itemName: String
-  addedByStaff: Boolean
 }
 
 input MedicineRequestItemInput {
@@ -91,6 +89,5 @@ type Query {
 type Mutation {
   createMedicineRequest(input: CreateMedicineRequestInput!): MedicineRequest
   setStatusMedicineRequest(requestId: ID!, status: RequestStatus!, notes: String): MedicineRequest
-  addMedicineToRequest(requestId: ID!, items: [MedicineRequestItemInput!]!): MedicineRequest
   cancelMedicineRequest: MedicineRequest
 }

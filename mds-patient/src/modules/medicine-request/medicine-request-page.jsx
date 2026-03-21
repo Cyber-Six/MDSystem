@@ -52,6 +52,12 @@ const MedicineRequestPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
+  // Notes Modal state
+  const [selectedNotes, setSelectedNotes] = useState(null);
+  
+  // Purpose Modal state
+  const [selectedPurpose, setSelectedPurpose] = useState(null);
+  
   // Track selected medicines by item_code
   const [selectedMedicinesByCode, setSelectedMedicinesByCode] = useState({});
 
@@ -90,20 +96,22 @@ const MedicineRequestPage = () => {
 
   // Fetch available medicines on mount and when location changes
   useEffect(() => {
-    // Determine which location to use
-    const locationToUse = assignedLocation || formData.location;
-    
-    // Don't fetch if no location is set
-    if (!locationToUse) {
-      setAvailableMedicines([]);
-      setGroupedMedicines({});
-      return;
-    }
+    // Only fetch if user location is determined
+    if (!assignedLocation && emailPrefix !== 'm') return;
     
     const fetchAvailableMedicines = async () => {
       setIsLoadingMedicines(true);
       setErrorMessage('');
       try {
+        // Use assigned location for 'q' profile, or selected location for 'm' profile
+        const locationFilter = assignedLocation || formData.location;
+        
+        if (!locationFilter) {
+          setAvailableMedicines([]);
+          setGroupedMedicines({});
+          return;
+        }
+
         const query = `
           query GetAvailableMedicine($location: LocationDesignation, $offset: Int, $limit: Int) {
             getAvailableMedicine(location: $location, offset: $offset, limit: $limit) {
@@ -111,41 +119,28 @@ const MedicineRequestPage = () => {
               item_code
               item_name
               category
-              dosageUnit
-              dosageValue
             }
           }
         `;
         
         const data = await sendGraphQLRequest(
           query,
-          { location: locationToUse, offset: 0, limit: 100 },
+          { location: locationFilter, offset: 0, limit: 100 },
           { endpoint: '/medical-inventory/medicine-request/patient' }
         );
         
-        // Handle response - data should be the GraphQL response object
-        const medicines = (data && data.getAvailableMedicine) ? data.getAvailableMedicine : [];
-        
-        if (!Array.isArray(medicines)) {
-          console.warn('Expected medicines to be an array, got:', typeof medicines, medicines);
-          setAvailableMedicines([]);
-          setGroupedMedicines({});
-          return;
-        }
-        
+        const medicines = data.getAvailableMedicine || [];
         setAvailableMedicines(medicines);
         
         // Group medicines by item_code
         const grouped = {};
         medicines.forEach(medicine => {
-          if (!medicine || !medicine.item_code) return;
-          
           const code = medicine.item_code;
           if (!grouped[code]) {
             grouped[code] = {
               item_code: code,
-              item_name: medicine.item_name || 'Unknown',
-              category: medicine.category || '',
+              item_name: medicine.item_name,
+              category: medicine.category,
               batches: []
             };
           }
@@ -156,8 +151,6 @@ const MedicineRequestPage = () => {
       } catch (error) {
         console.error('Error fetching medicines:', error);
         setErrorMessage('Failed to load available medicines. Please try again.');
-        setAvailableMedicines([]);
-        setGroupedMedicines({});
       } finally {
         setIsLoadingMedicines(false);
       }
@@ -283,10 +276,9 @@ const MedicineRequestPage = () => {
     try {
       requestItems = formData.items.map(item => {
         const medicineGroup = selectedMedicinesByCode[item.itemCode];
-        // Use id from the first batch - this is the medicineId
-        const medicineId = medicineGroup.batches[0]?.id;
-        if (!medicineId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
-        return { medicineId: parseInt(medicineId, 10), quantity: 1 };
+        const batchId = medicineGroup.batches[0]?.id;
+        if (!batchId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
+        return { batchId: parseInt(batchId, 10), quantity: 1 };
       });
     } catch (error) {
       setErrorMessage(error.message);
@@ -307,52 +299,54 @@ const MedicineRequestPage = () => {
   };
 
   const cancelPendingAndResubmit = async () => {
+    setShowCancelConfirm(false);
     if (!pendingSubmitPayload) return;
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      // Use the cancelMedicineRequest mutation which handles the pending request directly
+      // Find and cancel all pending requests
+      const pendingRequests = requests.filter(
+        (r) => r.status?.toLowerCase() === 'pending'
+      );
       const cancelMutation = `
-        mutation CancelMedicineRequest {
-          cancelMedicineRequest {
+        mutation CancelMedicineRequest($requestId: ID!, $status: RequestStatus!) {
+          setStatusMedicineRequest(requestId: $requestId, status: $status) {
             id
             status
           }
         }
       `;
-      const cancelResult = await sendGraphQLRequest(
-        cancelMutation,
-        {},
-        { endpoint: '/medical-inventory/medicine-request/patient' }
+      const cancelResults = await Promise.all(
+        pendingRequests.map((r) =>
+          sendGraphQLRequest(
+            cancelMutation,
+            { requestId: r.id, status: 'Cancelled' },
+            { endpoint: '/medical-inventory/medicine-request/patient' }
+          )
+        )
       );
-
-      // Verify the cancel actually worked
-      if (!cancelResult?.cancelMedicineRequest) {
+      // Verify the cancel actually worked (patient endpoint may not support it)
+      const anySucceeded = cancelResults.some(
+        (r) => r?.setStatusMedicineRequest !== null && r?.setStatusMedicineRequest !== undefined
+      );
+      if (!anySucceeded) {
         setErrorMessage(
           'Your pending request cannot be cancelled online. Please contact clinic staff to cancel your existing request before submitting a new one.'
         );
-        setShowCancelConfirm(false);
-        setIsSubmitting(false);
-        setPendingSubmitPayload(null);
         return;
       }
-
       // Update local state to reflect cancelled
       setRequests((prev) =>
         prev.map((r) =>
-          r.id === cancelResult.cancelMedicineRequest.id ? { ...r, status: 'Cancelled' } : r
+          r.status?.toLowerCase() === 'pending' ? { ...r, status: 'Cancelled' } : r
         )
       );
-
-      // Close modal and proceed with new submission
-      setShowCancelConfirm(false);
       await submitRequest(pendingSubmitPayload.requestItems);
     } catch (error) {
       console.error('Error cancelling and resubmitting:', error);
       setErrorMessage(
-        error.message || 'Unable to cancel your existing request. Please contact clinic staff to cancel your pending request before submitting a new one.'
+        'Unable to cancel your existing request. Please contact clinic staff to cancel your pending request before submitting a new one.'
       );
-      setShowCancelConfirm(false);
     } finally {
       setIsSubmitting(false);
       setPendingSubmitPayload(null);
@@ -442,17 +436,65 @@ const MedicineRequestPage = () => {
     return `${medicine.item_name}`;
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
+  const formatDate = (dateValue) => {
+    // Handle empty/null/undefined
+    if (!dateValue && dateValue !== 0) return 'N/A';
+    
     try {
-      return new Date(timestamp * 1000).toLocaleDateString();
-    } catch {
-      return timestamp;
+      let date;
+      
+      // Handle string format (ISO 8601 or other formats)
+      if (typeof dateValue === 'string') {
+        // Try parsing directly
+        date = new Date(dateValue);
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+        
+        // If it looks like a timestamp number in string form
+        const asNumber = parseInt(dateValue, 10);
+        if (!isNaN(asNumber)) {
+          if (asNumber > 10000000000) {
+            date = new Date(asNumber);
+          } else {
+            date = new Date(asNumber * 1000);
+          }
+          if (!isNaN(date.getTime())) {
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+          }
+        }
+      } 
+      // Handle numeric timestamps
+      else if (typeof dateValue === 'number') {
+        // If the number is very large (> 10 billion), it's already in milliseconds
+        if (dateValue > 10000000000) {
+          date = new Date(dateValue);
+        } else {
+          // Otherwise, treat as seconds and multiply by 1000
+          date = new Date(dateValue * 1000);
+        }
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+      } 
+      // Handle Date objects
+      else if (dateValue instanceof Date) {
+        if (!isNaN(dateValue.getTime())) {
+          return dateValue.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+      }
+      
+      // If nothing worked
+      console.warn('Could not parse date:', dateValue, 'Type:', typeof dateValue);
+      return 'N/A';
+    } catch (err) {
+      console.error('Date formatting error:', err, dateValue);
+      return 'N/A';
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
+    <div className="max-w-6xl mx-auto px-4 py-6">
 
       {/* Request Notification Modal */}
       <RequestNotificationModal request={notificationRequest} onDismiss={handleDismissNotification} batches={availableMedicines} />
@@ -550,12 +592,13 @@ const MedicineRequestPage = () => {
               {/* Purpose */}
               <div>
                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  Medical Condition / Purpose *
+                  Medical Condition / Purpose * <span className="text-xs text-neutral-500">({formData.purpose.length}/250)</span>
                 </label>
                 <textarea
                   required
+                  maxLength={250}
                   value={formData.purpose}
-                  onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, purpose: e.target.value.slice(0, 250) })}
                   rows="2"
                   placeholder="E.g., Headache, Fever, Cold symptoms, etc."
                   className="w-full px-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg 
@@ -764,16 +807,42 @@ const MedicineRequestPage = () => {
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Date</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Purpose</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Items</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Notes</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {requests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((request) => (
                     <tr key={request.id} className="border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
-                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{formatDate(request.created_at)}</td>
-                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{request.purpose}</td>
+                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{formatDate(request.created_at ?? request.createdAt ?? request.requestDate)}</td>
+                      <td className="py-3 px-4">
+                        {request.purpose && request.purpose.length > 30 ? (
+                          <button
+                            onClick={() => setSelectedPurpose(request.purpose)}
+                            className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[200px] hover:underline"
+                            title={request.purpose}
+                          >
+                            {request.purpose.substring(0, 30)}...
+                          </button>
+                        ) : (
+                          <span className="text-sm text-neutral-900 dark:text-white">{request.purpose || '—'}</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">
                         {request.items?.length || 0} item(s)
+                      </td>
+                      <td className="py-3 px-4">
+                        {request.notes && (request.status === 'Approved' || request.status === 'Rejected') ? (
+                          <button
+                            onClick={() => setSelectedNotes(request.notes)}
+                            className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[150px] hover:underline"
+                            title={request.notes}
+                          >
+                            {request.notes.length > 30 ? `${request.notes.substring(0, 30)}...` : request.notes}
+                          </button>
+                        ) : (
+                          <span className="text-sm text-neutral-400 dark:text-neutral-600">—</span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
@@ -828,6 +897,66 @@ const MedicineRequestPage = () => {
           </div>
         )}
       </div>
+
+      {/* Staff Notes Modal */}
+      {selectedNotes && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">Staff Notes</h3>
+              <button
+                onClick={() => setSelectedNotes(null)}
+                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-4 mb-4 max-h-[300px] overflow-y-auto">
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
+                {selectedNotes}
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedNotes(null)}
+              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Purpose Modal */}
+      {selectedPurpose && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">Medical Condition / Purpose</h3>
+              <button
+                onClick={() => setSelectedPurpose(null)}
+                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-4 mb-4 max-h-[300px] overflow-y-auto">
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
+                {selectedPurpose}
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedPurpose(null)}
+              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
         </>
       )}
     </div>

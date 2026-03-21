@@ -12,10 +12,9 @@ import AdjustStockModal from './components/adjust-stock/adjust-stock-modal';
 import DispenseModal from './components/dispense-queue/dispense-modal';
 import DispenseMedicineModal from './components/dispense-medicine/dispense-medicine-modal';
 import RequestActionModal from './components/dispense-queue/request-action-modal';
-import AddMedicineToRequestModal from './components/dispense-queue/add-medicine-to-request-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
-import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus, addMedicineToRequest } from './medicine-request-service';
+import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
 import {
   SEED_BATCHES, SEED_TRANSACTIONS,
@@ -59,8 +58,6 @@ const MedicalInventory = () => {
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState(null); // 'approve' or 'reject'
   const [selectedActionRequest, setSelectedActionRequest] = useState(null);
-  const [showAddMedicineModal, setShowAddMedicineModal] = useState(false);
-  const [addMedicineContext, setAddMedicineContext] = useState(null); // { request }
 
   // Context for modals
   const [supplyContext, setSupplyContext] = useState(null); // { itemId }
@@ -143,19 +140,35 @@ const MedicalInventory = () => {
 
   const enrichRequestItems = useCallback((requestItems = []) => {
     return requestItems.map((item) => {
-      // Note: item.batchId and item.medicineId from backend are both actually medicineId (medicalItemId)
-      // We need to use medicineId to look up the actual medicine, then find available batches for it
+      const hasBatchId = item?.batchId;
       const medicineId = item?.medicineId;
-      const medicine = items.find((i) => String(i.id) === String(medicineId));
+      
+      let itemId, itemName, batchId;
+      
+      if (hasBatchId) {
+        // Staff request with actual batchId
+        batchId = item.batchId;
+        const batch = batches.find((b) => String(b.id) === String(batchId));
+        const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
+        itemId = medicine?.id || batch?.medicalItemId || null;
+        itemName = medicine?.item_name || `Batch #${batchId}`;
+      } else if (medicineId) {
+        // Patient request with just medicineId - look up medicine directly
+        const medicine = items.find((i) => String(i.id) === String(medicineId));
+        itemId = medicine?.id || medicineId;
+        itemName = medicine?.item_name || `Medicine #${medicineId}`;
+        batchId = null; // Will be selected during dispensing
+      }
       
       return {
         ...item,
-        medicineId: medicineId,
-        itemId: medicineId, // This is the medicalItemId, used to filter batches during dispensing
-        itemName: item.itemName || medicine?.item_name || `Medicine #${medicineId}`,
+        batchId,
+        medicineId: medicineId || batchId,
+        itemId,
+        itemName,
       };
     });
-  }, [items]);
+  }, [batches, items]);
 
   // Find enriched selected item
   const selectedEnriched = useMemo(() => {
@@ -333,30 +346,16 @@ const MedicalInventory = () => {
     setIsLoadingRequests(true);
     try {
       const rawRequests = await fetchAllMedicineRequests(null);
-      console.log('📋 Raw requests loaded:', rawRequests.length, 'requests');
-      
-      const enriched = rawRequests.map((req) => {
-        // Enrich items with batch/medicine info
-        const enrichedItems = enrichRequestItems(req.items || []);
-        
-        // Use location from API response (now available)
-        const requestLocation = req.location || 'Casal'; // Fallback to Casal if missing
-        
-        console.log(`✅ Request #${req.id}: Location = "${requestLocation}"`);
-        
-        return {
-          ...req,
-          location: requestLocation,
-          patientName: `Patient #${req.patientId}`,
-          patientType: 'Self-Request',
-          _isRealRequest: true,
-          items: enrichedItems,
-        };
-      });
+      const enriched = rawRequests.map((req) => ({
+        ...req,
+        patientName: `Patient #${req.patientId}`,
+        patientType: 'Self-Request',
+        _isRealRequest: true,
+        items: enrichRequestItems(req.items || []),
+      }));
       setRequests(enriched);
     } catch (err) {
       setError(err.message || 'Failed to load medicine requests.');
-      console.error('❌ Error loading requests:', err);
     } finally {
       setIsLoadingRequests(false);
     }
@@ -445,17 +444,12 @@ const MedicalInventory = () => {
       }
 
       const totalQty = itemsPayload.reduce((sum, item) => sum + item.quantity, 0);
-      
-      // Issue prescription
       const prescriptionResult = await issuePrescription({
         patientId: Number(request.patientId),
         requestId: requestId,
         items: itemsPayload,
         notes: notes || `Dispensed for request #${requestId}`,
       });
-
-      // Mark medicine request as Completed in backend
-      await setMedicineRequestStatus(requestId, 'Completed', notes || `Dispensed for request #${requestId}`);
 
       // Decrement batches locally after backend mutation succeeds
       const batchUpdates = {};
@@ -544,39 +538,10 @@ const MedicalInventory = () => {
     }
   };
 
-  /**
-   * ✅ PART 2: Handle adding medicine to a pending request
-   * Staff selects a medicine from the modal, and it's added to the request
-   */
-  const handleAddMedicineToRequest = async (request, medicineData) => {
-    const requestId = request?.id;
-    if (!requestId || !medicineData) return;
-
-    try {
-      console.log('📤 Adding medicine to request:', { requestId, medicineData });
-      
-      // Call backend mutation
-      const updatedRequest = await addMedicineToRequest(requestId, [medicineData]);
-      
-      // Update local state with the new request data
-      setRequests(requests.map((r) => 
-        r.id === requestId ? updatedRequest : r
-      ));
-      
-      setSuccessMsg(`Medicine added to request #${requestId}!`);
-      setShowAddMedicineModal(false);
-      setAddMedicineContext(null);
-    } catch (err) {
-      setError(err.message || 'Failed to add medicine to request. Please try again.');
-      console.error('❌ Error adding medicine to request:', err);
-    }
-  };
-
   // Open modals with context
   const openAddSupply = (itemId) => { setSupplyContext({ itemId }); setShowAddSupply(true); };
   const openSplit = (batch) => { setSplitContext({ batch }); setShowSplitSupply(true); };
   const openAdjust = (batch) => { setAdjustContext({ batch }); setShowAdjustStock(true); };
-  const openAddMedicine = (request) => { setAddMedicineContext({ request }); setShowAddMedicineModal(true); };
   const openDispense = async (request) => {
     if (!request?.id) {
       setError('Invalid request. Please refresh and try again.');
@@ -776,7 +741,7 @@ const MedicalInventory = () => {
             </div>
           </div>
 
-          <DispenseQueue requests={requests} items={items} batches={batches} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} onAddMedicine={openAddMedicine} />
+          <DispenseQueue requests={requests} items={items} batches={batches} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} />
         </div>
       )}
 
@@ -865,19 +830,6 @@ const MedicalInventory = () => {
             setShowActionModal(false);
             setSelectedActionRequest(null);
             setActionType(null);
-          }}
-        />
-      )}
-
-      {showAddMedicineModal && addMedicineContext?.request && (
-        <AddMedicineToRequestModal
-          request={addMedicineContext.request}
-          items={items}
-          batchData={batches}
-          onConfirm={handleAddMedicineToRequest}
-          onCancel={() => {
-            setShowAddMedicineModal(false);
-            setAddMedicineContext(null);
           }}
         />
       )}
