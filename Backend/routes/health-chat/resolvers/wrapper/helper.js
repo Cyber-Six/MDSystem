@@ -42,7 +42,10 @@ async function getParticipantInfo(userId) {
       COALESCE(up.last_name, 'User') AS "lastName",
       uc.email,
       up.identifier,
-      COALESCE(CAST(p."profile" AS TEXT), CAST(up.branch AS TEXT)) AS "branch"
+      CASE
+        WHEN p."profile" IS NOT NULL THEN p."profile"::TEXT
+        ELSE up.branch::TEXT
+      END AS "branch"
      FROM "UserCredentials" uc
      LEFT JOIN "UsersPersonal" up ON up.id = uc.id
      LEFT JOIN "Patients" p ON p.id = uc.id
