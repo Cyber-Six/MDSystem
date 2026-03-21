@@ -26,6 +26,7 @@ const HealthChat = () => {
   const [isStaffTyping, setIsStaffTyping] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [ticketPurpose, setTicketPurpose] = useState('');
+  const [showCloseModal, setShowCloseModal] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -257,6 +258,7 @@ const HealthChat = () => {
 
   async function handleCloseTicket() {
     if (!ticket?.id) return;
+    setShowCloseModal(false);
     try {
       setIsLoading(true);
       const result = await closeTicket(ticket.id);
@@ -265,7 +267,7 @@ const HealthChat = () => {
         await loadMessages(ticket.id);
       }
     } catch (err) {
-      setError(err.message || 'Failed to close conversation.');
+      setError(err.message || 'Failed to close ticket.');
     } finally {
       setIsLoading(false);
     }
@@ -551,6 +553,9 @@ const HealthChat = () => {
                 onKeyDown={handleKeyDown}
                 onSubmit={handleSendMessage}
                 onCloseTicket={handleCloseTicket}
+                onOpenCloseModal={() => setShowCloseModal(true)}
+                showCloseModal={showCloseModal}
+                onCancelCloseModal={() => setShowCloseModal(false)}
                 formatTime={formatTime}
                 onRetry={initializeHealthChat}
                 onRefresh={refreshMessages}

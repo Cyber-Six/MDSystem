@@ -97,19 +97,13 @@ const ChatHeader = () => {
             {getPatientInitials(patient)}
           </div>
 
-          {/* Name + meta — tight two-line block */}
+          {/* Name + meta — three-line block */}
           <div className="min-w-0 flex flex-col justify-center gap-0.5">
-            {/* Row 1: name + tags */}
+            {/* Row 1: name + status + info button */}
             <div className="flex items-center gap-1.5 flex-wrap leading-none">
               <span className="font-semibold text-sm leading-none text-secondary-900 dark:text-white font-heading">
                 {formatPatientName(patient)}
               </span>
-
-              {patient?.identifier && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded leading-none bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
-                  {getIdLabel()}: {patient.identifier}
-                </span>
-              )}
 
               <TicketStatusBadge status={selectedTicket.status} />
 
@@ -124,7 +118,14 @@ const ChatHeader = () => {
               </button>
             </div>
 
-            {/* Row 2: purpose */}
+            {/* Row 2: Student ID or Employee No. */}
+            {patient?.identifier && (
+              <span className="text-[11px] font-mono leading-none text-neutral-500 dark:text-neutral-400">
+                {getIdLabel()}: {patient.identifier}
+              </span>
+            )}
+
+            {/* Row 3: ticket purpose/title */}
             <p className="text-[11px] truncate max-w-sm leading-none text-neutral-400 dark:text-neutral-500">
               {selectedTicket.purpose}
             </p>
@@ -170,7 +171,7 @@ const ChatHeader = () => {
                          hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
             >
               <X className="w-3.5 h-3.5" />
-              Close
+              Close Ticket
             </button>
           )}
 
@@ -225,9 +226,8 @@ const ChatHeader = () => {
               {[
                 { label: 'Full Name',    value: formatPatientName(patient) },
                 patient?.identifier && { label: getIdLabel(), value: patient.identifier, mono: true },
-                patient?.branch && { label: 'Type',   value: patient.branch },
+                patient?.branch && { label: 'Branch',   value: patient.branch },
                 patient?.email  && { label: 'Email',  value: patient.email },
-                { label: 'User ID', value: patient?.id || 'N/A', mono: true },
               ].filter(Boolean).map((row) => (
                 <div key={row.label}>
                   <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-neutral-400 dark:text-neutral-500">
@@ -322,9 +322,9 @@ const ChatHeader = () => {
         isOpen={confirmModal.isOpen && confirmModal.type === 'close'}
         onClose={() => setConfirmModal({ isOpen: false, type: null, reason: '' })}
         onConfirm={handleClose}
-        title="Close Conversation"
-        message="Are you sure you want to close this conversation? The patient will no longer be able to send messages."
-        confirmText="Close Conversation"
+        title="Close Ticket"
+        message="Are you sure you want to close this ticket? The patient will no longer be able to send messages."
+        confirmText="Close Ticket"
         variant="warning"
       />
 

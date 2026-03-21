@@ -3,6 +3,7 @@ import { Send, AlertCircle, X, Lock, RefreshCw, Stethoscope, Clock } from 'lucid
 import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
 import { FileAttachButton, FilePreview } from './FileAttachment';
+import ConfirmModal from './ConfirmModal';
 
 const ChatBox = ({
   messages,
@@ -17,6 +18,9 @@ const ChatBox = ({
   onKeyDown,
   onSubmit,
   onCloseTicket,
+  onOpenCloseModal,
+  showCloseModal,
+  onCancelCloseModal,
   formatTime,
   onRetry,
   onRefresh,
@@ -124,7 +128,7 @@ const ChatBox = ({
           {/* Close ticket button - only show when active */}
           {isActive && (
             <button
-              onClick={onCloseTicket}
+              onClick={onOpenCloseModal}
               disabled={isLoading}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
                          transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
@@ -135,7 +139,7 @@ const ChatBox = ({
                          hover:bg-red-50 dark:hover:bg-red-900/30"
             >
               <X className="w-3.5 h-3.5" />
-              End chat
+              Close Ticket
             </button>
           )}
         </div>
@@ -344,6 +348,18 @@ const ChatBox = ({
           </div>
         )}
       </div>
+
+      {/* Close Ticket Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showCloseModal}
+        onClose={onCancelCloseModal}
+        onConfirm={onCloseTicket}
+        title="Close Ticket"
+        message="Are you sure you want to close this ticket? You will no longer be able to send messages."
+        confirmText="Close Ticket"
+        cancelText="Cancel"
+        variant="warning"
+      />
     </div>
   );
 };

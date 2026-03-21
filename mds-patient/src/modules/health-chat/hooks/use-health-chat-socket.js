@@ -124,15 +124,30 @@ export function useHealthChatSocket({
 
       // Listen for typing indicators
       socketService.on('healthchat:user-typing', (data) => {
+        console.log('[HealthChatSocket Patient] Received user-typing event:', {
+          chatId: data.chatId,
+          userType: data.userType,
+          isTyping: data.isTyping,
+          expectedChatId: chatId,
+          match: String(data.chatId) === String(chatId) && data.userType === 'Medical'
+        });
         // Use String() coercion to handle potential type mismatch
         if (String(data.chatId) === String(chatId) && data.userType === 'Medical') {
+          console.log('[HealthChatSocket Patient] Updating typing indicator:', data.isTyping);
           onTypingRef.current?.(data.isTyping);
         }
       });
 
       // Listen for ticket approval
       socketService.on('healthchat:ticket-approved', (data) => {
+        console.log('[HealthChatSocket Patient] Received ticket-approved event:', {
+          receivedChatId: data.chat?.id,
+          expectedChatId: chatId,
+          status: data.chat?.status,
+          match: data.chat?.id === chatId || String(data.chat?.id) === String(chatId)
+        });
         if (data.chat?.id === chatId || String(data.chat?.id) === String(chatId)) {
+          console.log('[HealthChatSocket Patient] Calling onTicketApproved callback');
           onTicketApprovedRef.current?.(data.chat);
         }
       });

@@ -241,7 +241,17 @@ export function useHealthChatSocket() {
    * Emit typing status to server
    */
   const emitTyping = useCallback((chatId, isTyping) => {
-    if (!socketRef.current?.isConnected() || !chatId) return;
+    console.log('[HealthChatSocket Staff] emitTyping called:', {
+      chatId,
+      isTyping,
+      connected: socketRef.current?.isConnected(),
+      joinedRooms: Array.from(joinedRoomsRef.current)
+    });
+
+    if (!socketRef.current?.isConnected() || !chatId) {
+      console.warn('[HealthChatSocket Staff] Cannot emit typing - not connected or no chatId');
+      return;
+    }
 
     // Clear existing timeout
     if (typingTimeoutRef.current) {
