@@ -36,7 +36,10 @@ export function useHealthChatSocket({
   const [isConnected, setIsConnected] = useState(false);
   const [socketError, setSocketError] = useState(false);
   const typingTimeoutRef = useRef(null);
+  const typingDebounceRef = useRef(null);
+  const lastTypingEmitRef = useRef(0);
   const processedMessageIds = useRef(new Set());
+  const pollingIntervalRef = useRef(null);
 
   // Use refs for callbacks to avoid stale closures in socket event listeners
   // This ensures event handlers always call the latest callback version
@@ -187,27 +190,62 @@ export function useHealthChatSocket({
   }, [chatId, shouldConnect]);
 
   /**
-   * Emit typing status to server
-   * Automatically stops typing after 3 seconds of inactivity
+   * Emit typing status to server (OPTIMIZED with throttling and debouncing)
+   * - Throttles typing events to max once every 2 seconds
+   * - Debounces stop-typing by 500ms to batch rapid key presses
+   * - Automatically stops typing after 3 seconds of inactivity
    */
   const emitTyping = useCallback((isTyping) => {
     if (!socketRef.current?.isConnected() || !chatId) return;
 
-    // Clear existing timeout
+    const now = Date.now();
+    const THROTTLE_MS = 2000; // Max one typing event every 2 seconds
+    const DEBOUNCE_STOP_MS = 500; // Wait 500ms before sending stop-typing
+
+    // Clear existing timeouts
+    if (typingDebounceRef.current) {
+      clearTimeout(typingDebounceRef.current);
+      typingDebounceRef.current = null;
+    }
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
 
-    socketRef.current.emit('healthchat:typing', { chatId, isTyping });
-
-    // Auto-stop typing after 3 seconds
     if (isTyping) {
+      // Throttle: Only emit if enough time has passed since last emit
+      const timeSinceLastEmit = now - lastTypingEmitRef.current;
+      if (timeSinceLastEmit < THROTTLE_MS) {
+        console.log('[HealthChatSocket Patient] Throttling typing event (too soon)');
+        // Still set auto-stop timeout even if throttled
+        typingTimeoutRef.current = setTimeout(() => {
+          if (socketRef.current?.isConnected()) {
+            socketRef.current.emit('healthchat:typing', { chatId, isTyping: false });
+            lastTypingEmitRef.current = 0;
+          }
+        }, 3000);
+        return;
+      }
+
+      // Emit typing=true
+      lastTypingEmitRef.current = now;
+      socketRef.current.emit('healthchat:typing', { chatId, isTyping: true });
+
+      // Auto-stop typing after 3 seconds
       typingTimeoutRef.current = setTimeout(() => {
         if (socketRef.current?.isConnected()) {
           socketRef.current.emit('healthchat:typing', { chatId, isTyping: false });
+          lastTypingEmitRef.current = 0;
         }
       }, 3000);
+    } else {
+      // Debounce stop-typing to avoid rapid on/off events
+      typingDebounceRef.current = setTimeout(() => {
+        if (socketRef.current?.isConnected()) {
+          socketRef.current.emit('healthchat:typing', { chatId, isTyping: false });
+          lastTypingEmitRef.current = 0;
+        }
+      }, DEBOUNCE_STOP_MS);
     }
   }, [chatId]);
 
@@ -229,8 +267,79 @@ export function useHealthChatSocket({
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+      if (typingDebounceRef.current) {
+        clearTimeout(typingDebounceRef.current);
+      }
     };
   }, []);
+
+  /**
+   * 3-minute polling fallback for message updates
+   * Runs independently of socket status to ensure messages are never missed
+   * Even if sockets fail, polling will fetch new messages
+   */
+  useEffect(() => {
+    if (!chatId || !shouldConnect) {
+      // Clear polling if no active chat
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const POLLING_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+
+    const pollForNewMessages = async () => {
+      try {
+        console.log('[HealthChatSocket Patient] Polling for new messages in chat:', chatId);
+        // Import getTicketMessages dynamically to avoid circular deps
+        const { getTicketMessages } = await import('../health-chat-service');
+
+        // Fetch recent messages (last 10)
+        const messages = await getTicketMessages(chatId, 0, 10);
+
+        // Check if any messages are new (not in processedMessageIds)
+        // Only process Medical (staff) messages since we only care about incoming
+        const newMessages = messages.filter(msg => {
+          const messageId = String(msg.id);
+          const isFromStaff = msg.userType === 'Medical';
+          const notProcessed = !processedMessageIds.current.has(messageId);
+          return isFromStaff && notProcessed;
+        });
+
+        if (newMessages.length > 0) {
+          console.log(`[HealthChatSocket Patient] Polling found ${newMessages.length} new message(s)`);
+          // Add each new message to the UI + mark as processed
+          newMessages.forEach(msg => {
+            const messageId = String(msg.id);
+            processedMessageIds.current.add(messageId);
+            // Keep Set size bounded
+            if (processedMessageIds.current.size > 100) {
+              const firstKey = processedMessageIds.current.values().next().value;
+              processedMessageIds.current.delete(firstKey);
+            }
+            onNewMessageRef.current?.(msg);
+          });
+        } else {
+          console.log('[HealthChatSocket Patient] Polling: no new messages');
+        }
+      } catch (error) {
+        console.error('[HealthChatSocket Patient] Polling error:', error);
+      }
+    };
+
+    // Start polling interval
+    pollingIntervalRef.current = setInterval(pollForNewMessages, POLLING_INTERVAL_MS);
+
+    // Cleanup interval on unmount or chatId change
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [chatId, shouldConnect]);
 
   return {
     isConnected,
