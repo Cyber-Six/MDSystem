@@ -31,41 +31,28 @@ const ITEMS_AGG = `
 
 const Query = {
   _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { res }) => {
-    try {
-      const sql = `
-        SELECT
-          mb.id AS id,
-          mb.id AS "batchId",
-          mi.item_code,
-          mi.item_name,
-          mi.category,
-          mi.description,
-          mb."dosageUnit",
-          mb."dosageValue",
-          mb."expiryDate",
-          mb.location
-        FROM "MedicalItems" mi
-        JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
-        WHERE
-          mi.active = true AND
-          mi.category = 'Medicine' AND
-          mb."expiryDate" > CURRENT_DATE AND
-          mb.location = COALESCE($1, mb.location) AND
-          EXISTS (
-            SELECT 1
-            FROM "MedicineEntity" me
-            WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
-          )
-        ORDER BY mi.item_name, mb."expiryDate"
-        OFFSET $2 LIMIT $3
-      `;
+    const sql = `
+      SELECT
+        mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
+        mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
+      FROM "MedicalItems" mi
+      JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
+      WHERE 
+        mi.active = true AND
+        mi.category = 'Medicine' AND
+        mb."expiryDate" > CURRENT_DATE AND
+        mb.location = COALESCE($1, mb.location) AND
+        EXISTS (
+          SELECT 1
+          FROM "MedicineEntity" me
+          WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
+        )
+      ORDER BY mi.item_name, mb."expiryDate"
+      OFFSET $2 LIMIT $3
+    `;
 
-      const result = await db.query(sql, [location, offset, limit]);
-      return result.rows;
-    } catch (error) {
-      logger.error("Error in _getAvailableMedicine:", error);
-      throw error;
-    }
+    const result = await db.query(sql, [location, offset, limit]);
+    return result.rows;
   },
 
   _getMedicineStatus: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
