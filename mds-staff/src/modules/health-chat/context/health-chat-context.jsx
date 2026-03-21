@@ -145,8 +145,22 @@ export function HealthChatProvider({ children }) {
    * Add a new message to the current chat
    */
   const addMessage = useCallback((chatId, message) => {
+    console.log('[HealthChatContext] addMessage called:', {
+      chatId,
+      messageId: message?.id,
+      selectedChatId,
+      match: String(chatId) === String(selectedChatId)
+    });
     if (String(chatId) === String(selectedChatId)) {
-      setMessages(prev => [...prev, message]);
+      setMessages(prev => {
+        // Check if message already exists in array
+        if (prev.some(m => String(m.id) === String(message.id))) {
+          console.log('[HealthChatContext] ⚠️ Message already exists in state, skipping:', message.id);
+          return prev;
+        }
+        console.log('[HealthChatContext] ✅ Adding message to state:', message.id);
+        return [...prev, message];
+      });
     }
   }, [selectedChatId]);
 
@@ -221,9 +235,17 @@ export function HealthChatProvider({ children }) {
         // which will fetch fresh data from backend including our approved ticket
         setFilter('active');
 
-        // Note: We don't need setTimeout or manual ticket add anymore
-        // because refreshTickets will fetch the approved ticket from backend
-        // and the chat will stay selected via selectedChatId
+        // Manually add the approved ticket to ensure it appears immediately
+        // This prevents a brief moment where the ticket isn't visible
+        setTickets(prev => {
+          const exists = prev.some(t => String(t.id) === String(approvedChat.id));
+          if (exists) {
+            return prev.map(t =>
+              String(t.id) === String(approvedChat.id) ? approvedChat : t
+            );
+          }
+          return [approvedChat, ...prev];
+        });
       }
       return result;
     } catch (err) {

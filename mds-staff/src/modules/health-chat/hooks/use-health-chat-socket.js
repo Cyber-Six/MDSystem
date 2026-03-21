@@ -21,6 +21,8 @@ export function useHealthChatSocket() {
   const [isConnected, setIsConnected] = useState(false);
   const typingTimeoutRef = useRef(null);
   const joinedRoomsRef = useRef(new Set());
+  const processedMessageIds = useRef(new Set());
+  const closedChatIds = useRef(new Set());
 
   const {
     selectedChatId,
@@ -63,6 +65,7 @@ export function useHealthChatSocket() {
 
   // Connect on mount only - use empty dependency array to prevent reconnection
   useEffect(() => {
+    console.log('[HealthChatSocket Staff] 🔵 Initializing socket connection');
     let isMounted = true;
 
     const socketService = createSocketService({
@@ -86,9 +89,18 @@ export function useHealthChatSocket() {
         return;
       }
 
+      console.log('[HealthChatSocket Staff] ✅ Socket connected, setting up listeners');
       socketRef.current = socketService;
       setIsConnected(true);
       setSocketErrorRef.current(false);
+
+      // Handle reconnection - rejoin all tracked rooms
+      socketService.getSocket()?.on('reconnect', () => {
+        console.log('[HealthChatSocket Staff] Reconnected, rejoining rooms');
+        joinedRoomsRef.current.forEach(roomId => {
+          socketService.emit('healthchat:join-room', { chatId: roomId });
+        });
+      });
 
       // Listen for new ticket created by patient
       socketService.on('healthchat:ticket-created', (data) => {
@@ -97,16 +109,43 @@ export function useHealthChatSocket() {
         }
       });
 
-      // Listen for new messages (in any room we're in)
+      // Listen for new messages (in any room we're in) with deduplication
       socketService.on('healthchat:new-message', (data) => {
+        console.log('[HealthChatSocket Staff] Received new-message event:', {
+          chatId: data.chatId,
+          messageId: data.message?.id,
+          senderType: data.senderType,
+          setSize: processedMessageIds.current.size
+        });
+
         if (data.chatId && data.message && data.senderType === 'Patient') {
+          // Deduplicate messages by ID
+          const messageId = String(data.message?.id);
+          if (messageId && processedMessageIds.current.has(messageId)) {
+            console.log('[HealthChatSocket Staff] ⚠️ DUPLICATE message ignored:', messageId);
+            return;
+          }
+          if (messageId) {
+            processedMessageIds.current.add(messageId);
+            console.log('[HealthChatSocket Staff] ✅ Adding message:', messageId, 'Set size:', processedMessageIds.current.size);
+            // Keep Set size bounded - remove old entries
+            if (processedMessageIds.current.size > 100) {
+              const firstKey = processedMessageIds.current.values().next().value;
+              processedMessageIds.current.delete(firstKey);
+            }
+          }
           addMessageRef.current(data.chatId, data.message);
         }
       });
 
-      // Listen for typing indicators
+      // Listen for typing indicators (ignore closed chats)
       socketService.on('healthchat:user-typing', (data) => {
         if (data.chatId && data.userType === 'Patient') {
+          // Ignore typing events for closed chats
+          if (closedChatIds.current.has(String(data.chatId))) {
+            console.log('[HealthChatSocket Staff] Ignoring typing for closed chat:', data.chatId);
+            return;
+          }
           setUserTypingRef.current(data.chatId, data.userId, data.isTyping);
         }
       });
@@ -114,6 +153,8 @@ export function useHealthChatSocket() {
       // Listen for ticket closed by patient
       socketService.on('healthchat:ticket-closed', (data) => {
         if (data.chatId && data.closedBy === 'Patient') {
+          // Track this chat as closed to ignore future typing events
+          closedChatIds.current.add(String(data.chatId));
           updateTicketStatusRef.current(data.chatId, 'Closed');
           // Clear typing indicator when chat is closed
           setUserTypingRef.current(data.chatId, null, false);
@@ -153,6 +194,8 @@ export function useHealthChatSocket() {
         socketRef.current = null;
         setIsConnected(false);
       }
+      processedMessageIds.current.clear();
+      closedChatIds.current.clear();
     };
   }, []); // Empty dependency array - connect only once on mount
 

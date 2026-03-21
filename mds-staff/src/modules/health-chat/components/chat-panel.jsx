@@ -19,7 +19,8 @@ const ChatPanel = () => {
   } = useHealthChat();
 
   const messagesEndRef = useRef(null);
-  const isPatientTyping = typingUsers[selectedChatId]?.isTyping;
+  const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
+  const isPatientTyping = !isArchived && typingUsers[selectedChatId]?.isTyping;
   const isPending = selectedTicket?.status === 'Open';
 
   useEffect(() => {

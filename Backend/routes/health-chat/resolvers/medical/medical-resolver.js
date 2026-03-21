@@ -39,6 +39,10 @@ const Mutation = {
     return await Wrapper.Mutation._closeTicket(_, args, context);
   },
 
+  deleteArchivedTicket: async (_, args, context) => {
+    return await Wrapper.Mutation._deleteArchivedTicket(_, args, context);
+  },
+
   expireOldTickets: async (_, args, context) => {
     return await Wrapper.Mutation._expireOldTickets(_, args, context);
   }

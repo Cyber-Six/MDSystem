@@ -43,17 +43,30 @@ export const createSocketService = ({
   options = {},
 }) => {
   let socket = null;
+  let connectionPromise = null;
 
   /**
    * Connect to the Socket.IO server.
    * Resolves when connected, rejects on auth failure.
+   * Prevents duplicate connections by tracking in-progress connection.
    *
    * @returns {Promise<void>}
    */
   const connect = () => {
+    // If already connected, resolve immediately
     if (socket?.connected) return Promise.resolve();
 
-    return new Promise((resolve, reject) => {
+    // If connection is in progress, return existing promise
+    if (connectionPromise) return connectionPromise;
+
+    // If there's an existing socket that's not connected, clean it up first
+    if (socket) {
+      socket.removeAllListeners();
+      socket.disconnect();
+      socket = null;
+    }
+
+    connectionPromise = new Promise((resolve, reject) => {
       const baseUrl = getApiBaseUrl();
       let settled = false;
 
@@ -86,6 +99,7 @@ export const createSocketService = ({
       socket.once('connect', () => {
         if (!settled) {
           settled = true;
+          connectionPromise = null;
           console.log('[SocketService] Connected successfully');
           resolve();
         }
@@ -104,6 +118,7 @@ export const createSocketService = ({
         }
         if (!settled) {
           settled = true;
+          connectionPromise = null;
           reject(err);
         }
       });
@@ -116,12 +131,15 @@ export const createSocketService = ({
         console.error('[SocketService] Socket error:', error);
       });
     });
+
+    return connectionPromise;
   };
 
   /**
    * Disconnect from the server and clean up.
    */
   const disconnect = () => {
+    connectionPromise = null;
     if (socket) {
       socket.removeAllListeners();
       socket.disconnect();

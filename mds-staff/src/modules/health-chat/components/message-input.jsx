@@ -64,10 +64,12 @@ const MessageInput = () => {
     finally {
       setIsSending(false);
       // Refocus input after sending so user can continue typing
-      // Use setTimeout to ensure state updates have applied
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 0);
+      // Use double requestAnimationFrame for reliable focus after state updates
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+      });
     }
   };
 

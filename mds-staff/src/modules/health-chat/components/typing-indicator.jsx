@@ -39,4 +39,4 @@ const TypingIndicator = ({ isTyping, label = 'Patient is typing' }) => {
   );
 };
 
-export default TypingIndicator;
+export default React.memo(TypingIndicator);

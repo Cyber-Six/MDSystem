@@ -278,4 +278,4 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
   );
 };
 
-export default MessageBubble;
+export default React.memo(MessageBubble);
