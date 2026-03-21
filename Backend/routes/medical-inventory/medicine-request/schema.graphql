@@ -51,6 +51,7 @@ type MedicineRequest {
   notes: String
   approved_by: Int
   created_at: String
+  location: LocationDesignation
   items: [MedicineRequestItem]
 }
 
