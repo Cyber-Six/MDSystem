@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ALL_CATEGORIES, ITEM_CATEGORY } from '../../medical-inventory-service';
+import { ALL_CATEGORIES } from '../../medical-inventory-service';
 
 /**
  * Edit Medical Item Modal — updates an existing MedicalItems record.
@@ -15,20 +15,11 @@ const EditItemModal = ({ item, onClose, onSave }) => {
   const [submitError, setSubmitError] = useState('');
   const [touched, setTouched] = useState({});
 
-  // Normalize category to match GraphQL enum (Medicine/Supply with capitals)
-  const normalizeCategory = (cat) => {
-    if (!cat) return 'Medicine';
-    const normalized = ALL_CATEGORIES.find(
-      (c) => c.toLowerCase() === cat.toLowerCase()
-    );
-    return normalized || 'Medicine';
-  };
-
   useEffect(() => {
     if (item) {
       setForm({
         item_name: item.item_name || '',
-        category: normalizeCategory(item.category),
+        category: item.category || 'Medicine',
         description: item.description || '',
       });
     }

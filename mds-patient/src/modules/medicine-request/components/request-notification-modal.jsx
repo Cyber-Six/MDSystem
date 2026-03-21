@@ -3,7 +3,6 @@ import React from 'react';
 /**
  * Request Notification Modal
  * Shows patient notifications when their medicine request is approved or rejected
- * ✅ PART 2: Shows all items including added medicines with badge
  */
 const RequestNotificationModal = ({ request, onDismiss, batches }) => {
   if (!request) return null;
@@ -13,18 +12,10 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
 
   if (!isApproved && !isRejected) return null;
 
-  // Get all requested items
-  const allItems = request.items || [];
-  const originalItems = allItems.filter(item => !item.addedByStaff);
-  const addedItems = allItems.filter(item => item.addedByStaff);
-
-  // Look up medicine names from batches
-  const getItemName = (item) => {
-    const batch = batches?.find((b) => String(b.id) === String(item.medicineId));
-    return batch?.item_name || `Medicine #${item.medicineId}`;
-  };
-
-  const firstItemName = getItemName(allItems[0] || {});
+  // Look up medicine name from selected medicine entry
+  const medicineId = request.items?.[0]?.medicineId;
+  const batch = batches?.find((b) => String(b.id) === String(medicineId));
+  const itemName = batch?.item_name || 'Your medicine';
   const purpose = request.purpose || 'Medicine request';
   const notes = request.notes || '';
 
@@ -59,8 +50,8 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
           {/* Status Message */}
           <p className="text-sm text-secondary-700 dark:text-neutral-300">
             {isApproved
-              ? `Your medicine request has been <strong style="color: inherit;">approved</strong>. You may now proceed to the clinic to collect your medicine.`
-              : `Your medicine request has been <strong style="color: inherit;">rejected</strong>.`}
+              ? `Your medicine request for ${itemName} has been approved. You may now proceed to the clinic to collect your medicine.`
+              : `Your medicine request for ${itemName} has been rejected.`}
           </p>
 
           {/* Request Details */}
@@ -70,41 +61,14 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
               <span className="text-xs font-mono text-secondary-700 dark:text-neutral-300">#{request.id}</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Medicine</span>
+              <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{itemName}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Purpose</span>
               <span className="text-xs text-secondary-700 dark:text-neutral-300 text-right max-w-[160px]">{purpose}</span>
             </div>
           </div>
-
-          {/* ✅ PART 2: All Medicines List */}
-          {allItems.length > 0 && (
-            <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-              <div className="bg-neutral-100 dark:bg-neutral-700/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-                <p className="text-[10px] font-medium text-secondary-600 dark:text-neutral-300 uppercase tracking-wider">
-                  Medicines ({allItems.length})
-                </p>
-              </div>
-              <div className="divide-y divide-neutral-100 dark:divide-neutral-700">
-                {allItems.map((item, idx) => {
-                  const isAdded = item.addedByStaff;
-                  return (
-                    <div key={idx} className="px-3 py-2 flex items-center justify-between">
-                      <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
-                        {getItemName(item)}
-                      </span>
-                      {isAdded && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-100 dark:bg-accent-900/40 text-accent-700 dark:text-accent-400 rounded text-[10px] font-medium">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                          Added by Staff
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Notes */}
           {notes && (

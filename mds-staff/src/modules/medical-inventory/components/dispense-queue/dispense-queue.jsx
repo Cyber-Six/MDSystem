@@ -5,7 +5,7 @@ import { STATUS_BADGES } from '../../inventory-seed-data';
  * Dispense Queue — shows pending doctor / student medicine requests.
  * Key feature: "QTY PENDING" badge when quantity is null (student self-request).
  */
-const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject, onAddMedicine }) => {
+const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject }) => {
   const [search, setSearch] = useState('');
   const [filterLocation, setFilterLocation] = useState('Casal');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -52,12 +52,10 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
   const filtered = useMemo(() => {
     return (requests || []).filter((r) => {
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
-      
-      // Use location directly from request (from backend)
-      const reqLocation = r.location || 'Casal';
-      
+      // Filter by location from batch
+      const batchId = r.items?.[0]?.batchId ?? r.items?.[0]?.medicineId;
+      const reqLocation = batchId ? (batchMap[batchId]?.location || 'Casal') : 'Casal';
       if (reqLocation !== filterLocation) return false;
-      
       // Search
       if (search) {
         const q = search.toLowerCase();
@@ -72,7 +70,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
       }
       return true;
     });
-  }, [requests, search, filterLocation, filterStatus, itemMap]);
+  }, [requests, search, filterLocation, filterStatus, itemMap, batchMap]);
 
   const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
   const locations = ['Casal', 'Arlegui', 'QuezonCity'];
@@ -187,11 +185,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.approved_by ? `Staff #${req.approved_by}` : '—'}</td>
                       <td className="px-3 py-1.5 text-right">
                         {req.status === 'Pending' && (
-                          <div className="inline-flex flex-wrap items-center gap-1">
-                            <button onClick={() => onAddMedicine?.(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors" title="Add extra medicine to this request">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                              Add
-                            </button>
+                          <div className="inline-flex items-center gap-1">
                             <button onClick={() => onApprove?.(req)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                               Approve

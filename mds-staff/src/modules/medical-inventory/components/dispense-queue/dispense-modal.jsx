@@ -17,14 +17,6 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
     return initial;
   });
   const [notes, setNotes] = useState('');
-  // Track selected batch for each item (when multiple batches available)
-  const [selectedBatches, setSelectedBatches] = useState(() => {
-    const initial = {};
-    requestItems.forEach((item, idx) => {
-      initial[idx] = null; // null = auto-select FIFO
-    });
-    return initial;
-  });
 
   // Helper to format date safely
   const formatDate = (dateValue) => {
@@ -54,7 +46,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
   // Build allocation for all items
   const allocation = useMemo(() => {
     const allAllocations = [];
-    console.log('🔧 Building allocation from:', { requestItemsCount: requestItems.length, manualQties, selectedBatches });
+    console.log('🔧 Building allocation from:', { requestItemsCount: requestItems.length, manualQties });
     
     requestItems.forEach((reqItem, itemIdx) => {
       const qty = parseInt(manualQties[itemIdx]) || 0;
@@ -66,7 +58,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
       console.log(`  Item ${itemIdx} (${reqItem.itemName}): requesting ${qty} units`);
       
       // Get batches for this specific item
-      let itemBatches = batches
+      const itemBatches = batches
         .filter((b) => {
           const available = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
           const sameItem = reqItem?.itemId
@@ -77,16 +69,6 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
         .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
       
       console.log(`    Found ${itemBatches.length} available batches`);
-      
-      // If a specific batch is selected, use only that batch
-      const selectedBatchId = selectedBatches[itemIdx];
-      if (selectedBatchId) {
-        const selectedBatch = itemBatches.find(b => b.id === selectedBatchId);
-        if (selectedBatch) {
-          itemBatches = [selectedBatch];
-          console.log(`    Using selected batch ${selectedBatchId}`);
-        }
-      }
       
       // FEFO allocation for this item
       let remaining = qty;
@@ -111,7 +93,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
     const totalAllocated = allAllocations.reduce((s, a) => s + a.allocate, 0);
     console.log('✅ Total allocation built:', { totalAllocations: allAllocations.length, totalAllocated });
     return allAllocations;
-  }, [batches, manualQties, requestItems, selectedBatches]);
+  }, [batches, manualQties, requestItems]);
 
   // Validate all items are fully allocated
   const allQtiesValid = requestItems.every((item, idx) => {
@@ -121,19 +103,8 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
     const allocated = itemAllocations.reduce((s, a) => s + a.allocate, 0);
     return allocated >= qty;
   });
-
-  // ✅ PART 1: Frontend validation - check if any batch has insufficient stock
-  const stockWarnings = allocation
-    .filter(a => {
-      const available = Number(a.availableQuantity ?? a.currentQuantity ?? 0);
-      return a.allocate > available;
-    })
-    .map(a => {
-      const available = Number(a.availableQuantity ?? a.currentQuantity ?? 0);
-      return `Batch ${a.batchNumber}: only ${available} unit${available !== 1 ? 's' : ''} available, but requesting ${a.allocate} units`;
-    });
   
-  const isValid = allQtiesValid && allocation.length > 0 && stockWarnings.length === 0;
+  const isValid = allQtiesValid && allocation.length > 0;
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -184,20 +155,6 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                 .filter(b => String(b.medicalItemId) === String(reqItem.itemId))
                 .reduce((s, b) => s + (b.availableQuantity || b.currentQuantity || 0), 0);
               
-              // Get available batches for this item (sorted FIFO)
-              const availableBatchesForItem = batches
-                .filter(b => {
-                  const available = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
-                  return String(b.medicalItemId) === String(reqItem.itemId) && available > 0;
-                })
-                .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
-              
-              const hasMultipleBatches = availableBatchesForItem.length > 1;
-              const selectedBatchId = selectedBatches[idx];
-              const selectedBatchObj = selectedBatchId 
-                ? availableBatchesForItem.find(b => b.id === selectedBatchId)
-                : availableBatchesForItem[0]; // Default to FIFO (first/oldest)
-              
               return (
                 <div key={idx} className="p-3 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg border border-neutral-200 dark:border-neutral-600">
                   <div className="grid grid-cols-2 gap-2 mb-2">
@@ -210,39 +167,6 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                       <p className="text-xs font-medium text-secondary-800 dark:text-white m-0">{totalAvailable} units</p>
                     </div>
                   </div>
-                  
-                  {/* Batch Selector (if multiple batches available) */}
-                  {hasMultipleBatches && (
-                    <div className="mb-2">
-                      <label className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                        Select Batch (Default: FIFO)
-                      </label>
-                      <select
-                        value={selectedBatchId || 'fifo'}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setSelectedBatches({
-                            ...selectedBatches,
-                            [idx]: value === 'fifo' ? null : Number(value)
-                          });
-                        }}
-                        className="w-full px-3 py-2 text-sm border border-primary-300 dark:border-primary-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        <option value="fifo">FIFO (Oldest first)</option>
-                        {availableBatchesForItem.map((batch) => {
-                          const available = batch.availableQuantity || batch.currentQuantity || 0;
-                          const expStatus = getExpiryStatus(batch.expiryDate);
-                          const expBadge = expStatus === 'expired' ? ' [EXPIRED]' : expStatus === 'critical' ? ' [CRITICAL]' : '';
-                          return (
-                            <option key={batch.id} value={batch.id}>
-                              Batch {batch.batchNumber} — Exp: {new Date(batch.expiryDate).toLocaleDateString()} ({available} units){expBadge}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                  )}
-                  
                   <label className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
                     Quantity {isStudent && <span className="text-warning-500">(Not specified)</span>}
                   </label>
@@ -268,25 +192,6 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
               );
             })}
           </div>
-
-          {/* ✅ PART 1: Stock Validation Warning */}
-          {stockWarnings.length > 0 && (
-            <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 rounded-lg">
-              <div className="flex gap-2">
-                <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="text-xs text-error-700 dark:text-error-400">
-                  <p className="font-medium mb-1">⚠️ Stock is too low to dispense requested quantity:</p>
-                  <ul className="list-disc list-inside space-y-0.5">
-                    {stockWarnings.map((warning, i) => (
-                      <li key={i}>{warning}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Dispense Notes */}
           <div>

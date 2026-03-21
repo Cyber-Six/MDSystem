@@ -3,12 +3,13 @@ const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
 
 // Enhanced aggregation: includes medicine name by joining with MedicalItems
+// Note: mre."medicineId" stores the MedicalItems.id (the medicine item, not the batch)
 const getItemsWithNames = async (requestId) => {
   const result = await db.query(`
-    SELECT 
-      mre.id, 
-      mre."medicineId", 
-      mre."requestId", 
+    SELECT
+      mre.id,
+      mre."medicineId",
+      mre."requestId",
       mre.quantity,
       mre."addedByStaff",
       COALESCE(mi.item_name, 'Unknown Medicine') AS "itemName"
@@ -30,33 +31,28 @@ const ITEMS_AGG = `
 
 const Query = {
   _getAvailableMedicine: async (_, { location, offset = 0, limit = 20 }, { res }) => {
-    try {
-      const sql = `
-        SELECT
-          mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
-          mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
-        FROM "MedicalItems" mi
-        JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
-        WHERE 
-          mi.active = true AND
-          mi.category = 'Medicine' AND
-          mb."expiryDate" > CURRENT_DATE AND
-          mb.location = COALESCE($1, mb.location) AND
-          EXISTS (
-            SELECT 1
-            FROM "MedicineEntity" me
-            WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
-          )
-        ORDER BY mi.item_name, mb."expiryDate"
-        OFFSET $2 LIMIT $3
-      `;
+    const sql = `
+      SELECT
+        mi.id, mi.item_code, mi.item_name, mi.category, mi.description,
+        mb.id AS "batchId", mb."batchNumber", mb."dosageUnit", mb."dosageValue", mb."expiryDate", mb.location
+      FROM "MedicalItems" mi
+      JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
+      WHERE 
+        mi.active = true AND
+        mi.category = 'Medicine' AND
+        mb."expiryDate" > CURRENT_DATE AND
+        mb.location = COALESCE($1, mb.location) AND
+        EXISTS (
+          SELECT 1
+          FROM "MedicineEntity" me
+          WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
+        )
+      ORDER BY mi.item_name, mb."expiryDate"
+      OFFSET $2 LIMIT $3
+    `;
 
-      const result = await db.query(sql, [location, offset, limit]);
-      return result.rows;
-    } catch (error) {
-      logger.error("Error in _getAvailableMedicine:", error);
-      throw error;
-    }
+    const result = await db.query(sql, [location, offset, limit]);
+    return result.rows;
   },
 
   _getMedicineStatus: async (_, { patientId, offset = 0, limit = 20 }, { res }) => {
@@ -335,7 +331,6 @@ const Mutation = {
   },
 };
 
-module.exports = {
-  Query,
-  Mutation,
-};
+module.exports = { Query, Mutation };
+
+module.exports = { Query, Mutation };

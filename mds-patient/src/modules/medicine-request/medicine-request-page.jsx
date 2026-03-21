@@ -90,20 +90,22 @@ const MedicineRequestPage = () => {
 
   // Fetch available medicines on mount and when location changes
   useEffect(() => {
-    // Determine which location to use
-    const locationToUse = assignedLocation || formData.location;
-    
-    // Don't fetch if no location is set
-    if (!locationToUse) {
-      setAvailableMedicines([]);
-      setGroupedMedicines({});
-      return;
-    }
+    // Only fetch if user location is determined
+    if (!assignedLocation && emailPrefix !== 'm') return;
     
     const fetchAvailableMedicines = async () => {
       setIsLoadingMedicines(true);
       setErrorMessage('');
       try {
+        // Use assigned location for 'q' profile, or selected location for 'm' profile
+        const locationFilter = assignedLocation || formData.location;
+        
+        if (!locationFilter) {
+          setAvailableMedicines([]);
+          setGroupedMedicines({});
+          return;
+        }
+
         const query = `
           query GetAvailableMedicine($location: LocationDesignation, $offset: Int, $limit: Int) {
             getAvailableMedicine(location: $location, offset: $offset, limit: $limit) {
@@ -111,41 +113,28 @@ const MedicineRequestPage = () => {
               item_code
               item_name
               category
-              dosageUnit
-              dosageValue
             }
           }
         `;
         
         const data = await sendGraphQLRequest(
           query,
-          { location: locationToUse, offset: 0, limit: 100 },
+          { location: locationFilter, offset: 0, limit: 100 },
           { endpoint: '/medical-inventory/medicine-request/patient' }
         );
         
-        // Handle response - data should be the GraphQL response object
-        const medicines = (data && data.getAvailableMedicine) ? data.getAvailableMedicine : [];
-        
-        if (!Array.isArray(medicines)) {
-          console.warn('Expected medicines to be an array, got:', typeof medicines, medicines);
-          setAvailableMedicines([]);
-          setGroupedMedicines({});
-          return;
-        }
-        
+        const medicines = data.getAvailableMedicine || [];
         setAvailableMedicines(medicines);
         
         // Group medicines by item_code
         const grouped = {};
         medicines.forEach(medicine => {
-          if (!medicine || !medicine.item_code) return;
-          
           const code = medicine.item_code;
           if (!grouped[code]) {
             grouped[code] = {
               item_code: code,
-              item_name: medicine.item_name || 'Unknown',
-              category: medicine.category || '',
+              item_name: medicine.item_name,
+              category: medicine.category,
               batches: []
             };
           }
@@ -156,8 +145,6 @@ const MedicineRequestPage = () => {
       } catch (error) {
         console.error('Error fetching medicines:', error);
         setErrorMessage('Failed to load available medicines. Please try again.');
-        setAvailableMedicines([]);
-        setGroupedMedicines({});
       } finally {
         setIsLoadingMedicines(false);
       }
@@ -283,10 +270,9 @@ const MedicineRequestPage = () => {
     try {
       requestItems = formData.items.map(item => {
         const medicineGroup = selectedMedicinesByCode[item.itemCode];
-        // Use id from the first batch - this is the medicineId
-        const medicineId = medicineGroup.batches[0]?.id;
-        if (!medicineId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
-        return { medicineId: parseInt(medicineId, 10), quantity: 1 };
+        const batchId = medicineGroup.batches[0]?.id;
+        if (!batchId) throw new Error(`No available batch for ${medicineGroup.item_name}`);
+        return { batchId: parseInt(batchId, 10), quantity: 1 };
       });
     } catch (error) {
       setErrorMessage(error.message);
@@ -307,52 +293,54 @@ const MedicineRequestPage = () => {
   };
 
   const cancelPendingAndResubmit = async () => {
+    setShowCancelConfirm(false);
     if (!pendingSubmitPayload) return;
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      // Use the cancelMedicineRequest mutation which handles the pending request directly
+      // Find and cancel all pending requests
+      const pendingRequests = requests.filter(
+        (r) => r.status?.toLowerCase() === 'pending'
+      );
       const cancelMutation = `
-        mutation CancelMedicineRequest {
-          cancelMedicineRequest {
+        mutation CancelMedicineRequest($requestId: ID!, $status: RequestStatus!) {
+          setStatusMedicineRequest(requestId: $requestId, status: $status) {
             id
             status
           }
         }
       `;
-      const cancelResult = await sendGraphQLRequest(
-        cancelMutation,
-        {},
-        { endpoint: '/medical-inventory/medicine-request/patient' }
+      const cancelResults = await Promise.all(
+        pendingRequests.map((r) =>
+          sendGraphQLRequest(
+            cancelMutation,
+            { requestId: r.id, status: 'Cancelled' },
+            { endpoint: '/medical-inventory/medicine-request/patient' }
+          )
+        )
       );
-
-      // Verify the cancel actually worked
-      if (!cancelResult?.cancelMedicineRequest) {
+      // Verify the cancel actually worked (patient endpoint may not support it)
+      const anySucceeded = cancelResults.some(
+        (r) => r?.setStatusMedicineRequest !== null && r?.setStatusMedicineRequest !== undefined
+      );
+      if (!anySucceeded) {
         setErrorMessage(
           'Your pending request cannot be cancelled online. Please contact clinic staff to cancel your existing request before submitting a new one.'
         );
-        setShowCancelConfirm(false);
-        setIsSubmitting(false);
-        setPendingSubmitPayload(null);
         return;
       }
-
       // Update local state to reflect cancelled
       setRequests((prev) =>
         prev.map((r) =>
-          r.id === cancelResult.cancelMedicineRequest.id ? { ...r, status: 'Cancelled' } : r
+          r.status?.toLowerCase() === 'pending' ? { ...r, status: 'Cancelled' } : r
         )
       );
-
-      // Close modal and proceed with new submission
-      setShowCancelConfirm(false);
       await submitRequest(pendingSubmitPayload.requestItems);
     } catch (error) {
       console.error('Error cancelling and resubmitting:', error);
       setErrorMessage(
-        error.message || 'Unable to cancel your existing request. Please contact clinic staff to cancel your pending request before submitting a new one.'
+        'Unable to cancel your existing request. Please contact clinic staff to cancel your pending request before submitting a new one.'
       );
-      setShowCancelConfirm(false);
     } finally {
       setIsSubmitting(false);
       setPendingSubmitPayload(null);
@@ -452,7 +440,7 @@ const MedicineRequestPage = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
+    <div className="max-w-6xl mx-auto px-4 py-6">
 
       {/* Request Notification Modal */}
       <RequestNotificationModal request={notificationRequest} onDismiss={handleDismissNotification} batches={availableMedicines} />

@@ -29,7 +29,6 @@ enum RequestStatus {
   Expired
   Approved
   Rejected
-  Completed
 }
 
 type AvailableMedicine {
@@ -52,7 +51,6 @@ type MedicineRequest {
   notes: String
   approved_by: Int
   created_at: String
-  location: LocationDesignation
   items: [MedicineRequestItem]
 }
 
@@ -62,8 +60,6 @@ type MedicineRequestItem {
   medicineId: Int
   requestId: Int
   quantity: Int
-  itemName: String
-  addedByStaff: Boolean
 }
 
 input MedicineRequestItemInput {
@@ -91,6 +87,5 @@ type Query {
 type Mutation {
   createMedicineRequest(input: CreateMedicineRequestInput!): MedicineRequest
   setStatusMedicineRequest(requestId: ID!, status: RequestStatus!, notes: String): MedicineRequest
-  addMedicineToRequest(requestId: ID!, items: [MedicineRequestItemInput!]!): MedicineRequest
   cancelMedicineRequest: MedicineRequest
 }

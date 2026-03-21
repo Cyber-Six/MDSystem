@@ -5,33 +5,52 @@ const { emitToRoom } = require("../../../../../config/sockets");
 const db = require("../../../../../config/query.js");
 const logger = require("../../../../../utils/logger.js");
 
-// Ensure Wrapper is properly loaded
-if (!Wrapper || !Wrapper.Query) {
-  logger.error("ERROR: Wrapper or Wrapper.Query is undefined. Wrapper exports:", Object.keys(Wrapper || {}));
-  throw new Error("MedicineRequest Wrapper module failed to load properly");
+// Check if Wrapper loaded properly
+if (!Wrapper || !Wrapper.Query || !Wrapper.Query._getAvailableMedicine) {
+  logger.error("❌ Wrapper module failed to load properly");
+  logger.error("Wrapper:", Wrapper);
+  logger.error("Wrapper.Query:", Wrapper?.Query);
+  throw new Error("Wrapper module not loaded correctly");
 }
+
+logger.info("✅ Wrapper module loaded successfully");
 
 const Query = {
   getAvailableMedicine: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    
     try {
-      return await Wrapper.Query._getAvailableMedicine(_, args, { res });
+      logger.info("Fetching available medicines for location:", args.location);
+      const result = await Wrapper.Query._getAvailableMedicine(_, args, { res });
+      logger.info("Medicines fetched:", result?.length || 0);
+      return result;
     } catch (error) {
-      logger.error("Error in getAvailableMedicine resolver:", error);
-      throwGraphQLError(res).message("Failed to fetch available medicines").status(500).throw();
+      logger.error("Error in getAvailableMedicine:", error);
+      throw error;
     }
   },
 
   getMedicineStatus: async (_, __, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    
-    try {
-      return await Wrapper.Query._getMedicineStatus(_, { patientId: user.id }, { res });
-    } catch (error) {
-      logger.error("Error in getMedicineStatus resolver:", error);
-      throwGraphQLError(res).message("Failed to fetch medicine request status").status(500).throw();
+    return await Wrapper.Query._getMedicineStatus(_, { patientId: user.id }, { res });
+  },
+
+  getMedicineRequestById: async (_, { requestId }, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    return await Wrapper.Query._getMedicineRequestById(_, { requestId }, { res });
+  },
+
+  getMedicineRequests: async (_, { patientId, offset, limit }, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    // Patients can only view their own requests
+    if (user.id !== Number(patientId)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+    return await Wrapper.Query._getMedicineRequests(_, { patientId, offset, limit }, { res });
+  },
+
+  getAllMedicineRequests: async (_, __, { user, res }) => {
+    // Patients cannot view all requests - this is staff only
+    throwGraphQLError(res).message("Unauthorized").status(401).throw();
   },
 };
 
@@ -75,105 +94,56 @@ const Mutation = {
     await validateBatchesWithQuantity(mergedItems, res);
     */
 
+    const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
+
+    // Notify medical staff on the branch channel for the location of the first batch
     try {
-      const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
-
-      // Notify medical staff on the branch channel for the location of the first batch
-      try {
-        const batch = await db.query(
-          `SELECT location FROM "MedicineBatch" WHERE id = $1 LIMIT 1`,
-          [input.items[0].batchId ?? input.items[0].medicineId],
-        );
-        if (batch.rows.length > 0) {
-          const { location } = batch.rows[0];
-          emitToRoom(`branch:${location}`, 'medicine:request:new', {
-            requestId: result.id,
-            patientId: user.id,
-            location,
-          });
-        }
-      } catch (notifErr) {
-        logger.error("Failed to emit new medicine request to branch channel:", notifErr);
+      const batch = await db.query(
+        `SELECT location FROM "MedicineBatch" WHERE id = $1 LIMIT 1`,
+        [input.items[0].batchId ?? input.items[0].medicineId],
+      );
+      if (batch.rows.length > 0) {
+        const { location } = batch.rows[0];
+        emitToRoom(`branch:${location}`, 'medicine:request:new', {
+          requestId: result.id,
+          patientId: user.id,
+          location,
+        });
       }
-
-      return result;
-    } catch (error) {
-      logger.error("Error in createMedicineRequest resolver:", error);
-      throwGraphQLError(res).message("Failed to create medicine request").status(500).throw();
+    } catch (notifErr) {
+      logger.error("Failed to emit new medicine request to branch channel:", notifErr);
     }
+
+    return result;
   },
 
   cancelMedicineRequest: async (_, __, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
 
-    try {
-      // Fetch pending request directly to avoid false positives from non-pending latest requests.
-      const pendingResult = await db.query(
-        `SELECT id, status
-         FROM "MedicineRequestLog"
-         WHERE "patientId" = $1 AND status = 'Pending'
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [user.id],
-      );
+    // Fetch pending request directly to avoid false positives from non-pending latest requests.
+    const pendingResult = await db.query(
+      `SELECT id, status
+       FROM "MedicineRequestLog"
+       WHERE "patientId" = $1 AND status = 'Pending'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [user.id],
+    );
 
-      if (pendingResult.rows.length === 0) {
-        throwGraphQLError(res).message("Request not found").status(404).throw();
-      }
-
-      return await Wrapper.Mutation._setStatusMedicineRequest(
-        _,
-        { requestId: pendingResult.rows[0].id, status: 'Cancelled', approvedBy: null, notes: null },
-        { res },
-      );
-    } catch (error) {
-      logger.error("Error in cancelMedicineRequest resolver:", error);
-      throwGraphQLError(res).message("Failed to cancel medicine request").status(500).throw();
+    if (pendingResult.rows.length === 0) {
+      throwGraphQLError(res).message("Request not found").status(404).throw();
     }
+
+    return await Wrapper.Mutation._setStatusMedicineRequest(
+      _,
+      { requestId: pendingResult.rows[0].id, status: 'Cancelled', approvedBy: user.id, notes: null },
+      { res },
+    );
   },
 
-  setStatusMedicineRequest: async (_, { requestId, status, notes }, { user, res }) => {
-    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-
-    try {
-      // Verify the request belongs to the patient
-      const requestResult = await db.query(
-        `SELECT "patientId", status FROM "MedicineRequestLog" WHERE id = $1 LIMIT 1`,
-        [requestId],
-      );
-
-      if (requestResult.rows.length === 0) {
-        throwGraphQLError(res).message("Request not found").status(404).throw();
-      }
-
-      if (requestResult.rows[0].patientId !== user.id) {
-        throwGraphQLError(res).message("Unauthorized: You can only cancel your own requests").status(403).throw();
-      }
-
-      // Patients can only cancel pending requests
-      if (requestResult.rows[0].status !== 'Pending' && status !== 'Cancelled') {
-        throwGraphQLError(res).message("Patients can only cancel pending requests").status(400).throw();
-      }
-
-      return await Wrapper.Mutation._setStatusMedicineRequest(
-        _,
-        { requestId, status, approvedBy: user.id, notes },
-        { res },
-      );
-    } catch (error) {
-      logger.error("Error in setStatusMedicineRequest resolver:", error);
-      throwGraphQLError(res).message("Failed to update medicine request status").status(500).throw();
-    }
-  },
-
-  addMedicineToRequest: async (_, { requestId, items }, { user, res }) => {
-    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    
-    // This mutation is only available to medical staff, not patients
-    throwGraphQLError(res)
-      .message("This operation is only available to medical staff")
-      .status(403)
-      .throw();
+  setStatusMedicineRequest: async (_, __, { user, res }) => {
+    // Patients cannot update medicine request status - this is staff only
+    throwGraphQLError(res).message("Unauthorized").status(401).throw();
   },
 };
 
