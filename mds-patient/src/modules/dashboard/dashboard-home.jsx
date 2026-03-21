@@ -52,7 +52,7 @@ const DashboardHome = ({ firstName }) => {
   };
 
   return (
-    <div className="space-y-6 py-6">
+    <div className="space-y-6">
       {/* Welcome Section */}
       <div className="bg-primary-500 dark:bg-neutral-900 rounded-lg p-6 text-white">
         <h1 className="text-3xl font-bold mb-2 text-white">Welcome back, {firstName || 'there'}!</h1>

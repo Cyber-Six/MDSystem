@@ -306,7 +306,7 @@ const ChatBox = ({
                 onKeyDown={onKeyDown}
                 placeholder={getPlaceholder()}
                 disabled={!canSendMessage || isLoading}
-                className="w-full px-3.5 py-2 text-sm rounded-full resize-none leading-snug
+                className="w-full px-3 py-1.5 text-sm rounded-full resize-none leading-snug
                            text-secondary-800 dark:text-white placeholder-neutral-400 transition-all duration-200
                            focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
                            bg-neutral-100 dark:bg-neutral-800
@@ -314,7 +314,7 @@ const ChatBox = ({
                            focus:border-primary-500 dark:focus:border-primary-400
                            focus:shadow-lg focus:shadow-primary-500/10"
                 style={{
-                  maxHeight: '80px',
+                  maxHeight: '60px',
                   scrollbarWidth: 'none'
                 }}
                 rows={1}

@@ -56,7 +56,7 @@ const RecordChoicePage = ({ onSelect }) => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
+    <div className="max-w-5xl mx-auto px-4">
       {/* Header Section */}
       <div className="rounded-2xl p-6 mb-6 bg-primary-500">
         <div className="flex items-center gap-4">

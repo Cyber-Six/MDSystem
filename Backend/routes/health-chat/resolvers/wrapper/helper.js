@@ -154,20 +154,20 @@ async function formatMessage(message) {
 async function autoExpireTickets(patientId = null) {
   // Find tickets where the last message was more than CHAT_EXPIRY_DAYS ago
   let query = `
-    UPDATE "HealthChat" hc
+    UPDATE "HealthChat"
     SET status = 'Expired',
         session_end = NOW(),
         closed_by_type = 'System'
-    WHERE hc.status = 'Ongoing'
+    WHERE status = 'Ongoing'
     AND (
       SELECT MAX(stamp) FROM "HealthChatPrompt"
-      WHERE "consultationVirtualId" = hc.id
+      WHERE "consultationVirtualId" = "HealthChat".id
     ) < NOW() - INTERVAL '${CHAT_EXPIRY_DAYS} days'
   `;
   const params = [];
 
   if (patientId) {
-    query += ` AND hc."patientId" = $1`;
+    query += ` AND "HealthChat"."patientId" = $1`;
     params.push(patientId);
   }
 
