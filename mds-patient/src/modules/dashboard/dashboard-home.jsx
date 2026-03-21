@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { AnnouncementCarousel } from '../anouncement';
 
 const DashboardHome = ({ firstName }) => {
   const pendingRequests = [
@@ -74,6 +75,9 @@ const DashboardHome = ({ firstName }) => {
           </div>
         ))}
       </div>
+
+      {/* Announcements Section */}
+      <AnnouncementCarousel />
 
       {/* Pending Requests Section */}
       <div className="bg-white dark:bg-neutral-900 rounded-lg border border-gray-200 dark:border-neutral-700">
