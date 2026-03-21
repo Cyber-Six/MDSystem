@@ -53,6 +53,7 @@ async function initSocket(server, options = {}) {
   // --- Redis adapter (cross-node fan-out) ---
   // Two dedicated clients are required: one for publishing, one for subscribing.
   // They are duplicated from the main client to reuse the same connection config.
+  // If Redis pub/sub permissions are unavailable, fall back to single-node mode.
   try {
     const pubClient = getClient().duplicate();
     const subClient = getClient().duplicate();
@@ -60,8 +61,10 @@ async function initSocket(server, options = {}) {
     io.adapter(createAdapter(pubClient, subClient));
     logger.info('[SOCKET] Redis adapter attached (cross-node fan-out enabled)');
   } catch (err) {
-    logger.error('[SOCKET] Failed to attach Redis adapter:', err.message);
-    throw err;
+    logger.warn('[SOCKET] Redis adapter failed — running in single-node mode:', err.message);
+    logger.warn('[SOCKET] To enable cross-node Socket.IO, grant pub/sub permissions to your Redis user:');
+    logger.warn('[SOCKET]   ACL SETUSER <username> +@pubsub &*');
+    // Continue without Redis adapter — Socket.IO will work on this node only
   }
 
   // Wire JWT authentication
