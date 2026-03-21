@@ -37,4 +37,4 @@ const TypingIndicator = ({ isTyping, label = 'Medical Staff' }) => {
   );
 };
 
-export default TypingIndicator;
+export default React.memo(TypingIndicator);

@@ -3,13 +3,21 @@ import { Search, X } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 
 const FilterTabs = () => {
-  const { filter, setFilter, searchTerm, setSearchTerm } = useHealthChat();
+  const { selectedFilters, updateSelectedFilters, searchTerm, setSearchTerm } = useHealthChat();
 
-  const tabs = [
-    { id: 'active',  label: 'Active' },
+  const filters = [
+    { id: 'active',  label: 'Active Ticket' },
     { id: 'pending', label: 'Pending' },
     { id: 'archive', label: 'Archive' },
   ];
+
+  const handleFilterToggle = (filterId) => {
+    const newFilters = selectedFilters.includes(filterId)
+      ? selectedFilters.filter(f => f !== filterId)
+      : [...selectedFilters, filterId];
+
+    updateSelectedFilters(newFilters);
+  };
 
   return (
     <div className="flex-shrink-0 border-b border-neutral-200 dark:border-neutral-700">
@@ -38,22 +46,33 @@ const FilterTabs = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex">
-        {tabs.map((tab) => {
-          const active = filter === tab.id;
+      {/* Filter Checkboxes */}
+      <div className="px-3 py-1.5 flex gap-0 justify-between">
+        {filters.map((filter) => {
+          const isChecked = selectedFilters.includes(filter.id);
           return (
-            <button
-              key={tab.id}
-              onClick={() => setFilter(tab.id)}
-              className={`flex-1 py-2 text-xs font-medium relative transition-colors duration-150 border-b-2
-                         ${active
-                           ? 'text-secondary-800 dark:text-white border-primary-500'
-                           : 'text-neutral-400 dark:text-neutral-500 border-transparent hover:text-neutral-600 dark:hover:text-neutral-300'
-                         }`}
+            <label
+              key={filter.id}
+              className="flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded-md transition-all duration-200 flex-1 justify-center"
+              style={{
+                backgroundColor: isChecked ? 'rgba(var(--color-primary-500), 0.1)' : 'transparent',
+              }}
             >
-              {tab.label}
-            </button>
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={() => handleFilterToggle(filter.id)}
+                className="w-3.5 h-3.5 rounded accent-primary-500 cursor-pointer"
+              />
+              <span className={`text-xs font-medium transition-colors whitespace-nowrap ${
+                isChecked
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-neutral-600 dark:text-neutral-400'
+              }`}
+              >
+                {filter.label}
+              </span>
+            </label>
           );
         })}
       </div>

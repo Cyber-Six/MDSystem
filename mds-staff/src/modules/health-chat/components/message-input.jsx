@@ -58,16 +58,29 @@ const MessageInput = () => {
     try {
       setIsSending(true);
       emitTyping(selectedChatId, false);
-      if (attachedFile) { await sendMessage(selectedChatId, null, attachedFile.fileId, 'file'); setAttachedFile(null); }
-      if (inputValue.trim()) { await sendMessage(selectedChatId, inputValue.trim(), null, 'text'); setInputValue(''); }
-    } catch { alert('Failed to send. Please try again.'); }
+      if (attachedFile) {
+        console.log('[MessageInput] Sending file message');
+        await sendMessage(selectedChatId, null, attachedFile.fileId, 'file');
+        setAttachedFile(null);
+      }
+      if (inputValue.trim()) {
+        console.log('[MessageInput] Sending text message');
+        await sendMessage(selectedChatId, inputValue.trim(), null, 'text');
+        setInputValue('');
+      }
+    } catch (err) {
+      console.error('[MessageInput] Send failed:', err);
+      alert(`Failed to send message: ${err.message || 'Unknown error'}`);
+    }
     finally {
       setIsSending(false);
       // Refocus input after sending so user can continue typing
-      // Use setTimeout to ensure state updates have applied
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 0);
+      // Use double requestAnimationFrame for reliable focus after state updates
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+      });
     }
   };
 

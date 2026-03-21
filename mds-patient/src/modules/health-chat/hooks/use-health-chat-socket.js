@@ -36,6 +36,7 @@ export function useHealthChatSocket({
   const [isConnected, setIsConnected] = useState(false);
   const [socketError, setSocketError] = useState(false);
   const typingTimeoutRef = useRef(null);
+  const processedMessageIds = useRef(new Set());
 
   // Use refs for callbacks to avoid stale closures in socket event listeners
   // This ensures event handlers always call the latest callback version
@@ -93,25 +94,60 @@ export function useHealthChatSocket({
       // Join the chat room
       socketService.emit('healthchat:join-room', { chatId });
 
-      // Listen for new messages
+      // Handle reconnection - rejoin room
+      socketService.getSocket()?.on('reconnect', () => {
+        console.log('[HealthChatSocket] Reconnected, rejoining room:', chatId);
+        socketService.emit('healthchat:join-room', { chatId });
+      });
+
+      // Listen for new messages (with deduplication)
       socketService.on('healthchat:new-message', (data) => {
         // Use String() coercion to handle potential type mismatch (string vs number)
         if (String(data.chatId) === String(chatId) && data.senderType === 'Medical') {
+          // Deduplicate messages by ID
+          const messageId = String(data.message?.id);
+          if (messageId && processedMessageIds.current.has(messageId)) {
+            console.log('[HealthChatSocket] Duplicate message ignored:', messageId);
+            return;
+          }
+          if (messageId) {
+            processedMessageIds.current.add(messageId);
+            // Keep Set size bounded - remove old entries
+            if (processedMessageIds.current.size > 100) {
+              const firstKey = processedMessageIds.current.values().next().value;
+              processedMessageIds.current.delete(firstKey);
+            }
+          }
           onNewMessageRef.current?.(data.message);
         }
       });
 
       // Listen for typing indicators
       socketService.on('healthchat:user-typing', (data) => {
+        console.log('[HealthChatSocket Patient] Received user-typing event:', {
+          chatId: data.chatId,
+          userType: data.userType,
+          isTyping: data.isTyping,
+          expectedChatId: chatId,
+          match: String(data.chatId) === String(chatId) && data.userType === 'Medical'
+        });
         // Use String() coercion to handle potential type mismatch
         if (String(data.chatId) === String(chatId) && data.userType === 'Medical') {
+          console.log('[HealthChatSocket Patient] Updating typing indicator:', data.isTyping);
           onTypingRef.current?.(data.isTyping);
         }
       });
 
       // Listen for ticket approval
       socketService.on('healthchat:ticket-approved', (data) => {
+        console.log('[HealthChatSocket Patient] Received ticket-approved event:', {
+          receivedChatId: data.chat?.id,
+          expectedChatId: chatId,
+          status: data.chat?.status,
+          match: data.chat?.id === chatId || String(data.chat?.id) === String(chatId)
+        });
         if (data.chat?.id === chatId || String(data.chat?.id) === String(chatId)) {
+          console.log('[HealthChatSocket Patient] Calling onTicketApproved callback');
           onTicketApprovedRef.current?.(data.chat);
         }
       });
@@ -146,6 +182,7 @@ export function useHealthChatSocket({
         socketRef.current = null;
         setIsConnected(false);
       }
+      processedMessageIds.current.clear();
     };
   }, [chatId, shouldConnect]);
 

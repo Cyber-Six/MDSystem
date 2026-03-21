@@ -19,12 +19,13 @@ const ChatPanel = () => {
   } = useHealthChat();
 
   const messagesEndRef = useRef(null);
-  const isPatientTyping = typingUsers[selectedChatId]?.isTyping;
+  const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
+  const isPatientTyping = !isArchived && typingUsers[selectedChatId]?.isTyping;
   const isPending = selectedTicket?.status === 'Open';
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isPatientTyping]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  }, [messages, isPatientTyping, selectedChatId]);
 
   const formatTime = (dateStr) => {
     if (!dateStr) return '';

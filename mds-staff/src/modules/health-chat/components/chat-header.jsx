@@ -3,6 +3,7 @@ import { X, Check, Clock, User, ChevronDown, AlertCircle, Trash2 } from 'lucide-
 import { useHealthChat } from '../context/health-chat-context';
 import { formatPatientName, getPatientInitials } from '../health-chat-service';
 import TicketStatusBadge from './ticket-status-badge';
+import ConfirmModal from './confirm-modal';
 
 const ChatHeader = () => {
   const { selectedTicket, approveTicket, rejectTicket, closeTicket, deleteTicket } = useHealthChat();
@@ -10,6 +11,7 @@ const ChatHeader = () => {
   const [actionLoading, setActionLoading] = useState(null);
   const [showPatientInfo, setShowPatientInfo] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null, reason: '' });
 
   if (!selectedTicket) return null;
 
@@ -36,11 +38,10 @@ const ChatHeader = () => {
     }
   };
 
-  const handleReject = async () => {
-    const reason = window.prompt('Reason for rejection (optional):');
-    if (reason === null) return;
+  const handleReject = async (reason = null) => {
     try {
       setActionLoading('reject');
+      setConfirmModal({ isOpen: false, type: null, reason: '' });
       await rejectTicket(selectedTicket.id, reason || null);
     } catch (err) {
       setActionError(err.message || 'Failed to reject');
@@ -51,9 +52,9 @@ const ChatHeader = () => {
   };
 
   const handleClose = async () => {
-    if (!window.confirm('Close this conversation?')) return;
     try {
       setActionLoading('close');
+      setConfirmModal({ isOpen: false, type: null, reason: '' });
       await closeTicket(selectedTicket.id);
     } catch (err) {
       setActionError(err.message || 'Failed to close');
@@ -64,9 +65,9 @@ const ChatHeader = () => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this archived ticket? This action cannot be undone.')) return;
     try {
       setActionLoading('delete');
+      setConfirmModal({ isOpen: false, type: null, reason: '' });
       setActionError(null);
       await deleteTicket(selectedTicket.id);
     } catch (err) {
@@ -96,19 +97,13 @@ const ChatHeader = () => {
             {getPatientInitials(patient)}
           </div>
 
-          {/* Name + meta — tight two-line block */}
+          {/* Name + meta — two-line block */}
           <div className="min-w-0 flex flex-col justify-center gap-0.5">
-            {/* Row 1: name + tags */}
+            {/* Row 1: name + status + info button */}
             <div className="flex items-center gap-1.5 flex-wrap leading-none">
               <span className="font-semibold text-sm leading-none text-secondary-900 dark:text-white font-heading">
                 {formatPatientName(patient)}
               </span>
-
-              {patient?.identifier && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded leading-none bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
-                  {getIdLabel()}: {patient.identifier}
-                </span>
-              )}
 
               <TicketStatusBadge status={selectedTicket.status} />
 
@@ -123,10 +118,12 @@ const ChatHeader = () => {
               </button>
             </div>
 
-            {/* Row 2: purpose */}
-            <p className="text-[11px] truncate max-w-sm leading-none text-neutral-400 dark:text-neutral-500">
-              {selectedTicket.purpose}
-            </p>
+            {/* Row 2: Student ID or Employee No. */}
+            {patient?.identifier && (
+              <span className="text-xs font-mono leading-none text-neutral-500 dark:text-neutral-400">
+                {getIdLabel()}: {patient.identifier}
+              </span>
+            )}
           </div>
         </div>
 
@@ -146,7 +143,7 @@ const ChatHeader = () => {
                 Approve
               </button>
               <button
-                onClick={handleReject}
+                onClick={() => setConfirmModal({ isOpen: true, type: 'reject', reason: '' })}
                 disabled={!!actionLoading}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                            transition-all duration-150 disabled:opacity-50
@@ -161,7 +158,7 @@ const ChatHeader = () => {
 
           {isActive && (
             <button
-              onClick={handleClose}
+              onClick={() => setConfirmModal({ isOpen: true, type: 'close', reason: '' })}
               disabled={!!actionLoading}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                          transition-all duration-150 disabled:opacity-50
@@ -169,7 +166,7 @@ const ChatHeader = () => {
                          hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
             >
               <X className="w-3.5 h-3.5" />
-              Close
+              Close Ticket
             </button>
           )}
 
@@ -180,7 +177,7 @@ const ChatHeader = () => {
                 Ticket ended
               </span>
               <button
-                onClick={handleDelete}
+                onClick={() => setConfirmModal({ isOpen: true, type: 'delete', reason: '' })}
                 disabled={!!actionLoading}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                            transition-all duration-150 disabled:opacity-50
@@ -224,9 +221,8 @@ const ChatHeader = () => {
               {[
                 { label: 'Full Name',    value: formatPatientName(patient) },
                 patient?.identifier && { label: getIdLabel(), value: patient.identifier, mono: true },
-                patient?.branch && { label: 'Type',   value: patient.branch },
+                patient?.branch && { label: 'Branch',   value: patient.branch },
                 patient?.email  && { label: 'Email',  value: patient.email },
-                { label: 'User ID', value: patient?.id || 'N/A', mono: true },
               ].filter(Boolean).map((row) => (
                 <div key={row.label}>
                   <p className="text-[10px] font-semibold uppercase tracking-wider mb-1 text-neutral-400 dark:text-neutral-500">
@@ -254,6 +250,88 @@ const ChatHeader = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modals */}
+      {confirmModal.type === 'reject' && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50">
+          <div
+            className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between p-6 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-red-100 dark:bg-red-900/30">
+                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-secondary-900 dark:text-white">
+                    Reject Ticket
+                  </h2>
+                </div>
+              </div>
+              <button
+                onClick={() => setConfirmModal({ isOpen: false, type: null, reason: '' })}
+                className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-neutral-500 dark:text-neutral-400"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-neutral-600 dark:text-neutral-300 mb-4">
+                Are you sure you want to reject this ticket? You can optionally provide a reason below.
+              </p>
+              <textarea
+                value={confirmModal.reason}
+                onChange={(e) => setConfirmModal({ ...confirmModal, reason: e.target.value })}
+                placeholder="Reason for rejection (optional)"
+                className="w-full px-3 py-2 rounded-lg text-sm resize-none
+                           bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700
+                           text-secondary-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500
+                           focus:outline-none focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20"
+                rows={3}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-neutral-200 dark:border-neutral-700">
+              <button
+                onClick={() => setConfirmModal({ isOpen: false, type: null, reason: '' })}
+                className="px-4 py-2 text-sm font-medium rounded-lg transition-colors
+                           text-neutral-700 dark:text-neutral-300
+                           border border-neutral-300 dark:border-neutral-600
+                           hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleReject(confirmModal.reason)}
+                className="px-4 py-2 text-sm font-semibold rounded-lg transition-colors
+                           bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white"
+              >
+                Reject Ticket
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen && confirmModal.type === 'close'}
+        onClose={() => setConfirmModal({ isOpen: false, type: null, reason: '' })}
+        onConfirm={handleClose}
+        title="Close Ticket"
+        message="Are you sure you want to close this ticket? The patient will no longer be able to send messages."
+        confirmText="Close Ticket"
+        variant="warning"
+      />
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen && confirmModal.type === 'delete'}
+        onClose={() => setConfirmModal({ isOpen: false, type: null, reason: '' })}
+        onConfirm={handleDelete}
+        title="Delete Archived Ticket"
+        message="Are you sure you want to permanently delete this archived ticket? This action cannot be undone and will remove all messages."
+        confirmText="Delete Permanently"
+        variant="danger"
+      />
     </>
   );
 };
