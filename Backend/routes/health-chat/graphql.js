@@ -64,6 +64,7 @@ function initMedicalHealthChatGraphQL(app) {
   app.use(
     "/healthchat/medical",
     jwtProtect("medical"),
+    checkCredentialsStatus,
     graphqlHTTP((req) => {
       if (!req.body || !req.body.query) {
         throw new Error("Empty GraphQL request");
@@ -72,7 +73,7 @@ function initMedicalHealthChatGraphQL(app) {
         schema: medicalSchema,
         graphiql: true,
         context: {
-          user: req.user || null,
+          user: req.user,
           res: req.res,
         },
       };

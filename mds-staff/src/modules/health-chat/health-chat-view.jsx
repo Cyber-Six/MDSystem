@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useContext } from 'react';
 import { RefreshCw, Stethoscope } from 'lucide-react';
 import { HealthChatProvider, useHealthChat } from './context/health-chat-context';
 import { useHealthChatSocket } from './hooks/use-health-chat-socket';
 import FilterTabs from './components/filter-tabs';
 import PatientList from './components/patient-list';
 import ChatPanel from './components/chat-panel';
+import { SidebarContext } from '../../components/layout/StaffLayout';
 
 const HealthChatContent = () => {
   const { isConnected } = useHealthChatSocket();
@@ -115,24 +116,32 @@ const HealthChatContent = () => {
   );
 };
 
-const HealthChatView = () => (
-  <HealthChatProvider>
-    <div
-      style={{
-        position: 'fixed',
-        top: '3.5rem',     /* matches StaffLayout top navbar height — adjust if needed */
-        left: '3.75rem',   /* matches StaffLayout collapsed sidebar width */
-        right: 0,
-        bottom: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        zIndex: 10,
-      }}
-    >
-      <HealthChatContent />
-    </div>
-  </HealthChatProvider>
-);
+const HealthChatView = () => {
+  const { sidebarExpanded } = useContext(SidebarContext);
+
+  // Calculate left position based on sidebar state
+  const leftPosition = sidebarExpanded ? '14rem' : '3.75rem'; // 224px when expanded, 60px when collapsed
+
+  return (
+    <HealthChatProvider>
+      <div
+        style={{
+          position: 'fixed',
+          top: '3.5rem',     /* matches StaffLayout top navbar height — adjust if needed */
+          left: leftPosition,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          zIndex: 10,
+          transition: 'left 300ms ease-in-out',
+        }}
+      >
+        <HealthChatContent />
+      </div>
+    </HealthChatProvider>
+  );
+};
 
 export default HealthChatView;
