@@ -20,6 +20,7 @@ const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate
 
   const casalStock = batches.filter((b) => b.location === 'Casal').reduce((s, b) => s + getStock(b), 0);
   const arlegui = batches.filter((b) => b.location === 'Arlegui').reduce((s, b) => s + getStock(b), 0);
+  const quezonCity = batches.filter((b) => b.location === 'QuezonCity').reduce((s, b) => s + getStock(b), 0);
 
   // Calculate stock level percentage (assuming reasonable max inventory)
   const maxInventory = 10000;
@@ -117,6 +118,7 @@ const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate
             <div className="flex gap-2 text-[9px]">
               <span className="text-secondary-400 dark:text-neutral-500">Casal: {casalStock}</span>
               <span className="text-secondary-400 dark:text-neutral-500">Arlegui: {arlegui}</span>
+              <span className="text-secondary-400 dark:text-neutral-500">QC: {quezonCity}</span>
             </div>
           </div>
         </div>

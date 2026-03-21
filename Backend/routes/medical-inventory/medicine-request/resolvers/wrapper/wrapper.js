@@ -331,5 +331,3 @@ const Mutation = {
 };
 
 module.exports = { Query, Mutation };
-
-module.exports = { Query, Mutation };

@@ -54,20 +54,12 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
   const filtered = useMemo(() => {
     return (requests || []).filter((r) => {
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
-      // For patient requests, use medicineId to find batch; for staff requests, use batchId
-      const medicineId = r.items?.[0]?.medicineId;
-      const batchId = r.items?.[0]?.batchId;
-      
-      let reqLocation = 'Casal';
-      if (batchId) {
-        // Staff request - look up batch directly
-        reqLocation = batchMap[batchId]?.location || 'Casal';
-      } else if (medicineId) {
-        // Patient request - find batch that contains this medicine, use its location
-        const batch = Object.values(batchMap).find(b => b.medicalItemId === medicineId);
-        reqLocation = batch?.location || 'Casal';
-      }
-      
+
+      // Use the request's location field directly from the backend
+      // The MedicineRequestLog table stores location when the request is created
+      const reqLocation = r.location || null;
+
+      // Filter by selected location tab
       if (reqLocation !== filterLocation) return false;
       
       // Search
@@ -91,7 +83,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
       }
       return true;
     });
-  }, [requests, search, filterLocation, filterStatus, itemMap, batchMap]);
+  }, [requests, search, filterLocation, filterStatus, itemMap]);
 
   const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
   const locations = ['Casal', 'Arlegui', 'QuezonCity'];
