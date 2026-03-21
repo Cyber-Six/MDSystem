@@ -510,13 +510,13 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       </section>
 
       <section className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-        <div className="px-2 py-2 border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto">
-          <div className="flex gap-1 min-w-max">
+        <div className="px-2 py-2.5 border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto">
+          <div className="flex gap-1.5 min-w-max">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeTab === tab.id
                     ? 'bg-primary-500 text-white'
                     : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
