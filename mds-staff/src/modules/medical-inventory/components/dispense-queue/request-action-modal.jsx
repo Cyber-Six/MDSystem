@@ -24,9 +24,34 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel }) => {
     }
   };
 
+  // Helper to format date
+  const formatDate = (dateValue) => {
+    if (!dateValue) return '—';
+    try {
+      let date;
+      if (typeof dateValue === 'number') {
+        date = new Date(dateValue * 1000);
+      } else if (typeof dateValue === 'string') {
+        const trimmed = dateValue.trim();
+        if (/^\d+$/.test(trimmed)) {
+          const numeric = Number(trimmed);
+          date = new Date(trimmed.length >= 13 ? numeric : numeric * 1000);
+        } else {
+          date = new Date(trimmed);
+        }
+      } else {
+        date = dateValue;
+      }
+      if (isNaN(date.getTime())) return '—';
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch (err) {
+      return '—';
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl max-w-lg w-full p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
           {isApprove ? (
@@ -53,13 +78,44 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel }) => {
         {/* Content */}
         <div className="space-y-4 mb-5">
           {/* Request Info */}
-          <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-3">
-            <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Request</p>
-            <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">#{request.id}</p>
-            {request.items?.[0] && (
-              <p className="text-[10px] text-secondary-600 dark:text-neutral-400 mt-1">
-                {request.items[0].quantity} unit(s) requested
-              </p>
+          <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-3 space-y-3">
+            {/* Request ID */}
+            <div>
+              <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Request ID</p>
+              <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300">#{request.id}</p>
+            </div>
+
+            {/* Date */}
+            <div>
+              <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Date Created</p>
+              <p className="text-xs text-secondary-600 dark:text-neutral-400">{formatDate(request.created_at)}</p>
+            </div>
+
+            {/* Purpose */}
+            {request.purpose && (
+              <div>
+                <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Purpose</p>
+                <p className="text-xs text-secondary-600 dark:text-neutral-400 break-words whitespace-pre-wrap">{request.purpose}</p>
+              </div>
+            )}
+
+            {/* Medicines */}
+            {request.items?.length > 0 && (
+              <div>
+                <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">Medicines</p>
+                <div className="space-y-1.5">
+                  {request.items.map((item, idx) => (
+                    <div key={idx} className="flex items-start justify-between text-xs bg-white dark:bg-neutral-700/50 p-2 rounded border border-neutral-200 dark:border-neutral-600">
+                      <span className="text-secondary-600 dark:text-neutral-300 font-medium flex-1">
+                        {item.itemName || `Medicine #${item.medicineId || item.batchId}`}
+                      </span>
+                      <span className="text-secondary-500 dark:text-neutral-400 ml-2">
+                        {item.quantity} unit{item.quantity > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 

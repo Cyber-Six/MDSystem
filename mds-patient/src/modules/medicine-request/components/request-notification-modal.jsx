@@ -21,7 +21,7 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl max-w-lg w-full p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
           {isApproved ? (
@@ -64,9 +64,9 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
               <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Medicine</span>
               <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{itemName}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex flex-col gap-1">
               <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Purpose</span>
-              <span className="text-xs text-secondary-700 dark:text-neutral-300 text-right max-w-[160px]">{purpose}</span>
+              <span className="text-xs text-secondary-700 dark:text-neutral-300 break-words">{purpose}</span>
             </div>
           </div>
 
@@ -77,14 +77,14 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
                 ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-900/50'
                 : 'bg-error-50 dark:bg-error-900/20 border-error-200 dark:border-error-900/50'
             }`}>
-              <p className={`text-[10px] uppercase tracking-wider font-medium mb-1 ${
+              <p className={`text-[10px] uppercase tracking-wider font-medium mb-2 ${
                 isApproved
                   ? 'text-primary-600 dark:text-primary-400'
                   : 'text-error-600 dark:text-error-400'
               }`}>
                 {isApproved ? 'Staff Notes' : 'Reason'}
               </p>
-              <p className={`text-xs ${
+              <p className={`text-xs break-words whitespace-pre-wrap ${
                 isApproved
                   ? 'text-primary-700 dark:text-primary-300'
                   : 'text-error-700 dark:text-error-300'

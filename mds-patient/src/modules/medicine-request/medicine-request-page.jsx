@@ -52,6 +52,12 @@ const MedicineRequestPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
+  // Notes Modal state
+  const [selectedNotes, setSelectedNotes] = useState(null);
+  
+  // Purpose Modal state
+  const [selectedPurpose, setSelectedPurpose] = useState(null);
+  
   // Track selected medicines by item_code
   const [selectedMedicinesByCode, setSelectedMedicinesByCode] = useState({});
 
@@ -430,12 +436,60 @@ const MedicineRequestPage = () => {
     return `${medicine.item_name}`;
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
+  const formatDate = (dateValue) => {
+    // Handle empty/null/undefined
+    if (!dateValue && dateValue !== 0) return 'N/A';
+    
     try {
-      return new Date(timestamp * 1000).toLocaleDateString();
-    } catch {
-      return timestamp;
+      let date;
+      
+      // Handle string format (ISO 8601 or other formats)
+      if (typeof dateValue === 'string') {
+        // Try parsing directly
+        date = new Date(dateValue);
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+        
+        // If it looks like a timestamp number in string form
+        const asNumber = parseInt(dateValue, 10);
+        if (!isNaN(asNumber)) {
+          if (asNumber > 10000000000) {
+            date = new Date(asNumber);
+          } else {
+            date = new Date(asNumber * 1000);
+          }
+          if (!isNaN(date.getTime())) {
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+          }
+        }
+      } 
+      // Handle numeric timestamps
+      else if (typeof dateValue === 'number') {
+        // If the number is very large (> 10 billion), it's already in milliseconds
+        if (dateValue > 10000000000) {
+          date = new Date(dateValue);
+        } else {
+          // Otherwise, treat as seconds and multiply by 1000
+          date = new Date(dateValue * 1000);
+        }
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+      } 
+      // Handle Date objects
+      else if (dateValue instanceof Date) {
+        if (!isNaN(dateValue.getTime())) {
+          return dateValue.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+      }
+      
+      // If nothing worked
+      console.warn('Could not parse date:', dateValue, 'Type:', typeof dateValue);
+      return 'N/A';
+    } catch (err) {
+      console.error('Date formatting error:', err, dateValue);
+      return 'N/A';
     }
   };
 
@@ -538,12 +592,13 @@ const MedicineRequestPage = () => {
               {/* Purpose */}
               <div>
                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  Medical Condition / Purpose *
+                  Medical Condition / Purpose * <span className="text-xs text-neutral-500">({formData.purpose.length}/250)</span>
                 </label>
                 <textarea
                   required
+                  maxLength={250}
                   value={formData.purpose}
-                  onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, purpose: e.target.value.slice(0, 250) })}
                   rows="2"
                   placeholder="E.g., Headache, Fever, Cold symptoms, etc."
                   className="w-full px-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg 
@@ -752,16 +807,42 @@ const MedicineRequestPage = () => {
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Date</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Purpose</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Items</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Notes</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {requests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((request) => (
                     <tr key={request.id} className="border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
-                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{formatDate(request.created_at)}</td>
-                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{request.purpose}</td>
+                      <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">{formatDate(request.created_at ?? request.createdAt ?? request.requestDate)}</td>
+                      <td className="py-3 px-4">
+                        {request.purpose && request.purpose.length > 30 ? (
+                          <button
+                            onClick={() => setSelectedPurpose(request.purpose)}
+                            className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[200px] hover:underline"
+                            title={request.purpose}
+                          >
+                            {request.purpose.substring(0, 30)}...
+                          </button>
+                        ) : (
+                          <span className="text-sm text-neutral-900 dark:text-white">{request.purpose || '—'}</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">
                         {request.items?.length || 0} item(s)
+                      </td>
+                      <td className="py-3 px-4">
+                        {request.notes && (request.status === 'Approved' || request.status === 'Rejected') ? (
+                          <button
+                            onClick={() => setSelectedNotes(request.notes)}
+                            className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[150px] hover:underline"
+                            title={request.notes}
+                          >
+                            {request.notes.length > 30 ? `${request.notes.substring(0, 30)}...` : request.notes}
+                          </button>
+                        ) : (
+                          <span className="text-sm text-neutral-400 dark:text-neutral-600">—</span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
@@ -816,6 +897,66 @@ const MedicineRequestPage = () => {
           </div>
         )}
       </div>
+
+      {/* Staff Notes Modal */}
+      {selectedNotes && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">Staff Notes</h3>
+              <button
+                onClick={() => setSelectedNotes(null)}
+                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-4 mb-4 max-h-[300px] overflow-y-auto">
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
+                {selectedNotes}
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedNotes(null)}
+              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Purpose Modal */}
+      {selectedPurpose && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">Medical Condition / Purpose</h3>
+              <button
+                onClick={() => setSelectedPurpose(null)}
+                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-4 mb-4 max-h-[300px] overflow-y-auto">
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
+                {selectedPurpose}
+              </p>
+            </div>
+            <button
+              onClick={() => setSelectedPurpose(null)}
+              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
         </>
       )}
     </div>
