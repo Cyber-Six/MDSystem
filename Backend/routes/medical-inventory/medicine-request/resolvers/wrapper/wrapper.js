@@ -11,7 +11,6 @@ const getItemsWithNames = async (requestId) => {
       mre."medicineId",
       mre."requestId",
       mre.quantity,
-      mre."addedByStaff",
       COALESCE(mi.item_name, 'Unknown Medicine') AS "itemName"
     FROM "MedicineRequestEntity" mre
     LEFT JOIN "MedicalItems" mi ON mi.id = mre."medicineId"
@@ -24,7 +23,7 @@ const getItemsWithNames = async (requestId) => {
 const ITEMS_AGG = `
   COALESCE(
     json_agg(
-      json_build_object('id', mre.id, 'batchId', mre."medicineId", 'medicineId', mre."medicineId", 'requestId', mre."requestId", 'quantity', mre.quantity, 'addedByStaff', mre."addedByStaff")
+      json_build_object('id', mre.id, 'batchId', mre."medicineId", 'medicineId', mre."medicineId", 'requestId', mre."requestId", 'quantity', mre.quantity)
     ) FILTER (WHERE mre.id IS NOT NULL),
     '[]'
   ) AS items`.trim();
@@ -294,11 +293,11 @@ const Mutation = {
     try {
       await client.query('BEGIN');
 
-      // Insert new medicine request entities with addedByStaff = true
+      // Insert new medicine request entities
       for (const item of items) {
         const insertSql = `
-          INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId", quantity, "addedByStaff")
-          VALUES ($1, $2, $3, true)
+          INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId", quantity)
+          VALUES ($1, $2, $3)
           RETURNING id
         `;
         await client.query(insertSql, [
