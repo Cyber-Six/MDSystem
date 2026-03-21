@@ -38,11 +38,12 @@ async function getParticipantInfo(userId) {
   const result = await db.query(
     `SELECT
       uc.id,
-      COALESCE(up.first_name, 'Unknown') AS "firstName",
-      COALESCE(up.last_name, 'User') AS "lastName",
+      up.first_name,
+      up.last_name,
       uc.email,
       up.identifier,
-      COALESCE(p."profile", up.branch) AS "branch"
+      p.profile,
+      up.branch
      FROM "UserCredentials" uc
      LEFT JOIN "UsersPersonal" up ON up.id = uc.id
      LEFT JOIN "Patients" p ON p.id = uc.id
@@ -50,7 +51,17 @@ async function getParticipantInfo(userId) {
     [userId]
   );
 
-  return result.rows[0] || null;
+  if (result.rowCount === 0) return null;
+
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    firstName: row.first_name || 'Unknown',
+    lastName: row.last_name || 'User',
+    email: row.email,
+    identifier: row.identifier,
+    branch: row.profile || row.branch || null
+  };
 }
 
 /**
