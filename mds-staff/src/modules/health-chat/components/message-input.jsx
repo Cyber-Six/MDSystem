@@ -8,7 +8,7 @@ const ACCEPTED_TYPES = 'image/jpeg,image/png,application/pdf,video/mp4,video/qui
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const MessageInput = () => {
-  const { selectedChatId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
+  const { selectedChatId, activeTicketId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
   const { emitTyping } = useHealthChatSocket();
 
   const [inputValue, setInputValue]   = useState('');
@@ -22,7 +22,7 @@ const MessageInput = () => {
   const isPending = selectedTicket?.status === 'Open';
   const isActive  = selectedTicket?.status === 'Ongoing';
   const isClosed  = ['Closed', 'Expired'].includes(selectedTicket?.status);
-  const canSend   = isActive && (inputValue.trim() || attachedFile) && !isSending;
+  const canSend   = isActive && (inputValue.trim() || attachedFile) && !isSending && activeTicketId;
 
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
@@ -46,7 +46,7 @@ const MessageInput = () => {
 
   const handleInputChange = (e) => {
     setInputValue(e.target.value);
-    if (e.target.value.trim() && selectedChatId) emitTyping(selectedChatId, true);
+    if (e.target.value.trim() && activeTicketId) emitTyping(activeTicketId, true);
   };
 
   const handleKeyDown = (e) => {
@@ -54,18 +54,18 @@ const MessageInput = () => {
   };
 
   const handleSend = async () => {
-    if (!canSend || !selectedChatId) return;
+    if (!canSend || !activeTicketId) return;
     try {
       setIsSending(true);
-      emitTyping(selectedChatId, false);
+      emitTyping(activeTicketId, false);
       if (attachedFile) {
         console.log('[MessageInput] Sending file message');
-        await sendMessage(selectedChatId, null, attachedFile.fileId, 'file');
+        await sendMessage(activeTicketId, null, attachedFile.fileId, 'file');
         setAttachedFile(null);
       }
       if (inputValue.trim()) {
         console.log('[MessageInput] Sending text message');
-        await sendMessage(selectedChatId, inputValue.trim(), null, 'text');
+        await sendMessage(activeTicketId, inputValue.trim(), null, 'text');
         setInputValue('');
       }
     } catch (err) {
@@ -95,17 +95,17 @@ const MessageInput = () => {
                  : File;
 
   const handleApprove = async () => {
-    if (actionLoading) return;
-    try { setActionLoading('approve'); await approveTicket(selectedChatId); }
+    if (actionLoading || !activeTicketId) return;
+    try { setActionLoading('approve'); await approveTicket(activeTicketId); }
     catch { alert('Failed to approve.'); }
     finally { setActionLoading(null); }
   };
 
   const handleReject = async () => {
-    if (actionLoading) return;
+    if (actionLoading || !activeTicketId) return;
     const reason = window.prompt('Reason for rejection (optional):');
     if (reason === null) return;
-    try { setActionLoading('reject'); await rejectTicket(selectedChatId, reason || null); }
+    try { setActionLoading('reject'); await rejectTicket(activeTicketId, reason || null); }
     catch { alert('Failed to reject.'); }
     finally { setActionLoading(null); }
   };
