@@ -4,6 +4,8 @@ import {
   getActiveTickets,
   getArchivedTickets,
   getMessages,
+  getPatientConversations,
+  getPatientMessages,
   approveTicket as approveTicketService,
   rejectTicket as rejectTicketService,
   sendMessage as sendMessageService,
@@ -16,20 +18,39 @@ const HealthChatContext = createContext(null);
 /**
  * Health Chat Provider
  * Manages state for the staff health chat interface
+ * Uses patient-grouped conversations (1 patient = 1 row in the list)
  */
 export function HealthChatProvider({ children }) {
-  // Tickets state
+  // Conversations state (patient-grouped)
+  const [conversations, setConversations] = useState([]);
+  const [conversationsTotal, setConversationsTotal] = useState(0);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
+
+  // Legacy tickets state (for backward compatibility)
   const [tickets, setTickets] = useState([]);
   const [ticketsTotal, setTicketsTotal] = useState(0);
   const [ticketsLoading, setTicketsLoading] = useState(false);
 
-  // Selected chat state
-  const [selectedChatId, setSelectedChatId] = useState(null);
+  // Selected patient/chat state
+  const [selectedPatientId, setSelectedPatientId] = useState(null);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [selectedChatId, setSelectedChatId] = useState(null); // Legacy for compatibility
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [activeTicketId, setActiveTicketId] = useState(null); // Actual ticket ID for sending messages
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
 
-  // Typing indicators (chatId -> { userId, isTyping })
+  // Read timestamps tracking (patientId -> timestamp when staff last viewed)
+  const [readTimestamps, setReadTimestamps] = useState(() => {
+    try {
+      const saved = localStorage.getItem('health-chat-read-timestamps');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Typing indicators (patientId -> { userId, isTyping })
   const [typingUsers, setTypingUsers] = useState({});
 
   // Filter state
@@ -51,15 +72,15 @@ export function HealthChatProvider({ children }) {
   const [socketError, setSocketError] = useState(false);
 
   /**
-   * Refresh messages for current chat (manual refresh via HTTP)
+   * Refresh messages for current patient (manual refresh via HTTP)
    */
   const refreshMessages = useCallback(async () => {
-    if (!selectedChatId) return;
+    if (!selectedPatientId) return;
 
     try {
       setMessagesLoading(true);
       setError(null);
-      const fetchedMessages = await getMessages(selectedChatId);
+      const fetchedMessages = await getPatientMessages(Number(selectedPatientId));
       setMessages(fetchedMessages || []);
     } catch (err) {
       console.error('[HealthChatContext] Failed to refresh messages:', err);
@@ -67,7 +88,7 @@ export function HealthChatProvider({ children }) {
     } finally {
       setMessagesLoading(false);
     }
-  }, [selectedChatId]);
+  }, [selectedPatientId]);
 
   /**
    * Load tickets based on current filter
@@ -102,59 +123,99 @@ export function HealthChatProvider({ children }) {
   }, [filter]);
 
   /**
-   * Load tickets from multiple selected filters and merge results
+   * Load patient conversations from multiple selected filters
+   * Uses getPatientConversations to group by patient (1 patient = 1 row)
    */
   const refreshMultipleFilters = useCallback(async (filters) => {
     if (!filters || filters.length === 0) {
-      setTickets([]);
+      setConversations([]);
+      setConversationsTotal(0);
+      setTickets([]); // Legacy
       setTicketsTotal(0);
       return;
     }
 
     try {
+      setConversationsLoading(true);
       setTicketsLoading(true);
       setError(null);
 
-      const allTickets = [];
-      let totalCount = 0;
+      // Map filter names to status values for the backend
+      const statusMap = {
+        'active': ['Ongoing'],
+        'pending': ['Open'],
+        'archive': ['Closed', 'Expired']
+      };
 
-      // Fetch tickets from each selected filter
-      for (const filterType of filters) {
-        let result;
-        switch (filterType) {
-          case 'pending':
-            result = await getPendingTickets(0, 100);
-            break;
-          case 'archive':
-            result = await getArchivedTickets(0, 100);
-            break;
-          case 'active':
-            result = await getActiveTickets(0, 100);
-            break;
-          default:
-            continue;
-        }
+      // Collect all statuses from selected filters
+      const allStatuses = filters.flatMap(f => statusMap[f] || []);
 
-        if (result?.chats) {
-          allTickets.push(...result.chats);
-        }
-        totalCount += result?.total || 0;
+      // Fetch patient conversations with combined statuses
+      const result = await getPatientConversations(allStatuses, 0, 100);
+
+      if (result?.conversations) {
+        // Apply local read timestamps to compute effective unread count
+        const conversationsWithReadState = result.conversations.map(conv => {
+          const readTimestamp = readTimestamps[conv.patientId];
+          let effectiveUnreadCount = conv.unreadCount || 0;
+
+          // If we have a read timestamp and lastMessageAt is before it, no unread
+          if (readTimestamp && conv.lastMessageAt) {
+            const readTime = new Date(readTimestamp);
+            const lastMsgTime = new Date(conv.lastMessageAt);
+            if (lastMsgTime <= readTime) {
+              effectiveUnreadCount = 0;
+            }
+          }
+
+          return {
+            ...conv,
+            unreadCount: effectiveUnreadCount
+          };
+        });
+
+        // Sort by lastMessageAt DESC (newest first)
+        conversationsWithReadState.sort((a, b) => {
+          const aTime = new Date(a.lastMessageAt || a.latestTicket?.session_start || 0);
+          const bTime = new Date(b.lastMessageAt || b.latestTicket?.session_start || 0);
+          return bTime - aTime;
+        });
+
+        setConversations(conversationsWithReadState);
+        setConversationsTotal(result.total || 0);
+
+        // Also populate legacy tickets array for backward compatibility
+        // Transform conversations to ticket-like objects
+        const ticketLikeItems = conversationsWithReadState.map(conv => ({
+          id: conv.patientId, // Use patientId as the ID for selection
+          patientId: conv.patientId,
+          patient: conv.patient,
+          purpose: conv.latestTicket?.purpose,
+          status: conv.latestTicket?.status,
+          session_start: conv.latestTicket?.session_start,
+          session_end: conv.latestTicket?.session_end,
+          archived_at: conv.latestTicket?.archived_at,
+          closedBy: conv.latestTicket?.closedBy,
+          lastMessage: conv.lastMessage,
+          lastMessageAt: conv.lastMessageAt,
+          unreadCount: conv.unreadCount,
+          activeTicketCount: conv.activeTicketCount,
+          totalTicketCount: conv.totalTicketCount,
+          tickets: conv.tickets, // Array of all tickets for this patient
+          _isConversation: true // Flag to identify this is a patient conversation
+        }));
+
+        setTickets(ticketLikeItems);
+        setTicketsTotal(result.total || 0);
       }
-
-      // Remove duplicates based on ID (in case of any overlap)
-      const uniqueTickets = Array.from(
-        new Map(allTickets.map(ticket => [ticket.id, ticket])).values()
-      );
-
-      setTickets(uniqueTickets);
-      setTicketsTotal(totalCount);
     } catch (err) {
-      console.error('[HealthChatContext] Failed to load tickets:', err);
-      setError(err.message || 'Failed to load tickets');
+      console.error('[HealthChatContext] Failed to load patient conversations:', err);
+      setError(err.message || 'Failed to load conversations');
     } finally {
+      setConversationsLoading(false);
       setTicketsLoading(false);
     }
-  }, []);
+  }, [readTimestamps]);
 
   /**
    * Update selected filters and persist to localStorage
@@ -170,62 +231,147 @@ export function HealthChatProvider({ children }) {
     refreshMultipleFilters(selectedFilters);
   }, [selectedFilters, refreshMultipleFilters]);
 
-  // Keep selectedTicket in sync with tickets list (e.g., after refresh)
-  // This ensures the ticket data stays fresh when the list updates
+  // Keep selectedTicket/selectedConversation in sync with data (e.g., after refresh)
   useEffect(() => {
-    if (selectedChatId && tickets.length > 0) {
-      const updatedTicket = tickets.find(t => String(t.id) === String(selectedChatId));
+    if (selectedPatientId && tickets.length > 0) {
+      const updatedTicket = tickets.find(t =>
+        String(t.patientId) === String(selectedPatientId) ||
+        String(t.id) === String(selectedPatientId)
+      );
       if (updatedTicket) {
-        // Update selectedTicket with fresh data from list
         setSelectedTicket(updatedTicket);
+
+        // Also update activeTicketId
+        if (updatedTicket.tickets && updatedTicket.tickets.length > 0) {
+          const ongoingTicket = updatedTicket.tickets.find(t => t.status === 'Ongoing');
+          const pendingTicket = updatedTicket.tickets.find(t => t.status === 'Open');
+          const sortedTickets = [...updatedTicket.tickets].sort((a, b) => {
+            const aTime = new Date(a.session_start || 0);
+            const bTime = new Date(b.session_start || 0);
+            return bTime - aTime;
+          });
+          setActiveTicketId(ongoingTicket?.id || pendingTicket?.id || sortedTickets[0]?.id);
+        }
       }
-      // Note: If ticket is not in list (e.g., wrong filter), we keep the existing selectedTicket
-      // This allows viewing a chat even when it's not in the current filter
     }
-  }, [tickets, selectedChatId]);
+    if (selectedPatientId && conversations.length > 0) {
+      const updatedConv = conversations.find(c =>
+        String(c.patientId) === String(selectedPatientId)
+      );
+      if (updatedConv) {
+        setSelectedConversation(updatedConv);
+      }
+    }
+  }, [tickets, conversations, selectedPatientId]);
 
   /**
-   * Select a chat and load its messages
+   * Mark a patient conversation as read
    */
-  const selectChat = useCallback(async (chatId) => {
-    if (chatId === selectedChatId) return;
+  const markConversationAsRead = useCallback((patientId) => {
+    const now = new Date().toISOString();
+    setReadTimestamps(prev => {
+      const updated = { ...prev, [patientId]: now };
+      localStorage.setItem('health-chat-read-timestamps', JSON.stringify(updated));
+      return updated;
+    });
 
-    setSelectedChatId(chatId);
+    // Also update the unreadCount in conversations and tickets
+    setConversations(prev => prev.map(conv =>
+      conv.patientId === patientId ? { ...conv, unreadCount: 0 } : conv
+    ));
+    setTickets(prev => prev.map(t =>
+      t.patientId === patientId ? { ...t, unreadCount: 0 } : t
+    ));
+  }, []);
+
+  /**
+   * Select a patient conversation and load all their messages
+   */
+  const selectChat = useCallback(async (idOrPatientId) => {
+    // Handle both legacy chatId and new patientId
+    const item = tickets.find(t =>
+      String(t.id) === String(idOrPatientId) ||
+      String(t.patientId) === String(idOrPatientId)
+    );
+
+    const patientId = item?.patientId || idOrPatientId;
+
+    if (patientId === selectedPatientId) return;
+
+    setSelectedPatientId(patientId);
+    setSelectedChatId(patientId); // Legacy compatibility
     setMessages([]);
 
-    if (!chatId) {
+    if (!patientId) {
+      setSelectedConversation(null);
       setSelectedTicket(null);
+      setActiveTicketId(null);
       return;
     }
 
-    // Find ticket in current list
-    const ticket = tickets.find(t => String(t.id) === String(chatId));
-    setSelectedTicket(ticket || null);
+    // Find conversation in current list
+    const conversation = conversations.find(c => String(c.patientId) === String(patientId));
+    setSelectedConversation(conversation || null);
+    setSelectedTicket(item || null);
 
-    // Load messages
+    // Determine the active ticket ID (for sending messages/actions)
+    // Priority: Ongoing > Open > latest closed ticket
+    let ticketId = null;
+    if (item?.tickets && item.tickets.length > 0) {
+      const ongoingTicket = item.tickets.find(t => t.status === 'Ongoing');
+      const pendingTicket = item.tickets.find(t => t.status === 'Open');
+      // Find the latest ticket overall
+      const sortedTickets = [...item.tickets].sort((a, b) => {
+        const aTime = new Date(a.session_start || 0);
+        const bTime = new Date(b.session_start || 0);
+        return bTime - aTime;
+      });
+      ticketId = ongoingTicket?.id || pendingTicket?.id || sortedTickets[0]?.id;
+    } else if (conversation?.latestTicket) {
+      ticketId = conversation.latestTicket.id;
+    }
+    setActiveTicketId(ticketId);
+
+    // Mark as read immediately when opening
+    markConversationAsRead(patientId);
+
+    // Load ALL messages for this patient (across all their tickets)
     try {
       setMessagesLoading(true);
-      const fetchedMessages = await getMessages(chatId);
+      const fetchedMessages = await getPatientMessages(Number(patientId));
       setMessages(fetchedMessages || []);
     } catch (err) {
-      console.error('[HealthChatContext] Failed to load messages:', err);
+      console.error('[HealthChatContext] Failed to load patient messages:', err);
       setError(err.message || 'Failed to load messages');
     } finally {
       setMessagesLoading(false);
     }
-  }, [selectedChatId, tickets]);
+  }, [selectedPatientId, tickets, conversations, markConversationAsRead]);
 
   /**
-   * Add a new message to the current chat
+   * Add a new message to the current conversation
+   * Works with both chatId and patientId for socket events
    */
-  const addMessage = useCallback((chatId, message) => {
+  const addMessage = useCallback((chatIdOrPatientId, message) => {
     console.log('[HealthChatContext] addMessage called:', {
-      chatId,
+      chatIdOrPatientId,
       messageId: message?.id,
-      selectedChatId,
-      match: String(chatId) === String(selectedChatId)
+      selectedPatientId,
+      selectedChatId
     });
-    if (String(chatId) === String(selectedChatId)) {
+
+    // Check if this message belongs to the currently selected patient
+    // Socket may send chatId, but we now organize by patientId
+    const ticket = tickets.find(t =>
+      String(t.id) === String(chatIdOrPatientId) ||
+      t.tickets?.some(sub => String(sub.id) === String(chatIdOrPatientId))
+    );
+
+    const isCurrentPatient = ticket &&
+      (String(ticket.patientId) === String(selectedPatientId) ||
+       String(chatIdOrPatientId) === String(selectedPatientId));
+
+    if (isCurrentPatient) {
       setMessages(prev => {
         // Check if message already exists in array
         if (prev.some(m => String(m.id) === String(message.id))) {
@@ -236,7 +382,7 @@ export function HealthChatProvider({ children }) {
         return [...prev, message];
       });
     }
-  }, [selectedChatId]);
+  }, [selectedPatientId, selectedChatId, tickets]);
 
   /**
    * Update a ticket's status
@@ -421,19 +567,28 @@ export function HealthChatProvider({ children }) {
     : tickets;
 
   const value = {
-    // Tickets
+    // Patient Conversations (new patient-grouped approach)
+    conversations,
+    conversationsTotal,
+    conversationsLoading,
+
+    // Tickets (legacy compatibility - now contains patient-grouped data)
     tickets: filteredTickets,
     ticketsTotal,
     ticketsLoading,
     refreshTickets,
 
-    // Selected chat
-    selectedChatId,
+    // Selected patient/chat
+    selectedPatientId,
+    selectedConversation,
+    selectedChatId, // Legacy
     selectedTicket,
+    activeTicketId, // Actual ticket ID for sending messages/actions
     messages,
     messagesLoading,
     selectChat,
     refreshMessages,
+    markConversationAsRead,
 
     // Typing
     typingUsers,

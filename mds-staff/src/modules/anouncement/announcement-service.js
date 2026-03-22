@@ -1,7 +1,7 @@
 /**
  * Announcement Service
  * Handles REST API calls to the backend announcement endpoints
- * Endpoint: GET /info/announcement
+ * Endpoint: /announcement
  */
 
 import { axiosRequest } from '../../packages-core-adapter';
@@ -12,7 +12,7 @@ import { axiosRequest } from '../../packages-core-adapter';
  */
 export const fetchActiveAnnouncements = async () => {
   try {
-    const response = await axiosRequest.get('/info/announcement');
+    const response = await axiosRequest.get('/announcement');
     return response.data.data || [];
   } catch (err) {
     console.error('Failed to fetch announcements:', err);
@@ -27,7 +27,7 @@ export const fetchActiveAnnouncements = async () => {
  */
 export const fetchAnnouncementById = async (id) => {
   try {
-    const response = await axiosRequest.get(`/info/announcement/${id}`);
+    const response = await axiosRequest.get(`/announcement/${id}`);
     return response.data.data;
   } catch (err) {
     console.error(`Failed to fetch announcement ${id}:`, err);
@@ -46,7 +46,7 @@ export const fetchAnnouncementById = async (id) => {
  */
 export const createAnnouncement = async (data) => {
   try {
-    const response = await axiosRequest.post('/info/announcement', data);
+    const response = await axiosRequest.post('/announcement', data);
     return response.data.data;
   } catch (err) {
     console.error('Failed to create announcement:', err);
@@ -62,7 +62,7 @@ export const createAnnouncement = async (data) => {
  */
 export const updateAnnouncement = async (id, data) => {
   try {
-    const response = await axiosRequest.put(`/info/announcement/${id}`, data);
+    const response = await axiosRequest.put(`/announcement/${id}`, data);
     return response.data.data;
   } catch (err) {
     console.error(`Failed to update announcement ${id}:`, err);
@@ -77,7 +77,7 @@ export const updateAnnouncement = async (id, data) => {
  */
 export const deleteAnnouncement = async (id) => {
   try {
-    const response = await axiosRequest.delete(`/info/announcement/${id}`);
+    const response = await axiosRequest.delete(`/announcement/${id}`);
     return response.data;
   } catch (err) {
     console.error(`Failed to delete announcement ${id}:`, err);
@@ -91,7 +91,7 @@ export const deleteAnnouncement = async (id) => {
  */
 export const fetchAllAnnouncementsAdmin = async () => {
   try {
-    const response = await axiosRequest.get('/info/announcement/admin/all');
+    const response = await axiosRequest.get('/announcement/admin/all');
     return response.data.data || [];
   } catch (err) {
     console.error('Failed to fetch all announcements:', err);

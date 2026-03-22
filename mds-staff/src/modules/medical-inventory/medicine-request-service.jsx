@@ -24,20 +24,11 @@ const sendGraphQL = async (query, variables = {}) => {
 
     return response.data.data;
   } catch (err) {
-    const errorDetails = {
+    console.error('❌ sendGraphQL error:', {
       message: err.message,
       response: err.response?.data,
       status: err.response?.status,
-    };
-    
-    // Log full error details for debugging
-    console.error('❌ sendGraphQL error:', errorDetails);
-    
-    // If HTTP error with response data, log it separately for visibility
-    if (err.response?.data) {
-      console.error('❌ Full error response:', JSON.stringify(err.response.data, null, 2));
-    }
-    
+    });
     throw err;
   }
 };
@@ -59,14 +50,13 @@ export const fetchPatientMedicineRequests = async (patientId, offset = 0, limit 
         purpose
         notes
         approved_by
-        created_at
         location
+        created_at
         items {
           id
           medicineId
           requestId
           quantity
-          itemName
         }
       }
     }`,
@@ -75,13 +65,6 @@ export const fetchPatientMedicineRequests = async (patientId, offset = 0, limit 
   return data.getMedicineRequests ?? [];
 };
 
-/**
- * Fetch all medicine requests (optionally filtered by status).
- * @param {'Pending'|'Approved'|'Rejected'|'Cancelled'} [status]
- * @param {number} [offset=0]
- * @param {number} [limit=50]
- * @returns {Promise<Array>} MedicineRequest[]
- */
 /**
  * Fetch all medicine requests (optionally filtered by status).
  * @param {'Pending'|'Approved'|'Rejected'|'Cancelled'} [status]
@@ -99,14 +82,13 @@ export const fetchAllMedicineRequests = async (status = null, offset = 0, limit 
         purpose
         notes
         approved_by
-        created_at
         location
+        created_at
         items {
           id
           medicineId
           requestId
           quantity
-          itemName
         }
       }
     }`,
@@ -130,14 +112,13 @@ export const fetchMedicineRequestById = async (requestId) => {
         purpose
         notes
         approved_by
-        created_at
         location
+        created_at
         items {
           id
           medicineId
           requestId
           quantity
-          itemName
         }
       }
     }`,
@@ -167,14 +148,11 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
         notes
         approved_by
         created_at
-        location
         items {
           id
           medicineId
           requestId
           quantity
-          itemName
-          addedByStaff
         }
       }
     }`,
@@ -182,39 +160,4 @@ export const setMedicineRequestStatus = async (requestId, status, notes = null) 
   );
   console.log('✅ setMedicineRequestStatus response:', data.setStatusMedicineRequest);
   return data.setStatusMedicineRequest;
-};
-
-/**
- * ✅ PART 2: Add extra medicine to an existing medicine request
- * @param {string|number} requestId
- * @param {Array<{medicineId: number, quantity: number}>} items
- * @returns {Promise<Object>} Updated MedicineRequest
- */
-export const addMedicineToRequest = async (requestId, items) => {
-  console.log('📤 addMedicineToRequest called:', { requestId, items });
-  const data = await sendGraphQL(
-    `mutation AddMedicineToRequest($requestId: ID!, $items: [MedicineRequestItemInput!]!) {
-      addMedicineToRequest(requestId: $requestId, items: $items) {
-        id
-        patientId
-        status
-        purpose
-        notes
-        approved_by
-        created_at
-        location
-        items {
-          id
-          medicineId
-          requestId
-          quantity
-          itemName
-          addedByStaff
-        }
-      }
-    }`,
-    { requestId, items },
-  );
-  console.log('✅ addMedicineToRequest response:', data.addMedicineToRequest);
-  return data.addMedicineToRequest;
 };

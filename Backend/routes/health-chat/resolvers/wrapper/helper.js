@@ -127,9 +127,10 @@ async function checkChatStatus(chatId) {
  * @returns {Promise<Object>} - Formatted chat with participant info
  */
 async function formatChatRecord(chat) {
-  const [patient, medical] = await Promise.all([
+  const [patient, medical, lastMessageData] = await Promise.all([
     getParticipantInfo(chat.patientId),
-    getParticipantInfo(chat.medicalId)
+    getParticipantInfo(chat.medicalId),
+    getLastMessageInfo(chat.id)
   ]);
 
   return {
@@ -137,7 +138,53 @@ async function formatChatRecord(chat) {
     patient,
     medical,
     closedBy: chat.closed_by_type || null,
-    expiresAt: calculateExpiryDate(chat.session_start)
+    expiresAt: calculateExpiryDate(chat.session_start),
+    lastMessage: lastMessageData?.lastMessage || null,
+    lastMessageAt: lastMessageData?.lastMessageAt || null,
+    unreadCount: lastMessageData?.unreadCount || 0
+  };
+}
+
+/**
+ * Get last message info for a chat
+ * @param {number} chatId - Chat ID
+ * @returns {Promise<{lastMessage: Object, lastMessageAt: Date, unreadCount: number}>}
+ */
+async function getLastMessageInfo(chatId) {
+  // Get last message
+  const lastMsgResult = await db.query(
+    `SELECT * FROM "HealthChatPrompt"
+     WHERE "consultationVirtualId" = $1
+     ORDER BY stamp DESC
+     LIMIT 1`,
+    [chatId]
+  );
+
+  if (lastMsgResult.rowCount === 0) {
+    return { lastMessage: null, lastMessageAt: null, unreadCount: 0 };
+  }
+
+  const lastMsg = lastMsgResult.rows[0];
+  const lastMessage = await formatMessage(lastMsg);
+
+  // Count unread messages (messages from patient that staff hasn't read)
+  // For simplicity, count messages from Patient after the last Medical message
+  const unreadResult = await db.query(
+    `SELECT COUNT(*)::int as count FROM "HealthChatPrompt"
+     WHERE "consultationVirtualId" = $1
+     AND "userType" = 'Patient'
+     AND stamp > COALESCE(
+       (SELECT MAX(stamp) FROM "HealthChatPrompt"
+        WHERE "consultationVirtualId" = $1 AND "userType" = 'Medical'),
+       '1970-01-01'
+     )`,
+    [chatId]
+  );
+
+  return {
+    lastMessage,
+    lastMessageAt: lastMsg.stamp,
+    unreadCount: unreadResult.rows[0]?.count || 0
   };
 }
 
@@ -230,5 +277,6 @@ module.exports = {
   formatChatRecord,
   formatMessage,
   hasActiveTicket,
-  autoExpireTickets
+  autoExpireTickets,
+  getLastMessageInfo
 };

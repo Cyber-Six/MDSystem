@@ -263,16 +263,23 @@ export const getScheduleAvailability = async (schedulerId, date) => {
 };
 
 /**
- * List custom dates for a scheduler.
+ * List custom dates for a scheduler (with slot info).
  * @param {string} schedulerId
  * @param {number} [offset=0]
  * @param {number} [limit=100]
- * @returns {Promise<string[]>}
+ * @returns {Promise<Array>} SlotCustomDateEntry[]
  */
 export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
   const data = await sendGraphQL(`
     query ListCustomDates($schedulerId: ID!, $offset: Int, $limit: Int) {
-      listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit)
+      listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit) {
+        id
+        slotScheduleId
+        scheduledDate
+        morningAllowed
+        afternoonAllowed
+        created_at
+      }
     }
   `, { schedulerId, offset, limit });
   return data.listCustomDates;
@@ -435,15 +442,22 @@ export const deleteRequirement = async (schedulerId, label) => {
 // ── Mutations — Custom Dates ─────────────────────────────────────────────────
 
 /**
- * Add custom open dates to a scheduler.
+ * Add custom open dates to a scheduler with optional slot configuration.
  * @param {string} schedulerId
- * @param {string[]} dates
- * @returns {Promise<string[]>}
+ * @param {Array<{scheduledDate: string, morningAllowed?: number, afternoonAllowed?: number}>} dates
+ * @returns {Promise<Array>} SlotCustomDateEntry[]
  */
 export const setCustomDates = async (schedulerId, dates) => {
   const data = await sendGraphQL(`
-    mutation SetCustomDates($schedulerId: ID!, $dates: [Date!]!) {
-      setCustomDates(schedulerId: $schedulerId, dates: $dates)
+    mutation SetCustomDates($schedulerId: ID!, $dates: [SlotCustomDateInput!]!) {
+      setCustomDates(schedulerId: $schedulerId, dates: $dates) {
+        id
+        slotScheduleId
+        scheduledDate
+        morningAllowed
+        afternoonAllowed
+        created_at
+      }
     }
   `, { schedulerId, dates });
   return data.setCustomDates;
@@ -494,6 +508,28 @@ export const removeWhitelist = async (schedulerId, patientIds) => {
     }
   `, { schedulerId, patientIds });
   return data.removeEntryWhitelist;
+};
+
+/**
+ * List all patients in a scheduler's whitelist.
+ * @param {string} schedulerId
+ * @param {number} [offset=0]
+ * @param {number} [limit=50]
+ * @returns {Promise<Array>} WhitelistEntry[]
+ */
+export const listWhitelist = async (schedulerId, offset = 0, limit = 50) => {
+  const data = await sendGraphQL(`
+    query ListSchedulerWhitelist($schedulerId: ID!, $offset: Int, $limit: Int) {
+      listSchedulerWhitelist(schedulerId: $schedulerId, offset: $offset, limit: $limit) {
+        id
+        slotSchedulerId
+        patientId
+        patientIdentifier
+        patientName
+      }
+    }
+  `, { schedulerId, offset, limit });
+  return data.listSchedulerWhitelist;
 };
 
 // ── Mutations — Date Identity ────────────────────────────────────────────────

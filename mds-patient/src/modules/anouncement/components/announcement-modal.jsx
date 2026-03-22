@@ -67,8 +67,9 @@ const AnnouncementModal = ({ announcement, onClose }) => {
                 Attachment
               </h4>
               <a
-                href={`/media/announcement/${announcement.pubmat}`}
-                download
+                href={`/media/record/announcement/${announcement.pubmat}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

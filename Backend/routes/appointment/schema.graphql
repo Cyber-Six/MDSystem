@@ -45,6 +45,21 @@ type SlotScheduler {
   created_at: Date
 }
 
+type SlotCustomDateEntry {
+  id: ID!
+  slotScheduleId: ID!
+  scheduledDate: Date!
+  morningAllowed: Int
+  afternoonAllowed: Int
+  created_at: Date
+}
+
+input SlotCustomDateInput {
+  scheduledDate: Date!
+  morningAllowed: Int
+  afternoonAllowed: Int
+}
+
 input SlotSchedulerInput {
   label: String!
   location: LOCATION_DESIGNATION!
@@ -76,6 +91,14 @@ type ScheduleWhitelist {
   id: ID!
   slotSchedulerId: ID!
   patientId: ID!
+}
+
+type WhitelistEntry {
+  id: ID!
+  slotSchedulerId: ID!
+  patientId: ID!
+  patientIdentifier: Int
+  patientName: String
 }
 
 input ScheduleWhitelistInput {
@@ -149,7 +172,6 @@ type patientSlot {
   approvedBy: String
   notes: String
   arrived_at: Date
-  rejection_acknowledged: Boolean
   created_at: Date!
 }
 
@@ -168,7 +190,7 @@ input patientSlotInput { # for medical only
 # Queries
 type Query {
   listOpenAppointments(offset: Int, limit: Int): [SlotScheduler!] # list all open appointments
-  listCustomDates(schedulerId: ID!, offset: Int, limit: Int): [Date!]
+  listCustomDates(schedulerId: ID!, offset: Int, limit: Int): [SlotCustomDateEntry!]
   listAppointmentSchedule(schedulerId: ID!, date: Date!): ScheduleDateEntity 
   listAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
 
@@ -184,13 +206,13 @@ type Query {
 
   searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]
   getAppointmentStatusCounts: [StatusCount!]
+  listSchedulerWhitelist(schedulerId: ID!, offset: Int, limit: Int): [WhitelistEntry!]
 }
 
 # Mutations
 type Mutation {
   submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!): patientSlot
   cancelAppointment: Boolean
-  acknowledgeRejection: Boolean
 
   #----------- --^ Patient and --v Medical
   respondAppointment(userId: ID!, slotId: ID, status: SCHEDULING_STATUS!, notes: String): patientSlot
@@ -203,7 +225,7 @@ type Mutation {
   updateSchedulerRequirement(schedulerId: ID!, input: ScheduleRequirementInput!): ScheduleRequirement
   deleteSchedulerRequirement(schedulerId: ID!, label: String!): Boolean
 
-  setCustomDates(schedulerId: ID!, dates: [Date!]!): [Date!]
+  setCustomDates(schedulerId: ID!, dates: [SlotCustomDateInput!]!): [SlotCustomDateEntry!]
   unsetCustomDates(schedulerId: ID!, dates: [Date!]!): [Date!]
 
   addEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]

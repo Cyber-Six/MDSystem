@@ -11,7 +11,7 @@ const router = express.Router();
 router.get("/", jwtProtect(""), async (req, res) => {
     try {
         const sql = `
-            SELECT id, label, description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, pubmat, "isActive", created_at
             FROM "Announcement"
             WHERE "isActive" = true
             ORDER BY created_at DESC;
@@ -25,13 +25,38 @@ router.get("/", jwtProtect(""), async (req, res) => {
     }
 });
 
+// ✅ GET all announcements including inactive (Staff only) - MUST be before /:id
+router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Check permission
+        const permitted = await isMedicalPermitted(userId, permissions.announcement_allow_crud, null);
+        if (!permitted) {
+            return res.status(403).json({ error: "FORBIDDEN", message: "Not authorized to view all announcements" });
+        }
+
+        const sql = `
+            SELECT id, title as label, content as description, pubmat, "isActive", created_at
+            FROM "Announcement"
+            ORDER BY created_at DESC;
+        `;
+
+        const result = await query(sql);
+        return res.status(200).json({ success: true, data: result.rows });
+    } catch (err) {
+        logger.error("Failed to fetch all announcements:", err);
+        return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to fetch announcements" });
+    }
+});
+
 // ✅ GET single announcement by ID (Patient accessible)
 router.get("/:id", jwtProtect(""), async (req, res) => {
     try {
         const { id } = req.params;
 
         const sql = `
-            SELECT id, label, description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, pubmat, "isActive", created_at
             FROM "Announcement"
             WHERE id = $1;
         `;
@@ -73,9 +98,10 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
         }
 
         const sql = `
-            INSERT INTO "Announcement" (label, description, pubmat, "isActive")
+
+        INSERT INTO "Announcement" (title, content, pubmat, "isActive")
             VALUES ($1, $2, $3, $4)
-            RETURNING *;
+            RETURNING id, title as label, content as description, pubmat, "isActive", created_at;
         `;
 
         const params = [
@@ -128,12 +154,12 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         const sql = `
             UPDATE "Announcement"
             SET
-                label = COALESCE($1, label),
-                description = COALESCE($2, description),
+                title = COALESCE($1, title),
+                content = COALESCE($2, content),
                 pubmat = COALESCE($3, pubmat),
                 "isActive" = COALESCE($4, "isActive")
             WHERE id = $5
-            RETURNING *;
+            RETURNING id, title as label, content as description, pubmat, "isActive", created_at;
         `;
 
         const params = [
@@ -183,31 +209,6 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
     } catch (err) {
         logger.error("Failed to delete announcement:", err);
         return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to delete announcement" });
-    }
-});
-
-// ✅ GET all announcements including inactive (Staff only)
-router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
-    try {
-        const userId = req.user.id;
-
-        // Check permission
-        const permitted = await isMedicalPermitted(userId, permissions.announcement_allow_crud, null);
-        if (!permitted) {
-            return res.status(403).json({ error: "FORBIDDEN", message: "Not authorized to view all announcements" });
-        }
-
-        const sql = `
-            SELECT id, label, description, pubmat, "isActive", created_at
-            FROM "Announcement"
-            ORDER BY created_at DESC;
-        `;
-
-        const result = await query(sql);
-        return res.status(200).json({ success: true, data: result.rows });
-    } catch (err) {
-        logger.error("Failed to fetch all announcements:", err);
-        return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to fetch announcements" });
     }
 });
 

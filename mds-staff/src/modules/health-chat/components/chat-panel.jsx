@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import ChatHeader from './chat-header';
@@ -6,11 +6,14 @@ import MessageBubble from './message-bubble';
 import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
+import TicketDivider from './ticket-divider';
 
 const ChatPanel = () => {
   const {
     selectedChatId,
+    selectedPatientId,
     selectedTicket,
+    selectedConversation,
     messages,
     messagesLoading,
     typingUsers,
@@ -19,8 +22,65 @@ const ChatPanel = () => {
   } = useHealthChat();
 
   const messagesEndRef = useRef(null);
+
+  // Get ticket details for dividers (from selectedTicket.tickets array)
+  const ticketDetailsMap = useMemo(() => {
+    const map = {};
+    if (selectedTicket?.tickets) {
+      selectedTicket.tickets.forEach(t => {
+        map[t.id] = t;
+      });
+    }
+    // Also add the latest ticket if available
+    if (selectedConversation?.latestTicket) {
+      map[selectedConversation.latestTicket.id] = selectedConversation.latestTicket;
+    }
+    return map;
+  }, [selectedTicket, selectedConversation]);
+
+  // Build unified list with ticket dividers inserted where ticket changes
+  const itemsWithDividers = useMemo(() => {
+    if (!messages || messages.length === 0) return [];
+
+    const result = [];
+    let currentTicketId = null;
+    let lastClosedTicket = null;
+
+    // Sort messages by stamp to ensure chronological order
+    const sortedMessages = [...messages].sort((a, b) =>
+      new Date(a.stamp) - new Date(b.stamp)
+    );
+
+    for (let i = 0; i < sortedMessages.length; i++) {
+      const message = sortedMessages[i];
+      const msgTicketId = message.consultationVirtualId;
+
+      // If ticket changed, insert a divider
+      if (currentTicketId !== null && msgTicketId !== currentTicketId) {
+        const prevTicket = ticketDetailsMap[currentTicketId];
+        const newTicket = ticketDetailsMap[msgTicketId];
+
+        // Only show divider if previous ticket was closed
+        if (prevTicket && ['Closed', 'Expired'].includes(prevTicket.status)) {
+          result.push({
+            _isDivider: true,
+            id: `divider-${currentTicketId}-${msgTicketId}`,
+            closedBy: prevTicket.closedBy || 'Staff',
+            closedAt: prevTicket.session_end || prevTicket.archived_at,
+            newTicketPurpose: newTicket?.purpose
+          });
+        }
+      }
+
+      result.push(message);
+      currentTicketId = msgTicketId;
+    }
+
+    return result;
+  }, [messages, ticketDetailsMap]);
+
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
-  const isPatientTyping = !isArchived && typingUsers[selectedChatId]?.isTyping;
+  const isPatientTyping = !isArchived && typingUsers[selectedPatientId || selectedChatId]?.isTyping;
   const isPending = selectedTicket?.status === 'Open';
 
   useEffect(() => {
@@ -32,21 +92,22 @@ const ChatPanel = () => {
     return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  if (!selectedChatId) return <EmptyChatState />;
+  if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
-  // Build unified list: synthetic purpose entry + real messages
-  // so grouping logic works seamlessly across the boundary
-  const purposeSynth = selectedTicket?.purpose ? [{
+  // Build unified list: synthetic purpose entry + messages with dividers
+  // The purpose now comes from the first ticket for this patient
+  const firstTicket = selectedTicket?.tickets?.[0] || selectedConversation?.latestTicket;
+  const purposeSynth = firstTicket?.purpose ? [{
     id: '__purpose__',
-    text: selectedTicket.purpose,
+    text: firstTicket.purpose,
     userType: 'Patient',
     promptType: 'text',
-    stamp: selectedTicket.session_start,
-    sender: { firstName: selectedTicket.patient?.firstName || 'Patient' },
+    stamp: firstTicket.session_start,
+    sender: { firstName: selectedTicket?.patient?.firstName || 'Patient' },
     _isPurpose: true,
   }] : [];
 
-  const allItems = [...purposeSynth, ...messages];
+  const allItems = [...purposeSynth, ...itemsWithDividers];
 
   return (
     <div
@@ -68,17 +129,36 @@ const ChatPanel = () => {
             </div>
           )}
 
-          {/* Unified message list with correct grouping */}
-          {allItems.map((message, i) => {
+          {/* Unified message list with ticket dividers */}
+          {allItems.map((item, i) => {
+            // Render ticket divider
+            if (item._isDivider) {
+              return (
+                <TicketDivider
+                  key={item.id}
+                  closedBy={item.closedBy}
+                  closedAt={item.closedAt}
+                  newTicketPurpose={item.newTicketPurpose}
+                />
+              );
+            }
+
+            // Render message
+            const message = item;
             const prev = allItems[i - 1];
             const next = allItems[i + 1];
-            const isFirst = !prev
-              || prev.userType !== message.userType
-              || prev.promptType === 'system'
+
+            // Skip dividers when calculating grouping
+            const prevMsg = prev && !prev._isDivider ? prev : null;
+            const nextMsg = next && !next._isDivider ? next : null;
+
+            const isFirst = !prevMsg
+              || prevMsg.userType !== message.userType
+              || prevMsg.promptType === 'system'
               || message.promptType === 'system';
-            const isLast = !next
-              || next.userType !== message.userType
-              || next.promptType === 'system'
+            const isLast = !nextMsg
+              || nextMsg.userType !== message.userType
+              || nextMsg.promptType === 'system'
               || message.promptType === 'system';
 
             return (

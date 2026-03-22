@@ -31,7 +31,10 @@ export default function PatientPersonalInfoTab({ patient }) {
       </PatientSectionCard>
 
       <PatientSectionCard title="Address">
-        <p className="text-sm text-secondary-700 dark:text-neutral-300">{patient.personal.address || 'N/A'}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Present Address" value={patient.personal.presentAddress} />
+          <Field label="Province Address" value={patient.personal.provinceAddress} />
+        </div>
       </PatientSectionCard>
 
       <PatientSectionCard title={patient.type === 'Employee' ? 'Employment Information' : 'Academic Information'}>

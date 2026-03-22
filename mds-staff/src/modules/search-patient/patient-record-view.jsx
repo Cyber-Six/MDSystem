@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../../packages-core-adapter';
-import { GQL_FULL_RECORD, MOCK_PATIENT_RECORDS, STATUS_BANNER } from './patient-record-data';
+import { GQL_FULL_RECORD, GQL_PERSONAL_PROFILE, MOCK_PATIENT_RECORDS, STATUS_BANNER } from './patient-record-data';
 import * as consultationService from './consultation-service';
 
 const GQL_BASIC_RECORD_FALLBACK = `
@@ -56,7 +56,7 @@ function LoadingBlock({ label }) {
   );
 }
 
-function toDisplayPatient(patientId, data, mockPatient) {
+function toDisplayPatient(patientId, data, mockPatient, profileData) {
   if (mockPatient) return mockPatient;
 
   const basicInfo = data?.getPatientBasicInfo;
@@ -70,14 +70,64 @@ function toDisplayPatient(patientId, data, mockPatient) {
   const emergencyData = data?.getUserEmergencyContact?.[0] || null;
   const medicationData = data?.getUserMedicationProfile?.[0] || null;
   const dentalHistory = data?.getUserDentalHistory?.[0] || null;
+  const dentalRecord = data?.getUserDentalRecord?.[0] || null;
+  const applianceData = data?.getUserOralApplianceProfile?.[0] || null;
+  const procedureData = data?.getUserDentalProcedureProfile?.[0] || null;
   const visionData = data?.getUserVisualAcuityProfile?.[0] || null;
   const hospData = data?.getUserHospitalizationProfile?.[0] || null;
   const opData = data?.getUserOperationProfile?.[0] || null;
+  const dentalPhotoData = data?.getUserDentalPhotoRecord?.[0] || null;
+
+  const profile = profileData?.getUserPersonalRecord || null;
+
+  // Build catalog lookup maps (id → name/allergen)
+  const allergenMap = {};
+  (data?.allergenCatalogs || []).forEach((c) => { allergenMap[c.id] = c; });
+
+  const conditionMap = {};
+  (data?.conditionCatalogs || []).forEach((c) => { conditionMap[c.id] = c.name; });
+
+  const immunizationMap = {};
+  (data?.immunizationCatalogs || []).forEach((c) => { immunizationMap[c.id] = c.name; });
+
+  const operationMap = {};
+  (data?.operationCatalogs || []).forEach((c) => { operationMap[c.id] = c.name; });
+
+  const hospitalizationMap = {};
+  (data?.hospitalizationCatalogs || []).forEach((c) => { hospitalizationMap[c.id] = c.name; });
+
+  const dentalProcedureMap = {};
+  (data?.dentalProcedureCatalogs || []).forEach((c) => { dentalProcedureMap[c.id] = c.name; });
+
+  const medicationMap = {};
+  (data?.medicationCatalogs || []).forEach((c) => { medicationMap[c.id] = c.name; });
+
+  const applianceTagMap = {};
+  (data?.oralApplianceCatalogs || []).forEach((c) => { applianceTagMap[c.id] = c.name; });
+
+  // Resolve allergies by type
+  const allergyList = allergyData?.allergies || [];
+  const drugAllergies  = allergyList.filter((a) => allergenMap[a.allergenCatalogId]?.type === 'Drug').map((a) => allergenMap[a.allergenCatalogId]?.allergen || `#${a.allergenCatalogId}`);
+  const foodAllergies  = allergyList.filter((a) => allergenMap[a.allergenCatalogId]?.type === 'Food').map((a) => allergenMap[a.allergenCatalogId]?.allergen || `#${a.allergenCatalogId}`);
+  const otherAllergies = allergyList.filter((a) => {
+    const t = allergenMap[a.allergenCatalogId]?.type;
+    return t && t !== 'Drug' && t !== 'Food';
+  }).map((a) => allergenMap[a.allergenCatalogId]?.allergen || `#${a.allergenCatalogId}`);
+
+  // Format date_of_birth → readable date + age
+  let birthDate = '';
+  let age = '';
+  if (profile?.date_of_birth) {
+    const dob = new Date(profile.date_of_birth);
+    birthDate = dob.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' });
+    const today = new Date();
+    age = String(today.getFullYear() - dob.getFullYear() - (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0));
+  }
 
   return {
     id: patientId || '',
     name: basicInfo ? `${basicInfo.first_name || ''} ${basicInfo.last_name || ''}`.trim() : '',
-    email: '',
+    email: profile?.email || '',
     program: basicInfo?.program || basicInfo?.department || '',
     year: basicInfo?.year || basicInfo?.role || '',
     department: basicInfo?.department || '',
@@ -90,14 +140,15 @@ function toDisplayPatient(patientId, data, mockPatient) {
       middleName: basicInfo?.middle_name || '',
       lastName: basicInfo?.last_name || '',
       suffix: basicInfo?.suffix || '',
-      birthDate: '',
-      age: '',
-      sex: basicInfo?.sex || '',
-      civilStatus: '',
-      nationality: '',
-      religion: '',
-      address: '',
-      contactNumber: '',
+      birthDate,
+      age,
+      sex: profile?.sex || basicInfo?.sex || '',
+      civilStatus: profile?.civil_status || '',
+      nationality: profile?.nationality || '',
+      religion: profile?.religion || '',
+      presentAddress: profile?.present_address || '',
+      provinceAddress: profile?.province_address || '',
+      contactNumber: profile?.contactNumber || '',
       studentNumber: basicInfo?.identifier || '',
       studentCategory: '',
       lastSchoolAttended: '',
@@ -113,20 +164,26 @@ function toDisplayPatient(patientId, data, mockPatient) {
         name: emergencyData?.firstContact?.contactName || '',
         relationship: emergencyData?.firstContact?.relationship || '',
         contact: emergencyData?.firstContact?.contactNumber || '',
-        address: '',
+        address: emergencyData?.firstContact?.address || '',
       },
       second: {
         name: emergencyData?.secondContact?.contactName || '',
         relationship: emergencyData?.secondContact?.relationship || '',
         contact: emergencyData?.secondContact?.contactNumber || '',
-        address: '',
+        address: emergencyData?.secondContact?.address || '',
       },
     },
     medicalHistory: {
-      self: (medicalHistory?.conditions || []).filter((c) => !c.relationship || c.relationship === 'self').map((c) => c.description || `Condition #${c.conditionId}`),
-      selfDetails: medicalHistory?.notes || '',
-      family: (medicalHistory?.conditions || []).filter((c) => c.relationship && c.relationship !== 'self').map((c) => `${c.description || `Condition #${c.conditionId}`} (${c.relationship})`),
-      familyDetails: '',
+      self: (medicalHistory?.conditions || [])
+        .filter((c) => !c.relationship || c.relationship === 'self')
+        .map((c) => c.description || conditionMap[c.conditionId] || `Condition #${c.conditionId}`),
+      notes: medicalHistory?.notes || '',
+      family: (medicalHistory?.conditions || [])
+        .filter((c) => c.relationship && c.relationship !== 'self')
+        .map((c) => ({
+          name: c.description || conditionMap[c.conditionId] || `Condition #${c.conditionId}`,
+          relationship: c.relationship,
+        })),
     },
     medical: {
       vitalSigns: {
@@ -140,46 +197,80 @@ function toDisplayPatient(patientId, data, mockPatient) {
       },
       bloodType: '',
       allergies: {
-        drug: (allergyData?.allergies || []).filter((a) => a.allergenCatalogId).map((a) => `#${a.allergenCatalogId}`).join(', ') || '',
-        food: '',
-        other: '',
+        drug:  drugAllergies.join(', ')  || '',
+        food:  foodAllergies.join(', ')  || '',
+        other: otherAllergies.join(', ') || '',
       },
-      conditions: [],
-      medications: (medicationData?.medications || []).map((m) => m.description || `Medicine #${m.medicineId}`),
-      immunizations: (immunizationData?.immunizations || []).map((i) => `#${i.vaccineTypeId} (Dose ${i.doseNumber})`),
-      hospitalizations: (hospData?.hospitalizations || []).map((h) => ({
-        reason: `Condition #${h.conditionId}`,
-        year: h.admissionDate ? new Date(h.admissionDate).getFullYear() : '',
-        hospital: '',
-        duration: h.dischargeDate ? `until ${new Date(h.dischargeDate).toLocaleDateString('en-PH')}` : 'ongoing',
+      allergiesList: allergyList.map((a) => ({
+        name: allergenMap[a.allergenCatalogId]?.allergen || `Allergen #${a.allergenCatalogId}`,
+        type: allergenMap[a.allergenCatalogId]?.type || '',
+        severity: a.severity || '',
+        status: a.status || '',
       })),
-      operations: (opData?.operations || []).map((o) => `Procedure #${o.procedureId}`).join(', '),
+      conditions: [],
+      medications: (medicationData?.medications || []).map((m) => ({
+        name: medicationMap[m.medicineId] || `Medicine #${m.medicineId}`,
+        description: m.description || '',
+      })),
+      immunizations: (immunizationData?.immunizations || []).map((i) => ({
+        name: immunizationMap[i.vaccineTypeId] || `Vaccine #${i.vaccineTypeId}`,
+        date: i.immunizationDate ? new Date(i.immunizationDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }) : '',
+        doseNumber: i.doseNumber || '',
+      })),
+      hospitalizations: (hospData?.hospitalizations || []).map((h) => ({
+        condition: hospitalizationMap[h.conditionId] || `Condition #${h.conditionId}`,
+        admittedDate: h.admissionDate ? new Date(h.admissionDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }) : '',
+        dischargedDate: h.dischargeDate ? new Date(h.dischargeDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Ongoing',
+      })),
+      operations: (opData?.operations || []).map((o) => ({
+        procedure: operationMap[o.procedureId] || `Procedure #${o.procedureId}`,
+        date: o.operationDate ? new Date(o.operationDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }) : '',
+      })),
       lifestyle: {
-        smoker: lifestyleData?.smoker ? `Yes (${lifestyleData.numberOfCigarettesPerDay || '?'} sticks/day, ${lifestyleData.yearsSmoked || '?'} yrs)` : 'No',
-        alcoholDrinker: lifestyleData?.alcoholConsumer ? `Yes (${lifestyleData.frequencyOfAlcoholConsumption || 'occasional'})` : 'No',
-        tattoo: lifestyleData?.notes || '',
-        piercing: '',
+        smoker: lifestyleData?.smoker ? 'Yes' : lifestyleData?.smoker === false ? 'No' : '',
+        cigarettesPerDay: lifestyleData?.numberOfCigarettesPerDay ?? '',
+        yearsSmoked: lifestyleData?.yearsSmoked ?? '',
+        alcoholConsumer: lifestyleData?.alcoholConsumer ? 'Yes' : lifestyleData?.alcoholConsumer === false ? 'No' : '',
+        alcoholFrequency: lifestyleData?.frequencyOfAlcoholConsumption ?? '',
+        notes: lifestyleData?.notes || '',
       },
       vision: {
-        hasEyeglasses: !!visionData?.acuity,
-        hasContactLenses: false,
         gradeOD: visionData?.acuity?.right_eye || '',
         gradeOS: visionData?.acuity?.left_eye || '',
-        lastExam: visionData?.acuity?.recorded_at ? new Date(visionData.acuity.recorded_at).toLocaleDateString('en-PH') : '',
+        lastExam: visionData?.acuity?.recorded_at ? new Date(visionData.acuity.recorded_at).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }) : '',
       },
     },
-    dental: {
-      firstTimeDentist: dentalHistory?.seenByDentist === false ? 'Yes (first time)' : dentalHistory?.seenByDentist ? 'No' : '',
-      lastConsultation: dentalHistory?.lastVisitDate ? new Date(dentalHistory.lastVisitDate).toLocaleDateString('en-PH') : '',
-      lastCleaning: dentalHistory?.lastDentalCleaning || '',
-      toothExtraction: dentalHistory?.purpose || '',
-      dentalFilling: '',
-      oralFindings: [],
-      treatments: [],
-      hasAppliance: '',
-      applianceType: null,
-      toothChart: { missing: [], filled: [], decayed: [], notes: '' },
-    },
+    dental: (() => {
+      const procedureRecords = procedureData?.procedures || [];
+      const allAppliances = applianceData?.appliances || [];
+      const toothStates = {};
+      (dentalRecord?.ToothPlacements || []).forEach((tp) => { toothStates[tp.toothIndex] = tp.legend; });
+      return {
+        seenByDentist: dentalHistory?.seenByDentist ? 'No' : dentalHistory?.seenByDentist === false ? 'Yes' : '',
+        firstTimeDentist: dentalHistory?.seenByDentist === false ? 'Yes (first time)' : dentalHistory?.seenByDentist ? 'No' : '',
+        lastConsultation: dentalHistory?.lastVisitDate ? new Date(dentalHistory.lastVisitDate).toLocaleDateString('en-PH') : '',
+        lastCleaning: dentalHistory?.lastDentalCleaning || '',
+        procedures: procedureRecords.map((p) => ({
+          name: dentalProcedureMap[p.procedureTypeId] || `Procedure #${p.procedureTypeId}`,
+          date: p.procedureDate ? new Date(p.procedureDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }) : '',
+        })),
+        appliances: allAppliances.map((a) => ({
+          name: applianceTagMap[a.tagId] || `Appliance #${a.tagId}`,
+          status: a.status || '',
+          dateIssued: a.dateIssued ? new Date(a.dateIssued).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }) : '',
+          arch: a.arch || '',
+        })),
+        photoUpper: dentalPhotoData?.upperTeeth || null,
+        photoLower: dentalPhotoData?.lowerTeeth || null,
+        toothExtraction: procedureRecords.filter((p) => dentalProcedureMap[p.procedureTypeId] === 'Tooth Extraction').length > 0 ? String(procedureRecords.filter((p) => dentalProcedureMap[p.procedureTypeId] === 'Tooth Extraction').length) : '',
+        dentalFilling: procedureRecords.filter((p) => dentalProcedureMap[p.procedureTypeId] === 'Dental Filling').length > 0 ? String(procedureRecords.filter((p) => dentalProcedureMap[p.procedureTypeId] === 'Dental Filling').length) : '',
+        hasAppliance: allAppliances.filter((a) => a.status !== 'Removed' && a.status !== 'removed').length > 0 ? `Yes (${allAppliances.find((a) => a.status !== 'Removed' && a.status !== 'removed')?.arch || 'N/A'})` : '',
+        applianceType: allAppliances.find((a) => a.status !== 'Removed' && a.status !== 'removed')?.arch || null,
+        oralFindings: [],
+        treatments: [],
+        toothChart: { missing: [], filled: [], decayed: [], notes: dentalRecord?.notes || '', states: toothStates },
+      };
+    })(),
     obgyne: {
       lastMenstrualPeriod: obgynData?.lastMenstrualPeriod ? new Date(obgynData.lastMenstrualPeriod).toLocaleDateString('en-PH') : '',
       menstruationDuration: '',
@@ -202,6 +293,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
+  const [profileData, setProfileData] = useState(null);
   const [consultations, setConsultations] = useState([]);
 
   const isMockPatient = String(patientId || '').startsWith('mock-');
@@ -229,19 +321,39 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
     const loadRecord = async () => {
       try {
-        const { data } = await axiosRequest.post('/emr/medical', {
-          query: GQL_FULL_RECORD,
-          variables: { userId: patientId },
-        });
+        // Fetch EMR data and personal profile in parallel
+        const [emrResult, profileResult] = await Promise.allSettled([
+          axiosRequest.post('/emr/medical', {
+            query: GQL_FULL_RECORD,
+            variables: { userId: patientId },
+          }),
+          axiosRequest.post('/profile/medical', {
+            query: GQL_PERSONAL_PROFILE,
+            variables: { userId: patientId },
+          }),
+        ]);
 
         if (cancelled) return;
 
-        const payload = data?.data;
+        // Extract EMR payload — also handle partial 4xx responses with embedded GraphQL data
+        const emrResponse = emrResult.status === 'fulfilled'
+          ? emrResult.value.data
+          : emrResult.reason?.response?.data;
+
+        const payload = emrResponse?.data;
         if (!payload?.getPatientBasicInfo) {
-          throw new Error(data?.errors?.[0]?.message || 'Patient not found');
+          throw new Error(emrResponse?.errors?.[0]?.message || 'Patient not found');
         }
 
         setRecordData(payload);
+
+        // Personal profile is optional — set if available
+        if (profileResult.status === 'fulfilled') {
+          setProfileData(profileResult.value.data?.data || null);
+        } else {
+          const profilePartial = profileResult.reason?.response?.data?.data;
+          setProfileData(profilePartial || null);
+        }
       } catch (err) {
         if (cancelled) return;
 
@@ -263,6 +375,11 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           setRecordData(fallbackPayload);
           setLoadError(null);
         } catch (fallbackErr) {
+          const fallbackPartial = fallbackErr?.response?.data?.data;
+          if (fallbackPartial?.getPatientBasicInfo) {
+            setRecordData(fallbackPartial);
+            return;
+          }
           if (!cancelled) {
             setLoadError(fallbackErr?.message || err?.message || 'Failed to load patient.');
           }
@@ -279,7 +396,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     };
   }, [patientId, isMockPatient, mockPatient]);
 
-  const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient), [patientId, recordData, mockPatient]);
+  const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient, profileData), [patientId, recordData, mockPatient, profileData]);
 
   // Fetch consultations from backend on page load
   useEffect(() => {
@@ -510,13 +627,13 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       </section>
 
       <section className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-        <div className="px-2 py-2 border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto">
-          <div className="flex gap-1 min-w-max">
+        <div className="px-2 py-2.5 border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto">
+          <div className="flex gap-1.5 min-w-max">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeTab === tab.id
                     ? 'bg-primary-500 text-white'
                     : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'

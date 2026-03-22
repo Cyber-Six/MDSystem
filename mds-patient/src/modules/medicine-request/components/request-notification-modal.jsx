@@ -1,11 +1,45 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { sendGraphQLRequest } from '../../../utils/graphql-client';
 
 /**
  * Request Notification Modal
  * Shows patient notifications when their medicine request is approved or rejected
- * ✅ PART 2: Shows all items including added medicines with badge
  */
-const RequestNotificationModal = ({ request, onDismiss, batches }) => {
+const RequestNotificationModal = ({ request, onDismiss, batches, groupedMedicines }) => {
+  const [availableMedicines, setAvailableMedicines] = useState([]);
+  
+  // Fetch available medicines to look up names
+  useEffect(() => {
+    if (!request) return;
+    
+    const fetchMedicines = async () => {
+      try {
+        const query = `
+          query GetAvailableMedicine($location: LocationDesignation, $offset: Int, $limit: Int) {
+            getAvailableMedicine(location: $location, offset: $offset, limit: $limit) {
+              id
+              item_code
+              item_name
+              category
+            }
+          }
+        `;
+        
+        const data = await sendGraphQLRequest(
+          query,
+          { location: null, offset: 0, limit: 200 },
+          { endpoint: '/medical-inventory/medicine-request/patient' }
+        );
+        
+        setAvailableMedicines(data.getAvailableMedicine || []);
+      } catch (error) {
+        console.error('Error fetching available medicines:', error);
+      }
+    };
+    
+    fetchMedicines();
+  }, [request?.id]);
+  
   if (!request) return null;
 
   const isApproved = request.status?.toLowerCase() === 'approved';
@@ -13,24 +47,60 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
 
   if (!isApproved && !isRejected) return null;
 
-  // Get all requested items
-  const allItems = request.items || [];
-  const originalItems = allItems.filter(item => !item.addedByStaff);
-  const addedItems = allItems.filter(item => item.addedByStaff);
-
-  // Look up medicine names from batches
-  const getItemName = (item) => {
-    const batch = batches?.find((b) => String(b.id) === String(item.medicineId));
-    return batch?.item_name || `Medicine #${item.medicineId}`;
-  };
-
-  const firstItemName = getItemName(allItems[0] || {});
+  // Look up medicine name from request items first
+  let itemName = 'Your medicine';
+  
+  // Try to get from items array
+  if (request.items?.[0]) {
+    const firstItem = request.items[0];
+    // Check if item has item details directly
+    if (firstItem.itemName) {
+      itemName = firstItem.itemName;
+    } else {
+      const medicineId = firstItem.medicineId;
+      const batchId = firstItem.batchId;
+      
+      // Try to find from availableMedicines (most reliable source)
+      const medicine = availableMedicines?.find((m) => 
+        String(m.id) === String(batchId) || 
+        String(m.id) === String(medicineId) ||
+        String(m.batchId) === String(medicineId)
+      );
+      if (medicine?.item_name) {
+        itemName = medicine.item_name;
+      } else {
+        // Try from batches using medicineId or batchId
+        const batch = batches?.find((b) => 
+          String(b.id) === String(batchId) || 
+          String(b.medicalItemId) === String(medicineId) ||
+          String(b.id) === String(medicineId)
+        );
+        if (batch?.item_name) {
+          itemName = batch.item_name;
+        } else {
+          // Try from groupedMedicines (has item_code -> medicine group mapping)
+          if (groupedMedicines && Object.values(groupedMedicines).length > 0) {
+            const medicineGroup = Object.values(groupedMedicines).find(m =>
+              m.batches?.some(b => 
+                String(b.id) === String(medicineId) || 
+                String(b.id) === String(batchId)
+              )
+            );
+            if (medicineGroup?.item_name) {
+              itemName = medicineGroup.item_name;
+            }
+          }
+        }
+      }
+    }
+  }
+  
   const purpose = request.purpose || 'Medicine request';
   const notes = request.notes || '';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl max-w-lg w-full p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
           {isApproved ? (
@@ -59,8 +129,8 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
           {/* Status Message */}
           <p className="text-sm text-secondary-700 dark:text-neutral-300">
             {isApproved
-              ? `Your medicine request has been <strong style="color: inherit;">approved</strong>. You may now proceed to the clinic to collect your medicine.`
-              : `Your medicine request has been <strong style="color: inherit;">rejected</strong>.`}
+              ? `Your medicine request for ${itemName} has been approved. You may now proceed to the clinic to collect your medicine.`
+              : `Your medicine request for ${itemName} has been rejected.`}
           </p>
 
           {/* Request Details */}
@@ -70,41 +140,14 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
               <span className="text-xs font-mono text-secondary-700 dark:text-neutral-300">#{request.id}</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Medicine</span>
+              <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{itemName}</span>
+            </div>
+            <div className="flex flex-col gap-1">
               <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Purpose</span>
-              <span className="text-xs text-secondary-700 dark:text-neutral-300 text-right max-w-[160px]">{purpose}</span>
+              <span className="text-xs text-secondary-700 dark:text-neutral-300 break-words">{purpose}</span>
             </div>
           </div>
-
-          {/* ✅ PART 2: All Medicines List */}
-          {allItems.length > 0 && (
-            <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-              <div className="bg-neutral-100 dark:bg-neutral-700/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-                <p className="text-[10px] font-medium text-secondary-600 dark:text-neutral-300 uppercase tracking-wider">
-                  Medicines ({allItems.length})
-                </p>
-              </div>
-              <div className="divide-y divide-neutral-100 dark:divide-neutral-700">
-                {allItems.map((item, idx) => {
-                  const isAdded = item.addedByStaff;
-                  return (
-                    <div key={idx} className="px-3 py-2 flex items-center justify-between">
-                      <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
-                        {getItemName(item)}
-                      </span>
-                      {isAdded && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-100 dark:bg-accent-900/40 text-accent-700 dark:text-accent-400 rounded text-[10px] font-medium">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                          Added by Staff
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Notes */}
           {notes && (
@@ -113,14 +156,14 @@ const RequestNotificationModal = ({ request, onDismiss, batches }) => {
                 ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-900/50'
                 : 'bg-error-50 dark:bg-error-900/20 border-error-200 dark:border-error-900/50'
             }`}>
-              <p className={`text-[10px] uppercase tracking-wider font-medium mb-1 ${
+              <p className={`text-[10px] uppercase tracking-wider font-medium mb-2 ${
                 isApproved
                   ? 'text-primary-600 dark:text-primary-400'
                   : 'text-error-600 dark:text-error-400'
               }`}>
                 {isApproved ? 'Staff Notes' : 'Reason'}
               </p>
-              <p className={`text-xs ${
+              <p className={`text-xs break-words whitespace-pre-wrap ${
                 isApproved
                   ? 'text-primary-700 dark:text-primary-300'
                   : 'text-error-700 dark:text-error-300'
