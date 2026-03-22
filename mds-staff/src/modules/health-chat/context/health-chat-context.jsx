@@ -353,13 +353,6 @@ export function HealthChatProvider({ children }) {
    * Works with both chatId and patientId for socket events
    */
   const addMessage = useCallback((chatIdOrPatientId, message) => {
-    console.log('[HealthChatContext] addMessage called:', {
-      chatIdOrPatientId,
-      messageId: message?.id,
-      selectedPatientId,
-      selectedChatId
-    });
-
     // Check if this message belongs to the currently selected patient
     // Socket may send chatId, but we now organize by patientId
     const ticket = tickets.find(t =>
@@ -375,10 +368,8 @@ export function HealthChatProvider({ children }) {
       setMessages(prev => {
         // Check if message already exists in array
         if (prev.some(m => String(m.id) === String(message.id))) {
-          console.log('[HealthChatContext] ⚠️ Message already exists in state, skipping:', message.id);
           return prev;
         }
-        console.log('[HealthChatContext] ✅ Adding message to state:', message.id);
         return [...prev, message];
       });
     }
@@ -398,16 +389,19 @@ export function HealthChatProvider({ children }) {
 
   /**
    * Add a new ticket (from socket event)
+   * Uses selectedFilters (multi-filter) to determine visibility
    */
   const addTicket = useCallback((ticket) => {
-    if (filter === 'pending' && ticket.status === 'Open') {
-      setTickets(prev => [ticket, ...prev]);
-      setTicketsTotal(prev => prev + 1);
-    } else if (filter === 'active' && ticket.status === 'Ongoing') {
-      setTickets(prev => [ticket, ...prev]);
-      setTicketsTotal(prev => prev + 1);
+    const shouldShow =
+      (selectedFilters.includes('pending') && ticket.status === 'Open') ||
+      (selectedFilters.includes('active') && ticket.status === 'Ongoing') ||
+      (selectedFilters.includes('archive') && ['Closed', 'Expired'].includes(ticket.status));
+
+    if (shouldShow) {
+      // Refresh the full conversation list to get properly grouped data
+      refreshMultipleFilters(selectedFilters);
     }
-  }, [filter]);
+  }, [selectedFilters, refreshMultipleFilters]);
 
   /**
    * Remove a ticket from list (e.g., when approved moves from pending to active)

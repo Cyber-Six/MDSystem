@@ -60,10 +60,15 @@ export function useHealthChatSocket({
   // Only connect when chat is active (Ongoing) or pending (Open)
   const shouldConnect = chatId && ['Open', 'Ongoing'].includes(chatStatus);
 
-  // Connect and setup listeners
+  // Use a ref for chatId in event handlers to avoid stale closures
+  const chatIdRef = useRef(chatId);
+  useEffect(() => {
+    chatIdRef.current = chatId;
+  }, [chatId]);
+
+  // Connect socket once when shouldConnect becomes true, disconnect when false
   useEffect(() => {
     if (!shouldConnect) {
-      // Disconnect if we shouldn't be connected
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
@@ -72,7 +77,9 @@ export function useHealthChatSocket({
       return;
     }
 
-    // Create socket service with reconnection options
+    // Already connected - nothing to do
+    if (socketRef.current?.isConnected()) return;
+
     const socketService = createSocketService({
       getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
       getToken: () => tokenService.TokenStorage.getAccessToken(),
@@ -88,34 +95,27 @@ export function useHealthChatSocket({
       }
     });
 
-    // Connect and setup
     socketService.connect().then(() => {
       socketRef.current = socketService;
       setIsConnected(true);
       setSocketError(false);
 
-      // Join the chat room
-      socketService.emit('healthchat:join-room', { chatId });
-
-      // Handle reconnection - rejoin room
+      // Handle reconnection, rejoin current room
       socketService.getSocket()?.on('reconnect', () => {
-        console.log('[HealthChatSocket] Reconnected, rejoining room:', chatId);
-        socketService.emit('healthchat:join-room', { chatId });
+        if (chatIdRef.current) {
+          socketService.emit('healthchat:join-room', { chatId: chatIdRef.current });
+        }
       });
 
-      // Listen for new messages (with deduplication)
+      // Listen for new messages (with deduplication) - uses ref for chatId
       socketService.on('healthchat:new-message', (data) => {
-        // Use String() coercion to handle potential type mismatch (string vs number)
-        if (String(data.chatId) === String(chatId) && data.senderType === 'Medical') {
-          // Deduplicate messages by ID
+        if (String(data.chatId) === String(chatIdRef.current) && data.senderType === 'Medical') {
           const messageId = String(data.message?.id);
           if (messageId && processedMessageIds.current.has(messageId)) {
-            console.log('[HealthChatSocket] Duplicate message ignored:', messageId);
             return;
           }
           if (messageId) {
             processedMessageIds.current.add(messageId);
-            // Keep Set size bounded - remove old entries
             if (processedMessageIds.current.size > 100) {
               const firstKey = processedMessageIds.current.values().next().value;
               processedMessageIds.current.delete(firstKey);
@@ -127,67 +127,65 @@ export function useHealthChatSocket({
 
       // Listen for typing indicators
       socketService.on('healthchat:user-typing', (data) => {
-        console.log('[HealthChatSocket Patient] Received user-typing event:', {
-          chatId: data.chatId,
-          userType: data.userType,
-          isTyping: data.isTyping,
-          expectedChatId: chatId,
-          match: String(data.chatId) === String(chatId) && data.userType === 'Medical'
-        });
-        // Use String() coercion to handle potential type mismatch
-        if (String(data.chatId) === String(chatId) && data.userType === 'Medical') {
-          console.log('[HealthChatSocket Patient] Updating typing indicator:', data.isTyping);
+        if (String(data.chatId) === String(chatIdRef.current) && data.userType === 'Medical') {
           onTypingRef.current?.(data.isTyping);
         }
       });
 
       // Listen for ticket approval
       socketService.on('healthchat:ticket-approved', (data) => {
-        console.log('[HealthChatSocket Patient] Received ticket-approved event:', {
-          receivedChatId: data.chat?.id,
-          expectedChatId: chatId,
-          status: data.chat?.status,
-          match: data.chat?.id === chatId || String(data.chat?.id) === String(chatId)
-        });
-        if (data.chat?.id === chatId || String(data.chat?.id) === String(chatId)) {
-          console.log('[HealthChatSocket Patient] Calling onTicketApproved callback');
+        if (String(data.chat?.id) === String(chatIdRef.current)) {
           onTicketApprovedRef.current?.(data.chat);
         }
       });
 
       // Listen for ticket closed
       socketService.on('healthchat:ticket-closed', (data) => {
-        if (data.chatId === chatId || String(data.chatId) === String(chatId)) {
+        if (String(data.chatId) === String(chatIdRef.current)) {
           onTicketClosedRef.current?.(data);
         }
       });
 
       // Listen for ticket rejection
       socketService.on('healthchat:ticket-rejected', (data) => {
-        if (data.chat?.id === chatId || String(data.chat?.id) === String(chatId)) {
+        if (String(data.chat?.id) === String(chatIdRef.current)) {
           onTicketClosedRef.current?.(data);
         }
       });
+
+      // Join room for current chatId
+      if (chatIdRef.current) {
+        socketService.emit('healthchat:join-room', { chatId: chatIdRef.current });
+      }
     }).catch((err) => {
-      console.error('[HealthChatSocket] Connection failed:', err);
-      console.error('[HealthChatSocket] Details:', err.message);
+      console.error('[HealthChatSocket] Connection failed:', err.message);
       setIsConnected(false);
       setSocketError(true);
-      // Note: Socket.io client will auto-retry based on reconnectionAttempts
-      // Users can still use HTTP requests to fetch messages
     });
 
-    // Cleanup on unmount or when chatId changes
+    // Cleanup on unmount
     return () => {
       if (socketRef.current) {
-        socketRef.current.emit('healthchat:leave-room', { chatId });
         socketRef.current.disconnect();
         socketRef.current = null;
         setIsConnected(false);
       }
       processedMessageIds.current.clear();
     };
-  }, [chatId, shouldConnect]);
+  }, [shouldConnect]);
+
+  // Manage room join/leave when chatId changes (reuses existing connection)
+  useEffect(() => {
+    if (!socketRef.current?.isConnected() || !chatId) return;
+
+    socketRef.current.emit('healthchat:join-room', { chatId });
+
+    return () => {
+      if (socketRef.current?.isConnected()) {
+        socketRef.current.emit('healthchat:leave-room', { chatId });
+      }
+    };
+  }, [chatId, isConnected]);
 
   /**
    * Emit typing status to server (OPTIMIZED with throttling and debouncing)
@@ -216,7 +214,6 @@ export function useHealthChatSocket({
       // Throttle: Only emit if enough time has passed since last emit
       const timeSinceLastEmit = now - lastTypingEmitRef.current;
       if (timeSinceLastEmit < THROTTLE_MS) {
-        console.log('[HealthChatSocket Patient] Throttling typing event (too soon)');
         // Still set auto-stop timeout even if throttled
         typingTimeoutRef.current = setTimeout(() => {
           if (socketRef.current?.isConnected()) {

@@ -881,9 +881,12 @@ const Mutation = {
     const values = [];
     const placeholders = dates.map((dateEntry, i) => {
       const offset = i * 4;
+      // Normalize scheduledDate to YYYY-MM-DD
+      const rawDate = dateEntry.scheduledDate;
+      const normalizedDate = typeof rawDate === 'string' ? rawDate.split('T')[0] : (rawDate instanceof Date ? rawDate.toISOString().split('T')[0] : String(rawDate));
       values.push(
         schedulerId,
-        dateEntry.scheduledDate,
+        normalizedDate,
         dateEntry.morningAllowed ?? null,
         dateEntry.afternoonAllowed ?? null
       );
@@ -930,40 +933,48 @@ const Mutation = {
         .throw();
     }
 
+    // Normalize dates to YYYY-MM-DD format for consistent comparison
+    const normalizedDates = dates.map(d => {
+      if (typeof d === 'string') return d.split('T')[0];
+      if (d instanceof Date) return d.toISOString().split('T')[0];
+      return String(d);
+    });
+
+    let result;
     try {
-      const result = await db.query(
+      result = await db.query(
         `DELETE FROM "SlotCustomDate"
          WHERE "slotScheduleId" = $1
-         AND "scheduledDate" = ANY($2)
+         AND "scheduledDate" = ANY($2::date[])
          RETURNING "scheduledDate";`,
-        [schedulerId, dates]
+        [schedulerId, normalizedDates]
       );
-
-      if (result.rowCount === 0) {
-        throwGraphQLError(res)
-          .message("No matching custom dates found to unset")
-          .status(404)
-          .throw();
-      }
-
-      // Keep containsCustomDates flag in sync
-      const remaining = await db.query(
-        `SELECT 1 FROM "SlotCustomDate" WHERE "slotScheduleId" = $1 LIMIT 1;`,
-        [schedulerId]
-      );
-      await db.query(
-        `UPDATE "slotScheduler" SET "containsCustomDates" = $1 WHERE id = $2;`,
-        [remaining.rowCount > 0, schedulerId]
-      );
-
-      // Return the list of dates that were actually deleted
-      return result.rows.map(r => r.scheduledDate);
     } catch (err) {
       throwGraphQLError(res)
         .message(`Failed to unset custom dates: ${err.message}`)
         .status(500)
         .throw();
     }
+
+    if (result.rowCount === 0) {
+      throwGraphQLError(res)
+        .message("No matching custom dates found to unset")
+        .status(404)
+        .throw();
+    }
+
+    // Keep containsCustomDates flag in sync
+    const remaining = await db.query(
+      `SELECT 1 FROM "SlotCustomDate" WHERE "slotScheduleId" = $1 LIMIT 1;`,
+      [schedulerId]
+    );
+    await db.query(
+      `UPDATE "slotScheduler" SET "containsCustomDates" = $1 WHERE id = $2;`,
+      [remaining.rowCount > 0, schedulerId]
+    );
+
+    // Return the list of dates that were actually deleted
+    return result.rows.map(r => r.scheduledDate);
   },
 
   _addEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
@@ -1056,54 +1067,44 @@ const Mutation = {
     }
 
     try {
-      // Build dynamic update fields based on provided input
-      const fields = [];
-      const values = [];
-      let idx = 1;
-
-      if (input.morningAllowed !== undefined) {
-        fields.push(`"morningAllowed" = $${idx++}`);
-        values.push(input.morningAllowed);
-      }
-      if (input.afternoonAllowed !== undefined) {
-        fields.push(`"afternoonAllowed" = $${idx++}`);
-        values.push(input.afternoonAllowed);
-      }
-      if (input.allowDuring !== undefined) {
-        fields.push(`"allowDuring" = $${idx++}`);
-        values.push(input.allowDuring);
-      }
-      if (input.scheduledDate !== undefined) {
-        fields.push(`"scheduledDate" = $${idx++}`);
-        values.push(input.scheduledDate);
+      // Validate the date is valid for this scheduler
+      const isValidDate = await validateSchedulerDate(schedulerId, date);
+      if (!isValidDate) {
+        throwGraphQLError(res).message("Invalid date for scheduler").status(400).throw();
       }
 
-      if (fields.length === 0) {
-        throwGraphQLError(res)
-          .message("No fields provided to update")
-          .status(400)
-          .throw();
+      // Get scheduler defaults for fallback values
+      const schedulerResult = await db.query(
+        `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+        [schedulerId]
+      );
+      if (schedulerResult.rowCount === 0) {
+        throwGraphQLError(res).message("Scheduler not found").status(404).throw();
       }
+      const defaults = schedulerResult.rows[0];
 
-      // Add schedulerId and date filters
-      values.push(schedulerId);
-      values.push(date);
+      // Resolve final values: input > existing > custom date > scheduler defaults
+      const morningAllowed = input.morningAllowed !== undefined ? input.morningAllowed : defaults.morningAllowed;
+      const afternoonAllowed = input.afternoonAllowed !== undefined ? input.afternoonAllowed : defaults.afternoonAllowed;
 
-      const query = `
-        UPDATE "ScheduleDateEntity"
-        SET ${fields.join(", ")}
-        WHERE "slotId" = $${idx++} AND "scheduledDate" = $${idx++}
-        RETURNING *;
-      `;
-
-      const result = await db.query(query, values);
-
-      if (result.rowCount === 0) {
-        throwGraphQLError(res)
-          .message("No matching schedule date entity found to update")
-          .status(404)
-          .throw();
-      }
+      // Upsert: create the ScheduleDateEntity if it doesn't exist, or update if it does
+      const result = await db.query(
+        `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT ("slotId", "scheduledDate")
+         DO UPDATE SET
+           "morningAllowed" = COALESCE($5, "ScheduleDateEntity"."morningAllowed"),
+           "afternoonAllowed" = COALESCE($6, "ScheduleDateEntity"."afternoonAllowed")
+         RETURNING *;`,
+        [
+          schedulerId,
+          date,
+          morningAllowed,
+          afternoonAllowed,
+          input.morningAllowed !== undefined ? input.morningAllowed : null,
+          input.afternoonAllowed !== undefined ? input.afternoonAllowed : null,
+        ]
+      );
 
       // Attach computed counts so GraphQL can resolve morningRegistered, etc.
       const updated = result.rows[0];
