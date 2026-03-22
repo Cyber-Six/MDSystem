@@ -31,8 +31,8 @@ export const GQL_FULL_RECORD = `
     }
     getUserEmergencyContact(userId: $userId, limit: 1) {
       id created_at
-      firstContact  { id contactName relationship contactNumber }
-      secondContact { id contactName relationship contactNumber }
+      firstContact  { id contactName relationship contactNumber address }
+      secondContact { id contactName relationship contactNumber address }
     }
     getUserMedicationProfile(userId: $userId, limit: 1) {
       id notes created_at
@@ -40,6 +40,18 @@ export const GQL_FULL_RECORD = `
     }
     getUserDentalHistory(userId: $userId, limit: 1) {
       id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at
+    }
+    getUserDentalRecord(userId: $userId, limit: 1) {
+      id notes created_at
+      ToothPlacements { id toothIndex legend }
+    }
+    getUserOralApplianceProfile(userId: $userId, limit: 1) {
+      id notes created_at
+      appliances { id tagId status dateIssued arch }
+    }
+    getUserDentalProcedureProfile(userId: $userId, limit: 1) {
+      id notes created_at
+      procedures { id procedureTypeId procedureDate }
     }
     getUserVisualAcuityProfile(userId: $userId, limit: 1) {
       id notes created_at
@@ -52,6 +64,28 @@ export const GQL_FULL_RECORD = `
     getUserOperationProfile(userId: $userId, limit: 1) {
       id notes created_at
       operations { id procedureId operationDate notes }
+    }
+    allergenCatalogs: getAllergenCatalogs { id allergen type }
+    conditionCatalogs: getDomainCatalogs(domain: MedicalCondition) { id name }
+    immunizationCatalogs: getDomainCatalogs(domain: Immunization) { id name }
+    operationCatalogs: getDomainCatalogs(domain: Operation) { id name }
+    hospitalizationCatalogs: getDomainCatalogs(domain: Hospitalization) { id name }
+    dentalProcedureCatalogs: getDomainCatalogs(domain: DentalProcedure) { id name }
+    medicationCatalogs: getDomainCatalogs(domain: Medication) { id name }
+    oralApplianceCatalogs: getOralApplianceCatalogs { id name }
+    getUserDentalPhotoRecord(userId: $userId, limit: 1) {
+      id upperTeeth lowerTeeth isValid created_at
+    }
+  }
+`;
+
+
+export const GQL_PERSONAL_PROFILE = `
+  query GetUserPersonalProfile($userId: ID!) {
+    getUserPersonalRecord(userId: $userId) {
+      first_name middle_name last_name suffix
+      date_of_birth sex civil_status nationality religion
+      contactNumber present_address province_address email
     }
   }
 `;
@@ -88,6 +122,8 @@ export const MOCK_PATIENT_RECORDS = {
       nationality: 'Filipino',
       religion: 'Roman Catholic',
       address: 'Blk 12 Lot 8, Quezon City, Metro Manila',
+      presentAddress: 'Blk 12 Lot 8, Quezon City, Metro Manila',
+      provinceAddress: '',
       contactNumber: '09171234567',
       studentNumber: '2310346',
       studentCategory: 'Regular',
@@ -106,19 +142,38 @@ export const MOCK_PATIENT_RECORDS = {
     medicalHistory: {
       self: ['Asthma'],
       selfDetails: 'Uses inhaler during sudden weather changes.',
-      family: ['Hypertension (Father)', 'Diabetes (Grandmother)'],
+      family: [
+        { name: 'Hypertension', relationship: 'Father' },
+        { name: 'Diabetes', relationship: 'Grandmother' },
+      ],
       familyDetails: 'No known hereditary cancer history.',
     },
     medical: {
       vitalSigns: { height: '170', weight: '67', bmi: '23.2', bp: '118/78', heartRate: '76', temperature: '36.7', lastChecked: 'Mar 10, 2026' },
       bloodType: 'O+',
       allergies: { drug: 'Ibuprofen', food: 'Shrimp', other: 'Dust' },
+      allergiesList: [
+        { name: 'Ibuprofen', type: 'Drug', severity: 'Moderate', status: 'Active' },
+        { name: 'Shrimp', type: 'Food', severity: 'Mild', status: 'Active' },
+        { name: 'Dust Mites', type: 'Environmental', severity: 'Mild', status: 'Active' },
+      ],
       conditions: ['Asthma'],
-      medications: ['Cetirizine 10mg (as needed)', 'Salbutamol inhaler'],
-      immunizations: ['COVID-19 Booster', 'Hepatitis B (Dose 3)', 'Tetanus (2024)'],
-      hospitalizations: [{ reason: 'Dengue Fever', year: '2022', hospital: 'QC General Hospital', duration: '5 days' }],
-      operations: 'Appendectomy (2018)',
-      lifestyle: { smoker: 'No', alcoholDrinker: 'Yes (occasional)', tattoo: 'None', piercing: 'None' },
+      medications: [
+        { name: 'Cetirizine 10mg', description: 'as needed' },
+        { name: 'Salbutamol inhaler', description: '' },
+      ],
+      immunizations: [
+        { name: 'COVID-19 Booster', date: 'Jan 10, 2024', doseNumber: '3' },
+        { name: 'Hepatitis B', date: 'Mar 05, 2023', doseNumber: '3' },
+        { name: 'Tetanus', date: 'Aug 20, 2024', doseNumber: '1' },
+      ],
+      hospitalizations: [
+        { condition: 'Dengue Fever', admittedDate: 'Jul 12, 2022', dischargedDate: 'Jul 17, 2022' },
+      ],
+      operations: [
+        { procedure: 'Appendectomy', date: 'Mar 14, 2018' },
+      ],
+      lifestyle: { smoker: 'No', cigarettesPerDay: '', yearsSmoked: '', alcoholConsumer: 'Yes', alcoholFrequency: '2' },
       vision: { hasEyeglasses: true, hasContactLenses: false, gradeOD: '-1.25', gradeOS: '-1.00', lastExam: 'Jan 15, 2026' },
     },
     dental: {
@@ -163,19 +218,28 @@ export const MOCK_PATIENT_RECORDS = {
     avatar: null,
     personal: {
       firstName: 'Random', middleName: 'M.', lastName: 'Guy', suffix: '', birthDate: 'Sep 15, 1995', age: '30', sex: 'Male', civilStatus: 'Single',
-      nationality: 'Filipino', religion: 'Christian', address: 'Pasig City, Metro Manila', contactNumber: '09981234567', studentNumber: '', studentCategory: '',
+      nationality: 'Filipino', religion: 'Christian', address: 'Pasig City, Metro Manila', presentAddress: 'Pasig City, Metro Manila', provinceAddress: '', contactNumber: '09981234567', studentNumber: '', studentCategory: '',
       lastSchoolAttended: '', drugTestDone: 'Yes', employeeNumber: '2310345', position: 'HR Assistant', employmentCategory: 'Teaching and Non-Teaching', employmentStatus: 'Regular', branch: 'QuezonCity',
     },
     emergencyContacts: {
       first: { name: 'Anna Guy', relationship: 'Sister', contact: '09170001111', address: 'Pasig City' },
       second: { name: 'Luis Guy', relationship: 'Brother', contact: '09172223333', address: 'Cainta, Rizal' },
     },
-    medicalHistory: { self: ['Hypertension'], selfDetails: 'Controlled with medication and diet.', family: ['Hypertension (Mother)'], familyDetails: '' },
+    medicalHistory: { self: ['Hypertension'], selfDetails: 'Controlled with medication and diet.', family: [{ name: 'Hypertension', relationship: 'Mother' }], familyDetails: '' },
     medical: {
       vitalSigns: { height: '172', weight: '81', bmi: '27.4', bp: '130/85', heartRate: '80', temperature: '36.6', lastChecked: 'Mar 08, 2026' },
-      bloodType: 'A+', allergies: { drug: 'None', food: 'None', other: 'None' }, conditions: ['Hypertension'], medications: ['Amlodipine 5mg once daily'],
-      immunizations: ['Influenza (2025)', 'COVID-19 Booster'], hospitalizations: [], operations: 'None',
-      lifestyle: { smoker: 'No', alcoholDrinker: 'Yes (social)', tattoo: 'None', piercing: 'None' },
+      bloodType: 'A+',
+      allergies: { drug: 'None', food: 'None', other: 'None' },
+      allergiesList: [],
+      conditions: ['Hypertension'],
+      medications: [{ name: 'Amlodipine 5mg', description: 'once daily' }],
+      immunizations: [
+        { name: 'Influenza', date: 'Oct 15, 2025', doseNumber: '1' },
+        { name: 'COVID-19 Booster', date: 'Feb 10, 2025', doseNumber: '3' },
+      ],
+      hospitalizations: [],
+      operations: [],
+      lifestyle: { smoker: 'No', cigarettesPerDay: '', yearsSmoked: '', alcoholConsumer: 'Yes', alcoholFrequency: '3' },
       vision: { hasEyeglasses: true, hasContactLenses: false, gradeOD: '-0.75', gradeOS: '-0.50', lastExam: 'Dec 10, 2025' },
     },
     dental: {
