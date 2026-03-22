@@ -1,7 +1,7 @@
 /**
  * Announcement Service - Patient Version (Read-only)
  * Handles REST API calls to fetch announcements only
- * Endpoint: GET /info/announcement
+ * Endpoint: /announcement
  */
 
 import { axiosRequest } from '../../packages-core-adapter';
@@ -12,7 +12,7 @@ import { axiosRequest } from '../../packages-core-adapter';
  */
 export const fetchActiveAnnouncements = async () => {
   try {
-    const response = await axiosRequest.get('/info/announcement');
+    const response = await axiosRequest.get('/announcement');
     return response.data.data || [];
   } catch (err) {
     console.error('Failed to fetch announcements:', err);
@@ -27,7 +27,7 @@ export const fetchActiveAnnouncements = async () => {
  */
 export const fetchAnnouncementById = async (id) => {
   try {
-    const response = await axiosRequest.get(`/info/announcement/${id}`);
+    const response = await axiosRequest.get(`/announcement/${id}`);
     return response.data.data;
   } catch (err) {
     console.error(`Failed to fetch announcement ${id}:`, err);

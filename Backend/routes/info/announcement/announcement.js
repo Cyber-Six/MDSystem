@@ -11,7 +11,7 @@ const router = express.Router();
 router.get("/", jwtProtect(""), async (req, res) => {
     try {
         const sql = `
-            SELECT id, label, description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, pubmat, "isActive", created_at
             FROM "Announcement"
             WHERE "isActive" = true
             ORDER BY created_at DESC;
@@ -31,7 +31,7 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
         const { id } = req.params;
 
         const sql = `
-            SELECT id, label, description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, pubmat, "isActive", created_at
             FROM "Announcement"
             WHERE id = $1;
         `;
@@ -73,9 +73,9 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
         }
 
         const sql = `
-            INSERT INTO "Announcement" (label, description, pubmat, "isActive")
+            INSERT INTO "Announcement" (title, content, pubmat, "isActive")
             VALUES ($1, $2, $3, $4)
-            RETURNING *;
+            RETURNING id, title as label, content as description, pubmat, "isActive", created_at;
         `;
 
         const params = [
@@ -128,12 +128,12 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         const sql = `
             UPDATE "Announcement"
             SET
-                label = COALESCE($1, label),
-                description = COALESCE($2, description),
+                title = COALESCE($1, title),
+                content = COALESCE($2, content),
                 pubmat = COALESCE($3, pubmat),
                 "isActive" = COALESCE($4, "isActive")
             WHERE id = $5
-            RETURNING *;
+            RETURNING id, title as label, content as description, pubmat, "isActive", created_at;
         `;
 
         const params = [
@@ -198,7 +198,7 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
         }
 
         const sql = `
-            SELECT id, label, description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, pubmat, "isActive", created_at
             FROM "Announcement"
             ORDER BY created_at DESC;
         `;
