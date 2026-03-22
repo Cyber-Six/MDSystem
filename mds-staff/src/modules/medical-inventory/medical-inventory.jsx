@@ -140,15 +140,32 @@ const MedicalInventory = () => {
 
   const enrichRequestItems = useCallback((requestItems = []) => {
     return requestItems.map((item) => {
-      const batchId = item?.batchId ?? item?.medicineId;
-      const batch = batches.find((b) => String(b.id) === String(batchId));
-      const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
+      const hasBatchId = item?.batchId;
+      const medicineId = item?.medicineId;
+      
+      let itemId, itemName, batchId;
+      
+      if (hasBatchId) {
+        // Staff request with actual batchId
+        batchId = item.batchId;
+        const batch = batches.find((b) => String(b.id) === String(batchId));
+        const medicine = batch ? items.find((i) => String(i.id) === String(batch.medicalItemId)) : null;
+        itemId = medicine?.id || batch?.medicalItemId || null;
+        itemName = medicine?.item_name || `Batch #${batchId}`;
+      } else if (medicineId) {
+        // Patient request with just medicineId - look up medicine directly
+        const medicine = items.find((i) => String(i.id) === String(medicineId));
+        itemId = medicine?.id || medicineId;
+        itemName = medicine?.item_name || `Medicine #${medicineId}`;
+        batchId = null; // Will be selected during dispensing
+      }
+      
       return {
         ...item,
         batchId,
-        medicineId: item?.medicineId ?? batchId,
-        itemId: medicine?.id || batch?.medicalItemId || null,
-        itemName: medicine?.item_name || `Batch #${batchId}`,
+        medicineId: medicineId || batchId,
+        itemId,
+        itemName,
       };
     });
   }, [batches, items]);

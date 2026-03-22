@@ -21,8 +21,16 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
 
   if (!isOpen) return null;
 
+  const numericFields = new Set(['morningSlots', 'afternoonSlots']);
   const handleChange = (field) => (e) => {
-    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    if (numericFields.has(field)) {
+      const val = e.target.value;
+      if (val === '') { setFormData((prev) => ({ ...prev, [field]: '' })); return; }
+      const num = parseInt(val, 10);
+      if (!isNaN(num) && num >= 0) setFormData((prev) => ({ ...prev, [field]: num }));
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    }
   };
 
   const handleSubmit = (e) => {
@@ -142,20 +150,20 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
                 <div>
                   <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Morning Slots</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={formData.morningSlots}
                     onChange={handleChange('morningSlots')}
-                    min={0}
                     className="w-full px-3 py-1.5 text-sm bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                 </div>
                 <div>
                   <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Afternoon Slots</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={formData.afternoonSlots}
                     onChange={handleChange('afternoonSlots')}
-                    min={0}
                     className="w-full px-3 py-1.5 text-sm bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                 </div>

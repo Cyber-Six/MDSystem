@@ -50,6 +50,7 @@ export const fetchPatientMedicineRequests = async (patientId, offset = 0, limit 
         purpose
         notes
         approved_by
+        location
         created_at
         items {
           id
@@ -81,6 +82,7 @@ export const fetchAllMedicineRequests = async (status = null, offset = 0, limit 
         purpose
         notes
         approved_by
+        location
         created_at
         items {
           id
@@ -110,6 +112,7 @@ export const fetchMedicineRequestById = async (requestId) => {
         purpose
         notes
         approved_by
+        location
         created_at
         items {
           id

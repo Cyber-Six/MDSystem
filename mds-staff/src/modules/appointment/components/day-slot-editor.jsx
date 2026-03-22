@@ -1,328 +1,355 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Sun, Moon, Plus, Minus, X, Check, Calendar, Trash2, Clock } from 'lucide-react';
 
 /**
- * Day Slot Editor Component
- * Right-side panel — read-only by default, edit mode on button click
- * SRS §3.4.2 — Medical (default 60/60), Dental (default 1/1)
+ * Normalize a date value (string, Date, or number) to YYYY-MM-DD format.
  */
-const DaySlotEditor = ({ selectedDate, slotDefaults, dayOverride, onSave, onCreateEvent, events = [] }) => {
-  const [editing, setEditing] = useState(false);
-  const [medicalMorning, setMedicalMorning] = useState(slotDefaults.medical.morning);
-  const [medicalAfternoon, setMedicalAfternoon] = useState(slotDefaults.medical.afternoon);
-  const [dentalMorning, setDentalMorning] = useState(slotDefaults.dental.morning);
-  const [dentalAfternoon, setDentalAfternoon] = useState(slotDefaults.dental.afternoon);
-  const [dayStatus, setDayStatus] = useState('open');
-  const [notes, setNotes] = useState('');
-  const [hasChanges, setHasChanges] = useState(false);
+const normalizeDate = (val) => {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    // Already YYYY-MM-DD or ISO string — extract date portion
+    return val.split('T')[0];
+  }
+  if (val instanceof Date || typeof val === 'number') {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().split('T')[0];
+  }
+  return '';
+};
 
-  // Resolve display values: override > defaults
-  const displayMedMorning = dayOverride?.medical?.morning ?? slotDefaults.medical.morning;
-  const displayMedAfternoon = dayOverride?.medical?.afternoon ?? slotDefaults.medical.afternoon;
-  const displayDenMorning = dayOverride?.dental?.morning ?? slotDefaults.dental.morning;
-  const displayDenAfternoon = dayOverride?.dental?.afternoon ?? slotDefaults.dental.afternoon;
-  const displayStatus = dayOverride?.status ?? 'open';
+/**
+ * Day Slot Editor Component - Above calendar panel
+ * Fixed-height, always-inline editable. No edit button needed.
+ */
+const DaySlotEditor = ({
+  selectedDate: rawSelectedDate,
+  scheduler,
+  dayOverride,
+  onSave,
+  loading,
+  events = [],
+  customDates = [],
+  isDateAvailable = true,
+  onAddCustomDate,
+  onRemoveCustomDate,
+}) => {
+  const selectedDate = normalizeDate(rawSelectedDate);
+  const [morningSlots, setMorningSlots] = useState(0);
+  const [afternoonSlots, setAfternoonSlots] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const saveTimeoutRef = useRef(null);
 
-  // Reset to view mode when date changes, initialise from override if exists
+  // Default values from scheduler
+  const defaultMorning = scheduler?.morningAllowed ?? 25;
+  const defaultAfternoon = scheduler?.afternoonAllowed ?? 25;
+
+  // Check if this date is a custom date (normalize for comparison)
+  const customDateEntry = customDates.find(cd => normalizeDate(cd.scheduledDate) === selectedDate);
+  const isCustomDate = !!customDateEntry;
+
+  // Display values: override > custom date > defaults
+  const displayMorning = dayOverride?.morningAllowed ?? customDateEntry?.morningAllowed ?? defaultMorning;
+  const displayAfternoon = dayOverride?.afternoonAllowed ?? customDateEntry?.afternoonAllowed ?? defaultAfternoon;
+  const displayMorningRegistered = dayOverride?.morningRegistered ?? 0;
+  const displayAfternoonRegistered = dayOverride?.afternoonRegistered ?? 0;
+  const displayMorningPending = dayOverride?.morningPending ?? 0;
+  const displayAfternoonPending = dayOverride?.afternoonPending ?? 0;
+
+  // Totals
+  const totalMorning = displayMorningRegistered + displayMorningPending;
+  const totalAfternoon = displayAfternoonRegistered + displayAfternoonPending;
+  const morningAvailable = Math.max(0, displayMorning - totalMorning);
+  const afternoonAvailable = Math.max(0, displayAfternoon - totalAfternoon);
+
+  // Check if values are customized from defaults
+  const isCustomized = dayOverride && (
+    dayOverride.morningAllowed !== defaultMorning ||
+    dayOverride.afternoonAllowed !== defaultAfternoon
+  );
+
+  // Track whether the user has modified the slot values
+  const hasSlotChanges = morningSlots !== displayMorning || afternoonSlots !== displayAfternoon;
+
+  // Sync slot values when date or override changes
   useEffect(() => {
-    setEditing(false);
-    setMedicalMorning(dayOverride?.medical?.morning ?? slotDefaults.medical.morning);
-    setMedicalAfternoon(dayOverride?.medical?.afternoon ?? slotDefaults.medical.afternoon);
-    setDentalMorning(dayOverride?.dental?.morning ?? slotDefaults.dental.morning);
-    setDentalAfternoon(dayOverride?.dental?.afternoon ?? slotDefaults.dental.afternoon);
-    setDayStatus(dayOverride?.status ?? 'open');
-    setNotes(dayOverride?.notes ?? '');
-    setHasChanges(false);
-  }, [selectedDate, slotDefaults, dayOverride]);
+    setMorningSlots(displayMorning);
+    setAfternoonSlots(displayAfternoon);
+  }, [selectedDate, displayMorning, displayAfternoon]);
 
-  const handleChange = (setter) => (e) => {
-    setter(parseInt(e.target.value) || 0);
-    setHasChanges(true);
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+  }, []);
+
+  const handleSave = async () => {
+    if (!hasSlotChanges) return;
+    setSaving(true);
+    try {
+      await onSave?.({
+        morningAllowed: morningSlots,
+        afternoonAllowed: afternoonSlots,
+      });
+    } catch (err) {
+      console.error('Failed to save day override:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSave = () => {
-    onSave?.({
-      date: selectedDate,
-      medical: { morning: medicalMorning, afternoon: medicalAfternoon },
-      dental: { morning: dentalMorning, afternoon: dentalAfternoon },
-      status: dayStatus,
-      notes,
-    });
-    setHasChanges(false);
-    setEditing(false);
+  const handleAddAsCustomDate = async () => {
+    if (onAddCustomDate) {
+      setSaving(true);
+      try {
+        await onAddCustomDate(selectedDate, defaultMorning, defaultAfternoon);
+      } finally {
+        setSaving(false);
+      }
+    }
   };
 
-  const handleReset = () => {
-    setMedicalMorning(slotDefaults.medical.morning);
-    setMedicalAfternoon(slotDefaults.medical.afternoon);
-    setDentalMorning(slotDefaults.dental.morning);
-    setDentalAfternoon(slotDefaults.dental.afternoon);
-    setDayStatus('open');
-    setNotes('');
-    setHasChanges(false);
+  const handleRemoveAsCustomDate = async () => {
+    if (onRemoveCustomDate) {
+      setSaving(true);
+      try {
+        await onRemoveCustomDate(selectedDate);
+      } finally {
+        setSaving(false);
+      }
+    }
   };
 
-  const formatDate = (dateStr) => {
+  const formatDateShort = (dateStr) => {
     if (!dateStr) return '';
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const normalized = normalizeDate(dateStr);
+    if (!normalized) return '';
+    const d = new Date(normalized + 'T00:00:00');
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  const getDayOfWeek = (dateStr) => {
+    if (!dateStr) return '';
+    const normalized = normalizeDate(dateStr);
+    if (!normalized) return '';
+    const d = new Date(normalized + 'T00:00:00');
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { weekday: 'long' });
   };
 
   // Find events that overlap this date
-  const dayEvents = events.filter((e) => selectedDate >= e.startDate && selectedDate <= e.endDate);
+  const dayEvents = events.filter((e) => selectedDate >= normalizeDate(e.startDate) && selectedDate <= normalizeDate(e.endDate));
 
-  if (!selectedDate) {
-    return (
-      <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-6 flex flex-col items-center justify-center min-h-[300px]">
-        <svg className="w-10 h-10 text-neutral-300 dark:text-neutral-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <p className="text-sm text-secondary-500 dark:text-neutral-400 text-center">Select a date from the calendar<br />to view its details</p>
-      </div>
-    );
-  }
+  // Slot input handler - allows empty string for typing, treats empty as 0 on blur
+  const handleSlotChange = (setter) => (e) => {
+    const val = e.target.value;
+    if (val === '') {
+      setter(0);
+      return;
+    }
+    const num = parseInt(val, 10);
+    if (!isNaN(num) && num >= 0) {
+      setter(num);
+    }
+  };
 
-  /* ─── Read-only view (default) ─── */
-  if (!editing) {
-    return (
-      <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-        {/* Header */}
-        <div className="p-3 border-b border-neutral-200 dark:border-neutral-700">
-          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Day Details</h3>
-          <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{formatDate(selectedDate)}</p>
+  // Fixed-height container - always same size regardless of state
+  return (
+    <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 h-[140px] flex flex-col">
+      {/* No date selected */}
+      {!selectedDate ? (
+        <div className="flex-1 flex items-center justify-center px-3">
+          <div className="flex items-center gap-2 text-secondary-400 dark:text-neutral-500">
+            <Calendar className="w-4 h-4" />
+            <p className="text-xs font-medium">Click a date on the calendar to view and edit</p>
+          </div>
         </div>
-
-        <div className="p-3 space-y-3">
-          {/* Status */}
+      ) : loading ? (
+        /* Loading */
+        <div className="flex-1 flex items-center justify-center px-3">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+            <span className="text-xs text-secondary-500 dark:text-neutral-400">Loading...</span>
+          </div>
+        </div>
+      ) : !isDateAvailable && !isCustomDate ? (
+        /* Closed day - enable as custom date */
+        <div className="flex-1 flex flex-col justify-center px-3 py-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-secondary-500 dark:text-neutral-400">Status</span>
-            <span className={`text-xs font-semibold capitalize ${
-              displayStatus === 'open' ? 'text-success-600 dark:text-success-400' :
-              displayStatus === 'suspended' ? 'text-error-600 dark:text-error-400' :
-              'text-warning-600 dark:text-warning-400'
-            }`}>{displayStatus === 'open' ? 'Open' : displayStatus === 'suspended' ? 'Suspended' : 'Event Override'}</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Calendar className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" />
+                <span className="text-xs font-semibold text-secondary-800 dark:text-white truncate">{formatDateShort(selectedDate)}</span>
+                <span className="px-1.5 py-px text-[9px] font-semibold bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 rounded-full uppercase">
+                  Closed
+                </span>
+              </div>
+              <p className="text-[10px] text-secondary-400 dark:text-neutral-500 ml-5">
+                {getDayOfWeek(selectedDate)} is not in the schedule. Enable it to accept appointments.
+              </p>
+            </div>
+            <button
+              onClick={handleAddAsCustomDate}
+              disabled={saving}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm flex-shrink-0 ml-2"
+            >
+              {saving ? (
+                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Plus className="w-3 h-3" />
+              )}
+              Enable
+            </button>
           </div>
-
-          <hr className="border-neutral-100 dark:border-neutral-700" />
-
-          {/* Medical Slots */}
-          <div>
-            <p className="text-xs font-medium text-secondary-600 dark:text-neutral-300 flex items-center gap-1.5 mb-1.5">
-              <span className="w-2 h-2 rounded-full bg-accent-500" />
-              Medical Slots
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-neutral-50 dark:bg-neutral-700/40 rounded-md px-3 py-2 text-center">
-                <p className="text-lg font-bold text-secondary-800 dark:text-white">{displayMedMorning}</p>
-                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Morning</p>
-              </div>
-              <div className="bg-neutral-50 dark:bg-neutral-700/40 rounded-md px-3 py-2 text-center">
-                <p className="text-lg font-bold text-secondary-800 dark:text-white">{displayMedAfternoon}</p>
-                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Afternoon</p>
-              </div>
+        </div>
+      ) : (
+        /* Active day - inline editable */
+        <>
+          {/* Header row */}
+          <div className="flex items-center justify-between px-3 pt-2 pb-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Calendar className="w-3.5 h-3.5 text-primary-500 flex-shrink-0" />
+              <span className="text-xs font-semibold text-secondary-800 dark:text-white truncate">{formatDateShort(selectedDate)}</span>
+              {isCustomDate && (
+                <span className="px-1.5 py-px text-[9px] font-semibold bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-full flex-shrink-0">
+                  Custom
+                </span>
+              )}
+              {isCustomized && !isCustomDate && (
+                <span className="px-1.5 py-px text-[9px] font-semibold bg-accent-100 dark:bg-accent-900/30 text-accent-600 dark:text-accent-400 rounded-full flex-shrink-0">
+                  Modified
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {hasSlotChanges && (
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded transition-colors disabled:opacity-50"
+                >
+                  {saving ? (
+                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-3 h-3" />
+                  )}
+                  Save
+                </button>
+              )}
+              {isCustomDate && (
+                <button
+                  onClick={handleRemoveAsCustomDate}
+                  disabled={saving}
+                  className="p-1 text-error-400 hover:text-error-600 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors disabled:opacity-50"
+                  title="Remove custom date"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Dental Slots */}
-          <div>
-            <p className="text-xs font-medium text-secondary-600 dark:text-neutral-300 flex items-center gap-1.5 mb-1.5">
-              <span className="w-2 h-2 rounded-full bg-purple-500" />
-              Dental Slots
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-neutral-50 dark:bg-neutral-700/40 rounded-md px-3 py-2 text-center">
-                <p className="text-lg font-bold text-secondary-800 dark:text-white">{displayDenMorning}</p>
-                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Morning</p>
-              </div>
-              <div className="bg-neutral-50 dark:bg-neutral-700/40 rounded-md px-3 py-2 text-center">
-                <p className="text-lg font-bold text-secondary-800 dark:text-white">{displayDenAfternoon}</p>
-                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Afternoon</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Events for this date */}
-          {dayEvents.length > 0 && (
-            <div>
-              <hr className="border-neutral-100 dark:border-neutral-700 mb-2" />
-              <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 mb-1.5">Events on this date</p>
-              {dayEvents.map((ev) => (
-                <div key={ev.id} className="flex items-center gap-2 py-1">
-                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                    ev.effect === 'Suspend' ? 'bg-error-500' : ev.effect === 'Reduce' ? 'bg-warning-500' : 'bg-success-500'
-                  }`} />
-                  <span className="text-xs text-secondary-700 dark:text-neutral-300 font-medium">{ev.name}</span>
-                  <span className="text-[10px] text-secondary-400 dark:text-neutral-500">· {ev.effect}</span>
+          {/* Slot cards - compact inline editable */}
+          <div className="grid grid-cols-2 gap-2 px-3 pb-2 flex-1">
+            {/* Morning */}
+            <div className="bg-accent-50/50 dark:bg-accent-900/10 rounded-lg px-2.5 py-1.5 border border-accent-100 dark:border-accent-900/30 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <Sun className="w-3 h-3 text-accent-500" />
+                  <span className="text-[10px] font-semibold text-secondary-700 dark:text-neutral-300">Morning</span>
                 </div>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setMorningSlots(Math.max(0, morningSlots - 1))}
+                    className="p-0.5 hover:bg-accent-100 dark:hover:bg-accent-900/30 rounded text-secondary-400 transition-colors"
+                  >
+                    <Minus className="w-3 h-3" />
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={morningSlots}
+                    onChange={handleSlotChange(setMorningSlots)}
+                    className="w-10 text-center px-1 py-0.5 text-xs font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                  <button
+                    onClick={() => setMorningSlots(morningSlots + 1)}
+                    className="p-0.5 hover:bg-accent-100 dark:hover:bg-accent-900/30 rounded text-secondary-400 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between text-[10px] mt-1">
+                <span className="text-secondary-400">
+                  {displayMorningRegistered}<span className="text-secondary-300 mx-0.5">/</span>{displayMorningPending}p
+                </span>
+                <span className={`font-semibold ${morningAvailable === 0 ? 'text-error-500' : 'text-success-600 dark:text-success-400'}`}>
+                  {morningAvailable} left
+                </span>
+              </div>
+            </div>
+
+            {/* Afternoon */}
+            <div className="bg-warning-50/50 dark:bg-warning-900/10 rounded-lg px-2.5 py-1.5 border border-warning-100 dark:border-warning-900/30 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <Moon className="w-3 h-3 text-warning-500" />
+                  <span className="text-[10px] font-semibold text-secondary-700 dark:text-neutral-300">Afternoon</span>
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setAfternoonSlots(Math.max(0, afternoonSlots - 1))}
+                    className="p-0.5 hover:bg-warning-100 dark:hover:bg-warning-900/30 rounded text-secondary-400 transition-colors"
+                  >
+                    <Minus className="w-3 h-3" />
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={afternoonSlots}
+                    onChange={handleSlotChange(setAfternoonSlots)}
+                    className="w-10 text-center px-1 py-0.5 text-xs font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                  <button
+                    onClick={() => setAfternoonSlots(afternoonSlots + 1)}
+                    className="p-0.5 hover:bg-warning-100 dark:hover:bg-warning-900/30 rounded text-secondary-400 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between text-[10px] mt-1">
+                <span className="text-secondary-400">
+                  {displayAfternoonRegistered}<span className="text-secondary-300 mx-0.5">/</span>{displayAfternoonPending}p
+                </span>
+                <span className={`font-semibold ${afternoonAvailable === 0 ? 'text-error-500' : 'text-success-600 dark:text-success-400'}`}>
+                  {afternoonAvailable} left
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Events indicator - compact */}
+          {dayEvents.length > 0 && (
+            <div className="px-3 pb-1.5 flex items-center gap-1.5 overflow-hidden">
+              <Clock className="w-3 h-3 text-secondary-400 flex-shrink-0" />
+              {dayEvents.map((ev) => (
+                <span
+                  key={ev.id}
+                  className={`px-1.5 py-0.5 text-[9px] font-medium rounded ${
+                    ev.effect === 'Suspend'
+                      ? 'bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400'
+                      : 'bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400'
+                  }`}
+                >
+                  {ev.name}
+                </span>
               ))}
             </div>
           )}
-
-          {/* Edit button */}
-          <button
-            onClick={() => setEditing(true)}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors mt-1"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Edit Day Details
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ─── Edit mode ─── */
-  return (
-    <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-      {/* Header */}
-      <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Edit Day Details</h3>
-          <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{formatDate(selectedDate)}</p>
-        </div>
-        <button
-          onClick={() => { setEditing(false); handleReset(); }}
-          className="p-1 text-secondary-400 hover:text-secondary-600 dark:text-neutral-500 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
-          title="Cancel"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      <div className="p-3 space-y-4">
-        {/* Day Status */}
-        <div>
-          <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Status</label>
-          <select
-            value={dayStatus}
-            onChange={(e) => { setDayStatus(e.target.value); setHasChanges(true); }}
-            className="w-full px-2.5 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
-          >
-            <option value="open">Open</option>
-            <option value="suspended">Suspended (No Service)</option>
-            <option value="event">Event Override</option>
-          </select>
-        </div>
-
-        {dayStatus !== 'suspended' && (
-          <>
-            {/* Medical Slots */}
-            <div>
-              <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-2 block flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-accent-500" />
-                Medical Slots
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Morning</label>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => { setMedicalMorning(Math.max(0, medicalMorning - 5)); setHasChanges(true); }} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded text-secondary-500 dark:text-neutral-400">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                    </button>
-                    <input type="number" value={medicalMorning} onChange={handleChange(setMedicalMorning)} className="w-full text-center px-2 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500" min={0} />
-                    <button onClick={() => { setMedicalMorning(medicalMorning + 5); setHasChanges(true); }} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded text-secondary-500 dark:text-neutral-400">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Afternoon</label>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => { setMedicalAfternoon(Math.max(0, medicalAfternoon - 5)); setHasChanges(true); }} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded text-secondary-500 dark:text-neutral-400">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                    </button>
-                    <input type="number" value={medicalAfternoon} onChange={handleChange(setMedicalAfternoon)} className="w-full text-center px-2 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500" min={0} />
-                    <button onClick={() => { setMedicalAfternoon(medicalAfternoon + 5); setHasChanges(true); }} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded text-secondary-500 dark:text-neutral-400">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Dental Slots */}
-            <div>
-              <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-2 block flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-purple-500" />
-                Dental Slots
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Morning</label>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => { setDentalMorning(Math.max(0, dentalMorning - 1)); setHasChanges(true); }} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded text-secondary-500 dark:text-neutral-400">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                    </button>
-                    <input type="number" value={dentalMorning} onChange={handleChange(setDentalMorning)} className="w-full text-center px-2 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500" min={0} />
-                    <button onClick={() => { setDentalMorning(dentalMorning + 1); setHasChanges(true); }} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded text-secondary-500 dark:text-neutral-400">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Afternoon</label>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => { setDentalAfternoon(Math.max(0, dentalAfternoon - 1)); setHasChanges(true); }} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded text-secondary-500 dark:text-neutral-400">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                    </button>
-                    <input type="number" value={dentalAfternoon} onChange={handleChange(setDentalAfternoon)} className="w-full text-center px-2 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500" min={0} />
-                    <button onClick={() => { setDentalAfternoon(dentalAfternoon + 1); setHasChanges(true); }} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded text-secondary-500 dark:text-neutral-400">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Notes */}
-        <div>
-          <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Notes (Optional)</label>
-          <textarea
-            value={notes}
-            onChange={(e) => { setNotes(e.target.value); setHasChanges(true); }}
-            rows={2}
-            placeholder="Reason for changes..."
-            className="w-full px-2.5 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
-          />
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={handleSave}
-            disabled={!hasChanges}
-            className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              hasChanges
-                ? 'bg-primary-500 hover:bg-primary-600 text-white'
-                : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500 cursor-not-allowed'
-            }`}
-          >
-            Save Changes
-          </button>
-          <button
-            onClick={handleReset}
-            className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
-          >
-            Reset
-          </button>
-        </div>
-
-        {/* Create Event shortcut */}
-        <button
-          onClick={() => onCreateEvent?.(selectedDate)}
-          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-800 hover:bg-accent-50 dark:hover:bg-accent-900/20 rounded-md transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Create Event for This Date
-        </button>
-      </div>
+        </>
+      )}
     </div>
   );
 };

@@ -518,6 +518,71 @@ async function getStaffAnchor(userId) {
   return await getKey(key); // string or null
 }
 
+/**
+ * List all refresh sessions for a user (scans rt:${userId}:* keys)
+ * @param {string|number} userId
+ * @returns {Promise<Array>} Array of session objects with deviceId
+ */
+async function listUserSessions(userId) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!userId) throw new Error("listUserSessions: userId is required");
+
+  const pattern = `rt:${userId}:*`;
+  const sessions = [];
+
+  // Use SCAN to find all matching keys
+  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+    const raw = await client.get(key);
+    if (raw) {
+      try {
+        const session = JSON.parse(raw);
+        sessions.push(session);
+      } catch (e) {
+        // Skip invalid JSON
+      }
+    }
+  }
+
+  return sessions;
+}
+
+/**
+ * Delete all refresh sessions for a user
+ * @param {string|number} userId
+ * @returns {Promise<number>} Number of sessions deleted
+ */
+async function deleteAllUserSessions(userId) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!userId) throw new Error("deleteAllUserSessions: userId is required");
+
+  const pattern = `rt:${userId}:*`;
+  const keysToDelete = [];
+
+  // Collect all keys matching the pattern
+  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+    keysToDelete.push(key);
+  }
+
+  // Delete all keys if any found
+  if (keysToDelete.length > 0) {
+    await client.del(keysToDelete);
+  }
+
+  return keysToDelete.length;
+}
+
+/**
+ * Delete the staff anchor (forces re-login for all devices)
+ * @param {string|number} userId
+ */
+async function deleteStaffAnchor(userId) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!userId) throw new Error("deleteStaffAnchor: userId is required");
+
+  const key = `staff:anchor:${userId}`;
+  await client.del(key);
+}
+
 // New: load refresh session
 async function getRefreshSession(userId, deviceId) {
   if (!userId || !deviceId) {
@@ -765,9 +830,12 @@ module.exports = {
   getUserIdFromVerificationSession,
 
   saveRefreshSession,
-  getRefreshSession, 
+  getRefreshSession,
   saveStaffAnchor,
   getStaffAnchor,
+  listUserSessions,
+  deleteAllUserSessions,
+  deleteStaffAnchor,
 
   recordResetPwFailure,
   getResetPwFailures,

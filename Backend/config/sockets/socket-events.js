@@ -47,9 +47,9 @@ function registerHandlers(handlers) {
  */
 function bindHandlersToSocket(socket) {
   for (const [eventName, handler] of registry) {
-    socket.on(eventName, (data, callback) => {
+    socket.on(eventName, async (data, callback) => {
       try {
-        handler(socket, data, callback);
+        await handler(socket, data, callback);
       } catch (err) {
         logger.error(`[SOCKET_EVENTS] Error in "${eventName}":`, err);
         if (typeof callback === 'function') {

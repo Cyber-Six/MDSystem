@@ -178,21 +178,30 @@ async function insertSlotCustomDates(slotScheduleId, dates, db) {
     throw new Error("Dates array must not be empty");
   }
 
-  // Build placeholders like ($1, $2), ($1, $3), ...
+  // Build placeholders for new format with optional slots
+  // dates can be array of objects {scheduledDate, morningAllowed?, afternoonAllowed?}
+  // or array of date strings for backward compatibility
   const values = [];
-  const placeholders = dates.map((_, i) => {
-    const dateParamIndex = i + 2; // slotScheduleId is $1
-    values.push(dates[i]);
-    return `($1, $${dateParamIndex})`;
+  const placeholders = dates.map((dateEntry, i) => {
+    const offset = i * 4;
+    const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
+    const morning = typeof dateEntry === 'object' ? (dateEntry.morningAllowed ?? null) : null;
+    const afternoon = typeof dateEntry === 'object' ? (dateEntry.afternoonAllowed ?? null) : null;
+    values.push(slotScheduleId, scheduledDate, morning, afternoon);
+    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`;
   });
 
   const query = `
-    INSERT INTO "SlotCustomDate" (slotScheduleId, scheduledDate)
+    INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate", "morningAllowed", "afternoonAllowed")
     VALUES ${placeholders.join(", ")}
+    ON CONFLICT ("slotScheduleId", "scheduledDate")
+    DO UPDATE SET
+      "morningAllowed" = EXCLUDED."morningAllowed",
+      "afternoonAllowed" = EXCLUDED."afternoonAllowed"
     RETURNING *;
   `;
 
-  const result = await db.query(query, [slotScheduleId, ...values]);
+  const result = await db.query(query, values);
   return result.rows;
 }
 

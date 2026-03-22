@@ -1,89 +1,143 @@
-import React from 'react';
-import { Heart, RefreshCw } from 'lucide-react';
+import React, { useEffect, useContext } from 'react';
+import { RefreshCw, Stethoscope } from 'lucide-react';
 import { HealthChatProvider, useHealthChat } from './context/health-chat-context';
 import { useHealthChatSocket } from './hooks/use-health-chat-socket';
 import FilterTabs from './components/filter-tabs';
 import PatientList from './components/patient-list';
 import ChatPanel from './components/chat-panel';
+import { SidebarContext } from '../../components/layout/StaffLayout';
 
-/**
- * Inner component that uses the context
- */
 const HealthChatContent = () => {
-  // Initialize socket connection
-  const { isConnected, refreshMessages } = useHealthChatSocket();
-  const { socketError } = useHealthChat();
+  const { isConnected, emitTyping } = useHealthChatSocket();
+  const { socketError, selectedChatId, selectedTicket, refreshMessages } = useHealthChat();
+
+  const connStatus = socketError
+    ? { dot: '#F59E0B', label: 'Manual refresh' }
+    : isConnected
+    ? { dot: '#10B981', label: 'Connected' }
+    : { dot: '#F59E0B', label: 'Connecting…' };
+
+  // Poll for new messages when socket is disconnected (fallback mechanism)
+  useEffect(() => {
+    // Only poll when socket is disconnected or has error, and a chat is selected and active
+    if (!selectedChatId || selectedTicket?.status !== 'Ongoing') return;
+    if (isConnected && !socketError) return; // Socket is working, no need to poll
+
+    console.log('[HealthChat Staff] Socket disconnected - starting message polling for chat:', selectedChatId);
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await refreshMessages();
+      } catch (err) {
+        console.error('[HealthChat Staff] Message polling failed:', err);
+      }
+    }, 15000); // Poll every 15 seconds
+
+    return () => {
+      console.log('[HealthChat Staff] Stopping message polling');
+      clearInterval(pollInterval);
+    };
+  }, [selectedChatId, selectedTicket?.status, isConnected, socketError, refreshMessages]);
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-              <Heart className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-neutral-900 dark:text-white">
-                Health Chat
-              </h1>
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                {socketError ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 bg-amber-500 rounded-full" />
-                    Using manual refresh
-                  </span>
-                ) : isConnected ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full" />
-                    Connected
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 bg-amber-500 rounded-full" />
-                    Connecting...
-                  </span>
-                )}
-              </p>
-            </div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="bg-neutral-100 dark:bg-neutral-800">
+
+      {/* ── Page header ── */}
+      <div
+        className="flex items-center justify-between px-6 py-3 flex-shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700"
+      >
+        <div className="flex items-center gap-3">
+          {/* Icon */}
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: '#f4c430' }}
+          >
+            <Stethoscope className="w-4 h-4" style={{ color: '#1c1a17' }} />
           </div>
 
-          {/* Refresh button */}
-          <button
-            onClick={refreshMessages}
-            className="p-2 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-            title="Refresh all messages"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
+          {/* Title + status — explicit line-heights, no leading-none */}
+          <div className="flex flex-col justify-center" style={{ gap: '3px' }}>
+            <h1
+              className="text-sm font-bold text-secondary-900 dark:text-white"
+              style={{ fontFamily: 'Poppins, sans-serif', lineHeight: 1.2, margin: 0 }}
+            >
+              Health Chat
+            </h1>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{ background: connStatus.dot }}
+              />
+              <span className="text-neutral-500 dark:text-neutral-400" style={{ fontSize: '10px', fontFamily: 'Fira Code, monospace', lineHeight: 1.2 }}>
+                {connStatus.label}
+              </span>
+            </span>
+          </div>
         </div>
+
+        {/* Refresh */}
+        <button
+          onClick={refreshMessages}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors
+                     text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700
+                     hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          title="Refresh all messages"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Refresh
+        </button>
       </div>
 
-      {/* Main Content - Messenger-like layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Patient List */}
-        <div className="w-80 border-r border-neutral-200 dark:border-neutral-700 flex flex-col bg-white dark:bg-neutral-900">
+      {/* ── Messenger layout ── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+
+        {/* Left panel */}
+        <div
+          className="bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-700"
+          style={{
+            width: '320px',
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
           <FilterTabs />
           <PatientList />
         </div>
 
-        {/* Right Panel - Chat */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <ChatPanel />
+        {/* Right panel */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          <ChatPanel emitTyping={emitTyping} />
         </div>
+
       </div>
     </div>
   );
 };
 
-/**
- * Main Health Chat View Component
- * Wrapped with HealthChatProvider for state management
- */
 const HealthChatView = () => {
+  const { sidebarExpanded } = useContext(SidebarContext);
+
+  // Calculate left position based on sidebar state
+  const leftPosition = sidebarExpanded ? '14rem' : '3.75rem'; // 224px when expanded, 60px when collapsed
+
   return (
     <HealthChatProvider>
-      <div className="h-[calc(100vh-4rem)]">
+      <div
+        style={{
+          position: 'fixed',
+          top: '3.5rem',     /* matches StaffLayout top navbar height — adjust if needed */
+          left: leftPosition,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          zIndex: 10,
+          transition: 'left 300ms ease-in-out',
+        }}
+      >
         <HealthChatContent />
       </div>
     </HealthChatProvider>

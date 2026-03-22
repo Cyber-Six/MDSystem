@@ -134,6 +134,24 @@ const Query = {
     const status = await db.query(sql, [userId]);
     return status.rows[0]?.status || null;
   },
+
+  _getUserLoginCredentials: async (_, { userId }, { user, res }) => {
+    if (!userId) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const sql = `
+      SELECT email, credentials_status, locked_until
+      FROM "UserCredentials" uc
+      LEFT JOIN "UserLoginAttempts" ula ON uc.id = ula.user_id
+      WHERE 
+        uc.id = $1 AND 
+        (ula.was_successful = true OR ula.was_successful IS NULL)
+      LIMIT 1;
+    `;
+    const result = await db.query(sql, [userId]);
+    return result.rows[0] || null;
+  },
+
 };
 
 const Mutation = {
@@ -334,7 +352,7 @@ const Mutation = {
   },
 
   _staffSetCredentialStatus: async (_, { userId, status, lockDays = 7 }, { user, res }) => {
-    const validStatuses = ["locked", "active"];
+    const validStatuses = ["Locked", "Active"];
     if (!validStatuses.includes(status)) {
       throwGraphQLError(res).message("Invalid credential status").status(400).throw();
     }
@@ -342,7 +360,7 @@ const Mutation = {
     let query, params;
     console.log("Executing _staffSetCredentialStatus with params:", params);
 
-    if (status === "locked") {
+    if (status === "Locked") {
       query = `
         UPDATE "UserCredentials"
         SET credentials_status = $1,
@@ -353,7 +371,7 @@ const Mutation = {
       `;
       params = [status, userId, lockDays];
     } else {
-      // status = "active"
+      // status = "Active"
       query = `
         UPDATE "UserCredentials"
         SET credentials_status = $1,

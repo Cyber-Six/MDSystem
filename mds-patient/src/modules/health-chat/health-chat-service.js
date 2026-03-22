@@ -35,6 +35,8 @@ export const getMyTickets = async (status = null, offset = 0, limit = 10) => {
           status
           session_start
           session_end
+          archived_at
+          closedBy
           expiresAt
           patient {
             id
@@ -74,6 +76,8 @@ export const getMyTicket = async (chatId) => {
         status
         session_start
         session_end
+        archived_at
+        closedBy
         expiresAt
         patient {
           id

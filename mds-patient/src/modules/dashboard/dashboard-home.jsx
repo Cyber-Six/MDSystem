@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { AnnouncementCarousel } from '../anouncement';
 
 const DashboardHome = ({ firstName }) => {
   const pendingRequests = [
@@ -51,7 +52,7 @@ const DashboardHome = ({ firstName }) => {
   };
 
   return (
-    <div className="space-y-6 py-6">
+    <div className="space-y-6">
       {/* Welcome Section */}
       <div className="bg-primary-500 dark:bg-neutral-900 rounded-lg p-6 text-white">
         <h1 className="text-3xl font-bold mb-2 text-white">Welcome back, {firstName || 'there'}!</h1>
@@ -74,6 +75,9 @@ const DashboardHome = ({ firstName }) => {
           </div>
         ))}
       </div>
+
+      {/* Announcements Section */}
+      <AnnouncementCarousel />
 
       {/* Pending Requests Section */}
       <div className="bg-white dark:bg-neutral-900 rounded-lg border border-gray-200 dark:border-neutral-700">

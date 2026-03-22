@@ -14,13 +14,13 @@ const { initMedicalInventoryGraphQL } = require('./routes/medical-inventory/inve
 const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
 const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
+const { initRoleManagementGraphQL } = require('./routes/rolemanagement/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 const staffRoutes = require('./routes/staff/staff.js');
-const roleManagementRoutes = require('./routes/staff/rolemanagement.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentRoutes = require('./routes/documents/documents.js');
 
@@ -66,13 +66,13 @@ initMedicalInventoryGraphQL(app);
 initMedicalMedicineRequestGraphQL(app);
 initPrescriptionGraphQL(app);
 initMedicalHealthChatGraphQL(app);
+initRoleManagementGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
-app.use('/admin/staff', roleManagementRoutes);
 app.use('/media', mediaRoutes);
 app.use('/documents', documentRoutes);
 

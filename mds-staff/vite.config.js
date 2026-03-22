@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORTAL_URLS = {
   staff:  'https://staff.mdsystemtip.space',
   staff2: 'https://staff2.mdsystemtip.space',
-  local:  'http://localhost:3002',
+  local:  'http://localhost:3001',
 };
 
 // https://vite.dev/config/
@@ -38,10 +38,17 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       proxy: {
+        // Socket.IO WebSocket proxy (must be first for proper WebSocket upgrade)
+        '/socket.io': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
+          ws: true, // Enable WebSocket proxying
+        },
         '/auth': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
           bypass: function(req) {
             // Don't proxy GET requests (browser navigation) - let React Router handle them
             if (req.method === 'GET') {
@@ -52,12 +59,12 @@ export default defineConfig(({ mode }) => {
         '/emr': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/dashboard': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
           bypass: function(req) {
             if (req.method === 'GET') {
               return '/index.html';
@@ -67,17 +74,17 @@ export default defineConfig(({ mode }) => {
         '/medical-update': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/profile-update': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/appointment': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
           bypass: function(req) {
             // Don't proxy GET requests (browser navigation) - let React Router handle them
             if (req.method === 'GET') {
@@ -88,37 +95,37 @@ export default defineConfig(({ mode }) => {
         '/consultation': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/profile': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/media': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/info': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/medical-inventory': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/admin': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/healthchat': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
       },
     }

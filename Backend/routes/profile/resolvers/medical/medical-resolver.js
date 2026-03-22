@@ -76,6 +76,21 @@ const Query = {
 
     return await Wrapper.Query._getBranchIdentifier(_, { userId }, { user, res }); 
   },
+
+  getUserLoginCredentials: async (_, { userId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
+    if (!isPermitted) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to view login credentials of user ${userId}`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const result = await Wrapper.Query._getUserLoginCredentials(_, { userId }, { user, res });
+    return result || null;
+  },
 };
 
 const Mutation = {

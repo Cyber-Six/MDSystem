@@ -5,7 +5,7 @@ import { getPatientStatus, getPatientRecords, fetchRequirementFile } from '../st
  * Appointment Detail Modal
  * Shows real patientSlot record from the backend.
  * Backend shape: { id, patientId, slotEntityId, status, session,
- *   approvedBy, notes, arrived_at, created_at, requirements[] }
+ *   approvedBy, arrived_at, created_at, notes, requirements[] }
  *
  * Actions align to the appointment state machine:
  *   Pending     → Approve (Scheduled), Reject
@@ -90,9 +90,9 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
     status,
     session,
     approvedBy,
-    notes,
     arrived_at,
     created_at,
+    notes,
     requirements = [],
   } = appointment;
 
@@ -273,14 +273,16 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
             </div>
           </div>
 
-          {/* Notes */}
-          {notes && (
+          {/* Staff Notes (Rejection/Cancellation Reason) */}
+          {notes && (status === 'Rejected' || status.startsWith('Cancelled')) && (
             <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
               <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
-                <h3 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Notes</h3>
+                <h3 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">
+                  {status === 'Rejected' ? 'Rejection Reason' : 'Cancellation Reason'}
+                </h3>
               </div>
               <div className="p-4">
-                <p className="text-sm text-secondary-700 dark:text-neutral-300">{notes}</p>
+                <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap">{notes}</p>
               </div>
             </div>
           )}
@@ -357,7 +359,6 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                       </div>
                       <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-0.5">
                         {rec.created_at ? new Date(rec.created_at).toLocaleDateString() : '—'}
-                        {rec.notes ? ` · ${rec.notes}` : ''}
                       </p>
                     </div>
                     <span className={`px-2 py-0.5 text-[10px] font-medium rounded whitespace-nowrap ${STATUS_COLORS[rec.status] || 'bg-neutral-100 text-neutral-600'}`}>

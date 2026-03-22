@@ -86,7 +86,7 @@ const SearchResultsList = ({ patients, hasFired, isLoading, error, searchTerm, f
             <li key={p.id}>
               <button
                 onClick={() => onSelectPatient(p)}
-                className={`w-full grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 items-center px-4 py-3 text-left transition-colors
+                className={`w-full grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 items-start px-4 py-3 text-left transition-colors
                   ${isSelected
                     ? 'bg-primary-100 dark:bg-primary-900/30 border-l-2 border-primary-500'
                     : isFocused
@@ -94,14 +94,14 @@ const SearchResultsList = ({ patients, hasFired, isLoading, error, searchTerm, f
                       : 'hover:bg-neutral-50 dark:hover:bg-neutral-700/50'}`}
               >
                 {/* Avatar */}
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
                   {getPatientInitials(p)}
                 </div>
 
                 {/* Name + meta */}
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-secondary-900 dark:text-white truncate">{formatPatientName(p)}</p>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <div className="min-w-0 flex flex-col justify-start">
+                  <p className="text-sm font-semibold text-secondary-900 dark:text-white truncate leading-snug">{formatPatientName(p)}</p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     {p.identifier && (
                       <span className="text-xs font-mono text-secondary-500 dark:text-neutral-400">{p.identifier}</span>
                     )}
@@ -117,17 +117,17 @@ const SearchResultsList = ({ patients, hasFired, isLoading, error, searchTerm, f
                 </div>
 
                 {/* Branch */}
-                <div className="text-xs text-secondary-500 dark:text-neutral-400 text-right whitespace-nowrap">
+                <div className="text-xs text-secondary-500 dark:text-neutral-400 text-right whitespace-nowrap pt-0.5">
                   {p.branch || '—'}
                 </div>
 
                 {/* Scope */}
-                <div className="text-right">
+                <div className="text-right pt-0.5">
                   <ScopeBadge scope={p.latest_scope} />
                 </div>
 
                 {/* Status */}
-                <div className="text-right">
+                <div className="text-right pt-0.5">
                   {p.latest_status ? (
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={p.latest_status} />

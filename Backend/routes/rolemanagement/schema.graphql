@@ -1,0 +1,234 @@
+scalar Date
+
+# ─── ENUMS ─────────────────────────────────────────────────────────────────────
+
+enum StaffRole {
+  Doctor
+  Nurse
+  Admin
+  Pharmacist
+  Dentist
+  Staff
+}
+
+enum Designation {
+  Manila
+  QuezonCity
+  Both
+}
+
+enum AccountStatus {
+  Active
+  Suspended
+  Pending
+}
+
+enum CredentialsStatus {
+  Active
+  Unverified
+  Suspended
+}
+
+enum Identity {
+  Medical
+  Employee
+  Student
+  Superior
+}
+
+# ─── TYPES ─────────────────────────────────────────────────────────────────────
+
+type UserInfo {
+  email: String!
+  identity: Identity!
+  credentialsStatus: CredentialsStatus!
+  name: String!
+}
+
+type MedicalPersonnel {
+  id: ID!
+  role: StaffRole
+  title: String
+  designation: Designation
+  isActive: Boolean
+  user: UserInfo
+}
+
+type Permissions {
+  is_admin: Boolean!
+  is_staff: Boolean!
+  privileged_to_perform_on_superior: Boolean!
+  emr_allow_approval: Boolean!
+  emr_allow_edit: Boolean!
+  emr_allow_view: Boolean!
+  emr_allow_set_dental_record: Boolean!
+  emr_allow_edit_catalogs: Boolean!
+  profile_allow_approval: Boolean!
+  profile_allow_view: Boolean!
+  profile_allow_edit: Boolean!
+  profile_allow_update_email_identifier: Boolean!
+  appointment_allow_approval: Boolean!
+  appointment_allow_view_records: Boolean!
+  appointment_allow_view_configuration: Boolean!
+  appointment_allow_edit_configuration: Boolean!
+  announcement_allow_crud: Boolean!
+  consultation_allow_view: Boolean!
+  consultation_allow_edit: Boolean!
+  inventory_allow_view: Boolean!
+  inventory_allow_dispense: Boolean!
+  inventory_allow_edit: Boolean!
+  inventory_allow_manage_requests: Boolean!
+  inventory_allow_prescribe: Boolean!
+  medicine_request_allow_approve: Boolean!
+}
+
+type StaffAccount {
+  id: ID!
+  email: String!
+  name: String!
+  branch: Designation
+  identity: Identity!
+  status: AccountStatus!
+  permissions: Permissions!
+  credentialsStatus: CredentialsStatus
+  lastLogin: String
+}
+
+type StaffAccountList {
+  staff: [StaffAccount!]!
+  count: Int!
+}
+
+type MedicalPersonnelList {
+  personnel: [MedicalPersonnel!]!
+  count: Int!
+}
+
+type MutationResult {
+  ok: Boolean!
+  message: String!
+}
+
+type StaffAccountMutationResult {
+  ok: Boolean!
+  message: String!
+}
+
+type MedicalPersonnelMutationResult {
+  ok: Boolean!
+  message: String!
+  personnel: MedicalPersonnel
+}
+
+type DeleteMedicalPersonnelResult {
+  ok: Boolean!
+  message: String!
+  identityReverted: Boolean!
+}
+
+# ─── SESSION MANAGEMENT TYPES ──────────────────────────────────────────────────
+
+type StaffSession {
+  deviceId: String!
+  status: String!
+  createdAt: String!
+  updatedAt: String
+  expiresAt: String
+  isCurrent: Boolean!
+}
+
+type StaffSessionList {
+  sessions: [StaffSession!]!
+  count: Int!
+  currentAnchor: String
+}
+
+type RotateAnchorResult {
+  ok: Boolean!
+  message: String!
+  sessionsInvalidated: Int!
+}
+
+# ─── INPUT TYPES ───────────────────────────────────────────────────────────────
+
+input CreateMedicalPersonnelInput {
+  userId: ID!
+  title: String!
+  role: StaffRole!
+  designation: Designation!
+}
+
+input UpdateMedicalPersonnelInput {
+  title: String
+  designation: Designation
+  isActive: Boolean
+}
+
+input PermissionsInput {
+  is_admin: Boolean
+  is_staff: Boolean
+  privileged_to_perform_on_superior: Boolean
+  emr_allow_approval: Boolean
+  emr_allow_edit: Boolean
+  emr_allow_view: Boolean
+  emr_allow_set_dental_record: Boolean
+  emr_allow_edit_catalogs: Boolean
+  profile_allow_approval: Boolean
+  profile_allow_view: Boolean
+  profile_allow_edit: Boolean
+  profile_allow_update_email_identifier: Boolean
+  appointment_allow_approval: Boolean
+  appointment_allow_view_records: Boolean
+  appointment_allow_view_configuration: Boolean
+  appointment_allow_edit_configuration: Boolean
+  announcement_allow_crud: Boolean
+  consultation_allow_view: Boolean
+  consultation_allow_edit: Boolean
+  inventory_allow_view: Boolean
+  inventory_allow_dispense: Boolean
+  inventory_allow_edit: Boolean
+  inventory_allow_manage_requests: Boolean
+  inventory_allow_prescribe: Boolean
+  medicine_request_allow_approve: Boolean
+}
+
+input UpdateStaffAccountInput {
+  permissions: PermissionsInput!
+  status: AccountStatus!
+}
+
+# ─── QUERIES ───────────────────────────────────────────────────────────────────
+
+type Query {
+  # Staff Accounts
+  listStaffAccounts(status: CredentialsStatus, location: Designation): StaffAccountList!
+  getStaffAccount(userId: ID!): StaffAccount
+
+  # Medical Personnel
+  listMedicalPersonnel(role: StaffRole, designation: Designation, isActive: Boolean): MedicalPersonnelList!
+  getMedicalPersonnel(userId: ID!): MedicalPersonnel
+
+  # Permissions
+  getStaffPermissions(userId: ID!): Permissions!
+
+  # Session Management
+  listStaffSessions(userId: ID!): StaffSessionList!
+}
+
+# ─── MUTATIONS ─────────────────────────────────────────────────────────────────
+
+type Mutation {
+  # Staff Accounts
+  updateStaffAccount(userId: ID!, input: UpdateStaffAccountInput!): StaffAccountMutationResult!
+
+  # Medical Personnel
+  createMedicalPersonnel(input: CreateMedicalPersonnelInput!): MedicalPersonnelMutationResult!
+  updateMedicalPersonnel(userId: ID!, input: UpdateMedicalPersonnelInput!): MedicalPersonnelMutationResult!
+  deleteMedicalPersonnel(userId: ID!, revertIdentity: Boolean): DeleteMedicalPersonnelResult!
+
+  # Permissions (direct set)
+  setStaffPermissions(userId: ID!, permissions: PermissionsInput!, branch: Designation): MutationResult!
+
+  # Session Management
+  rotateStaffAnchor(userId: ID!): RotateAnchorResult!
+}

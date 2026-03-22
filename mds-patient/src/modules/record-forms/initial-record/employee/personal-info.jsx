@@ -1,8 +1,10 @@
 import React from 'react';
 import { Input, Select } from '../medical/form-elements';
 
-const EmployeePersonalInfoForm = ({ data, onChange }) => {
+const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError = () => {} }) => {
   const handleChange = (field, value) => {
+    // Clear error for this field when user starts typing
+    onClearFieldError(field);
     onChange({ ...data, [field]: value });
   };
 
@@ -12,6 +14,9 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
   const filterEmployeeId = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
 
   const handleEmergencyContactChange = (index, field, value) => {
+    // Clear error for this emergency contact field when user starts typing
+    const fieldName = `emergencyContact${index + 1}${field.charAt(0).toUpperCase() + field.slice(1)}`;
+    onClearFieldError(fieldName);
     const contacts = [...data.emergencyContacts];
     contacts[index] = { ...contacts[index], [field]: value };
     onChange({ ...data, emergencyContacts: contacts });
@@ -71,6 +76,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.surname || ''}
             onChange={(e) => handleChange('surname', e.target.value)}
             placeholder="Enter surname"
+            error={fieldErrors.surname}
           />
           <Input
             label="Given Name"
@@ -78,6 +84,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.firstName || ''}
             onChange={(e) => handleChange('firstName', e.target.value)}
             placeholder="Enter given name"
+            error={fieldErrors.firstName}
           />
           <Input
             label="Middle Name"
@@ -91,6 +98,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.employeeId || ''}
             onChange={(e) => handleChange('employeeId', filterEmployeeId(e.target.value))}
             placeholder="Enter employee ID number"
+            error={fieldErrors.employeeId}
           />
           <Input
             label="Birthday"
@@ -98,6 +106,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             required
             value={data.birthday || ''}
             onChange={(e) => handleChange('birthday', e.target.value)}
+            error={fieldErrors.birthday}
           />
           <Input
             label="Age"
@@ -115,6 +124,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               { value: 'Male', label: 'Male' },
               { value: 'Female', label: 'Female' },
             ]}
+            error={fieldErrors.gender}
           />
           <Select
             label="Civil Status"
@@ -127,6 +137,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               { value: 'Widowed', label: 'Widowed' },
               { value: 'Separated', label: 'Separated' },
             ]}
+            error={fieldErrors.civilStatus}
           />
           <Input
             label="Nationality"
@@ -134,6 +145,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.nationality || ''}
             onChange={(e) => handleChange('nationality', e.target.value)}
             placeholder="Enter nationality"
+            error={fieldErrors.nationality}
           />
           <Input
             label="Religion"
@@ -148,6 +160,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.contactNumber || ''}
             onChange={(e) => handleChange('contactNumber', filterPhone(e.target.value))}
             placeholder="+63 XXX XXX XXXX"
+            error={fieldErrors.contactNumber}
           />
           <Input
             label="Active Email Address"
@@ -164,6 +177,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.address || ''}
             onChange={(e) => handleChange('address', e.target.value)}
             placeholder="House Number, Street Name, Barangay, City / Municipality, Province"
+            error={fieldErrors.address}
           />
         </div>
       </div>
@@ -185,6 +199,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.department || ''}
             onChange={(e) => handleChange('department', e.target.value)}
             placeholder="Enter department"
+            error={fieldErrors.department}
           />
           <Select
             label="Employment Category"
@@ -192,6 +207,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.employmentCategory || ''}
             onChange={(e) => handleChange('employmentCategory', e.target.value)}
             options={employmentCategoryOptions}
+            error={fieldErrors.employmentCategory}
           />
           {data.employmentCategory === 'Other' && (
             <Input
@@ -200,6 +216,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               value={data.employmentCategoryOther || ''}
               onChange={(e) => handleChange('employmentCategoryOther', e.target.value)}
               placeholder="Enter your employment category"
+              error={fieldErrors.employmentCategoryOther}
             />
           )}
           <Select
@@ -208,6 +225,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
             value={data.employmentStatus || ''}
             onChange={(e) => handleChange('employmentStatus', e.target.value)}
             options={employmentStatusOptions}
+            error={fieldErrors.employmentStatus}
           />
           <Input
             label="Position"
@@ -224,6 +242,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               { value: 'Manila', label: 'Manila' },
               { value: 'QuezonCity', label: 'Quezon City' },
             ]}
+            error={fieldErrors.branch}
           />
         </div>
       </div>
@@ -248,6 +267,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               value={data.emergencyContacts[0]?.name || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'name', e.target.value)}
               placeholder="Full name"
+              error={fieldErrors.emergencyContact1Name}
             />
             <Input
               label="Relationship to the Person/s to be Contacted During Emergency"
@@ -255,6 +275,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               value={data.emergencyContacts[0]?.relationship || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'relationship', e.target.value)}
               placeholder="e.g., Spouse, Parent"
+              error={fieldErrors.emergencyContact1Relationship}
             />
             <Input
               label="Address of Contact Person"
@@ -262,6 +283,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               value={data.emergencyContacts[0]?.address || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'address', e.target.value)}
               placeholder="Complete address of contact person"
+              error={fieldErrors.emergencyContact1Address}
             />
             <Input
               label="Contact Number of the Person During Emergency"
@@ -270,6 +292,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               value={data.emergencyContacts[0]?.contactNumber || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', filterPhone(e.target.value))}
               placeholder="+63 XXX XXX XXXX"
+              error={fieldErrors.emergencyContact1ContactNumber}
             />
           </div>
         </div>
@@ -286,18 +309,21 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               value={data.emergencyContacts[1]?.name || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'name', e.target.value)}
               placeholder="Full name"
+              error={fieldErrors.emergencyContact2Name}
             />
             <Input
               label="Relationship to the Person/s to be Contacted During Emergency"
               value={data.emergencyContacts[1]?.relationship || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'relationship', e.target.value)}
               placeholder="e.g., Spouse, Parent"
+              error={fieldErrors.emergencyContact2Relationship}
             />
             <Input
               label="Address of Contact Person"
               value={data.emergencyContacts[1]?.address || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'address', e.target.value)}
               placeholder="Complete address of contact person"
+              error={fieldErrors.emergencyContact2Address}
             />
             <Input
               label="Contact Number of the Person During Emergency"
@@ -305,6 +331,7 @@ const EmployeePersonalInfoForm = ({ data, onChange }) => {
               value={data.emergencyContacts[1]?.contactNumber || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', filterPhone(e.target.value))}
               placeholder="+63 XXX XXX XXXX"
+              error={fieldErrors.emergencyContact2ContactNumber}
             />
           </div>
         </div>

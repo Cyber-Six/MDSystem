@@ -1,8 +1,10 @@
 import React from 'react';
 import { Input, Select } from './form-elements';
 
-const PersonalInfoForm = ({ data, onChange }) => {
+const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError = () => {} }) => {
   const handleChange = (field, value) => {
+    // Clear error for this field when user starts typing
+    onClearFieldError(field);
     onChange({ ...data, [field]: value });
   };
 
@@ -12,6 +14,9 @@ const PersonalInfoForm = ({ data, onChange }) => {
   const filterStudentNumber = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
 
   const handleEmergencyContactChange = (index, field, value) => {
+    // Clear error for this emergency contact field when user starts typing
+    const fieldName = `emergencyContact${index + 1}${field.charAt(0).toUpperCase() + field.slice(1)}`;
+    onClearFieldError(fieldName);
     const contacts = [...data.emergencyContacts];
     contacts[index] = { ...contacts[index], [field]: value };
     onChange({ ...data, emergencyContacts: contacts });
@@ -80,7 +85,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
   }, [data.birthday]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ── Personal Information Card ── */}
       <div className="form-section">
         <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex items-center gap-2">
@@ -91,13 +96,14 @@ const PersonalInfoForm = ({ data, onChange }) => {
           </span>
           Personal Information
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             label="Surname"
             required
             value={data.surname || ''}
             onChange={(e) => handleChange('surname', e.target.value)}
             placeholder="Enter surname"
+            error={fieldErrors.surname}
           />
           <Input
             label="First Name"
@@ -105,6 +111,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
             value={data.firstName || ''}
             onChange={(e) => handleChange('firstName', e.target.value)}
             placeholder="Enter first name"
+            error={fieldErrors.firstName}
           />
           <Input
             label="Middle Name"
@@ -118,6 +125,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
             required
             value={data.birthday || ''}
             onChange={(e) => handleChange('birthday', e.target.value)}
+            error={fieldErrors.birthday}
           />
           <Input
             label="Age"
@@ -135,6 +143,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
               { value: 'Male', label: 'Male' },
               { value: 'Female', label: 'Female' },
             ]}
+            error={fieldErrors.gender}
           />
           <Select
             label="Civil Status"
@@ -147,6 +156,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
               { value: 'Widowed', label: 'Widowed' },
               { value: 'Separated', label: 'Separated' },
             ]}
+            error={fieldErrors.civilStatus}
           />
           <Input
             label="Nationality"
@@ -154,6 +164,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
             value={data.nationality || ''}
             onChange={(e) => handleChange('nationality', e.target.value)}
             placeholder="Enter nationality"
+            error={fieldErrors.nationality}
           />
           <Input
             label="Religion"
@@ -168,15 +179,17 @@ const PersonalInfoForm = ({ data, onChange }) => {
             value={data.contactNumber || ''}
             onChange={(e) => handleChange('contactNumber', filterPhone(e.target.value))}
             placeholder="+63 XXX XXX XXXX"
+            error={fieldErrors.contactNumber}
           />
         </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             label="Present Address"
             required
             value={data.address || ''}
             onChange={(e) => handleChange('address', e.target.value)}
             placeholder="Enter current/present address"
+            error={fieldErrors.address}
           />
           <Input
             label="Province Address"
@@ -184,6 +197,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
             value={data.provinceAddress || ''}
             onChange={(e) => handleChange('provinceAddress', e.target.value)}
             placeholder="Enter province/permanent address"
+            error={fieldErrors.provinceAddress}
           />
         </div>
       </div>
@@ -198,7 +212,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
           </span>
           School Information
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="md:col-span-2">
             <Select
               label="Program"
@@ -206,6 +220,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
               value={data.program || ''}
               onChange={(e) => handleChange('program', e.target.value)}
               options={programOptions}
+              error={fieldErrors.program}
             />
             {data.program === 'Other' && (
               <div className="mt-2">
@@ -215,6 +230,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
                   value={data.programOther || ''}
                   onChange={(e) => handleChange('programOther', e.target.value)}
                   placeholder="Enter your specific program"
+                  error={fieldErrors.programOther}
                 />
               </div>
             )}
@@ -225,6 +241,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
             value={data.studentNumber || ''}
             onChange={(e) => handleChange('studentNumber', filterStudentNumber(e.target.value))}
             placeholder="Enter student number"
+            error={fieldErrors.studentNumber}
           />
         </div>
       </div>
@@ -239,13 +256,14 @@ const PersonalInfoForm = ({ data, onChange }) => {
           </span>
           Student Status
         </h3>
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-3">
           <Select
             label="Student Category"
             required
             value={data.studentCategory || ''}
             onChange={(e) => handleChange('studentCategory', e.target.value)}
             options={studentCategoryOptions}
+            error={fieldErrors.studentCategory}
           />
           <Input
             label="Last School Attended"
@@ -302,13 +320,14 @@ const PersonalInfoForm = ({ data, onChange }) => {
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-secondary-200 text-secondary-700 text-xs font-bold">{index + 1}</span>
               Contact Person {index + 1}
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <Input
                 label="Name"
                 required
                 value={data.emergencyContacts[index]?.name || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'name', e.target.value)}
                 placeholder="Full name"
+                error={index === 0 ? fieldErrors.emergencyContact1Name : fieldErrors.emergencyContact2Name}
               />
               <Input
                 label="Relationship"
@@ -316,6 +335,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
                 value={data.emergencyContacts[index]?.relationship || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'relationship', e.target.value)}
                 placeholder="e.g., Mother, Father"
+                error={index === 0 ? fieldErrors.emergencyContact1Relationship : fieldErrors.emergencyContact2Relationship}
               />
               <Input
                 label="Contact Number"
@@ -324,6 +344,7 @@ const PersonalInfoForm = ({ data, onChange }) => {
                 value={data.emergencyContacts[index]?.contactNumber || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', filterPhone(e.target.value))}
                 placeholder="+63 XXX XXX XXXX"
+                error={index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber}
               />
             </div>
             <div className="mt-4">

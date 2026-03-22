@@ -19,6 +19,14 @@ const Query = {
 
   getMessages: async (_, args, context) => {
     return await Wrapper.Query._getMessages(_, args, context);
+  },
+
+  getPatientConversations: async (_, args, context) => {
+    return await Wrapper.Query._getPatientConversations(_, args, context);
+  },
+
+  getPatientMessages: async (_, args, context) => {
+    return await Wrapper.Query._getPatientMessages(_, args, context);
   }
 };
 
@@ -37,6 +45,10 @@ const Mutation = {
 
   closeTicket: async (_, args, context) => {
     return await Wrapper.Mutation._closeTicket(_, args, context);
+  },
+
+  deleteArchivedTicket: async (_, args, context) => {
+    return await Wrapper.Mutation._deleteArchivedTicket(_, args, context);
   },
 
   expireOldTickets: async (_, args, context) => {

@@ -8,8 +8,8 @@ const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
-// 
-const reviewable_statuses = ["InProgress", "Pending", "RevisionSubmitted"];
+// Medical staff can view records in any active status (Approved = current live data)
+const reviewable_statuses = ["InProgress", "Pending", "RevisionSubmitted", "Revision", "Approved"];
 
 const Query = {
   getUserUpdateTicket: async (_, args, { user, res }) => {

@@ -1,7 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check, X, Trash2, Save, FileText, Trash } from 'lucide-react';
+
+/**
+ * Normalize a date value (string, Date, or number) to YYYY-MM-DD format.
+ */
+const normalizeDate = (val) => {
+  if (!val) return '';
+  if (typeof val === 'string') return val.split('T')[0];
+  if (val instanceof Date || typeof val === 'number') {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().split('T')[0];
+  }
+  return '';
+};
 import AvailabilityCalendar from './availability-calendar';
 import EventModal from './event-modal';
+import WhitelistManager from './whitelist-manager';
+import DaySlotEditor from './day-slot-editor';
 import {
   listAllSchedulers,
   createScheduler,
@@ -11,9 +27,15 @@ import {
   deleteRequirement,
   listAllRequirements,
   updateDateIdentity,
+  listWhitelist,
+  getScheduleAvailability,
+  listCustomDates,
+  setCustomDates as setCustomDatesAPI,
+  unsetCustomDates as unsetCustomDatesAPI,
 } from '../staff-appointment-service';
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// Include Sunday in the days list - Sunday disabled by default, only enabled via custom dates
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
  * Availability Manager Component
@@ -21,9 +43,8 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
  * SRS §3.4.2
  */
 const AvailabilityManager = () => {
-  const [selectedDate, setSelectedDate] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
-  const [eventModalDate, setEventModalDate] = useState(null);
+  const [_eventModalDate, _setEventModalDate] = useState(null); // Reserved for future use
   const [editingEvent, setEditingEvent] = useState(null);
   const [schedulers, setSchedulers] = useState([]);
   const [activeScheduler, setActiveScheduler] = useState(null);
@@ -50,10 +71,29 @@ const AvailabilityManager = () => {
   const [deleteModal, setDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  // Derive slot defaults from the active scheduler
-  const slotDefaults = activeScheduler
-    ? { morning: activeScheduler.morningAllowed, afternoon: activeScheduler.afternoonAllowed }
-    : { morning: 60, afternoon: 60 };
+  // Whitelist state
+  const [showWhitelistPanel, setShowWhitelistPanel] = useState(false);
+  const [whitelistCount, setWhitelistCount] = useState(0);
+
+  // Day slot editor state
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+  const [dayOverrideData, setDayOverrideData] = useState(null);
+  const [loadingDayData, setLoadingDayData] = useState(false);
+
+  // Custom dates state
+  const [customDates, setCustomDates] = useState([]);
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  const [customDateInput, setCustomDateInput] = useState({
+    scheduledDate: '',
+    morningAllowed: null,
+    afternoonAllowed: null,
+    useCustomSlots: false,
+  });
+
+  // Derive slot defaults from the active scheduler (or editForm for immediate reflection)
+  const slotDefaults = editForm
+    ? { morning: editForm.morningAllowed, afternoon: editForm.afternoonAllowed }
+    : { morning: 25, afternoon: 25 };
 
   // Load schedulers from API
   const loadSchedulers = useCallback(async (preserveId = null) => {
@@ -90,25 +130,178 @@ const AvailabilityManager = () => {
       setEditForm({ ...activeScheduler });
       // Load requirements for this scheduler
       loadRequirements(activeScheduler.id);
+      // Load whitelist count
+      loadWhitelistCount(activeScheduler.id);
+      // Load custom dates
+      loadCustomDates(activeScheduler.id);
     }
   }, [activeScheduler, isCreatingNew]);
+
+  // Load custom dates for a scheduler
+  const loadCustomDates = async (schedulerId) => {
+    try {
+      const entries = await listCustomDates(schedulerId, 0, 500);
+      setCustomDates(entries || []);
+    } catch (err) {
+      console.error('Failed to load custom dates:', err);
+      setCustomDates([]);
+    }
+  };
+
+  // Load whitelist count for display
+  const loadWhitelistCount = async (schedulerId) => {
+    try {
+      const entries = await listWhitelist(schedulerId, 0, 1000);
+      setWhitelistCount(entries?.length || 0);
+    } catch {
+      setWhitelistCount(0);
+    }
+  };
+
+  // Handle calendar date selection - load day-specific data (allow all dates)
+  const handleDateSelect = async (dateStr, isAvailable = true) => {
+    setSelectedCalendarDate(dateStr);
+    if (!activeScheduler?.id || !dateStr) {
+      setDayOverrideData(null);
+      return;
+    }
+
+    // Only load override data if the date is available
+    if (isAvailable) {
+      setLoadingDayData(true);
+      try {
+        const data = await getScheduleAvailability(activeScheduler.id, dateStr);
+        setDayOverrideData(data);
+      } catch (err) {
+        console.error('Failed to load day data:', err);
+        setDayOverrideData(null);
+      } finally {
+        setLoadingDayData(false);
+      }
+    } else {
+      // For unavailable dates, clear override data
+      setDayOverrideData(null);
+    }
+  };
+
+  // Check if a specific date is available (in schedule or custom dates)
+  const isDateAvailable = (dateStr) => {
+    if (!dateStr || !editForm) return false;
+    const normalized = normalizeDate(dateStr);
+    const d = new Date(normalized + 'T00:00:00');
+    const dayOfWeek = d.getDay();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = dayNames[dayOfWeek];
+
+    // Check if it's in the regular schedule
+    if (editForm.schedulePerWeek?.includes(dayName)) {
+      return true;
+    }
+    // Check if it's a custom date (normalize for comparison)
+    return customDates.some(cd => normalizeDate(cd.scheduledDate) === normalized);
+  };
+
+  // Handle adding a date as custom date from DaySlotEditor
+  const handleAddCustomDateFromEditor = async (dateStr, morning, afternoon) => {
+    if (!activeScheduler?.id) return;
+    try {
+      await setCustomDatesAPI(activeScheduler.id, [{
+        scheduledDate: dateStr,
+        morningAllowed: morning,
+        afternoonAllowed: afternoon,
+      }]);
+      await loadCustomDates(activeScheduler.id);
+      // Now load the day data
+      const data = await getScheduleAvailability(activeScheduler.id, dateStr);
+      setDayOverrideData(data);
+    } catch (err) {
+      setError(err.message || 'Failed to add custom date');
+    }
+  };
+
+  // Handle removing a custom date from DaySlotEditor
+  const handleRemoveCustomDateFromEditor = async (dateStr) => {
+    if (!activeScheduler?.id) return;
+    try {
+      const normalized = normalizeDate(dateStr);
+      await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
+      await loadCustomDates(activeScheduler.id);
+      setDayOverrideData(null);
+    } catch (err) {
+      setError(err.message || 'Failed to remove custom date');
+    }
+  };
+
+  // Handle saving day override
+  const handleSaveDayOverride = async (input) => {
+    if (!activeScheduler?.id || !selectedCalendarDate) return;
+    try {
+      const updated = await updateDateIdentity(activeScheduler.id, selectedCalendarDate, input);
+      setDayOverrideData(updated);
+    } catch (err) {
+      setError(err.message || 'Failed to update day settings');
+      throw err;
+    }
+  };
+
+  // Handle editing session limit from calendar inline popup
+  const handleEditSessionLimit = async (dateStr, session, value) => {
+    if (!activeScheduler?.id) return;
+    try {
+      const input = session === 'morning'
+        ? { morningAllowed: value }
+        : { afternoonAllowed: value };
+      await updateDateIdentity(activeScheduler.id, dateStr, input);
+      // If this is the currently selected date, refresh the day data
+      if (dateStr === selectedCalendarDate) {
+        const data = await getScheduleAvailability(activeScheduler.id, dateStr);
+        setDayOverrideData(data);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to update session limit');
+      throw err;
+    }
+  };
 
   const handleSelectScheduler = (sched) => {
     setActiveScheduler(sched);
     setEditForm({ ...sched });
     setIsCreatingNew(false);
     setShowDropdown(false);
+    // Clear day slot editor state
+    setSelectedCalendarDate(null);
+    setDayOverrideData(null);
+    // Clear custom date picker state
+    setShowCustomDatePicker(false);
+    setCustomDateInput({
+      scheduledDate: '',
+      morningAllowed: null,
+      afternoonAllowed: null,
+      useCustomSlots: false,
+    });
   };
 
   const handleCreateNew = () => {
     setIsCreatingNew(true);
+    // Clear day slot editor state
+    setSelectedCalendarDate(null);
+    setDayOverrideData(null);
+    // Clear custom dates state
+    setCustomDates([]);
+    setShowCustomDatePicker(false);
+    setCustomDateInput({
+      scheduledDate: '',
+      morningAllowed: null,
+      afternoonAllowed: null,
+      useCustomSlots: false,
+    });
     setEditForm({
       label: '',
       location: 'Arlegui',
       patientType: null,
       schedulePerWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-      morningAllowed: 60,
-      afternoonAllowed: 60,
+      morningAllowed: 25,
+      afternoonAllowed: 25,
       notes: '',
       isActive: true,
       whitelistOnly: false,
@@ -117,6 +310,66 @@ const AvailabilityManager = () => {
     setPendingRequirements([]);
     setRequirementForm({ label: '', isActive: true });
     setShowDropdown(false);
+  };
+
+  // Handle adding a custom date
+  const handleAddCustomDate = async () => {
+    if (!customDateInput.scheduledDate) return;
+
+    const dateEntry = {
+      scheduledDate: customDateInput.scheduledDate,
+      ...(customDateInput.useCustomSlots && customDateInput.morningAllowed != null
+        ? { morningAllowed: parseInt(customDateInput.morningAllowed) }
+        : {}),
+      ...(customDateInput.useCustomSlots && customDateInput.afternoonAllowed != null
+        ? { afternoonAllowed: parseInt(customDateInput.afternoonAllowed) }
+        : {}),
+    };
+
+    if (isCreatingNew) {
+      // For new scheduler, just add to local state (will be saved with scheduler)
+      setCustomDates(prev => [...prev, { ...dateEntry, id: `temp-${Date.now()}` }]);
+    } else if (activeScheduler?.id) {
+      // For existing scheduler, save to backend immediately
+      try {
+        setSaving(true);
+        await setCustomDatesAPI(activeScheduler.id, [dateEntry]);
+        await loadCustomDates(activeScheduler.id);
+      } catch (err) {
+        setError(err.message || 'Failed to add custom date');
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    // Reset input
+    setCustomDateInput({
+      scheduledDate: '',
+      morningAllowed: null,
+      afternoonAllowed: null,
+      useCustomSlots: false,
+    });
+    setShowCustomDatePicker(false);
+  };
+
+  // Handle removing a custom date
+  const handleRemoveCustomDate = async (dateStr) => {
+    const normalized = normalizeDate(dateStr);
+    if (isCreatingNew) {
+      // For new scheduler, just remove from local state
+      setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
+    } else if (activeScheduler?.id) {
+      // For existing scheduler, remove from backend
+      try {
+        setSaving(true);
+        await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
+        await loadCustomDates(activeScheduler.id);
+      } catch (err) {
+        setError(err.message || 'Failed to remove custom date');
+      } finally {
+        setSaving(false);
+      }
+    }
   };
 
   const handleSaveScheduler = async () => {
@@ -167,6 +420,17 @@ const AvailabilityManager = () => {
             });
           }
           setPendingRequirements([]);
+        }
+
+        // After scheduler created, add any pending custom dates
+        if (created?.id && customDates.length > 0) {
+          const dateEntries = customDates.map(cd => ({
+            scheduledDate: cd.scheduledDate,
+            ...(cd.morningAllowed != null ? { morningAllowed: cd.morningAllowed } : {}),
+            ...(cd.afternoonAllowed != null ? { afternoonAllowed: cd.afternoonAllowed } : {}),
+          }));
+          await setCustomDatesAPI(created.id, dateEntries);
+          setCustomDates([]);
         }
 
         await loadSchedulers(created?.id);
@@ -427,82 +691,39 @@ const AvailabilityManager = () => {
       {(activeScheduler || isCreatingNew) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Calendar Panel - 2/3 width */}
-          <div className="lg:col-span-8 flex flex-col gap-4">
-            {/* Scheduler Stats Card */}
+          <div className="lg:col-span-8 flex flex-col gap-3">
+            {/* Day Slot Editor - Above calendar */}
             {!isCreatingNew && activeScheduler && (
-              <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Morning Slots */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-accent-100 dark:bg-accent-900/30 flex items-center justify-center">
-                      <Sun className="w-5 h-5 text-accent-600 dark:text-accent-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">Morning Slots</p>
-                      <p className="text-lg font-semibold text-secondary-900 dark:text-white">{activeScheduler.morningAllowed}</p>
-                    </div>
-                  </div>
-
-                  {/* Afternoon Slots */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center">
-                      <Moon className="w-5 h-5 text-warning-600 dark:text-warning-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">Afternoon Slots</p>
-                      <p className="text-lg font-semibold text-secondary-900 dark:text-white">{activeScheduler.afternoonAllowed}</p>
-                    </div>
-                  </div>
-
-                  {/* Status */}
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      activeScheduler.isActive
-                        ? 'bg-emerald-100 dark:bg-emerald-900/30'
-                        : 'bg-neutral-100 dark:bg-neutral-700'
-                    }`}>
-                      <Check className={`w-5 h-5 ${
-                        activeScheduler.isActive
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-secondary-600 dark:text-neutral-400'
-                      }`} />
-                    </div>
-                    <div>
-                      <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">Status</p>
-                      <p className="text-lg font-semibold text-secondary-900 dark:text-white">
-                        {activeScheduler.isActive ? 'Active' : 'Inactive'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Available Days */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">Available Days</p>
-                      <p className="text-lg font-semibold text-secondary-900 dark:text-white">
-                        {activeScheduler.schedulePerWeek?.length || 0}/7
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <DaySlotEditor
+                selectedDate={selectedCalendarDate}
+                scheduler={activeScheduler}
+                dayOverride={dayOverrideData}
+                onSave={handleSaveDayOverride}
+                loading={loadingDayData}
+                events={events}
+                customDates={customDates}
+                isDateAvailable={selectedCalendarDate ? isDateAvailable(selectedCalendarDate) : false}
+                onAddCustomDate={handleAddCustomDateFromEditor}
+                onRemoveCustomDate={handleRemoveCustomDateFromEditor}
+              />
             )}
 
             {/* Calendar */}
-            <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden flex-1">
+            <div className="flex-1">
               {!isCreatingNew && activeScheduler ? (
                 <AvailabilityCalendar
-                  selectedDate={selectedDate}
-                  onSelectDate={setSelectedDate}
+                  selectedDate={selectedCalendarDate}
+                  onSelectDate={handleDateSelect}
                   events={events}
                   slotDefaults={slotDefaults}
                   activeScheduler={activeScheduler}
+                  editForm={editForm}
+                  customDates={customDates}
+                  onEditSessionLimit={handleEditSessionLimit}
+                  allowSelectClosed={true}
                 />
               ) : (
-                <div className="p-8 text-center text-secondary-500 dark:text-neutral-400">
+                <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 text-center text-secondary-500 dark:text-neutral-400">
                   <Calendar className="w-10 h-10 mx-auto mb-3 text-neutral-300 dark:text-neutral-600" />
                   <p className="text-sm">Save the scheduler to view calendar</p>
                 </div>
@@ -530,7 +751,7 @@ const AvailabilityManager = () => {
 
               {/* Edit Form */}
               {editForm && (
-                <div className="p-4 space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
+                <div className="p-4 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
                   {/* Name */}
                   <div>
                     <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
@@ -579,34 +800,54 @@ const AvailabilityManager = () => {
                     </div>
                   </div>
 
-                  {/* Slots */}
+                  {/* Slots - Compact Horizontal Layout */}
                   <div>
                     <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
                       Available Slots per Session
                     </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center gap-2 p-1.5 bg-accent-50 dark:bg-accent-900/20 rounded-lg border border-accent-200 dark:border-accent-800">
-                        <Sun className="w-4 h-4 text-accent-600 dark:text-accent-400 flex-shrink-0" />
-                        <p className="text-xs font-semibold text-accent-600 dark:text-accent-400 min-w-fit">Morning</p>
+                    <div className="flex gap-4">
+                      {/* Morning */}
+                      <div className="flex items-center gap-2">
+                        <Sun className="w-4 h-4 text-accent-600 dark:text-accent-400" />
+                        <span className="text-xs font-medium text-secondary-600 dark:text-neutral-400">Morning</span>
                         <input
-                          type="number"
-                          min="0"
-                          max="200"
-                          value={editForm.morningAllowed || 0}
-                          onChange={(e) => setEditForm({ ...editForm, morningAllowed: parseInt(e.target.value) || 0 })}
-                          className="w-12 px-1.5 py-0.5 text-sm font-semibold bg-white dark:bg-neutral-700 border border-accent-200 dark:border-accent-700 rounded text-secondary-900 dark:text-white focus:ring-1 focus:ring-accent-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          type="text"
+                          inputMode="numeric"
+                          value={editForm.morningAllowed}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') { setEditForm({ ...editForm, morningAllowed: '' }); return; }
+                            const num = parseInt(val, 10);
+                            if (!isNaN(num) && num >= 0) setEditForm({ ...editForm, morningAllowed: num });
+                          }}
+                          onBlur={() => {
+                            if (editForm.morningAllowed === '' || editForm.morningAllowed == null) {
+                              setEditForm({ ...editForm, morningAllowed: 0 });
+                            }
+                          }}
+                          className="w-16 px-2 py-1.5 text-center text-sm font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
                       </div>
-                      <div className="flex items-center gap-2 p-1.5 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-800">
-                        <Moon className="w-4 h-4 text-warning-600 dark:text-warning-400 flex-shrink-0" />
-                        <p className="text-xs font-semibold text-warning-600 dark:text-warning-400 min-w-fit">Afternoon</p>
+                      {/* Afternoon */}
+                      <div className="flex items-center gap-2">
+                        <Moon className="w-4 h-4 text-warning-600 dark:text-warning-400" />
+                        <span className="text-xs font-medium text-secondary-600 dark:text-neutral-400">Afternoon</span>
                         <input
-                          type="number"
-                          min="0"
-                          max="200"
-                          value={editForm.afternoonAllowed || 0}
-                          onChange={(e) => setEditForm({ ...editForm, afternoonAllowed: parseInt(e.target.value) || 0 })}
-                          className="w-12 px-1.5 py-0.5 text-sm font-semibold bg-white dark:bg-neutral-700 border border-warning-200 dark:border-warning-700 rounded text-secondary-900 dark:text-white focus:ring-1 focus:ring-warning-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          type="text"
+                          inputMode="numeric"
+                          value={editForm.afternoonAllowed}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') { setEditForm({ ...editForm, afternoonAllowed: '' }); return; }
+                            const num = parseInt(val, 10);
+                            if (!isNaN(num) && num >= 0) setEditForm({ ...editForm, afternoonAllowed: num });
+                          }}
+                          onBlur={() => {
+                            if (editForm.afternoonAllowed === '' || editForm.afternoonAllowed == null) {
+                              setEditForm({ ...editForm, afternoonAllowed: 0 });
+                            }
+                          }}
+                          className="w-16 px-2 py-1.5 text-center text-sm font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
                       </div>
                     </div>
@@ -620,15 +861,19 @@ const AvailabilityManager = () => {
                     <div className="flex flex-wrap gap-1.5">
                       {DAYS.map((day) => {
                         const isActive = editForm.schedulePerWeek?.includes(day);
+                        const isSunday = day === 'Sunday';
                         return (
                           <button
                             key={day}
                             type="button"
                             onClick={() => toggleDay(day)}
+                            title={isSunday && !isActive ? 'Sunday is disabled by default. Enable it or use Custom Dates below.' : ''}
                             className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
                               isActive
                                 ? 'bg-primary-500 text-white shadow-sm'
-                                : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+                                : isSunday
+                                  ? 'bg-neutral-200 dark:bg-neutral-600 text-neutral-400 dark:text-neutral-500 hover:bg-neutral-300 dark:hover:bg-neutral-500'
+                                  : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600'
                             }`}
                           >
                             {day.slice(0, 3)}
@@ -636,7 +881,143 @@ const AvailabilityManager = () => {
                         );
                       })}
                     </div>
+                    <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1.5">
+                      Sunday is disabled by default. Use Custom Dates for specific Sundays.
+                    </p>
                   </div>
+
+                  {/* Custom Dates Section */}
+                  {!isCreatingNew && activeScheduler?.id && (
+                    <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-semibold text-secondary-700 dark:text-neutral-300">
+                          <Calendar className="w-4 h-4 inline mr-1" />
+                          Custom Dates
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomDatePicker(!showCustomDatePicker)}
+                          className="text-xs text-primary-500 hover:text-primary-600 font-medium"
+                        >
+                          {showCustomDatePicker ? 'Cancel' : '+ Add Date'}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mb-2">
+                        Add specific dates to accept appointments, regardless of available days
+                      </p>
+
+                      {/* Add Custom Date Form */}
+                      {showCustomDatePicker && (
+                        <div className="mb-3 p-3 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg space-y-2">
+                          <input
+                            type="date"
+                            value={customDateInput.scheduledDate}
+                            onChange={(e) => setCustomDateInput({ ...customDateInput, scheduledDate: e.target.value })}
+                            className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                          />
+                          <label className="flex items-center gap-2 text-xs text-secondary-600 dark:text-neutral-400">
+                            <input
+                              type="checkbox"
+                              checked={customDateInput.useCustomSlots}
+                              onChange={(e) => setCustomDateInput({ ...customDateInput, useCustomSlots: e.target.checked })}
+                              className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
+                            />
+                            Custom slot capacity
+                          </label>
+                          {customDateInput.useCustomSlots && (
+                            <div className="flex gap-2">
+                              <div className="flex-1">
+                                <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block">
+                                  <Sun className="w-3 h-3 inline mr-0.5" /> Morning
+                                </label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  placeholder={String(editForm.morningAllowed || 25)}
+                                  value={customDateInput.morningAllowed ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') { setCustomDateInput({ ...customDateInput, morningAllowed: null }); return; }
+                                    const num = parseInt(val, 10);
+                                    if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, morningAllowed: num });
+                                  }}
+                                  className="w-full px-2 py-1.5 text-sm text-center border border-neutral-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block">
+                                  <Moon className="w-3 h-3 inline mr-0.5" /> Afternoon
+                                </label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  placeholder={String(editForm.afternoonAllowed || 25)}
+                                  value={customDateInput.afternoonAllowed ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') { setCustomDateInput({ ...customDateInput, afternoonAllowed: null }); return; }
+                                    const num = parseInt(val, 10);
+                                    if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, afternoonAllowed: num });
+                                  }}
+                                  className="w-full px-2 py-1.5 text-sm text-center border border-neutral-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                                />
+                              </div>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleAddCustomDate}
+                            disabled={!customDateInput.scheduledDate || saving}
+                            className="w-full px-3 py-2 text-xs font-medium text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add Custom Date
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Custom Dates List */}
+                      {customDates.length > 0 ? (
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {customDates.map((cd) => {
+                            const normalized = normalizeDate(cd.scheduledDate);
+                            const dateObj = normalized ? new Date(normalized + 'T00:00:00') : null;
+                            const dateLabel = dateObj && !isNaN(dateObj.getTime())
+                              ? dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                              : normalized || 'Unknown';
+                            return (
+                              <div
+                                key={cd.id || normalized}
+                                className="flex items-center justify-between px-2 py-1.5 bg-violet-50 dark:bg-violet-900/20 rounded text-xs"
+                              >
+                                <div>
+                                  <span className="font-medium text-violet-700 dark:text-violet-400">
+                                    {dateLabel}
+                                  </span>
+                                  {(cd.morningAllowed != null || cd.afternoonAllowed != null) && (
+                                    <span className="ml-1.5 text-violet-500 dark:text-violet-500">
+                                      ({cd.morningAllowed ?? 'default'}/{cd.afternoonAllowed ?? 'default'})
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCustomDate(normalized)}
+                                  className="p-1 text-violet-400 hover:text-error-500 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-secondary-400 dark:text-neutral-500 italic">
+                          No custom dates configured
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Options */}
                   <div className="space-y-1">
@@ -664,6 +1045,17 @@ const AvailabilityManager = () => {
                         <p className="text-[8px] text-secondary-500 dark:text-neutral-400 leading-tight">Only whitelisted patients</p>
                       </div>
                     </label>
+                    {/* Manage Whitelist Button */}
+                    {editForm.whitelistOnly && !isCreatingNew && activeScheduler?.id && (
+                      <button
+                        type="button"
+                        onClick={() => setShowWhitelistPanel(true)}
+                        className="mt-1 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                        Manage Whitelist ({whitelistCount})
+                      </button>
+                    )}
                   </div>
 
                   {/* Notes */}
@@ -805,7 +1197,7 @@ const AvailabilityManager = () => {
         isOpen={showEventModal}
         onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
         onSave={handleSaveEvent}
-        initialDate={eventModalDate}
+        initialDate={_eventModalDate}
         editingEvent={editingEvent}
       />
 
@@ -859,6 +1251,14 @@ const AvailabilityManager = () => {
           </div>
         </div>
       )}
+
+      {/* Whitelist Manager Modal */}
+      <WhitelistManager
+        schedulerId={activeScheduler?.id}
+        isOpen={showWhitelistPanel}
+        onClose={() => setShowWhitelistPanel(false)}
+        onUpdate={() => loadWhitelistCount(activeScheduler?.id)}
+      />
     </div>
   );
 };

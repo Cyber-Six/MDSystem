@@ -7,20 +7,20 @@ const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 
 const STATUS_STYLES = {
-  Pending:             'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
-  Scheduled:           'bg-accent-100  dark:bg-accent-900/30  text-accent-700  dark:text-accent-400',
-  InProgress:          'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400',
-  Completed:           'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
-  Rejected:            'bg-error-100   dark:bg-error-900/30   text-error-700   dark:text-error-400',
-  Expired:             'bg-neutral-100 dark:bg-neutral-700     text-neutral-500 dark:text-neutral-400',
-  NoShow:              'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
-  CancelledByPatient:  'bg-error-100   dark:bg-error-900/30   text-error-700   dark:text-error-400',
-  CancelledByMedical:  'bg-error-100   dark:bg-error-900/30   text-error-700   dark:text-error-400',
+  Pending:             'bg-warning-100 dark:bg-warning-900/40 text-warning-800 dark:text-warning-300',
+  Scheduled:           'bg-accent-100  dark:bg-accent-900/40  text-accent-800  dark:text-accent-300',
+  InProgress:          'bg-primary-100 dark:bg-primary-900/40 text-primary-800 dark:text-primary-300',
+  Completed:           'bg-success-100 dark:bg-success-900/40 text-success-800 dark:text-success-300',
+  Rejected:            'bg-error-100   dark:bg-error-900/40   text-error-800   dark:text-error-300',
+  Expired:             'bg-neutral-100 dark:bg-neutral-700/50 text-neutral-700 dark:text-neutral-300',
+  NoShow:              'bg-warning-100 dark:bg-warning-900/40 text-warning-800 dark:text-warning-300',
+  CancelledByPatient:  'bg-error-100   dark:bg-error-900/40   text-error-800   dark:text-error-300',
+  CancelledByMedical:  'bg-error-100   dark:bg-error-900/40   text-error-800   dark:text-error-300',
 };
 
 const SESSION_STYLES = {
-  Morning:   'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400',
-  Afternoon: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
+  Morning:   'bg-accent-100 dark:bg-accent-900/40 text-accent-800 dark:text-accent-300',
+  Afternoon: 'bg-warning-100 dark:bg-warning-900/40 text-warning-800 dark:text-warning-300',
 };
 
 /* Each tab maps to a backend SCHEDULING_STATUS for searchAppointmentStatuses */
@@ -253,11 +253,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           </div>
         ) : (
           <>
-          <table className="w-full" style={{ minWidth: 600 }}>
+          <table className="w-full border-collapse">
             <thead>
               <tr className="bg-neutral-50/60 dark:bg-neutral-700/30">
-                {['Patient', 'Scheduled', 'Session', 'Type', 'Status', 'Notes'].map((h) => (
-                  <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
+                {['Patient', 'Scheduled', 'Session', 'Status', 'Notes'].map((h) => (
+                  <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider whitespace-nowrap" style={{ width: '20%' }}>
                     {h}
                   </th>
                 ))}
@@ -270,45 +270,45 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                   onClick={() => onViewDetails?.(apt)}
                   className="hover:bg-primary-50/40 dark:hover:bg-neutral-700/30 cursor-pointer transition-colors"
                 >
-                  <td className="px-4 py-2.5">
-                    <p className="text-xs font-mono text-secondary-500 dark:text-neutral-400">
+                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
+                    <p className="text-sm font-semibold text-secondary-900 dark:text-neutral-100">
                       {apt.patientIdentifier ?? apt.patientId}
                     </p>
                     {apt.patientName && (
-                      <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">{apt.patientName}</p>
+                      <p className="text-xs text-secondary-700 dark:text-neutral-300 mt-0.5">{apt.patientName}</p>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
                     {apt.scheduledDate ? (
                       <div>
-                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
+                        <p className="text-sm font-semibold text-secondary-900 dark:text-neutral-100">
                           {new Date(apt.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
                         </p>
                         {apt.schedulerLabel && (
-                          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-0.5 truncate max-w-[120px]">{apt.schedulerLabel}</p>
+                          <p className="text-xs text-secondary-700 dark:text-neutral-300 mt-0.5 truncate max-w-[160px]">{apt.schedulerLabel}</p>
                         )}
                       </div>
                     ) : (
-                      <span className="text-xs text-secondary-400 dark:text-neutral-500">—</span>
+                      <span className="text-sm text-secondary-600 dark:text-neutral-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
-                    <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300'}`}>
+                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
+                    <span className={`inline-block px-2.5 py-1 text-xs font-semibold rounded ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200'}`}>
                       {apt.session}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5">
-                    <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-600'}`}>
+                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
+                    <span className={`inline-block px-2.5 py-1 text-xs font-semibold rounded ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-700'}`}>
                       {apt.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-secondary-500 dark:text-neutral-400 max-w-[200px] truncate">
+                  <td className="px-4 py-2.5 text-sm text-secondary-800 dark:text-neutral-200 truncate" style={{ width: '20%' }}>
                     {apt.notes || '—'}
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
+                  <td colSpan={5} className="px-4 py-12 text-center">
                     <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>

@@ -1,136 +1,267 @@
-import React, { useEffect, useRef } from 'react';
-import { Loader2, User, RefreshCw } from 'lucide-react';
+import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
+import { getPatientMessages } from '../health-chat-service';
 import ChatHeader from './chat-header';
 import MessageBubble from './message-bubble';
 import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
+import TicketDivider from './ticket-divider';
 
-const ChatPanel = () => {
+const ChatPanel = ({ emitTyping }) => {
   const {
     selectedChatId,
+    selectedPatientId,
     selectedTicket,
+    selectedConversation,
     messages,
     messagesLoading,
+    setMessages,
     typingUsers,
     refreshMessages,
     socketError
   } = useHealthChat();
-  const messagesEndRef = useRef(null);
 
-  const isPatientTyping = typingUsers[selectedChatId]?.isTyping;
+  const messagesEndRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const prevScrollHeightRef = useRef(0);
+
+  // Load older messages when scrolling to top
+  const handleScroll = useCallback(async () => {
+    const container = scrollContainerRef.current;
+    if (!container || loadingOlder || !hasMoreMessages || !selectedPatientId) return;
+
+    // Trigger load when scrolled near the top (within 80px)
+    if (container.scrollTop < 80) {
+      try {
+        setLoadingOlder(true);
+        prevScrollHeightRef.current = container.scrollHeight;
+
+        const olderMessages = await getPatientMessages(
+          Number(selectedPatientId),
+          { before: messages[0]?.stamp, limit: 50 }
+        );
+
+        if (!olderMessages || olderMessages.length === 0) {
+          setHasMoreMessages(false);
+        } else {
+          // Prepend older messages (they come in ASC order)
+          setMessages(prev => {
+            const existingIds = new Set(prev.map(m => String(m.id)));
+            const newMsgs = olderMessages.filter(m => !existingIds.has(String(m.id)));
+            return [...newMsgs, ...prev];
+          });
+
+          // Maintain scroll position after prepending
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current) {
+              const newScrollHeight = scrollContainerRef.current.scrollHeight;
+              scrollContainerRef.current.scrollTop = newScrollHeight - prevScrollHeightRef.current;
+            }
+          });
+        }
+      } catch (err) {
+        console.error('[ChatPanel] Failed to load older messages:', err);
+      } finally {
+        setLoadingOlder(false);
+      }
+    }
+  }, [loadingOlder, hasMoreMessages, selectedPatientId, messages]);
+
+  // Reset pagination state when patient changes
+  useEffect(() => {
+    setHasMoreMessages(true);
+    setLoadingOlder(false);
+  }, [selectedPatientId]);
+
+  // Get ticket details for dividers (from selectedTicket.tickets array)
+  const ticketDetailsMap = useMemo(() => {
+    const map = {};
+    if (selectedTicket?.tickets) {
+      selectedTicket.tickets.forEach(t => {
+        map[t.id] = t;
+      });
+    }
+    // Also add the latest ticket if available
+    if (selectedConversation?.latestTicket) {
+      map[selectedConversation.latestTicket.id] = selectedConversation.latestTicket;
+    }
+    return map;
+  }, [selectedTicket, selectedConversation]);
+
+  // Build unified list with ticket dividers inserted where ticket changes
+  const itemsWithDividers = useMemo(() => {
+    if (!messages || messages.length === 0) return [];
+
+    const result = [];
+    let currentTicketId = null;
+    let lastClosedTicket = null;
+
+    // Sort messages by stamp to ensure chronological order
+    const sortedMessages = [...messages].sort((a, b) =>
+      new Date(a.stamp) - new Date(b.stamp)
+    );
+
+    for (let i = 0; i < sortedMessages.length; i++) {
+      const message = sortedMessages[i];
+      const msgTicketId = message.consultationVirtualId;
+
+      // If ticket changed, insert a divider
+      if (currentTicketId !== null && msgTicketId !== currentTicketId) {
+        const prevTicket = ticketDetailsMap[currentTicketId];
+        const newTicket = ticketDetailsMap[msgTicketId];
+
+        // Only show divider if previous ticket was closed
+        if (prevTicket && ['Closed', 'Expired'].includes(prevTicket.status)) {
+          result.push({
+            _isDivider: true,
+            id: `divider-${currentTicketId}-${msgTicketId}`,
+            closedBy: prevTicket.closedBy || 'Staff',
+            closedAt: prevTicket.session_end || prevTicket.archived_at,
+            newTicketPurpose: newTicket?.purpose
+          });
+        }
+      }
+
+      result.push(message);
+      currentTicketId = msgTicketId;
+    }
+
+    return result;
+  }, [messages, ticketDetailsMap]);
+
+  const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
+  const isPatientTyping = !isArchived && typingUsers[selectedPatientId || selectedChatId]?.isTyping;
   const isPending = selectedTicket?.status === 'Open';
 
-  // Scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isPatientTyping]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  }, [messages, isPatientTyping, selectedChatId]);
 
   const formatTime = (dateStr) => {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  if (!selectedChatId) {
-    return <EmptyChatState />;
-  }
+  if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
+
+  // Build unified list: synthetic purpose entry + messages with dividers
+  // The purpose now comes from the first ticket for this patient
+  const firstTicket = selectedTicket?.tickets?.[0] || selectedConversation?.latestTicket;
+  const purposeSynth = firstTicket?.purpose ? [{
+    id: '__purpose__',
+    text: firstTicket.purpose,
+    userType: 'Patient',
+    promptType: 'text',
+    stamp: firstTicket.session_start,
+    sender: { firstName: selectedTicket?.patient?.firstName || 'Patient' },
+    _isPurpose: true,
+  }] : [];
+
+  const allItems = [...purposeSynth, ...itemsWithDividers];
 
   return (
-    <div className="flex-1 flex flex-col bg-white dark:bg-neutral-900 h-full">
+    <div
+      className="flex-1 flex flex-col h-full min-h-0 bg-white dark:bg-neutral-900"
+    >
       {/* Header */}
       <ChatHeader />
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-4 py-4 space-y-4">
-          {/* Socket error warning and refresh button */}
-          {socketError && (
-            <div className="flex items-center gap-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <div className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
-              <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
-                Connection issue - using manual refresh
-              </span>
-              <button
-                onClick={refreshMessages}
-                disabled={messagesLoading}
-                className="p-1 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded transition-colors disabled:opacity-50"
-                title="Refresh messages"
-              >
-                <RefreshCw className={`w-4 h-4 ${messagesLoading ? 'animate-spin' : ''}`} />
-              </button>
+      {/* Messages - only this div scrolls */}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 min-h-0 overflow-y-auto bg-neutral-100 dark:bg-neutral-800"
+      >
+        <div className="px-5 py-4">
+
+          {/* Loading older messages spinner */}
+          {loadingOlder && (
+            <div className="flex items-center justify-center py-3">
+              <Loader2 className="w-4 h-4 animate-spin text-neutral-400 dark:text-neutral-500" />
+              <span className="ml-2 text-xs text-neutral-400 dark:text-neutral-500">Loading older messages…</span>
             </div>
           )}
 
-          {messagesLoading && messages.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 text-neutral-400 animate-spin" />
+          {/* No more messages indicator */}
+          {!hasMoreMessages && messages.length > 0 && (
+            <div className="flex items-center justify-center py-3">
+              <span className="text-[10px] text-neutral-400 dark:text-neutral-500">Beginning of conversation</span>
             </div>
-          ) : (
-            <>
-              {/* Show ticket purpose as the initial "message" from patient */}
-              {selectedTicket?.purpose && (
-                <div className="flex items-start gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center flex-shrink-0">
-                    <User className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="max-w-[75%]">
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">
-                      {selectedTicket.patient?.firstName || 'Patient'}{isPending && ' • Initial Request'}
-                    </p>
-                    <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-neutral-100 dark:bg-neutral-800">
-                      <p className="text-sm text-neutral-900 dark:text-white whitespace-pre-wrap">
-                        {selectedTicket.purpose}
-                      </p>
-                    </div>
-                    {selectedTicket.session_start && (
-                      <p className="text-[10px] text-neutral-400 mt-1">
-                        {formatTime(selectedTicket.session_start)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
+          )}
 
-              {/* Pending status indicator */}
-              {isPending && (
-                <div className="flex justify-center my-2">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-                      Pending your response
-                    </span>
-                  </div>
-                </div>
-              )}
+          {/* Loading spinner */}
+          {messagesLoading && messages.length === 0 && (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-5 h-5 animate-spin text-neutral-300 dark:text-neutral-600" />
+            </div>
+          )}
 
-              {/* Regular messages */}
-              {messages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  formatTime={formatTime}
+          {/* Unified message list with ticket dividers */}
+          {allItems.map((item, i) => {
+            // Render ticket divider
+            if (item._isDivider) {
+              return (
+                <TicketDivider
+                  key={item.id}
+                  closedBy={item.closedBy}
+                  closedAt={item.closedAt}
+                  newTicketPurpose={item.newTicketPurpose}
                 />
-              ))}
-            </>
+              );
+            }
+
+            // Render message
+            const message = item;
+            const prev = allItems[i - 1];
+            const next = allItems[i + 1];
+
+            // Skip dividers when calculating grouping
+            const prevMsg = prev && !prev._isDivider ? prev : null;
+            const nextMsg = next && !next._isDivider ? next : null;
+
+            const isFirst = !prevMsg
+              || prevMsg.userType !== message.userType
+              || prevMsg.promptType === 'system'
+              || message.promptType === 'system';
+            const isLast = !nextMsg
+              || nextMsg.userType !== message.userType
+              || nextMsg.promptType === 'system'
+              || message.promptType === 'system';
+
+            return (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                formatTime={formatTime}
+                isFirstInGroup={isFirst}
+                isLastInGroup={isLast}
+              />
+            );
+          })}
+
+          {/* Pending badge after purpose bubble */}
+          {isPending && (
+            <div className="flex justify-center py-3">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium bg-primary-500/10 dark:bg-primary-500/20 border border-primary-500/25 dark:border-primary-500/30 text-primary-700 dark:text-primary-400">
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-primary-500" />
+                Awaiting your response
+              </div>
+            </div>
           )}
 
-          {/* Typing Indicator */}
-          <TypingIndicator
-            isTyping={isPatientTyping}
-            label="Patient is typing"
-          />
+          {/* Typing indicator */}
+          <TypingIndicator isTyping={isPatientTyping} label="Patient is typing" />
 
           <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {/* Input Area */}
-      <MessageInput />
+      {/* Input */}
+      <MessageInput emitTyping={emitTyping} />
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { listAllRequirements, updateRequirement, deleteRequirement } from '../staff-appointment-service';
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const LOCATIONS = ['Arlegui', 'Casal', 'QuezonCity'];
 
 const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler }) => {
@@ -44,9 +44,16 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
 
   if (!isOpen) return null;
 
+  const numericFields = new Set(['morningAllowed', 'afternoonAllowed']);
   const handleChange = (field) => (e) => {
-    const value = e.target.type === 'number' ? parseInt(e.target.value, 10) || 0 : e.target.value;
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (numericFields.has(field)) {
+      const val = e.target.value;
+      if (val === '') { setFormData((prev) => ({ ...prev, [field]: '' })); return; }
+      const num = parseInt(val, 10);
+      if (!isNaN(num) && num >= 0) setFormData((prev) => ({ ...prev, [field]: num }));
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    }
   };
 
   const toggleDay = (day) => {
@@ -218,20 +225,20 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
             <div>
               <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Morning Slots</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={formData.morningAllowed}
                 onChange={handleChange('morningAllowed')}
-                min={0}
                 className="w-full px-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
             <div>
               <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Afternoon Slots</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={formData.afternoonAllowed}
                 onChange={handleChange('afternoonAllowed')}
-                min={0}
                 className="w-full px-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>

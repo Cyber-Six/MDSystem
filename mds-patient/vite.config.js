@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORTAL_URLS = {
   www:    'https://www.mdsystemtip.space',
   www2:   'https://www2.mdsystemtip.space',
-  local:  'http://localhost:3001',
+  local:  'http://localhost:3000',
 };
 
 // https://vite.dev/config/
@@ -42,10 +42,17 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       proxy: {
+        // Socket.IO WebSocket proxy (must be first for proper WebSocket upgrade)
+        '/socket.io': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
+          ws: true, // Enable WebSocket proxying
+        },
         '/auth': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
           bypass: function(req) {
             // Don't proxy GET requests (browser navigation) - let React Router handle them
             if (req.method === 'GET') {
@@ -56,22 +63,22 @@ export default defineConfig(({ mode }) => {
         '/emr': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/patient': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/info': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/econsultation': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
           // SSE streaming support: disable response buffering and extend
           // timeout so the proxy doesn't kill the connection while LLaMA generates
           timeout: 300000,    // 5 minutes (matches backend CHATBOT_PROXY_TIMEOUT_MS)
@@ -89,7 +96,7 @@ export default defineConfig(({ mode }) => {
         '/appointment': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
           bypass: function(req) {
             // Don't proxy GET requests (browser navigation) - let React Router handle them
             if (req.method === 'GET') {
@@ -100,22 +107,22 @@ export default defineConfig(({ mode }) => {
         '/media': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/profile': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/medical-inventory': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
         '/healthchat': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
       },
     }

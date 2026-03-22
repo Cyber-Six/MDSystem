@@ -43,21 +43,39 @@ export const createSocketService = ({
   options = {},
 }) => {
   let socket = null;
+  let connectionPromise = null;
 
   /**
    * Connect to the Socket.IO server.
    * Resolves when connected, rejects on auth failure.
+   * Prevents duplicate connections by tracking in-progress connection.
    *
    * @returns {Promise<void>}
    */
   const connect = () => {
+    // If already connected, resolve immediately
     if (socket?.connected) return Promise.resolve();
 
-    return new Promise((resolve, reject) => {
+    // If connection is in progress, return existing promise
+    if (connectionPromise) return connectionPromise;
+
+    // If there's an existing socket that's not connected, clean it up first
+    if (socket) {
+      socket.removeAllListeners();
+      socket.disconnect();
+      socket = null;
+    }
+
+    connectionPromise = new Promise((resolve, reject) => {
       const baseUrl = getApiBaseUrl();
       let settled = false;
 
-      socket = ioClient(baseUrl || undefined, {
+      // In development with relative URLs, Socket.IO will connect to the current origin.
+      // The Vite proxy at /socket.io will forward requests to the backend.
+      // In production, we use relative URLs to avoid CORS issues (same origin).
+      const socketUrl = baseUrl ? baseUrl : undefined; // undefined = use current origin
+
+      socket = ioClient(socketUrl, {
         // Auth function called on every connection/reconnection.
         // Ensures token is always fresh.
         auth: (cb) => {
@@ -65,22 +83,30 @@ export const createSocketService = ({
             .then((token) => cb({ token: token || '' }))
             .catch(() => cb({ token: '' }));
         },
+        // Use both WebSocket and polling for maximum compatibility
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 10000,
         reconnectionAttempts: 10,
+        // Increase timeout for slow connections
+        timeout: 20000,
+        // Allow CORS for cross-origin connections
+        withCredentials: true,
         ...options,
       });
 
       socket.once('connect', () => {
         if (!settled) {
           settled = true;
+          connectionPromise = null;
+          console.log('[SocketService] Connected successfully');
           resolve();
         }
       });
 
       socket.on('connect_error', async (err) => {
+        console.error('[SocketService] Connection error:', err.message);
         if (err.message?.includes('SOCKET_AUTH_FAILED') && onAuthError) {
           try {
             await onAuthError();
@@ -92,16 +118,28 @@ export const createSocketService = ({
         }
         if (!settled) {
           settled = true;
+          connectionPromise = null;
           reject(err);
         }
       });
+
+      socket.on('disconnect', (reason) => {
+        console.log('[SocketService] Disconnected:', reason);
+      });
+
+      socket.on('error', (error) => {
+        console.error('[SocketService] Socket error:', error);
+      });
     });
+
+    return connectionPromise;
   };
 
   /**
    * Disconnect from the server and clean up.
    */
   const disconnect = () => {
+    connectionPromise = null;
     if (socket) {
       socket.removeAllListeners();
       socket.disconnect();

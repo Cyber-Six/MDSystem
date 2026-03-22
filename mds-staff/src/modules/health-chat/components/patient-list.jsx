@@ -14,18 +14,22 @@ const PatientList = () => {
 
   if (ticketsLoading && tickets.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <Loader2 className="w-6 h-6 text-neutral-400 animate-spin" />
+      <div className="flex-1 flex items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#d5d1cb' }} />
       </div>
     );
   }
 
   if (tickets.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center">
-          No conversations found
-        </p>
+      <div className="flex-1 flex items-center justify-center py-12 px-6 text-center">
+        {ticketsLoading ? (
+          <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#f4c430' }} />
+        ) : (
+          <p className="text-xs" style={{ color: '#a19b93' }}>
+            No conversations found
+          </p>
+        )}
       </div>
     );
   }
@@ -41,6 +45,13 @@ const PatientList = () => {
           onClick={() => selectChat(ticket.id)}
         />
       ))}
+
+      {/* Loading indicator at bottom of list */}
+      {ticketsLoading && tickets.length > 0 && (
+        <div className="flex items-center justify-center py-3 border-t border-neutral-100 dark:border-neutral-800">
+          <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
+        </div>
+      )}
     </div>
   );
 };

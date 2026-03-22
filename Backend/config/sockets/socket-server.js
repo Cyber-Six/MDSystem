@@ -29,19 +29,31 @@ async function initSocket(server, options = {}) {
     process.env.SOCKET_CORS_METHODS || 'GET,HEAD,PUT,PATCH,POST,DELETE'
   ).split(',');
 
+  // Determine the Socket.IO path based on environment
+  // This ensures compatibility with proxies in development
+  const path = process.env.SOCKET_PATH || '/socket.io';
+  const serveClientOption = process.env.NODE_ENV === 'production' ? false : true;
+
   io = new Server(server, {
+    path,
+    serveClient: serveClientOption,
     cors: {
       origin: corsOrigin,
       methods: corsMethods,
       credentials: true,
     },
     transports: ['websocket', 'polling'],
+    // Enhanced reconnection settings for reliability
+    maxHttpBufferSize: 1e6, // 1MB
+    pingInterval: 25000,
+    pingTimeout: 60000,
     ...options,
   });
 
   // --- Redis adapter (cross-node fan-out) ---
   // Two dedicated clients are required: one for publishing, one for subscribing.
   // They are duplicated from the main client to reuse the same connection config.
+  // If Redis pub/sub permissions are unavailable, fall back to single-node mode.
   try {
     const pubClient = getClient().duplicate();
     const subClient = getClient().duplicate();
@@ -49,8 +61,10 @@ async function initSocket(server, options = {}) {
     io.adapter(createAdapter(pubClient, subClient));
     logger.info('[SOCKET] Redis adapter attached (cross-node fan-out enabled)');
   } catch (err) {
-    logger.error('[SOCKET] Failed to attach Redis adapter:', err.message);
-    throw err;
+    logger.warn('[SOCKET] Redis adapter failed — running in single-node mode:', err.message);
+    logger.warn('[SOCKET] To enable cross-node Socket.IO, grant pub/sub permissions to your Redis user:');
+    logger.warn('[SOCKET]   ACL SETUSER <username> +@pubsub &*');
+    // Continue without Redis adapter — Socket.IO will work on this node only
   }
 
   // Wire JWT authentication

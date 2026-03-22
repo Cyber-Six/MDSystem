@@ -51,6 +51,16 @@ export const getPendingTickets = async (offset = 0, limit = 50) => {
           session_end
           archived_at
           expiresAt
+          closedBy
+          lastMessageAt
+          unreadCount
+          lastMessage {
+            id
+            text
+            stamp
+            userType
+            promptType
+          }
           patient {
             id
             firstName
@@ -93,6 +103,16 @@ export const getActiveTickets = async (offset = 0, limit = 50) => {
           session_end
           archived_at
           expiresAt
+          closedBy
+          lastMessageAt
+          unreadCount
+          lastMessage {
+            id
+            text
+            stamp
+            userType
+            promptType
+          }
           patient {
             id
             firstName
@@ -135,6 +155,16 @@ export const getAllTickets = async (status = null, offset = 0, limit = 50) => {
           session_end
           archived_at
           expiresAt
+          closedBy
+          lastMessageAt
+          unreadCount
+          lastMessage {
+            id
+            text
+            stamp
+            userType
+            promptType
+          }
           patient {
             id
             firstName
@@ -193,6 +223,7 @@ export const getTicket = async (chatId) => {
         session_end
         archived_at
         expiresAt
+        closedBy
         patient {
           id
           firstName
@@ -255,7 +286,39 @@ export const approveTicket = async (chatId, notes = null) => {
         message
         chat {
           id
+          patientId
+          medicalId
+          purpose
+          notes
           status
+          session_start
+          session_end
+          archived_at
+          expiresAt
+          closedBy
+          lastMessageAt
+          unreadCount
+          lastMessage {
+            id
+            text
+            stamp
+            userType
+            promptType
+          }
+          patient {
+            id
+            firstName
+            lastName
+            email
+            identifier
+            branch
+          }
+          medical {
+            id
+            firstName
+            lastName
+            email
+          }
         }
       }
     }
@@ -346,7 +409,112 @@ export const closeTicket = async (chatId, notes = null) => {
   return data.closeTicket;
 };
 
+/**
+ * Delete an archived ticket (admin only)
+ */
+export const deleteArchivedTicket = async (chatId) => {
+  const mutation = `
+    mutation DeleteArchivedTicket($chatId: ID!) {
+      deleteArchivedTicket(chatId: $chatId) {
+        success
+        message
+      }
+    }
+  `;
+
+  const data = await sendGraphQL(mutation, { chatId });
+  return data.deleteArchivedTicket;
+};
+
 // ==================== FILE HANDLING ====================
+
+/**
+ * Get patient conversations grouped by patient (1 row per patient)
+ */
+export const getPatientConversations = async (statuses = null, offset = 0, limit = 50) => {
+  const query = `
+    query GetPatientConversations($statuses: [ChatStatus], $offset: Int, $limit: Int) {
+      getPatientConversations(statuses: $statuses, offset: $offset, limit: $limit) {
+        conversations {
+          patientId
+          patient {
+            id
+            firstName
+            lastName
+            email
+            identifier
+            branch
+          }
+          latestTicket {
+            id
+            patientId
+            medicalId
+            purpose
+            notes
+            status
+            session_start
+            session_end
+            archived_at
+            expiresAt
+            closedBy
+          }
+          lastMessage {
+            id
+            text
+            stamp
+            userType
+            promptType
+          }
+          lastMessageAt
+          unreadCount
+          activeTicketCount
+          totalTicketCount
+          tickets {
+            id
+            purpose
+            status
+            session_start
+            session_end
+            closedBy
+          }
+        }
+        total
+      }
+    }
+  `;
+
+  const data = await sendGraphQL(query, { statuses, offset, limit });
+  return data.getPatientConversations;
+};
+
+/**
+ * Get all messages for a patient across all their tickets
+ */
+export const getPatientMessages = async (patientId, { before, limit = 50 } = {}) => {
+  const query = `
+    query GetPatientMessages($patientId: Int!, $limit: Int, $before: String) {
+      getPatientMessages(patientId: $patientId, limit: $limit, before: $before) {
+        id
+        consultationVirtualId
+        text
+        filename
+        promptType
+        userId
+        userType
+        stamp
+        sender {
+          id
+          firstName
+          lastName
+          email
+        }
+      }
+    }
+  `;
+
+  const data = await sendGraphQL(query, { patientId, limit, before });
+  return data.getPatientMessages;
+};
 
 /**
  * Upload a file to staging area
