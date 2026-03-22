@@ -117,6 +117,93 @@ async function clearMedicalPermits(personnelId) {
   return result.rows;
 }
 
+/**
+ * Get all permission keys with true/false based on DB records
+ * @param {number} personnelId
+ * @returns {Promise<Object>} e.g. { is_admin: false, is_staff: true, emr_allow_approval: true, ... }
+ */
+async function getStaffPermissions(personnelId) {
+  // Get all labels this staff has
+  const result = await db.query(
+    `SELECT rt.label FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1;`,
+    [personnelId]
+  );
+  const activeLabels = new Set(result.rows.map(r => r.label));
+
+  // Build result object with all permission keys
+  const perms = {};
+  for (const [key, label] of Object.entries(permissions)) {
+    perms[key] = activeLabels.has(label);
+  }
+  return perms;
+}
+
+/**
+ * Set permissions for staff - true inserts row, false deletes row
+ * @param {Object} params
+ * @param {number} params.personnelId
+ * @param {Object} params.permissionsMap - e.g. { is_admin: true, is_staff: false, ... }
+ * @param {number} params.assignedBy
+ * @param {string} params.branch - 'Manila' | 'QuezonCity' | 'Both'
+ */
+async function setStaffPermissions({ personnelId, permissionsMap, assignedBy, branch = 'Both' }) {
+  const toInsert = [];
+  const toDelete = [];
+
+  for (const [key, value] of Object.entries(permissionsMap)) {
+    const label = permissions[key];
+    if (!label) {
+      logger.error(`❌ Invalid permission key attempted: ${key}`);
+      throw new Error(`Invalid permission key: ${key}`);
+    }
+    if (value === true) {
+      toInsert.push(label);
+    } else if (value === false) {
+      toDelete.push(label);
+    }
+  }
+
+  // Delete permissions set to false
+  if (toDelete.length > 0) {
+    await db.query(
+      `DELETE FROM "rolesMap" rm
+       USING "rolesTable" rt
+       WHERE rm."rolesId" = rt.id
+         AND rm."personnelId" = $1
+         AND rt.label = ANY($2);`,
+      [personnelId, toDelete]
+    );
+  }
+
+  // Insert/upsert permissions set to true
+  if (toInsert.length > 0) {
+    const values = [];
+    const params = [personnelId, assignedBy];
+    let i = params.length + 1;
+
+    for (const label of toInsert) {
+      values.push(`($${i}, $${i + 1})`);
+      params.push(label, branch);
+      i += 2;
+    }
+
+    await db.query(
+      `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
+       SELECT $1, r.id, v.branch, $2
+       FROM (VALUES ${values.join(",")}) AS v(label, branch)
+       JOIN "rolesTable" r ON r.label = v.label
+       ON CONFLICT ("personnelId", "rolesId") DO UPDATE
+         SET branch = EXCLUDED.branch,
+             "assignedBy" = EXCLUDED."assignedBy";`,
+      params
+    );
+  }
+
+  return { inserted: toInsert, deleted: toDelete };
+}
+
 async function isMedicalPermitted(userId, label, patientId) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
   if (isAdmin) {
@@ -183,5 +270,13 @@ async function isMedicalPermitted(userId, label, patientId) {
   return true;
 }
 
-module.exports = { setMedicalPermit, unsetMedicalPermit, isMedicalPermitted,
-  clearMedicalPermits, getMedicalpermits, permissions };
+module.exports = {
+  setMedicalPermit,
+  unsetMedicalPermit,
+  isMedicalPermitted,
+  clearMedicalPermits,
+  getMedicalpermits,
+  permissions,
+  getStaffPermissions,
+  setStaffPermissions,
+};

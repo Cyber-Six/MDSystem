@@ -366,6 +366,26 @@ async function getUserPatientType(userId) {
     throw err;
   }
 }
+
+async function isActiveMedicalPersonnel(userId) {
+  const sql = `
+    SELECT mp.id
+    FROM "MedicalPersonnel" mp
+    JOIN "UserCredentials" uc ON uc.id = mp.id
+    WHERE mp.id = $1
+      AND mp.is_active = true
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+    return result.rows.length > 0; // true if found, false if not
+  } catch (err) {
+    logger.error(`Error checking medical personnel for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
 module.exports = {
     connect,
     query,
@@ -386,5 +406,6 @@ module.exports = {
     setExpiredPersonalTickets,
     getUserBranch,
     recordLoginAttempt,
-    getUserPatientType
+    getUserPatientType,
+    isActiveMedicalPersonnel
 };

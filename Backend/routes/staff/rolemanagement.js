@@ -2,173 +2,55 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../config/query.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect');
-const { isMedicalPermitted, permissions: medPermissions } = require('../../services/permit.js');
+const {
+  isMedicalPermitted,
+  permissions,
+  setStaffPermissions
+} = require('../../services/permit.js');
 const logger = require('../../utils/logger');
 
-// ─── UI module/action order (must match frontend PERMISSION_MODULES) ──────────
-const MODULE_STRUCTURE = {
-  appointments:    ['view', 'confirm', 'cancel', 'noshow', 'complete'],
-  pendingRequests: ['view', 'approveAppointment', 'rejectAppointment', 'approveMedicine', 'rejectMedicine', 'approveRecordUpdate', 'rejectRecordUpdate'],
-  medicalRecords:  ['view', 'edit', 'addNotes'],
-  dentalRecords:   ['view', 'edit', 'addNotes'],
-  patientSearch:   ['view'],
-  inventory:       ['view', 'add', 'dispense'],
-  roleManagement:  ['view', 'edit'],
-};
-
-// ─── UI toggle key → backend permission label(s) ─────────────────────────────
-const UI_TO_BACKEND = {
-  'appointments.view':                  ['ALLOW_TO_VIEW_APPOINTMENT'],
-  'appointments.confirm':               ['ALLOW_TO_APPROVE_APPOINTMENT'],
-  'appointments.cancel':                ['ALLOW_TO_APPROVE_APPOINTMENT'],
-  'appointments.noshow':                ['ALLOW_TO_APPROVE_APPOINTMENT'],
-  'appointments.complete':              ['ALLOW_TO_APPROVE_APPOINTMENT'],
-  'pendingRequests.view':               ['ALLOW_TO_VIEW_APPOINTMENT'],
-  'pendingRequests.approveAppointment': ['ALLOW_TO_APPROVE_APPOINTMENT'],
-  'pendingRequests.rejectAppointment':  ['ALLOW_TO_APPROVE_APPOINTMENT'],
-  'pendingRequests.approveMedicine':    ['ALLOW_TO_APPROVE_MEDICINE_REQUEST'],
-  'pendingRequests.rejectMedicine':     ['ALLOW_TO_APPROVE_MEDICINE_REQUEST'],
-  'pendingRequests.approveRecordUpdate':['ALLOW_TO_APPROVE_PROFILE'],
-  'pendingRequests.rejectRecordUpdate': ['ALLOW_TO_APPROVE_PROFILE'],
-  'medicalRecords.view':                ['ALLOW_TO_VIEW_EMR'],
-  'medicalRecords.edit':                ['ALLOW_TO_EDIT_EMR'],
-  'medicalRecords.addNotes':            ['ALLOW_TO_EDIT_EMR'],
-  'dentalRecords.view':                 ['ALLOW_TO_VIEW_EMR'],
-  'dentalRecords.edit':                 ['ALLOW_TO_SET_DENTAL_RECORD'],
-  'dentalRecords.addNotes':             ['ALLOW_TO_SET_DENTAL_RECORD'],
-  'patientSearch.view':                 ['ALLOW_TO_VIEW_PROFILE'],
-  'inventory.view':                     ['ALLOW_TO_VIEW_INVENTORY'],
-  'inventory.add':                      ['ALLOW_TO_ADD_INVENTORY'],
-  'inventory.dispense':                 ['ALLOW_TO_DISPENSE_MEDICINE'],
-  'roleManagement.view':                ['IS_ADMIN'],
-  'roleManagement.edit':                ['IS_ADMIN'],
-};
-
-// ─── Backend permission label → UI toggles it enables ────────────────────────
-const BACKEND_TO_UI = {
-  'ALLOW_TO_VIEW_APPOINTMENT':         [['appointments', 'view'], ['pendingRequests', 'view']],
-  'ALLOW_TO_APPROVE_APPOINTMENT':      [['appointments', 'confirm'], ['appointments', 'cancel'], ['appointments', 'noshow'], ['appointments', 'complete'], ['pendingRequests', 'approveAppointment'], ['pendingRequests', 'rejectAppointment']],
-  'ALLOW_TO_APPROVE_MEDICINE_REQUEST': [['pendingRequests', 'approveMedicine'], ['pendingRequests', 'rejectMedicine']],
-  'ALLOW_TO_APPROVE_PROFILE':          [['pendingRequests', 'approveRecordUpdate'], ['pendingRequests', 'rejectRecordUpdate']],
-  'ALLOW_TO_VIEW_EMR':                 [['medicalRecords', 'view'], ['dentalRecords', 'view']],
-  'ALLOW_TO_EDIT_EMR':                 [['medicalRecords', 'edit'], ['medicalRecords', 'addNotes']],
-  'ALLOW_TO_SET_DENTAL_RECORD':        [['dentalRecords', 'edit'], ['dentalRecords', 'addNotes']],
-  'ALLOW_TO_VIEW_PROFILE':             [['patientSearch', 'view']],
-  'ALLOW_TO_VIEW_INVENTORY':           [['inventory', 'view']],
-  'ALLOW_TO_ADD_INVENTORY':            [['inventory', 'add']],
-  'ALLOW_TO_DISPENSE_MEDICINE':        [['inventory', 'dispense']],
-  'IS_ADMIN':                          [['roleManagement', 'view'], ['roleManagement', 'edit']],
-};
-
-// Convert UI permissions object → deduplicated backend label array
-function uiPermissionsToLabels(uiPerms) {
-  const labelSet = new Set();
-  for (const [moduleId, actions] of Object.entries(uiPerms)) {
-    for (const [actionId, val] of Object.entries(actions)) {
-      if (val) {
-        const labels = UI_TO_BACKEND[`${moduleId}.${actionId}`] || [];
-        labels.forEach(l => labelSet.add(l));
-      }
-    }
-  }
-  return Array.from(labelSet);
-}
-
-// Convert backend label array → UI permissions object (consistent key order)
-function labelsToUiPermissions(labelList) {
-  // Build with consistent key order matching PERMISSION_MODULES
+// Convert labels array to permissions object { key: true/false }
+function labelsToPermissions(labels) {
+  const labelSet = new Set(labels || []);
   const perms = {};
-  for (const [mod, actions] of Object.entries(MODULE_STRUCTURE)) {
-    perms[mod] = {};
-    for (const action of actions) {
-      perms[mod][action] = false;
-    }
-  }
-  for (const label of labelList) {
-    const uiPaths = BACKEND_TO_UI[label] || [];
-    for (const [mod, action] of uiPaths) {
-      if (perms[mod] !== undefined) {
-        perms[mod][action] = true;
-      }
-    }
+  for (const [key, label] of Object.entries(permissions)) {
+    perms[key] = labelSet.has(label);
   }
   return perms;
-}
-
-// Atomically replace all rolesMap entries and update identity (uses pg transaction)
-async function applyStaffAccount(userId, roledata, newIdentity, assignedById) {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-
-    // 1. Clear all existing permits for this user
-    await client.query(`DELETE FROM "rolesMap" WHERE "personnelId" = $1`, [userId]);
-
-    // 2. Insert new permits (if any)
-    if (roledata.length > 0) {
-      const params = [userId, assignedById];
-      const values = [];
-      let i = 3;
-      for (const { label, branch } of roledata) {
-        values.push(`($${i}, $${i + 1})`);
-        params.push(label, branch);
-        i += 2;
-      }
-      await client.query(
-        `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-         SELECT $1, r.id, v.branch, $2
-         FROM (VALUES ${values.join(',')}) AS v(label text, branch "UserDesignation")
-         JOIN "rolesTable" r ON r.label = v.label
-         ON CONFLICT ("personnelId", "rolesId") DO UPDATE
-           SET branch = EXCLUDED.branch, "assignedBy" = EXCLUDED."assignedBy"`,
-        params
-      );
-    }
-
-    // 3. Update identity
-    await client.query(
-      `UPDATE "UserCredentials" SET identity = $1 WHERE id = $2`,
-      [newIdentity, userId]
-    );
-    logger.info(`Updated identity for userId=${userId} to ${newIdentity}`);
-    await client.query('COMMIT');
-  } catch (err) {
-    logger.error('Error applying staff account changes:', err);
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
 }
 
 // ─── GET /admin/staff/accounts ────────────────────────────────────────────────
 router.get('/accounts', jwtProtect('medical'), async (req, res) => {
   try {
-    const isAdmin = await isMedicalPermitted(req.user.id, medPermissions.is_admin, null);
+    const isAdmin = await isMedicalPermitted(req.user.id, permissions.is_admin, null);
     if (!isAdmin) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required.' });
     }
-    const narrowCredentialStatus = req.query?.status; // optional filter: Active, Suspended, Pending
 
+    const narrowCredentialStatus = req.query?.status;
+    const narrowDesignation = req.query?.location;
 
-    // Fetch all registered users with identity = 'Medical'
+    // Fetch all staff with their roles aggregated
     const result = await db.query(
       `SELECT
-         uc.id,
-         uc.email,
-         uc.identity,
-         uc.credentials_status,
-         up.first_name,
-         up.middle_name,
-         up.last_name,
-         up.branch
+         uc.id, uc.email, uc.identity, uc.credentials_status,
+         up.first_name, up.middle_name, up.last_name,
+         mp.designation AS branch,
+         COALESCE(array_agg(rt.label) FILTER (WHERE rt.label IS NOT NULL), '{}') AS labels
        FROM "UserCredentials" uc
-       LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-       WHERE 
+       JOIN "UsersPersonal" up ON up.id = uc.id
+       JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       LEFT JOIN "rolesMap" rm ON rm."personnelId" = uc.id
+       LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
+       WHERE
           uc.identity = 'Medical'
-          AND COALESCE($1, uc.credentials_status) = uc.credentials_status
-       ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST
-       `, [narrowCredentialStatus]);
+          AND ($1 IS NULL OR uc.credentials_status = $1)
+          AND ($2 IS NULL OR mp.designation = $2)
+       GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
+                up.first_name, up.middle_name, up.last_name, mp.designation
+       ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`,
+      [narrowCredentialStatus, narrowDesignation]
+    );
 
     // Fetch last login dates
     let lastLoginMap = {};
@@ -186,37 +68,14 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
       // gracefully skip on error
     }
 
-    // For each user, fetch their roles and determine permissions and status
-    // 1. Get all staff rows
-    const staffRows = result.rows;
-
-    // 2. Get all roles for all staff in one query
-    const staffIds = staffRows.map(r => r.id);
-    const rolesResult = await db.query(
-      `SELECT rm."personnelId", rt.label
-       FROM "rolesMap" rm
-       JOIN "rolesTable" rt ON rm."rolesId" = rt.id
-       WHERE rm."personnelId" = ANY($1)`,
-      [staffIds]
-    );
-
-    // 3. Group roles by personnelId
-    const rolesByStaff = {};
-    for (const { personnelId, label } of rolesResult.rows) {
-      if (!rolesByStaff[personnelId]) rolesByStaff[personnelId] = [];
-      rolesByStaff[personnelId].push(label);
-    }
-
-    // 4. Build staff list without N+1 queries
-    const staffList = staffRows.map((row) => {
-      const labelList = rolesByStaff[row.id] || [];
-      const hasStaff  = labelList.includes(medPermissions.is_staff);
-      const uiPerms   = labelsToUiPermissions(labelList);
+    // Build staff list from query result
+    const staffList = result.rows.map((row) => {
+      const perms = labelsToPermissions(row.labels);
 
       let staffStatus;
       if (row.identity === 'Medical') {
         staffStatus = 'Active';
-      } else if (hasStaff) {
+      } else if (perms.is_staff) {
         staffStatus = 'Suspended';
       } else {
         staffStatus = 'Pending';
@@ -237,7 +96,7 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
         branch: row.branch || 'Both',
         identity: row.identity,
         status: staffStatus,
-        permissions: uiPerms,
+        permissions: perms,
         credentialsStatus: row.credentials_status,
         lastLogin: lastLogin
           ? new Date(lastLogin).toLocaleString('en-US', {
@@ -251,72 +110,88 @@ router.get('/accounts', jwtProtect('medical'), async (req, res) => {
     return res.json({ ok: true, staff: staffList });
   } catch (err) {
     logger.error('Error fetching staff accounts:', err);
-    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' }
-      , err.message || 'Unknown error.' // remove in production for security
-    );
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
   }
 });
 
 // ─── PUT /admin/staff/accounts/:userId ───────────────────────────────────────
 router.put('/accounts/:userId', jwtProtect('medical'), async (req, res) => {
   try {
-    const isAdmin = await isMedicalPermitted(req.user.id, medPermissions.is_admin, null);
+    const isAdmin = await isMedicalPermitted(req.user.id, permissions.is_admin, null);
     if (!isAdmin) {
       return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required.' });
     }
 
     const { userId } = req.params;
-    const { permissions: uiPerms, status } = req.body;
+    const { permissions: permissionsMap, status } = req.body;
 
-    if (!uiPerms || !status) {
+    if (!permissionsMap || !status) {
       return res.status(400).json({ error: 'MISSING_FIELDS', message: 'permissions and status are required.' });
     }
     if (!['Active', 'Suspended'].includes(status)) {
       return res.status(400).json({ error: 'INVALID_STATUS', message: 'Status must be Active or Suspended.' });
     }
 
-    // Verify target user exists and is a .mds@ account
+    // Verify target user exists and is Medical identity
     const targetResult = await db.query(
-      `SELECT id, email, identity, credentials_status FROM "UserCredentials" WHERE id = $1`,
+      `SELECT uc.id, uc.email, uc.identity, uc.credentials_status, mp.designation AS branch
+       FROM "UserCredentials" uc
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       WHERE uc.id = $1`,
       [userId]
     );
     if (targetResult.rows.length === 0) {
       return res.status(404).json({ error: 'NOT_FOUND', message: 'User not found.' });
     }
-    if (targetResult.rows[0].identity !== 'Medical') {
-      return res.status(403).json({ error: 'FORBIDDEN', message: 'Can only manage .mds@tip.edu.ph staff accounts.' });
+    const targetUser = targetResult.rows[0];
+
+    // Check if MedicalPersonnel record exists
+    if (!targetUser.branch) {
+      return res.status(400).json({
+        error: 'MISSING_MEDICAL_PERSONNEL',
+        message: 'MedicalPersonnel record must be created before activating staff account. Use POST /admin/staff/medical-personnel first.'
+      });
     }
 
-    // Only active/verified staff accounts can be managed in role management.
-    const targetCredentialStatus = String(targetResult.rows[0].credentials_status || '').toLowerCase();
-    if (targetCredentialStatus !== 'Active') {
+    if (targetUser.identity !== 'Medical' && targetUser.identity !== 'Employee') {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Can only manage Medical and Employee staff accounts.' });
+    }
+
+    // Only active/verified staff accounts can be managed
+    const targetCredentialStatus = String(targetUser.credentials_status || '').toLowerCase();
+    if (targetCredentialStatus !== 'active') {
       return res.status(403).json({
         error: 'STAFF_NOT_VERIFIED',
         message: 'This account is not yet verified. Please approve the initial record first.',
       });
     }
 
-    // Prevent admin from removing their own IS_ADMIN unless they're not the last admin
+    // Prevent admin from suspending themselves
     if (String(req.user.id) === String(userId) && status === 'Suspended') {
       return res.status(400).json({ error: 'CANNOT_SELF_SUSPEND', message: 'Admins cannot suspend their own account.' });
     }
 
-    // Use the branch the staff set when completing their initial medical record
-    const branchResult = await db.getUserBranch(String(userId));
+    // Get branch from MedicalPersonnel.designation
     const allowedBranches = new Set(['Manila', 'QuezonCity', 'Both']);
-    const targetBranch = allowedBranches.has(branchResult) ? branchResult : 'Both';
+    const targetBranch = allowedBranches.has(targetUser.branch) ? targetUser.branch : 'Both';
 
-    // Convert UI permissions → distinct backend label set, always include IS_STAFF
-    const labels = uiPermissionsToLabels(uiPerms);
-    const labelSet = new Set(labels);
-    labelSet.add(medPermissions.is_staff); // IS_STAFF required for all active/suspended staff
+    // Always ensure is_staff is true for staff accounts
+    const finalPermissions = { ...permissionsMap, is_staff: true };
 
-    const roledata = Array.from(labelSet).map(label => ({ label, branch: targetBranch }));
+    // Apply permissions using setStaffPermissions
+    await setStaffPermissions({
+      personnelId: String(userId),
+      permissionsMap: finalPermissions,
+      assignedBy: String(req.user.id),
+      branch: targetBranch,
+    });
 
-    // Active → identity = 'Medical'; Suspended → identity = 'Employee' (immediately blocks all staff routes)
+    // Update identity: Active → Medical, Suspended → Employee
     const newIdentity = status === 'Active' ? 'Medical' : 'Employee';
-
-    await applyStaffAccount(String(userId), roledata, newIdentity, String(req.user.id));
+    await db.query(
+      `UPDATE "UserCredentials" SET identity = $1 WHERE id = $2`,
+      [newIdentity, userId]
+    );
 
     logger.info(`Staff account updated: targetUserId=${userId}, status=${status}, identity=${newIdentity}, by adminId=${req.user.id}`);
     return res.json({
@@ -328,5 +203,345 @@ router.put('/accounts/:userId', jwtProtect('medical'), async (req, res) => {
     return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
   }
 });
+
+// ─── POST /admin/staff/medical-personnel ─────────────────────────────────────
+router.post('/medical-personnel', jwtProtect('medical'), async (req, res) => {
+  try {
+    const isAdmin = await isMedicalPermitted(req.user.id, permissions.is_admin, null);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required.' });
+    }
+
+    const { userId, title, role, designation } = req.body;
+
+    // Validate required fields
+    if (!userId || !title || !role || !designation) {
+      return res.status(400).json({
+        error: 'MISSING_FIELDS',
+        message: 'userId, title, role, and designation are required.'
+      });
+    }
+
+    // Validate designation
+    const validDesignations = ['Manila', 'QuezonCity', 'Both'];
+    if (!validDesignations.includes(designation)) {
+      return res.status(400).json({
+        error: 'INVALID_DESIGNATION',
+        message: 'designation must be Manila, QuezonCity, or Both.'
+      });
+    }
+
+    // Validate role
+    const validRoles = ['Doctor', 'Nurse', 'Admin', 'Pharmacist', 'Dentist', 'Staff'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        error: 'INVALID_ROLE',
+        message: 'role must be one of: Doctor, Nurse, Admin, Pharmacist, Dentist, Staff.'
+      });
+    }
+
+    // Verify user exists and has Employee identity
+    const userResult = await db.query(
+      `SELECT id, identity, credentials_status FROM "UserCredentials" WHERE id = $1`,
+      [userId]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'USER_NOT_FOUND', message: 'User not found.' });
+    }
+
+    const user = userResult.rows[0];
+    if (user.identity !== 'Employee') {
+      return res.status(409).json({
+        error: 'INVALID_IDENTITY',
+        message: 'User must have identity=Employee to create MedicalPersonnel record.'
+      });
+    }
+
+    // Check if MedicalPersonnel record already exists
+    const existingResult = await db.query(
+      `SELECT id FROM "MedicalPersonnel" WHERE id = $1`,
+      [userId]
+    );
+    if (existingResult.rows.length > 0) {
+      return res.status(409).json({
+        error: 'RECORD_EXISTS',
+        message: 'MedicalPersonnel record already exists for this user.'
+      });
+    }
+
+    // Insert MedicalPersonnel record
+    const insertResult = await db.query(
+      `INSERT INTO "MedicalPersonnel" (id, role, title, designation, is_active)
+       VALUES ($1, $2, $3, $4, true)
+       RETURNING *`,
+      [userId, role, title, designation]
+    );
+
+    const personnel = insertResult.rows[0];
+    logger.info(`MedicalPersonnel record created: userId=${userId}, role=${role}, by adminId=${req.user.id}`);
+
+    return res.status(201).json({
+      ok: true,
+      message: 'MedicalPersonnel record created successfully.',
+      personnel: {
+        id: personnel.id,
+        userId: personnel.id,
+        role: personnel.role,
+        title: personnel.title,
+        designation: personnel.designation,
+        is_active: personnel.is_active
+      }
+    });
+  } catch (err) {
+    logger.error('Error creating MedicalPersonnel record:', err);
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
+  }
+});
+
+// ─── GET /admin/staff/medical-personnel (all) ────────────────────────────────
+router.get('/medical-personnel', jwtProtect('medical'), async (req, res) => {
+  try {
+    const isAdmin = await isMedicalPermitted(req.user.id, permissions.is_admin, null);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required.' });
+    }
+
+    const { role, designation, is_active } = req.query;
+
+    const result = await db.query(
+      `SELECT
+         mp.id, mp.role, mp.title, mp.designation, mp.is_active,
+         uc.email, uc.identity, uc.credentials_status,
+         up.first_name, up.middle_name, up.last_name
+       FROM "MedicalPersonnel" mp
+       JOIN "UserCredentials" uc ON uc.id = mp.id
+       JOIN "UsersPersonal" up ON up.id = mp.id
+       WHERE
+         ($1 IS NULL OR mp.role = $1)
+         AND ($2 IS NULL OR mp.designation = $2)
+         AND ($3 IS NULL OR mp.is_active = $3::boolean)
+       ORDER BY mp.id DESC`,
+      [role || null, designation || null, is_active || null]
+    );
+
+    const personnel = result.rows.map(row => ({
+      id: row.id,
+      role: row.role,
+      title: row.title,
+      designation: row.designation,
+      is_active: row.is_active,
+      user: {
+        email: row.email,
+        identity: row.identity,
+        credentials_status: row.credentials_status,
+        name: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ')
+      }
+    }));
+
+    return res.json({ ok: true, personnel, count: personnel.length });
+  } catch (err) {
+    logger.error('Error fetching MedicalPersonnel records:', err);
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
+  }
+});
+
+// ─── GET /admin/staff/medical-personnel/:userId ──────────────────────────────
+router.get('/medical-personnel/:userId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const isAdmin = await isMedicalPermitted(req.user.id, permissions.is_admin, null);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required.' });
+    }
+
+    const { userId } = req.params;
+
+    const result = await db.query(
+      `SELECT
+         mp.id, mp.role, mp.title, mp.designation, mp.is_active,
+         uc.email, uc.identity, uc.credentials_status,
+         up.first_name, up.middle_name, up.last_name
+       FROM "MedicalPersonnel" mp
+       JOIN "UserCredentials" uc ON uc.id = mp.id
+       JOIN "UsersPersonal" up ON up.id = mp.id
+       WHERE mp.id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'RECORD_NOT_FOUND',
+        message: 'MedicalPersonnel record not found.'
+      });
+    }
+
+    const row = result.rows[0];
+    const personnel = {
+      id: row.id,
+      role: row.role,
+      title: row.title,
+      designation: row.designation,
+      is_active: row.is_active,
+      user: {
+        email: row.email,
+        identity: row.identity,
+        credentials_status: row.credentials_status,
+        name: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ')
+      }
+    };
+
+    return res.json({ ok: true, personnel });
+  } catch (err) {
+    logger.error('Error fetching MedicalPersonnel record:', err);
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
+  }
+});
+
+// ─── PUT /admin/staff/medical-personnel/:userId ──────────────────────────────
+router.put('/medical-personnel/:userId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const isAdmin = await isMedicalPermitted(req.user.id, permissions.is_admin, null);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required.' });
+    }
+
+    const { userId } = req.params;
+    const { title, designation, is_active } = req.body;
+
+    // Validate at least one field provided
+    if (title === undefined && designation === undefined && is_active === undefined) {
+      return res.status(400).json({
+        error: 'MISSING_FIELDS',
+        message: 'At least one field (title, designation, is_active) must be provided.'
+      });
+    }
+
+    // Validate designation if provided
+    if (designation !== undefined) {
+      const validDesignations = ['Manila', 'QuezonCity', 'Both'];
+      if (!validDesignations.includes(designation)) {
+        return res.status(400).json({
+          error: 'INVALID_DESIGNATION',
+          message: 'designation must be Manila, QuezonCity, or Both.'
+        });
+      }
+    }
+
+    // Verify MedicalPersonnel record exists
+    const existingResult = await db.query(
+      `SELECT id FROM "MedicalPersonnel" WHERE id = $1`,
+      [userId]
+    );
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'RECORD_NOT_FOUND',
+        message: 'MedicalPersonnel record not found.'
+      });
+    }
+
+    // Build dynamic UPDATE query
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (title !== undefined) {
+      updates.push(`title = $${paramIndex++}`);
+      params.push(title);
+    }
+    if (designation !== undefined) {
+      updates.push(`designation = $${paramIndex++}`);
+      params.push(designation);
+    }
+    if (is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      params.push(is_active);
+    }
+
+    params.push(userId);
+
+    const updateQuery = `
+      UPDATE "MedicalPersonnel"
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING *
+    `;
+
+    const updateResult = await db.query(updateQuery, params);
+    const personnel = updateResult.rows[0];
+
+    logger.info(`MedicalPersonnel record updated: userId=${userId}, by adminId=${req.user.id}`);
+
+    return res.json({
+      ok: true,
+      message: 'MedicalPersonnel record updated successfully.',
+      personnel: {
+        id: personnel.id,
+        role: personnel.role,
+        title: personnel.title,
+        designation: personnel.designation,
+        is_active: personnel.is_active
+      }
+    });
+  } catch (err) {
+    logger.error('Error updating MedicalPersonnel record:', err);
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
+  }
+});
+
+// ─── DELETE /admin/staff/medical-personnel/:userId ───────────────────────────
+router.delete('/medical-personnel/:userId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const isAdmin = await isMedicalPermitted(req.user.id, permissions.is_admin, null);
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin access required.' });
+    }
+
+    const { userId } = req.params;
+    const revertIdentity = req.query.revertIdentity !== 'false'; // default true
+
+    // Verify MedicalPersonnel record exists
+    const existingResult = await db.query(
+      `SELECT id FROM "MedicalPersonnel" WHERE id = $1`,
+      [userId]
+    );
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'RECORD_NOT_FOUND',
+        message: 'MedicalPersonnel record not found.'
+      });
+    }
+
+    // Delete MedicalPersonnel record
+    await db.query(
+      `DELETE FROM "MedicalPersonnel" WHERE id = $1`,
+      [userId]
+    );
+
+    let identityReverted = false;
+
+    // Optionally revert identity to Employee
+    if (revertIdentity) {
+      const identityResult = await db.query(
+        `UPDATE "UserCredentials"
+         SET identity = 'Employee'
+         WHERE id = $1 AND identity = 'Medical'
+         RETURNING id`,
+        [userId]
+      );
+      identityReverted = identityResult.rowCount > 0;
+    }
+
+    logger.info(`MedicalPersonnel record deleted: userId=${userId}, identityReverted=${identityReverted}, by adminId=${req.user.id}`);
+
+    return res.json({
+      ok: true,
+      message: 'MedicalPersonnel record deleted successfully.',
+      identityReverted
+    });
+  } catch (err) {
+    logger.error('Error deleting MedicalPersonnel record:', err);
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
+  }
+});
+
 
 module.exports = router;

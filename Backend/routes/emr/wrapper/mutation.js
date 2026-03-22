@@ -103,8 +103,8 @@ const Mutation = {
 
   _EmployeeProfile: async (_, {args, recordId}, { user, res }) => {
     let identity = await db.getUserIdentity(user.id);
-    // Allow 'Medical' users (staff) to create employee profiles as well.
-    if (identity !== "Employee" && identity !== "Medical") {
+    // Allow override via environment variable for testing or special cases, but default to strict check
+    if (identity !== "Employee") {
       throwGraphQLError(res)
         .status(400)
         .message("User identity mismatch. Only employees can create employee profiles.")
@@ -112,7 +112,6 @@ const Mutation = {
       }
 
     // Always record profile_type as 'Employee' so downstream queries expecting
-    // Employee profile_type continue to work even if the user's identity is 'Medical'.
     await db.query(
       `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
         ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,

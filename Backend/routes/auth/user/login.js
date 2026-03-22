@@ -12,7 +12,6 @@ const query = require("../../../config/query.js");
 const { verifyPassword, generateRandomKey } = require("../../../utils/security.js");
 
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
-const { permissions: medicalPermissions, isMedicalPermitted } = require("../../../services/permit.js");
 const AuthSession = require("../../../utils/authSession.js");
 const router = express.Router();
 
@@ -66,12 +65,15 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   }
 
   // ✅ Check if account type matches portal
-  if (account_type === "medical" && user.identity !== "Medical") {
-    const count = await incrementLoginFailure(email, account_type);
-    return res.status(400).json({
-      error: "INVALID_CREDENTIALS",
-      message: `Email or password is incorrect. ${count} failed attempts.`
-    });
+  if (account_type === "medical") {
+    const isMedical = await query.isActiveMedicalPersonnel(user.id);
+    if (!isMedical) {
+      const count = await incrementLoginFailure(email, account_type);
+      return res.status(400).json({
+        error: "INVALID_CREDENTIALS",
+        message: `Email or password is incorrect. ${count} failed attempts.`
+      });
+      }
   }
 
   // ✅ Check password
@@ -144,32 +146,31 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
   const portal = detectPortalFromSubdomain(req);
   if (portal === "medical") {
-    const normalizedEmail = String(session.email || '').toLowerCase();
-    if (normalizedEmail.endsWith('.mds@tip.edu.ph')) {
-      const credentialsStatus = await query.getUserCredentialStatus(session.user_id);
-      const isActiveCredential = String(credentialsStatus || '').toLowerCase() === 'active';
-      if (!isActiveCredential) {
+    const credentialsStatus = await query.getUserCredentialStatus(session.user_id);
+    switch (credentialsStatus) {
+      case "Unverified":
         return res.status(403).json({
           error: "STAFF_ACCOUNT_NOT_VERIFIED",
           message: "Please ask your admin to verify your account first.",
         });
-      }
-    }
-
-    const identity = await query.getUserIdentity(session.user_id);
-    if (identity !== "Medical") {
-      const hasStaffRole = await isMedicalPermitted(session.user_id, medicalPermissions.is_staff);
-      if (hasStaffRole) {
+      case "Locked":
+        return res.status(403).json({
+          error: "STAFF_ACCOUNT_LOCKED",
+          message: "Your staff account is currently locked. Contact your administrator.",
+        });
+      case "Inactive":
+        return res.status(403).json({
+          error: "STAFF_ACCOUNT_INACTIVE",
+          message: "Your account does not yet have staff access. Ask your administrator to activate your account.",
+        });
+      case "Active":
+        break; // continue with login
+      default:
         return res.status(403).json({
           error: "STAFF_ACCOUNT_SUSPENDED",
           message: "Your staff account is currently suspended. Contact your administrator.",
         });
-      }
-      return res.status(403).json({
-        error: "STAFF_ACCOUNT_PENDING",
-        message: "Your account does not yet have staff access. Ask your administrator to activate your account.",
-      });
-    }
+    } 
   }
 
   // ✅ Create actual auth session (JWT, cookie, etc.)
