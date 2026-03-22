@@ -46,7 +46,8 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
     <div
       onClick={onClick}
       className={`
-        flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors duration-100
+        flex items-center gap-2.5 px-3 py-2.5 cursor-pointer
+        transition-all duration-300 ease-in-out
         border-l-[3px] border-b
         ${isSelected
           ? 'bg-amber-50 dark:bg-amber-900/20 border-l-primary-500 border-b-neutral-100 dark:border-b-neutral-800'
@@ -55,6 +56,7 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
             : 'bg-transparent border-l-transparent border-b-neutral-100 dark:border-b-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
         }
       `}
+      style={{ willChange: 'transform, opacity' }}
     >
       {/* Avatar with unread indicator */}
       <div className="relative flex-shrink-0">
@@ -107,7 +109,14 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
           }`}>
             {getLastMessagePreview()}
           </p>
-          <TicketStatusBadge status={ticket.status} />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {hasUnread && !isSelected && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-primary-500 text-secondary-900">
+                {ticket.unreadCount > 99 ? '99+' : ticket.unreadCount}
+              </span>
+            )}
+            <TicketStatusBadge status={ticket.status} />
+          </div>
         </div>
       </div>
     </div>

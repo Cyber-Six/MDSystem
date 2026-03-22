@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import {
   getPendingTickets,
   getActiveTickets,
@@ -338,7 +338,7 @@ export function HealthChatProvider({ children }) {
     // Load ALL messages for this patient (across all their tickets)
     try {
       setMessagesLoading(true);
-      const fetchedMessages = await getPatientMessages(Number(patientId));
+      const fetchedMessages = await getPatientMessages(Number(patientId), { limit: 50 });
       setMessages(fetchedMessages || []);
     } catch (err) {
       console.error('[HealthChatContext] Failed to load patient messages:', err);
@@ -376,6 +376,93 @@ export function HealthChatProvider({ children }) {
   }, [selectedPatientId, selectedChatId, tickets]);
 
   /**
+   * Update conversation list when a new message arrives (for unread indicator + reordering)
+   * This updates lastMessage, lastMessageAt, unreadCount on the ticket in the list
+   * and re-sorts the list so the most recent conversation is at the top.
+   */
+  const updateConversationForNewMessage = useCallback((chatId, message, senderType) => {
+    setTickets(prev => {
+      // Find the ticket that contains this chatId (could be ticket ID or sub-ticket ID)
+      const idx = prev.findIndex(t =>
+        String(t.id) === String(chatId) ||
+        t.tickets?.some(sub => String(sub.id) === String(chatId))
+      );
+      if (idx === -1) return prev;
+
+      const ticket = prev[idx];
+      const isCurrentlySelected = String(ticket.patientId) === String(selectedPatientId);
+
+      const updated = {
+        ...ticket,
+        lastMessage: {
+          id: message.id,
+          text: message.promptType === 'file' ? '📎 Sent a file' : message.text,
+          stamp: message.stamp,
+          userType: message.userType || senderType,
+          promptType: message.promptType
+        },
+        lastMessageAt: message.stamp
+      };
+
+      // Increment unread count only if this is a Patient message and staff is NOT viewing this patient
+      if (senderType === 'Patient' && !isCurrentlySelected) {
+        updated.unreadCount = (ticket.unreadCount || 0) + 1;
+      }
+
+      const newArr = [...prev];
+      newArr[idx] = updated;
+
+      // Re-sort by lastMessageAt DESC (newest first)
+      newArr.sort((a, b) => {
+        const aTime = new Date(a.lastMessageAt || a.latestTicket?.session_start || 0);
+        const bTime = new Date(b.lastMessageAt || b.latestTicket?.session_start || 0);
+        return bTime - aTime;
+      });
+
+      return newArr;
+    });
+
+    // Also update conversations array to stay in sync
+    setConversations(prev => {
+      const ticketInList = tickets.find(t =>
+        String(t.id) === String(chatId) ||
+        t.tickets?.some(sub => String(sub.id) === String(chatId))
+      );
+      if (!ticketInList) return prev;
+
+      const idx = prev.findIndex(c => String(c.patientId) === String(ticketInList.patientId));
+      if (idx === -1) return prev;
+
+      const isCurrentlySelected = String(ticketInList.patientId) === String(selectedPatientId);
+      const updated = {
+        ...prev[idx],
+        lastMessage: {
+          id: message.id,
+          text: message.promptType === 'file' ? '📎 Sent a file' : message.text,
+          stamp: message.stamp,
+          userType: message.userType || senderType,
+          promptType: message.promptType
+        },
+        lastMessageAt: message.stamp,
+        unreadCount: (senderType === 'Patient' && !isCurrentlySelected)
+          ? (prev[idx].unreadCount || 0) + 1
+          : prev[idx].unreadCount
+      };
+
+      const newArr = [...prev];
+      newArr[idx] = updated;
+
+      newArr.sort((a, b) => {
+        const aTime = new Date(a.lastMessageAt || a.latestTicket?.session_start || 0);
+        const bTime = new Date(b.lastMessageAt || b.latestTicket?.session_start || 0);
+        return bTime - aTime;
+      });
+
+      return newArr;
+    });
+  }, [selectedPatientId, tickets]);
+
+  /**
    * Update a ticket's status
    */
   const updateTicketStatus = useCallback((chatId, newStatus) => {
@@ -390,7 +477,9 @@ export function HealthChatProvider({ children }) {
   /**
    * Add a new ticket (from socket event)
    * Uses selectedFilters (multi-filter) to determine visibility
+   * Debounced to prevent rapid successive refreshes from multiple events
    */
+  const addTicketDebounceRef = useRef(null);
   const addTicket = useCallback((ticket) => {
     const shouldShow =
       (selectedFilters.includes('pending') && ticket.status === 'Open') ||
@@ -398,8 +487,14 @@ export function HealthChatProvider({ children }) {
       (selectedFilters.includes('archive') && ['Closed', 'Expired'].includes(ticket.status));
 
     if (shouldShow) {
-      // Refresh the full conversation list to get properly grouped data
-      refreshMultipleFilters(selectedFilters);
+      // Debounce: batch multiple rapid ticket events into a single refresh
+      if (addTicketDebounceRef.current) {
+        clearTimeout(addTicketDebounceRef.current);
+      }
+      addTicketDebounceRef.current = setTimeout(() => {
+        refreshMultipleFilters(selectedFilters);
+        addTicketDebounceRef.current = null;
+      }, 500);
     }
   }, [selectedFilters, refreshMultipleFilters]);
 
@@ -433,40 +528,40 @@ export function HealthChatProvider({ children }) {
     try {
       const result = await approveTicketService(chatId, notes);
       if (result.success && result.chat) {
-        // Get the approved chat data
         const approvedChat = result.chat;
 
-        // Always select the approved chat and load its messages
-        // This ensures staff enters the chat after approval
-        setSelectedChatId(approvedChat.id);
+        // Set the active ticket ID to the approved chat
+        setActiveTicketId(approvedChat.id);
+
+        // Set selected patient based on the full chat data
+        const patientId = approvedChat.patientId;
+        if (patientId) {
+          setSelectedPatientId(patientId);
+          setSelectedChatId(patientId); // Legacy
+        }
+
         setSelectedTicket(approvedChat);
 
         // Reload messages to show system approval message
         const fetchedMessages = await getMessages(chatId);
         setMessages(fetchedMessages || []);
 
-        // Switch to active filter - this will trigger refreshTickets
-        // which will fetch fresh data from backend including our approved ticket
-        setFilter('active');
+        // Switch filters to include active
+        if (!selectedFilters.includes('active')) {
+          const newFilters = [...selectedFilters, 'active'];
+          setSelectedFilters(newFilters);
+          localStorage.setItem('health-chat-selected-filters', JSON.stringify(newFilters));
+        }
 
-        // Manually add the approved ticket to ensure it appears immediately
-        // This prevents a brief moment where the ticket isn't visible
-        setTickets(prev => {
-          const exists = prev.some(t => String(t.id) === String(approvedChat.id));
-          if (exists) {
-            return prev.map(t =>
-              String(t.id) === String(approvedChat.id) ? approvedChat : t
-            );
-          }
-          return [approvedChat, ...prev];
-        });
+        // Refresh conversation list to get updated data including the approved chat
+        refreshMultipleFilters(selectedFilters.includes('active') ? selectedFilters : [...selectedFilters, 'active']);
       }
       return result;
     } catch (err) {
       console.error('[HealthChatContext] Failed to approve ticket:', err);
       throw err;
     }
-  }, []);
+  }, [selectedFilters, refreshMultipleFilters]);
 
   /**
    * Reject a ticket
@@ -580,6 +675,7 @@ export function HealthChatProvider({ children }) {
     activeTicketId, // Actual ticket ID for sending messages/actions
     messages,
     messagesLoading,
+    setMessages,
     selectChat,
     refreshMessages,
     markConversationAsRead,
@@ -593,6 +689,7 @@ export function HealthChatProvider({ children }) {
     addTicket,
     removeTicket,
     updateTicketStatus,
+    updateConversationForNewMessage,
     approveTicket,
     rejectTicket,
     sendMessage,

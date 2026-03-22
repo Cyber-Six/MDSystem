@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
+import { getPatientMessages } from '../health-chat-service';
 import ChatHeader from './chat-header';
 import MessageBubble from './message-bubble';
 import MessageInput from './message-input';
@@ -8,7 +9,7 @@ import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
 
-const ChatPanel = () => {
+const ChatPanel = ({ emitTyping }) => {
   const {
     selectedChatId,
     selectedPatientId,
@@ -16,12 +17,65 @@ const ChatPanel = () => {
     selectedConversation,
     messages,
     messagesLoading,
+    setMessages,
     typingUsers,
     refreshMessages,
     socketError
   } = useHealthChat();
 
   const messagesEndRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const prevScrollHeightRef = useRef(0);
+
+  // Load older messages when scrolling to top
+  const handleScroll = useCallback(async () => {
+    const container = scrollContainerRef.current;
+    if (!container || loadingOlder || !hasMoreMessages || !selectedPatientId) return;
+
+    // Trigger load when scrolled near the top (within 80px)
+    if (container.scrollTop < 80) {
+      try {
+        setLoadingOlder(true);
+        prevScrollHeightRef.current = container.scrollHeight;
+
+        const olderMessages = await getPatientMessages(
+          Number(selectedPatientId),
+          { before: messages[0]?.stamp, limit: 50 }
+        );
+
+        if (!olderMessages || olderMessages.length === 0) {
+          setHasMoreMessages(false);
+        } else {
+          // Prepend older messages (they come in ASC order)
+          setMessages(prev => {
+            const existingIds = new Set(prev.map(m => String(m.id)));
+            const newMsgs = olderMessages.filter(m => !existingIds.has(String(m.id)));
+            return [...newMsgs, ...prev];
+          });
+
+          // Maintain scroll position after prepending
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current) {
+              const newScrollHeight = scrollContainerRef.current.scrollHeight;
+              scrollContainerRef.current.scrollTop = newScrollHeight - prevScrollHeightRef.current;
+            }
+          });
+        }
+      } catch (err) {
+        console.error('[ChatPanel] Failed to load older messages:', err);
+      } finally {
+        setLoadingOlder(false);
+      }
+    }
+  }, [loadingOlder, hasMoreMessages, selectedPatientId, messages]);
+
+  // Reset pagination state when patient changes
+  useEffect(() => {
+    setHasMoreMessages(true);
+    setLoadingOlder(false);
+  }, [selectedPatientId]);
 
   // Get ticket details for dividers (from selectedTicket.tickets array)
   const ticketDetailsMap = useMemo(() => {
@@ -118,9 +172,26 @@ const ChatPanel = () => {
 
       {/* Messages - only this div scrolls */}
       <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
         className="flex-1 min-h-0 overflow-y-auto bg-neutral-100 dark:bg-neutral-800"
       >
         <div className="px-5 py-4">
+
+          {/* Loading older messages spinner */}
+          {loadingOlder && (
+            <div className="flex items-center justify-center py-3">
+              <Loader2 className="w-4 h-4 animate-spin text-neutral-400 dark:text-neutral-500" />
+              <span className="ml-2 text-xs text-neutral-400 dark:text-neutral-500">Loading older messages…</span>
+            </div>
+          )}
+
+          {/* No more messages indicator */}
+          {!hasMoreMessages && messages.length > 0 && (
+            <div className="flex items-center justify-center py-3">
+              <span className="text-[10px] text-neutral-400 dark:text-neutral-500">Beginning of conversation</span>
+            </div>
+          )}
 
           {/* Loading spinner */}
           {messagesLoading && messages.length === 0 && (
@@ -190,7 +261,7 @@ const ChatPanel = () => {
       </div>
 
       {/* Input */}
-      <MessageInput />
+      <MessageInput emitTyping={emitTyping} />
     </div>
   );
 };

@@ -397,26 +397,56 @@ const Query = {
    * Get all messages for a patient across all their tickets
    * Messages are ordered by stamp ASC with ticket dividers inserted
    */
-  _getPatientMessages: async (_, { patientId, offset, limit }, { user, res }) => {
+  _getPatientMessages: async (_, { patientId, offset, limit, before }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Get all messages for this patient across all tickets
-    const result = await db.query(
-      `SELECT
-        p.*,
-        hc.purpose as ticket_purpose,
-        hc.status as ticket_status,
-        hc.session_end as ticket_session_end,
-        hc.closed_by_type as ticket_closed_by
-       FROM "HealthChatPrompt" p
-       JOIN "HealthChat" hc ON hc.id = p."consultationVirtualId"
-       WHERE hc."patientId" = $1
-       ORDER BY p.stamp ASC
-       LIMIT $2 OFFSET $3`,
-      [patientId, limit || 200, offset || 0]
-    );
+    // Effective page size
+    const pageSize = limit || 50;
+
+    let result;
+    if (before) {
+      // Cursor-based: fetch up to pageSize messages OLDER than the given timestamp.
+      // Return them in ASC order so the frontend can prepend correctly.
+      result = await db.query(
+        `SELECT * FROM (
+           SELECT
+             p.*,
+             hc.purpose  AS ticket_purpose,
+             hc.status   AS ticket_status,
+             hc.session_end AS ticket_session_end,
+             hc.closed_by_type AS ticket_closed_by
+           FROM "HealthChatPrompt" p
+           JOIN "HealthChat" hc ON hc.id = p."consultationVirtualId"
+           WHERE hc."patientId" = $1 AND p.stamp < $2
+           ORDER BY p.stamp DESC
+           LIMIT $3
+         ) sub
+         ORDER BY stamp ASC`,
+        [patientId, before, pageSize]
+      );
+    } else {
+      // Initial load: return the LATEST pageSize messages in ASC order.
+      // DESC subquery + outer ASC gives newest-N ordered oldest-first for display.
+      result = await db.query(
+        `SELECT * FROM (
+           SELECT
+             p.*,
+             hc.purpose  AS ticket_purpose,
+             hc.status   AS ticket_status,
+             hc.session_end AS ticket_session_end,
+             hc.closed_by_type AS ticket_closed_by
+           FROM "HealthChatPrompt" p
+           JOIN "HealthChat" hc ON hc.id = p."consultationVirtualId"
+           WHERE hc."patientId" = $1
+           ORDER BY p.stamp DESC
+           LIMIT $2
+         ) sub
+         ORDER BY stamp ASC`,
+        [patientId, pageSize]
+      );
+    }
 
     return await Promise.all(result.rows.map(async (row) => {
       const message = await formatMessage(row);
@@ -601,6 +631,14 @@ const Mutation = {
 
     // Emit to chat room about ticket closure
     emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-closed', {
+      chatId,
+      closedBy: 'Patient',
+      chat
+    });
+
+    // Also notify all medical staff so their conversation list updates
+    // (staff may not be in the chat room if viewing a different patient)
+    emitToRole('medical', 'healthchat:ticket-closed', {
       chatId,
       closedBy: 'Patient',
       chat
