@@ -78,6 +78,14 @@ type ScheduleWhitelist {
   patientId: ID!
 }
 
+type WhitelistEntry {
+  id: ID!
+  slotSchedulerId: ID!
+  patientId: ID!
+  patientIdentifier: Int
+  patientName: String
+}
+
 input ScheduleWhitelistInput {
   slotSchedulerId: ID!
   patientId: ID!
@@ -149,7 +157,6 @@ type patientSlot {
   approvedBy: String
   notes: String
   arrived_at: Date
-  rejection_acknowledged: Boolean
   created_at: Date!
 }
 
@@ -184,13 +191,13 @@ type Query {
 
   searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]
   getAppointmentStatusCounts: [StatusCount!]
+  listSchedulerWhitelist(schedulerId: ID!, offset: Int, limit: Int): [WhitelistEntry!]
 }
 
 # Mutations
 type Mutation {
   submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!): patientSlot
   cancelAppointment: Boolean
-  acknowledgeRejection: Boolean
 
   #----------- --^ Patient and --v Medical
   respondAppointment(userId: ID!, slotId: ID, status: SCHEDULING_STATUS!, notes: String): patientSlot

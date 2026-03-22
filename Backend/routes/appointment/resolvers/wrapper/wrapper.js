@@ -350,6 +350,27 @@ const Query = {
     `);
 
     return result.rows;
+  },
+
+  _listSchedulerWhitelist: async (_, { schedulerId, offset, limit }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const query = `
+      SELECT
+        swl.id,
+        swl."slotSchedulerId",
+        swl."patientId",
+        up.identifier AS "patientIdentifier",
+        CONCAT(COALESCE(up.first_name, ''), ' ', COALESCE(up.last_name, '')) AS "patientName"
+      FROM "schedulerWhitelist" swl
+      LEFT JOIN "UsersPersonal" up ON up.id = swl."patientId"
+      WHERE swl."slotSchedulerId" = $1
+      ORDER BY swl.id DESC
+      LIMIT $2 OFFSET $3;
+    `;
+    const result = await db.query(query, [schedulerId, limit || 50, offset || 0]);
+    return result.rows;
   }
 };
 
@@ -445,21 +466,6 @@ const Mutation = {
       logger.error("Error submitting appointment:", err);
       throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();  
     }
-  },
-
-  _acknowledgeRejection: async (_, { patientId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const result = await db.query(
-      `UPDATE "patientSlot" SET "rejection_acknowledged" = true
-       WHERE "patientId" = $1 AND status = 'Rejected' AND "rejection_acknowledged" = false
-       RETURNING id;`,
-      [patientId]
-    );
-
-    return result.rowCount > 0;
   },
 
   _cancelAppointment: async (_, { patientId, cancelledBy, slotId }, { user, res }) => {

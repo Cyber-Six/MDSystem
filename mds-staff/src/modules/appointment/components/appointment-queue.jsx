@@ -253,11 +253,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           </div>
         ) : (
           <>
-          <table className="w-full" style={{ minWidth: 600 }}>
+          <table className="w-full border-collapse">
             <thead>
               <tr className="bg-neutral-50/60 dark:bg-neutral-700/30">
-                {['Patient', 'Scheduled', 'Session', 'Type', 'Status', 'Notes'].map((h) => (
-                  <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
+                {['Patient', 'Scheduled', 'Session', 'Status', 'Notes'].map((h) => (
+                  <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap" style={{ width: '20%' }}>
                     {h}
                   </th>
                 ))}
@@ -270,7 +270,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                   onClick={() => onViewDetails?.(apt)}
                   className="hover:bg-primary-50/40 dark:hover:bg-neutral-700/30 cursor-pointer transition-colors"
                 >
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
                     <p className="text-xs font-mono text-secondary-500 dark:text-neutral-400">
                       {apt.patientIdentifier ?? apt.patientId}
                     </p>
@@ -278,7 +278,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                       <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">{apt.patientName}</p>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
                     {apt.scheduledDate ? (
                       <div>
                         <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
@@ -292,23 +292,23 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                       <span className="text-xs text-secondary-400 dark:text-neutral-500">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
                     <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300'}`}>
                       {apt.session}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-2.5" style={{ width: '20%' }}>
                     <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-600'}`}>
                       {apt.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-secondary-500 dark:text-neutral-400 max-w-[200px] truncate">
+                  <td className="px-4 py-2.5 text-xs text-secondary-500 dark:text-neutral-400 truncate" style={{ width: '20%' }}>
                     {apt.notes || '—'}
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
+                  <td colSpan={5} className="px-4 py-12 text-center">
                     <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
