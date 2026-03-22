@@ -245,6 +245,15 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       } catch (err) {
         if (cancelled) return;
 
+        // When the backend returns a 4xx HTTP status but still includes partial
+        // GraphQL data (e.g. some resolvers threw "No active profile found"),
+        // extract the payload from the axios error response directly.
+        const partialPayload = err?.response?.data?.data;
+        if (partialPayload?.getPatientBasicInfo) {
+          setRecordData(partialPayload);
+          return;
+        }
+
         // Fallback: some users have incomplete medical sections that make the
         // full compound query fail; still load basic profile info for viewing.
         try {
@@ -263,6 +272,12 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           setRecordData(fallbackPayload);
           setLoadError(null);
         } catch (fallbackErr) {
+          // Also try partial data from the fallback axios error response
+          const fallbackPartial = fallbackErr?.response?.data?.data;
+          if (fallbackPartial?.getPatientBasicInfo) {
+            setRecordData(fallbackPartial);
+            return;
+          }
           if (!cancelled) {
             setLoadError(fallbackErr?.message || err?.message || 'Failed to load patient.');
           }
