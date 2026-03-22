@@ -76,8 +76,8 @@ const GQL_EMERGENCY = `
   query GetEmergency($userId: ID!) {
     getUserEmergencyContact(userId: $userId, limit: 1) {
       id status created_at
-      firstContact  { id contactName relationship contactNumber }
-      secondContact { id contactName relationship contactNumber }
+      firstContact  { id contactName relationship contactNumber address }
+      secondContact { id contactName relationship contactNumber address }
     }
   }
 `;
@@ -160,8 +160,8 @@ const GQL_FULL_RECORD = `
     }
     getUserEmergencyContact(userId: $userId, limit: 1) {
       id status created_at
-      firstContact  { id contactName relationship contactNumber }
-      secondContact { id contactName relationship contactNumber }
+      firstContact  { id contactName relationship contactNumber address }
+      secondContact { id contactName relationship contactNumber address }
     }
     getUserMedicationProfile(userId: $userId, limit: 1) {
       id notes status created_at
@@ -297,13 +297,13 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
         name:         emergencyData?.firstContact?.contactName   || '',
         relationship: emergencyData?.firstContact?.relationship  || '',
         contact:      emergencyData?.firstContact?.contactNumber || '',
-        address:      '',
+        address:      emergencyData?.firstContact?.address       || '',
       },
       second: {
         name:         emergencyData?.secondContact?.contactName   || '',
         relationship: emergencyData?.secondContact?.relationship  || '',
         contact:      emergencyData?.secondContact?.contactNumber || '',
-        address:      '',
+        address:      emergencyData?.secondContact?.address       || '',
       },
     },
     medicalHistory: {
@@ -468,8 +468,11 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
               <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
                 <h4 className="text-sm font-semibold text-secondary-900 dark:text-white uppercase tracking-wide">Address</h4>
               </div>
-              <div className="p-6">
-                <p className="text-sm text-secondary-700 dark:text-neutral-300">{patient.personal.address}</p>
+              <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1.5">Present Address</p>
+                  <p className="text-sm text-secondary-700 dark:text-neutral-300">{patient.personal.address || 'N/A'}</p>
+                </div>
               </div>
             </div>
             

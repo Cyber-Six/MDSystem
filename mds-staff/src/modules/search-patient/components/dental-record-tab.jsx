@@ -1,23 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PatientSectionCard from './section-card';
 import ToothChart from './tooth-chart';
 import PendingDentalSubmissions from './pending-dental-submissions';
 import { getLegend, ORAL_FINDINGS } from './tooth-chart-constants';
+import { axiosRequest } from '../../../packages-core-adapter';
 
-/* ─── helpers ──────────────────────────────────────────────── */
+/* ─── AuthenticatedImage ─────────────────────────────────────── */
+function AuthenticatedImage({ path, alt, className }) {
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
-function MetricCell({ label, value, highlight = false }) {
+  useEffect(() => {
+    let objectUrl = null;
+    let cancelled = false;
+    axiosRequest
+      .get(path, { responseType: 'blob' })
+      .then((res) => {
+        if (!cancelled) {
+          objectUrl = URL.createObjectURL(res.data);
+          setSrc(objectUrl);
+        }
+      })
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [path]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center w-full h-32 rounded-lg bg-neutral-100 dark:bg-neutral-700/50 animate-pulse">
+        <svg className="w-6 h-6 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (error || !src) {
+    return (
+      <div className="flex items-center justify-center w-full h-24 rounded-lg bg-neutral-100 dark:bg-neutral-700/50 border border-dashed border-neutral-300 dark:border-neutral-600">
+        <p className="text-xs text-neutral-400 dark:text-neutral-500">Photo unavailable</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="px-3 py-3 text-center">
-      <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none mb-1.5">{label}</p>
-      {value ? (
-        <p className={`text-sm font-semibold leading-none ${highlight ? 'text-primary-600 dark:text-primary-400' : 'text-secondary-800 dark:text-white'}`}>
-          {value}
-        </p>
-      ) : (
-        <p className="text-sm text-secondary-300 dark:text-neutral-600">—</p>
+    <>
+      <button type="button" onClick={() => setIsExpanded(true)} className="block w-full text-left" title="Click to enlarge">
+        <img src={src} alt={alt} className={`${className} cursor-zoom-in`} />
+      </button>
+      {isExpanded && (
+        <div className="fixed inset-0 z-[1200] bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center" onClick={() => setIsExpanded(false)}>
+          <div className="relative max-w-6xl w-full" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setIsExpanded(false)} className="absolute -top-10 right-0 text-white/90 hover:text-white text-sm font-medium">Close</button>
+            <img src={src} alt={alt} className="w-full max-h-[85vh] object-contain rounded-lg border border-white/20 shadow-2xl" />
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -83,7 +129,6 @@ function OralFindingsTable({ findings, onFindingChange, readOnly = false }) {
 
 export default function PatientDentalRecordTab({ patient }) {
   const dental = patient.dental || {};
-  const treatments = dental.treatments || [];
 
   // Convert legacy chart format to new tooth states format
   const convertLegacyChart = (chart) => {
@@ -127,14 +172,10 @@ export default function PatientDentalRecordTab({ patient }) {
     dental.pendingSubmissions || []
   );
 
-  const metricItems = [
-    { label: 'First Time Dentist', value: dental.firstTimeDentist },
-    { label: 'Last Consultation', value: dental.lastConsultation, highlight: true },
-    { label: 'Last Cleaning', value: dental.lastCleaning },
-    { label: 'Tooth Extraction', value: dental.toothExtraction },
-    { label: 'Dental Filling', value: dental.dentalFilling },
-    { label: 'Appliance', value: dental.hasAppliance },
-  ];
+  const procedures       = dental.procedures  || [];
+  const appliances       = dental.appliances  || [];
+  const photoUpper       = dental.photoUpper  || null;
+  const photoLower       = dental.photoLower  || null;
 
   // Handle tooth chart save
   const handleSaveToothChart = async (newStates) => {
@@ -203,14 +244,122 @@ export default function PatientDentalRecordTab({ patient }) {
         </PatientSectionCard>
       )}
 
-      {/* ── Dental Summary ───────────────────────────────────── */}
-      <PatientSectionCard title="Dental Summary">
-        <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-neutral-200 dark:divide-neutral-700 -mx-3 -mb-3 border-t border-neutral-100 dark:border-neutral-700/60">
-          {metricItems.map(({ label, value, highlight }) => (
-            <MetricCell key={label} label={label} value={value} highlight={highlight} />
-          ))}
+      {/* ── Dental Visit History ─────────────────────────────── */}
+      <PatientSectionCard title="Dental Visit History">
+        <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60">
+          <div className="flex items-start gap-3 py-1.5">
+            <span className="text-xs text-secondary-400 dark:text-neutral-500 min-w-[160px] shrink-0 pt-px">Seen by Dentist</span>
+            <span className="text-sm font-medium text-secondary-800 dark:text-white">
+              {dental.seenByDentist || <span className="text-secondary-300 dark:text-neutral-600 font-normal">—</span>}
+            </span>
+          </div>
+          <div className="flex items-start gap-3 py-1.5">
+            <span className="text-xs text-secondary-400 dark:text-neutral-500 min-w-[160px] shrink-0 pt-px">Last Dental Cleaning</span>
+            <span className="text-sm font-medium text-secondary-800 dark:text-white">
+              {dental.lastCleaning || <span className="text-secondary-300 dark:text-neutral-600 font-normal">—</span>}
+            </span>
+          </div>
         </div>
       </PatientSectionCard>
+
+      {/* ── Dental Procedures ────────────────────────────────── */}
+      <PatientSectionCard title="Dental Procedures">
+        {procedures.length > 0 ? (
+          <div className="overflow-x-auto -mx-3 -mb-3">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-neutral-50 dark:bg-neutral-700/40">
+                  <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide border-b border-neutral-100 dark:border-neutral-700">Procedure</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide border-b border-neutral-100 dark:border-neutral-700 w-36">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {procedures.map((p, i) => (
+                  <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/60 last:border-0 hover:bg-neutral-50/50 dark:hover:bg-neutral-700/20">
+                    <td className="px-3 py-2 text-secondary-800 dark:text-white">{p.name}</td>
+                    <td className="px-3 py-2 text-secondary-500 dark:text-neutral-400">{p.date || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-secondary-300 dark:text-neutral-600">No dental procedures recorded.</p>
+        )}
+      </PatientSectionCard>
+
+      {/* ── Oral Appliances ──────────────────────────────────── */}
+      <PatientSectionCard title="Oral Appliances">
+        {appliances.length > 0 ? (
+          <div className="overflow-x-auto -mx-3 -mb-3">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-neutral-50 dark:bg-neutral-700/40">
+                  <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide border-b border-neutral-100 dark:border-neutral-700">Tag</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide border-b border-neutral-100 dark:border-neutral-700 w-24">Status</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide border-b border-neutral-100 dark:border-neutral-700 w-32">Date Issued</th>
+                  <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide border-b border-neutral-100 dark:border-neutral-700 w-24">Arch</th>
+                </tr>
+              </thead>
+              <tbody>
+                {appliances.map((a, i) => {
+                  const isActive = a.status && a.status !== 'Removed' && a.status !== 'removed';
+                  return (
+                    <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/60 last:border-0 hover:bg-neutral-50/50 dark:hover:bg-neutral-700/20">
+                      <td className="px-3 py-2 text-secondary-800 dark:text-white">{a.name}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${isActive ? 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-400' : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'}`}>
+                          {a.status || '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-secondary-500 dark:text-neutral-400">{a.dateIssued || '—'}</td>
+                      <td className="px-3 py-2 text-secondary-800 dark:text-white">{a.arch || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-secondary-300 dark:text-neutral-600">No oral appliances recorded.</p>
+        )}
+      </PatientSectionCard>
+
+      {/* ── Dental Photos ────────────────────────────────────── */}
+      {(photoUpper || photoLower) && (
+        <PatientSectionCard title="Dental Photos">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-[11px] font-semibold text-secondary-400 dark:text-neutral-500 uppercase tracking-wider mb-2">Upper Teeth</p>
+              {photoUpper ? (
+                <AuthenticatedImage
+                  path={`/media/record/dentalPhoto/${photoUpper}`}
+                  alt="Upper teeth photo"
+                  className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 object-cover"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-24 rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600">
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500">No photo</p>
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-secondary-400 dark:text-neutral-500 uppercase tracking-wider mb-2">Lower Teeth</p>
+              {photoLower ? (
+                <AuthenticatedImage
+                  path={`/media/record/dentalPhoto/${photoLower}`}
+                  alt="Lower teeth photo"
+                  className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 object-cover"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-24 rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600">
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500">No photo</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </PatientSectionCard>
+      )}
 
       {/* ── Interactive Tooth Chart ──────────────────────────── */}
       <PatientSectionCard
@@ -278,28 +427,6 @@ export default function PatientDentalRecordTab({ patient }) {
           onFindingChange={handleFindingChange}
           readOnly={!isEditingFindings}
         />
-      </PatientSectionCard>
-
-      {/* ── Treatment History ────────────────────────────────── */}
-      <PatientSectionCard title="Treatment History">
-        {treatments.length === 0 ? (
-          <p className="text-xs text-secondary-300 dark:text-neutral-600">No dental treatments recorded.</p>
-        ) : (
-          <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60 -mx-3 -mb-3">
-            {treatments.map((t, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors"
-              >
-                <div>
-                  <p className="text-sm font-medium text-secondary-800 dark:text-white leading-none">{t.treatment}</p>
-                  <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">{t.dentist}</p>
-                </div>
-                <span className="text-xs text-secondary-400 dark:text-neutral-500 shrink-0 ml-4">{t.date}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </PatientSectionCard>
 
     </div>
