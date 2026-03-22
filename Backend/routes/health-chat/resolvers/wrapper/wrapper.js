@@ -275,12 +275,12 @@ const Query = {
     let statusFilter = '';
     const params = [];
     if (statuses && statuses.length > 0) {
-      statusFilter = `WHERE status = ANY($1)`;
+        statusFilter = `WHERE status = ANY($1)`;
       params.push(statuses);
     }
 
     // Get unique patients with their latest ticket
-    // Use DISTINCT ON to get one row per patient, ordered by priority (Ongoing > Open > others)
+    // Use ROW_NUMBER to get one row per patient, ordered by priority (Ongoing > Open > others)
     const query = `
       WITH RankedTickets AS (
         SELECT
@@ -293,7 +293,8 @@ const Query = {
                 WHEN status = 'Open' THEN 1
                 ELSE 2
               END,
-              COALESCE(session_start, id::text::timestamp) DESC
+              COALESCE(session_start, NOW()) DESC,
+              id DESC
           ) as rn
         FROM "HealthChat"
         ${statusFilter}
@@ -322,7 +323,8 @@ const Query = {
           WHEN lt.status = 'Open' THEN 1
           ELSE 2
         END,
-        COALESCE(lt.session_start, lt.id::text::timestamp) DESC
+        COALESCE(lt.session_start, NOW()) DESC,
+        lt.id DESC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
