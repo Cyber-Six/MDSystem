@@ -6,7 +6,7 @@ import TicketStatusBadge from './ticket-status-badge';
 import ConfirmModal from './confirm-modal';
 
 const ChatHeader = () => {
-  const { selectedTicket, approveTicket, rejectTicket, closeTicket, deleteTicket } = useHealthChat();
+  const { selectedTicket, activeTicketId, approveTicket, rejectTicket, closeTicket, deleteTicket } = useHealthChat();
 
   const [actionLoading, setActionLoading] = useState(null);
   const [showPatientInfo, setShowPatientInfo] = useState(false);
@@ -26,10 +26,11 @@ const ChatHeader = () => {
   };
 
   const handleApprove = async () => {
+    if (!activeTicketId) return;
     try {
       setActionLoading('approve');
       setActionError(null);
-      await approveTicket(selectedTicket.id);
+      await approveTicket(activeTicketId);
     } catch (err) {
       setActionError(err.message || 'Failed to approve');
       setTimeout(() => setActionError(null), 4000);
@@ -39,10 +40,11 @@ const ChatHeader = () => {
   };
 
   const handleReject = async (reason = null) => {
+    if (!activeTicketId) return;
     try {
       setActionLoading('reject');
       setConfirmModal({ isOpen: false, type: null, reason: '' });
-      await rejectTicket(selectedTicket.id, reason || null);
+      await rejectTicket(activeTicketId, reason || null);
     } catch (err) {
       setActionError(err.message || 'Failed to reject');
       setTimeout(() => setActionError(null), 4000);
@@ -52,10 +54,11 @@ const ChatHeader = () => {
   };
 
   const handleClose = async () => {
+    if (!activeTicketId) return;
     try {
       setActionLoading('close');
       setConfirmModal({ isOpen: false, type: null, reason: '' });
-      await closeTicket(selectedTicket.id);
+      await closeTicket(activeTicketId);
     } catch (err) {
       setActionError(err.message || 'Failed to close');
       setTimeout(() => setActionError(null), 4000);
@@ -65,11 +68,12 @@ const ChatHeader = () => {
   };
 
   const handleDelete = async () => {
+    if (!activeTicketId) return;
     try {
       setActionLoading('delete');
       setConfirmModal({ isOpen: false, type: null, reason: '' });
       setActionError(null);
-      await deleteTicket(selectedTicket.id);
+      await deleteTicket(activeTicketId);
     } catch (err) {
       setActionError(err.message || 'Failed to delete');
       setTimeout(() => setActionError(null), 4000);

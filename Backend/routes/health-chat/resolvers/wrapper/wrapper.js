@@ -275,25 +275,31 @@ const Query = {
     let statusFilter = '';
     const params = [];
     if (statuses && statuses.length > 0) {
-      statusFilter = `WHERE hc.status = ANY($1)`;
+      statusFilter = `WHERE status = ANY($1)`;
       params.push(statuses);
     }
 
     // Get unique patients with their latest ticket
-    // Use a window function to get the latest ticket per patient
+    // Use DISTINCT ON to get one row per patient, ordered by priority (Ongoing > Open > others)
     const query = `
-      WITH LatestTickets AS (
-        SELECT DISTINCT ON ("patientId")
-          hc.*,
-          ROW_NUMBER() OVER (PARTITION BY "patientId" ORDER BY
-            CASE WHEN status = 'Ongoing' THEN 0
-                 WHEN status = 'Open' THEN 1
-                 ELSE 2 END,
-            COALESCE(session_start, id::text::timestamp) DESC
+      WITH RankedTickets AS (
+        SELECT
+          *,
+          ROW_NUMBER() OVER (
+            PARTITION BY "patientId"
+            ORDER BY
+              CASE
+                WHEN status = 'Ongoing' THEN 0
+                WHEN status = 'Open' THEN 1
+                ELSE 2
+              END,
+              COALESCE(session_start, id::text::timestamp) DESC
           ) as rn
-        FROM "HealthChat" hc
+        FROM "HealthChat"
         ${statusFilter}
-        ORDER BY "patientId", rn
+      ),
+      LatestTickets AS (
+        SELECT * FROM RankedTickets WHERE rn = 1
       ),
       TicketCounts AS (
         SELECT
@@ -301,7 +307,7 @@ const Query = {
           COUNT(*) FILTER (WHERE status IN ('Open', 'Ongoing')) as active_count,
           COUNT(*) as total_count
         FROM "HealthChat"
-        ${statusFilter ? statusFilter.replace('hc.status', 'status') : ''}
+        ${statusFilter}
         GROUP BY "patientId"
       )
       SELECT
@@ -309,58 +315,66 @@ const Query = {
         tc.active_count,
         tc.total_count
       FROM LatestTickets lt
-      JOIN TicketCounts tc ON lt."patientId" = tc."patientId"
+      LEFT JOIN TicketCounts tc ON lt."patientId" = tc."patientId"
       ORDER BY
-        CASE WHEN lt.status = 'Ongoing' THEN 0
-             WHEN lt.status = 'Open' THEN 1
-             ELSE 2 END,
-        lt.id DESC
+        CASE
+          WHEN lt.status = 'Ongoing' THEN 0
+          WHEN lt.status = 'Open' THEN 1
+          ELSE 2
+        END,
+        COALESCE(lt.session_start, lt.id::text::timestamp) DESC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
     params.push(limit || 50, offset || 0);
-    const result = await db.query(query, params);
 
-    // Get count of unique patients
-    const countQuery = `
-      SELECT COUNT(DISTINCT "patientId")::int as total
-      FROM "HealthChat"
-      ${statusFilter ? statusFilter.replace('hc.status', 'status') : ''}
-    `;
-    const countResult = await db.query(countQuery, statuses ? [statuses] : []);
+    try {
+      const result = await db.query(query, params);
 
-    // Format conversations
-    const conversations = await Promise.all(result.rows.map(async (row) => {
-      const latestTicket = await formatChatRecord(row);
-      const patient = latestTicket.patient;
+      // Get count of unique patients
+      const countQuery = `
+        SELECT COUNT(DISTINCT "patientId")::int as total
+        FROM "HealthChat"
+        ${statusFilter}
+      `;
+      const countResult = await db.query(countQuery, statuses && statuses.length > 0 ? [statuses] : []);
 
-      // Get all tickets for this patient (for the tickets array)
-      const ticketsResult = await db.query(
-        `SELECT * FROM "HealthChat"
-         WHERE "patientId" = $1
-         ${statuses && statuses.length > 0 ? 'AND status = ANY($2)' : ''}
-         ORDER BY id DESC`,
-        statuses && statuses.length > 0 ? [row.patientId, statuses] : [row.patientId]
-      );
-      const tickets = await Promise.all(ticketsResult.rows.map(formatChatRecord));
+      // Format conversations
+      const conversations = await Promise.all(result.rows.map(async (row) => {
+        const latestTicket = await formatChatRecord(row);
+        const patient = latestTicket.patient;
+
+        // Get all tickets for this patient (for the tickets array)
+        const ticketsResult = await db.query(
+          `SELECT * FROM "HealthChat"
+           WHERE "patientId" = $1
+           ${statuses && statuses.length > 0 ? 'AND status = ANY($2)' : ''}
+           ORDER BY id DESC`,
+          statuses && statuses.length > 0 ? [row.patientId, statuses] : [row.patientId]
+        );
+        const tickets = await Promise.all(ticketsResult.rows.map(formatChatRecord));
+
+        return {
+          patientId: row.patientId,
+          patient,
+          latestTicket,
+          lastMessage: latestTicket.lastMessage,
+          lastMessageAt: latestTicket.lastMessageAt,
+          unreadCount: latestTicket.unreadCount,
+          activeTicketCount: row.active_count || 0,
+          totalTicketCount: row.total_count || 0,
+          tickets
+        };
+      }));
 
       return {
-        patientId: row.patientId,
-        patient,
-        latestTicket,
-        lastMessage: latestTicket.lastMessage,
-        lastMessageAt: latestTicket.lastMessageAt,
-        unreadCount: latestTicket.unreadCount,
-        activeTicketCount: row.active_count || 0,
-        totalTicketCount: row.total_count || 0,
-        tickets
+        conversations,
+        total: countResult.rows[0]?.total || 0
       };
-    }));
-
-    return {
-      conversations,
-      total: countResult.rows[0]?.total || 0
-    };
+    } catch (error) {
+      console.error('[_getPatientConversations] SQL Error:', error);
+      throwGraphQLError(res).message(`Failed to fetch conversations: ${error.message}`).status(500).throw();
+    }
   },
 
   /**
