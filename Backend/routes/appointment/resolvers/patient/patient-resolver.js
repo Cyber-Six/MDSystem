@@ -65,10 +65,6 @@ const Mutation = {
     return result;
   },
 
-  acknowledgeRejection: async (_, __, { user, res }) => {
-    return await Wrapper.Mutation._acknowledgeRejection(_, { patientId: user.id }, { user, res });
-  },
-
   cancelAppointment: async (_, __, { user, res }) => {
     const userRecord = await Wrapper.Query._getUserAppointmentRecords(_, { userId: user.id, offset: 0, limit: 1 }, { user, res });
 

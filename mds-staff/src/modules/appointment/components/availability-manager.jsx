@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check, X, Trash2, Save, FileText, Trash } from 'lucide-react';
 import AvailabilityCalendar from './availability-calendar';
 import EventModal from './event-modal';
+import WhitelistManager from './whitelist-manager';
+import DaySlotEditor from './day-slot-editor';
 import {
   listAllSchedulers,
   createScheduler,
@@ -11,6 +13,8 @@ import {
   deleteRequirement,
   listAllRequirements,
   updateDateIdentity,
+  listWhitelist,
+  getScheduleAvailability,
 } from '../staff-appointment-service';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -21,7 +25,6 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
  * SRS §3.4.2
  */
 const AvailabilityManager = () => {
-  const [selectedDate, setSelectedDate] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [eventModalDate, setEventModalDate] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
@@ -49,6 +52,15 @@ const AvailabilityManager = () => {
   // Delete confirmation modal state
   const [deleteModal, setDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // Whitelist state
+  const [showWhitelistPanel, setShowWhitelistPanel] = useState(false);
+  const [whitelistCount, setWhitelistCount] = useState(0);
+
+  // Day slot editor state
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+  const [dayOverrideData, setDayOverrideData] = useState(null);
+  const [loadingDayData, setLoadingDayData] = useState(false);
 
   // Derive slot defaults from the active scheduler
   const slotDefaults = activeScheduler
@@ -90,18 +102,67 @@ const AvailabilityManager = () => {
       setEditForm({ ...activeScheduler });
       // Load requirements for this scheduler
       loadRequirements(activeScheduler.id);
+      // Load whitelist count
+      loadWhitelistCount(activeScheduler.id);
     }
   }, [activeScheduler, isCreatingNew]);
+
+  // Load whitelist count for display
+  const loadWhitelistCount = async (schedulerId) => {
+    try {
+      const entries = await listWhitelist(schedulerId, 0, 1000);
+      setWhitelistCount(entries?.length || 0);
+    } catch (err) {
+      setWhitelistCount(0);
+    }
+  };
+
+  // Handle calendar date selection - load day-specific data
+  const handleDateSelect = async (dateStr) => {
+    setSelectedCalendarDate(dateStr);
+    if (!activeScheduler?.id || !dateStr) {
+      setDayOverrideData(null);
+      return;
+    }
+    setLoadingDayData(true);
+    try {
+      const data = await getScheduleAvailability(activeScheduler.id, dateStr);
+      setDayOverrideData(data);
+    } catch (err) {
+      console.error('Failed to load day data:', err);
+      setDayOverrideData(null);
+    } finally {
+      setLoadingDayData(false);
+    }
+  };
+
+  // Handle saving day override
+  const handleSaveDayOverride = async (input) => {
+    if (!activeScheduler?.id || !selectedCalendarDate) return;
+    try {
+      const updated = await updateDateIdentity(activeScheduler.id, selectedCalendarDate, input);
+      setDayOverrideData(updated);
+    } catch (err) {
+      setError(err.message || 'Failed to update day settings');
+      throw err;
+    }
+  };
 
   const handleSelectScheduler = (sched) => {
     setActiveScheduler(sched);
     setEditForm({ ...sched });
     setIsCreatingNew(false);
     setShowDropdown(false);
+    // Clear day slot editor state
+    setSelectedCalendarDate(null);
+    setDayOverrideData(null);
   };
 
   const handleCreateNew = () => {
     setIsCreatingNew(true);
+    // Clear day slot editor state
+    setSelectedCalendarDate(null);
+    setDayOverrideData(null);
     setEditForm({
       label: '',
       location: 'Arlegui',
@@ -495,8 +556,8 @@ const AvailabilityManager = () => {
             <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden flex-1">
               {!isCreatingNew && activeScheduler ? (
                 <AvailabilityCalendar
-                  selectedDate={selectedDate}
-                  onSelectDate={setSelectedDate}
+                  selectedDate={selectedCalendarDate}
+                  onSelectDate={handleDateSelect}
                   events={events}
                   slotDefaults={slotDefaults}
                   activeScheduler={activeScheduler}
@@ -508,6 +569,20 @@ const AvailabilityManager = () => {
                 </div>
               )}
             </div>
+
+            {/* Day Slot Editor - Show when a date is selected */}
+            {!isCreatingNew && activeScheduler && (
+              <div className="mt-4">
+                <DaySlotEditor
+                  selectedDate={selectedCalendarDate}
+                  scheduler={activeScheduler}
+                  dayOverride={dayOverrideData}
+                  onSave={handleSaveDayOverride}
+                  loading={loadingDayData}
+                  events={events}
+                />
+              </div>
+            )}
           </div>
 
           {/* Settings Panel - 1/3 width */}
@@ -664,6 +739,17 @@ const AvailabilityManager = () => {
                         <p className="text-[8px] text-secondary-500 dark:text-neutral-400 leading-tight">Only whitelisted patients</p>
                       </div>
                     </label>
+                    {/* Manage Whitelist Button */}
+                    {editForm.whitelistOnly && !isCreatingNew && activeScheduler?.id && (
+                      <button
+                        type="button"
+                        onClick={() => setShowWhitelistPanel(true)}
+                        className="mt-1 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                      >
+                        <Users className="w-3.5 h-3.5" />
+                        Manage Whitelist ({whitelistCount})
+                      </button>
+                    )}
                   </div>
 
                   {/* Notes */}
@@ -859,6 +945,14 @@ const AvailabilityManager = () => {
           </div>
         </div>
       )}
+
+      {/* Whitelist Manager Modal */}
+      <WhitelistManager
+        schedulerId={activeScheduler?.id}
+        isOpen={showWhitelistPanel}
+        onClose={() => setShowWhitelistPanel(false)}
+        onUpdate={() => loadWhitelistCount(activeScheduler?.id)}
+      />
     </div>
   );
 };

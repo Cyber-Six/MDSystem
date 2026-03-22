@@ -9,7 +9,6 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
   const [editedData, setEditedData] = useState({
     date: appointment?.scheduledDate || '',
     time: appointment?.scheduledTime || '',
-    notes: appointment?.notes || '',
   });
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -29,7 +28,6 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
     setEditedData({
       date: appointment.scheduledDate,
       time: appointment.scheduledTime,
-      notes: appointment.notes,
     });
     setIsEditing(false);
   };
@@ -162,26 +160,6 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
                 </p>
               </div>
 
-              {/* Additional Notes */}
-              <div>
-                <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-2">
-                  Additional Notes
-                </label>
-                {isEditing ? (
-                  <textarea
-                    value={editedData.notes}
-                    onChange={(e) => setEditedData({ ...editedData, notes: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Add notes about this appointment..."
-                  />
-                ) : (
-                  <p className="text-sm text-secondary-700 dark:text-neutral-300 bg-neutral-50 dark:bg-neutral-800/30 p-3 rounded-lg">
-                    {appointment.notes || 'No additional notes'}
-                  </p>
-                )}
-              </div>
-
               {/* Submission Details */}
               <div className="grid md:grid-cols-2 gap-4 pt-3 border-t border-neutral-200 dark:border-neutral-700">
                 <div>
@@ -193,7 +171,7 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
                   <span className={`inline-block px-2 py-1 text-xs font-semibold rounded ${
                     appointment.status === 'Pending'
                       ? 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400'
-                      : appointment.status === 'Approved'
+                      : appointment.status === 'Approved' || appointment.status === 'Scheduled'
                       ? 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400'
                       : 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400'
                   }`}>
@@ -201,6 +179,18 @@ const AppointmentDetailsModal = ({ appointment, onClose, onAccept, onReject, onU
                   </span>
                 </div>
               </div>
+
+              {/* Staff Notes (Rejection/Cancellation Reason) */}
+              {appointment.notes && (appointment.status === 'Rejected' || appointment.status?.startsWith('Cancelled')) && (
+                <div className="pt-3 border-t border-neutral-200 dark:border-neutral-700">
+                  <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-2">
+                    {appointment.status === 'Rejected' ? 'Rejection Reason' : 'Cancellation Reason'}
+                  </label>
+                  <p className="text-sm text-secondary-700 dark:text-neutral-300 bg-neutral-50 dark:bg-neutral-800/30 p-3 rounded-lg whitespace-pre-wrap">
+                    {appointment.notes}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

@@ -496,6 +496,28 @@ export const removeWhitelist = async (schedulerId, patientIds) => {
   return data.removeEntryWhitelist;
 };
 
+/**
+ * List all patients in a scheduler's whitelist.
+ * @param {string} schedulerId
+ * @param {number} [offset=0]
+ * @param {number} [limit=50]
+ * @returns {Promise<Array>} WhitelistEntry[]
+ */
+export const listWhitelist = async (schedulerId, offset = 0, limit = 50) => {
+  const data = await sendGraphQL(`
+    query ListSchedulerWhitelist($schedulerId: ID!, $offset: Int, $limit: Int) {
+      listSchedulerWhitelist(schedulerId: $schedulerId, offset: $offset, limit: $limit) {
+        id
+        slotSchedulerId
+        patientId
+        patientIdentifier
+        patientName
+      }
+    }
+  `, { schedulerId, offset, limit });
+  return data.listSchedulerWhitelist;
+};
+
 // ── Mutations — Date Identity ────────────────────────────────────────────────
 
 /**
