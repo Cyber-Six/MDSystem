@@ -7,7 +7,7 @@ import { Sun, Moon, X, Check } from 'lucide-react';
  * Color-coded: Green (open) / Yellow (>70% booked) / Red (full/suspended) / Blue (event override)
  * SRS §3.4.2
  */
-const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults, activeScheduler, onEditSessionLimit }) => {
+const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults, activeScheduler, editForm, customDates = [], onEditSessionLimit }) => {
   // Inline editor state
   const [editPopup, setEditPopup] = useState(null); // { dateStr, session: 'morning'|'afternoon', x, y }
   const [editValue, setEditValue] = useState(0);
@@ -48,31 +48,53 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     setCurrentMonth(new Date(year, month + delta));
   };
 
-  // Check if a day is available based on schedulePerWeek
-  const isDayAvailable = (dayOfWeek) => {
-    if (!activeScheduler?.schedulePerWeek?.length) return false;
-    const dayName = dayIndexToName[dayOfWeek];
-    return activeScheduler.schedulePerWeek.includes(dayName);
-  };
+  // Use editForm.schedulePerWeek for immediate reflection of changes, fallback to activeScheduler
+  const currentSchedulePerWeek = editForm?.schedulePerWeek || activeScheduler?.schedulePerWeek || [];
+
+  // Create a set of custom date strings for quick lookup
+  const customDateSet = useMemo(() => {
+    return new Set(customDates.map(cd => cd.scheduledDate));
+  }, [customDates]);
 
   // Mock booked data per day
   const bookedSlots = useMemo(() => {
+    // Check if a day is available based on schedulePerWeek or custom dates
+    const checkDayAvailable = (dayOfWeek, dateStr) => {
+      const dayName = dayIndexToName[dayOfWeek];
+      // First check if it's in the regular weekly schedule
+      if (currentSchedulePerWeek.includes(dayName)) {
+        return true;
+      }
+      // Then check if it's a custom date
+      return customDateSet.has(dateStr);
+    };
+
+    // Check if a date is a custom date (outside regular schedule)
+    const checkIsCustomDate = (dayOfWeek, dateStr) => {
+      const dayName = dayIndexToName[dayOfWeek];
+      // It's a custom date if it's available but not in the regular weekly schedule
+      return !currentSchedulePerWeek.includes(dayName) && customDateSet.has(dateStr);
+    };
+
     const data = {};
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(year, month, d).getDay();
 
-      // Check if day is available based on scheduler's schedulePerWeek
-      if (!isDayAvailable(dayOfWeek)) {
+      // Check if day is available based on scheduler's schedulePerWeek or custom dates
+      if (!checkDayAvailable(dayOfWeek, dateStr)) {
         data[dateStr] = { medical: { morning: 0, afternoon: 0 }, dental: { morning: 0, afternoon: 0 }, isClosed: true };
         continue;
       }
+
+      // Check if this is a custom date
+      const isCustom = checkIsCustomDate(dayOfWeek, dateStr);
 
       // Check if event overrides this day
       const dayEvent = events.find((e) => dateStr >= e.startDate && dateStr <= e.endDate);
 
       if (dayEvent && dayEvent.effect === 'Suspend') {
-        data[dateStr] = { medical: { morning: 0, afternoon: 0 }, dental: { morning: 0, afternoon: 0 }, isSuspended: true, event: dayEvent };
+        data[dateStr] = { medical: { morning: 0, afternoon: 0 }, dental: { morning: 0, afternoon: 0 }, isSuspended: true, event: dayEvent, isCustomDate: isCustom };
         continue;
       }
 
@@ -81,10 +103,11 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         medical: { morning: 0, afternoon: 0 },
         dental: { morning: 0, afternoon: 0 },
         event: dayEvent || null,
+        isCustomDate: isCustom,
       };
     }
     return data;
-  }, [year, month, daysInMonth, events, activeScheduler?.schedulePerWeek]);
+  }, [year, month, daysInMonth, events, currentSchedulePerWeek, customDateSet, dayIndexToName]);
 
   const getDayStatus = (dateStr) => {
     const info = bookedSlots[dateStr];
@@ -92,6 +115,9 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     if (info.isClosed) return 'closed';
     if (info.isSuspended) return 'suspended';
     if (info.event) return 'event';
+
+    // Check if it's a custom date (and not a regular weekday)
+    if (info.isCustomDate) return 'custom';
 
     const totalCapacity = (slotDefaults?.morning || 0) + (slotDefaults?.afternoon || 0);
     const totalBooked = info.medical.morning + info.medical.afternoon;
@@ -108,6 +134,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     full: 'bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/30',
     suspended: 'bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400 line-through hover:bg-error-200',
     event: 'bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-900/30',
+    custom: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/30',
     closed: 'bg-neutral-100 dark:bg-neutral-700/50 text-neutral-400 dark:text-neutral-500',
     none: 'bg-transparent text-neutral-300 dark:text-neutral-600',
   };
@@ -118,6 +145,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     full: 'bg-error-500',
     suspended: 'bg-error-500',
     event: 'bg-accent-500',
+    custom: 'bg-violet-500',
     closed: '',
     none: '',
   };
@@ -199,7 +227,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
 
       {/* Day labels */}
       <div className="grid grid-cols-7 border-b border-neutral-200 dark:border-neutral-700">
-        {dayLabels.map((label, idx) => (
+        {dayLabels.map((label) => (
           <div key={label} className="text-center py-2 text-[10px] sm:text-xs font-medium text-secondary-500 dark:text-neutral-400">
             <span className="sm:hidden">{label.charAt(0)}</span>
             <span className="hidden sm:inline">{label}</span>
@@ -355,6 +383,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
           { color: 'bg-primary-500', label: '>70%' },
           { color: 'bg-error-500', label: 'Full' },
           { color: 'bg-accent-500', label: 'Event' },
+          { color: 'bg-violet-500', label: 'Custom' },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1 sm:gap-1.5">
             <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${color}`} />
