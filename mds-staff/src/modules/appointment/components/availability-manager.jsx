@@ -148,6 +148,25 @@ const AvailabilityManager = () => {
     }
   };
 
+  // Handle editing session limit from calendar inline popup
+  const handleEditSessionLimit = async (dateStr, session, value) => {
+    if (!activeScheduler?.id) return;
+    try {
+      const input = session === 'morning'
+        ? { morningAllowed: value }
+        : { afternoonAllowed: value };
+      await updateDateIdentity(activeScheduler.id, dateStr, input);
+      // If this is the currently selected date, refresh the day data
+      if (dateStr === selectedCalendarDate) {
+        const data = await getScheduleAvailability(activeScheduler.id, dateStr);
+        setDayOverrideData(data);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to update session limit');
+      throw err;
+    }
+  };
+
   const handleSelectScheduler = (sched) => {
     setActiveScheduler(sched);
     setEditForm({ ...sched });
@@ -561,6 +580,7 @@ const AvailabilityManager = () => {
                   events={events}
                   slotDefaults={slotDefaults}
                   activeScheduler={activeScheduler}
+                  onEditSessionLimit={handleEditSessionLimit}
                 />
               ) : (
                 <div className="p-8 text-center text-secondary-500 dark:text-neutral-400">
@@ -656,32 +676,38 @@ const AvailabilityManager = () => {
 
                   {/* Slots */}
                   <div>
-                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-3">
                       Available Slots per Session
                     </label>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center gap-2 p-1.5 bg-accent-50 dark:bg-accent-900/20 rounded-lg border border-accent-200 dark:border-accent-800">
-                        <Sun className="w-4 h-4 text-accent-600 dark:text-accent-400 flex-shrink-0" />
-                        <p className="text-xs font-semibold text-accent-600 dark:text-accent-400 min-w-fit">Morning</p>
+                      {/* Morning */}
+                      <div className="flex flex-col items-center justify-center p-3 bg-accent-50 dark:bg-accent-900/20 rounded-lg border border-accent-200 dark:border-accent-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sun className="w-5 h-5 text-accent-600 dark:text-accent-400" />
+                          <span className="text-sm font-semibold text-accent-700 dark:text-accent-400">Morning</span>
+                        </div>
                         <input
                           type="number"
                           min="0"
                           max="200"
                           value={editForm.morningAllowed || 0}
                           onChange={(e) => setEditForm({ ...editForm, morningAllowed: parseInt(e.target.value) || 0 })}
-                          className="w-12 px-1.5 py-0.5 text-sm font-semibold bg-white dark:bg-neutral-700 border border-accent-200 dark:border-accent-700 rounded text-secondary-900 dark:text-white focus:ring-1 focus:ring-accent-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className="w-20 px-3 py-2 text-center text-base font-semibold bg-white dark:bg-neutral-700 border border-accent-300 dark:border-accent-700 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-accent-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
-                      <div className="flex items-center gap-2 p-1.5 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-800">
-                        <Moon className="w-4 h-4 text-warning-600 dark:text-warning-400 flex-shrink-0" />
-                        <p className="text-xs font-semibold text-warning-600 dark:text-warning-400 min-w-fit">Afternoon</p>
+                      {/* Afternoon */}
+                      <div className="flex flex-col items-center justify-center p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Moon className="w-5 h-5 text-warning-600 dark:text-warning-400" />
+                          <span className="text-sm font-semibold text-warning-700 dark:text-warning-400">Afternoon</span>
+                        </div>
                         <input
                           type="number"
                           min="0"
                           max="200"
                           value={editForm.afternoonAllowed || 0}
                           onChange={(e) => setEditForm({ ...editForm, afternoonAllowed: parseInt(e.target.value) || 0 })}
-                          className="w-12 px-1.5 py-0.5 text-sm font-semibold bg-white dark:bg-neutral-700 border border-warning-200 dark:border-warning-700 rounded text-secondary-900 dark:text-white focus:ring-1 focus:ring-warning-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className="w-20 px-3 py-2 text-center text-base font-semibold bg-white dark:bg-neutral-700 border border-warning-300 dark:border-warning-700 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-warning-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                     </div>

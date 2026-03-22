@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Sun, Moon, X, Check } from 'lucide-react';
 
 /**
  * Availability Calendar Component
@@ -6,7 +7,25 @@ import React, { useState, useMemo } from 'react';
  * Color-coded: Green (open) / Yellow (>70% booked) / Red (full/suspended) / Blue (event override)
  * SRS §3.4.2
  */
-const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults, activeScheduler }) => {
+const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults, activeScheduler, onEditSessionLimit }) => {
+  // Inline editor state
+  const [editPopup, setEditPopup] = useState(null); // { dateStr, session: 'morning'|'afternoon', x, y }
+  const [editValue, setEditValue] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const popupRef = useRef(null);
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (popupRef.current && !popupRef.current.contains(e.target)) {
+        setEditPopup(null);
+      }
+    };
+    if (editPopup) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [editPopup]);
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth()); // Current month
@@ -123,6 +142,36 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     calendarCells.push({ day: i, isOtherMonth: true });
   }
 
+  // Handle session count click for inline editing
+  const handleSessionClick = (e, dateStr, session) => {
+    e.stopPropagation(); // Prevent triggering date selection
+    const rect = e.currentTarget.getBoundingClientRect();
+    const currentValue = session === 'morning'
+      ? (slotDefaults?.morning || 0)
+      : (slotDefaults?.afternoon || 0);
+    setEditValue(currentValue);
+    setEditPopup({
+      dateStr,
+      session,
+      x: rect.left + rect.width / 2,
+      y: rect.bottom + 4,
+    });
+  };
+
+  // Handle save of edited session limit
+  const handleSaveSession = async () => {
+    if (!editPopup || !onEditSessionLimit) return;
+    setSaving(true);
+    try {
+      await onEditSessionLimit(editPopup.dateStr, editPopup.session, editValue);
+      setEditPopup(null);
+    } catch (err) {
+      console.error('Failed to save session limit:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
       {/* Month navigation */}
@@ -159,12 +208,12 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 relative">
         {calendarCells.map((cell, idx) => {
           if (cell.isOtherMonth) {
             return (
-              <div key={`other-${idx}`} className="p-1 sm:p-1.5 min-h-[40px] sm:min-h-[52px] border-b border-r border-neutral-100 dark:border-neutral-700/50">
-                <span className="text-[10px] sm:text-xs text-neutral-300 dark:text-neutral-600">{cell.day}</span>
+              <div key={`other-${idx}`} className="p-1 sm:p-1.5 min-h-[56px] sm:min-h-[72px] border-b border-r border-neutral-100 dark:border-neutral-700/50">
+                <span className="text-xs sm:text-sm text-neutral-300 dark:text-neutral-600">{cell.day}</span>
               </div>
             );
           }
@@ -172,12 +221,13 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
           const status = getDayStatus(cell.dateStr);
           const isSelected = cell.dateStr === selectedDate;
           const isClickable = status !== 'closed' && status !== 'none';
+          const slotInfo = bookedSlots[cell.dateStr];
 
           return (
             <div
               key={cell.dateStr}
               onClick={() => isClickable && onSelectDate(cell.dateStr)}
-              className={`p-1 sm:p-1.5 min-h-[40px] sm:min-h-[52px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative ${
+              className={`p-1 sm:p-1.5 min-h-[56px] sm:min-h-[72px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative ${
                 isSelected
                   ? 'ring-2 ring-primary-500 ring-inset bg-primary-50 dark:bg-primary-900/20'
                   : isClickable
@@ -185,33 +235,117 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
                     : statusColors[status]
               }`}
             >
-              <div className="flex items-center justify-between">
-                <span className={`text-[10px] sm:text-xs font-medium ${isSelected ? 'text-primary-700 dark:text-primary-400' : ''}`}>
+              {/* Date number - bigger */}
+              <div className="flex items-center justify-between mb-0.5">
+                <span className={`text-sm sm:text-base font-semibold ${isSelected ? 'text-primary-700 dark:text-primary-400' : ''}`}>
                   {cell.day}
                 </span>
                 {statusDots[status] && (
-                  <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${statusDots[status]}`} />
+                  <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${statusDots[status]}`} />
                 )}
               </div>
-              {status !== 'closed' && status !== 'none' && bookedSlots[cell.dateStr] && !bookedSlots[cell.dateStr].isSuspended && (
-                <div className="mt-0.5 sm:mt-1">
-                  <p className="text-[8px] sm:text-[10px] text-secondary-500 dark:text-neutral-400 leading-tight">
-                    {bookedSlots[cell.dateStr].medical.morning + bookedSlots[cell.dateStr].medical.afternoon}/
-                    {(slotDefaults?.morning || 0) + (slotDefaults?.afternoon || 0)}
-                  </p>
+
+              {/* Morning/Afternoon counts - side by side, morning left, afternoon right */}
+              {status !== 'closed' && status !== 'none' && slotInfo && !slotInfo.isSuspended && (
+                <div className="flex items-center justify-between gap-1 mt-1">
+                  {/* Morning count - LEFT */}
+                  <button
+                    onClick={(e) => handleSessionClick(e, cell.dateStr, 'morning')}
+                    className="flex-1 flex items-center justify-center gap-1 px-1 py-1 rounded border border-accent-300 dark:border-accent-700 hover:bg-accent-100 dark:hover:bg-accent-900/40 transition-colors group"
+                    title="Click to edit morning limit"
+                  >
+                    <Sun className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-accent-500 dark:text-accent-400 flex-shrink-0" />
+                    <span className="text-[9px] sm:text-xs font-semibold text-secondary-700 dark:text-neutral-200 group-hover:text-accent-600 dark:group-hover:text-accent-400">
+                      {slotInfo.medical.morning}/{slotDefaults?.morning || 0}
+                    </span>
+                  </button>
+                  {/* Afternoon count - RIGHT */}
+                  <button
+                    onClick={(e) => handleSessionClick(e, cell.dateStr, 'afternoon')}
+                    className="flex-1 flex items-center justify-center gap-1 px-1 py-1 rounded border border-warning-300 dark:border-warning-700 hover:bg-warning-100 dark:hover:bg-warning-900/40 transition-colors group"
+                    title="Click to edit afternoon limit"
+                  >
+                    <Moon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-warning-500 dark:text-warning-400 flex-shrink-0" />
+                    <span className="text-[9px] sm:text-xs font-semibold text-secondary-700 dark:text-neutral-200 group-hover:text-warning-600 dark:group-hover:text-warning-400">
+                      {slotInfo.medical.afternoon}/{slotDefaults?.afternoon || 0}
+                    </span>
+                  </button>
                 </div>
               )}
-              {bookedSlots[cell.dateStr]?.isSuspended && (
-                <p className="text-[8px] sm:text-[10px] text-error-500 dark:text-error-400 mt-0.5 sm:mt-1 leading-tight">Closed</p>
+
+              {slotInfo?.isSuspended && (
+                <p className="text-[9px] sm:text-[10px] text-error-500 dark:text-error-400 mt-1 font-medium">Closed</p>
               )}
-              {bookedSlots[cell.dateStr]?.event && !bookedSlots[cell.dateStr]?.isSuspended && (
-                <p className="text-[8px] sm:text-[10px] text-accent-600 dark:text-accent-400 mt-0.5 truncate leading-tight hidden sm:block">
-                  {bookedSlots[cell.dateStr].event.name}
+              {slotInfo?.event && !slotInfo?.isSuspended && (
+                <p className="text-[7px] sm:text-[9px] text-accent-600 dark:text-accent-400 mt-0.5 truncate hidden sm:block">
+                  {slotInfo.event.name}
                 </p>
               )}
             </div>
           );
         })}
+
+        {/* Inline Edit Popup */}
+        {editPopup && (
+          <div
+            ref={popupRef}
+            className="fixed z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl p-3 min-w-[180px]"
+            style={{
+              left: `${editPopup.x}px`,
+              top: `${editPopup.y}px`,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                {editPopup.session === 'morning' ? (
+                  <Sun className="w-4 h-4 text-accent-500" />
+                ) : (
+                  <Moon className="w-4 h-4 text-warning-500" />
+                )}
+                <span className="text-xs font-semibold text-secondary-800 dark:text-white capitalize">
+                  {editPopup.session} Limit
+                </span>
+              </div>
+              <button
+                onClick={() => setEditPopup(null)}
+                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded"
+              >
+                <X className="w-3.5 h-3.5 text-secondary-400" />
+              </button>
+            </div>
+            <p className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-2">
+              {new Date(editPopup.dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max="200"
+                value={editValue}
+                onChange={(e) => setEditValue(parseInt(e.target.value) || 0)}
+                className="flex-1 px-2 py-1.5 text-sm font-medium text-center border border-neutral-200 dark:border-neutral-600 rounded-md bg-neutral-50 dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveSession();
+                  if (e.key === 'Escape') setEditPopup(null);
+                }}
+              />
+              <button
+                onClick={handleSaveSession}
+                disabled={saving}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                {saving ? (
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-3 h-3" />
+                )}
+                Save
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Legend */}
