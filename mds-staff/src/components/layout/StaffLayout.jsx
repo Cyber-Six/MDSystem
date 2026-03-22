@@ -1,4 +1,4 @@
-import React, { useState, createContext } from 'react';
+import React, { useState, createContext, useEffect } from 'react';
 import StaffSidebar from './StaffSidebar';
 import StaffTopBar from './StaffTopBar';
 
@@ -6,7 +6,7 @@ import StaffTopBar from './StaffTopBar';
  * Context for sidebar state
  */
 export const SidebarContext = createContext({
-  sidebarExpanded: false,
+  sidebarExpanded: true,
 });
 
 /**
@@ -15,7 +15,28 @@ export const SidebarContext = createContext({
  */
 const StaffLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
+    // Check localStorage, default to true on desktop, false on mobile
+    const saved = localStorage.getItem('staff_sidebar_expanded');
+    if (saved !== null) return JSON.parse(saved);
+    return window.innerWidth >= 768; // Default: expanded on desktop
+  });
+
+  // Persist sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem('staff_sidebar_expanded', JSON.stringify(sidebarExpanded));
+  }, [sidebarExpanded]);
+
+  // Auto-collapse sidebar on smaller screens
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setSidebarExpanded(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const closeSidebar = () => setSidebarOpen(false);

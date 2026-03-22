@@ -146,6 +146,13 @@ export function HealthChatProvider({ children }) {
         new Map(allTickets.map(ticket => [ticket.id, ticket])).values()
       );
 
+      // Sort tickets by lastMessageAt DESC (newest messages first)
+      uniqueTickets.sort((a, b) => {
+        const aTime = new Date(a.lastMessageAt || a.session_start || 0);
+        const bTime = new Date(b.lastMessageAt || b.session_start || 0);
+        return bTime - aTime;
+      });
+
       setTickets(uniqueTickets);
       setTicketsTotal(totalCount);
     } catch (err) {

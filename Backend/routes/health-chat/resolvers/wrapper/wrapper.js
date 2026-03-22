@@ -13,6 +13,7 @@ const {
   hasActiveTicket,
   getParticipantInfo,
   autoExpireTickets,
+  getLastMessageInfo,
   CHAT_EXPIRY_DAYS
 } = require("./helper.js");
 
@@ -256,6 +257,148 @@ const Query = {
     );
 
     return await Promise.all(result.rows.map(formatMessage));
+  },
+
+  /**
+   * Get conversations grouped by patient (1 row per patient)
+   * Returns patients with their latest ticket and last message info
+   */
+  _getPatientConversations: async (_, { statuses, offset, limit }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Auto-expire any expired ongoing tickets
+    await autoExpireTickets();
+
+    // Build status filter
+    let statusFilter = '';
+    const params = [];
+    if (statuses && statuses.length > 0) {
+      statusFilter = `WHERE hc.status = ANY($1)`;
+      params.push(statuses);
+    }
+
+    // Get unique patients with their latest ticket
+    // Use a window function to get the latest ticket per patient
+    const query = `
+      WITH LatestTickets AS (
+        SELECT DISTINCT ON ("patientId")
+          hc.*,
+          ROW_NUMBER() OVER (PARTITION BY "patientId" ORDER BY
+            CASE WHEN status = 'Ongoing' THEN 0
+                 WHEN status = 'Open' THEN 1
+                 ELSE 2 END,
+            COALESCE(session_start, id::text::timestamp) DESC
+          ) as rn
+        FROM "HealthChat" hc
+        ${statusFilter}
+        ORDER BY "patientId", rn
+      ),
+      TicketCounts AS (
+        SELECT
+          "patientId",
+          COUNT(*) FILTER (WHERE status IN ('Open', 'Ongoing')) as active_count,
+          COUNT(*) as total_count
+        FROM "HealthChat"
+        ${statusFilter ? statusFilter.replace('hc.status', 'status') : ''}
+        GROUP BY "patientId"
+      )
+      SELECT
+        lt.*,
+        tc.active_count,
+        tc.total_count
+      FROM LatestTickets lt
+      JOIN TicketCounts tc ON lt."patientId" = tc."patientId"
+      ORDER BY
+        CASE WHEN lt.status = 'Ongoing' THEN 0
+             WHEN lt.status = 'Open' THEN 1
+             ELSE 2 END,
+        lt.id DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+
+    params.push(limit || 50, offset || 0);
+    const result = await db.query(query, params);
+
+    // Get count of unique patients
+    const countQuery = `
+      SELECT COUNT(DISTINCT "patientId")::int as total
+      FROM "HealthChat"
+      ${statusFilter ? statusFilter.replace('hc.status', 'status') : ''}
+    `;
+    const countResult = await db.query(countQuery, statuses ? [statuses] : []);
+
+    // Format conversations
+    const conversations = await Promise.all(result.rows.map(async (row) => {
+      const latestTicket = await formatChatRecord(row);
+      const patient = latestTicket.patient;
+
+      // Get all tickets for this patient (for the tickets array)
+      const ticketsResult = await db.query(
+        `SELECT * FROM "HealthChat"
+         WHERE "patientId" = $1
+         ${statuses && statuses.length > 0 ? 'AND status = ANY($2)' : ''}
+         ORDER BY id DESC`,
+        statuses && statuses.length > 0 ? [row.patientId, statuses] : [row.patientId]
+      );
+      const tickets = await Promise.all(ticketsResult.rows.map(formatChatRecord));
+
+      return {
+        patientId: row.patientId,
+        patient,
+        latestTicket,
+        lastMessage: latestTicket.lastMessage,
+        lastMessageAt: latestTicket.lastMessageAt,
+        unreadCount: latestTicket.unreadCount,
+        activeTicketCount: row.active_count || 0,
+        totalTicketCount: row.total_count || 0,
+        tickets
+      };
+    }));
+
+    return {
+      conversations,
+      total: countResult.rows[0]?.total || 0
+    };
+  },
+
+  /**
+   * Get all messages for a patient across all their tickets
+   * Messages are ordered by stamp ASC with ticket dividers inserted
+   */
+  _getPatientMessages: async (_, { patientId, offset, limit }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Get all messages for this patient across all tickets
+    const result = await db.query(
+      `SELECT
+        p.*,
+        hc.purpose as ticket_purpose,
+        hc.status as ticket_status,
+        hc.session_end as ticket_session_end,
+        hc.closed_by_type as ticket_closed_by
+       FROM "HealthChatPrompt" p
+       JOIN "HealthChat" hc ON hc.id = p."consultationVirtualId"
+       WHERE hc."patientId" = $1
+       ORDER BY p.stamp ASC
+       LIMIT $2 OFFSET $3`,
+      [patientId, limit || 200, offset || 0]
+    );
+
+    return await Promise.all(result.rows.map(async (row) => {
+      const message = await formatMessage(row);
+      // Include ticket info for divider rendering
+      return {
+        ...message,
+        ticketPurpose: row.ticket_purpose,
+        ticketStatus: row.ticket_status,
+        ticketSessionEnd: row.ticket_session_end,
+        ticketClosedBy: row.ticket_closed_by
+      };
+    }));
   }
 };
 

@@ -43,6 +43,10 @@ type HealthChat {
   closedBy: ClosedBy
   messages: [HealthChatPrompt!]
   expiresAt: Date
+  # NEW: For Messenger-style display
+  lastMessage: HealthChatPrompt
+  lastMessageAt: Date
+  unreadCount: Int
 }
 
 type HealthChatPrompt {
@@ -68,6 +72,24 @@ type ChatParticipant {
 
 type HealthChatList {
   chats: [HealthChat!]!
+  total: Int!
+}
+
+# NEW: Patient conversation grouping (1 row per patient)
+type PatientConversation {
+  patientId: Int!
+  patient: ChatParticipant!
+  latestTicket: HealthChat!
+  lastMessage: HealthChatPrompt
+  lastMessageAt: Date
+  unreadCount: Int
+  activeTicketCount: Int
+  totalTicketCount: Int
+  tickets: [HealthChat!]!
+}
+
+type PatientConversationList {
+  conversations: [PatientConversation!]!
   total: Int!
 }
 
@@ -118,6 +140,10 @@ type Query {
   getAllTickets(status: ChatStatus, offset: Int, limit: Int): HealthChatList!
   getTicket(chatId: ID!): HealthChat
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
+  # NEW: Get conversations grouped by patient
+  getPatientConversations(statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
+  # NEW: Get all messages for a patient (across all tickets)
+  getPatientMessages(patientId: Int!, offset: Int, limit: Int): [HealthChatPrompt!]!
 }
 
 # Mutations
