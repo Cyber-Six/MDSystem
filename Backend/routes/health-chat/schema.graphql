@@ -143,7 +143,7 @@ type Query {
   # NEW: Get conversations grouped by patient
   getPatientConversations(statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
   # NEW: Get all messages for a patient (across all tickets)
-  getPatientMessages(patientId: Int!, offset: Int, limit: Int): [HealthChatPrompt!]!
+  getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
 }
 
 # Mutations

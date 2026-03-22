@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '@core/assets/MDSystem.png';
+import { useHealthChatBadge } from '../../modules/health-chat/hooks/use-health-chat-badge';
 
 /**
  * Staff Sidebar Navigation Component
@@ -8,6 +9,7 @@ import logo from '@core/assets/MDSystem.png';
  */
 const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const location = useLocation();
+  const pendingChatCount = useHealthChatBadge();
 
   const navItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
@@ -127,8 +129,22 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
                       : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-secondary-600 dark:hover:text-neutral-300'
                   }`}
                 >
-                  <span className="flex-shrink-0">{icons[item.icon]}</span>
-                  {isExpanded && <span className="truncate">{item.label}</span>}
+                  <span className="flex-shrink-0 relative">
+                    {icons[item.icon]}
+                    {item.icon === 'healthchat' && pendingChatCount > 0 && !isExpanded && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+                        {pendingChatCount > 99 ? '99+' : pendingChatCount}
+                      </span>
+                    )}
+                  </span>
+                  {isExpanded && (
+                    <span className="truncate flex-1">{item.label}</span>
+                  )}
+                  {isExpanded && item.icon === 'healthchat' && pendingChatCount > 0 && (
+                    <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+                      {pendingChatCount > 99 ? '99+' : pendingChatCount}
+                    </span>
+                  )}
                 </Link>
               </li>
             ))}

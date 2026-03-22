@@ -31,14 +31,17 @@ export function useHealthChatSocket() {
   const {
     selectedChatId,
     selectedTicket,
+    activeTicketId,
     addMessage,
     addTicket,
     updateTicketStatus,
+    updateConversationForNewMessage,
     removeTicket,
     setUserTyping,
     refreshTickets,
     setSocketError,
-    filter
+    filter,
+    tickets
   } = useHealthChat();
 
   // Use refs for ALL callbacks to avoid socket reconnection on dependency changes
@@ -46,23 +49,27 @@ export function useHealthChatSocket() {
   const addMessageRef = useRef(addMessage);
   const addTicketRef = useRef(addTicket);
   const updateTicketStatusRef = useRef(updateTicketStatus);
+  const updateConversationForNewMessageRef = useRef(updateConversationForNewMessage);
   const setUserTypingRef = useRef(setUserTyping);
   const setSocketErrorRef = useRef(setSocketError);
   const refreshTicketsRef = useRef(refreshTickets);
   const removeTicketRef = useRef(removeTicket);
   const filterRef = useRef(filter);
+  const ticketsRef = useRef(tickets);
 
   // Keep refs up to date
   useEffect(() => {
     addMessageRef.current = addMessage;
     addTicketRef.current = addTicket;
     updateTicketStatusRef.current = updateTicketStatus;
+    updateConversationForNewMessageRef.current = updateConversationForNewMessage;
     setUserTypingRef.current = setUserTyping;
     setSocketErrorRef.current = setSocketError;
     refreshTicketsRef.current = refreshTickets;
     removeTicketRef.current = removeTicket;
     filterRef.current = filter;
-  }, [addMessage, addTicket, updateTicketStatus, setUserTyping, setSocketError, refreshTickets, removeTicket, filter]);
+    ticketsRef.current = tickets;
+  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, filter, tickets]);
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
@@ -128,28 +135,54 @@ export function useHealthChatSocket() {
             }
           }
           addMessageRef.current(data.chatId, data.message);
+          // Update conversation list (lastMessage, unread, order)
+          updateConversationForNewMessageRef.current(data.chatId, data.message, data.senderType);
         }
       });
 
       // Listen for typing indicators (ignore closed chats)
+      // Map ticketId to patientId for typing state since UI is patient-grouped
       socketService.on('healthchat:user-typing', (data) => {
         if (data.chatId && data.userType === 'Patient') {
           // Ignore typing events for closed chats
           if (closedChatIds.current.has(String(data.chatId))) {
             return;
           }
-          setUserTypingRef.current(data.chatId, data.userId, data.isTyping);
+          // Find the patientId for this ticket by checking the tickets list
+          const ticketId = String(data.chatId);
+          let patientKey = ticketId; // Default to ticketId
+          const ticket = ticketsRef.current?.find(t =>
+            String(t.id) === ticketId ||
+            t.tickets?.some(sub => String(sub.id) === ticketId)
+          );
+          if (ticket?.patientId) {
+            patientKey = String(ticket.patientId);
+          }
+          setUserTypingRef.current(patientKey, data.userId, data.isTyping);
         }
       });
 
       // Listen for ticket closed by patient
+      // Also handles notifications sent via emitToRole('medical', ...) for non-room events
       socketService.on('healthchat:ticket-closed', (data) => {
         if (data.chatId && data.closedBy === 'Patient') {
           // Track this chat as closed to ignore future typing events
           closedChatIds.current.add(String(data.chatId));
-          updateTicketStatusRef.current(data.chatId, 'Closed');
-          // Clear typing indicator when chat is closed
-          setUserTypingRef.current(data.chatId, null, false);
+          // Find the patient for this ticket and update accordingly
+          const ticketId = String(data.chatId);
+          const ticket = ticketsRef.current?.find(t =>
+            String(t.id) === ticketId ||
+            t.tickets?.some(sub => String(sub.id) === ticketId)
+          );
+          if (ticket) {
+            // Refresh to get updated status from server
+            refreshTicketsRef.current();
+          } else {
+            updateTicketStatusRef.current(data.chatId, 'Closed');
+          }
+          // Clear typing indicator
+          const patientKey = ticket?.patientId ? String(ticket.patientId) : ticketId;
+          setUserTypingRef.current(patientKey, null, false);
         }
       });
 
@@ -192,14 +225,14 @@ export function useHealthChatSocket() {
   }, []); // Empty dependency array - connect only once on mount
 
   // Join room when chat is selected (but NOT for archived chats)
-  // Note: Must depend on both isConnected AND selectedChatId to handle the race condition
-  // where socket connects AFTER a chat is already selected
+  // IMPORTANT: Join by activeTicketId (actual ticket ID), not selectedChatId (patientId)
+  // because socket rooms are named healthchat:${ticketId}
   useEffect(() => {
-    if (!socketRef.current?.isConnected() || !selectedChatId) return;
+    if (!socketRef.current?.isConnected() || !activeTicketId) return;
 
     // Leave previous room if different
     joinedRoomsRef.current.forEach(roomId => {
-      if (roomId !== selectedChatId) {
+      if (String(roomId) !== String(activeTicketId)) {
         socketRef.current.emit('healthchat:leave-room', { chatId: roomId });
         joinedRoomsRef.current.delete(roomId);
       }
@@ -208,19 +241,19 @@ export function useHealthChatSocket() {
     // Don't join room for archived chats - no need for real-time updates
     if (isArchived) {
       // If we had joined this room before, leave it
-      if (joinedRoomsRef.current.has(selectedChatId)) {
-        socketRef.current.emit('healthchat:leave-room', { chatId: selectedChatId });
-        joinedRoomsRef.current.delete(selectedChatId);
+      if (joinedRoomsRef.current.has(activeTicketId)) {
+        socketRef.current.emit('healthchat:leave-room', { chatId: activeTicketId });
+        joinedRoomsRef.current.delete(activeTicketId);
       }
       return;
     }
 
     // Join new room (only for non-archived chats)
-    if (!joinedRoomsRef.current.has(selectedChatId)) {
-      socketRef.current.emit('healthchat:join-room', { chatId: selectedChatId });
-      joinedRoomsRef.current.add(selectedChatId);
+    if (!joinedRoomsRef.current.has(activeTicketId)) {
+      socketRef.current.emit('healthchat:join-room', { chatId: activeTicketId });
+      joinedRoomsRef.current.add(activeTicketId);
     }
-  }, [selectedChatId, isConnected, isArchived]);
+  }, [activeTicketId, isConnected, isArchived]);
 
   // Clear typing indicator when viewing archived chats
   useEffect(() => {

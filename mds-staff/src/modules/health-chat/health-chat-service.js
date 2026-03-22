@@ -286,7 +286,39 @@ export const approveTicket = async (chatId, notes = null) => {
         message
         chat {
           id
+          patientId
+          medicalId
+          purpose
+          notes
           status
+          session_start
+          session_end
+          archived_at
+          expiresAt
+          closedBy
+          lastMessageAt
+          unreadCount
+          lastMessage {
+            id
+            text
+            stamp
+            userType
+            promptType
+          }
+          patient {
+            id
+            firstName
+            lastName
+            email
+            identifier
+            branch
+          }
+          medical {
+            id
+            firstName
+            lastName
+            email
+          }
         }
       }
     }
@@ -458,10 +490,10 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
 /**
  * Get all messages for a patient across all their tickets
  */
-export const getPatientMessages = async (patientId, offset = 0, limit = 200) => {
+export const getPatientMessages = async (patientId, { before, limit = 50 } = {}) => {
   const query = `
-    query GetPatientMessages($patientId: Int!, $offset: Int, $limit: Int) {
-      getPatientMessages(patientId: $patientId, offset: $offset, limit: $limit) {
+    query GetPatientMessages($patientId: Int!, $limit: Int, $before: String) {
+      getPatientMessages(patientId: $patientId, limit: $limit, before: $before) {
         id
         consultationVirtualId
         text
@@ -480,7 +512,7 @@ export const getPatientMessages = async (patientId, offset = 0, limit = 200) => 
     }
   `;
 
-  const data = await sendGraphQL(query, { patientId, offset, limit });
+  const data = await sendGraphQL(query, { patientId, limit, before });
   return data.getPatientMessages;
 };
 
