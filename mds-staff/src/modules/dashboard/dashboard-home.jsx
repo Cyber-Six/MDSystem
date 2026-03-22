@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { AnnouncementCarousel } from '../anouncement';
 
 /**
  * Staff Dashboard Home Page
@@ -76,6 +77,9 @@ const StaffDashboard = () => {
           </div>
         ))}
       </div>
+
+      {/* Announcements Section */}
+      <AnnouncementCarousel />
 
       {/* Quick Actions */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">

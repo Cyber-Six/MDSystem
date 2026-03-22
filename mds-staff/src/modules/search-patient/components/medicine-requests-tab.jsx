@@ -44,7 +44,7 @@ export default function PatientMedicineRequestsTab({ patient }) {
               onClick={() => setFilter(s)}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                 filter === s
-                  ? 'bg-secondary-800 dark:bg-neutral-200 text-white dark:text-secondary-900'
+                  ? 'bg-primary-500 dark:bg-primary-600 text-secondary-900 dark:text-secondary-900 font-semibold'
                   : 'text-secondary-400 dark:text-neutral-500 hover:text-secondary-600 dark:hover:text-neutral-300'
               }`}
             >
