@@ -8,49 +8,49 @@ export const GQL_FULL_RECORD = `
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
     getUserVitalSigns(userId: $userId, limit: 1) {
-      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at status
+      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
     }
     getUserMedicalHistory(userId: $userId, limit: 1) {
-      id notes status created_at
+      id notes created_at
       conditions { id conditionId description diagnosedDate relationship }
     }
     getUserAllergyProfile(userId: $userId, limit: 1) {
-      id notes status created_at
+      id notes created_at
       allergies { id allergenCatalogId status severity notes dateIdentified }
     }
     getUserImmunizationProfile(userId: $userId, limit: 1) {
-      id notes status created_at
+      id notes created_at
       immunizations { id vaccineTypeId immunizationDate doseNumber }
     }
     getUserLifestyle(userId: $userId, limit: 1) {
       id smoker numberOfCigarettesPerDay yearsSmoked
-      alcoholConsumer frequencyOfAlcoholConsumption notes status created_at
+      alcoholConsumer frequencyOfAlcoholConsumption notes created_at
     }
     getUserObgynHistory(userId: $userId, limit: 1) {
-      id lastMenstrualPeriod hasDysmenorrhea notes status created_at
+      id lastMenstrualPeriod hasDysmenorrhea notes created_at
     }
     getUserEmergencyContact(userId: $userId, limit: 1) {
-      id status created_at
+      id created_at
       firstContact  { id contactName relationship contactNumber }
       secondContact { id contactName relationship contactNumber }
     }
     getUserMedicationProfile(userId: $userId, limit: 1) {
-      id notes status created_at
+      id notes created_at
       medications { id medicineId description }
     }
     getUserDentalHistory(userId: $userId, limit: 1) {
-      id seenByDentist lastDentalCleaning purpose lastVisitDate status created_at
+      id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at
     }
     getUserVisualAcuityProfile(userId: $userId, limit: 1) {
-      id notes status created_at
+      id notes created_at
       acuity { id acuityId left_eye right_eye notes recorded_at }
     }
     getUserHospitalizationProfile(userId: $userId, limit: 1) {
-      id notes status created_at
+      id notes created_at
       hospitalizations { id conditionId admissionDate dischargeDate notes }
     }
     getUserOperationProfile(userId: $userId, limit: 1) {
-      id notes status created_at
+      id notes created_at
       operations { id procedureId operationDate notes }
     }
   }
