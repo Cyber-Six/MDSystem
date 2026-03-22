@@ -69,7 +69,6 @@ export function useHealthChatSocket() {
 
   // Connect on mount only - use empty dependency array to prevent reconnection
   useEffect(() => {
-    console.log('[HealthChatSocket Staff] 🔵 Initializing socket connection');
     let isMounted = true;
 
     const socketService = createSocketService({
@@ -93,14 +92,12 @@ export function useHealthChatSocket() {
         return;
       }
 
-      console.log('[HealthChatSocket Staff] ✅ Socket connected, setting up listeners');
       socketRef.current = socketService;
       setIsConnected(true);
       setSocketErrorRef.current(false);
 
       // Handle reconnection - rejoin all tracked rooms
       socketService.getSocket()?.on('reconnect', () => {
-        console.log('[HealthChatSocket Staff] Reconnected, rejoining rooms');
         joinedRoomsRef.current.forEach(roomId => {
           socketService.emit('healthchat:join-room', { chatId: roomId });
         });
@@ -115,24 +112,15 @@ export function useHealthChatSocket() {
 
       // Listen for new messages (in any room we're in) with deduplication
       socketService.on('healthchat:new-message', (data) => {
-        console.log('[HealthChatSocket Staff] Received new-message event:', {
-          chatId: data.chatId,
-          messageId: data.message?.id,
-          senderType: data.senderType,
-          setSize: processedMessageIds.current.size
-        });
-
         // Handle both Patient and Medical messages
         if (data.chatId && data.message && (data.senderType === 'Patient' || data.senderType === 'Medical')) {
           // Deduplicate messages by ID
           const messageId = String(data.message?.id);
           if (messageId && processedMessageIds.current.has(messageId)) {
-            console.log('[HealthChatSocket Staff] ⚠️ DUPLICATE message ignored:', messageId);
             return;
           }
           if (messageId) {
             processedMessageIds.current.add(messageId);
-            console.log('[HealthChatSocket Staff] ✅ Adding message:', messageId, 'Set size:', processedMessageIds.current.size);
             // Keep Set size bounded - remove old entries
             if (processedMessageIds.current.size > 100) {
               const firstKey = processedMessageIds.current.values().next().value;
@@ -148,7 +136,6 @@ export function useHealthChatSocket() {
         if (data.chatId && data.userType === 'Patient') {
           // Ignore typing events for closed chats
           if (closedChatIds.current.has(String(data.chatId))) {
-            console.log('[HealthChatSocket Staff] Ignoring typing for closed chat:', data.chatId);
             return;
           }
           setUserTypingRef.current(data.chatId, data.userId, data.isTyping);
@@ -249,15 +236,7 @@ export function useHealthChatSocket() {
    * - Automatically stops typing after 3 seconds
    */
   const emitTyping = useCallback((chatId, isTyping) => {
-    console.log('[HealthChatSocket Staff] emitTyping called:', {
-      chatId,
-      isTyping,
-      connected: socketRef.current?.isConnected(),
-      joinedRooms: Array.from(joinedRoomsRef.current)
-    });
-
     if (!socketRef.current?.isConnected() || !chatId) {
-      console.warn('[HealthChatSocket Staff] Cannot emit typing - not connected or no chatId');
       return;
     }
 
@@ -279,7 +258,6 @@ export function useHealthChatSocket() {
       // Throttle: Only emit if enough time has passed since last emit
       const timeSinceLastEmit = now - lastTypingEmitRef.current;
       if (timeSinceLastEmit < THROTTLE_MS) {
-        console.log('[HealthChatSocket Staff] Throttling typing event (too soon)');
         // Still set auto-stop timeout even if throttled
         typingTimeoutRef.current = setTimeout(() => {
           if (socketRef.current?.isConnected()) {
@@ -327,10 +305,11 @@ export function useHealthChatSocket() {
   /**
    * 3-minute polling fallback for message updates
    * Runs independently of socket status to ensure messages are never missed
+   * Uses patientMessages endpoint since selectedChatId is actually patientId
    */
   useEffect(() => {
-    if (!selectedChatId) {
-      // Clear polling if no chat selected
+    if (!selectedChatId || isArchived) {
+      // Clear polling if no chat selected or chat is archived
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
@@ -342,12 +321,12 @@ export function useHealthChatSocket() {
 
     const pollForNewMessages = async () => {
       try {
-        console.log('[HealthChatSocket Staff] Polling for new messages in chat:', selectedChatId);
-        // Import getMessages dynamically to avoid circular deps
-        const { getMessages } = await import('../health-chat-service');
+        console.log('[HealthChatSocket Staff] Polling for new messages for patient:', selectedChatId);
+        // Use getPatientMessages since selectedChatId is actually patientId in the grouped approach
+        const { getPatientMessages } = await import('../health-chat-service');
 
         // Fetch recent messages (last 10)
-        const messages = await getMessages(selectedChatId, 0, 10);
+        const messages = await getPatientMessages(Number(selectedChatId), 0, 10);
 
         // Check if any messages are new (not in processedMessageIds)
         const newMessages = messages.filter(msg => {
@@ -386,7 +365,7 @@ export function useHealthChatSocket() {
         pollingIntervalRef.current = null;
       }
     };
-  }, [selectedChatId]);
+  }, [selectedChatId, isArchived]);
 
   return {
     isConnected,

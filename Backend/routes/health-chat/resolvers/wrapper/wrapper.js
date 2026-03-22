@@ -9,9 +9,11 @@ const {
   verifyMedicalAssignedToChat,
   checkChatStatus,
   formatChatRecord,
+  formatChatRecordsBatch,
   formatMessage,
   hasActiveTicket,
   getParticipantInfo,
+  getParticipantInfoBatch,
   autoExpireTickets,
   getLastMessageInfo,
   CHAT_EXPIRY_DAYS
@@ -56,7 +58,7 @@ const Query = {
     }
     const countResult = await db.query(countQuery, countParams);
 
-    const chats = await Promise.all(result.rows.map(formatChatRecord));
+    const chats = await formatChatRecordsBatch(result.rows);
 
     return {
       chats,
@@ -137,7 +139,7 @@ const Query = {
       `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Open'`
     );
 
-    const chats = await Promise.all(result.rows.map(formatChatRecord));
+    const chats = await formatChatRecordsBatch(result.rows);
 
     return {
       chats,
@@ -168,7 +170,7 @@ const Query = {
       `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Ongoing'`
     );
 
-    const chats = await Promise.all(result.rows.map(formatChatRecord));
+    const chats = await formatChatRecordsBatch(result.rows);
 
     return {
       chats,
@@ -209,7 +211,7 @@ const Query = {
     }
     const countResult = await db.query(countQuery, countParams);
 
-    const chats = await Promise.all(result.rows.map(formatChatRecord));
+    const chats = await formatChatRecordsBatch(result.rows);
 
     return {
       chats,
@@ -341,33 +343,45 @@ const Query = {
       `;
       const countResult = await db.query(countQuery, statuses && statuses.length > 0 ? [statuses] : []);
 
-      // Format conversations
-      const conversations = await Promise.all(result.rows.map(async (row) => {
-        const latestTicket = await formatChatRecord(row);
-        const patient = latestTicket.patient;
+      // Format conversations using batch lookups to avoid N+1 queries
+      // 1. Batch-format the latest tickets from the main query
+      const latestTickets = await formatChatRecordsBatch(result.rows);
 
-        // Get all tickets for this patient (for the tickets array)
-        const ticketsResult = await db.query(
-          `SELECT * FROM "HealthChat"
-           WHERE "patientId" = $1
-           ${statuses && statuses.length > 0 ? 'AND status = ANY($2)' : ''}
-           ORDER BY id DESC`,
-          statuses && statuses.length > 0 ? [row.patientId, statuses] : [row.patientId]
-        );
-        const tickets = await Promise.all(ticketsResult.rows.map(formatChatRecord));
+      // 2. Fetch all tickets for all patients in one query
+      const patientIds = result.rows.map(r => r.patientId);
+      const allTicketsResult = await db.query(
+        `SELECT * FROM "HealthChat"
+         WHERE "patientId" = ANY($1)
+         ${statuses && statuses.length > 0 ? 'AND status = ANY($2)' : ''}
+         ORDER BY id DESC`,
+        statuses && statuses.length > 0 ? [patientIds, statuses] : [patientIds]
+      );
+      const allTicketsFormatted = await formatChatRecordsBatch(allTicketsResult.rows);
 
+      // Group tickets by patientId
+      const ticketsByPatient = new Map();
+      for (const ticket of allTicketsFormatted) {
+        if (!ticketsByPatient.has(ticket.patientId)) {
+          ticketsByPatient.set(ticket.patientId, []);
+        }
+        ticketsByPatient.get(ticket.patientId).push(ticket);
+      }
+
+      // 3. Build conversations
+      const conversations = latestTickets.map((latestTicket, i) => {
+        const row = result.rows[i];
         return {
           patientId: row.patientId,
-          patient,
+          patient: latestTicket.patient,
           latestTicket,
           lastMessage: latestTicket.lastMessage,
           lastMessageAt: latestTicket.lastMessageAt,
           unreadCount: latestTicket.unreadCount,
           activeTicketCount: row.active_count || 0,
           totalTicketCount: row.total_count || 0,
-          tickets
+          tickets: ticketsByPatient.get(row.patientId) || []
         };
-      }));
+      });
 
       return {
         conversations,
@@ -527,6 +541,19 @@ const Mutation = {
       message,
       senderType: 'Patient'
     });
+
+    // Also notify the assigned medical staff if they're offline
+    const chatInfo = await db.query(
+      `SELECT "medicalId" FROM "HealthChat" WHERE id = $1`,
+      [chatId]
+    );
+    if (chatInfo.rows[0]?.medicalId) {
+      notifyUser(String(chatInfo.rows[0].medicalId), 'healthchat:new-message', {
+        chatId,
+        message,
+        senderType: 'Patient'
+      });
+    }
 
     return {
       success: true,
@@ -690,7 +717,8 @@ const Mutation = {
       `UPDATE "HealthChat"
        SET status = 'Closed',
            "medicalId" = $1,
-           notes = $2
+           notes = $2,
+           closed_by_type = 'Staff'
        WHERE id = $3
        RETURNING *`,
       [user.id, reason || 'Ticket rejected by staff.', chatId]
@@ -803,6 +831,16 @@ const Mutation = {
       message,
       senderType: 'Medical'
     });
+
+    // Also notify the patient if they're offline
+    const patientId = chatResult.rows[0].patientId;
+    if (patientId) {
+      notifyUser(String(patientId), 'healthchat:new-message', {
+        chatId,
+        message,
+        senderType: 'Medical'
+      });
+    }
 
     return {
       success: true,
