@@ -141,25 +141,30 @@ async function getStaffPermissions(personnelId) {
 }
 
 /**
- * Set permissions for staff - true inserts row, false deletes row
+ * Set permissions for staff - each permission can have its own branch
  * @param {Object} params
  * @param {number} params.personnelId
- * @param {Object} params.permissionsMap - e.g. { is_admin: true, is_staff: false, ... }
+ * @param {Array} params.permissionsList - Array of { key, value, branch? }
  * @param {number} params.assignedBy
- * @param {string} params.branch - 'Manila' | 'QuezonCity' | 'Both'
+ * @param {string} params.defaultBranch - Default branch if not specified per permission
  */
-async function setStaffPermissions({ personnelId, permissionsMap, assignedBy, branch = 'Both' }) {
-  const toInsert = [];
-  const toDelete = [];
+async function setStaffPermissions({ personnelId, permissionsList, assignedBy, defaultBranch = 'Both' }) {
+  const toInsert = [];  // Array of { label, branch }
+  const toDelete = [];  // Array of labels
 
-  for (const [key, value] of Object.entries(permissionsMap)) {
+  for (const perm of permissionsList) {
+    const { key, value, branch } = perm;
     const label = permissions[key];
+
     if (!label) {
       logger.error(`❌ Invalid permission key attempted: ${key}`);
       throw new Error(`Invalid permission key: ${key}`);
     }
+
+    const effectiveBranch = branch || defaultBranch;
+
     if (value === true) {
-      toInsert.push(label);
+      toInsert.push({ label, branch: effectiveBranch });
     } else if (value === false) {
       toDelete.push(label);
     }
@@ -177,13 +182,13 @@ async function setStaffPermissions({ personnelId, permissionsMap, assignedBy, br
     );
   }
 
-  // Insert/upsert permissions set to true
+  // Insert/upsert permissions set to true (each with its own branch)
   if (toInsert.length > 0) {
     const values = [];
     const params = [personnelId, assignedBy];
     let i = params.length + 1;
 
-    for (const label of toInsert) {
+    for (const { label, branch } of toInsert) {
       values.push(`($${i}, $${i + 1})`);
       params.push(label, branch);
       i += 2;
@@ -201,7 +206,10 @@ async function setStaffPermissions({ personnelId, permissionsMap, assignedBy, br
     );
   }
 
-  return { inserted: toInsert, deleted: toDelete };
+  return {
+    inserted: toInsert.map(p => ({ label: p.label, branch: p.branch })),
+    deleted: toDelete
+  };
 }
 
 async function isMedicalPermitted(userId, label, patientId) {

@@ -286,88 +286,6 @@ const Query = {
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
 
 const Mutation = {
-  _updateStaffAccount: async (_, { userId, input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
-    const { permissions: permissionsMap, status } = input;
-
-    if (!['Active', 'Suspended'].includes(status)) {
-      throwGraphQLError(res).message('Status must be Active or Suspended.').status(400).throw();
-    }
-
-    // Verify target user exists
-    const targetResult = await db.query(
-      `SELECT uc.id, uc.email, uc.identity, uc.credentials_status, mp.designation AS branch
-       FROM "UserCredentials" uc
-       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
-       WHERE uc.id = $1`,
-      [userId]
-    );
-
-    if (targetResult.rows.length === 0) {
-      throwGraphQLError(res).message('User not found.').status(404).throw();
-    }
-
-    const targetUser = targetResult.rows[0];
-
-    // Check if MedicalPersonnel record exists
-    if (!targetUser.branch) {
-      throwGraphQLError(res)
-        .message('MedicalPersonnel record must be created before activating staff account.')
-        .status(400)
-        .throw();
-    }
-
-    if (targetUser.identity !== 'Medical' && targetUser.identity !== 'Employee') {
-      throwGraphQLError(res).message('Can only manage Medical and Employee staff accounts.').status(403).throw();
-    }
-
-    // Only active/verified staff accounts can be managed
-    const targetCredentialStatus = String(targetUser.credentials_status || '').toLowerCase();
-    if (targetCredentialStatus !== 'active') {
-      throwGraphQLError(res)
-        .message('This account is not yet verified.')
-        .status(403)
-        .throw();
-    }
-
-    // Prevent admin from suspending themselves
-    if (String(user.id) === String(userId) && status === 'Suspended') {
-      throwGraphQLError(res).message('Admins cannot suspend their own account.').status(400).throw();
-    }
-
-    // Get branch from MedicalPersonnel.designation
-    const allowedBranches = new Set(['Manila', 'QuezonCity', 'Both']);
-    const targetBranch = allowedBranches.has(targetUser.branch) ? targetUser.branch : 'Both';
-
-    // Always ensure is_staff is true for staff accounts
-    const finalPermissions = { ...permissionsMap, is_staff: true };
-
-    // Apply permissions using setStaffPermissions
-    await setStaffPermissions({
-      personnelId: String(userId),
-      permissionsMap: finalPermissions,
-      assignedBy: String(user.id),
-      branch: targetBranch,
-    });
-
-    // Update identity: Active → Medical, Suspended → Employee
-    const newIdentity = status === 'Active' ? 'Medical' : 'Employee';
-    await db.query(
-      `UPDATE "UserCredentials" SET identity = $1 WHERE id = $2`,
-      [newIdentity, userId]
-    );
-
-    logger.info(`Staff account updated: targetUserId=${userId}, status=${status}, by adminId=${user.id}`);
-
-    return {
-      ok: true,
-      message: `Staff account ${status === 'Active' ? 'activated' : 'suspended'} successfully.`,
-    };
-  },
-
   _createMedicalPersonnel: async (_, { input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message('Unauthorized').status(401).throw();
@@ -568,22 +486,32 @@ const Mutation = {
     };
   },
 
-  _setStaffPermissions: async (_, { userId, permissions: permissionsMap, branch = 'Both' }, { user, res }) => {
+  _setStaffPermissions: async (_, { userId, permissions: permissionsList, defaultBranch = 'Both' }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message('Unauthorized').status(401).throw();
     }
 
-    // Validate branch
+    // Validate defaultBranch
     const validBranches = ['Manila', 'QuezonCity', 'Both'];
-    if (!validBranches.includes(branch)) {
-      throwGraphQLError(res).message('branch must be Manila, QuezonCity, or Both.').status(400).throw();
+    if (!validBranches.includes(defaultBranch)) {
+      throwGraphQLError(res).message('defaultBranch must be Manila, QuezonCity, or Both.').status(400).throw();
+    }
+
+    // Validate each permission's branch if provided
+    for (const perm of permissionsList) {
+      if (perm.branch && !validBranches.includes(perm.branch)) {
+        throwGraphQLError(res)
+          .message(`Invalid branch "${perm.branch}" for permission "${perm.key}". Must be Manila, QuezonCity, or Both.`)
+          .status(400)
+          .throw();
+      }
     }
 
     await setStaffPermissions({
       personnelId: String(userId),
-      permissionsMap,
+      permissionsList,
       assignedBy: String(user.id),
-      branch,
+      defaultBranch,
     });
 
     logger.info(`Staff permissions set: userId=${userId}, by adminId=${user.id}`);

@@ -11,16 +11,19 @@ The role management system handles staff permissions and account status in the M
 ### Tables Involved
 
 **UserCredentials**
+
 - `id` - User ID (primary key)
 - `email` - User email
 - `identity` - User type: `'Medical'` (active staff), `'Employee'` (suspended staff), `'Student'`
 - `credentials_status` - Account status: `'Active'`, `'Suspended'`, `'Pending'`
 
 **UsersPersonal**
+
 - `id` - User ID
 - `first_name`, `middle_name`, `last_name` - Name fields
 
 **MedicalPersonnel**
+
 - `id` - User ID (one-to-one with UserCredentials)
 - `role` - Staff role: `'Doctor'`, `'Nurse'`, `'Admin'`, `'Pharmacist'`, `'Dentist'`, `'Staff'`
 - `title` - Job title (e.g., "Senior Medical Officer")
@@ -28,10 +31,12 @@ The role management system handles staff permissions and account status in the M
 - `is_active` - Boolean indicating if personnel record is active
 
 **rolesTable**
+
 - `id` - Role ID (primary key)
 - `label` - Permission label (e.g., `'IS_ADMIN'`, `'IS_STAFF'`, `'ALLOW_TO_VIEW_EMR'`)
 
 **rolesMap**
+
 - `personnelId` - User ID (foreign key to UserCredentials)
 - `rolesId` - Role ID (foreign key to rolesTable)
 - `branch` - Branch assignment: `'Manila'`, `'QuezonCity'`, `'Both'`
@@ -95,9 +100,11 @@ permissions = {
 Retrieves all permission keys with true/false values for a staff member.
 
 **Input:**
+
 - `personnelId` (number) - User ID
 
 **Output:**
+
 ```javascript
 {
   is_admin: false,
@@ -129,6 +136,7 @@ Retrieves all permission keys with true/false values for a staff member.
 ```
 
 **Example:**
+
 ```javascript
 const perms = await getStaffPermissions(123);
 console.log(perms.is_admin); // false
@@ -137,11 +145,12 @@ console.log(perms.emr_allow_view); // true
 
 ---
 
-### setStaffPermissions({ personnelId, permissionsMap, assignedBy, branch })
+### setStaffPermissions()
 
 Sets permissions for a staff member. `true` inserts/updates a row, `false` deletes the row.
 
 **Input:**
+
 ```javascript
 {
   personnelId: 123,              // User ID (number or string)
@@ -157,6 +166,7 @@ Sets permissions for a staff member. `true` inserts/updates a row, `false` delet
 ```
 
 **Output:**
+
 ```javascript
 {
   inserted: ['IS_ADMIN', 'ALLOW_TO_VIEW_EMR'],  // Labels that were inserted
@@ -165,6 +175,7 @@ Sets permissions for a staff member. `true` inserts/updates a row, `false` delet
 ```
 
 **Example:**
+
 ```javascript
 await setStaffPermissions({
   personnelId: 123,
@@ -180,6 +191,7 @@ await setStaffPermissions({
 ```
 
 **Behavior:**
+
 - Keys set to `true` → permission row is inserted (or updated if exists)
 - Keys set to `false` → permission row is deleted
 - Keys not in the map → left unchanged
@@ -210,12 +222,14 @@ graphql.js                      # Entry point - mounts endpoint, applies JWT mid
 ```
 
 **Files:**
+
 - `Backend/routes/rolemanagement/graphql.js` - GraphQL entry point
 - `Backend/routes/rolemanagement/schema.graphql` - Type definitions
 - `Backend/routes/rolemanagement/resolvers/admin/admin-resolver.js` - Admin permission checks
 - `Backend/routes/rolemanagement/resolvers/wrapper/wrapper.js` - Core business logic
 
 **Security:**
+
 - All mutations require Medical identity (`jwtProtect('medical')`)
 - All operations require `IS_ADMIN` permission (enforced in admin-resolver)
 - Session management operations are admin-only for security
@@ -224,104 +238,146 @@ graphql.js                      # Entry point - mounts endpoint, applies JWT mid
 
 ### Available Queries
 
-| Query | Description |
-|-------|-------------|
-| `listStaffAccounts(status, location)` | Get all staff accounts with permissions |
-| `getStaffAccount(userId)` | Get single staff account |
-| `listMedicalPersonnel(role, designation, isActive)` | Get all medical personnel |
-| `getMedicalPersonnel(userId)` | Get single medical personnel |
-| `getStaffPermissions(userId)` | Get permissions for a user |
-| `listStaffSessions(userId)` | Get all active sessions for a user |
+| Query                                                 | Description                             |
+| ----------------------------------------------------- | --------------------------------------- |
+| `listStaffAccounts(status, location)`               | Get all staff accounts with permissions |
+| `getStaffAccount(userId)`                           | Get single staff account                |
+| `listMedicalPersonnel(role, designation, isActive)` | Get all medical personnel               |
+| `getMedicalPersonnel(userId)`                       | Get single medical personnel            |
+| `getStaffPermissions(userId)`                       | Get permissions for a user              |
+| `listStaffSessions(userId)`                         | Get all active sessions for a user      |
 
 ### Available Mutations
 
-| Mutation | Description |
-|----------|-------------|
-| `updateStaffAccount(userId, input)` | **High-level**: Update permissions + status (changes identity) |
-| `createMedicalPersonnel(input)` | Create medical personnel record |
-| `updateMedicalPersonnel(userId, input)` | Update medical personnel |
-| `deleteMedicalPersonnel(userId, revertIdentity)` | Delete medical personnel |
-| `setStaffPermissions(userId, permissions, branch)` | **Low-level**: Set permissions only (no identity change) |
-| `rotateStaffAnchor(userId)` | Logout all devices for a user |
+| Mutation                                             | Description                                            |
+| ---------------------------------------------------- | ------------------------------------------------------ |
+| `createMedicalPersonnel(input)`                    | Create medical personnel record (grants staff access)  |
+| `updateMedicalPersonnel(userId, input)`            | Update medical personnel info                          |
+| `deleteMedicalPersonnel(userId, revertIdentity)`   | Delete medical personnel record (revokes staff access) |
+| `setStaffPermissions(userId, permissions, branch)` | Set fine-grained permissions with branch control       |
+| `rotateStaffAnchor(userId)`                        | Logout all devices for a user                          |
 
 ---
 
-## Understanding Permission Mutations
+## Understanding the Identity System
 
-### `updateStaffAccount` vs `setStaffPermissions`
+### How Medical Staff Identity Works
 
-The system provides two mutations for managing permissions. Understanding when to use each is important:
+**Important:** There is NO 'Medical' identity in `UserCredentials.identity` anymore. The identity field only contains:
 
-#### **`updateStaffAccount` - Complete Account Management (Recommended)**
+- `Employee` - Regular staff member
+- `Student` - Student
+- `Superior` - Superior/admin user
 
-This is the **primary mutation** for managing staff accounts. Use this for normal operations.
+**Medical staff access is determined by having a `MedicalPersonnel` record**, not by identity. The system uses the following logic:
 
-**What it does:**
-- Updates permissions AND account status together
-- Validates MedicalPersonnel record exists
-- Always ensures `is_staff: true`
-- **Changes identity based on status:**
-  - `status: 'Active'` → sets `identity = 'Medical'` (grants access)
-  - `status: 'Suspended'` → sets `identity = 'Employee'` (blocks access)
-- Prevents self-suspension (admins can't suspend themselves)
-- Pulls branch from `MedicalPersonnel.designation` automatically
+```
+Is Medical Staff? = EXISTS(MedicalPersonnel WHERE id = userId)
+```
 
-**When to use:**
-- Activating a new staff account
-- Suspending/unsuspending a staff member
-- Changing permissions + managing account status
-- Any normal admin operation on staff accounts
+**Authentication Flow:**
 
-**Example:**
+1. User logs in with `identity='Employee'`
+2. System checks if `MedicalPersonnel` record exists for that userId
+3. If exists → grants medical portal access with their assigned permissions
+4. If not exists → no medical access
+
+**Why this design?**
+
+- **Separation of concerns**: Identity describes the user type, MedicalPersonnel describes their staff role
+- **Flexibility**: Same Employee can be granted/revoked medical access without changing identity
+- **Data integrity**: Staff information (role, title, designation) stays in MedicalPersonnel table
+
+---
+
+## Managing Staff Access
+
+### Creating Medical Staff (Grant Access)
+
+To grant medical staff access to an Employee:
+
 ```graphql
 mutation {
-  updateStaffAccount(userId: "123", input: {
-    permissions: {
-      is_admin: true
-      emr_allow_view: true
-      emr_allow_edit: true
-    }
-    status: Active  # Also updates identity to 'Medical'
+  createMedicalPersonnel(input: {
+    userId: "123"
+    title: "Senior Doctor"
+    role: Doctor
+    designation: Manila
   }) {
     ok
     message
+    personnel {
+      id
+      role
+      title
+      designation
+      isActive
+    }
   }
 }
 ```
 
+**Effect:** User can now access the medical portal.
+
+### Revoking Medical Staff (Remove Access)
+
+To revoke medical staff access:
+
+```graphql
+mutation {
+  deleteMedicalPersonnel(userId: "123", revertIdentity: false) {
+    ok
+    message
+    identityReverted
+  }
+}
+```
+
+**Effect:** User loses medical portal access (MedicalPersonnel record deleted).
+
 ---
 
-#### **`setStaffPermissions` - Direct Permission Setter (Advanced)**
+## Setting Permissions
 
-This is a **low-level operation** that directly modifies permissions without touching account status or identity.
+### `setStaffPermissions` - Flexible Permission Management
+
+Use this mutation to control fine-grained permissions for medical staff with **per-permission branch control**.
 
 **What it does:**
-- ONLY sets permissions - nothing else
-- Does NOT change identity field
-- Does NOT validate MedicalPersonnel record
-- Does NOT manage account status
-- Requires explicit branch parameter
-- No safeguards (no self-suspension check)
 
-**When to use:**
-- Quick permission adjustments without status changes
-- Scripted/automated permission updates
-- Bulk operations
-- When you need to specify branch explicitly
-- Advanced scenarios where you need precise control
+- Sets permissions for a staff member (requires MedicalPersonnel record)
+- Each permission can have its own branch assignment
+- `value: true` → permission granted
+- `value: false` → permission revoked
+  -Permissions not in the list → left unchanged
+- **Each permission is stored with its own branch** in the `rolesMap` table
 
-**Important:** If you use this to grant permissions while identity is 'Employee', the user still won't be able to access the system because the `jwtProtect('medical')` middleware blocks non-Medical identities.
+**Branch System:**
 
-**Example:**
+- `defaultBranch` - Applied to permissions that don't specify their own branch
+- Per-permission `branch` - Overrides the defaultBranch for that specific permission
+- When checking permissions, the system considers both the permission and the branch:
+  - If patient is in Manila and permission has branch='Manila' or 'Both' → allowed
+  - If patient is in QuezonCity and permission has branch='QuezonCity' or 'Both' → allowed
+  - If permission has branch='Both' → allowed for all branches
+
+---
+
+### Example 1: Umbrella Branch (All Same)
+
+Grant all permissions for Manila branch:
+
 ```graphql
 mutation {
   setStaffPermissions(
     userId: "123"
-    permissions: {
-      emr_allow_edit: false
-      consultation_allow_view: true
-    }
-    branch: Manila  # Must specify branch
+    permissions: [
+      { key: "is_staff", value: true }
+      { key: "emr_allow_view", value: true }
+      { key: "emr_allow_edit", value: true }
+      { key: "consultation_allow_view", value: true }
+    ]
+    defaultBranch: Manila  # Applies to all permissions
   ) {
     ok
     message
@@ -329,9 +385,93 @@ mutation {
 }
 ```
 
+All four permissions will have `branch='Manila'`.
+
 ---
 
-**Rule of thumb:** Use `updateStaffAccount` for all normal admin operations. Only use `setStaffPermissions` when you specifically need direct permission control without status management.
+### Example 2: Per-Permission Branches
+
+Give different permissions for different branches in a **single mutation**:
+
+```graphql
+mutation {
+  setStaffPermissions(
+    userId: "123"
+    permissions: [
+      { key: "emr_allow_view", value: true, branch: Manila }
+      { key: "emr_allow_edit", value: true, branch: Manila }
+      { key: "consultation_allow_view", value: true, branch: QuezonCity }
+      { key: "consultation_allow_edit", value: true, branch: QuezonCity }
+      { key: "inventory_allow_view", value: true, branch: Both }
+    ]
+    defaultBranch: Both  # Not used here since all have explicit branches
+  ) {
+    ok
+    message
+  }
+}
+```
+
+**Result:**
+
+- `emr_allow_view` and `emr_allow_edit` → Manila only
+- `consultation_allow_view` and `consultation_allow_edit` → QuezonCity only
+- `inventory_allow_view` → Both branches
+
+---
+
+### Example 3: Mixed (Umbrella + Specific)
+
+Some permissions use the umbrella branch, others specify their own:
+
+```graphql
+mutation {
+  setStaffPermissions(
+    userId: "123"
+    permissions: [
+      { key: "is_staff", value: true }                          # Uses defaultBranch (Both)
+      { key: "emr_allow_view", value: true, branch: Manila }    # Explicit Manila
+      { key: "emr_allow_edit", value: true, branch: Manila }    # Explicit Manila
+      { key: "profile_allow_view", value: true }                # Uses defaultBranch (Both)
+    ]
+    defaultBranch: Both  # Applied to permissions without explicit branch
+  ) {
+    ok
+    message
+  }
+}
+```
+
+**Result:**
+
+- `is_staff` → Both (uses defaultBranch)
+- `emr_allow_view` → Manila (explicit)
+- `emr_allow_edit` → Manila (explicit)
+- `profile_allow_view` → Both (uses defaultBranch)
+
+---
+
+### Example 4: Revoking Permissions
+
+Revoke specific permissions:
+
+```graphql
+mutation {
+  setStaffPermissions(
+    userId: "123"
+    permissions: [
+      { key: "emr_allow_edit", value: false }  # Revokes EMR edit permission completely
+      { key: "consultation_allow_view", value: true, branch: Manila }  # Grant for Manila only
+    ]
+    defaultBranch: Both
+  ) {
+    ok
+    message
+  }
+}
+```
+
+**Note:** Revoking (`value: false`) deletes the permission record entirely from `rolesMap`, regardless of branch.
 
 ---
 
@@ -406,25 +546,6 @@ query {
       }
     }
     count
-  }
-}
-```
-
-### Update Staff Account
-
-```graphql
-mutation {
-  updateStaffAccount(userId: "123", input: {
-    permissions: {
-      is_admin: true
-      emr_allow_view: true
-      emr_allow_edit: false
-      consultation_allow_view: true
-    }
-    status: Active
-  }) {
-    ok
-    message
   }
 }
 ```
@@ -505,6 +626,7 @@ query {
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -545,6 +667,7 @@ mutation {
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -572,6 +695,7 @@ Create a new MedicalPersonnel record for an Employee user.
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
 **Request Body:**
+
 ```javascript
 {
   "userId": 123,              // Required: User ID (must have identity='Employee')
@@ -582,6 +706,7 @@ Create a new MedicalPersonnel record for an Employee user.
 ```
 
 **Validation:**
+
 - All fields required
 - `designation` must be: `'Manila'`, `'QuezonCity'`, or `'Both'`
 - `role` must be: `'Doctor'`, `'Nurse'`, `'Admin'`, `'Pharmacist'`, `'Dentist'`, or `'Staff'`
@@ -589,6 +714,7 @@ Create a new MedicalPersonnel record for an Employee user.
 - No existing MedicalPersonnel record (prevents duplicates)
 
 **Response (201 Created):**
+
 ```javascript
 {
   "ok": true,
@@ -605,6 +731,7 @@ Create a new MedicalPersonnel record for an Employee user.
 ```
 
 **Error Responses:**
+
 - `400 MISSING_FIELDS` - Missing required fields
 - `400 INVALID_DESIGNATION` - Invalid designation value
 - `400 INVALID_ROLE` - Invalid role value
@@ -623,17 +750,20 @@ Retrieve all MedicalPersonnel records with optional filters.
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
 **Query Parameters:**
+
 - `role` (optional) - Filter by role
 - `designation` (optional) - Filter by designation
 - `is_active` (optional) - Filter by active status (true/false)
 
 **Request Example:**
+
 ```http
 GET /admin/staff/medical-personnel?role=Doctor&designation=Manila
 Authorization: Bearer <jwt-token>
 ```
 
 **Response (200 OK):**
+
 ```javascript
 {
   "ok": true,
@@ -666,12 +796,14 @@ Retrieve a single MedicalPersonnel record.
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
 **Request Example:**
+
 ```http
 GET /admin/staff/medical-personnel/123
 Authorization: Bearer <jwt-token>
 ```
 
 **Response (200 OK):**
+
 ```javascript
 {
   "ok": true,
@@ -692,6 +824,7 @@ Authorization: Bearer <jwt-token>
 ```
 
 **Error Responses:**
+
 - `403 FORBIDDEN` - Not admin
 - `404 RECORD_NOT_FOUND` - MedicalPersonnel not found
 - `500 INTERNAL_ERROR` - Server error
@@ -705,6 +838,7 @@ Update an existing MedicalPersonnel record (title, designation, is_active).
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
 **Request Body (all optional, at least one required):**
+
 ```javascript
 {
   "title": "Chief Medical Officer",  // Optional: Update job title
@@ -716,6 +850,7 @@ Update an existing MedicalPersonnel record (title, designation, is_active).
 **Note:** `role` field is immutable and cannot be updated. Changing roles requires DELETE + POST.
 
 **Response (200 OK):**
+
 ```javascript
 {
   "ok": true,
@@ -731,6 +866,7 @@ Update an existing MedicalPersonnel record (title, designation, is_active).
 ```
 
 **Error Responses:**
+
 - `400 MISSING_FIELDS` - No fields provided
 - `400 INVALID_DESIGNATION` - Invalid designation value
 - `403 FORBIDDEN` - Not admin
@@ -746,15 +882,18 @@ Remove a MedicalPersonnel record and optionally revert user identity.
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
 **Query Parameters:**
+
 - `revertIdentity` (optional, default: true) - Revert identity from 'Medical' to 'Employee'
 
 **Request Example:**
+
 ```http
 DELETE /admin/staff/medical-personnel/123?revertIdentity=true
 Authorization: Bearer <jwt-token>
 ```
 
 **Response (200 OK):**
+
 ```javascript
 {
   "ok": true,
@@ -764,6 +903,7 @@ Authorization: Bearer <jwt-token>
 ```
 
 **Error Responses:**
+
 - `403 FORBIDDEN` - Not admin
 - `404 RECORD_NOT_FOUND` - MedicalPersonnel not found
 - `500 INTERNAL_ERROR` - Server error
@@ -779,16 +919,19 @@ Get all staff accounts with their permissions and details.
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
 **Query Parameters:**
+
 - `status` (optional) - Filter by credentials_status: `'Active'`, `'Suspended'`, `'Pending'`
 - `location` (optional) - Filter by MedicalPersonnel.designation: `'Manila'`, `'QuezonCity'`, `'Both'`
 
 **Request Example:**
+
 ```http
 GET /admin/staff/accounts?status=Active&location=Manila
 Authorization: Bearer <jwt-token>
 ```
 
 **Response:**
+
 ```javascript
 {
   ok: true,
@@ -836,116 +979,16 @@ Authorization: Bearer <jwt-token>
 ```
 
 **Status Logic:**
+
 - `'Active'` - identity is `'Medical'`
 - `'Suspended'` - identity is NOT `'Medical'` but has `is_staff` permission
 - `'Pending'` - identity is NOT `'Medical'` and does NOT have `is_staff` permission
 
 **Error Responses:**
+
 ```javascript
 // 403 - Not admin
 { error: 'FORBIDDEN', message: 'Admin access required.' }
-
-// 500 - Server error
-{ error: 'INTERNAL_ERROR', message: 'Internal server error.' }
-```
-
----
-
-### PUT /admin/staff/accounts/:userId
-
-Update a staff member's permissions and status.
-
-**What is `updateStaffAccount` used for?**
-
-The `updateStaffAccount` mutation is the primary tool for managing staff access in the system. It allows admins to:
-
-1. **Modify permissions** - Grant or revoke specific permission keys (e.g., EMR editing, appointment approval)
-2. **Activate staff** - Change status from 'Suspended' to 'Active' (sets identity to 'Medical')
-3. **Suspend staff** - Change status from 'Active' to 'Suspended' (sets identity to 'Employee', blocking access)
-4. **Automatic safeguards**:
-   - Always ensures `is_staff: true` is added to permissions
-   - Prevents admins from suspending themselves
-   - Only works on verified accounts with MedicalPersonnel records
-   - Pulls branch assignment from `MedicalPersonnel.designation`
-
-**Authentication:** Requires Medical identity with `IS_ADMIN` permission
-
-**URL Parameters:**
-- `userId` - The staff member's user ID
-
-**Request Body:**
-```javascript
-{
-  permissions: {              // Permission keys to set
-    is_admin: true,           // true = grant, false = revoke
-    emr_allow_edit: true,
-    emr_allow_view: true,
-    appointment_allow_view: false,
-    // Only include keys you want to change
-  },
-  status: "Active"            // 'Active' or 'Suspended'
-}
-```
-
-**Request Example:**
-```http
-PUT /admin/staff/accounts/123
-Authorization: Bearer <jwt-token>
-Content-Type: application/json
-
-{
-  "permissions": {
-    "is_admin": true,
-    "emr_allow_view": true,
-    "emr_allow_edit": false
-  },
-  "status": "Active"
-}
-```
-
-**Response:**
-```javascript
-{
-  ok: true,
-  message: "Staff account activated successfully."
-  // or "Staff account suspended successfully."
-}
-```
-
-**Behavior:**
-1. Validates admin permissions
-2. Fetches target user's branch from `MedicalPersonnel.designation`
-3. Always ensures `is_staff: true` is added to permissions
-4. Calls `setStaffPermissions()` to apply permission changes
-5. Updates `UserCredentials.identity`:
-   - `status: 'Active'` → `identity = 'Medical'`
-   - `status: 'Suspended'` → `identity = 'Employee'`
-
-**Error Responses:**
-```javascript
-// 400 - Missing fields
-{ error: 'MISSING_FIELDS', message: 'permissions and status are required.' }
-
-// 400 - Invalid status
-{ error: 'INVALID_STATUS', message: 'Status must be Active or Suspended.' }
-
-// 400 - Self-suspension
-{ error: 'CANNOT_SELF_SUSPEND', message: 'Admins cannot suspend their own account.' }
-
-// 403 - Not admin
-{ error: 'FORBIDDEN', message: 'Admin access required.' }
-
-// 403 - Wrong identity
-{ error: 'FORBIDDEN', message: 'Can only manage Medical staff accounts.' }
-
-// 403 - Not verified
-{
-  error: 'STAFF_NOT_VERIFIED',
-  message: 'This account is not yet verified. Please approve the initial record first.'
-}
-
-// 404 - User not found
-{ error: 'NOT_FOUND', message: 'User not found.' }
 
 // 500 - Server error
 { error: 'INTERNAL_ERROR', message: 'Internal server error.' }
@@ -1024,6 +1067,7 @@ List all active refresh token sessions (devices) for a staff member by scanning 
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
 **GraphQL Query:**
+
 ```graphql
 query {
   listStaffSessions(userId: "123") {
@@ -1042,6 +1086,7 @@ query {
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -1072,18 +1117,20 @@ query {
 ```
 
 **Field Descriptions:**
-| Field | Description |
-|-------|-------------|
-| `deviceId` | Unique identifier for the device/session (UUID) |
-| `status` | Session status (typically "active") |
-| `createdAt` | When the session was created (ISO timestamp) |
-| `updatedAt` | Last time the session was refreshed (ISO timestamp) |
-| `expiresAt` | When the refresh token expires (ISO timestamp) |
-| `isCurrent` | Whether this session matches the current request's deviceId |
-| `count` | Total number of active sessions |
-| `currentAnchor` | The current anchor UUID shared by all sessions |
+
+| Field             | Description                                                 |
+| ----------------- | ----------------------------------------------------------- |
+| `deviceId`      | Unique identifier for the device/session (UUID)             |
+| `status`        | Session status (typically "active")                         |
+| `createdAt`     | When the session was created (ISO timestamp)                |
+| `updatedAt`     | Last time the session was refreshed (ISO timestamp)         |
+| `expiresAt`     | When the refresh token expires (ISO timestamp)              |
+| `isCurrent`     | Whether this session matches the current request's deviceId |
+| `count`         | Total number of active sessions                             |
+| `currentAnchor` | The current anchor UUID shared by all sessions              |
 
 **Use Cases:**
+
 - View all logged-in devices for a staff member
 - Audit active sessions before security actions
 - Identify suspicious devices before rotating anchor
@@ -1096,6 +1143,7 @@ query {
 Rotate the staff anchor to instantly logout all devices for a user.
 
 **What it does:**
+
 1. Generates a new anchor (UUID)
 2. Saves it to Redis with 7-day TTL
 3. Deletes all refresh sessions (`rt:${userId}:*` keys)
@@ -1105,6 +1153,7 @@ This forces all existing access tokens to become invalid on next refresh attempt
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
 **GraphQL Mutation:**
+
 ```graphql
 mutation {
   rotateStaffAnchor(userId: "123") {
@@ -1116,6 +1165,7 @@ mutation {
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -1129,15 +1179,17 @@ mutation {
 ```
 
 **When to Use:**
-| Scenario | Description |
-|----------|-------------|
-| Security incident | Suspicious activity detected on staff account |
-| Account compromise | Staff reports unauthorized access |
-| Device lost/stolen | Staff lost a device with active session |
-| Mandatory logout | Force re-auth for policy updates |
-| Password change | After password reset to invalidate old sessions |
+
+| Scenario           | Description                                     |
+| ------------------ | ----------------------------------------------- |
+| Security incident  | Suspicious activity detected on staff account   |
+| Account compromise | Staff reports unauthorized access               |
+| Device lost/stolen | Staff lost a device with active session         |
+| Mandatory logout   | Force re-auth for policy updates                |
+| Password change    | After password reset to invalidate old sessions |
 
 **Error Responses:**
+
 ```javascript
 // 401 - Not authenticated
 { error: 'UNAUTHORIZED', message: 'Unauthorized' }
@@ -1164,11 +1216,12 @@ mutation {
 ### Identity vs Status
 
 - **identity** (UserCredentials.identity):
+
   - `'Medical'` - Active medical staff (can access medical routes)
   - `'Employee'` - Suspended staff (blocked from medical routes)
   - `'Student'` - Student user
-
 - **status** (API-level):
+
   - `'Active'` - Working staff member
   - `'Suspended'` - Temporarily blocked staff member
   - `'Pending'` - Not yet approved/configured
@@ -1254,11 +1307,13 @@ PUT /admin/staff/accounts/123
 Internal helper in `rolemanagement.js` that converts an array of permission labels to a permissions object.
 
 **Input:**
+
 ```javascript
 ['IS_ADMIN', 'IS_STAFF', 'ALLOW_TO_VIEW_EMR', 'ALLOW_TO_EDIT_CONSULTATION']
 ```
 
 **Output:**
+
 ```javascript
 {
   is_admin: true,

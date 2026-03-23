@@ -52,11 +52,6 @@ const Query = {
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
 
 const Mutation = {
-  updateStaffAccount: async (_, args, context) => {
-    await requireAdmin(context.user, context.res);
-    return await Wrapper.Mutation._updateStaffAccount(_, args, context);
-  },
-
   createMedicalPersonnel: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._createMedicalPersonnel(_, args, context);
