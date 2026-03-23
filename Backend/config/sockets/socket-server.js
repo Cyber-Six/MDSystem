@@ -43,10 +43,10 @@ async function initSocket(server, options = {}) {
       credentials: true,
     },
     transports: ['websocket', 'polling'],
-    // Enhanced reconnection settings for reliability
-    maxHttpBufferSize: 1e6, // 1MB
+    // Tuned for low-resource servers (RPi5)
+    maxHttpBufferSize: 5e5, // 500KB — enough for chat/notifications
     pingInterval: 25000,
-    pingTimeout: 60000,
+    pingTimeout: 30000,
     ...options,
   });
 

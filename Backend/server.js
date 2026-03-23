@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const fs = require('fs');
+const compression = require('compression');
 const db = require('./config/db.js');
 const redis = require('./config/redis.js');
 const logger = require('./utils/logger.js');
@@ -36,7 +36,8 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(compression());
+app.use(express.json({ limit: '1mb' }));
 app.set("trust proxy", true);
 
 // ✅ Ensure req.body is always an object (prevents destructuring crashes)
@@ -86,7 +87,10 @@ app.use('/announcement', AnnouncementRoutes);
 // ======================================
 
 // Serve static assets for the React app
-app.use(express.static(path.join(__dirname, '../mds-patient/dist')));
+app.use(express.static(path.join(__dirname, '../mds-patient/dist'), {
+  maxAge: '7d',
+  immutable: true,
+}));
 
 // Redirect the root URL to '/app'
 
