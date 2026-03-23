@@ -71,7 +71,20 @@ const HealthChat = () => {
   // Handle ticket closed via socket
   const handleTicketClosed = useCallback((data) => {
     console.log('[HealthChat] Ticket closed event received:', data);
-    setTicket(prev => prev ? { ...prev, status: 'Closed' } : null);
+    setTicket(prev => {
+      if (!prev) return null;
+      // Prefer the full chat record from the event (has session_end, closedBy, etc.)
+      // Fall back to merging individual fields so the divider shows correct info immediately.
+      if (data?.chat) {
+        return { ...prev, ...data.chat };
+      }
+      return {
+        ...prev,
+        status: 'Closed',
+        closedBy: data?.closedBy || prev.closedBy || null,
+        session_end: prev.session_end || new Date().toISOString(),
+      };
+    });
     // Reload messages to show system message
     if (data?.chatId) {
       loadMessages(data.chatId);

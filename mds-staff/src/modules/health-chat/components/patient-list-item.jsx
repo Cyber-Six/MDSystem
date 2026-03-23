@@ -98,12 +98,17 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
           }`}>
             {formatPatientName(patient)}
           </span>
-          <span className={`text-[10px] flex-shrink-0 ${
+          <span className={`text-xs flex-shrink-0 ${
             hasUnread
               ? 'text-primary-600 dark:text-primary-400 font-medium'
               : 'text-neutral-400 dark:text-neutral-500'
           }`}>
-            {formatRelativeTime(ticket.lastMessageAt || ticket.session_start || ticket.archived_at)}
+            {/* Pending: creation time; Active: last message time; Archive: close time */}
+            {ticket.status === 'Open'
+              ? formatRelativeTime(ticket.lastMessageAt || ticket.archived_at)
+              : ['Closed', 'Expired'].includes(ticket.status)
+                ? formatRelativeTime(ticket.session_end || ticket.archived_at || ticket.lastMessageAt || ticket.session_start)
+                : formatRelativeTime(ticket.lastMessageAt || ticket.session_start)}
           </span>
         </div>
 
@@ -122,9 +127,9 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
                 {ticket.unreadCount > 99 ? '99+' : ticket.unreadCount}
               </span>
             )}
-            {needsReply && !hasUnread && !isSelected && (
-              <span className="text-[10px] text-neutral-400 dark:text-neutral-500 italic">
-                reply
+            {needsReply && !hasUnread && !isSelected && !['Closed', 'Expired'].includes(ticket.status) && (
+              <span className="text-[12px] text-neutral-400 dark:text-neutral-500 italic">
+                respond?
               </span>
             )}
             <TicketStatusBadge status={ticket.status} />

@@ -347,14 +347,15 @@ const Query = {
       // 1. Batch-format the latest tickets from the main query
       const latestTickets = await formatChatRecordsBatch(result.rows);
 
-      // 2. Fetch all tickets for all patients in one query
+      // 2. Fetch ALL tickets for each patient regardless of status filter.
+      // This ensures the frontend has complete ticket history for dividers and
+      // initial-context (purposeSynth) even when archive filter is off.
       const patientIds = result.rows.map(r => r.patientId);
       const allTicketsResult = await db.query(
         `SELECT * FROM "HealthChat"
          WHERE "patientId" = ANY($1)
-         ${statuses && statuses.length > 0 ? 'AND status = ANY($2)' : ''}
          ORDER BY id DESC`,
-        statuses && statuses.length > 0 ? [patientIds, statuses] : [patientIds]
+        [patientIds]
       );
       const allTicketsFormatted = await formatChatRecordsBatch(allTicketsResult.rows);
 

@@ -16,6 +16,18 @@ import {
 const HealthChatContext = createContext(null);
 
 /**
+ * Get the effective timestamp for chronological sorting based on ticket status.
+ * - Pending (Open): creation time (initial message or DB creation timestamp)
+ * - Active (Ongoing): last message activity time
+ * - Archive (Closed/Expired): close/archive time
+ */
+function getEffectiveSortTime(status, lastMessageAt, sessionStart, sessionEnd, archivedAt) {
+  if (status === 'Open') return lastMessageAt || archivedAt;
+  if (status === 'Closed' || status === 'Expired') return sessionEnd || archivedAt || lastMessageAt;
+  return lastMessageAt || sessionStart;
+}
+
+/**
  * Health Chat Provider
  * Manages state for the staff health chat interface
  * Uses patient-grouped conversations (1 patient = 1 row in the list)
@@ -49,6 +61,9 @@ export function HealthChatProvider({ children }) {
       return {};
     }
   });
+  // Ref to avoid readTimestamps in useCallback dependencies (prevents API re-fetch on every chat open)
+  const readTimestampsRef = useRef(readTimestamps);
+  useEffect(() => { readTimestampsRef.current = readTimestamps; }, [readTimestamps]);
 
   // Typing indicators (patientId -> { userId, isTyping })
   const [typingUsers, setTypingUsers] = useState({});
@@ -169,8 +184,9 @@ export function HealthChatProvider({ children }) {
 
       if (result?.conversations) {
         // Apply local read timestamps to compute effective unread count
+        const currentReadTimestamps = readTimestampsRef.current;
         const conversationsWithReadState = result.conversations.map(conv => {
-          const readTimestamp = readTimestamps[conv.patientId];
+          const readTimestamp = currentReadTimestamps[conv.patientId];
           let effectiveUnreadCount = conv.unreadCount || 0;
 
           // If we have a read timestamp and lastMessageAt is before it, no unread
@@ -188,11 +204,22 @@ export function HealthChatProvider({ children }) {
           };
         });
 
-        // Sort by lastMessageAt DESC (newest first)
+        // Sort by effective time: pending uses creation time, active uses last message time
         conversationsWithReadState.sort((a, b) => {
-          const aTime = new Date(a.lastMessageAt || a.latestTicket?.session_start || 0);
-          const bTime = new Date(b.lastMessageAt || b.latestTicket?.session_start || 0);
-          return bTime - aTime;
+          const aTime = getEffectiveSortTime(
+            a.latestTicket?.status, a.lastMessageAt,
+            a.latestTicket?.session_start, a.latestTicket?.session_end, a.latestTicket?.archived_at
+          );
+          const bTime = getEffectiveSortTime(
+            b.latestTicket?.status, b.lastMessageAt,
+            b.latestTicket?.session_start, b.latestTicket?.session_end, b.latestTicket?.archived_at
+          );
+          const aMs = aTime ? new Date(aTime).getTime() : 0;
+          const bMs = bTime ? new Date(bTime).getTime() : 0;
+          if (aMs !== bMs) return bMs - aMs;
+
+          // Fallback: ticket ID desc (higher = newer)
+          return Number(b.latestTicket?.id || 0) - Number(a.latestTicket?.id || 0);
         });
 
         setConversations(conversationsWithReadState);
@@ -229,7 +256,7 @@ export function HealthChatProvider({ children }) {
       setConversationsLoading(false);
       setTicketsLoading(false);
     }
-  }, [readTimestamps]);
+  }, []); // No deps — uses readTimestampsRef for stable identity
 
   /**
    * Update selected filters and persist to localStorage
@@ -237,8 +264,9 @@ export function HealthChatProvider({ children }) {
   const updateSelectedFilters = useCallback((newFilters) => {
     setSelectedFilters(newFilters);
     localStorage.setItem('health-chat-selected-filters', JSON.stringify(newFilters));
-    refreshMultipleFilters(newFilters);
-  }, [refreshMultipleFilters]);
+    // Do NOT call refreshMultipleFilters here — the useEffect below handles it
+    // to avoid a double-fetch race condition.
+  }, []);
 
   // Load tickets when selectedFilters changes
   useEffect(() => {
@@ -266,6 +294,16 @@ export function HealthChatProvider({ children }) {
           });
           setActiveTicketId(ongoingTicket?.id || pendingTicket?.id || sortedTickets[0]?.id);
         }
+      } else if (!ticketsLoading) {
+        // Ticket not found in the current filter set (e.g., archive unchecked while viewing
+        // a closed ticket) — clear the selection so the panel doesn't show stale data.
+        // Guard with !ticketsLoading to avoid clearing during a mid-refresh render cycle.
+        setSelectedPatientId(null);
+        setSelectedChatId(null);
+        setSelectedTicket(null);
+        setSelectedConversation(null);
+        setActiveTicketId(null);
+        setMessages([]);
       }
     }
     if (selectedPatientId && conversations.length > 0) {
@@ -459,7 +497,7 @@ export function HealthChatProvider({ children }) {
         return [...prev, message];
       });
     }
-  }, [selectedPatientId, selectedChatId, tickets]);
+  }, [selectedPatientId, tickets]);
 
   /**
    * Update conversation list when a new message arrives (for unread indicator + reordering)
@@ -510,28 +548,40 @@ export function HealthChatProvider({ children }) {
       const newArr = [...prev];
       newArr[idx] = updated;
 
-      // Re-sort by lastMessageAt DESC (newest first)
+      // Re-sort by effective time (status-aware)
       newArr.sort((a, b) => {
-        const aTime = new Date(a.lastMessageAt || a.latestTicket?.session_start || 0);
-        const bTime = new Date(b.lastMessageAt || b.latestTicket?.session_start || 0);
-        return bTime - aTime;
+        const aTime = getEffectiveSortTime(a.status, a.lastMessageAt, a.session_start, a.session_end, a.archived_at);
+        const bTime = getEffectiveSortTime(b.status, b.lastMessageAt, b.session_start, b.session_end, b.archived_at);
+        const aMs = aTime ? new Date(aTime).getTime() : 0;
+        const bMs = bTime ? new Date(bTime).getTime() : 0;
+        if (aMs !== bMs) return bMs - aMs;
+
+        return Number(b.tickets?.[0]?.id || 0) - Number(a.tickets?.[0]?.id || 0);
       });
 
       return newArr;
     });
 
     // Also update conversations array to stay in sync
+    // Use setTickets result to find patientId (avoid stale tickets closure)
     setConversations(prev => {
-      const ticketInList = tickets.find(t =>
-        String(t.id) === String(chatId) ||
-        t.tickets?.some(sub => String(sub.id) === String(chatId))
-      );
-      if (!ticketInList) return prev;
+      // Re-read the latest tickets to find the patientId for this chatId
+      let patientIdForChat = null;
+      setTickets(currentTickets => {
+        const t = currentTickets.find(item =>
+          String(item.id) === String(chatId) ||
+          item.tickets?.some(sub => String(sub.id) === String(chatId))
+        );
+        patientIdForChat = t?.patientId;
+        return currentTickets; // No mutation
+      });
 
-      const idx = prev.findIndex(c => String(c.patientId) === String(ticketInList.patientId));
+      if (!patientIdForChat) return prev;
+
+      const idx = prev.findIndex(c => String(c.patientId) === String(patientIdForChat));
       if (idx === -1) return prev;
 
-      const isCurrentlySelected = String(ticketInList.patientId) === String(selectedPatientId);
+      const isCurrentlySelected = String(patientIdForChat) === String(selectedPatientId);
       const updated = {
         ...prev[idx],
         lastMessage: {
@@ -551,14 +601,24 @@ export function HealthChatProvider({ children }) {
       newArr[idx] = updated;
 
       newArr.sort((a, b) => {
-        const aTime = new Date(a.lastMessageAt || a.latestTicket?.session_start || 0);
-        const bTime = new Date(b.lastMessageAt || b.latestTicket?.session_start || 0);
-        return bTime - aTime;
+        const aTime = getEffectiveSortTime(
+          a.latestTicket?.status, a.lastMessageAt,
+          a.latestTicket?.session_start, a.latestTicket?.session_end, a.latestTicket?.archived_at
+        );
+        const bTime = getEffectiveSortTime(
+          b.latestTicket?.status, b.lastMessageAt,
+          b.latestTicket?.session_start, b.latestTicket?.session_end, b.latestTicket?.archived_at
+        );
+        const aMs = aTime ? new Date(aTime).getTime() : 0;
+        const bMs = bTime ? new Date(bTime).getTime() : 0;
+        if (aMs !== bMs) return bMs - aMs;
+
+        return Number(b.latestTicket?.id || 0) - Number(a.latestTicket?.id || 0);
       });
 
       return newArr;
     });
-  }, [selectedPatientId, tickets, markNeedsReply, markConversationAsRead]);
+  }, [selectedPatientId, markNeedsReply, markConversationAsRead]);
 
   /**
    * Update a ticket's status
@@ -650,15 +710,18 @@ export function HealthChatProvider({ children }) {
           setMessages(fetchedMessages || []);
         }
 
-        // Switch filters to include active
+        // Switch filters to include active and refresh once
+        const targetFilters = selectedFilters.includes('active')
+          ? selectedFilters
+          : [...selectedFilters, 'active'];
+
         if (!selectedFilters.includes('active')) {
-          const newFilters = [...selectedFilters, 'active'];
-          setSelectedFilters(newFilters);
-          localStorage.setItem('health-chat-selected-filters', JSON.stringify(newFilters));
+          setSelectedFilters(targetFilters);
+          localStorage.setItem('health-chat-selected-filters', JSON.stringify(targetFilters));
         }
 
-        // Refresh conversation list to get updated data including the approved chat
-        refreshMultipleFilters(selectedFilters.includes('active') ? selectedFilters : [...selectedFilters, 'active']);
+        // Single refresh with the correct filter set
+        refreshMultipleFilters(targetFilters);
       }
       return result;
     } catch (err) {

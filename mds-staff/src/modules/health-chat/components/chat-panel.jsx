@@ -158,8 +158,12 @@ const ChatPanel = ({ emitTyping }) => {
   if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
   // Build unified list: synthetic purpose entry + messages with dividers
-  // The purpose now comes from the first ticket for this patient
-  const firstTicket = selectedTicket?.tickets?.[0] || selectedConversation?.latestTicket;
+  // Use the OLDEST ticket's purpose as the initial context message so it aligns
+  // with the oldest messages rendered at the top of the chat.
+  const allSubTickets = selectedTicket?.tickets || [];
+  const firstTicket = allSubTickets.length > 0
+    ? allSubTickets[allSubTickets.length - 1]   // oldest (array is DESC)
+    : selectedConversation?.latestTicket;
   const purposeSynth = firstTicket?.purpose ? [{
     id: '__purpose__',
     text: firstTicket.purpose,

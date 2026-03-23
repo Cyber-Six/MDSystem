@@ -341,13 +341,14 @@ export function useHealthChatSocket() {
    * Uses patientMessages endpoint since selectedChatId is actually patientId
    */
   useEffect(() => {
+    // Always clear previous interval first
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+
     if (!selectedChatId || isArchived) {
-      // Clear polling if no chat selected or chat is archived
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-      return;
+      return; // Nothing to poll
     }
 
     const POLLING_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
