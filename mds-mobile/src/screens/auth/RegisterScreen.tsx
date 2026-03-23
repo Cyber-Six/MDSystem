@@ -517,7 +517,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
       <ScrollView 
         style={[
           styles.flex1,
-          { backgroundColor: isDark ? colors.neutral[900] : '#FFFFFF' }
+          { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }
         ]}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"

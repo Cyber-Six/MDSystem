@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, StyleSheet, SafeAreaView,
+  KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme, colors } from '../../context/ThemeContext';
@@ -269,7 +269,7 @@ const InitialRecordFormScreen: React.FC = () => {
   const isLastStep = currentStep === steps.length - 1;
 
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
+    <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
@@ -329,7 +329,7 @@ const InitialRecordFormScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 

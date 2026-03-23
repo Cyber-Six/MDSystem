@@ -38,7 +38,7 @@ export const MainTabNavigator: React.FC = () => {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: isDark ? colors.neutral[900] : '#FFFFFF',
+          backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50],
           borderTopColor: isDark ? colors.neutral[800] : colors.neutral[200],
           borderTopWidth: 1,
           height: 80,

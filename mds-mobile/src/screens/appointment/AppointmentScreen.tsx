@@ -231,7 +231,7 @@ export const AppointmentScreen: React.FC = () => {
     setSelectedDate(dateStr);
     setSelectedSession('');
     setAvailability(null);
-    if (!dateStr) return;
+    if (!dateStr || !selectedScheduler?.id) return;
 
     setLoadingAvailability(true);
     try {

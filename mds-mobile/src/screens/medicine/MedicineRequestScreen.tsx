@@ -17,8 +17,8 @@ import {
   StyleSheet,
   RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { useBanner } from '../../context/BannerContext';
 import {
   BRANCHES,
   getAvailableMedicine,
@@ -50,6 +50,7 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 
 export const MedicineRequestScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const { showBanner } = useBanner();
 
   // Views
   const [view, setView] = useState<'form' | 'status'>('form');
@@ -170,7 +171,7 @@ export const MedicineRequestScreen: React.FC = () => {
     try {
       const result = await createMedicineRequest(purpose.trim(), location, items);
       setRequests((prev) => [result, ...prev]);
-      setSuccess('Medicine request submitted successfully!');
+      showBanner({ type: 'success', message: 'Medicine request submitted successfully!' });
       setPurpose('');
       setLocation('');
       setSelectedCodes(new Set());

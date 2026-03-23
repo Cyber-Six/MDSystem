@@ -327,12 +327,12 @@ export const HealthChatScreen: React.FC = () => {
           style={[
             styles.errorBanner,
             {
-              backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2',
-              borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FECACA',
+              backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : colors.error[50],
+              borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : colors.error[200],
             },
           ]}
         >
-          <Text style={[styles.errorBannerText, { color: colors.error[600] }]}>
+          <Text style={[styles.errorBannerText, { color: isDark ? colors.error[400] : colors.error[600] }]}>
             {error}
           </Text>
         </View>
