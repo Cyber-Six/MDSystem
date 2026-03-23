@@ -475,6 +475,7 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
             status
             session_start
             session_end
+            archived_at
             closedBy
           }
         }

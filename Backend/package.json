@@ -16,6 +16,8 @@
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.65.0",
+    "compression": "^1.8.0",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-graphql": "^0.12.0",
