@@ -82,6 +82,20 @@ type Permissions {
   medicine_request_allow_approve: Boolean!
 }
 
+# Permission with branch information
+type PermissionWithBranch {
+  key: String!           # Permission key (e.g., "emr_allow_view")
+  label: String!         # Permission label (e.g., "ALLOW_TO_VIEW_EMR")
+  enabled: Boolean!      # Whether permission is granted
+  branch: Designation    # Branch for this permission (null if not granted)
+}
+
+# Staff permissions with branch info (returned by getStaffPermissions)
+type StaffPermissions {
+  permissions: [PermissionWithBranch!]!
+  count: Int!
+}
+
 type StaffAccount {
   id: ID!
   email: String!
@@ -149,6 +163,20 @@ type RotateAnchorResult {
   sessionsInvalidated: Int!
 }
 
+# User session info for paginated listing
+type UserSession {
+  userId: ID!
+  email: String!
+  role: String!
+  exp: Float!
+}
+
+# Paginated user sessions response
+type UserSessionPage {
+  sessions: [UserSession!]!
+  totalCount: Int!
+}
+
 # ─── INPUT TYPES ───────────────────────────────────────────────────────────────
 
 input CreateMedicalPersonnelInput {
@@ -164,11 +192,17 @@ input UpdateMedicalPersonnelInput {
   isActive: Boolean
 }
 
-# Individual permission with optional branch
-input StaffPermissionInput {
+# Individual permission with optional branch (for extended mutation)
+input ExtendedPermissionInput {
   key: String!          # Permission key (e.g., "emr_allow_view")
-  value: Boolean!       # true = grant, false = revoke
+  enabled: Boolean!     # true = grant, false = revoke (removes database record)
   branch: Designation   # Optional: Manila, QuezonCity, or Both (uses defaultBranch if not specified)
+}
+
+# Standard permission input (no branch - uses umbrella branch)
+input StandardPermissionInput {
+  key: String!          # Permission key (e.g., "emr_allow_view")
+  enabled: Boolean!     # true = grant, false = revoke (removes database record)
 }
 
 # ─── QUERIES ───────────────────────────────────────────────────────────────────
@@ -182,11 +216,15 @@ type Query {
   listMedicalPersonnel(role: StaffRole, designation: Designation, isActive: Boolean): MedicalPersonnelList!
   getMedicalPersonnel(userId: ID!): MedicalPersonnel
 
-  # Permissions
-  getStaffPermissions(userId: ID!): Permissions!
+  # Permissions - Returns all permissions with enabled status AND branch designation
+  getStaffPermissions(userId: ID!): StaffPermissions!
 
   # Session Management
   listStaffSessions(userId: ID!): StaffSessionList!
+
+  # Refresh Token Analytics
+  countActiveRefreshTokens: Int!
+  listUserSessions(offset: Int!, limit: Int!): UserSessionPage!
 }
 
 # ─── MUTATIONS ─────────────────────────────────────────────────────────────────
@@ -197,8 +235,17 @@ type Mutation {
   updateMedicalPersonnel(userId: ID!, input: UpdateMedicalPersonnelInput!): MedicalPersonnelMutationResult!
   deleteMedicalPersonnel(userId: ID!, revertIdentity: Boolean): DeleteMedicalPersonnelResult!
 
-  # Permissions (direct set)
-  setStaffPermissions(userId: ID!, permissions: [StaffPermissionInput!]!, defaultBranch: Designation): MutationResult!
+  # Permissions - Standard (umbrella branch for all permissions)
+  # Use this when all permissions should have the same branch designation.
+  # The 'branch' parameter is applied to ALL permissions being set.
+  # Example: setStaffPermissionsStandard(userId: "1", permissions: [{key: "emr_allow_view", value: true}], branch: Manila)
+  setStaffPermissionsStandard(userId: ID!, permissions: [StandardPermissionInput!]!, branch: Designation!): MutationResult!
+
+  # Permissions - Extended (independent branch per permission)
+  # Use this when each permission needs its own branch designation.
+  # If a permission doesn't specify a branch, 'defaultBranch' is used (defaults to 'Both').
+  # Example: setStaffPermissionsExtended(userId: "1", permissions: [{key: "emr_allow_view", enabled: true, branch: Manila}, {key: "profile_allow_view", enabled: true, branch: QuezonCity}])
+  setStaffPermissionsExtended(userId: ID!, permissions: [ExtendedPermissionInput!]!, defaultBranch: Designation): MutationResult!
 
   # Session Management
   rotateStaffAnchor(userId: ID!): RotateAnchorResult!

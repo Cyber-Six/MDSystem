@@ -95,9 +95,15 @@ permissions = {
 
 ## Core Functions (Backend/services/permit.js)
 
+This section describes the three core functions for managing staff permissions:
+
+1. **getStaffPermissions()** - Query permissions with enabled status and branch info
+2. **setStaffPermissionsExtended()** - Main function with independent branch per permission
+3. **setStaffPermissionsStandard()** - Wrapper that applies umbrella branch to all permissions
+
 ### getStaffPermissions(personnelId)
 
-Retrieves all permission keys with true/false values for a staff member.
+Retrieves all permission keys with their enabled status AND branch designation.
 
 **Input:**
 
@@ -107,97 +113,122 @@ Retrieves all permission keys with true/false values for a staff member.
 
 ```javascript
 {
-  is_admin: false,
-  is_staff: true,
-  privileged_to_perform_on_superior: false,
-  emr_allow_approval: true,
-  emr_allow_edit: false,
-  emr_allow_view: true,
-  emr_allow_set_dental_record: false,
-  emr_allow_edit_catalogs: false,
-  profile_allow_approval: true,
-  profile_allow_view: true,
-  profile_allow_edit: false,
-  profile_allow_update_email_identifier: false,
-  appointment_allow_approval: false,
-  appointment_allow_view_records: true,
-  appointment_allow_view_configuration: false,
-  appointment_allow_edit_configuration: false,
-  announcement_allow_crud: false,
-  consultation_allow_view: true,
-  consultation_allow_edit: false,
-  inventory_allow_view: true,
-  inventory_allow_dispense: false,
-  inventory_allow_edit: false,
-  inventory_allow_manage_requests: false,
-  inventory_allow_prescribe: false,
-  medicine_request_allow_approve: false
+  permissions: [
+    { key: "is_admin", label: "IS_ADMIN", enabled: true, branch: "Both" },
+    { key: "is_staff", label: "IS_STAFF", enabled: true, branch: "Manila" },
+    { key: "emr_allow_view", label: "ALLOW_TO_VIEW_EMR", enabled: true, branch: "Manila" },
+    { key: "emr_allow_edit", label: "ALLOW_TO_EDIT_EMR", enabled: false, branch: null },
+    // ... all permission keys
+  ],
+  count: 25
 }
 ```
 
 **Example:**
 
 ```javascript
-const perms = await getStaffPermissions(123);
-console.log(perms.is_admin); // false
-console.log(perms.emr_allow_view); // true
+const result = await getStaffPermissions(123);
+result.permissions.forEach(perm => {
+  if (perm.enabled) {
+    console.log(`${perm.key}: ${perm.branch}`);
+  }
+});
+
+// Or find a specific permission
+const emrView = result.permissions.find(p => p.key === 'emr_allow_view');
+console.log(emrView.enabled, emrView.branch); // true, "Manila"
 ```
 
 ---
 
-### setStaffPermissions()
+### setStaffPermissionsExtended()
 
-Sets permissions for a staff member. `true` inserts/updates a row, `false` deletes the row.
+Core function for setting staff permissions with **independent branch per permission**. Requires explicit branch specification per permission. Supports both simple (umbrella branch) and complex (per-permission branch) scenarios.
+
+**Key Behavior:**
+- `enabled: true` → Creates/updates permission record with specified or default branch
+- `enabled: false` → **Deletes the permission record entirely** (no database record = no permission)
+- Permissions not in list → Left unchanged
 
 **Input:**
 
 ```javascript
 {
   personnelId: 123,              // User ID (number or string)
-  permissionsMap: {              // Object with permission keys
-    is_admin: true,              // Will INSERT/UPDATE row
-    emr_allow_edit: false,       // Will DELETE row
-    emr_allow_view: true,        // Will INSERT/UPDATE row
-    // Only include keys you want to change
-  },
+  permissionsList: [             // Array with optional per-permission branch
+    { key: "emr_allow_view", enabled: true, branch: "Manila" },
+    { key: "emr_allow_edit", enabled: true, branch: "Manila" },
+    { key: "consultation_allow_view", enabled: true, branch: "QuezonCity" },
+    { key: "inventory_allow_view", enabled: true }  // Uses defaultBranch
+  ],
   assignedBy: 456,               // Admin user ID who made the change
-  branch: 'Manila'               // Optional: 'Manila' | 'QuezonCity' | 'Both' (default: 'Both')
+  defaultBranch: 'Both'          // Optional: Used when permission doesn't specify branch
 }
 ```
 
-**Output:**
+**Example - Scenario 1: Simple Umbrella Branch (all same)**
 
 ```javascript
-{
-  inserted: ['IS_ADMIN', 'ALLOW_TO_VIEW_EMR'],  // Labels that were inserted
-  deleted: ['ALLOW_TO_EDIT_EMR']                // Labels that were deleted
-}
-```
-
-**Example:**
-
-```javascript
-await setStaffPermissions({
+await setStaffPermissionsExtended({
   personnelId: 123,
-  permissionsMap: {
-    is_admin: true,              // Grant admin
-    is_staff: true,              // Grant staff access
-    emr_allow_edit: false,       // Revoke EMR edit
-    consultation_allow_view: true // Grant consultation view
-  },
+  permissionsList: [
+    { key: "is_admin", enabled: true },
+    { key: "is_staff", enabled: true },
+    { key: "emr_allow_view", enabled: true },
+    { key: "consultation_allow_view", enabled: true }
+  ],
   assignedBy: 456,
-  branch: 'Manila'
+  defaultBranch: 'Manila'  // All permissions use this default
 });
+// Result: All 4 permissions → branch='Manila'
 ```
 
-**Behavior:**
+**Example - Scenario 2: Complex Per-Permission Branch**
 
-- Keys set to `true` → permission row is inserted (or updated if exists)
-- Keys set to `false` → permission row is deleted
-- Keys not in the map → left unchanged
-- Invalid keys → throws error
+```javascript
+await setStaffPermissionsExtended({
+  personnelId: 456,
+  permissionsList: [
+    { key: "emr_allow_view", enabled: true, branch: "Manila" },
+    { key: "emr_allow_edit", enabled: true, branch: "Manila" },
+    { key: "consultation_allow_view", enabled: true, branch: "QuezonCity" },
+    { key: "inventory_allow_view", enabled: true }  // Uses defaultBranch='Both'
+  ],
+  assignedBy: 789,
+  defaultBranch: 'Both'
+});
+// Result: Permissions assigned to DIFFERENT branches
+```
+
+**Example - Scenario 3: Revoking Permissions (enabled: false)**
+
+```javascript
+await setStaffPermissionsExtended({
+  personnelId: 123,
+  permissionsList: [
+    { key: "emr_allow_edit", enabled: false }  // Deletes record from DB
+  ],
+  assignedBy: 456,
+  defaultBranch: 'Both'
+});
+// Result: emr_allow_edit record DELETED completely
+```
 
 ---
+
+### setStaffPermissionsStandard()
+
+**Wrapper function** that internally calls `setStaffPermissionsExtended` with all permissions using the same umbrella branch.
+
+**When to use:** Staff assigned to a single branch with uniform permission scope. This is the simpler option when all permissions should have the same branch designation.
+
+---
+
+### setStaffPermissionsExtended()
+
+**Main function** for setting staff permissions with per-permission branch control. This is the primary core implementation that supports independent branch assignment for each permission.
+
+**When to use:** Staff with complex multi-branch permission requirements where each permission needs its own branch designation.
 
 ## GraphQL Role Management API
 
@@ -238,24 +269,27 @@ graphql.js                      # Entry point - mounts endpoint, applies JWT mid
 
 ### Available Queries
 
-| Query                                                 | Description                             |
-| ----------------------------------------------------- | --------------------------------------- |
-| `listStaffAccounts(status, location)`               | Get all staff accounts with permissions |
-| `getStaffAccount(userId)`                           | Get single staff account                |
-| `listMedicalPersonnel(role, designation, isActive)` | Get all medical personnel               |
-| `getMedicalPersonnel(userId)`                       | Get single medical personnel            |
-| `getStaffPermissions(userId)`                       | Get permissions for a user              |
-| `listStaffSessions(userId)`                         | Get all active sessions for a user      |
+| Query                                                 | Description                                          |
+| ----------------------------------------------------- | ---------------------------------------------------- |
+| `listStaffAccounts(status, location)`               | Get all staff accounts with permissions              |
+| `getStaffAccount(userId)`                           | Get single staff account                             |
+| `listMedicalPersonnel(role, designation, isActive)` | Get all medical personnel                            |
+| `getMedicalPersonnel(userId)`                       | Get single medical personnel                         |
+| `getStaffPermissions(userId)`                       | Get permissions with enabled status and branch info  |
+| `listStaffSessions(userId)`                         | Get all active sessions for a user                   |
+| `countActiveRefreshTokens`                          | Count active refresh tokens system-wide              |
+| `listUserSessions(offset, limit)`                   | Get all active sessions globally with pagination     |
 
 ### Available Mutations
 
-| Mutation                                             | Description                                            |
-| ---------------------------------------------------- | ------------------------------------------------------ |
-| `createMedicalPersonnel(input)`                    | Create medical personnel record (grants staff access)  |
-| `updateMedicalPersonnel(userId, input)`            | Update medical personnel info                          |
-| `deleteMedicalPersonnel(userId, revertIdentity)`   | Delete medical personnel record (revokes staff access) |
-| `setStaffPermissions(userId, permissions, branch)` | Set fine-grained permissions with branch control       |
-| `rotateStaffAnchor(userId)`                        | Logout all devices for a user                          |
+| Mutation                                                        | Description                                            |
+| --------------------------------------------------------------- | ------------------------------------------------------ |
+| `createMedicalPersonnel(input)`                               | Create medical personnel record (grants staff access)  |
+| `updateMedicalPersonnel(userId, input)`                       | Update medical personnel info                          |
+| `deleteMedicalPersonnel(userId, revertIdentity)`              | Delete medical personnel record (revokes staff access) |
+| `setStaffPermissionsStandard(userId, permissions, branch)`    | Set permissions with umbrella branch (all same)        |
+| `setStaffPermissionsExtended(userId, permissions, defaultBranch)` | Set permissions with independent branch per permission |
+| `rotateStaffAnchor(userId)`                                   | Logout all devices for a user                          |
 
 ---
 
@@ -339,45 +373,33 @@ mutation {
 
 ## Setting Permissions
 
-### `setStaffPermissions` - Flexible Permission Management
+There are two mutations for setting staff permissions, each serving a different use case:
 
-Use this mutation to control fine-grained permissions for medical staff with **per-permission branch control**.
+### `setStaffPermissionsStandard` - Umbrella Branch
+
+Use this mutation when **all permissions should have the same branch**. This is simpler and ideal for most cases.
 
 **What it does:**
 
 - Sets permissions for a staff member (requires MedicalPersonnel record)
-- Each permission can have its own branch assignment
-- `value: true` → permission granted
-- `value: false` → permission revoked
-  -Permissions not in the list → left unchanged
-- **Each permission is stored with its own branch** in the `rolesMap` table
+- All permissions receive the **same branch** (umbrella branch)
+- `enabled: true` → permission granted with specified branch
+- `enabled: false` → permission revoked (database record deleted)
+- Permissions not in the list → left unchanged
 
-**Branch System:**
-
-- `defaultBranch` - Applied to permissions that don't specify their own branch
-- Per-permission `branch` - Overrides the defaultBranch for that specific permission
-- When checking permissions, the system considers both the permission and the branch:
-  - If patient is in Manila and permission has branch='Manila' or 'Both' → allowed
-  - If patient is in QuezonCity and permission has branch='QuezonCity' or 'Both' → allowed
-  - If permission has branch='Both' → allowed for all branches
-
----
-
-### Example 1: Umbrella Branch (All Same)
-
-Grant all permissions for Manila branch:
+**GraphQL Example:**
 
 ```graphql
 mutation {
-  setStaffPermissions(
+  setStaffPermissionsStandard(
     userId: "123"
     permissions: [
-      { key: "is_staff", value: true }
-      { key: "emr_allow_view", value: true }
-      { key: "emr_allow_edit", value: true }
-      { key: "consultation_allow_view", value: true }
+      { key: "is_staff", enabled: true }
+      { key: "emr_allow_view", enabled: true }
+      { key: "emr_allow_edit", enabled: true }
+      { key: "consultation_allow_view", enabled: true }
     ]
-    defaultBranch: Manila  # Applies to all permissions
+    branch: Manila  # ALL permissions get this branch
   ) {
     ok
     message
@@ -385,54 +407,35 @@ mutation {
 }
 ```
 
-All four permissions will have `branch='Manila'`.
+**Result:** All four permissions will have `branch='Manila'`.
 
 ---
 
-### Example 2: Per-Permission Branches
+### `setStaffPermissionsExtended` - Per-Permission Branch
 
-Give different permissions for different branches in a **single mutation**:
+Use this mutation when **different permissions need different branches**. This provides fine-grained control and is the primary way to set complex permission structures.
 
-```graphql
-mutation {
-  setStaffPermissions(
-    userId: "123"
-    permissions: [
-      { key: "emr_allow_view", value: true, branch: Manila }
-      { key: "emr_allow_edit", value: true, branch: Manila }
-      { key: "consultation_allow_view", value: true, branch: QuezonCity }
-      { key: "consultation_allow_edit", value: true, branch: QuezonCity }
-      { key: "inventory_allow_view", value: true, branch: Both }
-    ]
-    defaultBranch: Both  # Not used here since all have explicit branches
-  ) {
-    ok
-    message
-  }
-}
-```
+**What it does:**
 
-**Result:**
+- Sets permissions for a staff member with **independent branch per permission**
+- Each permission can specify its own `branch`
+- If a permission doesn't specify `branch`, it uses `defaultBranch` (defaults to 'Both')
+- `enabled: true` → permission granted with its branch
+- `enabled: false` → permission revoked (database record deleted)
+- Permissions not in the list → left unchanged
 
-- `emr_allow_view` and `emr_allow_edit` → Manila only
-- `consultation_allow_view` and `consultation_allow_edit` → QuezonCity only
-- `inventory_allow_view` → Both branches
-
----
-
-### Example 3: Mixed (Umbrella + Specific)
-
-Some permissions use the umbrella branch, others specify their own:
+**GraphQL Example:**
 
 ```graphql
 mutation {
-  setStaffPermissions(
+  setStaffPermissionsExtended(
     userId: "123"
     permissions: [
-      { key: "is_staff", value: true }                          # Uses defaultBranch (Both)
-      { key: "emr_allow_view", value: true, branch: Manila }    # Explicit Manila
-      { key: "emr_allow_edit", value: true, branch: Manila }    # Explicit Manila
-      { key: "profile_allow_view", value: true }                # Uses defaultBranch (Both)
+      { key: "emr_allow_view", enabled: true, branch: Manila }
+      { key: "emr_allow_edit", enabled: true, branch: Manila }
+      { key: "consultation_allow_view", enabled: true, branch: QuezonCity }
+      { key: "consultation_allow_edit", enabled: true, branch: QuezonCity }
+      { key: "inventory_allow_view", enabled: true }  # Uses defaultBranch
     ]
     defaultBranch: Both  # Applied to permissions without explicit branch
   ) {
@@ -444,26 +447,77 @@ mutation {
 
 **Result:**
 
-- `is_staff` → Both (uses defaultBranch)
-- `emr_allow_view` → Manila (explicit)
-- `emr_allow_edit` → Manila (explicit)
-- `profile_allow_view` → Both (uses defaultBranch)
+- `emr_allow_view` and `emr_allow_edit` → Manila only
+- `consultation_allow_view` and `consultation_allow_edit` → QuezonCity only
+- `inventory_allow_view` → Both branches (uses defaultBranch)
 
 ---
 
-### Example 4: Revoking Permissions
+### Query: `getStaffPermissions`
 
-Revoke specific permissions:
+Use this query to view the enabled status and branch assignment for each permission.
+
+**GraphQL Example:**
+
+```graphql
+query {
+  getStaffPermissions(userId: "123") {
+    permissions {
+      key
+      label
+      enabled
+      branch
+    }
+    count
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "getStaffPermissions": {
+      "permissions": [
+        { "key": "is_admin", "label": "IS_ADMIN", "enabled": true, "branch": "Both" },
+        { "key": "emr_allow_view", "label": "ALLOW_TO_VIEW_EMR", "enabled": true, "branch": "Manila" },
+        { "key": "emr_allow_edit", "label": "ALLOW_TO_EDIT_EMR", "enabled": false, "branch": null },
+        { "key": "consultation_allow_view", "label": "ALLOW_TO_VIEW_CONSULTATION", "enabled": true, "branch": "QuezonCity" }
+      ],
+      "count": 25
+    }
+  }
+}
+```
+
+---
+
+### Branch System Explained
+
+- **Branch values:** `Manila`, `QuezonCity`, `Both`
+- **Umbrella branch vs Per-permission branch:**
+  - `setStaffPermissionsStandard` uses umbrella (all same)
+  - `setStaffPermissionsExtended` allows independent branches
+- **Permission checking:**
+  - If patient is in Manila and permission has `branch='Manila'` or `'Both'` → allowed
+  - If patient is in QuezonCity and permission has `branch='QuezonCity'` or `'Both'` → allowed
+  - If permission has `branch='Both'` → allowed for all branches
+
+---
+
+### Example: Revoking Permissions
+
+Revoking works the same in both mutations:
 
 ```graphql
 mutation {
-  setStaffPermissions(
+  setStaffPermissionsStandard(
     userId: "123"
     permissions: [
-      { key: "emr_allow_edit", value: false }  # Revokes EMR edit permission completely
-      { key: "consultation_allow_view", value: true, branch: Manila }  # Grant for Manila only
+      { key: "emr_allow_edit", enabled: false }  # Revokes completely
     ]
-    defaultBranch: Both
+    branch: Both  # Required but ignored for revocations
   ) {
     ok
     message
@@ -471,7 +525,7 @@ mutation {
 }
 ```
 
-**Note:** Revoking (`value: false`) deletes the permission record entirely from `rolesMap`, regardless of branch.
+**Note:** Revoking (`enabled: false`) deletes the permission record entirely from `rolesMap`, regardless of branch.
 
 ---
 
@@ -1138,6 +1192,141 @@ query {
 
 ---
 
+### Query: countActiveRefreshTokens
+
+Count all active refresh tokens across the entire system.
+
+**What it does:**
+
+- Scans all refresh sessions in Redis
+- Filters out expired sessions (`exp < now`)
+- Filters out inactive sessions (`status !== "active"`)
+- Returns total count of active refresh tokens
+
+**Authentication:** Requires Medical identity with `IS_ADMIN` permission
+
+**GraphQL Query:**
+
+```graphql
+query {
+  countActiveRefreshTokens
+}
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "countActiveRefreshTokens": 42
+  }
+}
+```
+
+**Use Cases:**
+
+- Monitor total active sessions in the system
+- Capacity planning and resource monitoring
+- Security audit and anomaly detection
+- Identify sudden spikes in active sessions
+
+---
+
+### Query: listUserSessions
+
+List all sessions across all logged-in users in the system with offset-based pagination.
+
+**What it does:**
+
+- Scans all refresh sessions in Redis
+- Maps each userId to email from the database
+- Returns global list of all active sessions
+- Supports offset-based pagination
+
+**Authentication:** Requires Medical identity with `IS_ADMIN` permission
+
+**GraphQL Query:**
+
+```graphql
+query {
+  listUserSessions(offset: 0, limit: 10) {
+    sessions {
+      userId
+      email
+      role
+      exp
+    }
+    totalCount
+  }
+}
+```
+
+**Parameters:**
+
+| Parameter | Type    | Description                                    |
+| --------- | ------- | ---------------------------------------------- |
+| `offset`  | Int!    | Number of sessions to skip (0-based)           |
+| `limit`   | Int!    | Number of sessions to return (1-100)           |
+
+**Response:**
+
+```json
+{
+  "data": {
+    "listUserSessions": {
+      "sessions": [
+        {
+          "userId": "123",
+          "email": "doctor@example.com",
+          "role": "medical",
+          "exp": 1711793730000
+        },
+        {
+          "userId": "456",
+          "email": "nurse@example.com",
+          "role": "medical",
+          "exp": 1711880130000
+        },
+        {
+          "userId": "789",
+          "email": "admin@example.com",
+          "role": "medical",
+          "exp": 1711966530000
+        }
+      ],
+      "totalCount": 127
+    }
+  }
+}
+```
+
+**Field Descriptions:**
+
+| Field      | Description                                    |
+| ---------- | ---------------------------------------------- |
+| `userId`   | Unique identifier for the user                 |
+| `email`    | User's email address (from database)           |
+| `role`     | Session role (extracted from JWT session data) |
+| `exp`      | Token expiration timestamp in milliseconds     |
+| `totalCount` | Total number of active sessions in system     |
+
+**Pagination Examples:**
+
+- `offset: 0, limit: 10` → sessions 0-9
+- `offset: 10, limit: 10` → sessions 10-19
+- `offset: 20, limit: 10` → sessions 20-29
+
+**Use Cases:**
+
+- View all currently logged-in users system-wide
+- Monitor active sessions across all staff
+- Audit multi-user access patterns
+- Identify users with multiple active sessions
+- Security and compliance monitoring
+- Troubleshoot session-related issues
+
+---
+
 ### Mutation: rotateStaffAnchor
 
 Rotate the staff anchor to instantly logout all devices for a user.
@@ -1254,7 +1443,7 @@ PUT /admin/staff/accounts/123
 // Backend processes:
 // 1. Validates admin perms
 // 2. Gets user's branch from MedicalPersonnel.designation
-// 3. Calls setStaffPermissions() which:
+// 3. Calls setStaffPermissionsExtended() which:
 //    - Inserts rows for is_admin, is_staff, emr_allow_view, emr_allow_edit
 // 4. Updates identity to 'Medical'
 // 5. Returns success
@@ -1274,7 +1463,7 @@ PUT /admin/staff/accounts/123
 
 // Backend processes:
 // 1. Adds is_staff: true automatically
-// 2. Calls setStaffPermissions() which:
+// 2. Calls setStaffPermissionsExtended() which:
 //    - Deletes row for ALLOW_TO_EDIT_EMR
 //    - Ensures IS_STAFF row exists
 // 3. Keeps identity as 'Medical'

@@ -118,42 +118,59 @@ async function clearMedicalPermits(personnelId) {
 }
 
 /**
- * Get all permission keys with true/false based on DB records
+ * Get all permission keys with enabled status and branch information
  * @param {number} personnelId
- * @returns {Promise<Object>} e.g. { is_admin: false, is_staff: true, emr_allow_approval: true, ... }
+ * @returns {Promise<Object>} { permissions: [{ key, label, enabled, branch }], count }
  */
 async function getStaffPermissions(personnelId) {
-  // Get all labels this staff has
+  // Get all labels with their branches for this staff
   const result = await db.query(
-    `SELECT rt.label FROM "rolesMap" rm
-     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+    `SELECT rt.label, rm.branch 
+      FROM "rolesMap" rm
+      JOIN "rolesTable" rt
+      ON rm."rolesId" = rt.id
      WHERE rm."personnelId" = $1;`,
     [personnelId]
   );
-  const activeLabels = new Set(result.rows.map(r => r.label));
 
-  // Build result object with all permission keys
-  const perms = {};
-  for (const [key, label] of Object.entries(permissions)) {
-    perms[key] = activeLabels.has(label);
+  // Create a map of label -> branch for active permissions
+  const activePermissions = new Map();
+  for (const row of result.rows) {
+    activePermissions.set(row.label, row.branch);
   }
-  return perms;
+
+  // Build result array with all permission keys
+  const permsList = [];
+  for (const [key, label] of Object.entries(permissions)) {
+    const enabled = activePermissions.has(label);
+    permsList.push({
+      key,
+      label,
+      enabled,
+      branch: enabled ? activePermissions.get(label) : null
+    });
+  }
+
+  return {
+    permissions: permsList,
+    count: permsList.length
+  };
 }
 
 /**
- * Set permissions for staff - each permission can have its own branch
+ * Set permissions for staff with independent branch per permission
  * @param {Object} params
  * @param {number} params.personnelId
- * @param {Array} params.permissionsList - Array of { key, value, branch? }
+ * @param {Array} params.permissionsList - Array of { key, enabled, branch? }
  * @param {number} params.assignedBy
  * @param {string} params.defaultBranch - Default branch if not specified per permission
  */
-async function setStaffPermissions({ personnelId, permissionsList, assignedBy, defaultBranch = 'Both' }) {
+async function setStaffPermissionsExtended({ personnelId, permissionsList, assignedBy, defaultBranch = 'Both' }) {
   const toInsert = [];  // Array of { label, branch }
   const toDelete = [];  // Array of labels
 
   for (const perm of permissionsList) {
-    const { key, value, branch } = perm;
+    const { key, enabled, branch } = perm;
     const label = permissions[key];
 
     if (!label) {
@@ -163,14 +180,14 @@ async function setStaffPermissions({ personnelId, permissionsList, assignedBy, d
 
     const effectiveBranch = branch || defaultBranch;
 
-    if (value === true) {
+    if (enabled === true) {
       toInsert.push({ label, branch: effectiveBranch });
-    } else if (value === false) {
+    } else if (enabled === false) {
       toDelete.push(label);
     }
   }
 
-  // Delete permissions set to false
+  // Delete permissions set to false (removes records entirely)
   if (toDelete.length > 0) {
     await db.query(
       `DELETE FROM "rolesMap" rm
@@ -210,6 +227,31 @@ async function setStaffPermissions({ personnelId, permissionsList, assignedBy, d
     inserted: toInsert.map(p => ({ label: p.label, branch: p.branch })),
     deleted: toDelete
   };
+}
+
+/**
+ * Wrapper: Set permissions for staff using umbrella branch
+ * Internally calls setStaffPermissionsExtended with all permissions using same branch
+ * @param {Object} params
+ * @param {number} params.personnelId
+ * @param {Array} params.permissionsList - Array of { key, enabled }
+ * @param {number} params.assignedBy
+ * @param {string} params.branch - Applied to ALL permissions
+ */
+async function setStaffPermissionsStandard({ personnelId, permissionsList, assignedBy, branch = 'Both' }) {
+  // Convert standard format to extended format by adding branch to each permission
+  const extendedPermissionsList = permissionsList.map(perm => ({
+    ...perm,
+    branch: branch  // Apply umbrella branch to all
+  }));
+
+  // Call the main function with all permissions having same branch
+  return await setStaffPermissionsExtended({
+    personnelId,
+    permissionsList: extendedPermissionsList,
+    assignedBy,
+    defaultBranch: branch  // Not used since all have explicit branch, but for safety
+  });
 }
 
 async function isMedicalPermitted(userId, label, patientId) {
@@ -286,5 +328,6 @@ module.exports = {
   getMedicalpermits,
   permissions,
   getStaffPermissions,
-  setStaffPermissions,
+  setStaffPermissionsExtended,
+  setStaffPermissionsStandard,
 };

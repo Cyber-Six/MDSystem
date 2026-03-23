@@ -583,6 +583,62 @@ async function deleteStaffAnchor(userId) {
   await client.del(key);
 }
 
+/**
+ * Scan ALL refresh sessions across all users (for system-wide queries)
+ * @returns {Promise<Array>} Array of session objects with userId and deviceId
+ */
+async function scanAllRefreshSessions() {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const pattern = `rt:*`;
+  const sessions = [];
+  const batchSize = 100; // how many keys to fetch per MGET
+
+  let batch = [];
+
+  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: batchSize })) {
+    // Skip non-session keys (e.g., rt:fail:*, rt:lock:*)
+    const parts = key.split(':');
+    if (parts.length !== 3) continue;
+
+    batch.push(key);
+
+    // When batch is full, fetch them all at once
+    if (batch.length >= batchSize) {
+      const rawValues = await client.mGet(batch);
+      rawValues.forEach(raw => {
+        if (raw) {
+          try {
+            const session = JSON.parse(raw);
+            sessions.push(session);
+          } catch {
+            // Skip invalid JSON
+          }
+        }
+      });
+      batch = [];
+    }
+  }
+
+  // Handle leftover keys in the last batch
+  if (batch.length > 0) {
+    const rawValues = await client.mGet(batch);
+    rawValues.forEach(raw => {
+      if (raw) {
+        try {
+          const session = JSON.parse(raw);
+          sessions.push(session);
+        } catch {
+          // Skip invalid JSON
+        }
+      }
+    });
+  }
+
+  return sessions;
+}
+
+
 // New: load refresh session
 async function getRefreshSession(userId, deviceId) {
   if (!userId || !deviceId) {
@@ -834,6 +890,7 @@ module.exports = {
   saveStaffAnchor,
   getStaffAnchor,
   listUserSessions,
+  scanAllRefreshSessions,
   deleteAllUserSessions,
   deleteStaffAnchor,
 

@@ -47,6 +47,16 @@ const Query = {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listStaffSessions(_, args, context);
   },
+
+  countActiveRefreshTokens: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._countActiveRefreshTokens(_, args, context);
+  },
+
+  listUserSessions: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._listUserSessions(_, args, context);
+  },
 };
 
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
@@ -67,9 +77,14 @@ const Mutation = {
     return await Wrapper.Mutation._deleteMedicalPersonnel(_, args, context);
   },
 
-  setStaffPermissions: async (_, args, context) => {
+  setStaffPermissionsStandard: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
-    return await Wrapper.Mutation._setStaffPermissions(_, args, context);
+    return await Wrapper.Mutation._setStaffPermissionsStandard(_, args, context);
+  },
+
+  setStaffPermissionsExtended: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._setStaffPermissionsExtended(_, args, context);
   },
 
   rotateStaffAnchor: async (_, args, context) => {

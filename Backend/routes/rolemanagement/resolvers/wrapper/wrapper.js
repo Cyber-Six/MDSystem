@@ -1,11 +1,13 @@
 const db = require('../../../../config/query.js');
 const {
   permissions,
-  setStaffPermissions,
-  getStaffPermissions
+  getStaffPermissions,
+  setStaffPermissionsExtended,
+  setStaffPermissionsStandard
 } = require('../../../../services/permit.js');
 const {
   listUserSessions,
+  scanAllRefreshSessions,
   deleteAllUserSessions,
   getStaffAnchor,
   saveStaffAnchor
@@ -281,6 +283,89 @@ const Query = {
       currentAnchor: currentAnchor || null
     };
   },
+
+  /**
+   * Count all active refresh tokens across all users
+   * Filters out expired sessions (exp < now) or those with status !== "active"
+   */
+  _countActiveRefreshTokens: async (_, __, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    const now = Date.now();
+    const allSessions = await scanAllRefreshSessions();
+
+    // Filter active, non-expired sessions
+    const activeCount = allSessions.filter(session => {
+      // Handle missing or malformed session data gracefully
+      if (!session) return false;
+
+      // Check status is "active"
+      if (session.status !== 'active') return false;
+
+      // Check not expired (exp is in milliseconds)
+      if (session.exp && session.exp < now) return false;
+
+      return true;
+    }).length;
+
+    return activeCount;
+  },
+
+  /**
+   * List all sessions across all logged-in users with offset-based pagination (global query)
+   * Scans all refresh sessions, maps userId to email, and paginates
+   * Returns userId, email, role, exp for each session
+   */
+  _listUserSessions: async (_, { offset = 0, limit }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    // Validate pagination parameters
+    if (offset < 0) {
+      throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
+    }
+    if (limit < 1 || limit > 100) {
+      throwGraphQLError(res).message('limit must be between 1 and 100').status(400).throw();
+    }
+
+    // Scan all refresh sessions across all users in the system
+    const allSessions = await scanAllRefreshSessions();
+    const totalCount = allSessions.length;
+
+    // Apply offset-based pagination
+    const paginatedSessions = allSessions.slice(offset, offset + limit);
+
+    // Map userId to email and extract userId, email, role, exp
+    const sessions = await Promise.all(paginatedSessions.map(async (session) => {
+      // Handle missing or malformed session data gracefully
+      if (!session) {
+        return {
+          userId: 'unknown',
+          email: 'unknown',
+          role: 'unknown',
+          exp: 0
+        };
+      }
+
+      // Look up email for this session's userId
+      const email = await db.findEmailByUserId(session.userId);
+
+      return {
+        userId: String(session.userId) || 'unknown',
+        email: email || 'unknown',
+        role: session.role || 'unknown',
+        exp: session.exp ? Number(session.exp) : 0
+      };
+    }));
+
+    return {
+      sessions,
+      totalCount
+    };
+  },
 };
 
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
@@ -486,14 +571,40 @@ const Mutation = {
     };
   },
 
-  _setStaffPermissions: async (_, { userId, permissions: permissionsList, defaultBranch = 'Both' }, { user, res }) => {
+  _setStaffPermissionsStandard: async (_, { userId, permissions: permissionsList, branch }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    // Validate branch (required for standard)
+    const validBranches = ['Manila', 'QuezonCity', 'Both'];
+    if (!validBranches.includes(branch)) {
+      throwGraphQLError(res).message('branch must be Manila, QuezonCity, or Both.').status(400).throw();
+    }
+
+    await setStaffPermissionsStandard({
+      personnelId: String(userId),
+      permissionsList,
+      assignedBy: String(user.id),
+      branch,
+    });
+
+    logger.info(`Staff permissions set (standard): userId=${userId}, branch=${branch}, by adminId=${user.id}`);
+
+    return {
+      ok: true,
+      message: 'Staff permissions updated successfully.',
+    };
+  },
+
+  _setStaffPermissionsExtended: async (_, { userId, permissions: permissionsList, defaultBranch = 'Both' }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message('Unauthorized').status(401).throw();
     }
 
     // Validate defaultBranch
     const validBranches = ['Manila', 'QuezonCity', 'Both'];
-    if (!validBranches.includes(defaultBranch)) {
+    if (defaultBranch && !validBranches.includes(defaultBranch)) {
       throwGraphQLError(res).message('defaultBranch must be Manila, QuezonCity, or Both.').status(400).throw();
     }
 
@@ -507,14 +618,14 @@ const Mutation = {
       }
     }
 
-    await setStaffPermissions({
+    await setStaffPermissionsExtended({
       personnelId: String(userId),
       permissionsList,
       assignedBy: String(user.id),
       defaultBranch,
     });
 
-    logger.info(`Staff permissions set: userId=${userId}, by adminId=${user.id}`);
+    logger.info(`Staff permissions set (extended): userId=${userId}, by adminId=${user.id}`);
 
     return {
       ok: true,
