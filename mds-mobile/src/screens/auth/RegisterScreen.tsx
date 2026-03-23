@@ -3,7 +3,7 @@
  * Multi-step registration flow matching the frontend
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -16,6 +16,7 @@ import {
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Input, Button, Alert, LinkButton, Checkbox } from '../../components/ui/FormComponents';
+import { DataConsent } from '../../components/auth/DataConsent';
 import { axiosRequest, TokenStorage } from '../../core';
 
 // Import validation functions - inline for now to avoid module resolution issues
@@ -32,7 +33,7 @@ const isValidTipEmail = (email: string): boolean => {
   return tipDomains.some(domain => email.toLowerCase().endsWith(domain));
 };
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 
 interface RegisterScreenProps {
   onNavigateToLogin: () => void;
@@ -59,8 +60,6 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
   // Step-specific state
   const [otp, setOtp] = useState('');
   const [verificationKey, setVerificationKey] = useState('');
-  const [consentAccepted, setConsentAccepted] = useState(false);
-  const [consentData, setConsentData] = useState<string | null>(null);
 
   // UI state
   const [error, setError] = useState('');
@@ -81,23 +80,6 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     setSuccessMessage('');
     setCurrentStep(prev => prev + 1);
   };
-
-  // Fetch consent data when reaching consent step
-  useEffect(() => {
-    const fetchConsentData = async () => {
-      if (currentStep === 4 && !consentData && verificationKey) {
-        try {
-          const response = await axiosRequest.get(`/info/consent/register?verificationKey=${verificationKey}`);
-          if (response.data.ok) {
-            setConsentData(response.data.consent_text);
-          }
-        } catch (err) {
-          console.error('Failed to fetch consent data:', err);
-        }
-      }
-    };
-    fetchConsentData();
-  }, [currentStep, consentData, verificationKey]);
 
   // Step 1: Initial Registration
   const handleInitialRegistration = async () => {
@@ -133,7 +115,18 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
       });
 
       if (response.data.ok) {
-        goToNextStep();
+        // Auto-send OTP immediately after successful registration
+        try {
+          const recaptchaToken = 'MOBILE_APP_TOKEN';
+          await axiosRequest.post('/auth/email/verification', {
+            email: formData.email,
+            recaptchaToken
+          });
+          setSuccessMessage('Verification code sent to your email!');
+        } catch (otpErr: any) {
+          setError(otpErr.response?.data?.message || 'Account created but failed to send verification code. Use resend below.');
+        }
+        setCurrentStep(2);
       }
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
@@ -153,32 +146,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     }
   };
 
-  // Step 2: Send Email Verification OTP
-  const handleSendOTP = async () => {
-    setError('');
-    setLoading(true);
-
-    try {
-      const recaptchaToken = 'MOBILE_APP_TOKEN';
-
-      const response = await axiosRequest.post('/auth/email/verification', {
-        email: formData.email,
-        recaptchaToken
-      });
-
-      if (response.data.ok) {
-        setSuccessMessage('Verification code sent to your email!');
-        goToNextStep();
-      }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message;
-      setError(errorMessage || 'Failed to send verification code. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Step 3: Verify OTP
+  // Step 2: Verify OTP
   const handleVerifyOTP = async () => {
     setError('');
 
@@ -250,47 +218,35 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     }
   };
 
-  // Step 4: Submit Consent and Complete Registration
-  const handleConsentSubmit = async () => {
+  // Step 3: Handle consent acceptance from DataConsent modal
+  const handleConsentAccept = async () => {
     setError('');
-
-    if (!consentAccepted) {
-      setError('You must accept the data consent agreement to continue.');
-      return;
-    }
-
     setLoading(true);
 
     try {
-      // Record consent
-      const consentResponse = await axiosRequest.post('/info/consent/register', {
-        verificationKey
+      // Complete registration after consent has been recorded by DataConsent
+      const response = await axiosRequest.post('/auth/register/complete', {
+        verificationKey,
+        email: formData.email,
+        password: formData.password
       });
 
-      if (consentResponse.data.ok) {
-        // Complete registration
-        const response = await axiosRequest.post('/auth/register/complete', {
-          verificationKey,
-          email: formData.email,
-          password: formData.password
-        });
+      if (response.data.ok) {
+        if (response.data.accessToken && response.data.refreshToken) {
+          await TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+          setAuthenticated(true);
+          goToNextStep();
 
-        if (response.data.ok) {
-          if (response.data.accessToken && response.data.refreshToken) {
-            await TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
-            setAuthenticated(true);
-            goToNextStep();
-            
-            // Redirect after showing success
-            setTimeout(() => {
-              onRegisterSuccess();
-            }, 2000);
-          } else {
-            setError('Account already exists. Redirecting to login...');
-            setTimeout(() => {
-              onNavigateToLogin();
-            }, 2000);
-          }
+          // Redirect after showing success
+          setTimeout(() => {
+            onRegisterSuccess();
+          }, 2000);
+        } else {
+          // Account already exists
+          setError('Account already exists. Redirecting to login...');
+          setTimeout(() => {
+            onNavigateToLogin();
+          }, 2000);
         }
       }
     } catch (err: any) {
@@ -309,6 +265,16 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle consent cancellation
+  const handleConsentCancel = () => {
+    setCurrentStep(1);
+    setVerificationKey('');
+    setFormData({ email: '', password: '', confirmPassword: '' });
+    setOtp('');
+    setError('');
+    setSuccessMessage('');
   };
 
   // Progress Bar
@@ -401,48 +367,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     </View>
   );
 
-  // Step 2: Send OTP
-  const renderSendOtpStep = () => (
-    <View style={styles.centeredStep}>
-      <View style={[
-        styles.iconCircle,
-        { backgroundColor: isDark ? 'rgba(241, 197, 38, 0.2)' : colors.primary[100] }
-      ]}>
-        <Text style={styles.iconEmoji}>📧</Text>
-      </View>
-
-      <Text style={[
-        styles.stepTitle,
-        { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-      ]}>
-        Verify Your Email
-      </Text>
-      
-      <Text style={[
-        styles.stepSubtitle,
-        { color: isDark ? colors.neutral[400] : colors.neutral[600] }
-      ]}>
-        We'll send a verification code to
-      </Text>
-      <Text style={[
-        styles.emailText,
-        { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-      ]}>
-        {formData.email}
-      </Text>
-
-      <Alert message={error} type="error" />
-      {successMessage && <Alert message={successMessage} type="success" />}
-
-      <Button
-        title={loading ? 'Sending...' : 'Send Verification Code'}
-        onPress={handleSendOTP}
-        loading={loading}
-      />
-    </View>
-  );
-
-  // Step 3: Verify OTP
+  // Step 2: Verify OTP
   const renderVerifyOtpStep = () => (
     <View style={styles.stepContainer}>
       <View style={styles.centeredHeader}>
@@ -503,112 +428,42 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     </View>
   );
 
-  // Step 4: Consent
+  // Step 3: Consent (UI placeholder — DataConsent modal handles rendering)
   const renderConsentStep = () => (
-    <View style={styles.stepContainer}>
-      <View style={styles.centeredHeader}>
-        <View style={[
-          styles.iconCircle,
-          { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.2)' : colors.accent[100] }
-        ]}>
-          <Text style={styles.iconEmoji}>🛡️</Text>
-        </View>
-
-        <Text style={[
-          styles.stepTitle,
-          { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-        ]}>
-          Data Consent Policy
-        </Text>
-        
-        <Text style={[
-          styles.stepSubtitle,
-          { color: isDark ? colors.neutral[400] : colors.neutral[600] }
-        ]}>
-          Please review and agree to continue
-        </Text>
+    <View style={styles.centeredStep}>
+      <View style={[
+        styles.iconCircle,
+        { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.2)' : colors.accent[100] }
+      ]}>
+        <Text style={styles.iconEmoji}>🛡️</Text>
       </View>
+
+      <Text style={[
+        styles.stepTitle,
+        { color: isDark ? colors.neutral[100] : colors.secondary[900] }
+      ]}>
+        Data Consent Required
+      </Text>
+      
+      <Text style={[
+        styles.stepSubtitle,
+        { color: isDark ? colors.neutral[400] : colors.neutral[600] }
+      ]}>
+        Please review and accept the data consent policy to complete your registration
+      </Text>
 
       <Alert message={error} type="error" />
 
-      {/* Consent Content */}
-      <View style={[
-        styles.consentBox,
-        { 
-          backgroundColor: isDark ? colors.neutral[800] : colors.neutral[50],
-          borderColor: isDark ? colors.neutral[700] : colors.neutral[300]
-        }
+      <Text style={[
+        styles.stepSubtitle,
+        { color: isDark ? colors.neutral[400] : colors.neutral[500] }
       ]}>
-        <ScrollView nestedScrollEnabled style={{ maxHeight: 180 }}>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            By using the TIP Medical System, you agree to the collection and processing of your personal and medical data in accordance with our privacy policy and the Data Privacy Act of 2012.
-          </Text>
-          
-          <Text style={[
-            styles.consentHeading,
-            { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-          ]}>Data Collection</Text>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            We collect personal information including your name, email, contact details, medical history, and health records.
-          </Text>
-
-          <Text style={[
-            styles.consentHeading,
-            { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-          ]}>Data Usage</Text>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            Your data will be used solely for medical purposes including diagnosis, treatment, and health monitoring.
-          </Text>
-
-          <Text style={[
-            styles.consentHeading,
-            { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-          ]}>Data Protection</Text>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            All data is encrypted and access is restricted to authorized medical personnel only.
-          </Text>
-
-          <Text style={[
-            styles.consentHeading,
-            { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-          ]}>Your Rights</Text>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            You have the right to access, rectify, and request deletion of your personal data.
-          </Text>
-        </ScrollView>
-      </View>
-
-      <Checkbox
-        checked={consentAccepted}
-        onPress={() => setConsentAccepted(!consentAccepted)}
-        label="I agree to the data consent policy and terms of service"
-      />
-
-      <Button
-        title={loading ? 'Completing Registration...' : 'Accept & Complete Registration'}
-        onPress={handleConsentSubmit}
-        loading={loading}
-        disabled={!consentAccepted}
-      />
+        Opening consent agreement...
+      </Text>
     </View>
   );
 
-  // Step 5: Success
+  // Step 4: Success
   const renderSuccessStep = () => (
     <View style={styles.centeredStep}>
       <View style={[
@@ -643,12 +498,10 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
       case 1:
         return renderAccountStep();
       case 2:
-        return renderSendOtpStep();
-      case 3:
         return renderVerifyOtpStep();
-      case 4:
+      case 3:
         return renderConsentStep();
-      case 5:
+      case 4:
         return renderSuccessStep();
       default:
         return null;
@@ -656,6 +509,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
   };
 
   return (
+    <>
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.flex1}
@@ -698,6 +552,16 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+
+    {/* Data Consent Modal - Rendered when on consent step */}
+    <DataConsent
+      isOpen={currentStep === 3}
+      verificationKey={verificationKey}
+      purpose="register"
+      onAccept={handleConsentAccept}
+      onCancel={handleConsentCancel}
+    />
+    </>
   );
 };
 
@@ -815,21 +679,6 @@ const styles = StyleSheet.create({
   },
   marginBottom: {
     marginBottom: 12,
-  },
-  consentBox: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-  },
-  consentHeading: {
-    fontWeight: '600',
-    marginBottom: 4,
-    marginTop: 12,
-  },
-  consentText: {
-    fontSize: 14,
-    lineHeight: 20,
   },
   successCircle: {
     width: 96,

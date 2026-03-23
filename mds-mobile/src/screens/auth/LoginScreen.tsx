@@ -3,7 +3,7 @@
  * Matches the frontend login flow with dark mode support
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -16,6 +16,7 @@ import {
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Input, Button, Alert, LinkButton, Checkbox } from '../../components/ui/FormComponents';
+import { DataConsent } from '../../components/auth/DataConsent';
 import { axiosRequest, TokenStorage } from '../../core';
 
 // Import validation functions from core package
@@ -28,7 +29,7 @@ const isValidTipEmail = (email: string): boolean => {
   return tipDomains.some(domain => email.toLowerCase().endsWith(domain));
 };
 
-type LoginStep = 'credentials' | '2fa' | 'consent';
+type LoginStep = 'credentials' | '2fa';
 
 interface LoginScreenProps {
   onNavigateToRegister: () => void;
@@ -46,33 +47,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
-  const [consentAgreed, setConsentAgreed] = useState(false);
   
   // Flow state
   const [currentStep, setCurrentStep] = useState<LoginStep>('credentials');
   const [verificationKey, setVerificationKey] = useState('');
-  const [consentData, setConsentData] = useState<string | null>(null);
+  const [showConsent, setShowConsent] = useState(false);
   
   // UI state
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  // Fetch consent data when consent view loads
-  useEffect(() => {
-    const fetchConsentData = async () => {
-      if (currentStep === 'consent' && !consentData && verificationKey) {
-        try {
-          const response = await axiosRequest.get(`/info/consent/login?verificationKey=${verificationKey}`);
-          if (response.data.ok) {
-            setConsentData(response.data.consent_text);
-          }
-        } catch (err) {
-          console.error('Failed to fetch consent data:', err);
-        }
-      }
-    };
-    fetchConsentData();
-  }, [currentStep, consentData, verificationKey]);
 
   // Send 2FA code
   const handleSend2FA = async () => {
@@ -120,7 +103,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           await handleSend2FA();
           setCurrentStep('2fa');
         } else {
-          setCurrentStep('consent');
+          setShowConsent(true);
         }
       }
     } catch (err: any) {
@@ -162,11 +145,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     try {
       const response = await axiosRequest.post('/auth/email/2fa/verify', { 
         email,
-        otp: twoFactorCode 
+        otp: twoFactorCode,
+        verificationKey
       });
       
       if (response.data.ok) {
-        setCurrentStep('consent');
+        const newKey = response.data.verificationKey;
+        setVerificationKey(newKey);
+        setShowConsent(true);
       }
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
@@ -219,29 +205,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   };
 
-  // Complete login with consent
-  const handleCompleteLogin = async () => {
-    if (!consentAgreed) {
-      setError('You must agree to the data consent policy to continue.');
-      return;
-    }
-
+  // Complete login after consent is accepted (DataConsent handles POST consent)
+  const completeLoginWithKey = async (key: string) => {
     setError('');
     setIsLoading(true);
 
     try {
-      // Record consent
-      const consentResponse = await axiosRequest.post('/info/consent/login', {
-        verificationKey
-      });
-
-      if (!consentResponse.data.ok) {
-        throw new Error('Failed to record consent');
-      }
-
-      // Complete login
       const response = await axiosRequest.post('/auth/login/complete', { 
-        LoginKey: verificationKey 
+        LoginKey: key 
       });
       
       if (response.data.ok) {
@@ -267,20 +238,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         case 'DATA_CONSENT_REQUIRED':
           setError('You must agree to the data consent policy to login.');
           break;
+        case 'OUTDATED_CONSENT':
+          setError('You must agree to the latest data consent policy.');
+          break;
         default:
           setError(errorMsg);
       }
     } finally {
       setIsLoading(false);
+      setShowConsent(false);
     }
+  };
+
+  // Called when user accepts consent in the DataConsent modal
+  const handleConsentAccept = () => completeLoginWithKey(verificationKey);
+
+  // Called when user cancels consent in the DataConsent modal
+  const handleConsentCancel = () => {
+    setShowConsent(false);
+    setVerificationKey('');
+    setError('');
   };
 
   const resetForm = () => {
     setCurrentStep('credentials');
     setVerificationKey('');
     setTwoFactorCode('');
-    setConsentAgreed(false);
-    setConsentData(null);
+    setShowConsent(false);
   };
 
   // Credentials step
@@ -412,137 +396,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     </View>
   );
 
-  // Consent step
-  const renderConsentStep = () => (
-    <View style={styles.stepContainer}>
-      {/* Icon */}
-      <View style={[
-        styles.iconCircle,
-        { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.2)' : colors.accent[100] }
-      ]}>
-        <Text style={styles.iconEmoji}>🛡️</Text>
-      </View>
-
-      <Text style={[
-        styles.stepTitle,
-        { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-      ]}>
-        Data Consent Policy
-      </Text>
-      
-      <Text style={[
-        styles.stepSubtitle,
-        { color: isDark ? colors.neutral[400] : colors.neutral[600] }
-      ]}>
-        Please review and agree to continue
-      </Text>
-
-      <Alert message={error} type="error" />
-
-      {/* Consent Content */}
-      <View style={[
-        styles.consentBox,
-        {
-          backgroundColor: isDark ? colors.neutral[800] : colors.neutral[50],
-          borderColor: isDark ? colors.neutral[700] : colors.neutral[300],
-        }
-      ]}>
-        <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }}>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            By using the TIP Medical System, you agree to the collection and processing of your personal and medical data in accordance with our privacy policy and the Data Privacy Act of 2012.
-          </Text>
-          
-          <Text style={[
-            styles.consentHeading,
-            { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-          ]}>Data Collection</Text>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            We collect personal information including your name, email, contact details, medical history, and health records.
-          </Text>
-
-          <Text style={[
-            styles.consentHeading,
-            { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-          ]}>Data Usage</Text>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            Your data will be used solely for medical purposes including diagnosis, treatment, and health monitoring.
-          </Text>
-
-          <Text style={[
-            styles.consentHeading,
-            { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-          ]}>Data Protection</Text>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            All data is encrypted and access is restricted to authorized medical personnel only.
-          </Text>
-
-          <Text style={[
-            styles.consentHeading,
-            { color: isDark ? colors.neutral[100] : colors.secondary[900] }
-          ]}>Your Rights</Text>
-          <Text style={[
-            styles.consentText,
-            { color: isDark ? colors.neutral[300] : colors.neutral[700] }
-          ]}>
-            You have the right to access, rectify, and request deletion of your personal data.
-          </Text>
-        </ScrollView>
-      </View>
-
-      <Checkbox
-        checked={consentAgreed}
-        onPress={() => setConsentAgreed(!consentAgreed)}
-        label="I agree to the data consent policy and terms of service"
-      />
-
-      <View style={styles.buttonRow}>
-        <View style={styles.flexOne}>
-          <Button
-            title={isLoading ? 'Processing...' : 'Accept & Continue'}
-            onPress={handleCompleteLogin}
-            loading={isLoading}
-            disabled={!consentAgreed}
-          />
-        </View>
-        <View style={styles.buttonSpacer} />
-        <View style={styles.flexOne}>
-          <Button
-            title="Cancel"
-            onPress={resetForm}
-            variant="outline"
-            disabled={isLoading}
-          />
-        </View>
-      </View>
-    </View>
-  );
-
   const renderStep = () => {
     switch (currentStep) {
       case 'credentials':
         return renderCredentialsStep();
       case '2fa':
         return renderTwoFactorStep();
-      case 'consent':
-        return renderConsentStep();
       default:
         return null;
     }
   };
 
   return (
+    <>
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.flex1}
@@ -581,6 +447,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+
+    {/* Data Consent Modal */}
+    <DataConsent
+      isOpen={showConsent}
+      verificationKey={verificationKey}
+      purpose="login"
+      onAccept={handleConsentAccept}
+      onCancel={handleConsentCancel}
+    />
+    </>
   );
 };
 
@@ -678,21 +554,6 @@ const styles = StyleSheet.create({
   },
   buttonSpacer: {
     width: 12,
-  },
-  consentBox: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-  },
-  consentHeading: {
-    fontWeight: '600',
-    marginBottom: 4,
-    marginTop: 12,
-  },
-  consentText: {
-    fontSize: 14,
-    lineHeight: 20,
   },
 });
 

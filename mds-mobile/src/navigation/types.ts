@@ -11,7 +11,7 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Home: undefined;
   Appointments: undefined;
-  Consultation: undefined;
+  HealthChat: undefined;
   Medicine: undefined;
   More: undefined;
 };

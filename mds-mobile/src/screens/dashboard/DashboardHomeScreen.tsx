@@ -212,10 +212,10 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               onPress={() => navigation.navigate('Appointments')}
             />
             <QuickActionButton
-              icon="🤖"
-              label="AI Consultation"
+              icon="💬"
+              label="Health Chat"
               color={colors.primary[500]}
-              onPress={() => navigation.navigate('Consultation')}
+              onPress={() => navigation.navigate('HealthChat')}
             />
             <QuickActionButton
               icon="💊"
