@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Info, File, Image, Film } from 'lucide-react';
+import { Info, File, Image, Film, Loader2 } from 'lucide-react';
 import { getFileUrl } from '../health-chat-service';
+import { useAuthFile } from '../hooks/use-auth-file';
 import MediaLightbox from '../../../components/modals/MediaLightbox';
 
 /**
@@ -128,25 +129,15 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
 const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInGroup, isLastInGroup }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const fileUrl = getFileUrl(message.filename);
-  const ext = message.filename?.split('.').pop()?.toLowerCase() || '';
-  const isImage = ['jpg', 'jpeg', 'png'].includes(ext);
-  const isPdf   = ext === 'pdf';
-  const isVideo = ['mp4', 'mov'].includes(ext);
-
-  const getContentType = () => {
-    if (isImage) {
-      const typeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
-      return typeMap[ext] || 'image/jpeg';
-    }
-    if (isPdf) return 'application/pdf';
-    if (isVideo) {
-      const typeMap = { mp4: 'video/mp4', mov: 'video/quicktime' };
-      return typeMap[ext] || 'video/mp4';
-    }
-    return 'application/octet-stream';
-  };
+  const { blobUrl, loading: fileLoading, error: fileError, contentType } = useAuthFile(fileUrl);
+  // Use the server-supplied Content-Type for reliable type detection.
+  // message.filename is stored as a UUID without extension, so extension sniffing fails.
+  const isImage = contentType.startsWith('image/');
+  const isPdf   = contentType === 'application/pdf';
+  const isVideo = contentType.startsWith('video/');
 
   const Icon = isImage ? Image : isVideo ? Film : File;
+  const displayUrl = blobUrl || fileUrl;
 
   return (
     <>
@@ -173,15 +164,27 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
             </span>
           )}
 
-          {isPatient ? (
-            // Patient file container - needs dark mode
+          {fileLoading ? (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
+              <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
+              <span className="text-xs text-neutral-400">Loading file…</span>
+            </div>
+          ) : fileError ? (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
+              <Icon className="w-4 h-4 text-neutral-400" />
+              <a href={fileUrl} download={message.filename} className="text-xs text-primary-500 hover:underline">
+                Download file
+              </a>
+            </div>
+          ) : isPatient ? (
+            // Patient file container
             <div className="overflow-hidden rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-sm">
               {isImage && (
                 <button
                   onClick={() => setLightboxOpen(true)}
                   className="cursor-zoom-in block"
                 >
-                  <img src={fileUrl} alt="Attachment" className="max-w-full max-h-52 object-contain block" loading="lazy" />
+                  <img src={displayUrl} alt="Attachment" className="max-w-full max-h-52 object-contain block" loading="lazy" />
                 </button>
               )}
               {isPdf && (
@@ -193,7 +196,7 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
                   View PDF Document
                 </button>
               )}
-              {isVideo && <video src={fileUrl} controls className="max-w-full max-h-52 block" preload="metadata" />}
+              {isVideo && <video src={displayUrl} controls className="max-w-full max-h-52 block" preload="metadata" />}
               {!isImage && !isPdf && !isVideo && (
                 <button
                   onClick={() => setLightboxOpen(true)}
@@ -205,14 +208,14 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
               )}
             </div>
           ) : (
-            // Staff file container - dark background
+            // Staff file container
             <div className="overflow-hidden rounded-xl bg-neutral-800 dark:bg-neutral-900 shadow-sm">
               {isImage && (
                 <button
                   onClick={() => setLightboxOpen(true)}
                   className="cursor-zoom-in block"
                 >
-                  <img src={fileUrl} alt="Attachment" className="max-w-full max-h-52 object-contain block" loading="lazy" />
+                  <img src={displayUrl} alt="Attachment" className="max-w-full max-h-52 object-contain block" loading="lazy" />
                 </button>
               )}
               {isPdf && (
@@ -224,7 +227,7 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
                   View PDF Document
                 </button>
               )}
-              {isVideo && <video src={fileUrl} controls className="max-w-full max-h-52 block" preload="metadata" />}
+              {isVideo && <video src={displayUrl} controls className="max-w-full max-h-52 block" preload="metadata" />}
               {!isImage && !isPdf && !isVideo && (
                 <button
                   onClick={() => setLightboxOpen(true)}
@@ -249,11 +252,11 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
       </div>
 
       {/* Media Lightbox */}
-      {lightboxOpen && (
+      {lightboxOpen && blobUrl && (
         <MediaLightbox
-          url={fileUrl}
+          url={blobUrl}
           filename={message.filename}
-          contentType={getContentType()}
+          contentType={contentType}
           onClose={() => setLightboxOpen(false)}
         />
       )}

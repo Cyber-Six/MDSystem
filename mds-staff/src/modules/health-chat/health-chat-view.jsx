@@ -8,7 +8,7 @@ import ChatPanel from './components/chat-panel';
 import { SidebarContext } from '../../components/layout/StaffLayout';
 
 const HealthChatContent = () => {
-  const { isConnected } = useHealthChatSocket();
+  const { isConnected, emitTyping } = useHealthChatSocket();
   const { socketError, selectedChatId, selectedTicket, refreshMessages } = useHealthChat();
 
   const connStatus = socketError
@@ -108,7 +108,7 @@ const HealthChatContent = () => {
 
         {/* Right panel */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <ChatPanel />
+          <ChatPanel emitTyping={emitTyping} />
         </div>
 
       </div>

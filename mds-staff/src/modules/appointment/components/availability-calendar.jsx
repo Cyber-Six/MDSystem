@@ -191,7 +191,8 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     if (!editPopup || !onEditSessionLimit) return;
     setSaving(true);
     try {
-      await onEditSessionLimit(editPopup.dateStr, editPopup.session, editValue);
+      const val = editValue === '' || editValue == null ? 0 : Number(editValue);
+      await onEditSessionLimit(editPopup.dateStr, editPopup.session, val);
       setEditPopup(null);
     } catch (err) {
       console.error('Failed to save session limit:', err);
@@ -201,7 +202,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
   };
 
   return (
-    <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+    <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700">
       {/* Month navigation */}
       <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
         <button
@@ -248,19 +249,17 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
 
           const status = getDayStatus(cell.dateStr);
           const isSelected = cell.dateStr === selectedDate;
-          const isClickable = status !== 'closed' && status !== 'none';
+          const isAvailable = status !== 'closed' && status !== 'none';
           const slotInfo = bookedSlots[cell.dateStr];
 
           return (
             <div
               key={cell.dateStr}
-              onClick={() => isClickable && onSelectDate(cell.dateStr)}
+              onClick={() => onSelectDate(cell.dateStr, isAvailable)}
               className={`p-1 sm:p-1.5 min-h-[56px] sm:min-h-[72px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative ${
                 isSelected
                   ? 'ring-2 ring-primary-500 ring-inset bg-primary-50 dark:bg-primary-900/20'
-                  : isClickable
-                    ? statusColors[status]
-                    : statusColors[status]
+                  : statusColors[status]
               }`}
             >
               {/* Date number - bigger */}
@@ -347,12 +346,17 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
             </p>
             <div className="flex items-center gap-2">
               <input
-                type="number"
-                min="0"
-                max="200"
+                type="text"
+                inputMode="numeric"
                 value={editValue}
-                onChange={(e) => setEditValue(parseInt(e.target.value) || 0)}
-                className="flex-1 px-2 py-1.5 text-sm font-medium text-center border border-neutral-200 dark:border-neutral-600 rounded-md bg-neutral-50 dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') { setEditValue(''); return; }
+                  const num = parseInt(val, 10);
+                  if (!isNaN(num) && num >= 0) setEditValue(num);
+                }}
+                onBlur={() => { if (editValue === '' || editValue == null) setEditValue(0); }}
+                className="flex-1 px-2 py-1.5 text-sm font-medium text-center border border-neutral-200 dark:border-neutral-600 rounded-md bg-neutral-50 dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSaveSession();

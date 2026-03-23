@@ -1,15 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
-import { useHealthChatSocket } from '../hooks/use-health-chat-socket';
 import { uploadFile, unstageFile } from '../health-chat-service';
 
 const ACCEPTED_TYPES = 'image/jpeg,image/png,application/pdf,video/mp4,video/quicktime';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-const MessageInput = () => {
+const MessageInput = ({ emitTyping }) => {
   const { selectedChatId, activeTicketId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
-  const { emitTyping } = useHealthChatSocket();
 
   const [inputValue, setInputValue]   = useState('');
   const [attachedFile, setAttachedFile] = useState(null);
