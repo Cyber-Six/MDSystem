@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useTheme, colors } from '../../context/ThemeContext';
 
 const FAQ_DATA = [

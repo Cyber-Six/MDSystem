@@ -22,7 +22,9 @@ import { getPatientProfile, clearProfileCache } from '../../services/profile-ser
 import { fetchActiveAnnouncements, Announcement } from '../../services/announcement-service';
 import { getAppointmentStatus, ACTIVE_STATUSES } from '../../services/appointment-service';
 import { getCurrentActiveTicket } from '../../services/health-chat-service';
-import { checkInitialRecordStatus, type RecordStatus } from '../../services/emr-service';
+import { useRecordStatus } from '../../context/RecordStatusContext';
+import type { RecordStatus } from '../../services/emr-service';
+import PendingRecordGate from '../../components/PendingRecordGate';
 
 interface DashboardHomeScreenProps {
   navigation: any;
@@ -83,6 +85,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
   navigation,
 }) => {
   const { isDark, toggleTheme } = useTheme();
+  const { recordStatus } = useRecordStatus();
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
 
@@ -91,7 +94,6 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
   const [announcementIndex, setAnnouncementIndex] = useState(0);
   const [appointmentStatus, setAppointmentStatus] = useState<string | null>(null);
   const [chatStatus, setChatStatus] = useState<string | null>(null);
-  const [recordStatus, setRecordStatus] = useState<RecordStatus | null>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
 
   // Auto-rotate announcement carousel
@@ -99,12 +101,11 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
 
   const loadDashboardData = useCallback(async () => {
     try {
-      const [profile, annList, apptResult, chatResult, recordResult] = await Promise.allSettled([
+      const [profile, annList, apptResult, chatResult] = await Promise.allSettled([
         getPatientProfile(),
         fetchActiveAnnouncements(),
         getAppointmentStatus(),
         getCurrentActiveTicket(),
-        checkInitialRecordStatus(),
       ]);
 
       if (profile.status === 'fulfilled' && profile.value?.firstName) {
@@ -124,10 +125,6 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
 
       if (chatResult.status === 'fulfilled' && chatResult.value) {
         setChatStatus(chatResult.value.status);
-      }
-
-      if (recordResult.status === 'fulfilled' && recordResult.value) {
-        setRecordStatus(recordResult.value);
       }
     } catch {
       // Silently fail — dashboard still works without data
@@ -159,6 +156,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
   }, [loadDashboardData]);
 
   return (
+    <PendingRecordGate>
     <SafeAreaView
       style={[
         styles.container,
@@ -562,6 +560,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
         </View>
       </ScrollView>
     </SafeAreaView>
+    </PendingRecordGate>
   );
 };
 

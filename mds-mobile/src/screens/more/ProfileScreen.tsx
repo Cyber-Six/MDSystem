@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useTheme, colors } from '../../context/ThemeContext';
 import { getPatientProfile, PatientProfile } from '../../services/profile-service';
 

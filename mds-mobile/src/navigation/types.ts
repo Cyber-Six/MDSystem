@@ -14,6 +14,7 @@ export type MainTabParamList = {
   HealthChat: undefined;
   Records: undefined;
   More: undefined;
+  Medicine: undefined;
 };
 
 export type MoreStackParamList = {
