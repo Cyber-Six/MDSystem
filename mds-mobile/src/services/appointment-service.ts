@@ -33,16 +33,16 @@ export const getAppointmentStatus = async () => {
   const data = await sendGraphQL(`
     query {
       getAppointmentStatus {
-        id status session notes rejection_acknowledged created_at schedulerLabel
+        id
+        status
+        session
+        notes
+        created_at
+        schedulerLabel
       }
     }
   `);
   return data.getAppointmentStatus;
-};
-
-export const acknowledgeRejection = async () => {
-  const data = await sendGraphQL(`mutation { acknowledgeRejection }`);
-  return data.acknowledgeRejection;
 };
 
 export const listOpenAppointments = async (offset = 0, limit = 20) => {

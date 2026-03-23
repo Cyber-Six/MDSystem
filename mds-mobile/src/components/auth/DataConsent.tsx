@@ -3,6 +3,7 @@
  * Mirrors mds-patient/src/modules/auth/data-consent/data-consent.jsx
  *
  * Displays data consent policy in a modal for login/register flows.
+ * Renders the HTML consent document with proper structure (headings, sections, lists).
  *
  * Backend Integration:
  * - GET /info/consent/:purpose - Fetches consent data
@@ -20,9 +21,202 @@ import {
   StyleSheet,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  useWindowDimensions,
+  Linking,
 } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { axiosRequest } from '../../core';
+
+// ── HTML Renderer ─────────────────────────────────────────────────────────────
+
+const decodeEntities = (str: string): string =>
+  str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .trim();
+
+/** Renders inline HTML (text with <strong>, <b>, <a>, <br>) as React Native Text nodes */
+const renderInlineHtml = (
+  html: string,
+  baseStyle: object,
+  boldStyle: object,
+  linkStyle: object,
+): React.ReactNode => {
+  const parts: Array<{ text: string; type: 'text' | 'bold' | 'link'; href?: string }> = [];
+
+  const normalized = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(
+      /<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
+      '__LINK__$1__TEXT__$2__ENDLINK__',
+    );
+
+  const regex =
+    /<(?:strong|b)>([\s\S]*?)<\/(?:strong|b)>|__LINK__([^_]*)__TEXT__([\s\S]*?)__ENDLINK__|([^<]+)/g;
+  let m: RegExpExecArray | null;
+
+  while ((m = regex.exec(normalized)) !== null) {
+    if (m[1] !== undefined) {
+      parts.push({ text: decodeEntities(m[1]), type: 'bold' });
+    } else if (m[2] !== undefined) {
+      parts.push({ text: decodeEntities(m[3] ?? ''), type: 'link', href: m[2] });
+    } else if (m[4] !== undefined) {
+      const text = decodeEntities(m[4]);
+      if (text) parts.push({ text, type: 'text' });
+    }
+  }
+
+  if (parts.length === 0) return null;
+
+  return (
+    <Text style={baseStyle}>
+      {parts.map((p, i) => {
+        if (p.type === 'bold') {
+          return (
+            <Text key={i} style={boldStyle}>
+              {p.text}
+            </Text>
+          );
+        }
+        if (p.type === 'link') {
+          return (
+            <Text
+              key={i}
+              style={linkStyle}
+              onPress={() => p.href && Linking.openURL(p.href).catch(() => {})}
+            >
+              {p.text}
+            </Text>
+          );
+        }
+        return p.text;
+      })}
+    </Text>
+  );
+};
+
+/** Parses full consent HTML into structured React Native nodes */
+const renderConsentHtml = (html: string, isDark: boolean): React.ReactNode[] => {
+  const textColor = isDark ? colors.neutral[300] : colors.neutral[700];
+  const h1Color = isDark ? colors.neutral[50] : colors.secondary[900];
+  const h2Color = isDark ? colors.primary[300] : colors.primary[700];
+  const dividerColor = isDark ? colors.neutral[700] : colors.neutral[200];
+  const linkColor = isDark ? colors.accent[400] : colors.accent[600];
+  const bulletColor = isDark ? colors.primary[400] : colors.primary[500];
+
+  let content = html;
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  if (bodyMatch) content = bodyMatch[1];
+  content = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+  content = content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+
+  const nodes: React.ReactNode[] = [];
+  let key = 0;
+
+  const blockRegex =
+    /<(h1|h2|p)\b[^>]*>([\s\S]*?)<\/\1>|<(ul)\b[^>]*>([\s\S]*?)<\/ul>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = blockRegex.exec(content)) !== null) {
+    const tag = match[1]?.toLowerCase();
+    const inner = match[2] ?? '';
+    const ulInner = match[4];
+
+    if (tag === 'h1') {
+      const text = decodeEntities(inner.replace(/<[^>]*>/g, ''));
+      if (!text) continue;
+      nodes.push(
+        <View key={key++} style={{ marginBottom: 16 }}>
+          <Text
+            style={{ fontSize: 17, fontWeight: '700', color: h1Color, lineHeight: 25 }}
+          >
+            {text}
+          </Text>
+          <View
+            style={{
+              height: 2,
+              backgroundColor: h2Color,
+              marginTop: 8,
+              borderRadius: 1,
+              opacity: 0.6,
+            }}
+          />
+        </View>,
+      );
+    } else if (tag === 'h2') {
+      const text = decodeEntities(inner.replace(/<[^>]*>/g, ''));
+      if (!text) continue;
+      nodes.push(
+        <View key={key++} style={{ marginTop: 18, marginBottom: 6 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '700',
+              color: h2Color,
+              letterSpacing: 0.5,
+              textTransform: 'uppercase',
+            }}
+          >
+            {text}
+          </Text>
+          <View style={{ height: 1, backgroundColor: dividerColor, marginTop: 5 }} />
+        </View>,
+      );
+    } else if (tag === 'p') {
+      const node = renderInlineHtml(
+        inner,
+        { fontSize: 13, lineHeight: 21, color: textColor, marginBottom: 8 } as object,
+        { fontWeight: '700', color: textColor } as object,
+        { color: linkColor, textDecorationLine: 'underline' } as object,
+      );
+      if (node) nodes.push(<View key={key++}>{node}</View>);
+    } else if (ulInner !== undefined) {
+      const liItems: string[] = [];
+      const liRegex = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
+      let liMatch: RegExpExecArray | null;
+      while ((liMatch = liRegex.exec(ulInner)) !== null) {
+        liItems.push(liMatch[1]);
+      }
+      nodes.push(
+        <View key={key++} style={{ marginBottom: 8 }}>
+          {liItems.map((item, i) => (
+            <View
+              key={i}
+              style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 5 }}
+            >
+              <Text
+                style={{
+                  color: bulletColor,
+                  fontSize: 14,
+                  lineHeight: 21,
+                  marginRight: 8,
+                }}
+              >
+                ›
+              </Text>
+              <View style={{ flex: 1 }}>
+                {renderInlineHtml(
+                  item,
+                  { fontSize: 13, lineHeight: 21, color: textColor } as object,
+                  { fontWeight: '700', color: textColor } as object,
+                  { color: linkColor, textDecorationLine: 'underline' } as object,
+                )}
+              </View>
+            </View>
+          ))}
+        </View>,
+      );
+    }
+  }
+
+  return nodes;
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 interface ConsentData {
   ok: boolean;
@@ -48,6 +242,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
   onCancel,
 }) => {
   const { isDark } = useTheme();
+  const { height: screenHeight } = useWindowDimensions();
 
   const [consentData, setConsentData] = useState<ConsentData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,20 +255,19 @@ export const DataConsent: React.FC<DataConsentProps> = ({
   const contentHeightRef = useRef(0);
   const scrollViewHeightRef = useRef(0);
 
-  // Load consent data when modal opens
   useEffect(() => {
     if (isOpen && verificationKey) {
       loadConsentData();
     }
   }, [isOpen, verificationKey]);
 
-  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setAgreed(false);
       setError('');
       setShowExitWarning(false);
       setHasScrolledToBottom(false);
+      setConsentData(null);
     }
   }, [isOpen]);
 
@@ -94,7 +288,6 @@ export const DataConsent: React.FC<DataConsentProps> = ({
       }
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
-      const errorMessage = err.response?.data?.message || 'Failed to load consent policy.';
 
       switch (errorCode) {
         case 'INVALID_OR_EXPIRED_SESSION':
@@ -104,7 +297,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
           setError('Verification key is missing. Please restart the process.');
           break;
         default:
-          setError(errorMessage);
+          setError(err.response?.data?.message || 'Failed to load consent policy.');
       }
     } finally {
       setLoading(false);
@@ -126,16 +319,10 @@ export const DataConsent: React.FC<DataConsentProps> = ({
       });
 
       if (response.data.ok) {
-        if (onAccept) {
-          onAccept({
-            version: response.data.version,
-            verificationKey,
-          });
-        }
+        onAccept?.({ version: response.data.version, verificationKey });
       }
     } catch (err: any) {
       const errorCode = err.response?.data?.error;
-      const errorMessage = err.response?.data?.message || 'Failed to record consent.';
 
       switch (errorCode) {
         case 'INVALID_OR_EXPIRED_SESSION':
@@ -146,44 +333,33 @@ export const DataConsent: React.FC<DataConsentProps> = ({
           if (purpose === 'register') {
             setShowEmailExistsDialog(true);
           } else {
-            setError(errorMessage);
+            setError(err.response?.data?.message || 'Failed to record consent.');
           }
           break;
         default:
-          setError(errorMessage);
+          setError(err.response?.data?.message || 'Failed to record consent.');
       }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleCloseClick = () => {
-    setShowExitWarning(true);
-  };
-
+  const handleCloseClick = () => setShowExitWarning(true);
   const handleConfirmExit = () => {
     setShowExitWarning(false);
     setAgreed(false);
     setError('');
-    if (onCancel) {
-      onCancel();
-    }
+    onCancel?.();
   };
-
-  const handleCancelExit = () => {
-    setShowExitWarning(false);
-  };
-
+  const handleCancelExit = () => setShowExitWarning(false);
   const handleGoToLogin = () => {
     setShowEmailExistsDialog(false);
-    if (onCancel) {
-      onCancel();
-    }
+    onCancel?.();
   };
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const isAtBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
+    const isAtBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 24;
     if (isAtBottom && !hasScrolledToBottom) {
       setHasScrolledToBottom(true);
     }
@@ -191,7 +367,6 @@ export const DataConsent: React.FC<DataConsentProps> = ({
 
   const handleContentSizeChange = (_w: number, h: number) => {
     contentHeightRef.current = h;
-    // If content fits without scrolling, allow checkbox immediately
     if (scrollViewHeightRef.current > 0 && h <= scrollViewHeightRef.current + 10) {
       setHasScrolledToBottom(true);
     }
@@ -199,22 +374,35 @@ export const DataConsent: React.FC<DataConsentProps> = ({
 
   const handleScrollViewLayout = (event: any) => {
     scrollViewHeightRef.current = event.nativeEvent.layout.height;
-    // Check again after layout
-    if (contentHeightRef.current > 0 && contentHeightRef.current <= scrollViewHeightRef.current + 10) {
+    if (
+      contentHeightRef.current > 0 &&
+      contentHeightRef.current <= scrollViewHeightRef.current + 10
+    ) {
       setHasScrolledToBottom(true);
     }
   };
 
   const isNewVersion =
-    consentData &&
-    consentData.data_consent_version &&
+    consentData?.data_consent_version &&
     consentData.data_consent_version !== consentData.required_version;
+
+  const renderedHtml =
+    consentData?.consent_text ? renderConsentHtml(consentData.consent_text, isDark) : null;
+
+  // Sizes the modal at 88% of screen height for proper scroll area
+  const MODAL_HEIGHT = Math.min(screenHeight * 0.88, 680);
+
+  const bgModal = isDark ? colors.neutral[900] : '#FFFFFF';
+  const bgFooter = isDark ? colors.neutral[800] : colors.neutral[50];
+  const borderColor = isDark ? colors.neutral[700] : colors.neutral[200];
+  const textPrimary = isDark ? colors.neutral[100] : colors.secondary[900];
+  const textSecondary = isDark ? colors.neutral[400] : colors.neutral[500];
 
   if (!isOpen) return null;
 
   return (
     <>
-      {/* Main Modal */}
+      {/* ── Main Consent Modal ─────────────────────────────────────────────── */}
       <Modal
         visible={isOpen}
         transparent
@@ -225,33 +413,29 @@ export const DataConsent: React.FC<DataConsentProps> = ({
           <View
             style={[
               styles.modalContainer,
-              { backgroundColor: isDark ? colors.neutral[900] : '#FFFFFF' },
+              { backgroundColor: bgModal, height: MODAL_HEIGHT },
             ]}
           >
             {/* Header */}
-            <View
-              style={[
-                styles.header,
-                { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] },
-              ]}
-            >
+            <View style={[styles.header, { borderBottomColor: borderColor }]}>
               <View style={styles.headerLeft}>
-                <Text style={styles.headerIcon}>🛡️</Text>
-                <View style={styles.headerTextContainer}>
-                  <Text
-                    style={[
-                      styles.headerTitle,
-                      { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                    ]}
-                  >
+                <View
+                  style={[
+                    styles.iconCircle,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(241,197,38,0.15)'
+                        : colors.primary[50],
+                    },
+                  ]}
+                >
+                  <Text style={styles.headerIconText}>🛡️</Text>
+                </View>
+                <View style={styles.headerTextBlock}>
+                  <Text style={[styles.headerTitle, { color: textPrimary }]}>
                     Data Consent Policy
                   </Text>
-                  <Text
-                    style={[
-                      styles.headerSubtitle,
-                      { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                    ]}
-                  >
+                  <Text style={[styles.headerSubtitle, { color: textSecondary }]}>
                     {purpose === 'register'
                       ? 'Required for Account Registration'
                       : isNewVersion
@@ -260,121 +444,153 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                   </Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={handleCloseClick} style={styles.closeButton}>
-                <Text
-                  style={[
-                    styles.closeButtonText,
-                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                  ]}
-                >
-                  ✕
-                </Text>
+              <TouchableOpacity
+                onPress={handleCloseClick}
+                style={[
+                  styles.closeBtn,
+                  {
+                    backgroundColor: isDark
+                      ? colors.neutral[800]
+                      : colors.neutral[100],
+                  },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={[styles.closeBtnText, { color: textSecondary }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Content */}
-            <View style={styles.contentContainer}>
+            {/* Scrollable content area — flex: 1 */}
+            <View style={styles.contentArea}>
               {loading ? (
                 <View style={styles.centeredState}>
                   <ActivityIndicator size="large" color={colors.primary[500]} />
-                  <Text
-                    style={[
-                      styles.stateText,
-                      { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                    ]}
-                  >
-                    Loading consent policy...
+                  <Text style={[styles.stateText, { color: textSecondary }]}>
+                    Loading consent policy…
                   </Text>
                 </View>
               ) : error && !consentData ? (
                 <View style={styles.centeredState}>
                   <Text style={styles.errorIcon}>⚠️</Text>
-                  <Text style={[styles.errorText, { color: colors.error[600] }]}>{error}</Text>
+                  <Text style={[styles.errorText, { color: colors.error[600] }]}>
+                    {error}
+                  </Text>
                   <TouchableOpacity
                     onPress={loadConsentData}
-                    style={[styles.retryButton, { backgroundColor: colors.primary[500] }]}
+                    style={[styles.retryBtn, { backgroundColor: colors.primary[500] }]}
                   >
-                    <Text style={styles.retryButtonText}>Retry</Text>
+                    <Text style={styles.retryBtnText}>Retry</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 <>
+                  {/* Version-updated notice */}
+                  {isNewVersion && (
+                    <View
+                      style={[
+                        styles.versionNotice,
+                        {
+                          backgroundColor: isDark
+                            ? 'rgba(245,158,11,0.1)'
+                            : '#FFFBEB',
+                          borderColor: isDark ? 'rgba(245,158,11,0.3)' : '#FDE68A',
+                          marginHorizontal: 16,
+                          marginTop: 12,
+                        },
+                      ]}
+                    >
+                      <Text style={styles.versionNoticeTitle}>⚠️ Policy Updated</Text>
+                      <Text
+                        style={[
+                          styles.versionNoticeText,
+                          { color: isDark ? '#FBBF24' : '#92400E' },
+                        ]}
+                      >
+                        Updated from v{consentData?.data_consent_version} to v
+                        {consentData?.required_version}. Please review and accept the new
+                        policy.
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Scroll-down hint */}
+                  {!hasScrolledToBottom && (
+                    <View
+                      style={[
+                        styles.scrollHintBanner,
+                        {
+                          backgroundColor: isDark
+                            ? 'rgba(241,197,38,0.08)'
+                            : colors.primary[50],
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.scrollHintText,
+                          {
+                            color: isDark
+                              ? colors.primary[300]
+                              : colors.primary[700],
+                          },
+                        ]}
+                      >
+                        ↓  Scroll down to read the full policy
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Policy document — structured HTML render */}
                   <ScrollView
                     style={styles.scrollContent}
+                    contentContainerStyle={styles.scrollContentInner}
                     onScroll={handleScroll}
                     scrollEventThrottle={16}
                     onContentSizeChange={handleContentSizeChange}
                     onLayout={handleScrollViewLayout}
+                    showsVerticalScrollIndicator
+                    bounces={false}
                   >
-                    {/* Version Update Notice */}
-                    {isNewVersion && (
-                      <View
-                        style={[
-                          styles.versionNotice,
-                          {
-                            backgroundColor: isDark ? 'rgba(245, 158, 11, 0.1)' : '#FFFBEB',
-                            borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : '#FDE68A',
-                          },
-                        ]}
-                      >
-                        <Text style={styles.versionNoticeTitle}>⚠️ Policy Updated</Text>
-                        <Text
-                          style={[
-                            styles.versionNoticeText,
-                            { color: isDark ? '#FBBF24' : '#92400E' },
-                          ]}
-                        >
-                          Updated from version {consentData?.data_consent_version} to{' '}
-                          {consentData?.required_version}. Please review and accept the new policy.
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* Consent Text */}
-                    {consentData?.consent_text ? (
+                    {renderedHtml ?? (
                       <Text
-                        style={[
-                          styles.consentText,
-                          { color: isDark ? colors.neutral[300] : colors.neutral[700] },
-                        ]}
+                        style={{
+                          fontSize: 13,
+                          lineHeight: 21,
+                          color: isDark ? colors.neutral[300] : colors.neutral[700],
+                        }}
                       >
-                        {consentData.consent_text.replace(/<[^>]*>/g, '')}
-                      </Text>
-                    ) : (
-                      <Text
-                        style={[
-                          styles.consentText,
-                          { color: isDark ? colors.neutral[300] : colors.neutral[700] },
-                        ]}
-                      >
-                        I consent to the collection and use of my data in accordance with the
-                        MDSystem Privacy Policy.
+                        I consent to the collection and use of my data in accordance with
+                        the MDSystem Privacy Policy.
                       </Text>
                     )}
 
-                    {/* Version Badge */}
+                    {/* Version badge at bottom of document */}
                     {consentData && (
                       <View
                         style={[
                           styles.versionBadgeContainer,
-                          { borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200] },
+                          { borderTopColor: borderColor },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.versionLabel,
-                            { color: isDark ? colors.neutral[500] : colors.neutral[400] },
-                          ]}
-                        >
+                        <Text style={[styles.versionLabel, { color: textSecondary }]}>
                           Document version:
                         </Text>
                         <View
                           style={[
                             styles.versionBadge,
-                            { backgroundColor: isDark ? 'rgba(241, 197, 38, 0.1)' : colors.primary[50] || '#FEF9E7' },
+                            {
+                              backgroundColor: isDark
+                                ? 'rgba(241,197,38,0.1)'
+                                : colors.primary[50],
+                            },
                           ]}
                         >
-                          <Text style={[styles.versionBadgeText, { color: colors.primary[600] || colors.primary[500] }]}>
+                          <Text
+                            style={[
+                              styles.versionBadgeText,
+                              { color: colors.primary[600] },
+                            ]}
+                          >
                             {consentData.required_version}
                           </Text>
                         </View>
@@ -385,18 +601,15 @@ export const DataConsent: React.FC<DataConsentProps> = ({
               )}
             </View>
 
-            {/* Footer */}
+            {/* Footer — pinned at bottom of the modal */}
             {!loading && consentData && (
               <View
                 style={[
                   styles.footer,
-                  {
-                    borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200],
-                    backgroundColor: isDark ? colors.neutral[800] : colors.neutral[50],
-                  },
+                  { borderTopColor: borderColor, backgroundColor: bgFooter },
                 ]}
               >
-                {/* Checkbox */}
+                {/* Agreement checkbox */}
                 <TouchableOpacity
                   style={styles.checkboxRow}
                   onPress={() => {
@@ -417,41 +630,48 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                           : isDark
                             ? colors.neutral[600]
                             : colors.neutral[400],
-                        backgroundColor: agreed
-                          ? colors.primary[500]
-                          : 'transparent',
-                        opacity: hasScrolledToBottom ? 1 : 0.5,
+                        backgroundColor: agreed ? colors.primary[500] : 'transparent',
+                        opacity: hasScrolledToBottom ? 1 : 0.45,
                       },
                     ]}
                   >
                     {agreed && <Text style={styles.checkmark}>✓</Text>}
                   </View>
-                  <View style={styles.checkboxTextContainer}>
+                  <View style={styles.checkboxLabelBlock}>
                     <Text
                       style={[
                         styles.checkboxLabel,
-                        { color: isDark ? colors.neutral[300] : colors.neutral[600] },
+                        {
+                          color: isDark ? colors.neutral[300] : colors.neutral[600],
+                        },
                       ]}
                     >
-                      I have read and agree to the data consent policy and understand how my
-                      personal and medical information will be collected, used, and protected.
+                      I have read and agree to the data consent policy and understand
+                      how my personal and medical information will be collected, used,
+                      and protected.
                     </Text>
                     {!hasScrolledToBottom && (
-                      <Text style={[styles.scrollHint, { color: '#F59E0B' }]}>
-                        ⚠ Please scroll to the bottom to enable this option
+                      <Text
+                        style={[styles.checkboxHint, { color: colors.primary[500] }]}
+                      >
+                        Scroll to the bottom to enable
                       </Text>
                     )}
                   </View>
                 </TouchableOpacity>
 
-                {/* Error in footer */}
+                {/* Inline error message */}
                 {error && (
                   <View
                     style={[
                       styles.footerError,
                       {
-                        backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2',
-                        borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FECACA',
+                        backgroundColor: isDark
+                          ? 'rgba(239,68,68,0.1)'
+                          : '#FEF2F2',
+                        borderColor: isDark
+                          ? 'rgba(239,68,68,0.25)'
+                          : '#FECACA',
                       },
                     ]}
                   >
@@ -461,23 +681,28 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                   </View>
                 )}
 
-                {/* Buttons */}
+                {/* Cancel / Accept buttons */}
                 <View style={styles.footerButtons}>
                   <TouchableOpacity
                     style={[
-                      styles.cancelButton,
+                      styles.cancelBtn,
                       {
                         backgroundColor: isDark ? colors.neutral[700] : '#FFFFFF',
-                        borderColor: isDark ? colors.neutral[600] : colors.neutral[300],
+                        borderColor: isDark
+                          ? colors.neutral[600]
+                          : colors.neutral[300],
                       },
                     ]}
                     onPress={handleCloseClick}
                     disabled={submitting}
+                    activeOpacity={0.7}
                   >
                     <Text
                       style={[
-                        styles.cancelButtonText,
-                        { color: isDark ? colors.neutral[300] : colors.neutral[600] },
+                        styles.cancelBtnText,
+                        {
+                          color: isDark ? colors.neutral[300] : colors.neutral[600],
+                        },
                       ]}
                     >
                       Cancel
@@ -486,23 +711,24 @@ export const DataConsent: React.FC<DataConsentProps> = ({
 
                   <TouchableOpacity
                     style={[
-                      styles.acceptButton,
+                      styles.acceptBtn,
                       {
                         backgroundColor: colors.primary[500],
-                        opacity: !agreed || submitting ? 0.5 : 1,
+                        opacity: !agreed || submitting ? 0.45 : 1,
                       },
                     ]}
                     onPress={handleSubmit}
                     disabled={!agreed || submitting}
+                    activeOpacity={0.8}
                   >
                     {submitting ? (
-                      <View style={styles.buttonContent}>
+                      <View style={styles.btnContent}>
                         <ActivityIndicator size="small" color="#FFFFFF" />
-                        <Text style={styles.acceptButtonText}>Processing...</Text>
+                        <Text style={styles.acceptBtnText}>Processing…</Text>
                       </View>
                     ) : (
-                      <View style={styles.buttonContent}>
-                        <Text style={styles.acceptButtonText}>✓ Accept & Continue</Text>
+                      <View style={styles.btnContent}>
+                        <Text style={styles.acceptBtnText}>✓  Accept & Continue</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -513,7 +739,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
         </View>
       </Modal>
 
-      {/* Exit Warning Dialog */}
+      {/* ── Exit Warning Dialog ────────────────────────────────────────────── */}
       <Modal
         visible={showExitWarning}
         transparent
@@ -527,40 +753,32 @@ export const DataConsent: React.FC<DataConsentProps> = ({
               { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
             ]}
           >
-            <View style={styles.dialogHeader}>
+            <View style={styles.dialogIconRow}>
               <View
                 style={[
                   styles.dialogIconCircle,
-                  { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.2)' : '#FEF3C7' },
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(245,158,11,0.2)'
+                      : '#FEF3C7',
+                  },
                 ]}
               >
-                <Text style={styles.dialogIconText}>⚠️</Text>
-              </View>
-              <View style={styles.dialogTextContainer}>
-                <Text
-                  style={[
-                    styles.dialogTitle,
-                    { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                  ]}
-                >
-                  Data Consent Required
-                </Text>
-                <Text
-                  style={[
-                    styles.dialogMessage,
-                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                  ]}
-                >
-                  {purpose === 'register'
-                    ? 'Consent is required to create an account. Closing will cancel your registration.'
-                    : 'Consent is required to continue. Closing will cancel your login.'}
-                </Text>
+                <Text style={styles.dialogIconEmoji}>⚠️</Text>
               </View>
             </View>
+            <Text style={[styles.dialogTitle, { color: textPrimary }]}>
+              Data Consent Required
+            </Text>
+            <Text style={[styles.dialogBody, { color: textSecondary }]}>
+              {purpose === 'register'
+                ? 'Consent is required to create an account. Closing will cancel your registration.'
+                : 'Consent is required to continue. Closing will cancel your login.'}
+            </Text>
             <View style={styles.dialogButtons}>
               <TouchableOpacity
                 style={[
-                  styles.dialogCancelBtn,
+                  styles.dialogSecondaryBtn,
                   {
                     backgroundColor: isDark ? colors.neutral[700] : '#FFFFFF',
                     borderColor: isDark ? colors.neutral[600] : colors.neutral[300],
@@ -570,7 +788,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
               >
                 <Text
                   style={[
-                    styles.dialogCancelText,
+                    styles.dialogSecondaryText,
                     { color: isDark ? colors.neutral[300] : colors.neutral[600] },
                   ]}
                 >
@@ -578,17 +796,17 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.dialogContinueBtn, { backgroundColor: colors.primary[500] }]}
+                style={[styles.dialogPrimaryBtn, { backgroundColor: colors.primary[500] }]}
                 onPress={handleCancelExit}
               >
-                <Text style={styles.dialogContinueText}>Continue Review</Text>
+                <Text style={styles.dialogPrimaryText}>Continue Review</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Email Already Exists Dialog */}
+      {/* ── Email Already Exists Dialog ────────────────────────────────────── */}
       <Modal
         visible={showEmailExistsDialog}
         transparent
@@ -602,40 +820,32 @@ export const DataConsent: React.FC<DataConsentProps> = ({
               { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
             ]}
           >
-            <View style={styles.dialogHeader}>
+            <View style={styles.dialogIconRow}>
               <View
                 style={[
                   styles.dialogIconCircle,
-                  { backgroundColor: isDark ? 'rgba(241, 197, 38, 0.2)' : colors.primary[100] || '#FEF9E7' },
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(241,197,38,0.2)'
+                      : colors.primary[100] ?? '#FEF9E7',
+                  },
                 ]}
               >
-                <Text style={styles.dialogIconText}>👤</Text>
-              </View>
-              <View style={styles.dialogTextContainer}>
-                <Text
-                  style={[
-                    styles.dialogTitle,
-                    { color: isDark ? colors.neutral[100] : colors.secondary[900] },
-                  ]}
-                >
-                  Account Already Exists
-                </Text>
-                <Text
-                  style={[
-                    styles.dialogMessage,
-                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
-                  ]}
-                >
-                  An account with this email already exists. Please log in to your existing
-                  account instead.
-                </Text>
+                <Text style={styles.dialogIconEmoji}>👤</Text>
               </View>
             </View>
+            <Text style={[styles.dialogTitle, { color: textPrimary }]}>
+              Account Already Exists
+            </Text>
+            <Text style={[styles.dialogBody, { color: textSecondary }]}>
+              An account with this email already exists. Please log in to your existing
+              account instead.
+            </Text>
             <TouchableOpacity
-              style={[styles.fullWidthBtn, { backgroundColor: colors.primary[500] }]}
+              style={[styles.dialogFullBtn, { backgroundColor: colors.primary[500] }]}
               onPress={handleGoToLogin}
             >
-              <Text style={styles.fullWidthBtnText}>Go to Login</Text>
+              <Text style={styles.dialogPrimaryText}>Go to Login</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -644,32 +854,37 @@ export const DataConsent: React.FC<DataConsentProps> = ({
   );
 };
 
+// ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
+  // Overlay & modal shell
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
   },
   modalContainer: {
     width: '100%',
-    maxHeight: '90%',
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
-    elevation: 10,
+    elevation: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    // `height` is set inline (dynamic via useWindowDimensions)
   },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -677,260 +892,185 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 10,
   },
-  headerIcon: {
-    fontSize: 20,
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTextContainer: {
+  headerIconText: { fontSize: 18 },
+  headerTextBlock: { flex: 1 },
+  headerTitle: { fontSize: 15, fontWeight: '700', letterSpacing: 0.1 },
+  headerSubtitle: { fontSize: 11, marginTop: 2 },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  closeBtnText: { fontSize: 13, fontWeight: '700' },
+
+  // Content area — flex: 1 so it takes all space between header and footer
+  contentArea: {
     flex: 1,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  closeButton: {
-    padding: 6,
-    borderRadius: 8,
-    marginLeft: 12,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  contentContainer: {
-    flex: 1,
-    minHeight: 200,
+    overflow: 'hidden',
   },
   centeredState: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 40,
+    paddingHorizontal: 24,
   },
-  stateText: {
-    fontSize: 14,
-    marginTop: 12,
-  },
-  errorIcon: {
-    fontSize: 32,
-    marginBottom: 12,
-  },
-  errorText: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 20,
-  },
-  retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    maxHeight: 350,
-  },
+  stateText: { fontSize: 14, marginTop: 12 },
+  errorIcon: { fontSize: 32, marginBottom: 12 },
+  errorText: { fontSize: 14, textAlign: 'center', marginBottom: 16 },
+  retryBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 },
+  retryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+
+  // Version-updated banner
   versionNotice: {
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: 4,
   },
   versionNoticeTitle: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 4,
+    color: '#92400E',
   },
-  versionNoticeText: {
-    fontSize: 12,
-    lineHeight: 18,
+  versionNoticeText: { fontSize: 12, lineHeight: 18 },
+
+  // Scroll hint
+  scrollHintBanner: {
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    alignItems: 'center',
   },
-  consentText: {
-    fontSize: 14,
-    lineHeight: 22,
+  scrollHintText: { fontSize: 12, fontWeight: '600' },
+
+  // Policy scroll area — flex: 1 (no maxHeight constraint)
+  scrollContent: { flex: 1 },
+  scrollContentInner: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 16,
   },
+
+  // Version badge at end of policy
   versionBadgeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginTop: 20,
     paddingTop: 12,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  versionLabel: {
-    fontSize: 12,
-  },
-  versionBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  versionBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'monospace',
-  },
+  versionLabel: { fontSize: 11 },
+  versionBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
+  versionBadgeText: { fontSize: 11, fontWeight: '700', fontFamily: 'monospace' },
+
+  // Footer
   footer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 4,
+    borderRadius: 5,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    marginTop: 1,
+    flexShrink: 0,
   },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  checkboxTextContainer: {
-    flex: 1,
-  },
-  checkboxLabel: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  scrollHint: {
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 4,
-  },
+  checkmark: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  checkboxLabelBlock: { flex: 1 },
+  checkboxLabel: { fontSize: 12, lineHeight: 18 },
+  checkboxHint: { fontSize: 11, fontWeight: '600', marginTop: 4 },
   footerError: {
     padding: 8,
     borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  footerErrorText: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  footerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  cancelButton: {
+  footerErrorText: { fontSize: 12, textAlign: 'center' },
+  footerButtons: { flexDirection: 'row', gap: 8 },
+  cancelBtn: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 11,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
   },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  acceptButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
+  cancelBtnText: { fontSize: 14, fontWeight: '500' },
+  acceptBtn: {
+    flex: 1.6,
+    paddingVertical: 11,
+    borderRadius: 10,
     alignItems: 'center',
   },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  acceptButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  // Dialog styles
+  btnContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  acceptBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+
+  // Dialogs (exit warning + email exists)
   dialogContainer: {
     width: '100%',
-    maxWidth: 340,
-    borderRadius: 16,
-    padding: 20,
-    elevation: 10,
+    maxWidth: 360,
+    borderRadius: 20,
+    padding: 24,
+    elevation: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
-    shadowRadius: 12,
+    shadowRadius: 14,
+    alignItems: 'center',
   },
-  dialogHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 16,
-  },
+  dialogIconRow: { marginBottom: 14 },
   dialogIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dialogIconText: {
-    fontSize: 16,
-  },
-  dialogTextContainer: {
+  dialogIconEmoji: { fontSize: 24 },
+  dialogTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
+  dialogBody: { fontSize: 13, lineHeight: 20, textAlign: 'center', marginBottom: 20 },
+  dialogButtons: { flexDirection: 'row', gap: 8, width: '100%' },
+  dialogSecondaryBtn: {
     flex: 1,
-  },
-  dialogTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  dialogMessage: {
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  dialogButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  dialogCancelBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 11,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
   },
-  dialogCancelText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  dialogContinueBtn: {
+  dialogSecondaryText: { fontSize: 13, fontWeight: '500' },
+  dialogPrimaryBtn: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 11,
+    borderRadius: 10,
     alignItems: 'center',
   },
-  dialogContinueText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  fullWidthBtn: {
-    paddingVertical: 10,
-    borderRadius: 8,
+  dialogPrimaryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  dialogFullBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: 'center',
-  },
-  fullWidthBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
 
