@@ -267,7 +267,7 @@ async function isUserValidated(userId) {
       return false; // patient not found
     }
 
-    const status = result.rows[0].status?.toLowerCase();
+    const status = result.rows[0].status;
     return status !== "Unverified"; // true if verified or other
   } catch (err) {
     logger.error(`Error fetching credential status for userId=${userId}:`, err);
