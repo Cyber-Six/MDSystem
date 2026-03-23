@@ -75,7 +75,7 @@ export const ChangePasswordScreen: React.FC<{ navigation: any }> = ({ navigation
   ];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
           <Text style={[styles.title, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
@@ -154,13 +154,13 @@ export const ChangePasswordScreen: React.FC<{ navigation: any }> = ({ navigation
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 20 },
+  scrollContent: { padding: 16, paddingBottom: 40 },
   card: { borderRadius: 16, padding: 20 },
   title: { fontSize: 20, fontWeight: '600', marginBottom: 4 },
   subtitle: { fontSize: 14, marginBottom: 20 },

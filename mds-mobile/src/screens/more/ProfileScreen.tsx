@@ -70,24 +70,22 @@ export const ProfileScreen: React.FC = () => {
 
   if (isLoading) {
     return (
-      <SafeAreaView
+      <View
         style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
-        edges={['top']}
       >
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView
+    <View
       style={[
         styles.container,
         { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
       ]}
-      edges={['top']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Avatar */}
@@ -162,14 +160,14 @@ export const ProfileScreen: React.FC = () => {
           Contact the admin to update your profile information.
         </Text>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: 16, paddingBottom: 40 },
   avatarSection: { alignItems: 'center', marginBottom: 24 },
   avatar: {
     width: 80,

@@ -10,7 +10,7 @@ import { MainTabParamList } from './types';
 import { DashboardHomeScreen } from '../screens/dashboard/DashboardHomeScreen';
 import { AppointmentScreen } from '../screens/appointment/AppointmentScreen';
 import { HealthChatScreen } from '../screens/health-chat/HealthChatScreen';
-import { MedicineRequestScreen } from '../screens/medicine/MedicineRequestScreen';
+import InitialRecordFormScreen from '../screens/record-forms/InitialRecordFormScreen';
 import { MoreStackNavigator } from './MoreStackNavigator';
 import { useTheme, colors } from '../context/ThemeContext';
 
@@ -41,8 +41,8 @@ export const MainTabNavigator: React.FC = () => {
           backgroundColor: isDark ? colors.neutral[900] : '#FFFFFF',
           borderTopColor: isDark ? colors.neutral[800] : colors.neutral[200],
           borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 8,
+          height: 80,
+          paddingBottom: 20,
           paddingTop: 8,
           elevation: 8,
           shadowColor: '#000',
@@ -91,12 +91,12 @@ export const MainTabNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name="Medicine"
-        component={MedicineRequestScreen}
+        name="Records"
+        component={InitialRecordFormScreen}
         options={{
-          tabBarLabel: 'Medicine',
+          tabBarLabel: 'Records',
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="💊" focused={focused} />
+            <TabIcon icon="📋" focused={focused} />
           ),
         }}
       />

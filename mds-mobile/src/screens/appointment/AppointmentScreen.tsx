@@ -27,7 +27,6 @@ import {
   getScheduleAvailability,
   submitAppointment,
   cancelAppointment,
-  acknowledgeRejection,
 } from '../../services/appointment-service';
 
 const STEP_LABELS = ['Select Type', 'Date & Session', 'Requirements', 'Review'];
@@ -160,7 +159,6 @@ export const AppointmentScreen: React.FC = () => {
 
   // Rejection
   const [rejectionRecord, setRejectionRecord] = useState<any>(null);
-  const [rejectionAcknowledged, setRejectionAcknowledged] = useState(false);
 
   // Cancel modal
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -186,9 +184,8 @@ export const AppointmentScreen: React.FC = () => {
       const status = record?.status ?? null;
       setCurrentStatus(status);
 
-      if (status === STATUS.REJECTED) {
+      if (status === STATUS.REJECTED || status === STATUS.EXPIRED) {
         setRejectionRecord(record);
-        setRejectionAcknowledged(!!record?.rejection_acknowledged);
         const list = await listOpenAppointments();
         setSchedulers(list);
       } else {
@@ -408,8 +405,8 @@ export const AppointmentScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
           </View>
-        ) : rejectionRecord && !rejectionAcknowledged ? (
-          /* ── Rejection Notice ────────────────────────────────────────── */
+        ) : rejectionRecord ? (
+          /* ── Rejection / Expired Notice ────────────────────────────── */
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
             <View style={styles.rejectionHeader}>
               <View style={[styles.rejectionIcon, { backgroundColor: isDark ? 'rgba(239,68,68,0.2)' : colors.error[50] }]}>
@@ -417,10 +414,12 @@ export const AppointmentScreen: React.FC = () => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cardTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                  Appointment Rejected
+                  {rejectionRecord.status === STATUS.EXPIRED ? 'Appointment Expired' : 'Appointment Rejected'}
                 </Text>
                 <Text style={[styles.cardBody, { color: isDark ? colors.neutral[400] : colors.neutral[600], marginTop: 4 }]}>
-                  Your previous appointment request was not approved.
+                  {rejectionRecord.status === STATUS.EXPIRED
+                    ? 'Your previous appointment has expired.'
+                    : 'Your previous appointment request was not approved.'}
                 </Text>
               </View>
             </View>
@@ -432,9 +431,8 @@ export const AppointmentScreen: React.FC = () => {
             )}
             <TouchableOpacity
               style={[styles.primaryButton]}
-              onPress={async () => {
-                await acknowledgeRejection();
-                setRejectionAcknowledged(true);
+              onPress={() => {
+                setRejectionRecord(null);
               }}
             >
               <Text style={styles.primaryButtonText}>OK, Book New Appointment</Text>
