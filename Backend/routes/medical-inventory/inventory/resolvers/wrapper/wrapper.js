@@ -207,46 +207,172 @@ const Mutation = {
   },
 
   _splitMedicalSupply: async (_, { batchId, input }, { res }) => {
-    const source = await db.query(
-      `SELECT * FROM "SupplyBatch" WHERE id = $1 LIMIT 1`,
-      [batchId],
-    );
-
-    if (source.rows.length === 0) {
-      throwGraphQLError(res).message("Supply batch not found").status(404).throw();
+    if (input.quantity <= 0) {
+      throwGraphQLError(res).message("Quantity to split must be positive").status(400).throw();
     }
 
-    const batch = source.rows[0];
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (batch.currentQuantity < input.quantity) {
-      throwGraphQLError(res).message("Insufficient quantity to split").status(400).throw();
+      const source = await client.query(
+        `SELECT * FROM "SupplyBatch" WHERE id = $1 LIMIT 1 FOR UPDATE`,
+        [batchId],
+      );
+
+      if (source.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Supply batch not found").status(404).throw();
+      }
+
+      const batch = source.rows[0];
+
+      if (batch.location === input.targetLocation) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Target location must differ from source").status(400).throw();
+      }
+
+      // Get count of available quantity in the batch
+      const availableResult = await client.query(
+        `SELECT COUNT(*)::int AS available_count FROM "SupplyEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL`,
+        [batchId],
+      );
+
+      const availableCount = availableResult.rows[0].available_count;
+
+      if (availableCount < input.quantity) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Insufficient available quantity to split").status(400).throw();
+      }
+
+      const sql = `INSERT INTO "SupplyBatch"
+      ("supplyItemId", batch_number, unit, "initialQuantity", "currentQuantity",
+        location, received_at, "receivedBy",
+        supplier_name, notes)
+      VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9) RETURNING *`;
+
+      const result = await client.query(sql, [
+        batch.supplyItemId, batch.batch_number, batch.unit, input.quantity,
+        input.targetLocation, batch.received_at, batch.receivedBy,
+        batch.supplier_name, input.notes || batch.notes,
+      ]);
+      
+      const newBatch = result.rows[0];
+
+      // Move specified quantity of entities to new batch
+      const updateResult = await client.query(
+        `UPDATE "SupplyEntity" SET "batchId" = $1 WHERE id IN (
+          SELECT id FROM "SupplyEntity" WHERE "batchId" = $2 AND "transactionId" IS NULL LIMIT $3
+        )`,
+        [newBatch.id, batchId, input.quantity],
+      );
+
+      // Verify actual moved count matches requested
+      if (updateResult.rowCount !== input.quantity) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message(`Failed to move exact quantity. Expected ${input.quantity}, moved ${updateResult.rowCount}`)
+          .status(409)
+          .throw();
+      }
+
+      // Decrement source batch current quantity
+      await client.query(
+        `UPDATE "SupplyBatch" SET "currentQuantity" = "currentQuantity" - $1 WHERE id = $2`,
+        [input.quantity, batchId],
+      );
+
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _splitMedicalSupply:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
+    }
+  },
+
+  _splitMedicineSupply: async (_, { batchId, input }, { res }) => {
+    if (input.quantity <= 0) {
+      throwGraphQLError(res).message("Quantity to split must be positive").status(400).throw();
     }
 
-    if (batch.location === input.targetLocation) {
-      throwGraphQLError(res).message("Target location must differ from source").status(400).throw();
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      const source = await client.query(
+        `SELECT * FROM "MedicineBatch" WHERE id = $1 LIMIT 1 FOR UPDATE`,
+        [batchId],
+      );
+
+      if (source.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
+      }
+
+      const batch = source.rows[0];
+
+      if (batch.location === input.targetLocation) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Target location must differ from source").status(400).throw();
+      }
+
+      // Get count of available (unassigned) entities in the batch
+      const availableResult = await client.query(
+        `SELECT COUNT(*)::int AS available_count FROM "MedicineEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL`,
+        [batchId],
+      );
+
+      const availableCount = availableResult.rows[0].available_count;
+
+      if (availableCount < input.quantity) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Insufficient available quantity to split").status(400).throw();
+      }
+      // Create new batch at target location
+      const sql = `
+        INSERT INTO "MedicineBatch"
+          ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location, "receivedBy", notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+      `;
+
+      const result = await client.query(sql, [
+        batch.medicalItemId, batch.supplierName, batch.batchNumber,
+        batch.dosageUnit, batch.dosageValue, batch.expiryDate,
+        input.targetLocation, batch.receivedBy, input.notes || batch.notes,
+      ]);
+
+      const newBatch = result.rows[0];
+
+      // Move specified quantity of entities to new batch
+      const updateResult = await client.query(
+        `UPDATE "MedicineEntity" SET "batchId" = $1 WHERE id IN (
+          SELECT id FROM "MedicineEntity" WHERE "batchId" = $2 AND "transactionId" IS NULL LIMIT $3
+        )`,
+        [newBatch.id, batchId, input.quantity],
+      );
+
+      // Verify actual moved count matches requested
+      if (updateResult.rowCount !== input.quantity) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message(`Failed to move exact quantity. Expected ${input.quantity}, moved ${updateResult.rowCount}`)
+          .status(409)
+          .throw();
+      }
+
+      await client.query('COMMIT');
+      return newBatch;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _splitMedicineSupply:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
-
-    // Deduct from source batch
-    await db.query(
-      `UPDATE "SupplyBatch" SET "currentQuantity" = "currentQuantity" - $1 WHERE id = $2`,
-      [input.quantity, batchId],
-    );
-
-    // Create new batch at target location — $3 used twice for initial/current quantity
-    const sql = `
-      INSERT INTO "SupplyBatch"
-        ("supplyItemId", batch_number, "initialQuantity", "currentQuantity", unit, expiry_date, location, "receivedBy", supplier_name, notes)
-      VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING *
-    `;
-
-    const result = await db.query(sql, [
-      batch.supplyItemId, batch.batch_number, input.quantity,
-      batch.unit, batch.expiry_date, input.targetLocation,
-      batch.receivedBy, batch.supplier_name, input.notes || batch.notes,
-    ]);
-
-    return result.rows[0];
   },
 
   _updateMedicalSupply: async (_, { batchId, input }, { res }) => {

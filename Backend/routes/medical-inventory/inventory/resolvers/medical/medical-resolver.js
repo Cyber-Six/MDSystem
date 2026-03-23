@@ -106,6 +106,16 @@ const Mutation = {
     return await Wrapper.Mutation._splitMedicalSupply(_, { batchId, input }, { res });
   },
 
+  splitMedicineSupply: async (_, { batchId, input }, { user, res }) => {
+    if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+    if (!isPermitted) {
+      logger.warn("Unauthorized medicine split attempt by staff " + user.id);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Mutation._splitMedicineSupply(_, { batchId, input }, { res });
+  },
+
   updateMedicalSupply: async (_, { batchId, input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
     const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
