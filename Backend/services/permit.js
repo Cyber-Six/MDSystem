@@ -320,6 +320,355 @@ async function isMedicalPermitted(userId, label, patientId) {
   return true;
 }
 
+// ─── TEMPLATE PERMISSION FUNCTIONS ───────────────────────────────────────────
+
+/**
+ * Create a new permission template with permissions
+ * @param {Object} params
+ * @param {string} params.label - Template name
+ * @param {Array} params.permissionsList - Array of { key, enabled, branch }
+ * @param {number} params.createdBy - User ID creating the template
+ * @param {string} params.defaultBranch - Default branch if not specified
+ * @returns {Promise<Object>} Created template with id
+ */
+async function createPermissionTemplate({ label, permissionsList, createdBy, defaultBranch = 'Both' }) {
+  const client = await db.pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Insert template
+    const templateResult = await client.query(
+      `INSERT INTO "rolesTemplate" (label, created_by, created_at)
+       VALUES ($1, $2, NOW())
+       RETURNING id, label, created_by, created_at;`,
+      [label, createdBy]
+    );
+
+    const template = templateResult.rows[0];
+    const templateId = template.id;
+
+    // Prepare permissions to insert
+    const toInsert = [];
+    for (const perm of permissionsList) {
+      const { key, enabled, branch } = perm;
+      const permLabel = permissions[key];
+
+      if (!permLabel) {
+        throw new Error(`Invalid permission key: ${key}`);
+      }
+
+      if (enabled === true) {
+        const effectiveBranch = branch || defaultBranch;
+        toInsert.push({ label: permLabel, branch: effectiveBranch });
+      }
+    }
+
+    // Insert template permissions
+    if (toInsert.length > 0) {
+      const values = [];
+      const params = [templateId];
+      let i = params.length + 1;
+
+      for (const { label: permLabel, branch } of toInsert) {
+        values.push(`($${i}, $${i + 1})`);
+        params.push(permLabel, branch);
+        i += 2;
+      }
+
+      await client.query(
+        `INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
+         SELECT $1, r.id, v.branch, NOW()
+         FROM (VALUES ${values.join(",")}) AS v(label, branch)
+         JOIN "rolesTable" r ON r.label = v.label;`,
+        params
+      );
+    }
+
+    await client.query('COMMIT');
+
+    logger.info(`Permission template created: templateId=${templateId}, label="${label}", by userId=${createdBy}`);
+
+    return {
+      id: String(templateId),
+      label: template.label,
+      createdBy: String(template.created_by),
+      createdAt: template.created_at.toISOString()
+    };
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    logger.error(`Failed to create permission template: ${error.message}`);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Get a single permission template with its permissions
+ * @param {number} templateId
+ * @returns {Promise<Object>} Template with permissions array
+ */
+async function getPermissionTemplate(templateId) {
+  // Get template info
+  const templateResult = await db.query(
+    `SELECT id, label, created_by, created_at
+     FROM "rolesTemplate"
+     WHERE id = $1;`,
+    [templateId]
+  );
+
+  if (templateResult.rows.length === 0) {
+    return null;
+  }
+
+  const template = templateResult.rows[0];
+
+  // Get template permissions
+  const permsResult = await db.query(
+    `SELECT rt.label, rtm.branch
+     FROM "rolesTemplateMap" rtm
+     JOIN "rolesTable" rt ON rtm."rolesId" = rt.id
+     WHERE rtm."templateId" = $1;`,
+    [templateId]
+  );
+
+  // Create map of label -> branch for enabled permissions
+  const activePermissions = new Map();
+  for (const row of permsResult.rows) {
+    activePermissions.set(row.label, row.branch);
+  }
+
+  // Build complete permissions list
+  const permsList = [];
+  for (const [key, label] of Object.entries(permissions)) {
+    const enabled = activePermissions.has(label);
+    permsList.push({
+      key,
+      label,
+      enabled,
+      branch: enabled ? activePermissions.get(label) : null
+    });
+  }
+
+  return {
+    id: String(template.id),
+    label: template.label,
+    createdBy: String(template.created_by),
+    createdAt: template.created_at.toISOString(),
+    permissions: permsList,
+    permissionCount: permsList.filter(p => p.enabled).length
+  };
+}
+
+/**
+ * List all permission templates
+ * @returns {Promise<Array>} Array of templates with basic info
+ */
+async function listPermissionTemplates() {
+  const result = await db.query(
+    `SELECT
+       t.id,
+       t.label,
+       t.created_by,
+       t.created_at,
+       COUNT(tm.id) AS permission_count
+     FROM "rolesTemplate" t
+     LEFT JOIN "rolesTemplateMap" tm ON tm."templateId" = t.id
+     GROUP BY t.id, t.label, t.created_by, t.created_at
+     ORDER BY t.created_at DESC;`
+  );
+
+  const templates = [];
+
+  // For each template, get its full permissions for consistency with getPermissionTemplate
+  for (const row of result.rows) {
+    const fullTemplate = await getPermissionTemplate(row.id);
+    if (fullTemplate) {
+      templates.push(fullTemplate);
+    }
+  }
+
+  return {
+    templates,
+    count: templates.length
+  };
+}
+
+/**
+ * Update a permission template
+ * @param {Object} params
+ * @param {number} params.templateId
+ * @param {string} params.label - Optional new label
+ * @param {Array} params.permissionsList - Optional new permissions
+ * @param {string} params.defaultBranch - Default branch if not specified
+ * @returns {Promise<Object>} Updated template
+ */
+async function updatePermissionTemplate({ templateId, label, permissionsList, defaultBranch = 'Both' }) {
+  const client = await db.pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Update label if provided
+    if (label !== undefined && label !== null) {
+      await client.query(
+        `UPDATE "rolesTemplate"
+         SET label = $1
+         WHERE id = $2;`,
+        [label, templateId]
+      );
+    }
+
+    // Update permissions if provided
+    if (permissionsList && permissionsList.length > 0) {
+      // Delete existing permissions for this template
+      await client.query(
+        `DELETE FROM "rolesTemplateMap"
+         WHERE "templateId" = $1;`,
+        [templateId]
+      );
+
+      // Prepare new permissions to insert
+      const toInsert = [];
+      for (const perm of permissionsList) {
+        const { key, enabled, branch } = perm;
+        const permLabel = permissions[key];
+
+        if (!permLabel) {
+          throw new Error(`Invalid permission key: ${key}`);
+        }
+
+        if (enabled === true) {
+          const effectiveBranch = branch || defaultBranch;
+          toInsert.push({ label: permLabel, branch: effectiveBranch });
+        }
+      }
+
+      // Insert new permissions
+      if (toInsert.length > 0) {
+        const values = [];
+        const params = [templateId];
+        let i = params.length + 1;
+
+        for (const { label: permLabel, branch } of toInsert) {
+          values.push(`($${i}, $${i + 1})`);
+          params.push(permLabel, branch);
+          i += 2;
+        }
+
+        await client.query(
+          `INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
+           SELECT $1, r.id, v.branch, NOW()
+           FROM (VALUES ${values.join(",")}) AS v(label, branch)
+           JOIN "rolesTable" r ON r.label = v.label;`,
+          params
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    logger.info(`Permission template updated: templateId=${templateId}`);
+
+    // Return updated template
+    return await getPermissionTemplate(templateId);
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    logger.error(`Failed to update permission template: ${error.message}`);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Delete a permission template
+ * @param {number} templateId
+ * @returns {Promise<boolean>} True if deleted
+ */
+async function deletePermissionTemplate(templateId) {
+  const client = await db.pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Delete template permissions first (foreign key constraint)
+    await client.query(
+      `DELETE FROM "rolesTemplateMap"
+       WHERE "templateId" = $1;`,
+      [templateId]
+    );
+
+    // Delete template
+    const result = await client.query(
+      `DELETE FROM "rolesTemplate"
+       WHERE id = $1
+       RETURNING id;`,
+      [templateId]
+    );
+
+    await client.query('COMMIT');
+
+    if (result.rows.length > 0) {
+      logger.info(`Permission template deleted: templateId=${templateId}`);
+      return true;
+    }
+
+    return false;
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    logger.error(`Failed to delete permission template: ${error.message}`);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Apply a template to a staff member (copy template permissions to staff)
+ * @param {Object} params
+ * @param {number} params.personnelId - Staff user ID
+ * @param {number} params.templateId - Template ID to apply
+ * @param {number} params.assignedBy - Admin user ID applying the template
+ * @returns {Promise<Object>} Result with inserted permissions
+ */
+async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
+  // Get template permissions
+  const template = await getPermissionTemplate(templateId);
+
+  if (!template) {
+    throw new Error(`Template with id ${templateId} not found`);
+  }
+
+  // Filter only enabled permissions
+  const enabledPermissions = template.permissions
+    .filter(p => p.enabled)
+    .map(p => ({
+      key: p.key,
+      enabled: true,
+      branch: p.branch
+    }));
+
+  // Apply permissions using existing function
+  await setStaffPermissionsExtended({
+    personnelId: String(personnelId),
+    permissionsList: enabledPermissions,
+    assignedBy: String(assignedBy),
+    defaultBranch: 'Both'
+  });
+
+  logger.info(`Template applied to staff: templateId=${templateId}, personnelId=${personnelId}, by userId=${assignedBy}`);
+
+  return {
+    appliedCount: enabledPermissions.length,
+    permissions: enabledPermissions
+  };
+}
+
 module.exports = {
   setMedicalPermit,
   unsetMedicalPermit,
@@ -330,4 +679,11 @@ module.exports = {
   getStaffPermissions,
   setStaffPermissionsExtended,
   setStaffPermissionsStandard,
+  // Template functions
+  createPermissionTemplate,
+  getPermissionTemplate,
+  listPermissionTemplates,
+  updatePermissionTemplate,
+  deletePermissionTemplate,
+  applyTemplateToStaff,
 };
