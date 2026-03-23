@@ -29,7 +29,7 @@ const Mutation = {
     // Update the ticket
     const updateResult = await Wrapper._StaffUpdateTicket(
       _,
-      { args, recordId: record.id },
+      { args, recordId: record.id, scope: record.scope },
       { user, res }
     );
 

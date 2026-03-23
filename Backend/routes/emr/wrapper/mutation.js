@@ -17,7 +17,7 @@ const { validateUpdateTicket } = require("../resolvers/record-validator.js");
 
 
 const Mutation = {
-  _StaffUpdateTicket: async (_, {args, recordId}, { user, res }) => {
+  _StaffUpdateTicket: async (_, {args, recordId, scope}, { user, res }) => {
     let newStatus = args.status;
     if (newStatus !== "Approved" && newStatus !== "Revision" && newStatus !== "Rejected") {
       throwGraphQLError(res)
@@ -27,7 +27,6 @@ const Mutation = {
       }
     
     if (newStatus === 'Approved') { // approval require check again
-      const userTicket = await _getUserUpdateTicket(_, { userId: recordId }, { user, res });
       const scope = userTicket.scope;
       const missingRecords = await validateUpdateTicket(recordId, scope);
       if (missingRecords.length > 0) {
