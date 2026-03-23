@@ -155,16 +155,6 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
               <p className="text-[10px] text-secondary-400 dark:text-neutral-500 font-mono truncate max-w-sm">{viewingFile.filename}</p>
             </div>
             <div className="flex items-center gap-2">
-              <a
-                href={viewingFile.blobUrl}
-                download={viewingFile.filename}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Download
-              </a>
               <button
                 onClick={handleCloseViewer}
                 className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
@@ -202,13 +192,6 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                 </svg>
                 <p className="text-sm text-secondary-600 dark:text-neutral-400">Preview not available for this file type.</p>
                 <p className="text-xs text-secondary-400 dark:text-neutral-500">{viewingFile.contentType}</p>
-                <a
-                  href={viewingFile.blobUrl}
-                  download={viewingFile.filename}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors"
-                >
-                  Download file
-                </a>
               </div>
             )}
           </div>

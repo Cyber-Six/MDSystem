@@ -53,6 +53,20 @@ export function HealthChatProvider({ children }) {
   // Typing indicators (patientId -> { userId, isTyping })
   const [typingUsers, setTypingUsers] = useState({});
 
+  // Needs-reply tracking (patientId -> true when patient sent last msg and staff hasn't replied)
+  const [needsReplyChats, setNeedsReplyChats] = useState(() => {
+    try {
+      const saved = localStorage.getItem('health-chat-needs-reply');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Pending closed chats - tickets closed but still shown in list until staff navigates away
+  // { patientId: { chatId, closedBy, closedAt, isExiting } }
+  const [pendingClosedChats, setPendingClosedChats] = useState({});
+
   // Filter state
   const [filter, setFilter] = useState('active'); // 'active' | 'pending' | 'archive' (kept for backward compatibility)
   const [searchTerm, setSearchTerm] = useState('');
@@ -80,7 +94,7 @@ export function HealthChatProvider({ children }) {
     try {
       setMessagesLoading(true);
       setError(null);
-      const fetchedMessages = await getPatientMessages(Number(selectedPatientId));
+      const fetchedMessages = await getPatientMessages(Number(selectedPatientId), { limit: 50 });
       setMessages(fetchedMessages || []);
     } catch (err) {
       console.error('[HealthChatContext] Failed to refresh messages:', err);
@@ -285,6 +299,53 @@ export function HealthChatProvider({ children }) {
   }, []);
 
   /**
+   * Mark a chat as needing a reply (patient sent last message, staff hasn't replied)
+   */
+  const markNeedsReply = useCallback((patientId, needs) => {
+    setNeedsReplyChats(prev => {
+      const updated = { ...prev };
+      if (needs) {
+        updated[patientId] = true;
+      } else {
+        delete updated[patientId];
+      }
+      localStorage.setItem('health-chat-needs-reply', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  /**
+   * Mark a closed ticket as pending removal (stays in list until staff navigates away)
+   */
+  const markTicketPendingClosed = useCallback((chatId, patientId, closedBy) => {
+    // Update ticket status to Closed immediately
+    setTickets(prev => prev.map(t => {
+      if (String(t.patientId) === String(patientId) ||
+          t.tickets?.some(sub => String(sub.id) === String(chatId))) {
+        const updatedTickets = t.tickets?.map(sub =>
+          String(sub.id) === String(chatId) ? { ...sub, status: 'Closed', closedBy } : sub
+        );
+        return { ...t, status: 'Closed', closedBy, tickets: updatedTickets || t.tickets };
+      }
+      return t;
+    }));
+
+    // Update selectedTicket if currently viewing
+    if (selectedTicket && (
+      String(selectedTicket.patientId) === String(patientId) ||
+      selectedTicket.tickets?.some(sub => String(sub.id) === String(chatId))
+    )) {
+      setSelectedTicket(prev => prev ? { ...prev, status: 'Closed', closedBy } : null);
+    }
+
+    // Track as pending closed for deferred removal with animation
+    setPendingClosedChats(prev => ({
+      ...prev,
+      [patientId]: { chatId, closedBy, closedAt: new Date().toISOString(), isExiting: false }
+    }));
+  }, [selectedTicket]);
+
+  /**
    * Select a patient conversation and load all their messages
    */
   const selectChat = useCallback(async (idOrPatientId) => {
@@ -297,6 +358,31 @@ export function HealthChatProvider({ children }) {
     const patientId = item?.patientId || idOrPatientId;
 
     if (patientId === selectedPatientId) return;
+
+    // When leaving the current chat, update read timestamp so messages seen are marked as read
+    if (selectedPatientId) {
+      markConversationAsRead(selectedPatientId);
+
+      // Check if previous chat has a pending closed status — trigger exit animation
+      const prevPending = pendingClosedChats[selectedPatientId];
+      if (prevPending && !prevPending.isExiting) {
+        setPendingClosedChats(prev => ({
+          ...prev,
+          [selectedPatientId]: { ...prev[selectedPatientId], isExiting: true }
+        }));
+        // Remove from list after animation completes
+        const prevId = selectedPatientId;
+        setTimeout(() => {
+          setTickets(prev => prev.filter(t => String(t.patientId) !== String(prevId)));
+          setConversations(prev => prev.filter(c => String(c.patientId) !== String(prevId)));
+          setPendingClosedChats(prev => {
+            const updated = { ...prev };
+            delete updated[prevId];
+            return updated;
+          });
+        }, 400); // Match animation duration
+      }
+    }
 
     setSelectedPatientId(patientId);
     setSelectedChatId(patientId); // Legacy compatibility
@@ -346,7 +432,7 @@ export function HealthChatProvider({ children }) {
     } finally {
       setMessagesLoading(false);
     }
-  }, [selectedPatientId, tickets, conversations, markConversationAsRead]);
+  }, [selectedPatientId, tickets, conversations, markConversationAsRead, pendingClosedChats]);
 
   /**
    * Add a new message to the current conversation
@@ -409,6 +495,18 @@ export function HealthChatProvider({ children }) {
         updated.unreadCount = (ticket.unreadCount || 0) + 1;
       }
 
+      // If patient sends message while staff is viewing, mark as needs-reply
+      // and update read timestamp so it's not shown as unread when staff leaves
+      if (senderType === 'Patient' && isCurrentlySelected) {
+        markNeedsReply(ticket.patientId, true);
+        markConversationAsRead(ticket.patientId);
+      }
+
+      // If staff sends a message, clear needs-reply status
+      if (senderType === 'Medical') {
+        markNeedsReply(ticket.patientId, false);
+      }
+
       const newArr = [...prev];
       newArr[idx] = updated;
 
@@ -460,7 +558,7 @@ export function HealthChatProvider({ children }) {
 
       return newArr;
     });
-  }, [selectedPatientId, tickets]);
+  }, [selectedPatientId, tickets, markNeedsReply, markConversationAsRead]);
 
   /**
    * Update a ticket's status
@@ -542,9 +640,15 @@ export function HealthChatProvider({ children }) {
 
         setSelectedTicket(approvedChat);
 
-        // Reload messages to show system approval message
-        const fetchedMessages = await getMessages(chatId);
-        setMessages(fetchedMessages || []);
+        // Fetch latest messages using patient messages endpoint (paginated, latest 50)
+        // This ensures we show the most recent messages and scroll to bottom
+        if (patientId) {
+          const fetchedMessages = await getPatientMessages(Number(patientId), { limit: 50 });
+          setMessages(fetchedMessages || []);
+        } else {
+          const fetchedMessages = await getMessages(chatId);
+          setMessages(fetchedMessages || []);
+        }
 
         // Switch filters to include active
         if (!selectedFilters.includes('active')) {
@@ -587,13 +691,17 @@ export function HealthChatProvider({ children }) {
       const result = await sendMessageService(chatId, text, filename, promptType);
       if (result.success && result.message) {
         addMessage(chatId, result.message);
+        // Clear needs-reply when staff sends a message
+        if (selectedPatientId) {
+          markNeedsReply(selectedPatientId, false);
+        }
       }
       return result;
     } catch (err) {
       console.error('[HealthChatContext] Failed to send message:', err);
       throw err;
     }
-  }, [addMessage]);
+  }, [addMessage, selectedPatientId, markNeedsReply]);
 
   /**
    * Close a ticket
@@ -602,13 +710,25 @@ export function HealthChatProvider({ children }) {
     try {
       const result = await closeTicketService(chatId, notes);
       if (result.success) {
-        updateTicketStatus(chatId, 'Closed');
-        // If on active tab, remove it
-        if (filter === 'active') {
-          removeTicket(chatId);
+        // Find patientId for this chat
+        const ticket = tickets.find(t =>
+          String(t.id) === String(chatId) ||
+          t.tickets?.some(sub => String(sub.id) === String(chatId))
+        );
+        const patientId = ticket?.patientId || selectedPatientId;
+
+        // Mark as pending closed (status updates immediately, removal deferred)
+        if (patientId) {
+          markTicketPendingClosed(chatId, patientId, 'Staff');
+        } else {
+          updateTicketStatus(chatId, 'Closed');
         }
+
         // Reload messages to show system message
-        if (String(chatId) === String(selectedChatId)) {
+        if (selectedPatientId) {
+          const fetchedMessages = await getPatientMessages(Number(selectedPatientId), { limit: 50 });
+          setMessages(fetchedMessages || []);
+        } else if (String(chatId) === String(selectedChatId)) {
           const fetchedMessages = await getMessages(chatId);
           setMessages(fetchedMessages || []);
         }
@@ -618,7 +738,7 @@ export function HealthChatProvider({ children }) {
       console.error('[HealthChatContext] Failed to close ticket:', err);
       throw err;
     }
-  }, [updateTicketStatus, filter, removeTicket, selectedChatId]);
+  }, [updateTicketStatus, tickets, selectedPatientId, selectedChatId, markTicketPendingClosed]);
 
   /**
    * Delete an archived ticket (admin only)
@@ -683,6 +803,12 @@ export function HealthChatProvider({ children }) {
     // Typing
     typingUsers,
     setUserTyping,
+
+    // Needs-reply & pending closed
+    needsReplyChats,
+    markNeedsReply,
+    pendingClosedChats,
+    markTicketPendingClosed,
 
     // Actions
     addMessage,

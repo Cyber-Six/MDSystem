@@ -137,8 +137,17 @@ const ChatPanel = ({ emitTyping }) => {
   const isPatientTyping = !isArchived && typingUsers[selectedPatientId || selectedChatId]?.isTyping;
   const isPending = selectedTicket?.status === 'Open';
 
+  // Scroll to bottom when messages load or chat changes
+  // Use double-rAF to ensure DOM has rendered before scrolling
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    const scrollToBottom = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        });
+      });
+    };
+    scrollToBottom();
   }, [messages, isPatientTyping, selectedChatId]);
 
   const formatTime = (dateStr) => {

@@ -47,9 +47,7 @@ const logger = winston.createLogger({
 
     new winston.transports.File({
       filename: getDailyLogFile(),
-      format: winston.format.json(),
-      maxsize: 5 * 1024 * 1024, // 5MB per file — prevents disk fill on constrained storage
-      maxFiles: 7,              // keep 1 week of rotated logs
+      format: winston.format.json()
     })
   ]
 });

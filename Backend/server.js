@@ -87,10 +87,7 @@ app.use('/announcement', AnnouncementRoutes);
 // ======================================
 
 // Serve static assets for the React app
-app.use(express.static(path.join(__dirname, '../mds-patient/dist'), {
-  maxAge: '7d',
-  immutable: true,
-}));
+app.use(express.static(path.join(__dirname, '../mds-patient/dist')));
 
 // Redirect the root URL to '/app'
 

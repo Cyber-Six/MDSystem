@@ -40,6 +40,7 @@ export function useHealthChatSocket() {
     setUserTyping,
     refreshTickets,
     setSocketError,
+    markTicketPendingClosed,
     filter,
     tickets
   } = useHealthChat();
@@ -54,6 +55,7 @@ export function useHealthChatSocket() {
   const setSocketErrorRef = useRef(setSocketError);
   const refreshTicketsRef = useRef(refreshTickets);
   const removeTicketRef = useRef(removeTicket);
+  const markTicketPendingClosedRef = useRef(markTicketPendingClosed);
   const filterRef = useRef(filter);
   const ticketsRef = useRef(tickets);
 
@@ -67,9 +69,10 @@ export function useHealthChatSocket() {
     setSocketErrorRef.current = setSocketError;
     refreshTicketsRef.current = refreshTickets;
     removeTicketRef.current = removeTicket;
+    markTicketPendingClosedRef.current = markTicketPendingClosed;
     filterRef.current = filter;
     ticketsRef.current = tickets;
-  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, filter, tickets]);
+  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, markTicketPendingClosed, filter, tickets]);
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
@@ -163,26 +166,23 @@ export function useHealthChatSocket() {
       });
 
       // Listen for ticket closed by patient
-      // Also handles notifications sent via emitToRole('medical', ...) for non-room events
+      // Updates status immediately but defers removal from list until staff navigates away
       socketService.on('healthchat:ticket-closed', (data) => {
-        if (data.chatId && data.closedBy === 'Patient') {
+        if (data.chatId) {
+          const closedBy = data.closedBy || 'Patient';
           // Track this chat as closed to ignore future typing events
           closedChatIds.current.add(String(data.chatId));
-          // Find the patient for this ticket and update accordingly
+          // Find the patient for this ticket
           const ticketId = String(data.chatId);
           const ticket = ticketsRef.current?.find(t =>
             String(t.id) === ticketId ||
             t.tickets?.some(sub => String(sub.id) === ticketId)
           );
-          if (ticket) {
-            // Refresh to get updated status from server
-            refreshTicketsRef.current();
-          } else {
-            updateTicketStatusRef.current(data.chatId, 'Closed');
-          }
+          const patientId = ticket?.patientId || ticketId;
+          // Mark as pending closed (status updates immediately, removal deferred)
+          markTicketPendingClosedRef.current(data.chatId, patientId, closedBy);
           // Clear typing indicator
-          const patientKey = ticket?.patientId ? String(ticket.patientId) : ticketId;
-          setUserTypingRef.current(patientKey, null, false);
+          setUserTypingRef.current(String(patientId), null, false);
         }
       });
 
@@ -359,7 +359,7 @@ export function useHealthChatSocket() {
         const { getPatientMessages } = await import('../health-chat-service');
 
         // Fetch recent messages (last 10)
-        const messages = await getPatientMessages(Number(selectedChatId), 0, 10);
+        const messages = await getPatientMessages(Number(selectedChatId), { limit: 10 });
 
         // Check if any messages are new (not in processedMessageIds)
         const newMessages = messages.filter(msg => {
