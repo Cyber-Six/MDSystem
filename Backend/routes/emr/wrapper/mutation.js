@@ -12,7 +12,6 @@ const { generateDomainCodes } = require("../../../utils/validator.js");
 const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
     require("../../profile/resolvers/wrapper/wrapper.js");
 
-const { _getUserUpdateTicket } = require("./query.js");
 const { validateUpdateTicket } = require("../resolvers/record-validator.js");
 
 
@@ -27,7 +26,6 @@ const Mutation = {
       }
     
     if (newStatus === 'Approved') { // approval require check again
-      const scope = userTicket.scope;
       const missingRecords = await validateUpdateTicket(recordId, scope);
       if (missingRecords.length > 0) {
         throwGraphQLError(res)
