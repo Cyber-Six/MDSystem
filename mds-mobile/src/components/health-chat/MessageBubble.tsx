@@ -1,0 +1,270 @@
+/**
+ * MessageBubble - Individual chat message display
+ * Mirrors mds-patient MessageBubble.jsx for React Native
+ *
+ * Supports:
+ * - Patient (gold) and staff (white/dark) bubble styles
+ * - System event pills
+ * - Grouped message layout (avatar/timestamp only on first/last)
+ * - Adaptive border radius for conversation flow
+ */
+
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { useTheme, colors } from '../../context/ThemeContext';
+
+interface Message {
+  id: string;
+  text?: string;
+  userType: 'Patient' | 'Medical';
+  promptType?: string;
+  stamp?: string;
+  filename?: string;
+}
+
+interface MessageBubbleProps {
+  message: Message;
+  formatTime: (date?: string) => string;
+  isFirstInGroup?: boolean;
+  isLastInGroup?: boolean;
+}
+
+const MessageBubble: React.FC<MessageBubbleProps> = ({
+  message,
+  formatTime,
+  isFirstInGroup = true,
+  isLastInGroup = true,
+}) => {
+  const { isDark } = useTheme();
+  const isPatient = message.userType === 'Patient';
+  const isSystem = message.promptType === 'system';
+
+  // System event pill
+  if (isSystem) {
+    return (
+      <View style={styles.systemContainer}>
+        <View
+          style={[
+            styles.systemPill,
+            {
+              backgroundColor: isDark ? colors.neutral[800] : colors.neutral[100],
+              borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+            },
+          ]}
+        >
+          <Text style={styles.systemIcon}>ℹ</Text>
+          <Text
+            style={[
+              styles.systemText,
+              { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+            ]}
+          >
+            {message.text}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Compute border radii for conversation flow
+  const getPatientRadius = () => ({
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: isFirstInGroup ? 18 : 18,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: isLastInGroup ? 4 : 18,
+  });
+
+  const getStaffRadius = () => ({
+    borderTopLeftRadius: isFirstInGroup ? 18 : 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: isLastInGroup ? 4 : 18,
+    borderBottomRightRadius: 18,
+  });
+
+  return (
+    <View style={{ marginBottom: isLastInGroup ? 6 : 2 }}>
+      <View
+        style={[
+          styles.messageRow,
+          isPatient ? styles.rowRight : styles.rowLeft,
+        ]}
+      >
+        {/* Staff avatar — only visible on last bubble of group */}
+        {!isPatient && (
+          <View
+            style={[
+              styles.avatar,
+              { opacity: isLastInGroup ? 1 : 0 },
+            ]}
+          >
+            <Text style={styles.avatarText}>🩺</Text>
+          </View>
+        )}
+
+        <View
+          style={[
+            styles.bubbleColumn,
+            isPatient ? styles.alignEnd : styles.alignStart,
+          ]}
+        >
+          {/* Sender label — first bubble of staff group */}
+          {!isPatient && isFirstInGroup && (
+            <Text
+              style={[
+                styles.senderLabel,
+                { color: isDark ? colors.neutral[500] : colors.neutral[400] },
+              ]}
+            >
+              Medical Staff
+            </Text>
+          )}
+
+          {/* Bubble */}
+          {isPatient ? (
+            <View style={[styles.patientBubble, getPatientRadius()]}>
+              <Text style={styles.patientText}>{message.text}</Text>
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.staffBubble,
+                getStaffRadius(),
+                {
+                  backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
+                  borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.staffText,
+                  { color: isDark ? colors.neutral[100] : colors.secondary[800] },
+                ]}
+              >
+                {message.text}
+              </Text>
+            </View>
+          )}
+
+          {/* Timestamp — only on last bubble */}
+          {isLastInGroup && (
+            <Text
+              style={[
+                styles.timestamp,
+                { color: isDark ? colors.neutral[500] : colors.neutral[400] },
+              ]}
+            >
+              {formatTime(message.stamp)}
+            </Text>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  // System
+  systemContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  systemPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  systemIcon: {
+    fontSize: 11,
+  },
+  systemText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  // Message layout
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  rowRight: {
+    flexDirection: 'row-reverse',
+  },
+  rowLeft: {
+    flexDirection: 'row',
+  },
+  // Avatar
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(244,196,48,0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(244,196,48,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 14,
+  },
+  // Column
+  bubbleColumn: {
+    maxWidth: '76%',
+  },
+  alignEnd: {
+    alignItems: 'flex-end',
+  },
+  alignStart: {
+    alignItems: 'flex-start',
+  },
+  // Sender label
+  senderLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginBottom: 2,
+    paddingHorizontal: 4,
+  },
+  // Patient bubble
+  patientBubble: {
+    backgroundColor: '#F4C430',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    elevation: 2,
+    shadowColor: '#F4C430',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  patientText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.secondary[900],
+  },
+  // Staff bubble
+  staffBubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1.5,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  staffText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  // Timestamp
+  timestamp: {
+    fontSize: 10,
+    marginTop: 2,
+    paddingHorizontal: 4,
+  },
+});
+
+export default React.memo(MessageBubble);

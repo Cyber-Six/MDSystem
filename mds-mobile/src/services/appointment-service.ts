@@ -33,7 +33,7 @@ export const getAppointmentStatus = async () => {
   const data = await sendGraphQL(`
     query {
       getAppointmentStatus {
-        id status session notes rejection_acknowledged created_at
+        id status session notes rejection_acknowledged created_at schedulerLabel
       }
     }
   `);
@@ -49,7 +49,7 @@ export const listOpenAppointments = async (offset = 0, limit = 20) => {
   const data = await sendGraphQL(`
     query ListOpenAppointments($offset: Int, $limit: Int) {
       listOpenAppointments(offset: $offset, limit: $limit) {
-        id label location schedulePerWeek
+        id label location patientType schedulePerWeek
         morningAllowed afternoonAllowed notes
         isActive containsCustomDates whitelistOnly
       }

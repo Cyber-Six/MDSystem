@@ -3,10 +3,13 @@
  * 
  * This file creates React Native-specific implementations of the @mdsystem/core services
  * by injecting mobile-specific dependencies (AsyncStorage, navigation, etc.)
+ * 
+ * Unlike the web apps (which use Vite's dev proxy and relative URLs),
+ * React Native MUST use absolute URLs since there is no proxy layer.
+ * Both dev and production connect to the same backend.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createApiBaseUrlProvider } from '@mdsystem/core/services/api-base-url-provider';
 import { createTokenService } from '@mdsystem/core/services/token-service';
 import { createAxiosRequestHandler } from '@mdsystem/core/services/axios-request-handler';
 import * as bannerConfig from '@mdsystem/core/config/banner-config';
@@ -24,66 +27,52 @@ export const setNavigationRef = (ref: any): void => {
   navigationRef = ref;
 };
 
-// Get hostname from environment or config
-const getHostname = (): string => {
-  // TODO: Replace with your environment config (react-native-config or similar)
-  // For now, return a default based on __DEV__
-  if (__DEV__) {
-    return 'localhost'; // or 'patient.mdsystemtip.space' for dev
-  }
-  return 'patient.mdsystemtip.space'; // or your production domain
-};
+// ── Backend Configuration ──
+// React Native has no proxy — always use the absolute backend URL.
+// Both dev and production connect to the same server.
+const BACKEND_URL = 'https://www.mdsystemtip.space';
 
-// Get environment variable
-const getEnv = (key: string): string | undefined => {
-  // TODO: Replace with react-native-config when needed
-  // import Config from 'react-native-config';
-  // return Config[key];
-  
-  // For now, return defaults
-  const envVars: Record<string, string> = {
-    API_BASE_URL: __DEV__ ? 'http://localhost:3000' : 'https://api.mdsystemtip.space',
-  };
-  return envVars[key];
-};
+/**
+ * Returns the absolute backend URL.
+ * Web apps return '' (empty) for relative/proxy URLs, but React Native
+ * must always return the full URL since there is no proxy.
+ */
+const getApiBaseUrl = (): string => BACKEND_URL;
 
-// 1. Create API base URL provider with React Native dependencies
-export const apiBaseUrlProvider = createApiBaseUrlProvider({
-  getHostname,
-  getEnv,
-}) as any; // Type assertion for JS module
+/**
+ * Returns the hostname for the X-Forwarded-Host header.
+ * The backend uses this to detect which portal (patient vs staff) is calling.
+ */
+const getDevSubdomain = (): string => 'www.mdsystemtip.space';
 
-// 2. Create token service with AsyncStorage and navigation
+// 1. Create token service with AsyncStorage and navigation
 export const tokenService = createTokenService({
-  storage: AsyncStorage, // AsyncStorage returns promises automatically
+  storage: AsyncStorage,
   navigator: {
-    navigate: (path: string) => {
+    navigate: (_path: string) => {
       if (navigationRef) {
-        // Navigate using your navigation reference
-        // Example: navigationRef.navigate('Login');
-        navigationRef.navigate('Auth'); // Adjust based on your route names
+        navigationRef.navigate('Auth');
       }
     },
   },
-  getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
+  getApiBaseUrl,
   tokenNamespace: 'patient',
-}) as any; // Type assertion for JS module
+}) as any;
 
-// 3. Create banner service instance
+// 2. Create banner service instance
 export const bannerService = new BannerService() as any;
 
-// 4. Create axios instance with all dependencies
+// 3. Create axios instance with all dependencies
 export const axiosRequest: AxiosInstance = createAxiosRequestHandler({
-  getApiBaseUrl: apiBaseUrlProvider.getApiBaseUrl,
-  getDevSubdomain: apiBaseUrlProvider.getDevSubdomain,
+  getApiBaseUrl,
+  getDevSubdomain,
   tokenService,
   bannerConfig,
   onShowBanner: (banner: any) => bannerService.showBanner(banner),
 });
 
 // Export convenience methods
-export const getApiBaseUrl = apiBaseUrlProvider.getApiBaseUrl;
-export const getDevSubdomain = apiBaseUrlProvider.getDevSubdomain;
+export { getApiBaseUrl, getDevSubdomain };
 export const TokenStorage = tokenService.TokenStorage;
 export const refreshAccessToken = tokenService.refreshAccessToken;
 export const logout = tokenService.logout;

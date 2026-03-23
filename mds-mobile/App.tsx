@@ -2,18 +2,19 @@
  * MDSystem Mobile App
  * 
  * React Native app with NativeWind styling, dark mode support,
- * and shared business logic from @mdsystem/core
+ * React Navigation bottom tabs, and shared business logic from @mdsystem/core
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, Text, LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AuthScreen } from './src/screens/auth';
-import { DashboardScreen } from './src/screens/dashboard/DashboardScreen';
-import { bannerService } from './src/core';
+import { MainTabNavigator } from './src/navigation/MainTabNavigator';
+import { bannerService, setNavigationRef } from './src/core';
 
 // SafeAreaView deprecation currently surfaces from third-party dependencies.
 LogBox.ignoreLogs([
@@ -84,6 +85,14 @@ const LoadingScreen: React.FC = () => {
 const AppContent: React.FC = () => {
   const { isDark } = useTheme();
   const { isAuthenticated, isLoading, checkAuth } = useAuth();
+  const navigationRef = useRef<NavigationContainerRef<any>>(null);
+
+  // Wire navigation ref to core.ts for logout redirects
+  useEffect(() => {
+    if (navigationRef.current) {
+      setNavigationRef(navigationRef.current);
+    }
+  }, []);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -92,7 +101,9 @@ const AppContent: React.FC = () => {
   return (
     <View className={`flex-1 ${isDark ? 'bg-neutral-900' : 'bg-white'}`}>
       {isAuthenticated ? (
-        <DashboardScreen onLogout={checkAuth} />
+        <NavigationContainer ref={navigationRef}>
+          <MainTabNavigator />
+        </NavigationContainer>
       ) : (
         <AuthScreen onAuthSuccess={checkAuth} />
       )}

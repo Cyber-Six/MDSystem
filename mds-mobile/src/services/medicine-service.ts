@@ -6,7 +6,7 @@
 import { sendGraphQLRequest } from './graphql-client';
 
 const sendGraphQL = async (query: string, variables: Record<string, any> = {}) => {
-  return sendGraphQLRequest(query, variables, { endpoint: '/medical-inventory/patient' });
+  return sendGraphQLRequest(query, variables, { endpoint: '/medical-inventory/medicine-request/patient' });
 };
 
 export const listMedicines = async (branch: string) => {
