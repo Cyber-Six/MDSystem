@@ -17,6 +17,7 @@ import {
   StyleSheet,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useBanner } from '../../context/BannerContext';
 import {
@@ -70,6 +71,14 @@ export const MedicineRequestScreen: React.FC = () => {
   const [requests, setRequests] = useState<MedicineRequest[]>([]);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  // Load status on mount so we can check pending before submit
+  useEffect(() => {
+    getMedicineStatus()
+      .then(setRequests)
+      .catch(() => {});
+  }, []);
 
   // Load medicines when location changes
   useEffect(() => {
@@ -184,9 +193,23 @@ export const MedicineRequestScreen: React.FC = () => {
     }
   };
 
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      await cancelMedicineRequest();
+      showBanner({ type: 'success', message: 'Medicine request cancelled.' });
+      await loadHistory();
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel request.');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   return (
-    <View
+    <SafeAreaView
       style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
+      edges={['top']}
     >
       {/* Tab bar */}
       <View style={[styles.tabBar, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
@@ -455,13 +478,27 @@ export const MedicineRequestScreen: React.FC = () => {
                       ))}
                     </View>
                   )}
+
+                  {req.status === 'Pending' && (
+                    <TouchableOpacity
+                      style={[styles.cancelButton, { opacity: cancelling ? 0.5 : 1 }]}
+                      onPress={handleCancel}
+                      disabled={cancelling}
+                      activeOpacity={0.7}
+                    >
+                      {cancelling && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />}
+                      <Text style={styles.cancelButtonText}>
+                        {cancelling ? 'Cancelling...' : 'Cancel Request'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })
           )}
         </ScrollView>
       )}
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -591,6 +628,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   primaryButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+  cancelButton: {
+    backgroundColor: colors.error[500],
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  cancelButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
 });
 
 export default MedicineRequestScreen;

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { useRecordStatus } from '../../context/RecordStatusContext';
 import { ProgressStepper } from '../../components/ui/ProgressStepper';
 import PersonalInfoStep from './steps/PersonalInfoStep';
 import MedicalHistoryStep from './steps/MedicalHistoryStep';
@@ -34,6 +35,7 @@ const InitialRecordFormScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { isDark } = useTheme();
+  const { refreshRecordStatus } = useRecordStatus();
   const scrollRef = useRef<ScrollView>(null);
 
   const isRevision = route.params?.isRevision ?? false;
@@ -188,6 +190,7 @@ const InitialRecordFormScreen: React.FC = () => {
             setIsSubmitting(true);
             try {
               await createInitialMedicalRecord(formData, { isRevision });
+              await refreshRecordStatus();
               Alert.alert(
                 'Success!',
                 'Your medical record has been submitted successfully.',

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image, StyleSheet } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
 
 interface ChatInputProps {
@@ -14,6 +14,11 @@ interface ChatInputProps {
   isSocketConnected: boolean;
   onChangeText: (text: string) => void;
   onSend: () => void;
+  // Media attachment
+  onPickImage?: () => void;
+  pendingImage?: { uri: string } | null;
+  onClearPendingImage?: () => void;
+  isUploading?: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -23,12 +28,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
   isSocketConnected,
   onChangeText,
   onSend,
+  onPickImage,
+  pendingImage,
+  onClearPendingImage,
+  isUploading = false,
 }) => {
   const { isDark } = useTheme();
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
   const isPending = ticketStatus === 'Open';
   const isActive = ticketStatus === 'Ongoing';
-  const canSend = isActive && !isLoading;
+  const canSend = isActive && !isLoading && !isUploading;
+  const hasPendingContent = Boolean(inputValue.trim()) || Boolean(pendingImage);
 
   // Frozen state
   if (isFrozen) {
@@ -109,11 +119,55 @@ const ChatInput: React.FC<ChatInputProps> = ({
         },
       ]}
     >
+      {/* Pending image preview strip */}
+      {pendingImage && (
+        <View
+          style={[
+            styles.previewStrip,
+            {
+              backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+              borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
+            },
+          ]}
+        >
+          <Image source={{ uri: pendingImage.uri }} style={styles.previewThumb} resizeMode="cover" />
+          <Text
+            style={[styles.previewLabel, { color: isDark ? colors.neutral[300] : colors.secondary[700] }]}
+          >
+            Image ready to send
+          </Text>
+          <TouchableOpacity
+            onPress={onClearPendingImage}
+            hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
+          >
+            <Text style={{ fontSize: 18, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.inputRow}>
+        {/* Attachment button */}
+        {onPickImage && (
+          <TouchableOpacity
+            style={[
+              styles.attachButton,
+              {
+                backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100],
+                borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
+              },
+            ]}
+            onPress={onPickImage}
+            disabled={!canSend}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 18 }}>📎</Text>
+          </TouchableOpacity>
+        )}
+
         <TextInput
           value={inputValue}
           onChangeText={onChangeText}
-          placeholder="Type a message..."
+          placeholder={pendingImage ? 'Add a caption (optional)...' : 'Type a message...'}
           placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
           multiline
           style={[
@@ -132,7 +186,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             styles.sendButton,
             {
               backgroundColor:
-                canSend && inputValue.trim()
+                canSend && hasPendingContent
                   ? '#F4C430'
                   : isDark
                     ? colors.neutral[700]
@@ -140,10 +194,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
             },
           ]}
           onPress={onSend}
-          disabled={!canSend || !inputValue.trim()}
+          disabled={!canSend || !hasPendingContent}
           activeOpacity={0.7}
         >
-          {isLoading ? (
+          {isLoading || isUploading ? (
             <ActivityIndicator size="small" color={colors.secondary[900]} />
           ) : (
             <Text
@@ -151,7 +205,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 styles.sendIcon,
                 {
                   color:
-                    canSend && inputValue.trim()
+                    canSend && hasPendingContent
                       ? colors.secondary[900]
                       : isDark
                         ? colors.neutral[500]
@@ -210,6 +264,33 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   // Active input
+  previewStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  previewThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+  },
+  previewLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  attachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

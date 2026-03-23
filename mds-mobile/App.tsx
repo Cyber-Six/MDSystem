@@ -13,6 +13,7 @@ import { NavigationContainer, NavigationContainerRef } from '@react-navigation/n
 import { ThemeProvider, useTheme, colors } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { BannerProvider } from './src/context/BannerContext';
+import { RecordStatusProvider } from './src/context/RecordStatusContext';
 import { AuthScreen } from './src/screens/auth';
 import { MainTabNavigator } from './src/navigation/MainTabNavigator';
 import { Banner as BannerComponent } from './src/components/Banner';
@@ -122,9 +123,11 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <BannerProvider>
-            <AppContent />
-          </BannerProvider>
+          <RecordStatusProvider>
+            <BannerProvider>
+              <AppContent />
+            </BannerProvider>
+          </RecordStatusProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

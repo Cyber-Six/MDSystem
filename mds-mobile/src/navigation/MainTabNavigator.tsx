@@ -5,14 +5,27 @@
 
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, View, Platform, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainTabParamList } from './types';
 import { DashboardHomeScreen } from '../screens/dashboard/DashboardHomeScreen';
 import { AppointmentScreen } from '../screens/appointment/AppointmentScreen';
 import { HealthChatScreen } from '../screens/health-chat/HealthChatScreen';
-import InitialRecordFormScreen from '../screens/record-forms/InitialRecordFormScreen';
+import { MedicineRequestScreen } from '../screens/medicine/MedicineRequestScreen';
 import { MoreStackNavigator } from './MoreStackNavigator';
 import { useTheme, colors } from '../context/ThemeContext';
+import PendingRecordGate from '../components/PendingRecordGate';
+
+// Wrap screens that should be gated behind initial-record approval
+const GatedAppointmentScreen = (props: any) => (
+  <PendingRecordGate><AppointmentScreen {...props} /></PendingRecordGate>
+);
+const GatedHealthChatScreen = (props: any) => (
+  <PendingRecordGate><HealthChatScreen {...props} /></PendingRecordGate>
+);
+const GatedMedicineScreen = (props: any) => (
+  <PendingRecordGate><MedicineRequestScreen {...props} /></PendingRecordGate>
+);
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -32,6 +45,10 @@ const TabIcon: React.FC<{ icon: string; focused: boolean }> = ({
 
 export const MainTabNavigator: React.FC = () => {
   const { isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  // On Android, bottom insets can be 0 even with gesture nav. Ensure a minimum.
+  const bottomPadding = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 10);
 
   return (
     <Tab.Navigator
@@ -41,8 +58,8 @@ export const MainTabNavigator: React.FC = () => {
           backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50],
           borderTopColor: isDark ? colors.neutral[800] : colors.neutral[200],
           borderTopWidth: 1,
-          height: 80,
-          paddingBottom: 20,
+          height: 56 + bottomPadding,
+          paddingBottom: bottomPadding,
           paddingTop: 8,
           elevation: 8,
           shadowColor: '#000',
@@ -72,7 +89,7 @@ export const MainTabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="Appointments"
-        component={AppointmentScreen}
+        component={GatedAppointmentScreen}
         options={{
           tabBarLabel: 'Appointments',
           tabBarIcon: ({ focused }) => (
@@ -82,7 +99,7 @@ export const MainTabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="HealthChat"
-        component={HealthChatScreen}
+        component={GatedHealthChatScreen}
         options={{
           tabBarLabel: 'Health Chat',
           tabBarIcon: ({ focused }) => (
@@ -92,11 +109,11 @@ export const MainTabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="Records"
-        component={InitialRecordFormScreen}
+        component={GatedMedicineScreen}
         options={{
-          tabBarLabel: 'Records',
+          tabBarLabel: 'Medicine',
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="📋" focused={focused} />
+            <TabIcon icon="💊" focused={focused} />
           ),
         }}
       />
