@@ -1,6 +1,7 @@
 /**
  * Profile Screen
  * Mirrors mds-patient profile-modal.jsx
+ * Fetches real profile data from backend via profile-service
  */
 
 import React, { useState, useEffect } from 'react';
@@ -8,20 +9,12 @@ import {
   View,
   Text,
   ScrollView,
+  ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
-import { TokenStorage } from '../../core';
-
-const decodeJWT = (token: string) => {
-  try {
-    const payload = token.split('.')[1];
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-};
+import { getPatientProfile, PatientProfile } from '../../services/profile-service';
 
 const ProfileField: React.FC<{
   icon: string;
@@ -63,22 +56,30 @@ const ProfileField: React.FC<{
 
 export const ProfileScreen: React.FC = () => {
   const { isDark } = useTheme();
-  const [userEmail, setUserEmail] = useState('');
+  const [profile, setProfile] = useState<PatientProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loadUser = async () => {
-      const token = await TokenStorage.getAccessToken();
-      if (token) {
-        const decoded = decodeJWT(token);
-        setUserEmail(decoded?.email || '');
-      }
-    };
-    loadUser();
+    getPatientProfile()
+      .then(setProfile)
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const displayName = userEmail
-    ? userEmail.split('@')[0].replace(/[._]/g, ' ')
-    : 'Patient';
+  const displayName = profile?.name || profile?.email?.split('@')[0]?.replace(/[._]/g, ' ') || 'Patient';
+
+  if (isLoading) {
+    return (
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
+        edges={['top']}
+      >
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary[500]} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView
@@ -135,30 +136,21 @@ export const ProfileScreen: React.FC = () => {
             Personal Information
           </Text>
 
+          <ProfileField icon="📧" label="Email" value={profile?.email || '—'} isDark={isDark} />
+          <ProfileField icon="📞" label="Contact Number" value={profile?.contactNumber || '—'} isDark={isDark} />
           <ProfileField
-            icon="📧"
-            label="Email"
-            value={userEmail || '—'}
-            isDark={isDark}
-          />
-          <ProfileField
-            icon="📞"
-            label="Contact Number"
-            value="—"
+            icon="🆘"
+            label="Emergency Contact 1"
+            value={profile?.firstEmergencyContactNumber || '—'}
             isDark={isDark}
           />
           <ProfileField
             icon="🆘"
-            label="Emergency Contact"
-            value="—"
+            label="Emergency Contact 2"
+            value={profile?.secondEmergencyContactNumber || '—'}
             isDark={isDark}
           />
-          <ProfileField
-            icon="🪪"
-            label="Student ID"
-            value="—"
-            isDark={isDark}
-          />
+          <ProfileField icon="🪪" label="Student ID" value={profile?.identifier || '—'} isDark={isDark} />
         </View>
 
         <Text
@@ -176,6 +168,7 @@ export const ProfileScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { padding: 20, paddingBottom: 40 },
   avatarSection: { alignItems: 'center', marginBottom: 24 },
   avatar: {

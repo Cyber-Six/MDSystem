@@ -33,11 +33,13 @@ type LoginStep = 'credentials' | '2fa';
 
 interface LoginScreenProps {
   onNavigateToRegister: () => void;
+  onNavigateToForgotPassword?: () => void;
   onLoginSuccess: () => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ 
   onNavigateToRegister,
+  onNavigateToForgotPassword,
   onLoginSuccess 
 }) => {
   const { isDark } = useTheme();
@@ -302,7 +304,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       <View style={styles.linkContainer}>
         <LinkButton 
           title="Forgot your password?" 
-          onPress={() => {/* TODO: Navigate to forgot password */}} 
+          onPress={() => onNavigateToForgotPassword?.()} 
         />
       </View>
 

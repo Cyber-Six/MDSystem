@@ -24,6 +24,7 @@ export type MoreStackParamList = {
   FAQs: undefined;
   ContactSupport: undefined;
   Feedback: undefined;
+  InitialRecordForm: { isRevision?: boolean } | undefined;
 };
 
 export type RootStackParamList = {
