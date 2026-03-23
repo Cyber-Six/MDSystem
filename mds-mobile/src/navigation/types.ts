@@ -11,7 +11,7 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Home: undefined;
   Appointments: undefined;
-  Consultation: undefined;
+  HealthChat: undefined;
   Medicine: undefined;
   More: undefined;
 };
@@ -24,6 +24,7 @@ export type MoreStackParamList = {
   FAQs: undefined;
   ContactSupport: undefined;
   Feedback: undefined;
+  InitialRecordForm: { isRevision?: boolean } | undefined;
 };
 
 export type RootStackParamList = {

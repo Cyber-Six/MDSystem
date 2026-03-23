@@ -20,8 +20,8 @@ const FAQ_DATA = [
     a: 'Navigate to the Appointments tab, select an appointment type, choose your preferred date and session, then submit your request.',
   },
   {
-    q: 'How does the AI Consultation work?',
-    a: 'The AI Consultation provides general health information through a chat interface. It does not replace professional medical advice. Type your health question and the AI will respond in real-time.',
+    q: 'How does Health Chat work?',
+    a: 'Health Chat connects you directly with our medical team. Create a consultation ticket describing your concern, and a staff member will join the chat to assist you.',
   },
   {
     q: 'How do I request medicine?',
