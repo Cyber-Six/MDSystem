@@ -114,7 +114,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       });
       
       if (response.data.ok) {
-        setVerificationKey(response.data.verificationKey);
+        setVerificationKey(response.data.LoginKey);
         
         if (response.data.requires2FA) {
           await handleSend2FA();
@@ -241,7 +241,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       // Complete login
       const response = await axiosRequest.post('/auth/login/complete', { 
-        verificationKey 
+        LoginKey: verificationKey 
       });
       
       if (response.data.ok) {

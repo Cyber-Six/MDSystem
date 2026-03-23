@@ -71,54 +71,78 @@ export const sendMessageStreaming = async (
   const streamUrl = `${baseUrl}/econsultation/chat/message/stream`;
   const accessToken = await TokenStorage.getAccessToken();
 
-  const response = await fetch(streamUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: JSON.stringify({ sessionId, message }),
-    signal,
-  });
+  // React Native's fetch does not support ReadableStream / response.body.getReader().
+  // Use XMLHttpRequest which fires onreadystatechange as chunks arrive (streaming).
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', streamUrl);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    if (accessToken) {
+      xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
+    }
 
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    let lastIndex = 0;
+    let accumulatedContent = '';
 
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body');
+    // Handle abort signal
+    if (signal) {
+      signal.addEventListener('abort', () => xhr.abort());
+    }
 
-  const decoder = new TextDecoder();
-  let accumulatedContent = '';
+    xhr.onreadystatechange = () => {
+      // readyState 3 = LOADING (partial data available), 4 = DONE
+      if (xhr.readyState < 3) return;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+      if (xhr.status !== 0 && xhr.status !== 200) {
+        if (xhr.readyState === 4) {
+          reject(new Error(`HTTP error! status: ${xhr.status}`));
+        }
+        return;
+      }
 
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split('\n');
+      // Process new data since last check
+      const newText = xhr.responseText.substring(lastIndex);
+      lastIndex = xhr.responseText.length;
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          if (data.token !== undefined) {
-            accumulatedContent = data.content || (accumulatedContent + data.token);
-            onToken(accumulatedContent);
-          } else if (data.message !== undefined && data.role === 'assistant') {
-            onDone({
-              id: Date.now(),
-              role: 'assistant',
-              content: data.message,
-              timestamp: new Date(),
-            });
-          } else if (data.error) {
-            onError(data.message || 'An error occurred');
+      const lines = newText.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.token !== undefined) {
+              accumulatedContent = data.content || (accumulatedContent + data.token);
+              onToken(accumulatedContent);
+            } else if (data.message !== undefined && data.role === 'assistant') {
+              onDone({
+                id: Date.now(),
+                role: 'assistant',
+                content: data.message,
+                timestamp: new Date(),
+              });
+            } else if (data.error) {
+              onError(data.message || 'An error occurred');
+            }
+          } catch {
+            // Ignore unparseable SSE data
           }
-        } catch {
-          // Ignore unparseable SSE data
         }
       }
-    }
-  }
+
+      if (xhr.readyState === 4) {
+        resolve();
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during streaming'));
+    };
+
+    xhr.onabort = () => {
+      resolve();
+    };
+
+    xhr.send(JSON.stringify({ sessionId, message }));
+  });
 };
 
 export const cancelGeneration = async (sessionId: string): Promise<void> => {
