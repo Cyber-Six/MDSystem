@@ -449,7 +449,9 @@ export const HealthChatScreen: React.FC = () => {
                   await loadMessages(ticket.id);
                   setIsRefreshing(false);
                 }}
+                colors={[colors.primary[500]]}
                 tintColor={colors.primary[500]}
+                progressBackgroundColor={colors.secondary[900]}
               />
             }
             ListHeaderComponent={
