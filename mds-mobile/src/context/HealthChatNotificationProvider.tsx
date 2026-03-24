@@ -13,12 +13,14 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { createSocketService } from '@mdsystem/core/services/socket-service';
-import { getApiBaseUrl, TokenStorage, refreshAccessToken, getNavigationRef } from '../core';
+import { getApiBaseUrl, TokenStorage, refreshAccessToken, getNavigationRef, axiosRequest } from '../core';
 import {
   requestNotificationPermissions,
   setupNotificationChannel,
   showHealthChatNotification,
   onNotificationResponse,
+  getExpoPushToken,
+  registerPushToken,
 } from '../services/notification-service';
 
 interface SocketService {
@@ -68,21 +70,33 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
   ) => {
     const isActive = appStateRef.current === 'active';
 
+    if (isActive && isOnHealthChat()) {
+      return; // User already sees it live — nothing to do
+    }
+
+    // Show notification in all other cases:
+    //   - App active but on a different tab → banner on screen + badge
+    //   - App backgrounded / inactive → lock-screen notification
+    await showHealthChatNotification(notifTitle, notifBody, notifData);
+
+    // Additionally bump the tab badge so user sees the count even after dismissing banner
     if (isActive) {
-      // User has the app open
-      if (isOnHealthChat()) return; // Already looking at it — nothing to do
-      incrementBadge();             // On another tab — bump the badge
-    } else {
-      // App is backgrounded — show a local push notification
-      await showHealthChatNotification(notifTitle, notifBody, notifData);
+      incrementBadge();
     }
   };
 
-  // Set up notifications on mount
+  // Set up notifications + register Expo push token on mount
   useEffect(() => {
     (async () => {
       await setupNotificationChannel();
-      await requestNotificationPermissions();
+      const granted = await requestNotificationPermissions();
+      if (granted) {
+        // Register push token with backend so remote push works when app is killed
+        const token = await getExpoPushToken();
+        if (token) {
+          await registerPushToken(token, axiosRequest);
+        }
+      }
     })();
 
     // Navigate to HealthChat when user taps a notification

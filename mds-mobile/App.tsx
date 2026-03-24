@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, Text, LogBox, StyleSheet } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
+import * as Notifications from 'expo-notifications';
 import { ThemeProvider, useTheme, colors } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { BannerProvider } from './src/context/BannerContext';
@@ -102,6 +103,25 @@ const AppContent: React.FC = () => {
       setNavigationRef(navigationRef.current);
     }
   }, []);
+
+  // Cold-start: handle a notification tap that launched the app from killed state
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!response) return;
+      const data = response.notification.request.content.data;
+      if (data?.type === 'health-chat') {
+        // Small delay to ensure NavigationContainer is fully mounted
+        setTimeout(() => {
+          try {
+            navigationRef.current?.navigate('HealthChat' as never);
+          } catch {
+            // Navigation not ready
+          }
+        }, 300);
+      }
+    });
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return <LoadingScreen />;

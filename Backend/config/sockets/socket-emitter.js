@@ -1,7 +1,8 @@
 const logger = require('../../utils/logger');
 const { isConnectedAnywhere } = require('./socket-store');
-const { pushPending } = require('./notification-store');
+const { pushPending, getPushToken } = require('./notification-store');
 const { enqueueNotificationEmail } = require('../../services/emailservice');
+const { sendExpoPushNotification, eventToPushContent } = require('./push-notification');
 
 // Lazy-loaded to avoid circular dependency with socket-server.js
 let _getIO;
@@ -127,6 +128,16 @@ async function notifyUser(userId, eventName, data, emailNotif = null) {
   }
   await pushPending(userId, eventName, data);
   logger.debug(`[NOTIF] Queued "${eventName}" for offline user:${userId}`);
+
+  // Send Expo remote push notification so the device receives it even when app is killed
+  const pushContent = eventToPushContent(eventName, data);
+  if (pushContent) {
+    const pushToken = await getPushToken(String(userId));
+    if (pushToken) {
+      await sendExpoPushNotification(pushToken, pushContent.title, pushContent.body, { chatId: data?.chatId ?? data?.chat?.id });
+    }
+  }
+
   if (emailNotif && emailNotif.email) {
     try {
       await enqueueNotificationEmail(

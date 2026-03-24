@@ -7,6 +7,8 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import type { AxiosInstance } from 'axios';
 
 // Configure how notifications display when app is in foreground
 Notifications.setNotificationHandler({
@@ -79,4 +81,52 @@ export function onNotificationResponse(
 ): () => void {
   const subscription = Notifications.addNotificationResponseReceivedListener(handler);
   return () => subscription.remove();
+}
+
+// ── Expo Push Token (remote notifications when app is closed) ─────────────────
+
+/**
+ * Get the Expo push token for this device.
+ * Returns null on emulators or if EAS project ID is missing.
+ */
+export async function getExpoPushToken(): Promise<string | null> {
+  if (!Device.isDevice) {
+    // Emulators have no push token
+    return null;
+  }
+  try {
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+    if (!projectId) {
+      console.warn('[Notifications] No EAS project ID found in app config — skipping push token.');
+      return null;
+    }
+    const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
+    return data;
+  } catch (err: any) {
+    console.warn('[Notifications] Failed to get Expo push token:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Register the Expo push token with the backend so it can send remote pushes
+ * while the app is fully closed.
+ */
+export async function registerPushToken(token: string, axiosInstance: AxiosInstance): Promise<void> {
+  try {
+    await axiosInstance.post('/auth/push-token', { token });
+  } catch (err: any) {
+    console.warn('[Notifications] Failed to register push token with backend:', err.message);
+  }
+}
+
+/**
+ * Unregister the push token from the backend (call on logout).
+ */
+export async function unregisterPushToken(axiosInstance: AxiosInstance): Promise<void> {
+  try {
+    await axiosInstance.delete('/auth/push-token');
+  } catch (err: any) {
+    console.warn('[Notifications] Failed to unregister push token:', err.message);
+  }
 }
