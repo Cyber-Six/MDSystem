@@ -241,7 +241,7 @@ const Query = {
     for (const row of result.rows) { // define the oral findings here
       const findingsQuery = `
         SELECT oralFindingId, status, notes
-        FROM "OralFindingRecord"
+        FROM "oralFindingRecord"
         WHERE "dentalRecordId" = $1;
       `; // somewhere here
       const DentalFindings = await db.query(findingsQuery, [row.id]);

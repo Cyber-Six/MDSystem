@@ -175,7 +175,7 @@ const Mutation = {
     await anchor.DentalRecord(recordId, args.input.notes);
     // Clear existing records before re-inserting to avoid duplicates
     await db.query(`DELETE FROM "ToothPlacement" WHERE "dentalRecordId" = $1`, [recordId]);
-    await db.query(`DELETE FROM "OralFindingRecord" WHERE "dentalRecordId" = $1`, [recordId]);
+    await db.query(`DELETE FROM "oralFindingRecord" WHERE "dentalRecordId" = $1`, [recordId]);
     let result;
     try {
       const toothPlacements = args.input.ToothPlacements || [];
@@ -212,7 +212,7 @@ const Mutation = {
     for (const finding of args.input.oralFindings) {
       try {
         const resultFinder = await db.queryControlled(
-          `INSERT INTO "OralFindingRecord"
+          `INSERT INTO "oralFindingRecord"
             ("dentalRecordId", "oralFindingId", "status", "notes")
            VALUES ($1, $2, $3, $4)
            RETURNING *;`,
