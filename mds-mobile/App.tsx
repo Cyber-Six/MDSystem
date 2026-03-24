@@ -14,6 +14,7 @@ import { ThemeProvider, useTheme, colors } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { BannerProvider } from './src/context/BannerContext';
 import { RecordStatusProvider } from './src/context/RecordStatusContext';
+import { HealthChatNotificationProvider } from './src/context/HealthChatNotificationProvider';
 import { AuthScreen } from './src/screens/auth';
 import { MainTabNavigator } from './src/navigation/MainTabNavigator';
 import { Banner as BannerComponent } from './src/components/Banner';
@@ -113,7 +114,9 @@ const AppContent: React.FC = () => {
     ]}>
       {isAuthenticated ? (
         <NavigationContainer ref={navigationRef}>
-          <MainTabNavigator />
+          <HealthChatNotificationProvider>
+            <MainTabNavigator />
+          </HealthChatNotificationProvider>
         </NavigationContainer>
       ) : (
         <AuthScreen onAuthSuccess={checkAuth} />

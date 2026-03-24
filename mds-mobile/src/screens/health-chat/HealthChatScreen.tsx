@@ -12,13 +12,14 @@ import {
   FlatList,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { useHealthChatBadge } from '../../context/HealthChatNotificationProvider';
 import {
   Ticket,
   TicketMessage,
@@ -75,6 +76,12 @@ function computeGrouping(messages: TicketMessage[]) {
 
 export const HealthChatScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const { clearBadge } = useHealthChatBadge();
+
+  // Clear notification badge whenever this screen comes into focus
+  useFocusEffect(useCallback(() => {
+    clearBadge();
+  }, [clearBadge]));
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -341,6 +348,7 @@ export const HealthChatScreen: React.FC = () => {
           styles.container,
           { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
         ]}
+        edges={['top']}
       >
         <View style={styles.centeredContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
@@ -364,6 +372,7 @@ export const HealthChatScreen: React.FC = () => {
         styles.container,
         { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
       ]}
+      edges={['top']}
     >
       {/* Error Banner */}
       {error && (
@@ -411,9 +420,9 @@ export const HealthChatScreen: React.FC = () => {
       {/* Active Chat — Open (pending) or Ongoing */}
       {!isInitializing && ticket && ['Open', 'Ongoing'].includes(ticket.status) && (
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior="padding"
           style={styles.flex1}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          keyboardVerticalOffset={0}
         >
           {/* Chat Header */}
           <ChatHeader

@@ -27,6 +27,8 @@ export const setNavigationRef = (ref: any): void => {
   navigationRef = ref;
 };
 
+export const getNavigationRef = (): any => navigationRef;
+
 // ── Backend Configuration ──
 // React Native has no proxy — always use the absolute backend URL.
 // Reads from EXPO_PUBLIC_API_URL in .env; falls back to production URL.

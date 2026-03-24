@@ -5,7 +5,6 @@
 
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
 
 interface ChatInputProps {
@@ -35,7 +34,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   isUploading = false,
 }) => {
   const { isDark } = useTheme();
-  const insets = useSafeAreaInsets();
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
   const isPending = ticketStatus === 'Open';
   const isActive = ticketStatus === 'Ongoing';
@@ -51,7 +49,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           {
             backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
             borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200],
-            paddingBottom: Math.max(insets.bottom, 8),
           },
         ]}
       >
@@ -86,7 +83,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           {
             backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
             borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200],
-            paddingBottom: Math.max(insets.bottom, 8),
           },
         ]}
       >
@@ -120,7 +116,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         {
           backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
           borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200],
-          paddingBottom: Math.max(insets.bottom, 8),
         },
       ]}
     >
