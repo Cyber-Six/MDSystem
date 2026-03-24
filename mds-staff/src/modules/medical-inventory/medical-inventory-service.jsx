@@ -180,15 +180,13 @@ const MEDICINE_BATCH_FIELDS = `
 const SUPPLY_BATCH_FIELDS = `
         id
         supplyItemId
-        batch_number
-        initialQuantity
+        batchNumber
         currentQuantity
         unit
-        expiry_date
+        expiryDate
         location
-        received_at
         receivedBy
-        supplier_name
+        supplierName
         notes
         created_at`;
 
