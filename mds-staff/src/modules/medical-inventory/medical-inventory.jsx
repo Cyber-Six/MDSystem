@@ -104,13 +104,12 @@ const MedicalInventory = () => {
               bs.map((b) => ({
                 id: b.id,
                 medicalItemId: b.supplyItemId,
-                batchNumber: b.batch_number,
+                batchNumber: b.batchNumber,
                 currentQuantity: b.currentQuantity,
-                initialQuantity: b.initialQuantity,
                 unit: b.unit,
-                expiryDate: b.expiry_date,
+                expiryDate: b.expiryDate,
                 location: b.location,
-                supplierName: b.supplier_name,
+                supplierName: b.supplierName,
                 notes: b.notes,
               }))
             );
@@ -269,13 +268,13 @@ const MedicalInventory = () => {
     } else {
       created = await addSupplyBatch({
         supplyItemId: batch.medicalItemId,
-        batch_number: batch.batchNumber,
+        batchNumber: batch.batchNumber,
         initialQuantity: batch.quantity,
         unit: batch.unit,
-        expiry_date: batch.expiryDate,
+        expiryDate: batch.expiryDate,
         location: batch.location,
-        received_at: batch.receivedAt,
-        supplier_name: batch.supplierName || null,
+        receivedBy: batch.receivedBy,
+        supplierName: batch.supplierName || null,
         notes: batch.notes || null,
       });
     }
@@ -298,12 +297,11 @@ const MedicalInventory = () => {
       : {
           id: created.id,
           medicalItemId: created.supplyItemId,
-          batchNumber: created.batch_number,
+          batchNumber: created.batchNumber,
           currentQuantity: created.currentQuantity,
-          initialQuantity: created.initialQuantity,
-          expiryDate: created.expiry_date,
+          expiryDate: created.expiryDate,
           location: created.location,
-          supplierName: created.supplier_name,
+          supplierName: created.supplierName,
           notes: created.notes,
         };
     setBatches([...batches, normalized]);
