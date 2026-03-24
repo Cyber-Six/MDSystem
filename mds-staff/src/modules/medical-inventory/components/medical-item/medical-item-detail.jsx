@@ -122,7 +122,10 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Location</th>
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
                   {item.category?.toLowerCase() === 'medicine' ? (
-                    <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Dosage</th>
+                    <>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Dosage</th>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Quantity</th>
+                    </>
                   ) : (
                     <>
                       <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Initial</th>
@@ -137,7 +140,7 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
                 {sortedBatches.length === 0 && (
-                  <tr><td colSpan={item.category?.toLowerCase() === 'medicine' ? 8 : 10} className="px-4 py-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No batches for this item. Add supply to get started.</td></tr>
+                  <tr><td colSpan={item.category?.toLowerCase() === 'medicine' ? 9 : 10} className="px-4 py-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No batches for this item. Add supply to get started.</td></tr>
                 )}
                 {sortedBatches.map((batch, idx) => {
                   const st = getExpiryStatus(batch.expiryDate);
@@ -161,9 +164,12 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                         </div>
                       </td>
                       {isMedicineBatch ? (
-                        <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">
-                          {batch.dosageValue != null ? `${batch.dosageValue} ${batch.dosageUnit || ''}` : '—'}
-                        </td>
+                        <>
+                          <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">
+                            {batch.dosageValue != null ? `${batch.dosageValue} ${batch.dosageUnit || ''}` : '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-center text-xs font-bold text-secondary-800 dark:text-white">{batch.currentQuantity ?? '0'} units</td>
+                        </>
                       ) : (
                         <>
                           <td className="px-3 py-1.5 text-center text-xs text-secondary-500 dark:text-neutral-400">{batch.initialQuantity ?? '—'}</td>

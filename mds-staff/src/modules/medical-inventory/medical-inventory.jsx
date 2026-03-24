@@ -88,9 +88,10 @@ const MedicalInventory = () => {
                 id: b.id,
                 medicalItemId: b.medicalItemId,
                 batchNumber: b.batchNumber,
-                currentQuantity: b.dosageValue,
+                currentQuantity: Number(b.availableQuantity ?? 0),
                 availableQuantity: Number(b.availableQuantity ?? 0),
-                initialQuantity: b.dosageValue,
+                initialQuantity: Number(b.availableQuantity ?? 0),
+                dosageValue: Number(b.dosageValue ?? 0),
                 dosageUnit: b.dosageUnit,
                 expiryDate: b.expiryDate,
                 location: b.location,
@@ -327,7 +328,7 @@ const MedicalInventory = () => {
       }
 
       // Call the appropriate split mutation
-      const newBatch = isMedicine
+      const updatedBatch = isMedicine
         ? await splitMedicineSupply(sourceBatchId, {
             quantity,
             targetLocation: toClinic,
@@ -339,43 +340,18 @@ const MedicalInventory = () => {
             notes: notes || undefined,
           });
 
-      // Update source batch locally
+      // The batch location is updated by the backend
+      // Only update the state with the returned batch (location changed)
       setBatches((prevBatches) =>
-        prevBatches
-          .map((b) => 
-            b.id === sourceBatchId 
-              ? { ...b, currentQuantity: b.currentQuantity - quantity }
-              : b
-          )
-          .concat([
-            isMedicine
-              ? {
-                  id: newBatch.id,
-                  medicalItemId: newBatch.medicalItemId,
-                  batchNumber: newBatch.batchNumber,
-                  dosageValue: newBatch.dosageValue,
-                  dosageUnit: newBatch.dosageUnit,
-                  currentQuantity: quantity,
-                  availableQuantity: quantity,
-                  initialQuantity: quantity,
-                  expiryDate: newBatch.expiryDate,
-                  location: newBatch.location,
-                  supplierName: newBatch.supplierName,
-                  notes: newBatch.notes,
-                }
-              : {
-                  id: newBatch.id,
-                  medicalItemId: newBatch.supplyItemId,
-                  batchNumber: newBatch.batch_number,
-                  currentQuantity: newBatch.currentQuantity,
-                  initialQuantity: newBatch.initialQuantity,
-                  unit: newBatch.unit,
-                  expiryDate: newBatch.expiry_date,
-                  location: newBatch.location,
-                  supplierName: newBatch.supplier_name,
-                  notes: newBatch.notes,
-                },
-          ])
+        prevBatches.map((b) => 
+          b.id === sourceBatchId 
+            ? { 
+                ...b, 
+                location: updatedBatch.location,
+                currentQuantity: updatedBatch.currentQuantity ?? b.currentQuantity,
+              }
+            : b
+        )
       );
 
       // Record transaction
@@ -391,15 +367,15 @@ const MedicalInventory = () => {
           issuedBy: 101,
           issuedByName: 'Current User',
           issuedAt: new Date().toISOString(),
-          notes: `Split from ${source.batchNumber} → ${toClinic}. ${notes || ''}`.trim(),
+          notes: `Moved ${quantity} units from ${source.location} to ${toClinic}. ${notes || ''}`.trim(),
           itemName: item?.item_name || '',
-          batchNumber: newBatch.batchNumber || newBatch.batch_number,
+          batchNumber: source.batchNumber,
         },
         ...transactions,
       ]);
 
       setShowSplitSupply(false);
-      setSuccessMsg(`Successfully split ${quantity} units to ${toClinic}.`);
+      setSuccessMsg(`Successfully moved ${quantity} units to ${toClinic}.`);
     } catch (err) {
       setError(err.message || 'Failed to split supply. Please try again.');
     }
