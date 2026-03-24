@@ -54,6 +54,33 @@ const Mutation = {
 
 
 
+  staffCreateUpdateTicket: async (_, args, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit, args.userId);
+    if (!isPermitted) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to staffCreateUpdateTicket`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Check if an active update ticket already exists for this patient
+    const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    if (record?.status === "InProgress" || record?.status === "Pending" || record?.status === "Revision" || record?.status === "RevisionSubmitted") {
+      throwGraphQLError(res)
+        .status(400)
+        .message("An update ticket is already in progress for this patient.")
+        .throw();
+    }
+
+    const result = await db.query(
+      `INSERT INTO "patientUpdateLog" ("patientId", "status", "scope")
+       VALUES ($1, 'Pending', $2)
+       RETURNING "id";`,
+      [args.userId, args.scope]
+    );
+
+    logger.info(`Staff ${user.id} created update ticket ${result.rows[0].id} for patient ${args.userId} with scope ${args.scope}`);
+    return result.rows[0].id;
+  },
+
   updateStudentProfile: async (_, args, { user, res }) => {
     const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit, args.userId);
     if (!isPermitted) {

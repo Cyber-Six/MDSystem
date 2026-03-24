@@ -881,6 +881,7 @@ type Mutation {
   cancelUpdateTicket: UpdateStatus
 
   staffUpdateTicket(userId: ID!, status: UpdateStatus!, notes: String): UpdateStatus
+  staffCreateUpdateTicket(userId: ID!, scope: UpdateScope!): ID
   
 
   createStudentProfile(input: StudentProfileInput!): StudentProfile # for patients

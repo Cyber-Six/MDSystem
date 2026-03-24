@@ -4,7 +4,7 @@ import ToothChart from './tooth-chart';
 import PendingDentalSubmissions from './pending-dental-submissions';
 import { getLegend } from './tooth-chart-constants';
 import { axiosRequest } from '../../../packages-core-adapter';
-import { GQL_UPDATE_DENTAL_RECORD } from '../patient-record-data';
+import { GQL_UPDATE_DENTAL_RECORD, GQL_STAFF_CREATE_UPDATE_TICKET } from '../patient-record-data';
 
 /* ─── AuthenticatedImage ─────────────────────────────────────── */
 function AuthenticatedImage({ path, alt, className }) {
@@ -165,13 +165,43 @@ export default function PatientDentalRecordTab({ patient }) {
   const [oralFindings, setOralFindings] = useState(() => dental.oralFindingRecords || {});
   const [isChartEditing, setIsChartEditing] = useState(false);
 
+  // Staff-created ticket state
+  const [staffTicketCreated, setStaffTicketCreated] = useState(false);
+  const [isCreatingTicket, setIsCreatingTicket] = useState(false);
+
   // Editing is only allowed when the patient has an active Dental-scope update ticket
   const ticketStatus = patient.status || '';
   const ticketScope  = patient.updateTicketScope || '';
-  const canEdit = (
+  const canEdit = staffTicketCreated || (
     (ticketStatus === 'Pending' || ticketStatus === 'RevisionSubmitted') &&
     (ticketScope  === 'Dental'  || ticketScope  === 'Both')
   );
+
+  // Determine if the edit button should be shown (no active ticket blocking editing)
+  const hasActiveTicket = ['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(ticketStatus);
+  const showEditButton = !canEdit && !hasActiveTicket;
+
+  // Handle staff-initiated edit: create an update ticket for the patient
+  const handleStartEdit = async () => {
+    setIsCreatingTicket(true);
+    try {
+      const response = await axiosRequest.post('/emr/medical', {
+        query: GQL_STAFF_CREATE_UPDATE_TICKET,
+        variables: { userId: patient.id, scope: 'Dental' },
+      });
+
+      if (response.data?.errors) {
+        throw new Error(response.data.errors[0]?.message || 'Failed to create update ticket');
+      }
+
+      setStaffTicketCreated(true);
+    } catch (err) {
+      console.error('Failed to create update ticket:', err);
+      alert(err.message || 'Failed to create update ticket. Please try again.');
+    } finally {
+      setIsCreatingTicket(false);
+    }
+  };
 
   // Mock pending submissions - in real app, this would come from API
   const [pendingSubmissions, setPendingSubmissions] = useState(() =>
@@ -393,7 +423,7 @@ export default function PatientDentalRecordTab({ patient }) {
                 {Object.keys(toothStates).length} teeth marked
               </span>
             )}
-            {!canEdit && (
+            {!canEdit && !showEditButton && (
               <span className="text-[10px] text-warning-600 dark:text-warning-400">
                 {ticketStatus === 'InProgress' || ticketStatus === 'Revision'
                   ? 'Patient update pending'
@@ -401,6 +431,31 @@ export default function PatientDentalRecordTab({ patient }) {
                     ? `Ticket scope: ${ticketScope}`
                     : 'No active patient ticket'}
               </span>
+            )}
+            {showEditButton && (
+              <button
+                type="button"
+                onClick={handleStartEdit}
+                disabled={isCreatingTicket}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:bg-primary-400 disabled:cursor-not-allowed rounded-md transition-colors"
+              >
+                {isCreatingTicket ? (
+                  <>
+                    <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Creating ticket…
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    Edit Dental Record
+                  </>
+                )}
+              </button>
             )}
           </div>
         }

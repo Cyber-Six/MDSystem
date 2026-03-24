@@ -92,6 +92,12 @@ export const GQL_UPDATE_DENTAL_RECORD = `
   }
 `;
 
+export const GQL_STAFF_CREATE_UPDATE_TICKET = `
+  mutation StaffCreateUpdateTicket($userId: ID!, $scope: UpdateScope!) {
+    staffCreateUpdateTicket(userId: $userId, scope: $scope)
+  }
+`;
+
 export const GQL_PERSONAL_PROFILE = `
   query GetUserPersonalProfile($userId: ID!) {
     getUserPersonalRecord(userId: $userId) {
