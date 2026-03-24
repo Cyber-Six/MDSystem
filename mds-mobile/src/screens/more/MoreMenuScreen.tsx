@@ -199,7 +199,7 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
               { color: isDark ? colors.neutral[600] : colors.neutral[300] },
             ]}
           >
-            MDSystem Mobile v1.0.0
+            MDSystem Mobile {process.env.EXPO_PUBLIC_APP_VERSION}
           </Text>
         </View>
       </ScrollView>

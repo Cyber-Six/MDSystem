@@ -408,7 +408,7 @@ export const MedicineRequestScreen: React.FC = () => {
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadHistory(); }} />}
         >
-          {loadingStatus ? (
+          {loadingStatus && !refreshing ? (
             <View style={styles.centeredLoader}>
               <ActivityIndicator size="large" color={colors.primary[500]} />
               <Text style={[styles.loadingText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>

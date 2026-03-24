@@ -238,7 +238,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
             styles.footerText,
             { color: isDark ? colors.neutral[500] : colors.neutral[400] }
           ]}>
-            MDSystem Mobile v1.0.0
+            MDSystem Mobile {process.env.EXPO_PUBLIC_APP_VERSION}
           </Text>
           <Text style={[
             styles.footerCopyright,

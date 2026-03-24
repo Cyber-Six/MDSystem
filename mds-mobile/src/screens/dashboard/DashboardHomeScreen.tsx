@@ -596,7 +596,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               },
             ]}
           >
-            MDSystem Mobile v1.0.0
+            MDSystem Mobile {process.env.EXPO_PUBLIC_APP_VERSION}
           </Text>
         </View>
       </ScrollView>

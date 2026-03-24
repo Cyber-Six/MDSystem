@@ -89,6 +89,7 @@ export const HealthChatScreen: React.FC = () => {
   const [isStaffTyping, setIsStaffTyping] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const hasInitialized = useRef(false);
@@ -441,8 +442,13 @@ export const HealthChatScreen: React.FC = () => {
             onContentSizeChange={scrollToBottom}
             refreshControl={
               <RefreshControl
-                refreshing={false}
-                onRefresh={() => ticket?.id && loadMessages(ticket.id)}
+                refreshing={isRefreshing}
+                onRefresh={async () => {
+                  if (!ticket?.id) return;
+                  setIsRefreshing(true);
+                  await loadMessages(ticket.id);
+                  setIsRefreshing(false);
+                }}
                 tintColor={colors.primary[500]}
               />
             }
