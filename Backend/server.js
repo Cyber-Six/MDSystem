@@ -8,6 +8,7 @@ const logger = require('./utils/logger.js');
 
 const registerRoutes = require('./routes/auth/user/register.js');
 const loginRoutes = require('./routes/auth/user/login.js');
+const userPasswordRoutes = require('./routes/auth/user/user-password.js');
 
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
@@ -77,6 +78,7 @@ logger.info(`✅ Chatbot proxy registered at /econsultation/chat → ${process.e
 
 app.use('/auth/register', registerRoutes);
 app.use('/auth/login', loginRoutes);
+app.use('/auth/user', userPasswordRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/auth/email', emailAuthRoutes);
 app.use('/auth/refresh', refreshAuthRoutes);
