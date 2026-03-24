@@ -125,8 +125,8 @@ export interface FormData {
     applianceOther: string;
     applianceLocation: string;
     selectedDentalProcedures: Record<string, boolean>;
-    upperTeethPhoto: { uri: string; name: string; type: string } | null;
-    lowerTeethPhoto: { uri: string; name: string; type: string } | null;
+    upperTeethPhoto: { uri: string; name: string; type: string; id?: string } | null;
+    lowerTeethPhoto: { uri: string; name: string; type: string; id?: string } | null;
   };
   obgyne?: {
     lastMenstrualPeriod: string;
@@ -563,11 +563,13 @@ const buildBatchInputs = (
   );
   inputs.oralApplianceProfile = { appliances, notes: oralNotes };
 
-  // Dental photos
-  inputs.dentalPhotoRecord = {
-    upperTeeth: photoIds.upperTeethFileId ?? null,
-    lowerTeeth: photoIds.lowerTeethFileId ?? null,
-  };
+  // Dental photos — only include if both UUIDs are available (backend requires UUID! for both)
+  if (photoIds.upperTeethFileId && photoIds.lowerTeethFileId) {
+    inputs.dentalPhotoRecord = {
+      upperTeeth: photoIds.upperTeethFileId,
+      lowerTeeth: photoIds.lowerTeethFileId,
+    };
+  }
 
   // OB-GYNE (female only)
   if (formData.personalInfo.gender === 'Female' && formData.obgyne) {
@@ -627,7 +629,7 @@ const sendBatchedCreateMutations = async (inputs: Record<string, any>, formData:
 
 // ─── Main submission functions ─────────────────────────────────────────────────
 
-export const createInitialMedicalRecord = async (formData: FormData, { isRevision = false } = {}) => {
+export const createInitialMedicalRecord = async (formData: FormData, { isRevision = false, scope = 'Both' as string } = {}) => {
   let ticketCreated = false;
   let profileLogCreated = false;
   let upperTeethFileId: string | null = null;
@@ -646,9 +648,9 @@ export const createInitialMedicalRecord = async (formData: FormData, { isRevisio
       const existing = await fetchCurrentUpdateTicket();
       ticketPromise = existing?.status === 'Revision'
         ? Promise.resolve(existing.id)
-        : createUpdateTicket('Both');
+        : createUpdateTicket(scope);
     } else {
-      ticketPromise = createUpdateTicket('Both');
+      ticketPromise = createUpdateTicket(scope);
     }
 
     const [ticketResult, upperResult, lowerResult] = await Promise.allSettled([
@@ -683,6 +685,132 @@ export const createInitialMedicalRecord = async (formData: FormData, { isRevisio
     if (profileLogCreated) await cancelPersonalRecordLog();
     throw error;
   }
+};
+
+// ─── Update record submission (for validated users) ───────────────────────────
+
+/**
+ * Submit an update record for a validated user.
+ * Unlike createInitialMedicalRecord, this does NOT call registerProfileSetup
+ * and only sends mutations relevant to the selected scope.
+ * Mirrors mds-patient's submitUpdateRecord flow.
+ */
+export const submitUpdateRecord = async (
+  formData: FormData,
+  recordType: 'medical' | 'dental' | 'both',
+) => {
+  let ticketCreated = false;
+  let upperTeethFileId: string | null = null;
+  let lowerTeethFileId: string | null = null;
+
+  try {
+    // Step 1: Check for existing ticket
+    const existingTicket = await fetchCurrentUpdateTicket();
+
+    let ticketId: string;
+    if (existingTicket?.status === 'Revision') {
+      // Reuse existing Revision ticket (staff requested corrections)
+      ticketId = existingTicket.id;
+    } else {
+      // Cancel any active ticket, then create new one with scope
+      if (existingTicket) {
+        const finalStatuses = ['Approved', 'Cancelled', 'Rejected', 'Expired'];
+        if (!finalStatuses.includes(existingTicket.status)) {
+          await cancelUpdateTicket();
+        }
+      }
+      const scope = recordType === 'medical' ? 'Medical' : recordType === 'dental' ? 'Dental' : 'Both';
+      ticketId = await createUpdateTicket(scope);
+      ticketCreated = true;
+    }
+
+    // Step 2: Upload dental photos only when scope includes dental
+    const showDental = recordType === 'dental' || recordType === 'both';
+    if (showDental) {
+      // For new photos (have uri): upload them
+      // For revision-prefilled photos (have id but no new uri): reuse existing UUID
+      const upperPhoto = formData.dentalHistory?.upperTeethPhoto;
+      const lowerPhoto = formData.dentalHistory?.lowerTeethPhoto;
+
+      if (upperPhoto?.uri && !upperPhoto?.id) {
+        const result = await uploadMediaFile(upperPhoto);
+        upperTeethFileId = result;
+      } else if (upperPhoto?.id) {
+        upperTeethFileId = upperPhoto.id;
+      }
+
+      if (lowerPhoto?.uri && !lowerPhoto?.id) {
+        const result = await uploadMediaFile(lowerPhoto);
+        lowerTeethFileId = result;
+      } else if (lowerPhoto?.id) {
+        lowerTeethFileId = lowerPhoto.id;
+      }
+    }
+
+    // Step 3: Build inputs and send scope-filtered batch
+    const allCatalogs = await fetchAllCatalogs();
+    const allInputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
+    const batchResult = await sendScopedUpdateMutations(allInputs, formData, recordType);
+
+    return { success: true, data: { ticketId, ...batchResult } };
+  } catch (error) {
+    if (upperTeethFileId || lowerTeethFileId) {
+      await Promise.all([unstageMediaFile(upperTeethFileId), unstageMediaFile(lowerTeethFileId)]);
+    }
+    if (ticketCreated) await cancelUpdateTicket();
+    throw error;
+  }
+};
+
+/**
+ * Send only the mutations relevant to the selected scope, then submit the ticket.
+ */
+const sendScopedUpdateMutations = async (
+  inputs: Record<string, any>,
+  formData: FormData,
+  recordType: 'medical' | 'dental' | 'both',
+) => {
+  const mutationParts: string[] = [];
+  const variableDefs: string[] = [];
+  const variables: Record<string, any> = {};
+
+  const addMutation = (alias: string, mutationName: string, inputType: string, inputKey: string, varName: string) => {
+    if (!inputs[inputKey]) return;
+    variableDefs.push(`$${varName}: ${inputType}!`);
+    mutationParts.push(`${alias}: ${mutationName}(input: $${varName}) { id }`);
+    variables[varName] = inputs[inputKey];
+  };
+
+  // Personal info (profile + emergency contact) — always included
+  if (inputs.studentProfile) addMutation('studentProfile', 'createStudentProfile', 'StudentProfileInput', 'studentProfile', 'studentInput');
+  if (inputs.emergencyContact) addMutation('emergencyContact', 'createEmergencyContact', 'EmergencyContactInput', 'emergencyContact', 'emergencyInput');
+
+  // Medical mutations — only for medical or both
+  if (recordType === 'medical' || recordType === 'both') {
+    addMutation('medicalHistory', 'createMedicalHistory', 'MedicalHistoryInput', 'medicalHistory', 'medHistInput');
+    addMutation('allergyProfile', 'createAllergyProfile', 'AllergyProfileInput', 'allergyProfile', 'allergyInput');
+    addMutation('hospitalizationProfile', 'createHospitalizationProfile', 'HospitalizationProfileInput', 'hospitalizationProfile', 'hospInput');
+    addMutation('operationProfile', 'createOperationProfile', 'OperationProfileInput', 'operationProfile', 'opInput');
+    addMutation('medicationProfile', 'createMedicationProfile', 'MedicationProfileInput', 'medicationProfile', 'medInput');
+    addMutation('immunizationProfile', 'createImmunizationProfile', 'ImmunizationProfileInput', 'immunizationProfile', 'immuInput');
+    addMutation('lifestyle', 'createLifestyle', 'LifestyleInput', 'lifestyle', 'lifeInput');
+    addMutation('visualAcuityProfile', 'createVisualAcuityProfile', 'VisualAcuityProfileInput', 'visualAcuityProfile', 'vaInput');
+    if (inputs.obgynHistory) addMutation('obgynHistory', 'createObgynHistory', 'ObgynHistoryInput', 'obgynHistory', 'obgynInput');
+  }
+
+  // Dental mutations — only for dental or both
+  if (recordType === 'dental' || recordType === 'both') {
+    addMutation('dentalHistory', 'createDentalHistory', 'DentalHistoryInput', 'dentalHistory', 'dentalHistInput');
+    addMutation('dentalProcedureProfile', 'createDentalProcedureProfile', 'DentalProcedureProfileInput', 'dentalProcedureProfile', 'dentalProcInput');
+    addMutation('oralApplianceProfile', 'createOralApplianceProfile', 'OralApplianceProfileInput', 'oralApplianceProfile', 'oralAppInput');
+    addMutation('dentalPhotoRecord', 'createDentalPhotoRecord', 'DentalPhotoRecordInput', 'dentalPhotoRecord', 'dentalPhotoInput');
+  }
+
+  // Always submit the ticket at the end
+  mutationParts.push('submitTicket: submitUpdateTicket');
+
+  const mutation = `mutation BatchUpdateRecords(${variableDefs.join(', ')}) {\n  ${mutationParts.join('\n  ')}\n}`;
+  return sendGraphQLRequest(mutation, variables);
 };
 
 // ─── Catalog fetcher ──────────────────────────────────────────────────────────
@@ -811,6 +939,7 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
         lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption }
         visualAcuity: getVisualAcuityProfile { notes acuity { left_eye right_eye recorded_at } }
         dentalHistory: getDentalHistory { seenByDentist lastDentalCleaning lastVisitDate }
+        dentalPhotoRecord: getDentalPhotoRecord { upperTeeth lowerTeeth }
         oralAppliance: getOralApplianceProfile { appliances { tagId arch } }
         obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }
       }`, {}
@@ -886,6 +1015,19 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
   base.dentalHistory.lastDentalCleaning = reverseMapDentalCleaningRange(dh.lastDentalCleaning || '');
   base.dentalHistory.hasIntraOralAppliance = oaAppliances.length > 0 ? 'yes' : 'no';
   for (const a of oaAppliances) base.dentalHistory.intraOralAppliances[a.tagId] = true;
+
+  // Dental photos — preserve existing UUIDs so updates can reuse them
+  const dpr = emr?.dentalPhotoRecord;
+  if (dpr?.upperTeeth) {
+    base.dentalHistory.upperTeethPhoto = {
+      uri: '', name: 'Upper Teeth (from revision)', type: 'image/jpeg', id: dpr.upperTeeth,
+    };
+  }
+  if (dpr?.lowerTeeth) {
+    base.dentalHistory.lowerTeethPhoto = {
+      uri: '', name: 'Lower Teeth (from revision)', type: 'image/jpeg', id: dpr.lowerTeeth,
+    };
+  }
 
   // OB-GYNE
   const obg = emr?.obgyne || {};

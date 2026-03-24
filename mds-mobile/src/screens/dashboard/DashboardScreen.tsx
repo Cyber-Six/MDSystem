@@ -21,7 +21,7 @@ interface DashboardScreenProps {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) => {
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -92,16 +92,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
             </Text>
           </View>
           
-          {/* Theme Toggle */}
-          <TouchableOpacity 
-            onPress={toggleTheme}
-            style={[
-              styles.themeToggle,
-              { backgroundColor: isDark ? colors.neutral[800] : colors.neutral[200] }
-            ]}
-          >
-            <Text style={styles.themeIcon}>{isDark ? '☀️' : '🌙'}</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Quick Actions */}

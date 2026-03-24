@@ -84,7 +84,7 @@ const QuickActionButton: React.FC<{
 export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
   navigation,
 }) => {
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
   const { recordStatus } = useRecordStatus();
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
@@ -195,19 +195,6 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               {userName || 'Patient'}
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={toggleTheme}
-            style={[
-              styles.themeToggle,
-              {
-                backgroundColor: isDark
-                  ? colors.neutral[800]
-                  : colors.neutral[200],
-              },
-            ]}
-          >
-            <Text style={styles.themeIcon}>{isDark ? '☀️' : '🌙'}</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Stats Row */}
@@ -401,6 +388,60 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
             />
           </View>
         </View>
+
+        {/* Record Update Options — only when initial record is approved */}
+        {!recordStatus?.needsInitialRecord && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+          >
+            <Text
+              style={[
+                styles.cardTitle,
+                { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+              ]}
+            >
+              Update Records
+            </Text>
+            <View style={styles.updateRow}>
+              <TouchableOpacity
+                style={[styles.updateButton, { backgroundColor: '#3B82F6' }]}
+                onPress={() => navigation.navigate('More', {
+                  screen: 'InitialRecordForm',
+                  params: { isUpdate: true, recordType: 'medical' },
+                })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updateIcon}>🏥</Text>
+                <Text style={styles.updateLabel}>Medical</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.updateButton, { backgroundColor: '#22C55E' }]}
+                onPress={() => navigation.navigate('More', {
+                  screen: 'InitialRecordForm',
+                  params: { isUpdate: true, recordType: 'dental' },
+                })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updateIcon}>🦷</Text>
+                <Text style={styles.updateLabel}>Dental</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.updateButton, { backgroundColor: '#8B5CF6' }]}
+                onPress={() => navigation.navigate('More', {
+                  screen: 'InitialRecordForm',
+                  params: { isUpdate: true, recordType: 'both' },
+                })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updateIcon}>📋</Text>
+                <Text style={styles.updateLabel}>Both</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Active Status */}
         {(appointmentStatus || chatStatus) && (
@@ -634,6 +675,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
     textAlign: 'center',
+  },
+  // Record update row
+  updateRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  updateButton: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  updateIcon: { fontSize: 24, marginBottom: 4 },
+  updateLabel: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 12,
   },
   emptyState: {
     padding: 24,

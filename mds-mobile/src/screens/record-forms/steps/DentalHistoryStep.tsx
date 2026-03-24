@@ -2,10 +2,11 @@
  * Dental History Step — Step 3: Dental visits, oral appliances, procedures, photos
  */
 
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Image, StyleSheet, Alert, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Image, StyleSheet, Alert, Platform, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../../context/ThemeContext';
+import { axiosRequest, getApiBaseUrl } from '../../../core';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
 
 interface Props {
@@ -19,6 +20,39 @@ const CLEANING_RANGES = ['0 to 6 months ago', '7 to 11 months ago', '1 year or m
 
 export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark, catalogs }) => {
   const dh = formData.dentalHistory;
+
+  // Fetch preview URIs for revision-prefilled photos (have id but no uri)
+  const [revisionPreviews, setRevisionPreviews] = useState<{ upper?: string; lower?: string }>({});
+  const [loadingPreviews, setLoadingPreviews] = useState<{ upper: boolean; lower: boolean }>({ upper: false, lower: false });
+
+  useEffect(() => {
+    const fetchPreview = async (fileId: string, key: 'upper' | 'lower') => {
+      setLoadingPreviews(prev => ({ ...prev, [key]: true }));
+      try {
+        const url = `${getApiBaseUrl()}/media/record/dentalPhoto/${fileId}`;
+        const response = await axiosRequest.get(url, { responseType: 'arraybuffer' });
+        const bytes = new Uint8Array(response.data as ArrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        const base64 = btoa(binary);
+        const contentType = (response.headers as Record<string, string>)['content-type'] || 'image/jpeg';
+        setRevisionPreviews(prev => ({ ...prev, [key]: `data:${contentType};base64,${base64}` }));
+      } catch {
+        // Preview failed — user can still re-upload; the id is preserved for submission
+      } finally {
+        setLoadingPreviews(prev => ({ ...prev, [key]: false }));
+      }
+    };
+
+    if (dh.upperTeethPhoto?.id && !dh.upperTeethPhoto.uri) fetchPreview(dh.upperTeethPhoto.id, 'upper');
+    if (dh.lowerTeethPhoto?.id && !dh.lowerTeethPhoto.uri) fetchPreview(dh.lowerTeethPhoto.id, 'lower');
+  }, [dh.upperTeethPhoto?.id, dh.lowerTeethPhoto?.id]);
+
+  // Resolve the display URI: prefer local uri (new pick), fall back to revision preview
+  const upperDisplayUri = dh.upperTeethPhoto?.uri || revisionPreviews.upper || null;
+  const lowerDisplayUri = dh.lowerTeethPhoto?.uri || revisionPreviews.lower || null;
+  const hasUpperPhoto = !!upperDisplayUri || !!dh.upperTeethPhoto?.id;
+  const hasLowerPhoto = !!lowerDisplayUri || !!dh.lowerTeethPhoto?.id;
 
   const inputStyle = [styles.input, {
     backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
@@ -180,11 +214,23 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
 
         {/* Upper teeth */}
         <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>Upper Teeth Photo *</Text>
-        {dh.upperTeethPhoto?.uri ? (
+        {loadingPreviews.upper ? (
+          <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], alignItems: 'center', justifyContent: 'center', height: 120 }]}>
+            <ActivityIndicator color={colors.primary[500]} />
+            <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], marginTop: 6, fontSize: 12 }}>Loading revision photo...</Text>
+          </View>
+        ) : upperDisplayUri ? (
           <View style={styles.photoPreview}>
-            <Image source={{ uri: dh.upperTeethPhoto.uri }} style={styles.photoImage} resizeMode="cover" />
+            <Image source={{ uri: upperDisplayUri }} style={styles.photoImage} resizeMode="cover" />
             <TouchableOpacity style={styles.changeBtn} onPress={() => pickImage('upperTeethPhoto')}>
               <Text style={styles.changeBtnText}>Change</Text>
+            </TouchableOpacity>
+          </View>
+        ) : hasUpperPhoto ? (
+          <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], alignItems: 'center', justifyContent: 'center', height: 80 }]}>
+            <Text style={{ color: colors.primary[500], fontWeight: '600' }}>Photo from previous submission</Text>
+            <TouchableOpacity style={{ marginTop: 8 }} onPress={() => pickImage('upperTeethPhoto')}>
+              <Text style={{ color: colors.primary[500], textDecorationLine: 'underline' }}>Replace</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -195,11 +241,23 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
 
         {/* Lower teeth */}
         <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900], marginTop: 16 }]}>Lower Teeth Photo *</Text>
-        {dh.lowerTeethPhoto?.uri ? (
+        {loadingPreviews.lower ? (
+          <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], alignItems: 'center', justifyContent: 'center', height: 120 }]}>
+            <ActivityIndicator color={colors.primary[500]} />
+            <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], marginTop: 6, fontSize: 12 }}>Loading revision photo...</Text>
+          </View>
+        ) : lowerDisplayUri ? (
           <View style={styles.photoPreview}>
-            <Image source={{ uri: dh.lowerTeethPhoto.uri }} style={styles.photoImage} resizeMode="cover" />
+            <Image source={{ uri: lowerDisplayUri }} style={styles.photoImage} resizeMode="cover" />
             <TouchableOpacity style={styles.changeBtn} onPress={() => pickImage('lowerTeethPhoto')}>
               <Text style={styles.changeBtnText}>Change</Text>
+            </TouchableOpacity>
+          </View>
+        ) : hasLowerPhoto ? (
+          <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], alignItems: 'center', justifyContent: 'center', height: 80 }]}>
+            <Text style={{ color: colors.primary[500], fontWeight: '600' }}>Photo from previous submission</Text>
+            <TouchableOpacity style={{ marginTop: 8 }} onPress={() => pickImage('lowerTeethPhoto')}>
+              <Text style={{ color: colors.primary[500], textDecorationLine: 'underline' }}>Replace</Text>
             </TouchableOpacity>
           </View>
         ) : (

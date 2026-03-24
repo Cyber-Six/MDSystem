@@ -108,7 +108,7 @@ export const MainTabNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name="Records"
+        name="Medicine"
         component={GatedMedicineScreen}
         options={{
           tabBarLabel: 'Medicine',

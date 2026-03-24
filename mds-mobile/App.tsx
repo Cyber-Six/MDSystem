@@ -31,6 +31,13 @@ LogBox.ignoreLogs([
   "SafeAreaView has been deprecated and will be removed in a future release.",
 ]);
 
+// Also suppress in terminal output (LogBox only hides the yellow box)
+const originalWarn = console.warn;
+console.warn = (...args: any[]) => {
+  if (typeof args[0] === 'string' && args[0].includes('SafeAreaView has been deprecated')) return;
+  originalWarn(...args);
+};
+
 // Banner display component
 const BannerOverlay: React.FC = () => {
   const insets = useSafeAreaInsets();
