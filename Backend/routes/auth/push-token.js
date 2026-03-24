@@ -10,10 +10,10 @@
 
 const express = require('express');
 const { Expo } = require('expo-server-sdk');
-const { jwtProtect } = require('../../../config/middleware/jwtProtect');
-const { portalBasedIpRateLimiter } = require('../../../config/middleware/ratelimiter');
-const { savePushToken, deletePushToken } = require('../../../config/sockets/notification-store');
-const logger = require('../../../utils/logger');
+const { jwtProtect } = require('../../config/middleware/jwtProtect');
+const { portalBasedIpRateLimiter } = require('../../config/middleware/ratelimiter');
+const { savePushToken, deletePushToken } = require('../../config/sockets/notification-store');
+const logger = require('../../utils/logger');
 
 const router = express.Router();
 
