@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import PatientSectionCard from './section-card';
 import ToothChart from './tooth-chart';
 import PendingDentalSubmissions from './pending-dental-submissions';
-import { getLegend, ORAL_FINDINGS } from './tooth-chart-constants';
+import { getLegend } from './tooth-chart-constants';
 import { axiosRequest } from '../../../packages-core-adapter';
+import { GQL_UPDATE_DENTAL_RECORD } from '../patient-record-data';
 
 /* ─── AuthenticatedImage ─────────────────────────────────────── */
 function AuthenticatedImage({ path, alt, className }) {
@@ -68,7 +69,14 @@ function AuthenticatedImage({ path, alt, className }) {
 }
 
 /* ─── Oral Findings Table ──────────────────────────────────────── */
-function OralFindingsTable({ findings, onFindingChange, readOnly = false }) {
+function OralFindingsTable({ catalogs = [], findings, onFindingChange, readOnly = false }) {
+  if (catalogs.length === 0) {
+    return (
+      <div className="py-4 text-center">
+        <p className="text-xs text-secondary-300 dark:text-neutral-600">No oral finding catalog data available.</p>
+      </div>
+    );
+  }
   return (
     <div className="overflow-x-auto -mx-3 -mb-3">
       <table className="w-full text-sm">
@@ -86,22 +94,22 @@ function OralFindingsTable({ findings, onFindingChange, readOnly = false }) {
           </tr>
         </thead>
         <tbody>
-          {ORAL_FINDINGS.map((finding, idx) => {
-            const value = findings[finding];
+          {catalogs.map((catalog, idx) => {
+            const value = findings[catalog.id]; // true | false | undefined
             return (
               <tr
-                key={finding}
+                key={catalog.id}
                 className={`${idx % 2 === 0 ? 'bg-white dark:bg-neutral-800' : 'bg-neutral-50 dark:bg-neutral-800/50'} hover:bg-primary-50/50 dark:hover:bg-neutral-700/30 transition-colors`}
               >
                 <td className="px-3 py-2 text-xs text-secondary-700 dark:text-neutral-300 border-b border-neutral-100 dark:border-neutral-700">
-                  {finding}
+                  {catalog.name}
                 </td>
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
                   <input
                     type="radio"
-                    name={`finding-${finding}`}
-                    checked={value === 'yes'}
-                    onChange={() => !readOnly && onFindingChange(finding, 'yes')}
+                    name={`finding-${catalog.id}`}
+                    checked={value === true}
+                    onChange={() => !readOnly && onFindingChange(catalog.id, true)}
                     disabled={readOnly}
                     className="w-4 h-4 text-green-600 border-neutral-300 dark:border-neutral-500 focus:ring-green-500 dark:bg-neutral-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                   />
@@ -109,9 +117,9 @@ function OralFindingsTable({ findings, onFindingChange, readOnly = false }) {
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
                   <input
                     type="radio"
-                    name={`finding-${finding}`}
-                    checked={value === 'no'}
-                    onChange={() => !readOnly && onFindingChange(finding, 'no')}
+                    name={`finding-${catalog.id}`}
+                    checked={value === false}
+                    onChange={() => !readOnly && onFindingChange(catalog.id, false)}
                     disabled={readOnly}
                     className="w-4 h-4 text-red-600 border-neutral-300 dark:border-neutral-500 focus:ring-red-500 dark:bg-neutral-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                   />
@@ -153,19 +161,17 @@ export default function PatientDentalRecordTab({ patient }) {
     convertLegacyChart(dental.toothChart)
   );
 
-  // Oral findings state - convert array format to object format
-  const [oralFindings, setOralFindings] = useState(() => {
-    const findingsObj = {};
-    // Initialize from existing data if available
-    if (dental.oralFindings && Array.isArray(dental.oralFindings)) {
-      dental.oralFindings.forEach(f => { findingsObj[f] = 'yes'; });
-    } else if (dental.oralFindings && typeof dental.oralFindings === 'object') {
-      return dental.oralFindings;
-    }
-    return findingsObj;
-  });
+  // Oral findings state — keyed by oralFindingId: true (yes) | false (no) | undefined (no answer)
+  const [oralFindings, setOralFindings] = useState(() => dental.oralFindingRecords || {});
+  const [isChartEditing, setIsChartEditing] = useState(false);
 
-  const [isEditingFindings, setIsEditingFindings] = useState(false);
+  // Editing is only allowed when the patient has an active Dental-scope update ticket
+  const ticketStatus = patient.status || '';
+  const ticketScope  = patient.updateTicketScope || '';
+  const canEdit = (
+    (ticketStatus === 'Pending' || ticketStatus === 'RevisionSubmitted') &&
+    (ticketScope  === 'Dental'  || ticketScope  === 'Both')
+  );
 
   // Mock pending submissions - in real app, this would come from API
   const [pendingSubmissions, setPendingSubmissions] = useState(() =>
@@ -177,26 +183,42 @@ export default function PatientDentalRecordTab({ patient }) {
   const photoUpper       = dental.photoUpper  || null;
   const photoLower       = dental.photoLower  || null;
 
-  // Handle tooth chart save
+  // Save tooth chart + oral findings together in one request
   const handleSaveToothChart = async (newStates) => {
-    console.log('Saving tooth chart for patient:', patient.id, newStates);
+    const toothPlacements = Object.entries(newStates).map(([toothIndex, legend]) => ({
+      toothIndex: parseInt(toothIndex, 10),
+      legend,
+    }));
+
+    const oralFindingsInput = Object.entries(oralFindings)
+      .filter(([, status]) => status !== null && status !== undefined)
+      .map(([oralFindingId, status]) => ({ oralFindingId, status }));
+
+    const response = await axiosRequest.post('/emr/medical', {
+      query: GQL_UPDATE_DENTAL_RECORD,
+      variables: {
+        userId: patient.id,
+        input: {
+          notes: dental.toothChart?.notes || null,
+          ToothPlacements: toothPlacements,
+          oralFindings: oralFindingsInput,
+        },
+      },
+    });
+
+    if (response.data.errors) {
+      throw new Error(response.data.errors[0]?.message || 'Failed to save dental record');
+    }
+
     setToothStates(newStates);
-    // TODO: API call to save tooth chart
   };
 
-  // Handle oral findings change
-  const handleFindingChange = (finding, value) => {
+  // Handle oral findings change (while in chart edit mode)
+  const handleFindingChange = (findingId, value) => {
     setOralFindings(prev => ({
       ...prev,
-      [finding]: value
+      [findingId]: value,
     }));
-  };
-
-  // Save oral findings
-  const handleSaveFindings = async () => {
-    console.log('Saving oral findings for patient:', patient.id, oralFindings);
-    setIsEditingFindings(false);
-    // TODO: API call to save findings
   };
 
   // Handle verify submission
@@ -217,7 +239,7 @@ export default function PatientDentalRecordTab({ patient }) {
   };
 
   const hasToothData = Object.keys(toothStates).length > 0;
-  const hasFindings = Object.keys(oralFindings).some(k => oralFindings[k]);
+  const hasFindings  = Object.values(oralFindings).some(v => v === true || v === false);
 
   return (
     <div className="space-y-3">
@@ -361,22 +383,34 @@ export default function PatientDentalRecordTab({ patient }) {
         </PatientSectionCard>
       )}
 
-      {/* ── Interactive Tooth Chart ──────────────────────────── */}
+      {/* ── Interactive Tooth Chart + Oral Findings (unified edit) ── */}
       <PatientSectionCard
         title="Tooth Chart"
         right={
-          hasToothData && (
-            <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
-              {Object.keys(toothStates).length} teeth marked
-            </span>
-          )
+          <div className="flex items-center gap-2">
+            {hasToothData && !isChartEditing && (
+              <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
+                {Object.keys(toothStates).length} teeth marked
+              </span>
+            )}
+            {!canEdit && (
+              <span className="text-[10px] text-warning-600 dark:text-warning-400">
+                {ticketStatus === 'InProgress' || ticketStatus === 'Revision'
+                  ? 'Patient update pending'
+                  : ticketScope && ticketScope !== 'Dental' && ticketScope !== 'Both'
+                    ? `Ticket scope: ${ticketScope}`
+                    : 'No active patient ticket'}
+              </span>
+            )}
+          </div>
         }
       >
         <ToothChart
           initialStates={toothStates}
           onSave={handleSaveToothChart}
           patientId={patient.id}
-          readOnly={false}
+          readOnly={!canEdit}
+          onEditStateChange={setIsChartEditing}
         />
       </PatientSectionCard>
 
@@ -384,48 +418,23 @@ export default function PatientDentalRecordTab({ patient }) {
       <PatientSectionCard
         title="Oral Findings"
         right={
-          <div className="flex items-center gap-2">
-            {hasFindings && !isEditingFindings && (
-              <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
-                {Object.values(oralFindings).filter(v => v === 'yes').length} findings
-              </span>
-            )}
-            {!isEditingFindings ? (
-              <button
-                onClick={() => setIsEditingFindings(true)}
-                className="text-[10px] text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium flex items-center gap-1"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                Edit
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsEditingFindings(false)}
-                  className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveFindings}
-                  className="text-[10px] text-success-600 hover:text-success-700 dark:text-success-400 font-medium flex items-center gap-1"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Save
-                </button>
-              </div>
-            )}
-          </div>
+          hasFindings && !isChartEditing && (
+            <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
+              {Object.values(oralFindings).filter(v => v === true).length} findings
+            </span>
+          )
         }
       >
+        {isChartEditing && (
+          <p className="text-[10px] text-primary-600 dark:text-primary-400 mb-2">
+            Editing — changes will be saved with the tooth chart.
+          </p>
+        )}
         <OralFindingsTable
+          catalogs={dental.oralFindingCatalogs || []}
           findings={oralFindings}
           onFindingChange={handleFindingChange}
-          readOnly={!isEditingFindings}
+          readOnly={!isChartEditing}
         />
       </PatientSectionCard>
 

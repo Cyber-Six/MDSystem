@@ -161,7 +161,8 @@ export default function ToothChart({
   initialStates = {},
   onSave,
   patientId,
-  readOnly = false
+  readOnly = false,
+  onEditStateChange,
 }) {
   const [toothStates, setToothStates] = useState(() => initializeDefaultStates(initialStates));
   const [selectedLegend, setSelectedLegend] = useState(null);
@@ -180,11 +181,9 @@ export default function ToothChart({
 
     setPreviousState({ ...toothStates });
 
-    // Toggle off if same legend is already applied
+    // Toggle off if same legend is already applied → revert to Caries-free instead of blank
     if (toothStates[toothNumber] === selectedLegend) {
-      const newStates = { ...toothStates };
-      delete newStates[toothNumber];
-      setToothStates(newStates);
+      setToothStates({ ...toothStates, [toothNumber]: '✓' });
     } else {
       setToothStates({ ...toothStates, [toothNumber]: selectedLegend });
     }
@@ -212,6 +211,7 @@ export default function ToothChart({
         await onSave(toothStates);
       }
       setIsEditing(false);
+      if (onEditStateChange) onEditStateChange(false);
       setPreviousState(null);
     } catch (error) {
       console.error('Failed to save tooth chart:', error);
@@ -223,6 +223,7 @@ export default function ToothChart({
   const handleCancel = () => {
     setToothStates(initializeDefaultStates(initialStates));
     setIsEditing(false);
+    if (onEditStateChange) onEditStateChange(false);
     setSelectedLegend(null);
     setPreviousState(null);
   };
@@ -283,7 +284,7 @@ export default function ToothChart({
         <div className="flex items-center gap-2">
           {!readOnly && !isEditing && (
             <button
-              onClick={() => setIsEditing(true)}
+              onClick={() => { setIsEditing(true); if (onEditStateChange) onEditStateChange(true); }}
               className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md transition-colors flex items-center gap-1.5"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

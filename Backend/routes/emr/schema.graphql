@@ -243,6 +243,7 @@ input ToothPlacementInput{
 
 # Oral Finding
 type OralFindingCatalog{
+  id: ID!
   name: String! # Calculus
   isActive: Boolean!
   description: String

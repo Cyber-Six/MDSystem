@@ -133,6 +133,7 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
     department: basicInfo?.department || '',
     semester: '',
     status: updateTicket?.status || basicInfo?.latest_status || '',
+    updateTicketScope: updateTicket?.scope || basicInfo?.latest_scope || '',
     type: basicInfo?.profile_type || 'Student',
     avatar: null,
     personal: {
@@ -269,6 +270,12 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
         oralFindings: [],
         treatments: [],
         toothChart: { missing: [], filled: [], decayed: [], notes: dentalRecord?.notes || '', states: toothStates },
+        oralFindingCatalogs: data?.oralFindingCatalogs || [],
+        oralFindingRecords: (() => {
+          const map = {};
+          (dentalRecord?.oralFindings || []).forEach(f => { map[f.oralFindingId] = f.status; });
+          return map;
+        })(),
       };
     })(),
     obgyne: {

@@ -173,22 +173,30 @@ const Mutation = {
   _DentalRecord: async (_, { args, recordId }, { user, res }) => {
 
     await anchor.DentalRecord(recordId, args.input.notes);
+    // Clear existing records before re-inserting to avoid duplicates
+    await db.query(`DELETE FROM "ToothPlacement" WHERE "dentalRecordId" = $1`, [recordId]);
+    await db.query(`DELETE FROM "OralFindingRecord" WHERE "dentalRecordId" = $1`, [recordId]);
     let result;
     try {
-      const values = [];
-      const params = [];
-      args.input.toothPlacements.forEach((tooth, i) => {
-        const baseIndex = i * 3;
-        values.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`);
-        params.push(recordId, tooth.tooth_index, tooth.legend);
-      });
+      const toothPlacements = args.input.ToothPlacements || [];
+      if (toothPlacements.length > 0) {
+        const values = [];
+        const params = [];
+        toothPlacements.forEach((tooth, i) => {
+          const baseIndex = i * 3;
+          values.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`);
+          params.push(recordId, tooth.toothIndex, tooth.legend);
+        });
 
-      const query = `
-        INSERT INTO "ToothPlacement" ("dentalRecordId", "toothIndex", "legend")
-        VALUES ${values.join(", ")}
-        RETURNING *;
-      `;
-      result = await db.queryControlled(query, params);
+        const query = `
+          INSERT INTO "ToothPlacement" ("dentalRecordId", "toothIndex", "legend")
+          VALUES ${values.join(", ")}
+          RETURNING *;
+        `;
+        result = await db.queryControlled(query, params);
+      } else {
+        result = { rows: [] };
+      }
 
       logger.debug("Inserted Tooth Placements:", result.rows);
     } catch (err) {

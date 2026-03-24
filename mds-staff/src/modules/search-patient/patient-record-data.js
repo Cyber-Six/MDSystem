@@ -44,7 +44,9 @@ export const GQL_FULL_RECORD = `
     getUserDentalRecord(userId: $userId, limit: 1) {
       id notes created_at
       ToothPlacements { id toothIndex legend }
+      oralFindings { oralFindingId status notes }
     }
+    oralFindingCatalogs: getOralFindingCatalogs(filterIsValid: true, limit: 50) { id name }
     getUserOralApplianceProfile(userId: $userId, limit: 1) {
       id notes created_at
       appliances { id tagId status dateIssued arch }
@@ -79,6 +81,16 @@ export const GQL_FULL_RECORD = `
   }
 `;
 
+
+export const GQL_UPDATE_DENTAL_RECORD = `
+  mutation UpdateDentalRecord($userId: ID!, $input: DentalRecordInput!) {
+    updateDentalRecord(userId: $userId, input: $input) {
+      id
+      notes
+      ToothPlacements { id toothIndex legend }
+    }
+  }
+`;
 
 export const GQL_PERSONAL_PROFILE = `
   query GetUserPersonalProfile($userId: ID!) {

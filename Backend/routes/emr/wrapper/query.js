@@ -245,7 +245,7 @@ const Query = {
         WHERE "dentalRecordId" = $1;
       `; // somewhere here
       const DentalFindings = await db.query(findingsQuery, [row.id]);
-      row.DentalFindings = DentalFindings.rows;
+      row.oralFindings = DentalFindings.rows;
       }
     logger.debug("User Dental Record with Findings:", result.rows);
     return result.rows;
