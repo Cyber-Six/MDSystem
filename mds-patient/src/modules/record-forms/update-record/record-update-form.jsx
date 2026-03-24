@@ -505,10 +505,19 @@ const RecordUpdateForm = () => {
                   // Merge pre-filled revision data into form
                   if (revisionPrefillData && Object.keys(revisionPrefillData).length > 0) {
                     console.log('[RecordUpdateForm] Merging pre-fill data into form');
-                    setFormData(prev => ({
-                      ...prev,
-                      ...revisionPrefillData
-                    }));
+                    setFormData(prev => {
+                      // Ensure toggle states match pre-filled data presence
+                      const merged = { ...prev, ...revisionPrefillData };
+                      
+                      // If we have pre-filled oral appliances, set the toggle to true
+                      if (revisionPrefillData.oralAppliances?.length > 0 && merged.hasOralAppliances !== true) {
+                        merged.hasOralAppliances = true;
+                      }
+                      
+                      // If we have pre-filled dental procedures, we'll sync with the local state via useEffect
+                      
+                      return merged;
+                    });
                   }
                   
                   setRecordType(recordTypeForRevision);

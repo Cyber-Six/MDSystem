@@ -63,16 +63,23 @@ async function sendGraphQLRequest(query, variables = {}) {
     });
 
     // Handle GraphQL errors gracefully
-    if (response.data.errors) {
+    if (response.data.errors && response.data.errors.length > 0) {
       console.warn('⚠️ GraphQL Errors:', response.data.errors.map(e => e.message).join(', '));
       
-      // If data is null (backend table missing, etc.), return empty object
-      // This allows fallback logic to work naturally
+      // If we have partial data (field-level errors in scope-aware queries), accept it
+      // This happens when querying only Dental fields but backend returns "No active profile" 
+      // for medical fields that weren't included in the query
+      if (response.data.data && Object.keys(response.data.data).length > 0) {
+        console.log('✓ Returning partial data despite field-level errors');
+        return response.data.data;
+      }
+      
+      // If data is completely null (backend table missing, no records, etc.), return empty object
       if (response.data.data === null) {
         return {};
       }
       
-      // If we have partial data with errors, throw to handle more seriously
+      // Otherwise, throw the error
       throw new Error(response.data.errors.map(e => e.message).join(', '));
     }
 
@@ -96,6 +103,7 @@ export async function getUpdateTicketStatus() {
       getUpdateTicket {
         id
         status
+        scope
       }
     }
   `;
@@ -159,76 +167,96 @@ export async function getUpdateRevisionStatus() {
 
 /**
  * Fetch the patient's previous medical/dental records for pre-filling the form during revision
+ * Builds a scope-specific query based on the revision scope (Medical/Dental/Both)
  * @returns {Promise<object>} Previous form data to pre-fill the revision form
  */
 export async function fetchUpdateRevisionPrefill() {
   console.log('[UpdateRevision] 📥 Fetching previous submission data for revision pre-fill...');
   
   try {
-    // Fetch all relevant data from the previous submission
-    const query = `
-      query GetRevisionEMRData {
-        emrProfile: getProfile {
-          ... on StudentProfile { program year }
-          ... on EmployeeProfile { department role }
-        }
-        emergencyContact: getEmergencyContact {
-          firstContact { contactName relationship contactNumber address }
-          secondContact { contactName relationship contactNumber address }
-        }
-        medicalHistory: getMedicalHistory {
-          conditions { conditionId relationship }
-          notes
-        }
-        allergyProfile: getAllergyProfile {
-          allergies { allergenCatalogId status severity notes }
-          notes
-        }
-        hospitalizationProfile: getHospitalizationProfile {
-          hospitalizations { conditionId admissionDate dischargeDate notes }
-          notes
-        }
-        operationProfile: getOperationProfile {
-          operations { procedureId operationDate notes }
-          notes
-        }
-        medicationProfile: getMedicationProfile {
-          medications { medicineId description }
-          notes
-        }
-        immunizationProfile: getImmunizationProfile {
-          immunizations { vaccineTypeId immunizationDate doseNumber }
-          notes
-        }
-        lifestyle: getLifestyle {
-          smoker numberOfCigarettesPerDay yearsSmoked
-          alcoholConsumer frequencyOfAlcoholConsumption
-          notes
-        }
-        visualAcuityProfile: getVisualAcuityProfile {
-          notes
-          acuity { acuityId left_eye right_eye notes }
-        }
-        obgynHistory: getObgynHistory {
-          lastMenstrualPeriod hasDysmenorrhea
-          notes
-        }
-        dentalHistory: getDentalHistory {
-          seenByDentist lastDentalCleaning purpose lastVisitDate
-        }
-        dentalProcedureProfile: getDentalProcedureProfile {
-          procedures { procedureTypeId procedureDate }
-          notes
-        }
-        dentalPhotoRecord: getDentalPhotoRecord {
-          upperTeeth lowerTeeth
-        }
-        oralApplianceProfile: getOralApplianceProfile {
-          appliances { tagId status dateIssued arch }
-          notes
-        }
+    // First, get the ticket scope to build the appropriate query
+    const ticket = await getUpdateTicketStatus();
+    const scope = ticket?.scope || 'Both'; // Default to Both if no scope
+    
+    console.log('[UpdateRevision] Query scope:', scope);
+    
+    // Build query based on scope - only request fields relevant to the revision scope
+    let query = `query GetRevisionEMRData {`;
+    
+    // Always fetch profile and emergency contact (needed for all scopes)
+    query += `
+      emrProfile: getProfile {
+        ... on StudentProfile { program year }
+        ... on EmployeeProfile { department role }
       }
-    `;
+      emergencyContact: getEmergencyContact {
+        firstContact { contactName relationship contactNumber address }
+        secondContact { contactName relationship contactNumber address }
+      }`;
+    
+    // Add medical fields only for Medical or Both scope
+    if (scope === 'Medical' || scope === 'Both') {
+      query += `
+      medicalHistory: getMedicalHistory {
+        conditions { conditionId relationship }
+        notes
+      }
+      allergyProfile: getAllergyProfile {
+        allergies { allergenCatalogId status severity notes }
+        notes
+      }
+      hospitalizationProfile: getHospitalizationProfile {
+        hospitalizations { conditionId admissionDate dischargeDate notes }
+        notes
+      }
+      operationProfile: getOperationProfile {
+        operations { procedureId operationDate notes }
+        notes
+      }
+      medicationProfile: getMedicationProfile {
+        medications { medicineId description }
+        notes
+      }
+      immunizationProfile: getImmunizationProfile {
+        immunizations { vaccineTypeId immunizationDate doseNumber }
+        notes
+      }
+      lifestyle: getLifestyle {
+        smoker numberOfCigarettesPerDay yearsSmoked
+        alcoholConsumer frequencyOfAlcoholConsumption
+        notes
+      }
+      visualAcuityProfile: getVisualAcuityProfile {
+        notes
+        acuity { acuityId left_eye right_eye notes }
+      }
+      obgynHistory: getObgynHistory {
+        lastMenstrualPeriod hasDysmenorrhea
+        notes
+      }`;
+    }
+    
+    // Add dental fields only for Dental or Both scope
+    if (scope === 'Dental' || scope === 'Both') {
+      query += `
+      dentalHistory: getDentalHistory {
+        seenByDentist lastDentalCleaning purpose lastVisitDate
+      }
+      dentalProcedureProfile: getDentalProcedureProfile {
+        procedures { procedureTypeId procedureDate }
+        notes
+      }
+      dentalPhotoRecord: getDentalPhotoRecord {
+        upperTeeth lowerTeeth
+      }
+      oralApplianceProfile: getOralApplianceProfile {
+        appliances { tagId status dateIssued arch }
+        notes
+      }`;
+    }
+    
+    query += `
+    }`;
     
     const response = await sendGraphQLRequest(query, {});
     console.log('[UpdateRevision] ✅ Pre-fill data fetched:', response);
@@ -515,7 +543,7 @@ async function mapRevisionDataToFormData(backendData) {
  * @param {string} fileId - File ID from getDentalPhotoRecord
  * @returns {Promise<string|null>} Blob URL for display, or null if fetch fails
  */
-async function fetchDentalPhotoAsBlob(fileId) {
+export async function fetchDentalPhotoAsBlob(fileId) {
   if (!fileId) return null;
   
   try {
