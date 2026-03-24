@@ -247,3 +247,39 @@ export const fetchSupplyBatches = async (supplyItemId) => {
   );
   return data.getSupplyBatches ?? [];
 };
+
+// ── Split Mutations ──────────────────────────────────────────────────────────
+
+/**
+ * Split a medicine batch (move units to a new batch at target location).
+ * @param {string|number} batchId - ID of the batch to split
+ * @param {{ quantity: number, targetLocation: string, notes?: string }} input
+ * @returns {Promise<Object>} New MedicineBatch
+ */
+export const splitMedicineSupply = async (batchId, input) => {
+  const data = await sendGraphQL(
+    `mutation SplitMedicineSupply($batchId: ID!, $input: SplitMedicalSupplyInput!) {
+      splitMedicineSupply(batchId: $batchId, input: $input) {${MEDICINE_BATCH_FIELDS}
+      }
+    }`,
+    { batchId, input },
+  );
+  return data.splitMedicineSupply;
+};
+
+/**
+ * Split a supply batch (move units to a new batch at target location).
+ * @param {string|number} batchId - ID of the batch to split
+ * @param {{ quantity: number, targetLocation: string, notes?: string }} input
+ * @returns {Promise<Object>} New SupplyBatch
+ */
+export const splitMedicalSupply = async (batchId, input) => {
+  const data = await sendGraphQL(
+    `mutation SplitMedicalSupply($batchId: ID!, $input: SplitMedicalSupplyInput!) {
+      splitMedicalSupply(batchId: $batchId, input: $input) {${SUPPLY_BATCH_FIELDS}
+      }
+    }`,
+    { batchId, input },
+  );
+  return data.splitMedicalSupply;
+};

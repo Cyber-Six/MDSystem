@@ -7,11 +7,25 @@
  * - System event pills
  * - Grouped message layout (avatar/timestamp only on first/last)
  * - Adaptive border radius for conversation flow
+ * - Image messages with authenticated loading and full-screen lightbox
  */
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  Modal,
+  TouchableOpacity,
+  Pressable,
+  StyleSheet,
+  Dimensions,
+  ActivityIndicator,
+} from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { axiosRequest, getApiBaseUrl } from '../../core';
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 interface Message {
   id: string;
@@ -29,6 +43,117 @@ interface MessageBubbleProps {
   isLastInGroup?: boolean;
 }
 
+// ─── AuthImage ─────────────────────────────────────────────────────────────
+// Fetches an image with JWT auth headers, caches as base64, shows lightbox
+
+interface AuthImageProps {
+  filename: string;
+  isPatient: boolean;
+  isDark: boolean;
+}
+
+const AuthImage: React.FC<AuthImageProps> = ({ filename, isPatient, isDark }) => {
+  const [uri, setUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const url = `${getApiBaseUrl()}/media/record/eConsultation/${filename}`;
+
+    axiosRequest
+      .get(url, { responseType: 'arraybuffer' })
+      .then((response) => {
+        if (cancelled) return;
+        const bytes = new Uint8Array(response.data as ArrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        const contentType =
+          (response.headers as Record<string, string>)['content-type'] || 'image/jpeg';
+        setUri(`data:${contentType};base64,${base64}`);
+      })
+      .catch(() => {
+        if (!cancelled) setHasError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filename]);
+
+  const placeholderBg = isPatient
+    ? 'rgba(0,0,0,0.08)'
+    : isDark
+    ? colors.neutral[700]
+    : colors.neutral[100];
+
+  if (loading) {
+    return (
+      <View style={[styles.imagePlaceholder, { backgroundColor: placeholderBg }]}>
+        <ActivityIndicator
+          size="small"
+          color={isPatient ? colors.secondary[900] : colors.primary[500]}
+        />
+      </View>
+    );
+  }
+
+  if (hasError || !uri) {
+    return (
+      <View style={[styles.imagePlaceholder, { backgroundColor: placeholderBg }]}>
+        <Text
+          style={{
+            fontSize: 11,
+            color: isPatient
+              ? colors.secondary[700]
+              : isDark
+              ? colors.neutral[400]
+              : colors.neutral[500],
+          }}
+        >
+          ⚠ Image unavailable
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <TouchableOpacity onPress={() => setLightboxOpen(true)} activeOpacity={0.85}>
+        <Image source={{ uri }} style={styles.thumbnailImage} resizeMode="cover" />
+      </TouchableOpacity>
+
+      <Modal
+        visible={lightboxOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setLightboxOpen(false)}
+      >
+        <Pressable style={styles.lightboxOverlay} onPress={() => setLightboxOpen(false)}>
+          <Image source={{ uri }} style={styles.lightboxImage} resizeMode="contain" />
+          <TouchableOpacity
+            style={styles.lightboxClose}
+            onPress={() => setLightboxOpen(false)}
+            hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }}
+          >
+            <Text style={styles.lightboxCloseText}>✕</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Modal>
+    </>
+  );
+};
+
+// ─── MessageBubble ──────────────────────────────────────────────────────────
+
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   formatTime,
@@ -38,6 +163,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const { isDark } = useTheme();
   const isPatient = message.userType === 'Patient';
   const isSystem = message.promptType === 'system';
+  const hasImage = Boolean(message.filename);
 
   // System event pill
   if (isSystem) {
@@ -122,7 +248,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           {/* Bubble */}
           {isPatient ? (
             <View style={[styles.patientBubble, getPatientRadius()]}>
-              <Text style={styles.patientText}>{message.text}</Text>
+              {hasImage && (
+                <AuthImage
+                  filename={message.filename!}
+                  isPatient={isPatient}
+                  isDark={isDark}
+                />
+              )}
+              {message.text ? (
+                <Text style={[styles.patientText, hasImage && styles.imageCaption]}>
+                  {message.text}
+                </Text>
+              ) : null}
             </View>
           ) : (
             <View
@@ -135,14 +272,24 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.staffText,
-                  { color: isDark ? colors.neutral[100] : colors.secondary[800] },
-                ]}
-              >
-                {message.text}
-              </Text>
+              {hasImage && (
+                <AuthImage
+                  filename={message.filename!}
+                  isPatient={isPatient}
+                  isDark={isDark}
+                />
+              )}
+              {message.text ? (
+                <Text
+                  style={[
+                    styles.staffText,
+                    { color: isDark ? colors.neutral[100] : colors.secondary[800] },
+                    hasImage && styles.imageCaption,
+                  ]}
+                >
+                  {message.text}
+                </Text>
+              ) : null}
             </View>
           )}
 
@@ -264,6 +411,49 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
     paddingHorizontal: 4,
+  },
+  // Image support
+  imagePlaceholder: {
+    width: 200,
+    height: 140,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbnailImage: {
+    width: 200,
+    height: 140,
+    borderRadius: 10,
+  },
+  imageCaption: {
+    marginTop: 6,
+  },
+  // Lightbox
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImage: {
+    width: SCREEN_W,
+    height: SCREEN_H * 0.78,
+  },
+  lightboxClose: {
+    position: 'absolute',
+    top: 52,
+    right: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxCloseText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

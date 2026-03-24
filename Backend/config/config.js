@@ -11,8 +11,9 @@
       name: process.env.POSTGRES_DB,
       port: parseInt(process.env.POSTGRES_PORT, 10) || 5432,
       max: parseInt(process.env.POSTGRES_MAX_CONN, 10) || 5,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 20000,
+      connectionTimeoutMillis: 5000,
+      statement_timeout: 30000,
       },
     jwt: { // JWT configuration
       secret: process.env.JWT_SECRET,

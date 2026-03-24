@@ -14,6 +14,14 @@ const DentalHistoryStep = ({ formData, onChange }) => {
   });
   const [hasDentalProcedures, setHasDentalProcedures] = useState(() => (formData.dentalProcedures?.length > 0 ? true : null));
 
+  // Sync local state with formData when pre-fill data arrives (e.g., during revision)
+  useEffect(() => {
+    // Update hasDentalProcedures when formData changes
+    if (formData.dentalProcedures?.length > 0) {
+      setHasDentalProcedures(true);
+    }
+  }, [formData.dentalProcedures]);
+
   // Fetch catalogs on mount
   useEffect(() => {
     let isMounted = true;

@@ -163,9 +163,7 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
           ) : fileError ? (
             <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
               {getIcon()}
-              <a href={fileUrl} download={fileId} className="text-xs text-primary-500 hover:underline">
-                Download file
-              </a>
+              <span className="text-xs text-neutral-400">Unable to load file</span>
             </div>
           ) : isPatient ? (
             // Patient file container

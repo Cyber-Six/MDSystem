@@ -137,8 +137,17 @@ const ChatPanel = ({ emitTyping }) => {
   const isPatientTyping = !isArchived && typingUsers[selectedPatientId || selectedChatId]?.isTyping;
   const isPending = selectedTicket?.status === 'Open';
 
+  // Scroll to bottom when messages load or chat changes
+  // Use double-rAF to ensure DOM has rendered before scrolling
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    const scrollToBottom = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        });
+      });
+    };
+    scrollToBottom();
   }, [messages, isPatientTyping, selectedChatId]);
 
   const formatTime = (dateStr) => {
@@ -149,8 +158,12 @@ const ChatPanel = ({ emitTyping }) => {
   if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
   // Build unified list: synthetic purpose entry + messages with dividers
-  // The purpose now comes from the first ticket for this patient
-  const firstTicket = selectedTicket?.tickets?.[0] || selectedConversation?.latestTicket;
+  // Use the OLDEST ticket's purpose as the initial context message so it aligns
+  // with the oldest messages rendered at the top of the chat.
+  const allSubTickets = selectedTicket?.tickets || [];
+  const firstTicket = allSubTickets.length > 0
+    ? allSubTickets[allSubTickets.length - 1]   // oldest (array is DESC)
+    : selectedConversation?.latestTicket;
   const purposeSynth = firstTicket?.purpose ? [{
     id: '__purpose__',
     text: firstTicket.purpose,

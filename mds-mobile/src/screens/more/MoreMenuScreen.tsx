@@ -30,14 +30,16 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { icon: '👤', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
-  { icon: '�', label: 'Medical Record', screen: 'InitialRecordForm', description: 'View or fill your record' },
-  { icon: '�🔑', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
+  { icon: '💊', label: 'Medicine Request', screen: 'MedicineRequest', description: 'Request medicines from the clinic' },
+  { icon: '📋', label: 'Medical Record', screen: 'InitialRecordForm', description: 'View or fill your record' },
+  { icon: '🔑', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
   { icon: '📜', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
   { icon: '❓', label: 'FAQs', screen: 'FAQs', description: 'Common questions' },
+  { icon: '⚙️', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
 ];
 
 export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) => {
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
   const { setAuthenticated } = useAuth();
   const [userName, setUserName] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
@@ -79,15 +81,6 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
           >
             More
           </Text>
-          <TouchableOpacity
-            onPress={toggleTheme}
-            style={[
-              styles.themeToggle,
-              { backgroundColor: isDark ? colors.neutral[800] : colors.neutral[200] },
-            ]}
-          >
-            <Text style={styles.themeIcon}>{isDark ? '☀️' : '🌙'}</Text>
-          </TouchableOpacity>
         </View>
 
         {/* User card */}
@@ -216,7 +209,7 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: 16, paddingBottom: 40 },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -284,7 +277,7 @@ const styles = StyleSheet.create({
   signOutText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#EF4444',
+    color: colors.error[500],
   },
   footer: {
     alignItems: 'center',

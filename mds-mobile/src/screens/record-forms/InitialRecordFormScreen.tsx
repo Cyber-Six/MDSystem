@@ -6,10 +6,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, StyleSheet, SafeAreaView,
+  KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { useRecordStatus } from '../../context/RecordStatusContext';
 import { ProgressStepper } from '../../components/ui/ProgressStepper';
 import PersonalInfoStep from './steps/PersonalInfoStep';
 import MedicalHistoryStep from './steps/MedicalHistoryStep';
@@ -34,6 +35,7 @@ const InitialRecordFormScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { isDark } = useTheme();
+  const { refreshRecordStatus } = useRecordStatus();
   const scrollRef = useRef<ScrollView>(null);
 
   const isRevision = route.params?.isRevision ?? false;
@@ -188,6 +190,7 @@ const InitialRecordFormScreen: React.FC = () => {
             setIsSubmitting(true);
             try {
               await createInitialMedicalRecord(formData, { isRevision });
+              await refreshRecordStatus();
               Alert.alert(
                 'Success!',
                 'Your medical record has been submitted successfully.',
@@ -269,7 +272,7 @@ const InitialRecordFormScreen: React.FC = () => {
   const isLastStep = currentStep === steps.length - 1;
 
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
+    <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
@@ -329,7 +332,7 @@ const InitialRecordFormScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 

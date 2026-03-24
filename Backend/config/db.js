@@ -14,6 +14,7 @@ const pool = new Pool({
   max: dbConfig.max,
   idleTimeoutMillis: dbConfig.idleTimeoutMillis,
   connectionTimeoutMillis: dbConfig.connectionTimeoutMillis,
+  statement_timeout: dbConfig.statement_timeout,
 });
 
 pool.on('connect', () => {

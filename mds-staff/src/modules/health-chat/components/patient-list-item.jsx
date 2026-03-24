@@ -6,8 +6,9 @@ import { formatPatientName, getPatientInitials, formatRelativeTime } from '../he
  * Patient List Item - Messenger Style
  * Shows: Name, Last message preview, Time ago, Status badge
  * Highlights unread conversations
+ * Shows subtle "reply" badge when patient sent last message and staff hasn't replied
  */
-const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
+const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, onClick }) => {
   const patient = ticket.patient;
   const initials = getPatientInitials(patient);
   const hasUnread = ticket.unreadCount > 0;
@@ -49,6 +50,7 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
         flex items-center gap-2.5 px-3 py-2.5 cursor-pointer
         transition-all duration-300 ease-in-out
         border-l-[3px] border-b
+        ${isExiting ? 'animate-[slideOut_400ms_ease-in-out_forwards]' : ''}
         ${isSelected
           ? 'bg-amber-50 dark:bg-amber-900/20 border-l-primary-500 border-b-neutral-100 dark:border-b-neutral-800'
           : hasUnread
@@ -56,7 +58,12 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
             : 'bg-transparent border-l-transparent border-b-neutral-100 dark:border-b-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
         }
       `}
-      style={{ willChange: 'transform, opacity' }}
+      style={{
+        willChange: 'transform, opacity',
+        ...(isExiting ? {
+          animation: 'slideOut 400ms ease-in-out forwards',
+        } : {})
+      }}
     >
       {/* Avatar with unread indicator */}
       <div className="relative flex-shrink-0">
@@ -91,12 +98,17 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
           }`}>
             {formatPatientName(patient)}
           </span>
-          <span className={`text-[10px] flex-shrink-0 ${
+          <span className={`text-xs flex-shrink-0 ${
             hasUnread
               ? 'text-primary-600 dark:text-primary-400 font-medium'
               : 'text-neutral-400 dark:text-neutral-500'
           }`}>
-            {formatRelativeTime(ticket.lastMessageAt || ticket.session_start || ticket.archived_at)}
+            {/* Pending: creation time; Active: last message time; Archive: close time */}
+            {ticket.status === 'Open'
+              ? formatRelativeTime(ticket.lastMessageAt || ticket.archived_at)
+              : ['Closed', 'Expired'].includes(ticket.status)
+                ? formatRelativeTime(ticket.session_end || ticket.archived_at || ticket.lastMessageAt || ticket.session_start)
+                : formatRelativeTime(ticket.lastMessageAt || ticket.session_start)}
           </span>
         </div>
 
@@ -113,6 +125,11 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
             {hasUnread && !isSelected && (
               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-primary-500 text-secondary-900">
                 {ticket.unreadCount > 99 ? '99+' : ticket.unreadCount}
+              </span>
+            )}
+            {needsReply && !hasUnread && !isSelected && !['Closed', 'Expired'].includes(ticket.status) && (
+              <span className="text-[12px] text-neutral-400 dark:text-neutral-500 italic">
+                respond?
               </span>
             )}
             <TicketStatusBadge status={ticket.status} />

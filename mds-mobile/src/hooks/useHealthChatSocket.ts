@@ -16,6 +16,16 @@ import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { getApiBaseUrl, TokenStorage, refreshAccessToken } from '../core';
 import type { TicketMessage, Ticket } from '../services/health-chat-service';
 
+interface SocketService {
+  connect(): Promise<void>;
+  disconnect(): void;
+  on(event: string, handler: (...args: any[]) => void): void;
+  off(event: string, handler?: (...args: any[]) => void): void;
+  emit(event: string, data?: any, callback?: (...args: any[]) => void): boolean;
+  isConnected(): boolean;
+  getSocket(): any;
+}
+
 interface UseHealthChatSocketOptions {
   chatId: string | null;
   chatStatus: string;
@@ -98,7 +108,7 @@ export function useHealthChatSocket({
           transports: ['websocket', 'polling'],
           timeout: 15000,
         },
-      });
+      }) as SocketService;
 
       await socketService.connect();
       socketRef.current = socketService;

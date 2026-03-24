@@ -184,15 +184,12 @@ export const FileMessageBubble = ({ fileId, fileName, isPatient, timestamp, form
       )}
 
       {!isImage && !isPdf && !isVideo && (
-        <a
-          href={fileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <div
           className={`flex items-center gap-2 p-3 ${isPatient ? 'text-white' : 'text-neutral-700 dark:text-neutral-300'}`}
         >
           <File className="w-6 h-6" />
-          <span className="text-sm">Download Attachment</span>
-        </a>
+          <span className="text-sm">View Attachment</span>
+        </div>
       )}
 
       {timestamp && (

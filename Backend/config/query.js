@@ -308,10 +308,9 @@ async function getUserBranch(userId) {
   try {
     const result = await query(sql, [userId]);
     if (result.rows.length === 0) {
-      console.log(`No branch found for userId=${userId}`);
+      logger.debug(`No branch found for userId=${userId}`);
       return null; // patient not found
     }
-    console.log(result.rows[0]);
     return result.rows[0].branch; 
   } catch (err) {
     logger.error(`Error fetching branch for userId=${userId}:`, err);

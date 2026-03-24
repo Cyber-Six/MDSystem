@@ -1,11 +1,11 @@
 import React, { useEffect, useCallback } from 'react';
-import { X, Download, FileText, Film } from 'lucide-react';
+import { X, FileText } from 'lucide-react';
 
 /**
- * MediaLightbox - A modal component for viewing images, PDFs, and videos
+ * MediaLightbox - A modal component for viewing images, PDFs, and videos (view-only, no download)
  *
  * @param {string} url - The URL of the media file
- * @param {string} filename - The filename to display and use for download
+ * @param {string} filename - The filename to display
  * @param {string} contentType - MIME type (e.g., 'image/jpeg', 'application/pdf', 'video/mp4')
  * @param {function} onClose - Callback when the lightbox is closed
  */
@@ -27,6 +27,7 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
   };
 
   const mediaType = getMediaType();
+  const isPdf = mediaType === 'pdf';
 
   // Handle escape key to close
   const handleKeyDown = useCallback((e) => {
@@ -55,10 +56,15 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-[60] p-4"
+      className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-[60]"
+      style={{ padding: isPdf ? '0.5rem' : '1rem' }}
       onClick={handleBackdropClick}
     >
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div
+        className={`bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden ${
+          isPdf ? 'h-[calc(100vh-1rem)]' : 'max-h-[90vh]'
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
           <div className="flex-1 min-w-0 mr-4">
@@ -69,44 +75,39 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
               {filename || 'Attachment'}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <a
-              href={url}
-              download={filename}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download
-            </a>
-            <button
-              onClick={onClose}
-              className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
-              aria-label="Close"
-            >
-              <X className="w-4 h-4 text-secondary-600 dark:text-neutral-400" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors flex-shrink-0"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4 text-secondary-600 dark:text-neutral-400" />
+          </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center min-h-0">
+        <div className={`flex-1 bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center min-h-0 ${
+          isPdf ? 'overflow-hidden' : 'overflow-auto'
+        }`}>
           {mediaType === 'image' ? (
             <img
               src={url}
               alt={filename || 'Image'}
               className="max-w-full max-h-full object-contain p-4"
               loading="lazy"
+              onContextMenu={(e) => e.preventDefault()}
+              draggable={false}
             />
-          ) : mediaType === 'pdf' ? (
+          ) : isPdf ? (
             <iframe
               src={url}
               title={filename || 'PDF Document'}
-              className="w-full h-full min-h-[60vh] border-0"
+              className="w-full h-full border-0"
             />
           ) : mediaType === 'video' ? (
             <video
               src={url}
               controls
+              controlsList="nodownload"
               className="max-w-full max-h-full p-4"
             >
               Your browser does not support video playback.
@@ -114,11 +115,7 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
           ) : (
             <div className="flex flex-col items-center gap-3 p-8 text-center">
               <div className="w-16 h-16 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center">
-                {mediaType === 'video' ? (
-                  <Film className="w-8 h-8 text-neutral-400 dark:text-neutral-500" />
-                ) : (
-                  <FileText className="w-8 h-8 text-neutral-400 dark:text-neutral-500" />
-                )}
+                <FileText className="w-8 h-8 text-neutral-400 dark:text-neutral-500" />
               </div>
               <p className="text-sm text-secondary-600 dark:text-neutral-400">
                 Preview not available for this file type.
@@ -126,13 +123,6 @@ const MediaLightbox = ({ url, filename, contentType, onClose }) => {
               <p className="text-xs text-secondary-400 dark:text-neutral-500">
                 {contentType || 'Unknown type'}
               </p>
-              <a
-                href={url}
-                download={filename}
-                className="px-4 py-2 text-sm font-medium text-secondary-900 bg-primary-500 hover:bg-primary-600 rounded-md transition-colors"
-              >
-                Download file
-              </a>
             </div>
           )}
         </div>

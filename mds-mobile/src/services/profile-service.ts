@@ -17,6 +17,8 @@ export interface PatientProfile {
 }
 
 let _cache: PatientProfile | null = null;
+let _cacheTimestamp = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 const extractContactNumber = (contact: any): string | null => {
   if (!contact) return null;
@@ -26,7 +28,7 @@ const extractContactNumber = (contact: any): string | null => {
 };
 
 export const getPatientProfile = async (): Promise<PatientProfile> => {
-  if (_cache) return _cache;
+  if (_cache && Date.now() - _cacheTimestamp < CACHE_TTL_MS) return _cache;
 
   const profileData = await sendGraphQLRequest(
     `query GetPatientProfileData {
@@ -84,6 +86,7 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
 
   const nameParts = [log.first_name, log.middle_name, log.last_name, log.suffix].filter(Boolean);
 
+  _cacheTimestamp = Date.now();
   _cache = {
     name: nameParts.length > 0 ? nameParts.join(' ') : null,
     firstName: log.first_name || null,
@@ -100,4 +103,5 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
 /** Clear profile cache (call on logout or data changes) */
 export const clearProfileCache = (): void => {
   _cache = null;
+  _cacheTimestamp = 0;
 };

@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useTheme, colors } from '../../context/ThemeContext';
 
 const FAQ_DATA = [
@@ -54,9 +54,8 @@ export const FAQsScreen: React.FC = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <SafeAreaView
+    <View
       style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
-      edges={['top']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={[styles.headerBanner, { backgroundColor: colors.accent[500] }]}>
@@ -120,7 +119,7 @@ export const FAQsScreen: React.FC = () => {
           );
         })}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 

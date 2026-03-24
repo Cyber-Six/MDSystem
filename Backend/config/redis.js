@@ -1,21 +1,11 @@
 // config/redis.js
 const redis = require("redis");
-const path = require("path");
-const dotenv = require("dotenv");
 const { hashOTP, generateRandomKey, delayRandom } = require("../utils/security.js");
 const query = require("./query.js");
 const { redis: redisConfig } = require('./config');
 const logger = require("../utils/logger.js");
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 let client;
-
-const connection = {
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: Number(process.env.REDIS_PORT) || 6379,
-  username: process.env.REDIS_USERNAME || 'mdsadmin', // ACL user
-  password: process.env.REDIS_PASSWORD,               // ACL password
-  };
 async function initRedis(options = {}) {
   if (client) return client; // reuse if already initialized
 
@@ -849,7 +839,6 @@ function getClient() {
 }
 
 module.exports = {
-  connection,
   redisConfig,
   initRedis,
   getClient,

@@ -17,6 +17,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme, colors } from '../../context/ThemeContext';
 import {
   Ticket,
@@ -27,6 +28,7 @@ import {
   createTicket,
   sendMessage,
   closeTicket,
+  uploadFile,
 } from '../../services/health-chat-service';
 import { useHealthChatSocket } from '../../hooks/useHealthChatSocket';
 import {
@@ -85,6 +87,8 @@ export const HealthChatScreen: React.FC = () => {
   const [ticketPurpose, setTicketPurpose] = useState('');
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isStaffTyping, setIsStaffTyping] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{ uri: string; name: string; type: string } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const hasInitialized = useRef(false);
@@ -213,22 +217,61 @@ export const HealthChatScreen: React.FC = () => {
 
   async function handleSendMessage() {
     const text = inputValue.trim();
-    if (!text || !ticket?.id) return;
+    if (!ticket?.id) return;
+    if (!text && !pendingImage) return;
 
     try {
       setIsLoading(true);
       setError(null);
       emitTyping(false);
 
-      const result = await sendMessage(ticket.id, text, null, 'text');
-      if (result.success && result.message) {
-        setMessages((prev) => [...prev, result.message!]);
-        setInputValue('');
+      if (pendingImage) {
+        setIsUploading(true);
+        let filename: string;
+        try {
+          filename = await uploadFile(pendingImage.uri, pendingImage.name, pendingImage.type);
+        } finally {
+          setIsUploading(false);
+        }
+        const result = await sendMessage(ticket.id, text || null, filename, 'image');
+        if (result.success && result.message) {
+          setMessages((prev) => [...prev, result.message!]);
+          setPendingImage(null);
+          setInputValue('');
+        }
+      } else {
+        const result = await sendMessage(ticket.id, text, null, 'text');
+        if (result.success && result.message) {
+          setMessages((prev) => [...prev, result.message!]);
+          setInputValue('');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to send message.');
     } finally {
       setIsLoading(false);
+      setIsUploading(false);
+    }
+  }
+
+  async function handlePickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setError('Permission to access your photo library is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: false,
+    });
+
+    if (!result.canceled && result.assets.length > 0) {
+      const asset = result.assets[0];
+      const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'image.jpg';
+      const type = asset.mimeType ?? 'image/jpeg';
+      setPendingImage({ uri: asset.uri, name, type });
     }
   }
 
@@ -327,12 +370,12 @@ export const HealthChatScreen: React.FC = () => {
           style={[
             styles.errorBanner,
             {
-              backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2',
-              borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FECACA',
+              backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : colors.error[50],
+              borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : colors.error[200],
             },
           ]}
         >
-          <Text style={[styles.errorBannerText, { color: colors.error[600] }]}>
+          <Text style={[styles.errorBannerText, { color: isDark ? colors.error[400] : colors.error[600] }]}>
             {error}
           </Text>
         </View>
@@ -461,6 +504,10 @@ export const HealthChatScreen: React.FC = () => {
             isSocketConnected={isSocketConnected}
             onChangeText={handleInputChange}
             onSend={handleSendMessage}
+            onPickImage={handlePickImage}
+            pendingImage={pendingImage}
+            onClearPendingImage={() => setPendingImage(null)}
+            isUploading={isUploading}
           />
 
           {/* Close Ticket Confirmation Modal */}

@@ -13,8 +13,10 @@ import {
   StyleSheet,
   Alert,
   Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme, colors } from '../../context/ThemeContext';
 import {
   STATUS,
@@ -27,7 +29,8 @@ import {
   getScheduleAvailability,
   submitAppointment,
   cancelAppointment,
-  acknowledgeRejection,
+  stageFile,
+  unstageFile,
 } from '../../services/appointment-service';
 
 const STEP_LABELS = ['Select Type', 'Date & Session', 'Requirements', 'Review'];
@@ -153,6 +156,10 @@ export const AppointmentScreen: React.FC = () => {
 
   // Step 2 - requirements
   const [requirements, setRequirements] = useState<any[]>([]);
+  const [uploadedRequirements, setUploadedRequirements] = useState<
+    Array<{ scheduleRequirementId: string; filename: string; localUri: string }>
+  >([]);
+  const [pickingForReq, setPickingForReq] = useState<string | null>(null);
 
   // Submission
   const [submitting, setSubmitting] = useState(false);
@@ -160,10 +167,12 @@ export const AppointmentScreen: React.FC = () => {
 
   // Rejection
   const [rejectionRecord, setRejectionRecord] = useState<any>(null);
-  const [rejectionAcknowledged, setRejectionAcknowledged] = useState(false);
 
   // Cancel modal
   const [showCancelModal, setShowCancelModal] = useState(false);
+
+  // Lightbox for local requirement image previews
+  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
 
   // Calendar state
   const now = new Date();
@@ -186,9 +195,8 @@ export const AppointmentScreen: React.FC = () => {
       const status = record?.status ?? null;
       setCurrentStatus(status);
 
-      if (status === STATUS.REJECTED) {
+      if (status === STATUS.REJECTED || status === STATUS.EXPIRED) {
         setRejectionRecord(record);
-        setRejectionAcknowledged(!!record?.rejection_acknowledged);
         const list = await listOpenAppointments();
         setSchedulers(list);
       } else {
@@ -216,6 +224,11 @@ export const AppointmentScreen: React.FC = () => {
     setSelectedDate('');
     setSelectedSession('');
     setAvailability(null);
+    // Clear any previously staged requirement files when changing scheduler
+    for (const r of uploadedRequirements) {
+      unstageFile(r.filename).catch(() => {});
+    }
+    setUploadedRequirements([]);
 
     if (scheduler.containsCustomDates) {
       try {
@@ -234,7 +247,7 @@ export const AppointmentScreen: React.FC = () => {
     setSelectedDate(dateStr);
     setSelectedSession('');
     setAvailability(null);
-    if (!dateStr) return;
+    if (!dateStr || !selectedScheduler?.id) return;
 
     setLoadingAvailability(true);
     try {
@@ -261,14 +274,67 @@ export const AppointmentScreen: React.FC = () => {
     setSubmitting(true);
     setError(null);
     try {
-      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, []);
+      const reqs = uploadedRequirements.map((r) => ({
+        scheduleRequirementId: r.scheduleRequirementId,
+        filename: r.filename,
+      }));
+      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqs);
       setSuccessMessage('Your appointment has been submitted successfully!');
+      setUploadedRequirements([]);
       await loadStatus();
       setStep(0);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handlePickRequirement = async (reqId: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setError('Permission to access your photo library is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: false,
+    });
+
+    if (result.canceled || result.assets.length === 0) return;
+
+    const asset = result.assets[0];
+    const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'image.jpg';
+    const type = asset.mimeType ?? 'image/jpeg';
+
+    setPickingForReq(reqId);
+    try {
+      // Unstage any previous upload for this requirement
+      const existing = uploadedRequirements.find((r) => r.scheduleRequirementId === reqId);
+      if (existing) {
+        await unstageFile(existing.filename).catch(() => {});
+      }
+
+      const stagedFileId = await stageFile(asset.uri, name, type);
+
+      setUploadedRequirements((prev) => [
+        ...prev.filter((r) => r.scheduleRequirementId !== reqId),
+        { scheduleRequirementId: reqId, filename: stagedFileId, localUri: asset.uri },
+      ]);
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload file. Please try again.');
+    } finally {
+      setPickingForReq(null);
+    }
+  };
+
+  const handleRemoveRequirement = async (reqId: string) => {
+    const existing = uploadedRequirements.find((r) => r.scheduleRequirementId === reqId);
+    if (existing) {
+      unstageFile(existing.filename).catch(() => {});
+      setUploadedRequirements((prev) => prev.filter((r) => r.scheduleRequirementId !== reqId));
     }
   };
 
@@ -326,6 +392,13 @@ export const AppointmentScreen: React.FC = () => {
   const afternoonRemaining = availability
     ? availability.afternoonAllowed - availability.afternoonRegistered - availability.afternoonPending
     : 0;
+
+  // All digital requirements must be uploaded before proceeding
+  const allDigitalUploaded =
+    requirements.filter((r) => r.isDigital).length === 0 ||
+    requirements
+      .filter((r) => r.isDigital)
+      .every((r) => uploadedRequirements.some((u) => u.scheduleRequirementId === r.id));
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -408,8 +481,8 @@ export const AppointmentScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
           </View>
-        ) : rejectionRecord && !rejectionAcknowledged ? (
-          /* ── Rejection Notice ────────────────────────────────────────── */
+        ) : rejectionRecord ? (
+          /* ── Rejection / Expired Notice ────────────────────────────── */
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
             <View style={styles.rejectionHeader}>
               <View style={[styles.rejectionIcon, { backgroundColor: isDark ? 'rgba(239,68,68,0.2)' : colors.error[50] }]}>
@@ -417,10 +490,12 @@ export const AppointmentScreen: React.FC = () => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cardTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                  Appointment Rejected
+                  {rejectionRecord.status === STATUS.EXPIRED ? 'Appointment Expired' : 'Appointment Rejected'}
                 </Text>
                 <Text style={[styles.cardBody, { color: isDark ? colors.neutral[400] : colors.neutral[600], marginTop: 4 }]}>
-                  Your previous appointment request was not approved.
+                  {rejectionRecord.status === STATUS.EXPIRED
+                    ? 'Your previous appointment has expired.'
+                    : 'Your previous appointment request was not approved.'}
                 </Text>
               </View>
             </View>
@@ -432,9 +507,8 @@ export const AppointmentScreen: React.FC = () => {
             )}
             <TouchableOpacity
               style={[styles.primaryButton]}
-              onPress={async () => {
-                await acknowledgeRejection();
-                setRejectionAcknowledged(true);
+              onPress={() => {
+                setRejectionRecord(null);
               }}
             >
               <Text style={styles.primaryButtonText}>OK, Book New Appointment</Text>
@@ -691,23 +765,122 @@ export const AppointmentScreen: React.FC = () => {
                 <Text style={[styles.cardBody, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
                   Please upload all required documents before submitting.
                 </Text>
-                {requirements.map((req) => (
-                  <View
-                    key={req.id}
-                    style={[styles.reqItem, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}
-                  >
-                    <Text style={[styles.reqLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{req.label}</Text>
-                    {req.notes && <Text style={[styles.reqNotes, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>{req.notes}</Text>}
-                    <Text style={[styles.reqUploadHint, { color: isDark ? colors.neutral[500] : colors.neutral[400] }]}>
-                      File upload available in future update
-                    </Text>
-                  </View>
-                ))}
+                {requirements.map((req) => {
+                  const uploaded = uploadedRequirements.find(
+                    (r) => r.scheduleRequirementId === req.id,
+                  );
+                  const isPickingThis = pickingForReq === req.id;
+                  return (
+                    <View
+                      key={req.id}
+                      style={[styles.reqItem, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}
+                    >
+                      <Text style={[styles.reqLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                        {req.label}
+                      </Text>
+                      {req.notes ? (
+                        <Text style={[styles.reqNotes, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
+                          {req.notes}
+                        </Text>
+                      ) : null}
+
+                      {req.isDigital ? (
+                        uploaded ? (
+                          <View style={styles.reqThumbWrap}>
+                            <TouchableOpacity
+                              onPress={() => setLightboxUri(uploaded.localUri)}
+                              activeOpacity={0.85}
+                            >
+                              <Image
+                                source={{ uri: uploaded.localUri }}
+                                style={styles.reqThumb}
+                                resizeMode="cover"
+                              />
+                            </TouchableOpacity>
+                            <View style={styles.reqThumbActions}>
+                              <TouchableOpacity
+                                style={[styles.reqActionBtn, {
+                                  backgroundColor: isDark ? colors.neutral[600] : colors.neutral[100],
+                                }]}
+                                onPress={() => setLightboxUri(uploaded.localUri)}
+                              >
+                                <Text style={{ fontSize: 13, color: isDark ? colors.neutral[200] : colors.secondary[800] }}>
+                                  👁 View
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.reqActionBtn, {
+                                  backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50],
+                                }]}
+                                onPress={() => handleRemoveRequirement(req.id)}
+                              >
+                                <Text style={{ fontSize: 13, color: colors.error[600] }}>✕ Remove</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.reqActionBtn, {
+                                  backgroundColor: isDark ? 'rgba(241,197,38,0.12)' : colors.primary[50],
+                                  opacity: isPickingThis ? 0.5 : 1,
+                                }]}
+                                onPress={() => handlePickRequirement(req.id)}
+                                disabled={isPickingThis}
+                              >
+                                {isPickingThis ? (
+                                  <ActivityIndicator size="small" color={colors.primary[500]} />
+                                ) : (
+                                  <Text style={{ fontSize: 13, color: isDark ? colors.primary[300] : colors.primary[700] }}>
+                                    ↺ Replace
+                                  </Text>
+                                )}
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.reqUploadBtn, {
+                              backgroundColor: isDark ? 'rgba(241,197,38,0.08)' : colors.primary[50],
+                              borderColor: isDark ? 'rgba(241,197,38,0.3)' : colors.primary[200],
+                              opacity: isPickingThis ? 0.5 : 1,
+                            }]}
+                            onPress={() => handlePickRequirement(req.id)}
+                            disabled={isPickingThis}
+                            activeOpacity={0.7}
+                          >
+                            {isPickingThis ? (
+                              <ActivityIndicator size="small" color={colors.primary[500]} />
+                            ) : (
+                              <Text style={{ fontSize: 18 }}>📎</Text>
+                            )}
+                            <Text style={[styles.reqUploadBtnText, {
+                              color: isDark ? colors.primary[300] : colors.primary[700],
+                            }]}>
+                              {isPickingThis ? 'Uploading...' : 'Tap to upload image'}
+                            </Text>
+                          </TouchableOpacity>
+                        )
+                      ) : (
+                        <View style={[styles.reqPhysicalBadge, {
+                          backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : '#EEF2FF',
+                        }]}>
+                          <Text style={{ fontSize: 12, color: isDark ? '#A5B4FC' : '#4F46E5' }}>
+                            📋 Bring physical copy
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
                 <View style={styles.navRow}>
-                  <TouchableOpacity style={[styles.backButton, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] }]} onPress={() => setStep(1)}>
+                  <TouchableOpacity
+                    style={[styles.backButton, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                    onPress={() => setStep(1)}
+                  >
                     <Text style={[styles.backButtonText, { color: isDark ? colors.neutral[200] : colors.secondary[700] }]}>‹ Back</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.primaryButton} onPress={() => setStep(3)}>
+                  <TouchableOpacity
+                    style={[styles.primaryButton, { opacity: allDigitalUploaded ? 1 : 0.5 }]}
+                    disabled={!allDigitalUploaded}
+                    onPress={() => setStep(3)}
+                  >
                     <Text style={styles.primaryButtonText}>Next ›</Text>
                   </TouchableOpacity>
                 </View>
@@ -739,6 +912,16 @@ export const AppointmentScreen: React.FC = () => {
                       {selectedSession === SESSION.MORNING ? 'Morning (8 AM – 12 PM)' : 'Afternoon (1 PM – 5 PM)'}
                     </Text>
                   </View>
+                  {uploadedRequirements.length > 0 && (
+                    <View style={styles.reviewRow}>
+                      <Text style={[styles.reviewLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
+                        Requirements
+                      </Text>
+                      <Text style={[styles.reviewValue, { color: colors.success[600] }]}>
+                        {uploadedRequirements.length} file{uploadedRequirements.length !== 1 ? 's' : ''} uploaded ✓
+                      </Text>
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.navRow}>
@@ -797,6 +980,36 @@ export const AppointmentScreen: React.FC = () => {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Image Lightbox — Requirement previews */}
+      <Modal
+        visible={lightboxUri !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setLightboxUri(null)}
+      >
+        <TouchableOpacity
+          style={styles.lightboxOverlay}
+          activeOpacity={1}
+          onPress={() => setLightboxUri(null)}
+        >
+          {lightboxUri && (
+            <Image
+              source={{ uri: lightboxUri }}
+              style={styles.lightboxImage}
+              resizeMode="contain"
+            />
+          )}
+          <TouchableOpacity
+            style={styles.lightboxClose}
+            onPress={() => setLightboxUri(null)}
+            hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }}
+          >
+            <Text style={styles.lightboxCloseText}>✕</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -986,6 +1199,47 @@ const styles = StyleSheet.create({
   reqLabel: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
   reqNotes: { fontSize: 12, marginBottom: 6 },
   reqUploadHint: { fontSize: 12, fontStyle: 'italic' },
+  reqUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  reqUploadBtnText: { fontSize: 13, fontWeight: '500' },
+  reqThumbWrap: { marginTop: 8 },
+  reqThumb: { width: '100%', height: 140, borderRadius: 10 },
+  reqThumbActions: { flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' },
+  reqActionBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
+  reqPhysicalBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImage: { width: '100%', height: '78%' },
+  lightboxClose: {
+    position: 'absolute',
+    top: 52,
+    right: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxCloseText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 
   // Empty state
   emptyState: { padding: 32, borderRadius: 12, alignItems: 'center' },
