@@ -159,14 +159,381 @@ export async function getUpdateRevisionStatus() {
 
 /**
  * Fetch the patient's previous medical/dental records for pre-filling the form during revision
- * NOTE: This is currently a placeholder - pre-fill from previous ticket could be added later
  * @returns {Promise<object>} Previous form data to pre-fill the revision form
  */
 export async function fetchUpdateRevisionPrefill() {
-  // For now, we'll just note that pre-fill is optional
-  // The revision banner will show regardless, allowing patient to restart entry
-  console.log('[UpdateRevision] 📥 Pre-fill available - patient can edit form sections');
-  return {};
+  console.log('[UpdateRevision] 📥 Fetching previous submission data for revision pre-fill...');
+  
+  try {
+    // Fetch all relevant data from the previous submission
+    const query = `
+      query GetRevisionEMRData {
+        emrProfile: getProfile {
+          ... on StudentProfile { program year }
+          ... on EmployeeProfile { department role }
+        }
+        emergencyContact: getEmergencyContact {
+          firstContact { contactName relationship contactNumber address }
+          secondContact { contactName relationship contactNumber address }
+        }
+        medicalHistory: getMedicalHistory {
+          conditions { conditionId relationship }
+          notes
+        }
+        allergyProfile: getAllergyProfile {
+          allergies { allergenCatalogId status severity notes }
+          notes
+        }
+        hospitalizationProfile: getHospitalizationProfile {
+          hospitalizations { conditionId admissionDate dischargeDate notes }
+          notes
+        }
+        operationProfile: getOperationProfile {
+          operations { procedureId operationDate notes }
+          notes
+        }
+        medicationProfile: getMedicationProfile {
+          medications { medicineId description }
+          notes
+        }
+        immunizationProfile: getImmunizationProfile {
+          immunizations { vaccineTypeId immunizationDate doseNumber }
+          notes
+        }
+        lifestyle: getLifestyle {
+          smoker numberOfCigarettesPerDay yearsSmoked
+          alcoholConsumer frequencyOfAlcoholConsumption
+          notes
+        }
+        visualAcuityProfile: getVisualAcuityProfile {
+          notes
+          acuity { acuityId left_eye right_eye notes }
+        }
+        obgynHistory: getObgynHistory {
+          lastMenstrualPeriod hasDysmenorrhea
+          notes
+        }
+        dentalHistory: getDentalHistory {
+          seenByDentist lastDentalCleaning purpose lastVisitDate
+        }
+        dentalProcedureProfile: getDentalProcedureProfile {
+          procedures { procedureTypeId procedureDate }
+          notes
+        }
+        dentalPhotoRecord: getDentalPhotoRecord {
+          upperTeeth lowerTeeth
+        }
+        oralApplianceProfile: getOralApplianceProfile {
+          appliances { tagId status dateIssued arch }
+          notes
+        }
+      }
+    `;
+    
+    const response = await sendGraphQLRequest(query, {});
+    console.log('[UpdateRevision] ✅ Pre-fill data fetched:', response);
+    
+    // Transform backend data to form data structure
+    const formData = await mapRevisionDataToFormData(response);
+    console.log('[UpdateRevision] ✅ Pre-fill data mapped to form structure:', formData);
+    
+    return formData;
+  } catch (error) {
+    console.warn('[UpdateRevision] ⚠️ Could not fetch pre-fill data:', error.message);
+    // Return empty object on error - form will still be accessible, just without pre-fill
+    return {};
+  }
+}
+
+/**
+ * Transform backend GraphQL data to form field names and structures
+ * Maps database field names to component form field names
+ * @param {object} backendData - Data from GraphQL query (see fetchUpdateRevisionPrefill)
+ * @returns {Promise<object>} Form data with all fields properly renamed and structured
+ */
+async function mapRevisionDataToFormData(backendData) {
+  const formData = {};
+
+  console.log('[MapRevisionData] ========== STARTING DATA TRANSFORMATION ==========');
+  console.log('[MapRevisionData] Backend data received:', JSON.stringify(backendData, null, 2));
+
+  // ======== PERSONAL INFO ========
+  
+  // Emergency Contact
+  if (backendData.emergencyContact?.firstContact) {
+    const firstContact = backendData.emergencyContact.firstContact;
+    formData.emergencyContact1Name = firstContact.contactName || '';
+    formData.emergencyContact1Relationship = firstContact.relationship || '';
+    formData.emergencyContact1Number = firstContact.contactNumber || '';
+  }
+
+  if (backendData.emergencyContact?.secondContact) {
+    const secondContact = backendData.emergencyContact.secondContact;
+    formData.emergencyContact2Name = secondContact.contactName || '';
+    formData.emergencyContact2Relationship = secondContact.relationship || '';
+    formData.emergencyContact2Number = secondContact.contactNumber || '';
+  }
+
+  // School/Employee Profile
+  if (backendData.emrProfile?.program) {
+    formData.program = backendData.emrProfile.program || '';
+    formData.schoolYear = backendData.emrProfile.year || '';
+  }
+  if (backendData.emrProfile?.department) {
+    formData.employeeDepartment = backendData.emrProfile.department || '';
+    formData.employeeRole = backendData.emrProfile.role || '';
+  }
+
+  // ======== MEDICAL HISTORY ========
+  
+  // Medical Conditions
+  console.log('[MapRevisionData] Medical history data:', backendData.medicalHistory);
+  if (backendData.medicalHistory?.conditions && Array.isArray(backendData.medicalHistory.conditions) && backendData.medicalHistory.conditions.length > 0) {
+    formData.selfConditions = {};
+    formData.familyConditions = {};
+    
+    for (const condition of backendData.medicalHistory.conditions) {
+      console.log('[MapRevisionData] Processing condition:', condition);
+      // Self conditions have relationship === null or undefined
+      if (!condition.relationship || condition.relationship === 'Self' || condition.relationship === null) {
+        formData.selfConditions[condition.conditionId] = true;
+        console.log('[MapRevisionData] Added self condition:', condition.conditionId);
+      } else if (condition.relationship) {
+        // Family conditions have a relationship name
+        formData.familyConditions[condition.conditionId] = {
+          checked: true,
+          relationship: condition.relationship
+        };
+        console.log('[MapRevisionData] Added family condition:', condition.conditionId, 'relationship:', condition.relationship);
+      }
+    }
+    console.log('[MapRevisionData] Conditions prefilled - Self:', formData.selfConditions, 'Family:', formData.familyConditions);
+  } else {
+    console.log('[MapRevisionData] No medical conditions to prefill');
+    formData.selfConditions = {};
+    formData.familyConditions = {};
+  }
+
+  // Allergies
+  console.log('[MapRevisionData] Allergy profile data:', backendData.allergyProfile);
+  if (backendData.allergyProfile?.allergies && Array.isArray(backendData.allergyProfile.allergies)) {
+    formData.hasAllergies = 'yes';
+    formData.selectedAllergies = [];
+    formData.allergyDetails = {};
+
+    for (const allergy of backendData.allergyProfile.allergies) {
+      formData.selectedAllergies.push(allergy.allergenCatalogId);
+      formData.allergyDetails[allergy.allergenCatalogId] = {
+        status: allergy.status || 'Active',
+        severity: allergy.severity || 'Mild'
+      };
+    }
+  } else {
+    formData.hasAllergies = 'no';
+  }
+
+  // Hospitalization
+  console.log('[MapRevisionData] Hospitalization profile data:', backendData.hospitalizationProfile);
+  if (backendData.hospitalizationProfile?.hospitalizations && Array.isArray(backendData.hospitalizationProfile.hospitalizations) && backendData.hospitalizationProfile.hospitalizations.length > 0) {
+    formData.hasHospitalizations = 'yes';
+    const hosp = backendData.hospitalizationProfile.hospitalizations[0];
+    formData.hospitalizationCondition = hosp.conditionId || '';
+    // Convert ISO dates to yyyy-MM-dd format
+    formData.admissionDate = hosp.admissionDate ? hosp.admissionDate.split('T')[0] : '';
+    formData.dischargeDate = hosp.dischargeDate ? hosp.dischargeDate.split('T')[0] : '';
+  } else {
+    formData.hasHospitalizations = 'no';
+  }
+
+  // Surgery/Operations
+  console.log('[MapRevisionData] Operation profile data:', backendData.operationProfile);
+  if (backendData.operationProfile?.operations && Array.isArray(backendData.operationProfile.operations) && backendData.operationProfile.operations.length > 0) {
+    formData.hasSurgeries = 'yes';
+    const op = backendData.operationProfile.operations[0];
+    formData.surgeryType = op.procedureId || '';
+    // Convert ISO date to yyyy-MM-dd format
+    formData.operationDate = op.operationDate ? op.operationDate.split('T')[0] : '';
+  } else {
+    formData.hasSurgeries = 'no';
+  }
+
+  // Medications
+  console.log('[MapRevisionData] Medication profile data:', backendData.medicationProfile);
+  if (backendData.medicationProfile?.medications && Array.isArray(backendData.medicationProfile.medications) && backendData.medicationProfile.medications.length > 0) {
+    formData.hasMedications = 'yes';
+    formData.currentMedications = backendData.medicationProfile.medications.map(med => ({
+      medicineId: med.medicineId,
+      description: med.description || ''
+    }));
+  } else {
+    formData.hasMedications = 'no';
+  }
+
+  // Immunizations
+  console.log('[MapRevisionData] Immunization profile data:', backendData.immunizationProfile);
+  if (backendData.immunizationProfile?.immunizations && Array.isArray(backendData.immunizationProfile.immunizations) && backendData.immunizationProfile.immunizations.length > 0) {
+    formData.immunizations = backendData.immunizationProfile.immunizations.map(imm => imm.vaccineTypeId);
+    formData.immunizationDetails = {};
+    
+    for (const imm of backendData.immunizationProfile.immunizations) {
+      // Convert ISO date format to yyyy-MM-dd
+      let dateStr = '';
+      if (imm.immunizationDate) {
+        if (imm.immunizationDate.includes('T')) {
+          // ISO format: "2026-03-19T16:00:00.000Z" → "2026-03-19"
+          dateStr = imm.immunizationDate.split('T')[0];
+        } else {
+          dateStr = imm.immunizationDate;
+        }
+      }
+      
+      formData.immunizationDetails[imm.vaccineTypeId] = {
+        date: dateStr,
+        doseNumber: imm.doseNumber || ''
+      };
+    }
+    console.log('[MapRevisionData] Immunizations prefilled:', formData.immunizations);
+  } else {
+    console.log('[MapRevisionData] No immunizations to prefill - array is empty or missing');
+    formData.immunizations = [];
+    formData.immunizationDetails = {};
+  }
+
+  // Lifestyle
+  if (backendData.lifestyle) {
+    formData.smoking = backendData.lifestyle.smoker 
+      ? (backendData.lifestyle.numberOfCigarettesPerDay ? 'Current' : 'Former')
+      : 'Never';
+    formData.alcohol = backendData.lifestyle.alcoholConsumer 
+      ? backendData.lifestyle.frequencyOfAlcoholConsumption || 'Occasionally'
+      : 'Never';
+  }
+
+  // Visual Acuity
+  if (backendData.visualAcuityProfile?.acuity) {
+    formData.visualAcuity = 'yes';
+    formData.acuityId = backendData.visualAcuityProfile.acuity.acuityId || '';
+    formData.leftEye = backendData.visualAcuityProfile.acuity.left_eye || '';
+    formData.rightEye = backendData.visualAcuityProfile.acuity.right_eye || '';
+  } else {
+    formData.visualAcuity = 'no';
+  }
+
+  // OB-GYN (Female only)
+  if (backendData.obgynHistory) {
+    // Convert ISO date to yyyy-MM-dd format
+    formData.lastMenstrualPeriod = backendData.obgynHistory.lastMenstrualPeriod ? backendData.obgynHistory.lastMenstrualPeriod.split('T')[0] : '';
+    formData.dysmenorrhea = backendData.obgynHistory.hasDysmenorrhea ? 'yes' : 'no';
+  }
+
+  // ======== DENTAL HISTORY ========
+  
+  if (backendData.dentalHistory) {
+    formData.seenByDentist = backendData.dentalHistory.seenByDentist === true;
+    formData.lastDentalCleaning = backendData.dentalHistory.lastDentalCleaning || '0-6';
+    formData.purpose = backendData.dentalHistory.purpose || '';
+    // Convert ISO date to yyyy-MM-dd format
+    formData.lastVisitDate = backendData.dentalHistory.lastVisitDate ? backendData.dentalHistory.lastVisitDate.split('T')[0] : '';
+  }
+
+  // Dental Procedures
+  console.log('[MapRevisionData] Dental procedure profile data:', backendData.dentalProcedureProfile);
+  if (backendData.dentalProcedureProfile?.procedures && Array.isArray(backendData.dentalProcedureProfile.procedures) && backendData.dentalProcedureProfile.procedures.length > 0) {
+    formData.dentalProcedures = backendData.dentalProcedureProfile.procedures.map(proc => {
+      // Convert ISO date format to yyyy-MM-dd for input[type="date"]
+      const dateStr = proc.procedureDate ? new Date(proc.procedureDate).toISOString().split('T')[0] : '';
+      return {
+        procedureTypeId: proc.procedureTypeId,
+        procedureDate: dateStr
+      };
+    });
+    console.log('[MapRevisionData] Dental procedures prefilled:', formData.dentalProcedures);
+  } else {
+    console.log('[MapRevisionData] No dental procedures to prefill - array is empty or missing');
+    formData.dentalProcedures = [];
+  }
+
+  // Oral Appliances
+  console.log('[MapRevisionData] Oral appliance profile data:', backendData.oralApplianceProfile);
+  if (backendData.oralApplianceProfile?.appliances && Array.isArray(backendData.oralApplianceProfile.appliances) && backendData.oralApplianceProfile.appliances.length > 0) {
+    formData.oralAppliances = backendData.oralApplianceProfile.appliances.map(app => {
+      // Convert ISO date format to yyyy-MM-dd for input[type="date"]
+      const dateStr = app.dateIssued ? new Date(app.dateIssued).toISOString().split('T')[0] : '';
+      return {
+        tagId: app.tagId,
+        status: app.status || '',
+        dateIssued: dateStr,
+        arch: app.arch || 'None'
+      };
+    });
+    console.log('[MapRevisionData] Oral appliances prefilled:', formData.oralAppliances);
+  } else {
+    console.log('[MapRevisionData] No oral appliances to prefill - array is empty or missing');
+    formData.oralAppliances = [];
+  }
+
+  // Dental Photos - Convert file IDs to preview URLs
+  if (backendData.dentalPhotoRecord?.upperTeeth) {
+    try {
+      const previewUrl = await fetchDentalPhotoAsBlob(backendData.dentalPhotoRecord.upperTeeth);
+      if (previewUrl) {
+        formData.upperTeethPhoto = {
+          id: backendData.dentalPhotoRecord.upperTeeth,
+          preview: previewUrl,
+          name: 'Upper Teeth (from revision)'
+        };
+        console.log('[MapRevisionData] Upper teeth photo mapped');
+      }
+    } catch (err) {
+      console.warn('[MapRevisionData] Could not fetch upper teeth photo:', err.message);
+    }
+  }
+
+  if (backendData.dentalPhotoRecord?.lowerTeeth) {
+    try {
+      const previewUrl = await fetchDentalPhotoAsBlob(backendData.dentalPhotoRecord.lowerTeeth);
+      if (previewUrl) {
+        formData.lowerTeethPhoto = {
+          id: backendData.dentalPhotoRecord.lowerTeeth,
+          preview: previewUrl,
+          name: 'Lower Teeth (from revision)'
+        };
+        console.log('[MapRevisionData] Lower teeth photo mapped');
+      }
+    } catch (err) {
+      console.warn('[MapRevisionData] Could not fetch lower teeth photo:', err.message);
+    }
+  }
+
+  console.log('[MapRevisionData] ✅ Mapped form data:', formData);
+  return formData;
+}
+
+/**
+ * Fetch a dental photo file from backend using authenticated file ID
+ * Converts file ID to blob URL for display
+ * @param {string} fileId - File ID from getDentalPhotoRecord
+ * @returns {Promise<string|null>} Blob URL for display, or null if fetch fails
+ */
+async function fetchDentalPhotoAsBlob(fileId) {
+  if (!fileId) return null;
+  
+  try {
+    console.log('[FetchPhoto] 📸 Fetching dental photo:', fileId);
+    
+    const response = await axiosRequest({
+      method: 'GET',
+      url: `/media/record/dentalPhoto/${fileId}`,
+      responseType: 'blob'
+    });
+    
+    const blobUrl = URL.createObjectURL(response.data);
+    console.log('[FetchPhoto] ✅ Photo fetched successfully, created blob URL');
+    return blobUrl;
+  } catch (error) {
+    console.error('[FetchPhoto] ❌ Failed to fetch photo:', error.message);
+    return null;
+  }
 }
 
 /**
@@ -341,17 +708,25 @@ export async function createMedicalHistory(formData) {
     }
   `;
 
-  // Build notes including self conditions, family conditions with "who has it"
+  // Build conditions array from selected conditions
+  const conditions = [];
   const medicalHistoryNotes = [];
   
-  // Add self conditions
+  // Add self conditions to conditions array
   if (formData.selfConditions) {
     const selfConditions = Object.entries(formData.selfConditions)
       .filter(([_, checked]) => checked)
-      .map(([conditionId, _]) => conditionId);
+      .map(([conditionId, _]) => ({
+        conditionId: parseInt(conditionId),
+        relationship: null // Self conditions have no relationship
+      }));
     
-    if (selfConditions.length > 0) {
-      medicalHistoryNotes.push(`Self: ${selfConditions.join(', ')}`);
+    conditions.push(...selfConditions);
+    const selfIds = Object.entries(formData.selfConditions)
+      .filter(([_, checked]) => checked)
+      .map(([conditionId, _]) => conditionId);
+    if (selfIds.length > 0) {
+      medicalHistoryNotes.push(`Self: ${selfIds.join(', ')}`);
     }
   }
   
@@ -360,17 +735,25 @@ export async function createMedicalHistory(formData) {
     medicalHistoryNotes.push(`Self Other: ${formData.selfOther}`);
   }
   
-  // Add family conditions with relationship information
+  // Add family conditions to conditions array with relationship
   if (formData.familyConditions) {
     const familyConditions = Object.entries(formData.familyConditions)
+      .filter(([_, val]) => val && val.checked)
+      .map(([conditionId, val]) => ({
+        conditionId: parseInt(conditionId),
+        relationship: val.relationship || null
+      }));
+    
+    conditions.push(...familyConditions);
+    
+    const familyConditionsDisplay = Object.entries(formData.familyConditions)
       .filter(([_, val]) => val && val.checked)
       .map(([conditionId, val]) => {
         const relationship = val.relationship;
         return relationship ? `${conditionId} (${relationship})` : conditionId;
       });
-    
-    if (familyConditions.length > 0) {
-      medicalHistoryNotes.push(`Family history: ${familyConditions.join(', ')}`);
+    if (familyConditionsDisplay.length > 0) {
+      medicalHistoryNotes.push(`Family history: ${familyConditionsDisplay.join(', ')}`);
     }
   }
   
@@ -384,7 +767,7 @@ export async function createMedicalHistory(formData) {
   }
 
   const input = {
-    conditions: [], // Empty - catalog IDs not available in form (using notes instead)
+    conditions, // Now populated with condition objects
     notes: medicalHistoryNotes.length > 0 ? medicalHistoryNotes.join('; ') : null
   };
 
@@ -587,16 +970,27 @@ export async function createImmunizationProfile(formData) {
     }
   `;
 
-  // Build immunization notes from form data
-  let immunizationNotes = null;
+  // Build immunizations array with required fields
+  const immunizations = [];
   const immunizationList = [];
   
-  // Get selected immunizations (formData.immunizations is an array of IDs)
+  // Get selected immunizations with their details (dates, dose numbers)
   if (Array.isArray(formData.immunizations) && formData.immunizations.length > 0) {
-    immunizationList.push(...formData.immunizations);
+    for (const vaccineId of formData.immunizations) {
+      const detail = formData.immunizationDetails?.[vaccineId] || {};
+      
+      // Create immunization object with required fields
+      immunizations.push({
+        vaccineTypeId: parseInt(vaccineId),
+        immunizationDate: detail.date || new Date().toISOString().split('T')[0], // Use today's date if not provided
+        doseNumber: detail.doseNumber ? parseInt(detail.doseNumber) : 1 // Default to dose 1 if not provided
+      });
+      
+      immunizationList.push(vaccineId);
+    }
   }
 
-  // Add immunization details (dates, dose numbers)
+  // Add immunization details to notes
   if (formData.immunizationDetails) {
     const details = Object.entries(formData.immunizationDetails)
       .map(([vaccineId, detail]) => {
@@ -611,6 +1005,7 @@ export async function createImmunizationProfile(formData) {
   }
 
   // Add immunization notes
+  let immunizationNotes = null;
   if (formData.immunizationNotes) {
     immunizationList.push(formData.immunizationNotes);
   }
@@ -620,7 +1015,7 @@ export async function createImmunizationProfile(formData) {
   }
 
   const input = {
-    immunizations: [], // Empty - catalog IDs not available in form (using notes instead)
+    immunizations, // Now populated with vaccine objects including date and dose
     notes: immunizationNotes
   };
 
@@ -647,23 +1042,34 @@ export async function createHospitalizationProfile(formData) {
     }
   `;
 
-  // Build hospitalization notes from form structure
-  const hospitalizationNotes = formData.hasHospitalizations === 'yes' ? [
-    formData.hospitalizationCondition 
-      ? `Condition: ${formData.hospitalizationCondition}` 
-      : null,
-    formData.admissionDate 
-      ? `Admission: ${formData.admissionDate}` 
-      : null,
-    formData.dischargeDate 
-      ? `Discharge: ${formData.dischargeDate}` 
-      : null,
-    formData.hospitalizationNotes || null
-  ].filter(Boolean).join('; ') || null : null;
+  // Build hospitalizations array from form data
+  const hospitalizations = [];
+  const hospitalizationNotes = [];
+  
+  if (formData.hasHospitalizations === 'yes') {
+    if (formData.hospitalizationCondition) {
+      hospitalizations.push({
+        conditionId: parseInt(formData.hospitalizationCondition),
+        admissionDate: formData.admissionDate || null,
+        dischargeDate: formData.dischargeDate || null
+      });
+      hospitalizationNotes.push(`Condition: ${formData.hospitalizationCondition}`);
+    }
+    
+    if (formData.admissionDate) {
+      hospitalizationNotes.push(`Admission: ${formData.admissionDate}`);
+    }
+    if (formData.dischargeDate) {
+      hospitalizationNotes.push(`Discharge: ${formData.dischargeDate}`);
+    }
+    if (formData.hospitalizationNotes) {
+      hospitalizationNotes.push(formData.hospitalizationNotes);
+    }
+  }
 
   const input = {
-    hospitalizations: [], // Empty - catalog IDs not available in form (using notes instead)
-    notes: hospitalizationNotes
+    hospitalizations, // Now populated with hospitalization objects
+    notes: hospitalizationNotes.length > 0 ? hospitalizationNotes.join('; ') : null
   };
 
   console.log('🏥 Creating hospitalization profile...', input);
@@ -689,20 +1095,30 @@ export async function createOperationProfile(formData) {
     }
   `;
 
-  // Build operation notes from form structure
-  const operationNotes = formData.hasSurgeries === 'yes' ? [
-    formData.surgeryType 
-      ? `Type: ${formData.surgeryType}` 
-      : null,
-    formData.operationDate 
-      ? `Date: ${formData.operationDate}` 
-      : null,
-    formData.surgeryNotes || null
-  ].filter(Boolean).join('; ') || null : null;
+  // Build operations array from form data
+  const operations = [];
+  const operationNotes = [];
+  
+  if (formData.hasSurgeries === 'yes') {
+    if (formData.surgeryType) {
+      operations.push({
+        procedureId: parseInt(formData.surgeryType),
+        operationDate: formData.operationDate || null
+      });
+      operationNotes.push(`Type: ${formData.surgeryType}`);
+    }
+    
+    if (formData.operationDate) {
+      operationNotes.push(`Date: ${formData.operationDate}`);
+    }
+    if (formData.surgeryNotes) {
+      operationNotes.push(formData.surgeryNotes);
+    }
+  }
 
   const input = {
-    operations: [], // Empty - catalog IDs not available in form (using notes instead)
-    notes: operationNotes
+    operations, // Now populated with operation objects
+    notes: operationNotes.length > 0 ? operationNotes.join('; ') : null
   };
 
   console.log('🔪 Creating operation profile...', input);
@@ -728,23 +1144,32 @@ export async function createMedicationProfile(formData) {
     }
   `;
 
-  // Build medication notes from form structure
-  const medicationNotes = formData.hasMedications === 'yes' ? (() => {
+  // Build medications array from form data
+  const medications = [];
+  const medicationNotes = [];
+  
+  if (formData.hasMedications === 'yes' && (formData.currentMedications || []).length > 0) {
     const meds = formData.currentMedications || [];
-    const medEntries = meds.map((m, i) => {
-      const parts = [`#${i + 1}: ${m.medicineId || 'Unknown'}`];
-      if (m.description) parts.push(m.description);
-      return parts.join(' - ');
-    });
-    const parts = [];
-    if (medEntries.length > 0) parts.push(medEntries.join('; '));
-    if (formData.medicationNotes) parts.push(formData.medicationNotes);
-    return parts.length > 0 ? parts.join('; ') : null;
-  })() : null;
+    
+    for (let i = 0; i < meds.length; i++) {
+      const m = meds[i];
+      if (m.medicineId) {
+        medications.push({
+          medicineId: parseInt(m.medicineId),
+          description: m.description || null
+        });
+        medicationNotes.push(`#${i + 1}: ${m.medicineId}${m.description ? ' - ' + m.description : ''}`);
+      }
+    }
+  }
+  
+  if (formData.medicationNotes) {
+    medicationNotes.push(formData.medicationNotes);
+  }
 
   const input = {
-    medications: [], // Empty - catalog IDs not available in form (using notes instead)
-    notes: medicationNotes
+    medications, // Now populated with medication objects
+    notes: medicationNotes.length > 0 ? medicationNotes.join('; ') : null
   };
 
   console.log('💊 Creating medication profile...', input);

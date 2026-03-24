@@ -21,6 +21,7 @@ const RecordUpdateForm = () => {
   const [revisionStatus, setRevisionStatus] = useState(null); // { id, status, notes }
   const [showRevisionBanner, setShowRevisionBanner] = useState(false);
   const [revisionLoading, setRevisionLoading] = useState(true);
+  const [revisionPrefillData, setRevisionPrefillData] = useState(null); // Pre-fetched form data for revision
 
   // Success modal tracking
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -46,8 +47,8 @@ const RecordUpdateForm = () => {
           try {
             const prefill = await fetchUpdateRevisionPrefill();
             if (prefill && Object.keys(prefill).length > 0) {
-              console.log('[RecordUpdateForm] Pre-fill data fetched for revision');
-              // Form data will be pre-filled when patient starts editing
+              console.log('[RecordUpdateForm] ✅ Pre-fill data fetched:', prefill);
+              setRevisionPrefillData(prefill); // Store for later use
             }
           } catch (err) {
             console.warn('[RecordUpdateForm] Could not fetch pre-fill data:', err.message);
@@ -500,6 +501,16 @@ const RecordUpdateForm = () => {
                     'Both': 'both'
                   };
                   const recordTypeForRevision = scopeMap[revisionStatus?.scope] || 'medical';
+                  
+                  // Merge pre-filled revision data into form
+                  if (revisionPrefillData && Object.keys(revisionPrefillData).length > 0) {
+                    console.log('[RecordUpdateForm] Merging pre-fill data into form');
+                    setFormData(prev => ({
+                      ...prev,
+                      ...revisionPrefillData
+                    }));
+                  }
+                  
                   setRecordType(recordTypeForRevision);
                   setCurrentStep(0);
                 }}
