@@ -472,7 +472,7 @@ export const MedicineRequestScreen: React.FC = () => {
                       {req.items.map((item, i) => (
                         <View key={item.id || i} style={[styles.statusMedItem, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
                           <Text style={[styles.medDosage, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>
-                            Medicine #{item.medicineId} × {item.quantity}
+                            {item.itemName || `Medicine #${item.medicineId}`} × {item.quantity}
                           </Text>
                         </View>
                       ))}

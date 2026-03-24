@@ -34,6 +34,7 @@ export interface MedicineRequestItem {
   medicineId?: number;
   requestId?: number;
   quantity: number;
+  itemName?: string;
 }
 
 export interface MedicineRequest {
@@ -84,6 +85,7 @@ export const getMedicineStatus = async (): Promise<MedicineRequest[]> => {
           medicineId
           requestId
           quantity
+          itemName
         }
       }
     }
@@ -111,6 +113,7 @@ export const createMedicineRequest = async (
           id
           medicineId
           quantity
+          itemName
         }
       }
     }
