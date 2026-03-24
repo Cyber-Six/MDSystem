@@ -385,6 +385,17 @@ async function isActiveMedicalPersonnel(userId) {
   }
 }
 
+async function setSystemAuditLog({client=pool, eventType, actorId, actorType, targetId, action, details, changedBy}) {
+  const result = await client.query(
+    `INSERT INTO "SystemAuditLog"
+     ("event_type", "actorId", "actorType", "targetId", "action", "details", "changedBy")
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id;`,
+    [eventType, actorId, actorType, targetId, action, details, changedBy]
+  );
+  return result.rows[0].id;
+}
+
 module.exports = {
     connect,
     query,
@@ -406,5 +417,6 @@ module.exports = {
     getUserBranch,
     recordLoginAttempt,
     getUserPatientType,
-    isActiveMedicalPersonnel
+    isActiveMedicalPersonnel,
+    setSystemAuditLog
 };

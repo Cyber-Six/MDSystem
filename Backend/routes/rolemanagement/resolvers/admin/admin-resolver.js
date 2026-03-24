@@ -57,6 +57,16 @@ const Query = {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listUserSessions(_, args, context);
   },
+
+  listPermissionTemplates: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._listPermissionTemplates(_, args, context);
+  },
+
+  getPermissionTemplate: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._getPermissionTemplate(_, args, context);
+  },
 };
 
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
@@ -90,6 +100,26 @@ const Mutation = {
   rotateStaffAnchor: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._rotateStaffAnchor(_, args, context);
+  },
+
+  createPermissionTemplate: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._createPermissionTemplate(_, args, context);
+  },
+
+  updatePermissionTemplate: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._updatePermissionTemplate(_, args, context);
+  },
+
+  deletePermissionTemplate: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._deletePermissionTemplate(_, args, context);
+  },
+
+  applyTemplateToStaff: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._applyTemplateToStaff(_, args, context);
   },
 };
 

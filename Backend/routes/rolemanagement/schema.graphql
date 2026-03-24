@@ -96,6 +96,32 @@ type StaffPermissions {
   count: Int!
 }
 
+# ─── TEMPLATE TYPES ────────────────────────────────────────────────────────────
+
+# Permission template for reusable permission sets
+type PermissionTemplate {
+  id: ID!
+  label: String!
+  createdBy: ID!
+  createdAt: String!
+  permissions: [TemplatePermission!]!
+  permissionCount: Int!
+}
+
+# Individual permission in a template
+type TemplatePermission {
+  key: String!           # Permission key (e.g., "emr_allow_view")
+  label: String!         # Permission label (e.g., "ALLOW_TO_VIEW_EMR")
+  enabled: Boolean!      # Whether permission is enabled in this template
+  branch: Designation    # Branch designation for this permission
+}
+
+# List of permission templates
+type PermissionTemplateList {
+  templates: [PermissionTemplate!]!
+  count: Int!
+}
+
 type StaffAccount {
   id: ID!
   email: String!
@@ -205,6 +231,29 @@ input StandardPermissionInput {
   enabled: Boolean!     # true = grant, false = revoke (removes database record)
 }
 
+# ─── TEMPLATE INPUT TYPES ──────────────────────────────────────────────────────
+
+# Input for creating a permission template
+input CreateTemplateInput {
+  label: String!                         # Template name/label
+  permissions: [ExtendedPermissionInput!]!  # Permissions with branch
+  defaultBranch: Designation             # Default branch if not specified per permission
+}
+
+# Input for updating a permission template
+input UpdateTemplateInput {
+  label: String                          # Optional: new template name/label
+  permissions: [ExtendedPermissionInput!] # Optional: updated permissions
+  defaultBranch: Designation             # Optional: default branch for permissions without branch
+}
+
+# Result type for template mutations
+type TemplateMutationResult {
+  ok: Boolean!
+  message: String!
+  template: PermissionTemplate
+}
+
 # ─── QUERIES ───────────────────────────────────────────────────────────────────
 
 type Query {
@@ -225,6 +274,10 @@ type Query {
   # Refresh Token Analytics
   countActiveRefreshTokens: Int!
   listUserSessions(offset: Int!, limit: Int!): UserSessionPage!
+
+  # Permission Templates
+  listPermissionTemplates: PermissionTemplateList!
+  getPermissionTemplate(templateId: ID!): PermissionTemplate
 }
 
 # ─── MUTATIONS ─────────────────────────────────────────────────────────────────
@@ -249,4 +302,12 @@ type Mutation {
 
   # Session Management
   rotateStaffAnchor(userId: ID!): RotateAnchorResult!
+
+  # Permission Templates
+  createPermissionTemplate(input: CreateTemplateInput!): TemplateMutationResult!
+  updatePermissionTemplate(templateId: ID!, input: UpdateTemplateInput!): TemplateMutationResult!
+  deletePermissionTemplate(templateId: ID!): MutationResult!
+
+  # Apply template to staff (copies template permissions to staff)
+  applyTemplateToStaff(userId: ID!, templateId: ID!): MutationResult!
 }

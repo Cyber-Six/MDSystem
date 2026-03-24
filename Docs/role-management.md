@@ -1603,6 +1603,422 @@ await fetch(`/admin/staff/accounts/${userId}`, {
 
 ---
 
+## Permission Templates
+
+Permission templates provide a way to create reusable permission sets that can be quickly applied to staff members. Templates are similar to UserPermissions but exist as predefined configurations.
+
+### Database Schema for Templates
+
+**rolesTemplate**
+
+- `id` - Template ID (primary key)
+- `label` - Template name/label (e.g., "Nurse Standard", "Admin Full Access")
+- `created_by` - User ID of admin who created the template
+- `created_at` - Timestamp when template was created
+
+**rolesTemplateMap**
+
+- `id` - Map entry ID (primary key)
+- `templateId` - Template ID (foreign key to rolesTemplate)
+- `rolesId` - Role ID (foreign key to rolesTable)
+- `branch` - Branch designation: `'Manila'`, `'QuezonCity'`, `'Both'`
+- `created_at` - Timestamp when mapping was created
+
+### Template Functions (Backend/services/permit.js)
+
+#### createPermissionTemplate()
+
+Creates a new permission template with specified permissions.
+
+**Parameters:**
+```javascript
+{
+  label: string,                  // Template name
+  permissionsList: [              // Array of permissions
+    {
+      key: string,                // Permission key (e.g., "emr_allow_view")
+      enabled: boolean,           // true = include in template
+      branch: Designation         // Optional: Manila, QuezonCity, or Both
+    }
+  ],
+  createdBy: number,             // Admin user ID
+  defaultBranch: Designation     // Default branch (default: 'Both')
+}
+```
+
+**Returns:**
+```javascript
+{
+  id: string,
+  label: string,
+  createdBy: string,
+  createdAt: string
+}
+```
+
+**Example:**
+```javascript
+const template = await createPermissionTemplate({
+  label: "Nurse Standard",
+  permissionsList: [
+    { key: "is_staff", enabled: true, branch: "Manila" },
+    { key: "emr_allow_view", enabled: true, branch: "Manila" },
+    { key: "consultation_allow_view", enabled: true, branch: "Manila" },
+    { key: "inventory_allow_view", enabled: true, branch: "Manila" }
+  ],
+  createdBy: 1,
+  defaultBranch: "Manila"
+});
+```
+
+#### getPermissionTemplate()
+
+Retrieves a single template with all its permissions (both enabled and disabled).
+
+**Parameters:**
+```javascript
+templateId: number
+```
+
+**Returns:**
+```javascript
+{
+  id: string,
+  label: string,
+  createdBy: string,
+  createdAt: string,
+  permissions: [
+    {
+      key: string,           // Permission key
+      label: string,         // Permission label
+      enabled: boolean,      // Whether this permission is in the template
+      branch: Designation    // Branch for this permission (null if not enabled)
+    }
+  ],
+  permissionCount: number   // Count of enabled permissions
+}
+```
+
+**Example:**
+```javascript
+const template = await getPermissionTemplate(5);
+console.log(template.label);  // "Nurse Standard"
+console.log(template.permissionCount);  // 4
+console.log(template.permissions[0]);  // { key: "is_admin", label: "IS_ADMIN", enabled: false, branch: null }
+```
+
+#### listPermissionTemplates()
+
+Lists all available permission templates with full permission details.
+
+**Returns:**
+```javascript
+{
+  templates: [
+    {
+      id: string,
+      label: string,
+      createdBy: string,
+      createdAt: string,
+      permissions: [...],
+      permissionCount: number
+    }
+  ],
+  count: number
+}
+```
+
+**Example:**
+```javascript
+const { templates, count } = await listPermissionTemplates();
+templates.forEach(template => {
+  console.log(`${template.label} - ${template.permissionCount} permissions`);
+});
+```
+
+#### updatePermissionTemplate()
+
+Updates a template's label and/or permissions.
+
+**Parameters:**
+```javascript
+{
+  templateId: number,
+  label: string,                  // Optional: new label
+  permissionsList: [...],         // Optional: new permissions (replaces all)
+  defaultBranch: Designation      // Optional: default branch
+}
+```
+
+**Returns:** Updated template object (same format as getPermissionTemplate)
+
+**Example:**
+```javascript
+const updated = await updatePermissionTemplate({
+  templateId: 5,
+  label: "Nurse Advanced",
+  permissionsList: [
+    { key: "is_staff", enabled: true, branch: "Manila" },
+    { key: "emr_allow_view", enabled: true, branch: "Manila" },
+    { key: "emr_allow_edit", enabled: true, branch: "Manila" },  // Added
+    { key: "consultation_allow_edit", enabled: true, branch: "Manila" }  // Added
+  ]
+});
+```
+
+#### deletePermissionTemplate()
+
+Deletes a permission template and all its associated permissions.
+
+**Parameters:**
+```javascript
+templateId: number
+```
+
+**Returns:**
+```javascript
+boolean  // true if deleted successfully
+```
+
+**Example:**
+```javascript
+const deleted = await deletePermissionTemplate(5);
+console.log(deleted);  // true
+```
+
+#### applyTemplateToStaff()
+
+Applies a template's permissions to a staff member, copying all enabled permissions from the template.
+
+**Parameters:**
+```javascript
+{
+  personnelId: number,    // Staff user ID
+  templateId: number,     // Template ID to apply
+  assignedBy: number      // Admin user ID
+}
+```
+
+**Returns:**
+```javascript
+{
+  appliedCount: number,
+  permissions: [...]      // Array of applied permissions
+}
+```
+
+**Example:**
+```javascript
+const result = await applyTemplateToStaff({
+  personnelId: 123,
+  templateId: 5,
+  assignedBy: 1
+});
+console.log(`Applied ${result.appliedCount} permissions to staff`);
+```
+
+### GraphQL Operations for Templates
+
+#### Queries
+
+**listPermissionTemplates**
+```graphql
+query {
+  listPermissionTemplates {
+    templates {
+      id
+      label
+      createdBy
+      createdAt
+      permissionCount
+      permissions {
+        key
+        label
+        enabled
+        branch
+      }
+    }
+    count
+  }
+}
+```
+
+**getPermissionTemplate**
+```graphql
+query {
+  getPermissionTemplate(templateId: "5") {
+    id
+    label
+    createdBy
+    createdAt
+    permissionCount
+    permissions {
+      key
+      label
+      enabled
+      branch
+    }
+  }
+}
+```
+
+#### Mutations
+
+**createPermissionTemplate**
+```graphql
+mutation {
+  createPermissionTemplate(
+    input: {
+      label: "Nurse Standard"
+      permissions: [
+        { key: "is_staff", enabled: true, branch: Manila }
+        { key: "emr_allow_view", enabled: true, branch: Manila }
+        { key: "consultation_allow_view", enabled: true, branch: Manila }
+      ]
+      defaultBranch: Manila
+    }
+  ) {
+    ok
+    message
+    template {
+      id
+      label
+      permissionCount
+    }
+  }
+}
+```
+
+**updatePermissionTemplate**
+```graphql
+mutation {
+  updatePermissionTemplate(
+    templateId: "5"
+    input: {
+      label: "Nurse Advanced"
+      permissions: [
+        { key: "is_staff", enabled: true, branch: Manila }
+        { key: "emr_allow_view", enabled: true, branch: Manila }
+        { key: "emr_allow_edit", enabled: true, branch: Manila }
+      ]
+    }
+  ) {
+    ok
+    message
+    template {
+      id
+      label
+      permissionCount
+    }
+  }
+}
+```
+
+**deletePermissionTemplate**
+```graphql
+mutation {
+  deletePermissionTemplate(templateId: "5") {
+    ok
+    message
+  }
+}
+```
+
+**applyTemplateToStaff**
+```graphql
+mutation {
+  applyTemplateToStaff(userId: "123", templateId: "5") {
+    ok
+    message
+  }
+}
+```
+
+### Frontend Integration Example
+
+```javascript
+// 1. List all templates
+const templatesQuery = `
+  query {
+    listPermissionTemplates {
+      templates {
+        id
+        label
+        permissionCount
+        permissions { key enabled branch }
+      }
+    }
+  }
+`;
+
+const response = await fetch('/rolemanagement/admin', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ query: templatesQuery })
+});
+
+const { data } = await response.json();
+const templates = data.listPermissionTemplates.templates;
+
+// 2. Display templates in UI
+templates.forEach(template => {
+  console.log(`${template.label}: ${template.permissionCount} permissions`);
+});
+
+// 3. Apply template to staff member
+const applyMutation = `
+  mutation {
+    applyTemplateToStaff(userId: "123", templateId: "5") {
+      ok
+      message
+    }
+  }
+`;
+
+await fetch('/rolemanagement/admin', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ query: applyMutation })
+});
+
+// Staff 123 now has all permissions from template 5
+```
+
+### Template Workflow
+
+1. **Creating Templates**: Admins create templates with predefined permission sets
+2. **Viewing Templates**: Staff can query templates to see available configurations
+3. **Applying Templates**: Admins apply templates to staff members
+   - All enabled permissions from the template are copied to the staff member
+   - Existing permissions are updated/replaced using `setStaffPermissionsExtended()`
+4. **Updating Templates**: Changes to templates don't affect staff who already have those permissions
+   - Templates must be re-applied to update staff permissions
+
+### Use Cases
+
+**Example Templates:**
+
+- **"Nurse Standard"**: Basic nursing permissions (view EMR, view consultations, view inventory)
+- **"Pharmacist Full"**: Complete pharmacy permissions (view/dispense medicine, manage requests, prescribe)
+- **"Admin Full Access"**: All system permissions with admin privileges
+- **"Doctor EMR Only"**: Restricted to EMR operations only
+- **"Reception Desk"**: Appointment and profile management only
+
+**Benefits:**
+
+- Consistency: Ensure all staff in the same role have the same permissions
+- Speed: Quickly onboard new staff by applying a template
+- Maintenance: Update templates to standardize permissions across the organization
+- Compliance: Document and audit standard permission configurations
+
+---
+
 ## Notes
 
 - The system enforces that all active/suspended staff must have `is_staff: true`
@@ -1611,3 +2027,6 @@ await fetch(`/admin/staff/accounts/${userId}`, {
 - Permission keys not included in the request are left unchanged
 - Invalid permission keys will throw an error
 - Branch is always pulled from `MedicalPersonnel.designation`, not from request body
+- Templates are independent of staff permissions - updating a template does not update existing staff
+- Template permissions follow the same branch designation rules as staff permissions
+

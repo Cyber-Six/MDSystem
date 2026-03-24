@@ -25,6 +25,9 @@ CREATE INDEX idx_medicalpersonnel_designation
 CREATE INDEX idx_medicalpersonnel_is_active
   ON "MedicalPersonnel"(is_active);
 
+CREATE INDEX IF NOT EXISTS idx_medicine_batch_updated_at ON "MedicineBatch"("updated_at" DESC);
+CREATE INDEX IF NOT EXISTS idx_supply_batch_updated_at ON "SupplyBatch"("updated_at" DESC);
+
 
 ALTER TABLE "ScheduleDateEntity"
 ADD CONSTRAINT schedule_unique_slot_date

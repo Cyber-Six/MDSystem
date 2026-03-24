@@ -3,7 +3,13 @@ const {
   permissions,
   getStaffPermissions,
   setStaffPermissionsExtended,
-  setStaffPermissionsStandard
+  setStaffPermissionsStandard,
+  createPermissionTemplate,
+  getPermissionTemplate,
+  listPermissionTemplates,
+  updatePermissionTemplate,
+  deletePermissionTemplate,
+  applyTemplateToStaff
 } = require('../../../../services/permit.js');
 const {
   listUserSessions,
@@ -366,6 +372,22 @@ const Query = {
       totalCount
     };
   },
+
+  _listPermissionTemplates: async (_, __, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    return await listPermissionTemplates();
+  },
+
+  _getPermissionTemplate: async (_, { templateId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    return await getPermissionTemplate(templateId);
+  },
 };
 
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
@@ -678,6 +700,181 @@ const Mutation = {
       message: 'Staff anchor rotated successfully. All devices have been logged out.',
       sessionsInvalidated: sessionCount,
     };
+  },
+
+  _createPermissionTemplate: async (_, { input }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    const { label, permissions: permissionsList, defaultBranch = 'Both' } = input;
+
+    // Validate required fields
+    if (!label || !permissionsList || permissionsList.length === 0) {
+      throwGraphQLError(res)
+        .message('label and permissions are required.')
+        .status(400)
+        .throw();
+    }
+
+    try {
+      const template = await createPermissionTemplate({
+        label,
+        permissionsList,
+        createdBy: user.id,
+        defaultBranch
+      });
+
+      logger.info(`Permission template created: templateId=${template.id}, by adminId=${user.id}`);
+
+      return {
+        ok: true,
+        message: 'Permission template created successfully.',
+        template: await getPermissionTemplate(template.id)
+      };
+    } catch (error) {
+      logger.error(`Failed to create permission template: ${error.message}`);
+      throwGraphQLError(res)
+        .message(`Failed to create template: ${error.message}`)
+        .status(500)
+        .throw();
+    }
+  },
+
+  _updatePermissionTemplate: async (_, { templateId, input }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    const { label, permissions: permissionsList, defaultBranch = 'Both' } = input;
+
+    // Validate at least one field provided
+    if (label === undefined && (!permissionsList || permissionsList.length === 0)) {
+      throwGraphQLError(res)
+        .message('At least one field (label, permissions) must be provided.')
+        .status(400)
+        .throw();
+    }
+
+    // Verify template exists
+    const existingTemplate = await getPermissionTemplate(templateId);
+    if (!existingTemplate) {
+      throwGraphQLError(res)
+        .message('Permission template not found.')
+        .status(404)
+        .throw();
+    }
+
+    try {
+      const template = await updatePermissionTemplate({
+        templateId,
+        label,
+        permissionsList,
+        defaultBranch
+      });
+
+      logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}`);
+
+      return {
+        ok: true,
+        message: 'Permission template updated successfully.',
+        template
+      };
+    } catch (error) {
+      logger.error(`Failed to update permission template: ${error.message}`);
+      throwGraphQLError(res)
+        .message(`Failed to update template: ${error.message}`)
+        .status(500)
+        .throw();
+    }
+  },
+
+  _deletePermissionTemplate: async (_, { templateId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    // Verify template exists
+    const existingTemplate = await getPermissionTemplate(templateId);
+    if (!existingTemplate) {
+      throwGraphQLError(res)
+        .message('Permission template not found.')
+        .status(404)
+        .throw();
+    }
+
+    try {
+      const deleted = await deletePermissionTemplate(templateId);
+
+      logger.info(`Permission template deleted: templateId=${templateId}, by adminId=${user.id}`);
+
+      return {
+        ok: deleted,
+        message: deleted
+          ? 'Permission template deleted successfully.'
+          : 'Permission template not found.'
+      };
+    } catch (error) {
+      logger.error(`Failed to delete permission template: ${error.message}`);
+      throwGraphQLError(res)
+        .message(`Failed to delete template: ${error.message}`)
+        .status(500)
+        .throw();
+    }
+  },
+
+  _applyTemplateToStaff: async (_, { userId, templateId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    // Verify user exists and is Medical staff
+    const userResult = await db.query(
+      `SELECT id, identity FROM "UserCredentials" WHERE id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      throwGraphQLError(res).message('User not found.').status(404).throw();
+    }
+
+    const targetUser = userResult.rows[0];
+    if (targetUser.identity !== 'Medical') {
+      throwGraphQLError(res)
+        .message('Template can only be applied to Medical staff accounts.')
+        .status(403)
+        .throw();
+    }
+
+    // Verify template exists
+    const template = await getPermissionTemplate(templateId);
+    if (!template) {
+      throwGraphQLError(res)
+        .message('Permission template not found.')
+        .status(404)
+        .throw();
+    }
+
+    try {
+      const result = await applyTemplateToStaff({
+        personnelId: userId,
+        templateId,
+        assignedBy: user.id
+      });
+
+      logger.info(`Template applied to staff: userId=${userId}, templateId=${templateId}, by adminId=${user.id}`);
+
+      return {
+        ok: true,
+        message: `Successfully applied template "${template.label}" to staff. ${result.appliedCount} permissions were set.`
+      };
+    } catch (error) {
+      logger.error(`Failed to apply template to staff: ${error.message}`);
+      throwGraphQLError(res)
+        .message(`Failed to apply template: ${error.message}`)
+        .status(500)
+        .throw();
+    }
   },
 };
 

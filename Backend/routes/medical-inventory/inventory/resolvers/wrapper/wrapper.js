@@ -57,13 +57,20 @@ const Query = {
   _getSupplyBatches: async (_, { supplyItemId, location, availableOnly, offset = 0, limit = 20 }, { res }) => {
 
     const sql = `
-      SELECT sb.* FROM "SupplyBatch" sb
+      SELECT sb.*, COALESCE(av.available_count, 0) AS "currentQuantity"
+      FROM "SupplyBatch" sb
+      LEFT JOIN (
+        SELECT "batchId", COUNT(*)::int AS available_count
+        FROM "SupplyEntity"
+        WHERE "transactionId" IS NULL
+        GROUP BY "batchId"
+      ) av ON av."batchId" = sb.id
       WHERE
         sb."supplyItemId" = $1 AND
         sb.location = COALESCE($2, sb.location) AND
-        ($3::boolean IS NOT TRUE OR sb."currentQuantity" > 0) AND
-        ($3::boolean IS NOT TRUE OR sb.expiry_date IS NULL OR sb.expiry_date > CURRENT_DATE)
-      ORDER BY expiry_date ASC
+        ($3::boolean IS NOT TRUE OR COALESCE(av.available_count, 0) > 0) AND
+        ($3::boolean IS NOT TRUE OR sb."expiryDate" IS NULL OR sb."expiryDate" > CURRENT_DATE)
+      ORDER BY "expiryDate" ASC
       OFFSET $4 LIMIT $5
     `;
 
@@ -151,8 +158,8 @@ const Mutation = {
 
     const sql = `
       INSERT INTO "MedicineBatch"
-        ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location, "receivedBy", notes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location, "receivedBy", notes, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, current_timestamp, current_timestamp)
       RETURNING *
     `;
 
@@ -185,21 +192,33 @@ const Mutation = {
   _addSupplyBatch: async (_, { input, receivedBy }, { res }) => {
     await validateItemActive(input.supplyItemId, res);
 
-    // $3 is used twice: initialQuantity and currentQuantity start equal
     const sql = `
       INSERT INTO "SupplyBatch"
-        ("supplyItemId", batch_number, "initialQuantity", "currentQuantity", unit, expiry_date, location, received_at, "receivedBy", supplier_name, notes)
-      VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10)
+        ("supplyItemId", "batchNumber", unit, "expiryDate", location, "receivedBy", "supplierName", notes, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, current_timestamp, current_timestamp)
       RETURNING *
     `;
 
     try {
       const result = await db.query(sql, [
-        input.supplyItemId, input.batch_number, input.initialQuantity,
-        input.unit, input.expiry_date || null, input.location,
-        input.received_at || null, receivedBy, input.supplier_name || null, input.notes || null,
+        input.supplyItemId, input.batchNumber, input.unit,
+        input.expiryDate || null, input.location,
+        receivedBy, input.supplierName || null, input.notes || null,
       ]);
-      return result.rows[0];
+
+      const batch = result.rows[0];
+      const quantity = input.initialQuantity || 1;
+
+      // Bulk insert individual SupplyEntity records for each unit
+      if (quantity > 0) {
+        const placeholders = Array(quantity).fill('($1)').join(', ');
+        await db.query(
+          `INSERT INTO "SupplyEntity" ("batchId") VALUES ${placeholders}`,
+          [batch.id],
+        );
+      }
+
+      return batch;
     } catch (err) {
       logger.error("Error in _addSupplyBatch:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
@@ -246,17 +265,16 @@ const Mutation = {
       }
 
       const sql = `INSERT INTO "SupplyBatch"
-      ("supplyItemId", batch_number, unit, "initialQuantity", "currentQuantity",
-        location, received_at, "receivedBy",
-        supplier_name, notes)
-      VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8, $9) RETURNING *`;
+      ("supplyItemId", "batchNumber", unit, "expiryDate",
+        location, "receivedBy", "supplierName", notes, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, current_timestamp, current_timestamp) RETURNING *`;
 
       const result = await client.query(sql, [
-        batch.supplyItemId, batch.batch_number, batch.unit, input.quantity,
-        input.targetLocation, batch.received_at, batch.receivedBy,
-        batch.supplier_name, input.notes || batch.notes,
+        batch.supplyItemId, batch.batchNumber, batch.unit, batch.expiryDate,
+        input.targetLocation, batch.receivedBy,
+        batch.supplierName, input.notes || batch.notes,
       ]);
-      
+
       const newBatch = result.rows[0];
 
       // Move specified quantity of entities to new batch
@@ -276,14 +294,8 @@ const Mutation = {
           .throw();
       }
 
-      // Decrement source batch current quantity
-      await client.query(
-        `UPDATE "SupplyBatch" SET "currentQuantity" = "currentQuantity" - $1 WHERE id = $2`,
-        [input.quantity, batchId],
-      );
-
       await client.query('COMMIT');
-      return result.rows[0];
+      return newBatch;
     } catch (err) {
       await client.query('ROLLBACK');
       logger.error("Error in _splitMedicalSupply:", err);
@@ -334,8 +346,8 @@ const Mutation = {
       // Create new batch at target location
       const sql = `
         INSERT INTO "MedicineBatch"
-          ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location, "receivedBy", notes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ("medicalItemId", "supplierName", "batchNumber", "dosageUnit", "dosageValue", "expiryDate", location, "receivedBy", notes, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, current_timestamp, current_timestamp)
         RETURNING *
       `;
 
@@ -386,6 +398,7 @@ const Mutation = {
       throwGraphQLError(res).message("No fields to update").status(400).throw();
     }
 
+    sets.push(`"updated_at" = current_timestamp`);
     params.push(batchId);
 
     const sql = `
@@ -406,13 +419,14 @@ const Mutation = {
     const params = [];
     const sets = [];
 
-    if (input.expiryDate !== undefined) sets.push(`expiry_date = $${params.push(input.expiryDate)}`);
+    if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
     if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
 
     if (sets.length === 0) {
       throwGraphQLError(res).message("No fields to update").status(400).throw();
     }
 
+    sets.push(`"updated_at" = current_timestamp`);
     params.push(batchId);
 
     const sql = `

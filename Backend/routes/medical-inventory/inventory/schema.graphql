@@ -58,17 +58,16 @@ type MedicineBatch {
 type SupplyBatch {
   id: ID!
   supplyItemId: Int!
-  batch_number: String
-  initialQuantity: Int
-  currentQuantity: Int
+  batchNumber: String
   unit: SupplyUnit
-  expiry_date: Date
+  currentQuantity: Int
+  expiryDate: Date
   location: LocationDesignation
-  received_at: Date
   receivedBy: Int
-  supplier_name: String
+  supplierName: String
   notes: String
   created_at: Date
+  updated_at: Date
 }
 
 input MedicalItemInput {
@@ -100,13 +99,12 @@ input MedicineBatchInput {
 
 input SupplyBatchInput {
   supplyItemId: Int!
-  batch_number: String!
+  batchNumber: String!
   initialQuantity: Int!
   unit: SupplyUnit!
-  expiry_date: Date
+  expiryDate: Date
   location: LocationDesignation!
-  received_at: Date
-  supplier_name: String
+  supplierName: String
   notes: String
 }
 
