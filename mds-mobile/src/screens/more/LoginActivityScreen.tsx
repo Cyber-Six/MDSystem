@@ -18,11 +18,8 @@ import { axiosRequest } from '../../core';
 
 interface LoginRecord {
   id: string;
-  device: string;
-  browser: string;
-  location: string;
+  wasSuccessful: boolean;
   timestamp: string;
-  isCurrent?: boolean;
 }
 
 export const LoginActivityScreen: React.FC = () => {
@@ -96,41 +93,26 @@ export const LoginActivityScreen: React.FC = () => {
                 styles.recordCard,
                 {
                   backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
-                  borderColor: record.isCurrent
-                    ? colors.success[500]
-                    : isDark
-                    ? colors.neutral[700]
-                    : colors.neutral[200],
+                  borderColor: record.wasSuccessful
+                    ? isDark ? colors.neutral[700] : colors.neutral[200]
+                    : colors.error[300],
                 },
               ]}
             >
               <View style={styles.recordHeader}>
                 <Text style={{ fontSize: 20 }}>
-                  {record.device?.toLowerCase().includes('mobile') ? '📱' : '💻'}
+                  {record.wasSuccessful ? '✅' : '❌'}
                 </Text>
                 <View style={{ flex: 1 }}>
                   <View style={styles.deviceRow}>
                     <Text style={[styles.deviceText, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                      {record.device || 'Unknown Device'}
+                      {record.wasSuccessful ? 'Successful Login' : 'Failed Login Attempt'}
                     </Text>
-                    {record.isCurrent && (
-                      <View style={[styles.currentBadge, { backgroundColor: colors.success[100] }]}>
-                        <Text style={{ color: colors.success[600], fontSize: 10, fontWeight: '600' }}>Current</Text>
-                      </View>
-                    )}
                   </View>
                   <Text style={[styles.browserText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
-                    {record.browser || ''}
+                    {formatDate(record.timestamp)}
                   </Text>
                 </View>
-              </View>
-              <View style={styles.recordFooter}>
-                <Text style={[styles.locationText, { color: isDark ? colors.neutral[500] : colors.neutral[400] }]}>
-                  📍 {record.location || 'Unknown'}
-                </Text>
-                <Text style={[styles.timeText, { color: isDark ? colors.neutral[500] : colors.neutral[400] }]}>
-                  {formatDate(record.timestamp)}
-                </Text>
               </View>
             </View>
           ))

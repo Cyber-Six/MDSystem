@@ -1,6 +1,6 @@
 {
   "name": "mds-mobile",
-  "version": "1.0.0",
+  "version": "0.7.5-dev",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -17,6 +17,7 @@
     "axios": "^1.13.2",
     "babel-preset-expo": "^54.0.9",
     "expo": "~54.0.30",
+    "expo-constants": "~17.0.8",
     "expo-document-picker": "~14.0.8",
     "expo-image-picker": "~17.0.10",
     "expo-status-bar": "~3.0.9",

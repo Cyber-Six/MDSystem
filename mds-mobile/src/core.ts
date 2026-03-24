@@ -29,8 +29,8 @@ export const setNavigationRef = (ref: any): void => {
 
 // ── Backend Configuration ──
 // React Native has no proxy — always use the absolute backend URL.
-// Both dev and production connect to the same server.
-const BACKEND_URL = 'https://www.mdsystemtip.space';
+// Reads from EXPO_PUBLIC_API_URL in .env; falls back to production URL.
+const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://www.mdsystemtip.space';
 
 /**
  * Returns the absolute backend URL.
@@ -42,8 +42,15 @@ const getApiBaseUrl = (): string => BACKEND_URL;
 /**
  * Returns the hostname for the X-Forwarded-Host header.
  * The backend uses this to detect which portal (patient vs staff) is calling.
+ * Derived automatically from EXPO_PUBLIC_API_URL.
  */
-const getDevSubdomain = (): string => 'www.mdsystemtip.space';
+const getDevSubdomain = (): string => {
+  try {
+    return new URL(BACKEND_URL).hostname;
+  } catch {
+    return 'www.mdsystemtip.space';
+  }
+};
 
 // 1. Create token service with AsyncStorage and navigation
 export const tokenService = createTokenService({

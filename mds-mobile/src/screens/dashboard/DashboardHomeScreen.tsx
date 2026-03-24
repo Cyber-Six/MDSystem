@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statIconText: { fontSize: 20 },
-  statValue: { fontSize: 20, fontWeight: 'bold' },
+  statValue: { fontSize: 14, fontWeight: 'bold' },
   statLabel: { fontSize: 11, marginTop: 2 },
   card: {
     borderRadius: 16,

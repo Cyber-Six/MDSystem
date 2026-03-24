@@ -233,7 +233,7 @@ export const HealthChatScreen: React.FC = () => {
         } finally {
           setIsUploading(false);
         }
-        const result = await sendMessage(ticket.id, text || null, filename, 'image');
+        const result = await sendMessage(ticket.id, text || null, filename, 'file');
         if (result.success && result.message) {
           setMessages((prev) => [...prev, result.message!]);
           setPendingImage(null);
