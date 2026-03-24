@@ -387,14 +387,33 @@ const Mutation = {
     }
   },
 
-  _updateMedicalSupply: async (_, { batchId, input }, { res }) => {
+  _updateMedicalSupply: async (_, { batchId, input }, { res, user }) => {
     const params = [];
     const sets = [];
+
+    // Fetch old values for audit trail
+    const oldBatchResult = await db.query(
+      `SELECT "expiryDate", notes FROM "MedicineBatch" WHERE id = $1`,
+      [batchId]
+    );
+
+    if (oldBatchResult.rows.length === 0) {
+      throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
+    }
+
+    const oldValues = oldBatchResult.rows[0];
+
+    // Get old quantity count
+    const oldQtyResult = await db.query(
+      `SELECT COUNT(*)::int AS count FROM "MedicineEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL`,
+      [batchId]
+    );
+    const oldQuantity = oldQtyResult.rows[0].count;
 
     if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
     if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
 
-    if (sets.length === 0) {
+    if (sets.length === 0 && input.currentQuantity === undefined) {
       throwGraphQLError(res).message("No fields to update").status(400).throw();
     }
 
@@ -408,17 +427,83 @@ const Mutation = {
       RETURNING *
     `;
 
-    const result = await db.query(sql, params);
-    if (result.rows.length === 0) {
-      throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
+    try {
+      const result = await db.query(sql, params);
+      if (result.rows.length === 0) {
+        throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
+      }
+
+      const newValues = result.rows[0];
+      let newQuantity = oldQuantity;
+
+      // Handle quantity changes (add or remove MedicineEntity records)
+      if (input.currentQuantity !== undefined) {
+        const quantityDiff = input.currentQuantity - oldQuantity;
+
+        if (quantityDiff > 0) {
+          // Add new MedicineEntity records
+          const placeholders = Array(quantityDiff).fill('($1)').join(', ');
+          await db.query(
+            `INSERT INTO "MedicineEntity" ("batchId") VALUES ${placeholders}`,
+            [batchId]
+          );
+        } else if (quantityDiff < 0) {
+          // Remove unused MedicineEntity records
+          const toDelete = Math.abs(quantityDiff);
+          await db.query(
+            `DELETE FROM "MedicineEntity"
+             WHERE "batchId" = $1 AND "transactionId" IS NULL
+             LIMIT $2`,
+            [batchId, toDelete]
+          );
+        }
+        newQuantity = input.currentQuantity;
+      }
+
+      // Log to SystemAuditLog
+      if (user && user.id) {
+        await db.setSystemAuditLog({
+          eventType: "INVENTORY_UPDATE",
+          actorId: user.id,
+          actorType: "Staff",
+          targetId: parseInt(batchId),
+          action: "UPDATE_MEDICINE_BATCH",
+          details: JSON.stringify({
+            oldQuantity: oldQuantity,
+            newQuantity: newQuantity,
+            oldExpiryDate: oldValues.expiryDate,
+            newExpiryDate: newValues.expiryDate,
+            oldNotes: oldValues.notes,
+            newNotes: newValues.notes
+          }),
+          changedBy: "Medical"
+        });
+      }
+
+      return newValues;
+    } catch (err) {
+      logger.error("Error in _updateMedicalSupply:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
     }
-    return result.rows[0];
   },
 
-  _updateSupplyBatch: async (_, { batchId, input }, { res }) => {
+  _updateSupplyBatch: async (_, { batchId, input }, { res, user }) => {
     const params = [];
     const sets = [];
 
+    // Fetch old values for audit trail
+    const oldBatchResult = await db.query(
+      `SELECT "currentQuantity", "expiryDate", notes FROM "SupplyBatch" WHERE id = $1`,
+      [batchId]
+    );
+
+    if (oldBatchResult.rows.length === 0) {
+      throwGraphQLError(res).message("Supply batch not found").status(404).throw();
+    }
+
+    const oldValues = oldBatchResult.rows[0];
+
+    if (input.currentQuantity !== undefined) sets.push(`"currentQuantity" = $${params.push(input.currentQuantity)}`);
     if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
     if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
 
@@ -436,11 +521,39 @@ const Mutation = {
       RETURNING *
     `;
 
-    const result = await db.query(sql, params);
-    if (result.rows.length === 0) {
-      throwGraphQLError(res).message("Supply batch not found").status(404).throw();
+    try {
+      const result = await db.query(sql, params);
+      if (result.rows.length === 0) {
+        throwGraphQLError(res).message("Supply batch not found").status(404).throw();
+      }
+
+      const newValues = result.rows[0];
+
+      // Log to SystemAuditLog
+      if (user && user.id) {
+        await db.setSystemAuditLog({
+          eventType: "INVENTORY_UPDATE",
+          actorId: user.id,
+          actorType: "Staff",
+          targetId: parseInt(batchId),
+          action: "UPDATE_SUPPLY_BATCH",
+          details: JSON.stringify({
+            oldQuantity: oldValues.currentQuantity,
+            newQuantity: newValues.currentQuantity,
+            oldExpiryDate: oldValues.expiryDate,
+            newExpiryDate: newValues.expiryDate,
+            oldNotes: oldValues.notes,
+            newNotes: newValues.notes
+          }),
+          changedBy: "Medical"
+        });
+      }
+
+      return newValues;
+    } catch (err) {
+      logger.error("Error in _updateSupplyBatch:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
     }
-    return result.rows[0];
   },
 };
 

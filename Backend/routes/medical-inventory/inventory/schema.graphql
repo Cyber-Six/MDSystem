@@ -109,6 +109,13 @@ input SupplyBatchInput {
 }
 
 input MedicalSupplyUpdateInput {
+  currentQuantity: Int
+  expiryDate: Date
+  notes: String
+}
+
+input SupplyBatchUpdateInput {
+  currentQuantity: Int
   expiryDate: Date
   notes: String
 }
@@ -137,5 +144,5 @@ type Mutation {
   splitMedicalSupply(batchId: ID!, input: SplitMedicalSupplyInput!): SupplyBatch
   splitMedicineSupply(batchId: ID!, input: SplitMedicalSupplyInput!): MedicineBatch
   updateMedicalSupply(batchId: ID!, input: MedicalSupplyUpdateInput!): MedicineBatch
-  updateSupplyBatch(batchId: ID!, input: MedicalSupplyUpdateInput!): SupplyBatch
+  updateSupplyBatch(batchId: ID!, input: SupplyBatchUpdateInput!): SupplyBatch
 }
