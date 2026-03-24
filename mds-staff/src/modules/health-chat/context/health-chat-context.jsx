@@ -710,18 +710,56 @@ export function HealthChatProvider({ children }) {
           setMessages(fetchedMessages || []);
         }
 
-        // Switch filters to include active and refresh once
-        const targetFilters = selectedFilters.includes('active')
-          ? selectedFilters
-          : [...selectedFilters, 'active'];
+        // Update the ticket in-place: change its status from Open to Ongoing
+        // This avoids a full list refresh which causes redundant animations
+        setTickets(prev => {
+          const updated = prev.map(t => {
+            const isTarget = String(t.patientId) === String(patientId) ||
+              t.tickets?.some(sub => String(sub.id) === String(chatId));
+            if (!isTarget) return t;
 
+            const updatedTickets = t.tickets?.map(sub =>
+              String(sub.id) === String(chatId) ? { ...sub, status: 'Ongoing' } : sub
+            );
+            return { ...t, status: 'Ongoing', tickets: updatedTickets || t.tickets };
+          });
+
+          // Re-sort by effective time
+          updated.sort((a, b) => {
+            const aTime = getEffectiveSortTime(a.status, a.lastMessageAt, a.session_start, a.session_end, a.archived_at);
+            const bTime = getEffectiveSortTime(b.status, b.lastMessageAt, b.session_start, b.session_end, b.archived_at);
+            const aMs = aTime ? new Date(aTime).getTime() : 0;
+            const bMs = bTime ? new Date(bTime).getTime() : 0;
+            if (aMs !== bMs) return bMs - aMs;
+            return Number(b.tickets?.[0]?.id || 0) - Number(a.tickets?.[0]?.id || 0);
+          });
+
+          return updated;
+        });
+
+        // Also update conversations array in-place
+        setConversations(prev => {
+          const updated = prev.map(c => {
+            if (String(c.patientId) !== String(patientId)) return c;
+            const updatedTickets = c.tickets?.map(sub =>
+              String(sub.id) === String(chatId) ? { ...sub, status: 'Ongoing' } : sub
+            );
+            const latestTicket = c.latestTicket && String(c.latestTicket.id) === String(chatId)
+              ? { ...c.latestTicket, status: 'Ongoing' }
+              : c.latestTicket;
+            return { ...c, tickets: updatedTickets || c.tickets, latestTicket };
+          });
+          return updated;
+        });
+
+        // Ensure 'active' filter is included so the approved ticket stays visible
         if (!selectedFilters.includes('active')) {
+          const targetFilters = [...selectedFilters, 'active'];
           setSelectedFilters(targetFilters);
           localStorage.setItem('health-chat-selected-filters', JSON.stringify(targetFilters));
+          // Only do a full refresh when we actually need to change filters
+          refreshMultipleFilters(targetFilters);
         }
-
-        // Single refresh with the correct filter set
-        refreshMultipleFilters(targetFilters);
       }
       return result;
     } catch (err) {

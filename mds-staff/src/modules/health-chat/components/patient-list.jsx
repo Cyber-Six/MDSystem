@@ -14,21 +14,32 @@ const PatientList = () => {
     pendingClosedChats
   } = useHealthChat();
 
-  // Track known ticket IDs to detect new entries for enter animation
+  // Track known ticket IDs to detect genuinely new entries for enter animation
+  // Uses a persistent ref that only grows — IDs are never removed so re-renders
+  // after status changes or re-sorting don't falsely trigger enter animations.
   const knownTicketIds = useRef(new Set());
   const [newTicketIds, setNewTicketIds] = useState(new Set());
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     const currentIds = new Set(tickets.map(t => String(t.id)));
-    const entering = new Set();
 
+    // On initial load, seed the known set without animating
+    if (isInitialLoad.current) {
+      knownTicketIds.current = currentIds;
+      isInitialLoad.current = false;
+      return;
+    }
+
+    const entering = new Set();
     currentIds.forEach(id => {
       if (!knownTicketIds.current.has(id)) {
         entering.add(id);
       }
     });
 
-    knownTicketIds.current = currentIds;
+    // Add new IDs to known set (never remove — prevents re-animation on re-sort)
+    currentIds.forEach(id => knownTicketIds.current.add(id));
 
     if (entering.size > 0) {
       setNewTicketIds(entering);
