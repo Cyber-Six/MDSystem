@@ -242,6 +242,10 @@ VALUES
 ('DentalProcedure', 'EXPANDER', 'Palatal Expander', 'Orthodontic device to widen upper jaw', true, 1),
 ('DentalProcedure', 'NIGHTGUARD', 'Night Guard', 'Protective appliance worn during sleep to prevent grinding', true, 1);
 
+-- Fix: Change ToothPlacement.legend from dentalLegend enum to text
+-- The frontend uses short codes (C, X, R, M, F, G, J, AB, P, FX, RD, FD)
+-- which don't match the original enum values.
+ALTER TABLE "ToothPlacement" ALTER COLUMN "legend" TYPE text;
 
 INSERT INTO "slotScheduler" (label, location, "scheduleFlags", "morningAllowed", "afternoonAllowed", notes, "isActive", "containsCustomDates", "whitelistOnly")
 VALUES

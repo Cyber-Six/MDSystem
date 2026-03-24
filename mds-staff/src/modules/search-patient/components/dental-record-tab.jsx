@@ -215,10 +215,12 @@ export default function PatientDentalRecordTab({ patient }) {
 
   // Save tooth chart + oral findings together in one request
   const handleSaveToothChart = async (newStates) => {
-    const toothPlacements = Object.entries(newStates).map(([toothIndex, legend]) => ({
-      toothIndex: parseInt(toothIndex, 10),
-      legend,
-    }));
+    const toothPlacements = Object.entries(newStates)
+      .filter(([, legend]) => legend !== '✓') // ✓ is the default (Caries-free) — not stored in DB
+      .map(([toothIndex, legend]) => ({
+        toothIndex: parseInt(toothIndex, 10),
+        legend,
+      }));
 
     const oralFindingsInput = Object.entries(oralFindings)
       .filter(([, status]) => status !== null && status !== undefined)
