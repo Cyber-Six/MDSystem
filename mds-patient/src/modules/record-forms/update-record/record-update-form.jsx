@@ -31,6 +31,10 @@ const RecordUpdateForm = () => {
   const [dbErrors, setDbErrors] = useState([]);
   const [showDbErrorModal, setShowDbErrorModal] = useState(false);
 
+  // Validation error tracking
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+
   // Check for pending revision request on mount
   useEffect(() => {
     const checkForRevision = async () => {
@@ -109,12 +113,12 @@ const RecordUpdateForm = () => {
   // Validate required fields before allowing Next
   const validateCurrentStep = () => {
     const stepName = steps[currentStep];
+    const errors = [];
 
     if (stepName === 'Medical History') {
       // Lifestyle habits are always required
       if (!formData.smoking || !formData.alcohol) {
-        alert('Please fill in all Lifestyle Habits (Smoking, Alcohol) before proceeding.');
-        return false;
+        errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in all Lifestyle Habits (Smoking, Alcohol) before proceeding.' });
       }
       // If user said yes to allergies, check sub-fields
       if (formData.hasAllergies === 'yes') {
@@ -123,8 +127,8 @@ const RecordUpdateForm = () => {
           for (const allergenId of selectedAllergies) {
             const detail = formData.allergyDetails?.[allergenId];
             if (!detail?.status || !detail?.severity) {
-              alert('Please fill in Status and Severity for all selected allergies.');
-              return false;
+              errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in Status and Severity for all selected allergies.' });
+              break;
             }
           }
         }
@@ -132,70 +136,75 @@ const RecordUpdateForm = () => {
       // If user said yes to hospitalizations, check sub-fields
       if (formData.hasHospitalizations === 'yes') {
         if (!formData.admissionDate) {
-          alert('Please fill in the Admission Date for your hospitalization.');
-          return false;
+          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Admission Date for your hospitalization.' });
         }
       }
       // If user said yes to surgeries, check sub-fields
       if (formData.hasSurgeries === 'yes') {
         if (!formData.operationDate) {
-          alert('Please fill in the Operation Date for your surgery.');
-          return false;
+          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Operation Date for your surgery.' });
         }
       }
       // If user said yes to medications, check at least one medication entry
       if (formData.hasMedications === 'yes') {
         const meds = formData.currentMedications || [];
         if (meds.length === 0) {
-          alert('Please add at least one medication.');
-          return false;
-        }
-        for (const med of meds) {
-          if (!med.medicineId) {
-            alert('Please fill in the medication name/selection for all added medications.');
-            return false;
+          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please add at least one medication.' });
+        } else {
+          for (const med of meds) {
+            if (!med.medicineId) {
+              errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the medication name/selection for all added medications.' });
+              break;
+            }
           }
         }
       }
-      return true;
     }
 
     if (stepName === 'Dental History') {
+      const stepIndexForDental = recordType === 'both' ? 2 : 1;
+      
       // Dentist visit info is required
       if (formData.seenByDentist === undefined || formData.seenByDentist === null) {
-        alert('Please indicate whether you have visited a dentist.');
-        return false;
+        errors.push({ section: 'Dental History', sectionIndex: stepIndexForDental, message: 'Please indicate whether you have visited a dentist.' });
       }
       if (!formData.lastDentalCleaning) {
-        alert('Please select when your last dental cleaning was.');
-        return false;
+        errors.push({ section: 'Dental History', sectionIndex: stepIndexForDental, message: 'Please select when your last dental cleaning was.' });
       }
       // Validate oral appliance entries if any were added
       const appliances = formData.oralAppliances || [];
       for (const appliance of appliances) {
         if (!appliance.tagId || !appliance.status || !appliance.dateIssued) {
-          alert('Please fill in all required fields (Type, Status, Date Issued) for each oral appliance.');
-          return false;
+          errors.push({ section: 'Dental History', sectionIndex: stepIndexForDental, message: 'Please fill in all required fields (Type, Status, Date Issued) for each oral appliance.' });
+          break;
         }
       }
       // Validate dental procedure dates if any were selected
       const procedures = formData.dentalProcedures || [];
       for (const proc of procedures) {
         if (!proc.procedureDate) {
-          alert('Please fill in the Date of Procedure for all selected dental procedures.');
-          return false;
+          errors.push({ section: 'Dental History', sectionIndex: stepIndexForDental, message: 'Please fill in the Date of Procedure for all selected dental procedures.' });
+          break;
         }
       }
       // Dental photos are required (backend DentalPhotoRecordInput requires UUID! for both fields)
-      if (!formData.upperTeethPhoto?.file) {
-        alert('Please upload a photo of your upper teeth.');
-        return false;
+      // Photos are valid if they have either:
+      // 1. .file (newly uploaded) OR
+      // 2. .id (pre-filled from previous revision)
+      if (!formData.upperTeethPhoto?.file && !formData.upperTeethPhoto?.id) {
+        errors.push({ section: 'Dental History', sectionIndex: stepIndexForDental, message: 'Please upload a photo of your upper teeth.' });
       }
-      if (!formData.lowerTeethPhoto?.file) {
-        alert('Please upload a photo of your lower teeth.');
-        return false;
+      if (!formData.lowerTeethPhoto?.file && !formData.lowerTeethPhoto?.id) {
+        errors.push({ section: 'Dental History', sectionIndex: stepIndexForDental, message: 'Please upload a photo of your lower teeth.' });
       }
-      return true;
+    }
+
+    // If errors exist, show the modal and don't allow navigation
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      setShowValidationModal(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return false;
     }
 
     return true;
@@ -439,6 +448,17 @@ const RecordUpdateForm = () => {
         variant="error"
         title="Submission Failed"
         subtitle="The server rejected your submission. Please fix the issue below and try again."
+      />
+
+      {/* Validation Error Modal */}
+      <ValidationWarningModal
+        isOpen={showValidationModal}
+        onClose={() => setShowValidationModal(false)}
+        errors={validationErrors}
+        onGoToSection={(stepIndex) => { setCurrentStep(stepIndex); setShowValidationModal(false); }}
+        variant="error"
+        title="Incomplete Form"
+        subtitle="Please fix the following issues before proceeding to the next step."
       />
 
       {/* Revision Request Banner - Show if revision is pending */}

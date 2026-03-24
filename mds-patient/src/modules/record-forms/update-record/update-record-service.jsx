@@ -1378,15 +1378,36 @@ export async function submitDentalUpdate(formData) {
   let lowerTeethFileId = null;
 
   try {
-    // Upload dental photos in parallel (if provided)
-    console.log('[Dental Update] Uploading dental photos...');
-    const [upperResult, lowerResult] = await Promise.allSettled([
-      uploadMediaFile(formData.upperTeethPhoto?.file ?? null),
-      uploadMediaFile(formData.lowerTeethPhoto?.file ?? null),
-    ]);
-    upperTeethFileId = upperResult.status === 'fulfilled' ? upperResult.value : null;
-    lowerTeethFileId = lowerResult.status === 'fulfilled' ? lowerResult.value : null;
-    console.log('[Dental Update] Photos staged:', { upperTeethFileId, lowerTeethFileId });
+    // Handle dental photos
+    // For new uploads: upload the file and get a fileId
+    // For pre-filled revisions: use the existing ID from the previous submission
+    console.log('[Dental Update] Processing dental photos...');
+    
+    // Handle upper teeth photo
+    if (formData.upperTeethPhoto?.file) {
+      // New upload
+      const result = await uploadMediaFile(formData.upperTeethPhoto.file);
+      upperTeethFileId = result;
+      console.log('[Dental Update] Upper teeth photo uploaded, fileId:', upperTeethFileId);
+    } else if (formData.upperTeethPhoto?.id) {
+      // Pre-filled from revision - use existing photo UUID
+      upperTeethFileId = formData.upperTeethPhoto.id;
+      console.log('[Dental Update] Upper teeth photo kept from revision, id:', upperTeethFileId);
+    }
+    
+    // Handle lower teeth photo
+    if (formData.lowerTeethPhoto?.file) {
+      // New upload
+      const result = await uploadMediaFile(formData.lowerTeethPhoto.file);
+      lowerTeethFileId = result;
+      console.log('[Dental Update] Lower teeth photo uploaded, fileId:', lowerTeethFileId);
+    } else if (formData.lowerTeethPhoto?.id) {
+      // Pre-filled from revision - use existing photo UUID
+      lowerTeethFileId = formData.lowerTeethPhoto.id;
+      console.log('[Dental Update] Lower teeth photo kept from revision, id:', lowerTeethFileId);
+    }
+    
+    console.log('[Dental Update] Photos processed:', { upperTeethFileId, lowerTeethFileId });
 
     // Dental History
     console.log('[Dental Update] Creating dental history...');
