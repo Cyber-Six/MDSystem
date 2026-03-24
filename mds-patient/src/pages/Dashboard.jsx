@@ -53,6 +53,7 @@ const Dashboard = () => {
   const [showInitialRecordModal, setShowInitialRecordModal] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [recordStatus, setRecordStatus] = useState(null);
+  const [isVerified, setIsVerified] = useState(null); // null=checking, true=verified, false=unverified
   const [revisionData, setRevisionData] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [revisionNote, setRevisionNote] = useState(null);
@@ -80,12 +81,26 @@ const Dashboard = () => {
 
         console.log('[Dashboard] Checking initial record status...');
         console.log('[Dashboard] User role detected:', detectedRole);
+        
+        // Get credential status first to determine if patient is verified
+        let credStatus = null;
+        try {
+          const credResponse = await axiosRequest.post('/profile/patient', {
+            query: `query { getCredentialStatus }`
+          });
+          credStatus = credResponse.data?.data?.getCredentialStatus;
+        } catch (err) {
+          console.warn('[Dashboard] Could not fetch credential status:', err.message);
+        }
+        
+        setIsVerified(credStatus && credStatus !== 'Unverified');
+        
         const [{ needsInitialRecord, status, notes: ticketNotes }, branchInfo] = await Promise.all([
           checkInitialRecordStatus(),
           getMyBranchIdentifier(),
         ]);
         
-        console.log('[Dashboard] Initial record check result:', { needsInitialRecord, status });
+        console.log('[Dashboard] Initial record check result:', { needsInitialRecord, status, isVerified: credStatus });
         console.log('[Dashboard] Patient branch:', branchInfo?.branch ?? 'not set', '| identifier:', branchInfo?.identifier ?? 'not set');
         
         setRecordStatus(status);
@@ -147,8 +162,9 @@ const Dashboard = () => {
     );
   }
 
-  // Show revision-submitted screen when patient has resubmitted after a revision request
-  if (recordStatus === 'RevisionSubmitted') {
+  // Show revision-submitted screen ONLY for unverified patients waiting for initial record approval
+  // Verified patients with pending revisions should still access dashboard normally
+  if (recordStatus === 'RevisionSubmitted' && isVerified === false) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -215,8 +231,9 @@ const Dashboard = () => {
     );
   }
 
-  // Show pending approval screen when initial record is awaiting staff verification
-  if (recordStatus === 'Pending') {
+  // Show pending approval screen ONLY for unverified patients waiting for initial record approval
+  // Verified patients with pending updates should still access dashboard normally
+  if (recordStatus === 'Pending' && isVerified === false) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">

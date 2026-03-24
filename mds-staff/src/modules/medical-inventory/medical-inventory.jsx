@@ -13,7 +13,7 @@ import DispenseModal from './components/dispense-queue/dispense-modal';
 import DispenseMedicineModal from './components/dispense-medicine/dispense-medicine-modal';
 import RequestActionModal from './components/dispense-queue/request-action-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
-import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
+import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
 import {
@@ -310,35 +310,99 @@ const MedicalInventory = () => {
     setSuccessMsg(`Batch ${batch.batchNumber} received (${batch.quantity} units).`);
   };
 
-  const handleSplit = ({ sourceBatchId, quantity, toClinic, notes }) => {
-    const source = batches.find((b) => b.id === sourceBatchId);
-    if (!source || quantity > source.currentQuantity) {
-      setError('Invalid split: insufficient quantity.');
-      return;
+  const handleSplit = async ({ sourceBatchId, quantity, toClinic, notes }) => {
+    try {
+      const source = batches.find((b) => b.id === sourceBatchId);
+      if (!source) {
+        setError('Source batch not found.');
+        return;
+      }
+
+      // Determine if this is a medicine or supply batch
+      const isMedicine = source.dosageUnit !== undefined; // Medicine batches have dosageUnit
+      
+      if (quantity > source.currentQuantity) {
+        setError(`Insufficient quantity. Available: ${source.currentQuantity}, requested: ${quantity}`);
+        return;
+      }
+
+      // Call the appropriate split mutation
+      const newBatch = isMedicine
+        ? await splitMedicineSupply(sourceBatchId, {
+            quantity,
+            targetLocation: toClinic,
+            notes: notes || undefined,
+          })
+        : await splitMedicalSupply(sourceBatchId, {
+            quantity,
+            targetLocation: toClinic,
+            notes: notes || undefined,
+          });
+
+      // Update source batch locally
+      setBatches((prevBatches) =>
+        prevBatches
+          .map((b) => 
+            b.id === sourceBatchId 
+              ? { ...b, currentQuantity: b.currentQuantity - quantity }
+              : b
+          )
+          .concat([
+            isMedicine
+              ? {
+                  id: newBatch.id,
+                  medicalItemId: newBatch.medicalItemId,
+                  batchNumber: newBatch.batchNumber,
+                  dosageValue: newBatch.dosageValue,
+                  dosageUnit: newBatch.dosageUnit,
+                  currentQuantity: quantity,
+                  availableQuantity: quantity,
+                  initialQuantity: quantity,
+                  expiryDate: newBatch.expiryDate,
+                  location: newBatch.location,
+                  supplierName: newBatch.supplierName,
+                  notes: newBatch.notes,
+                }
+              : {
+                  id: newBatch.id,
+                  medicalItemId: newBatch.supplyItemId,
+                  batchNumber: newBatch.batch_number,
+                  currentQuantity: newBatch.currentQuantity,
+                  initialQuantity: newBatch.initialQuantity,
+                  unit: newBatch.unit,
+                  expiryDate: newBatch.expiry_date,
+                  location: newBatch.location,
+                  supplierName: newBatch.supplier_name,
+                  notes: newBatch.notes,
+                },
+          ])
+      );
+
+      // Record transaction
+      const txId = Math.max(...transactions.map((t) => t.id), 0) + 1;
+      const item = items.find((i) => i.id === source.medicalItemId);
+      setTransactions([
+        {
+          id: txId,
+          patientId: null,
+          patientName: null,
+          action: 'transfer',
+          quantity,
+          issuedBy: 101,
+          issuedByName: 'Current User',
+          issuedAt: new Date().toISOString(),
+          notes: `Split from ${source.batchNumber} → ${toClinic}. ${notes || ''}`.trim(),
+          itemName: item?.item_name || '',
+          batchNumber: newBatch.batchNumber || newBatch.batch_number,
+        },
+        ...transactions,
+      ]);
+
+      setShowSplitSupply(false);
+      setSuccessMsg(`Successfully split ${quantity} units to ${toClinic}.`);
+    } catch (err) {
+      setError(err.message || 'Failed to split supply. Please try again.');
     }
-    const newId = Math.max(...batches.map((b) => b.id)) + 1;
-    const newBatch = {
-      ...source,
-      id: newId,
-      batchNumber: `${toClinic.substring(0, 3).toUpperCase()}-SPLIT-${newId}`,
-      location: toClinic,
-      initialQuantity: quantity,
-      currentQuantity: quantity,
-      notes: `Split from ${source.batchNumber}. ${notes || ''}`.trim(),
-    };
-    setBatches(batches.map((b) => b.id === sourceBatchId ? { ...b, currentQuantity: b.currentQuantity - quantity } : b).concat(newBatch));
-    // Record transactions
-    const txId = Math.max(...transactions.map((t) => t.id)) + 1;
-    const item = items.find((i) => i.id === source.medicalItemId);
-    setTransactions([{
-      id: txId, patientId: null, patientName: null, action: 'transfer',
-      quantity, issuedBy: 101, issuedByName: 'Current User',
-      issuedAt: new Date().toISOString(),
-      notes: `Split from ${source.batchNumber} → ${toClinic}`,
-      itemName: item?.item_name || '', batchNumber: newBatch.batchNumber,
-    }, ...transactions]);
-    setShowSplitSupply(false);
-    setSuccessMsg(`Split ${quantity} units to ${toClinic}.`);
   };
 
   // Auto-load all medicine requests on mount (all statuses)
