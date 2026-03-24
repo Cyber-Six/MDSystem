@@ -134,7 +134,7 @@ async function notifyUser(userId, eventName, data, emailNotif = null) {
   if (pushContent) {
     const pushToken = await getPushToken(String(userId));
     if (pushToken) {
-      await sendExpoPushNotification(pushToken, pushContent.title, pushContent.body, { chatId: data?.chatId ?? data?.chat?.id });
+      await sendExpoPushNotification(pushToken, pushContent.title, pushContent.body, { chatId: data?.chatId ?? data?.chat?.id }, String(userId));
     }
   }
 

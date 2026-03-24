@@ -95,7 +95,7 @@ async function getPendingCount(userId) {
   }
 }
 
-module.exports = { pushPending, flushPending, getPendingCount };
+module.exports = { pushPending, flushPending, getPendingCount, savePushToken, getPushToken, deletePushToken };
 
 // ── Expo Push Token Store ─────────────────────────────────────────────────────
 // Tokens are stored in Redis with a 30-day TTL.
@@ -147,5 +147,3 @@ async function deletePushToken(userId) {
     logger.error(`[PUSH_TOKEN] Failed to delete token for user:${userId}: ${err.message}`);
   }
 }
-
-Object.assign(module.exports, { savePushToken, getPushToken, deletePushToken });

@@ -13,6 +13,7 @@
 
 const { Expo } = require('expo-server-sdk');
 const logger = require('../../utils/logger');
+const { deletePushToken } = require('./notification-store');
 
 const expo = new Expo();
 
@@ -58,8 +59,9 @@ function eventToPushContent(eventName, data) {
  * @param {string} title
  * @param {string} body
  * @param {object} [data]      - Custom data payload (accessible in the app on tap)
+ * @param {string} [userId]    - User ID for token cleanup on DeviceNotRegistered
  */
-async function sendExpoPushNotification(pushToken, title, body, data = {}) {
+async function sendExpoPushNotification(pushToken, title, body, data = {}, userId = null) {
   if (!Expo.isExpoPushToken(pushToken)) {
     logger.warn(`[PUSH] Invalid Expo push token: ${pushToken}`);
     return;
@@ -82,8 +84,10 @@ async function sendExpoPushNotification(pushToken, title, body, data = {}) {
         if (ticket.status === 'error') {
           logger.warn(`[PUSH] Push ticket error: ${ticket.message}`);
           if (ticket.details?.error === 'DeviceNotRegistered') {
-            // Token is expired/unregistered — caller should clean it up
-            logger.info('[PUSH] Token is no longer registered, should be cleaned.');
+            logger.info('[PUSH] Token is no longer registered, cleaning up.');
+            if (userId) {
+              await deletePushToken(String(userId));
+            }
           }
         }
       }
