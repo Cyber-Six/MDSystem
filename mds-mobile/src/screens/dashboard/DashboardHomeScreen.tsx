@@ -170,7 +170,13 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary[500]]}
+            tintColor={colors.primary[500]}
+            progressBackgroundColor={colors.secondary[900]}
+          />
         }
       >
         {/* Header */}
@@ -596,7 +602,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               },
             ]}
           >
-            MDSystem Mobile v1.0.0
+            MDSystem Mobile {process.env.EXPO_PUBLIC_APP_VERSION}
           </Text>
         </View>
       </ScrollView>

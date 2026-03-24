@@ -69,7 +69,15 @@ export const LoginActivityScreen: React.FC = () => {
     <View style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadActivity(); }} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); loadActivity(); }}
+            colors={[colors.primary[500]]}
+            tintColor={colors.primary[500]}
+            progressBackgroundColor={colors.secondary[900]}
+          />
+        }
       >
         {/* Info banner */}
         <View style={[styles.infoBanner, { backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : colors.accent[50] }]}>

@@ -72,7 +72,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary[500]]}
+            tintColor={colors.primary[500]}
+            progressBackgroundColor={colors.secondary[900]}
+          />
         }
       >
         {/* Header */}
@@ -238,7 +244,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
             styles.footerText,
             { color: isDark ? colors.neutral[500] : colors.neutral[400] }
           ]}>
-            MDSystem Mobile v1.0.0
+            MDSystem Mobile {process.env.EXPO_PUBLIC_APP_VERSION}
           </Text>
           <Text style={[
             styles.footerCopyright,

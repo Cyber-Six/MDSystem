@@ -15,6 +15,7 @@ import { MedicineRequestScreen } from '../screens/medicine/MedicineRequestScreen
 import { MoreStackNavigator } from './MoreStackNavigator';
 import { useTheme, colors } from '../context/ThemeContext';
 import PendingRecordGate from '../components/PendingRecordGate';
+import { useHealthChatBadge } from '../context/HealthChatNotificationProvider';
 
 // Wrap screens that should be gated behind initial-record approval
 const GatedAppointmentScreen = (props: any) => (
@@ -46,6 +47,7 @@ const TabIcon: React.FC<{ icon: string; focused: boolean }> = ({
 export const MainTabNavigator: React.FC = () => {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { badgeCount } = useHealthChatBadge();
 
   // On Android, bottom insets can be 0 even with gesture nav. Ensure a minimum.
   const bottomPadding = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 10);
@@ -105,6 +107,8 @@ export const MainTabNavigator: React.FC = () => {
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="💬" focused={focused} />
           ),
+          tabBarBadge: badgeCount > 0 ? badgeCount : undefined,
+          keyboardHidesTabBar: true,
         }}
       />
       <Tab.Screen

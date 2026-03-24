@@ -14,7 +14,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { logout } from '../../core';
+import { logout, axiosRequest } from '../../core';
+import { unregisterPushToken } from '../../services/notification-service';
 import { getPatientProfile } from '../../services/profile-service';
 
 interface MoreMenuScreenProps {
@@ -57,6 +58,8 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
 
   const handleLogout = async () => {
     try {
+      // Unregister push token before clearing auth tokens
+      await unregisterPushToken(axiosRequest);
       await logout();
     } catch {}
     setAuthenticated(false);
@@ -199,7 +202,7 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
               { color: isDark ? colors.neutral[600] : colors.neutral[300] },
             ]}
           >
-            MDSystem Mobile v1.0.0
+            MDSystem Mobile {process.env.EXPO_PUBLIC_APP_VERSION}
           </Text>
         </View>
       </ScrollView>
