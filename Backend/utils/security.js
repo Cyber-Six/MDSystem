@@ -15,8 +15,8 @@ async function verifyPassword(password, hash) {
   return await bcrypt.compare(password, hash);
 }
 
-function generateRandomKey() {
-  return crypto.randomBytes(32).toString("hex"); // 64-char token
+function generateRandomKey(length=32) {
+  return crypto.randomBytes(length).toString("hex"); // 64-char token
   }
 
 function hashOTP(otp) {

@@ -81,6 +81,25 @@ async function enqueueResetPassword(userEmail, portal = "patient") {
   };
 }
 
+async function enqueueAdminTransferEmail(userEmail, verificationToken, newAdminEmail) {
+  const job = await emailQueue.add('sendAdminTransferEmail', {
+    userEmail,
+    data: { verificationToken, newAdminEmail },
+  }, {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 1000 },
+    removeOnComplete: true,
+  });
+  const waitingCount = await emailQueue.getWaitingCount();
+  logger.debug(`Enqueued admin transfer email for ${userEmail}, job ID: ${job.id}`);
+  return {
+    jobId: job.id,
+    position: waitingCount,
+    expectedArrivalSeconds: waitingCount * (Number(process.env.EMAIL_DELAY) || 1),
+    validitySeconds: 600, // 10 minutes
+  };
+}
+
 /**
  * Enqueue a generic notification email for any system event.
  * All notification emails funnel through this single job name ('sendNotificationEmail').
@@ -200,6 +219,85 @@ function passwordResetTemplate(sessionToken, portal) {
   `;
 }
 
+function adminTransferTemplate(verificationToken, newAdminEmail) {
+  const timestamp = new Date().toLocaleString('en-US', {
+    timeZone: 'UTC',
+    dateStyle: 'full',
+    timeStyle: 'long'
+  });
+
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 2px solid #dc3545; border-radius: 10px; background-color: #fff5f5;">
+      <div style="background-color: #dc3545; color: white; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h2 style="margin: 0;">⚠️ Admin Privilege Transfer Request</h2>
+      </div>
+
+      <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+        <strong style="color: #856404;">CRITICAL SECURITY ACTION REQUIRED</strong>
+      </div>
+
+      <p><strong>Request initiated at:</strong> ${timestamp} (UTC)</p>
+      <p>You have initiated a request to transfer admin privileges to:</p>
+      <p style="font-size: 18px; font-weight: bold; color: #2F4F4F; text-align: center; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
+        ${newAdminEmail}
+      </p>
+
+      <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 20px 0; border-radius: 5px;">
+        <h3 style="color: #721c24; margin-top: 0;">⚠️ Warning: This action will:</h3>
+        <ul style="color: #721c24;">
+          <li><strong>Grant full administrative privileges</strong> to ${newAdminEmail}</li>
+          <li><strong>Permanently remove YOUR admin privileges</strong></li>
+          <li><strong>Cannot be undone</strong> without intervention from the new admin</li>
+          <li><strong>Invalidate any pending transfer requests</strong></li>
+        </ul>
+      </div>
+
+      <p style="margin-top: 30px;"><strong>To confirm this transfer, use the following verification token:</strong></p>
+
+      <div style="text-align:center; margin: 25px 0;">
+        <div style="font-size: 22px; font-weight: bold; letter-spacing: 4px; background:#2F4F4F; color: white; padding:15px 25px; border-radius:8px; font-family: 'Courier New', monospace;">
+          ${verificationToken}
+        </div>
+      </div>
+
+      <div style="background-color: #d1ecf1; border-left: 4px solid #17a2b8; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #0c5460;"><strong>Token Security:</strong></p>
+        <ul style="color: #0c5460; margin-top: 10px;">
+          <li>This token will <strong>expire in 10 minutes</strong></li>
+          <li>Can only be used <strong>once</strong></li>
+          <li>Only valid for this specific transfer request</li>
+          <li>Do not share this token with anyone</li>
+        </ul>
+      </div>
+
+      <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; margin: 20px 0; border-radius: 5px;">
+        <p style="margin: 0; color: #495057;"><strong>🔒 Security Recommendations:</strong></p>
+        <ul style="color: #495057; margin-top: 10px;">
+          <li>Verify you initiated this request</li>
+          <li>Confirm the recipient email address is correct</li>
+          <li>Ensure the new admin has completed all required security training</li>
+          <li>Document this transfer in your administrative records</li>
+        </ul>
+      </div>
+
+      <p style="color:#dc3545; font-weight: bold; margin-top: 30px;">⚠️ If you did NOT initiate this transfer:</p>
+      <ol style="color:#dc3545;">
+        <li><strong>Do NOT use the verification token</strong></li>
+        <li><strong>Secure your account immediately</strong> (change password, review active sessions)</li>
+        <li><strong>Contact your system security team</strong></li>
+        <li><strong>Report this as a potential security incident</strong></li>
+      </ol>
+
+      <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+
+      <p style="color:#6c757d; font-size: 12px; text-align: center;">
+        This is an automated security notification from MDSystem.<br>
+        For security reasons, do not reply to this email.
+      </p>
+    </div>
+  `;
+}
+
 
 // -------------------- Builder --------------------
 function buildEmailTemplate(job_name, userEmail, data) {
@@ -224,6 +322,9 @@ function buildEmailTemplate(job_name, userEmail, data) {
       ctaText: data.ctaText,
       ctaLink: data.ctaLink,
     });
+  } else if (job_name === 'sendAdminTransferEmail') {
+    subject = 'Admin Privilege Transfer Request';
+    htmlContent = adminTransferTemplate(data.verificationToken, data.newAdminEmail);
   } else {
     subject = 'Your MDSystem OTP Verification';
     htmlContent = emailVerificationTemplate(data.otp); // fallback
@@ -238,6 +339,7 @@ module.exports = {
   enqueueEmail2FA,
   enqueueResetPassword,
   enqueueNotificationEmail,
+  enqueueAdminTransferEmail,
   buildEmailTemplate,
   notificationTemplate,
 };

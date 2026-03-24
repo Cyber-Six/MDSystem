@@ -773,6 +773,205 @@ async function decrementMediaStagingCount(userId) {
   return newCount;
 }
 
+// ------------------------------------------------
+// Admin Transfer Token Management
+// ------------------------------------------------
+
+const ADMIN_TRANSFER_EXPIRATION = 600; // 10 minutes
+
+async function createAdminTransferSession(oldAdminId, newAdminId, verificationToken) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `admin:transfer:${verificationToken}`;
+
+  await client.hSet(key, {
+    old_admin_id: oldAdminId.toString(),
+    new_admin_id: newAdminId.toString(),
+    created_at: Date.now().toString(),
+  });
+
+  await client.expire(key, ADMIN_TRANSFER_EXPIRATION);
+
+  return verificationToken;
+}
+
+async function getAdminTransferSession(verificationToken) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `admin:transfer:${verificationToken}`;
+  const session = await client.hGetAll(key);
+
+  if (!session || !session.old_admin_id) return null;
+
+  return {
+    oldAdminId: session.old_admin_id,
+    newAdminId: session.new_admin_id,
+    createdAt: parseInt(session.created_at, 10),
+  };
+}
+
+async function deleteAdminTransferSession(verificationToken) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `admin:transfer:${verificationToken}`;
+  await client.del(key);
+  return true;
+}
+
+// ------------------------------------------------
+// Admin Transfer Rate Limiting
+// ------------------------------------------------
+
+const ADMIN_TRANSFER_COOLDOWN = 300; // 5-minute cooldown between initiation attempts
+const ADMIN_TRANSFER_PASSWORD_FAIL_TTL = 3600; // 1 hour window for failures
+const ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD = 3; // 3 failures before lockout
+const ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT = 1800; // 30-minute lockout
+
+/**
+ * Record admin transfer initiation attempt and check cooldown
+ * @param {number} adminId
+ * @returns {Promise<{allowed: boolean, retryAfterSeconds: number}>}
+ */
+async function recordAdminTransferAttempt(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `admin:transfer:attempt:${adminId}`;
+  const lastAttempt = await client.get(key);
+
+  if (lastAttempt) {
+    // Still in cooldown
+    const ttl = await client.ttl(key);
+    return {
+      allowed: false,
+      retryAfterSeconds: ttl > 0 ? ttl : ADMIN_TRANSFER_COOLDOWN,
+    };
+  }
+
+  // Set cooldown for next attempt
+  await client.set(key, Date.now().toString(), { EX: ADMIN_TRANSFER_COOLDOWN });
+
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+/**
+ * Check if admin has an active pending transfer
+ * @param {number} adminId
+ * @returns {Promise<{hasPending: boolean, tokenPrefix: string | null}>}
+ */
+async function getAdminActivePendingTransfer(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  // Scan for active transfer sessions with this admin
+  const pattern = `admin:transfer:*`;
+  let hasPending = false;
+  let tokenFound = null;
+
+  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 10 })) {
+    const session = await client.hGetAll(key);
+    if (session && session.old_admin_id === adminId.toString()) {
+      hasPending = true;
+      const token = key.replace('admin:transfer:', '');
+      tokenFound = token.substring(0, 8) + '...';
+      break;
+    }
+  }
+
+  return { hasPending, tokenPrefix: tokenFound };
+}
+
+/**
+ * Record admin transfer password failure attempt
+ * @param {number} adminId
+ * @returns {Promise<{failures: number, locked: boolean, lockoutTTL: number}>}
+ */
+async function recordAdminTransferPasswordFailure(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const failKey = `admin:transfer:pw:fail:${adminId}`;
+  const lockKey = `admin:transfer:pw:lock:${adminId}`;
+
+  // Check if already locked out
+  const locked = await client.exists(lockKey);
+  if (locked) {
+    const ttl = await client.ttl(lockKey);
+    return {
+      failures: ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD,
+      locked: true,
+      lockoutTTL: ttl > 0 ? ttl : ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT,
+    };
+  }
+
+  // Increment failure count
+  const failures = await client.incr(failKey);
+
+  if (failures === 1) {
+    // Set TTL on first failure
+    await client.expire(failKey, ADMIN_TRANSFER_PASSWORD_FAIL_TTL);
+  }
+
+  // Lock if threshold reached
+  if (failures >= ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD) {
+    await client.set(lockKey, '1', { EX: ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT });
+    return {
+      failures,
+      locked: true,
+      lockoutTTL: ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT,
+    };
+  }
+
+  return {
+    failures,
+    locked: false,
+    lockoutTTL: 0,
+  };
+}
+
+/**
+ * Get current admin transfer password failure count
+ * @param {number} adminId
+ * @returns {Promise<number>}
+ */
+async function getAdminTransferPasswordFailureCount(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const failKey = `admin:transfer:pw:fail:${adminId}`;
+  const count = await client.get(failKey);
+  return Number(count) || 0;
+}
+
+/**
+ * Check if admin is locked out from transfer password attempts
+ * @param {number} adminId
+ * @returns {Promise<{locked: boolean, ttl: number}>}
+ */
+async function isAdminTransferPasswordLocked(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const lockKey = `admin:transfer:pw:lock:${adminId}`;
+  const exists = await client.exists(lockKey);
+
+  if (!exists) {
+    return { locked: false, ttl: 0 };
+  }
+
+  const ttl = await client.ttl(lockKey);
+  return { locked: true, ttl: ttl > 0 ? ttl : ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT };
+}
+
+/**
+ * Clear admin transfer password failures (after successful completion)
+ * @param {number} adminId
+ */
+async function clearAdminTransferPasswordFailures(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const failKey = `admin:transfer:pw:fail:${adminId}`;
+  const lockKey = `admin:transfer:pw:lock:${adminId}`;
+
+  await client.del(failKey);
+  await client.del(lockKey);
+}
+
 const LoginFailureMatrix = {
   patient: {
     prefix: "login:patient",
@@ -892,7 +1091,18 @@ module.exports = {
   getRefreshTokenFailures,
   isRefreshTokenLocked,
   clearRefreshTokenFailures,
-  
+
   incrementMediaStagingCount,
   decrementMediaStagingCount,
+
+  createAdminTransferSession,
+  getAdminTransferSession,
+  deleteAdminTransferSession,
+
+  recordAdminTransferAttempt,
+  getAdminActivePendingTransfer,
+  recordAdminTransferPasswordFailure,
+  getAdminTransferPasswordFailureCount,
+  isAdminTransferPasswordLocked,
+  clearAdminTransferPasswordFailures,
 };

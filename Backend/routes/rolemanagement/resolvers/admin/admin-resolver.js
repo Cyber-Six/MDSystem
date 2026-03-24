@@ -121,6 +121,16 @@ const Mutation = {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._applyTemplateToStaff(_, args, context);
   },
+
+  initiateAdminTransfer: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._initiateAdminTransfer(_, args, context);
+  },
+
+  confirmAdminTransfer: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._confirmAdminTransfer(_, args, context);
+  },
 };
 
 module.exports = { Query, Mutation };

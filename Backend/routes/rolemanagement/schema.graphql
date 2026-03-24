@@ -189,6 +189,20 @@ type RotateAnchorResult {
   sessionsInvalidated: Int!
 }
 
+# Admin transfer result type
+type InitiateAdminTransferResult {
+  ok: Boolean!
+  message: String!
+  verificationRequired: Boolean!
+}
+
+type ConfirmAdminTransferResult {
+  ok: Boolean!
+  message: String!
+  oldAdminId: ID
+  newAdminId: ID
+}
+
 # User session info for paginated listing
 type UserSession {
   userId: ID!
@@ -310,4 +324,10 @@ type Mutation {
 
   # Apply template to staff (copies template permissions to staff)
   applyTemplateToStaff(userId: ID!, templateId: ID!): MutationResult!
+
+  # Admin Transfer - Initiate the transfer process (requires password re-authentication)
+  initiateAdminTransfer(newAdminUserId: ID!, password: String!): InitiateAdminTransferResult!
+
+  # Admin Transfer - Confirm with verification token
+  confirmAdminTransfer(verificationToken: String!): ConfirmAdminTransferResult!
 }

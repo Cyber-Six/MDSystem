@@ -62,6 +62,9 @@ function sleep(ms) {
         emailDetails = buildEmailTemplate(job.name, userEmail, data);
       } else if (job.name === 'sendNotificationEmail') {
         emailDetails = buildEmailTemplate(job.name, userEmail, data);
+      } else if (job.name === 'sendAdminTransferEmail') {
+        // Admin transfer email - uses userEmail instead of generic 'to'
+        emailDetails = buildEmailTemplate(job.name, userEmail, data);
       } else if (job.name === 'sendEmail') {
         emailDetails = { to, subject, htmlContent };
       }

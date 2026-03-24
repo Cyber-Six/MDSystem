@@ -9,15 +9,29 @@ const {
   listPermissionTemplates,
   updatePermissionTemplate,
   deletePermissionTemplate,
-  applyTemplateToStaff
+  applyTemplateToStaff,
+  setMedicalPermit,
+  unsetMedicalPermit,
+  isMedicalPermitted
 } = require('../../../../services/permit.js');
 const {
   listUserSessions,
   scanAllRefreshSessions,
   deleteAllUserSessions,
   getStaffAnchor,
-  saveStaffAnchor
+  saveStaffAnchor,
+  createAdminTransferSession,
+  getAdminTransferSession,
+  deleteAdminTransferSession,
+  recordAdminTransferAttempt,
+  getAdminActivePendingTransfer,
+  recordAdminTransferPasswordFailure,
+  getAdminTransferPasswordFailureCount,
+  isAdminTransferPasswordLocked,
+  clearAdminTransferPasswordFailures,
 } = require('../../../../config/redis.js');
+const { enqueueAdminTransferEmail } = require('../../../../services/emailservice.js');
+const { generateOTP, verifyPassword, delayRandom } = require('../../../../utils/security.js');
 const crypto = require('crypto');
 const logger = require('../../../../utils/logger.js');
 const { throwGraphQLError } = require('../../../../utils/graphql-helper.js');
@@ -874,6 +888,623 @@ const Mutation = {
         .message(`Failed to apply template: ${error.message}`)
         .status(500)
         .throw();
+    }
+  },
+
+  _initiateAdminTransfer: async (_, { newAdminUserId, password }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    if (!password) {
+      throwGraphQLError(res)
+        .message('Password is required to initiate admin transfer.')
+        .status(400)
+        .throw();
+    }
+
+    const oldAdminId = user.id;
+
+    try {
+      // ✅ RATE LIMIT 1: Check if admin is locked out from password failures
+      const { locked: pwLocked, ttl: pwLockTTL } = await isAdminTransferPasswordLocked(oldAdminId);
+      if (pwLocked) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Admin locked out - too many password failures',
+            lockoutRemainingSeconds: pwLockTTL,
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        logger.warn(`Admin ${oldAdminId} attempted transfer while password-locked (TTL: ${pwLockTTL}s)`);
+
+        throwGraphQLError(res)
+          .message(`Too many password failures. Try again in ${pwLockTTL} seconds.`)
+          .status(429)
+          .throw();
+      }
+
+      // ✅ RATE LIMIT 2: Check initiation cooldown (5-minute minimum between transfers)
+      const { allowed: canInitiate, retryAfterSeconds } = await recordAdminTransferAttempt(oldAdminId);
+      if (!canInitiate) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Transfer initiation cooldown active',
+            retryAfterSeconds,
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        logger.info(`Admin ${oldAdminId} on transfer initiation cooldown (${retryAfterSeconds}s remaining)`);
+
+        throwGraphQLError(res)
+          .message(`Transfer already initiated. Try again in ${retryAfterSeconds} seconds.`)
+          .status(429)
+          .throw();
+      }
+
+      // ✅ RATE LIMIT 3: Check for active pending transfer
+      const { hasPending, tokenPrefix } = await getAdminActivePendingTransfer(oldAdminId);
+      if (hasPending) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Duplicate transfer attempt - transfer already pending',
+            existingTokenPrefix: tokenPrefix,
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        logger.warn(`Admin ${oldAdminId} attempted duplicate transfer (token: ${tokenPrefix})`);
+
+        throwGraphQLError(res)
+          .message('You already have a pending admin transfer. Complete or cancel it first.')
+          .status(409)
+          .throw();
+      }
+
+      // Get current admin's user record for password verification
+      const oldAdminEmail = await db.findEmailByUserId(oldAdminId);
+      if (!oldAdminEmail) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Current admin email not found',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Unable to verify your credentials.')
+          .status(500)
+          .throw();
+      }
+
+      // Fetch admin credentials to verify password
+      const adminCredentials = await db.findUserByEmail(oldAdminEmail);
+      if (!adminCredentials || !adminCredentials.password_hash) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Current admin credentials not found',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Unable to verify your credentials.')
+          .status(500)
+          .throw();
+      }
+
+      // ✅ CRITICAL: Verify password
+      const passwordValid = await verifyPassword(password, adminCredentials.password_hash);
+      if (!passwordValid) {
+        // Record the failed attempt and get updated failure count and lockout status
+        const { failures, locked, lockoutTTL } = await recordAdminTransferPasswordFailure(oldAdminId);
+
+        const baseDelayMs = failures * 1000;
+        await delayRandom(Math.max(100, baseDelayMs - 100), baseDelayMs + 100);
+
+        // Log failed password attempt
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Invalid password provided',
+            passwordFailureCount: failures,
+            isLocked: locked,
+            lockoutTTL: locked ? lockoutTTL : null,
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        logger.warn(`Admin ${oldAdminId} invalid password (attempt ${failures}/${3}${locked ? ' - LOCKED' : ''})`);
+
+        if (locked) {
+          throwGraphQLError(res)
+            .message(`Too many invalid passwords. Locked for ${lockoutTTL} seconds.`)
+            .status(429)
+            .throw();
+        }
+
+        throwGraphQLError(res)
+          .message(`Invalid password. ${3 - failures} attempt(s) remaining before lockout.`)
+          .status(403)
+          .throw();
+      }
+
+      // ✅ Password valid - clear failure counter
+      await clearAdminTransferPasswordFailures(oldAdminId);
+
+      // Validate that new admin user exists and is different from current admin
+      if (oldAdminId === newAdminUserId) {
+        // Log failed attempt
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Cannot transfer to self',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Cannot transfer admin privileges to yourself.')
+          .status(400)
+          .throw();
+      }
+
+      // Check if new admin is an active medical personnel
+      const isActive = await db.isActiveMedicalPersonnel(newAdminUserId);
+      if (!isActive) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Target not active medical personnel',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Target user is not an active medical personnel.')
+          .status(400)
+          .throw();
+      }
+
+      // Check if new admin is validated
+      const isValidated = await db.isUserValidated(newAdminUserId);
+      if (!isValidated) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Target user not validated',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Target user has not been validated.')
+          .status(400)
+          .throw();
+      }
+
+      // Check if new admin has 2FA enabled
+      const newAdminUser = await db.findEmailByUserId(newAdminUserId);
+      if (!newAdminUser) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Target user not found',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Target user not found.')
+          .status(404)
+          .throw();
+      }
+
+      const newAdminData = await db.getUserConsentStateByEmail(newAdminUser);
+      if (!newAdminData?.allow_email_2fa) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Target user 2FA not enabled',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Target user must have 2FA enabled before becoming admin.')
+          .status(400)
+          .throw();
+      }
+
+      // Check if current admin has 2FA enabled
+      const oldAdminData = await db.getUserConsentStateByEmail(oldAdminEmail);
+
+      if (!oldAdminData?.allow_email_2fa) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Current admin 2FA not enabled',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        logger.warn(`Admin ${oldAdminId} attempted transfer without 2FA enabled`);
+        throwGraphQLError(res)
+          .message('Current admin must have 2FA enabled to transfer privileges.')
+          .status(400)
+          .throw();
+      }
+
+      // Generate verification token
+      const verificationToken = generateOTP(8);
+
+      // Store transfer session in Redis
+      await createAdminTransferSession(oldAdminId, newAdminUserId, verificationToken);
+
+      // Send verification email to current admin
+      await enqueueAdminTransferEmail(oldAdminEmail, verificationToken, newAdminUser);
+
+      // Log successful initiation
+      await db.setSystemAuditLog({
+        eventType: 'ADMIN_TRANSFER_INITIATED',
+        actorId: oldAdminId,
+        actorType: 'Medical',
+        targetId: newAdminUserId,
+        action: 'INITIATE_ADMIN_TRANSFER',
+        details: JSON.stringify({
+          oldAdminEmail,
+          newAdminEmail: newAdminUser,
+          tokenPrefix: verificationToken.substring(0, 8) + '...',
+          timestamp: new Date().toISOString(),
+        }),
+        changedBy: oldAdminId,
+      });
+
+      logger.info(`Admin transfer initiated: oldAdminId=${oldAdminId}, newAdminId=${newAdminUserId}`);
+
+      return {
+        ok: true,
+        message: 'Verification email sent. Please check your email and use the token to confirm the transfer.',
+        verificationRequired: true,
+      };
+    } catch (error) {
+      // If error wasn't already logged (non-GraphQL errors)
+      if (!error.extensions) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminUserId,
+          action: 'INITIATE_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: error.message,
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+      }
+      throw error;
+    }
+  },
+
+  _confirmAdminTransfer: async (_, { verificationToken }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    const currentUserId = user.id;
+    const pool = require('../../../../config/db.js');
+    const client = await pool.pool.connect();
+
+    try {
+      // Retrieve transfer session from Redis
+      const transferSession = await getAdminTransferSession(verificationToken);
+
+      if (!transferSession) {
+        // Log failed verification attempt
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: currentUserId,
+          actorType: 'Medical',
+          targetId: null,
+          action: 'CONFIRM_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Invalid or expired verification token',
+            tokenPrefix: verificationToken.substring(0, 8) + '...',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: currentUserId,
+        });
+
+        throwGraphQLError(res)
+          .message('Invalid or expired verification token.')
+          .status(400)
+          .throw();
+      }
+
+      const { oldAdminId, newAdminId } = transferSession;
+
+      // Verify that the current user is the old admin
+      if (currentUserId !== parseInt(oldAdminId, 10)) {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: currentUserId,
+          actorType: 'Medical',
+          targetId: newAdminId,
+          action: 'CONFIRM_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Unauthorized confirmation attempt',
+            expectedAdminId: oldAdminId,
+            attemptedByUserId: currentUserId,
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: currentUserId,
+        });
+
+        throwGraphQLError(res)
+          .message('You are not authorized to confirm this transfer.')
+          .status(403)
+          .throw();
+      }
+
+      // Verify that the old admin still has admin privileges
+      const isCurrentlyAdmin = await isMedicalPermitted(
+        oldAdminId,
+        permissions.is_admin,
+        null
+      );
+
+      if (!isCurrentlyAdmin) {
+        await deleteAdminTransferSession(verificationToken);
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminId,
+          action: 'CONFIRM_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Old admin no longer has admin privileges',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('You no longer have admin privileges.')
+          .status(403)
+          .throw();
+      }
+
+      // Re-validate new admin (in case status changed during verification period)
+      const isActive = await db.isActiveMedicalPersonnel(newAdminId);
+      if (!isActive) {
+        await deleteAdminTransferSession(verificationToken);
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminId,
+          action: 'CONFIRM_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Target user no longer active medical personnel',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Target user is no longer an active medical personnel.')
+          .status(400)
+          .throw();
+      }
+
+      const isValidated = await db.isUserValidated(newAdminId);
+      if (!isValidated) {
+        await deleteAdminTransferSession(verificationToken);
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminId,
+          action: 'CONFIRM_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Target user no longer validated',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Target user is no longer validated.')
+          .status(400)
+          .throw();
+      }
+
+      const newAdminEmail = await db.findEmailByUserId(newAdminId);
+      const newAdminData = await db.getUserConsentStateByEmail(newAdminEmail);
+      if (!newAdminData?.allow_email_2fa) {
+        await deleteAdminTransferSession(verificationToken);
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: oldAdminId,
+          actorType: 'Medical',
+          targetId: newAdminId,
+          action: 'CONFIRM_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Target user 2FA no longer enabled',
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: oldAdminId,
+        });
+
+        throwGraphQLError(res)
+          .message('Target user no longer has 2FA enabled.')
+          .status(400)
+          .throw();
+      }
+
+      const oldAdminEmail = await db.findEmailByUserId(oldAdminId);
+
+      // Perform atomic transfer using database transaction with raw SQL
+      await client.query('BEGIN');
+
+      // Grant admin to new user - raw SQL
+      await client.query(
+        `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
+         SELECT $1, r.id, 'Both', $2
+         FROM "rolesTable" r
+         WHERE r.label = $3
+         ON CONFLICT ("personnelId", "rolesId") DO UPDATE
+           SET branch = EXCLUDED.branch,
+               "assignedBy" = EXCLUDED."assignedBy"`,
+        [newAdminId, oldAdminId, permissions.is_admin]
+      );
+
+      // Remove admin from old user - raw SQL
+      await client.query(
+        `DELETE FROM "rolesMap"
+         WHERE "personnelId" = $1
+         AND "rolesId" = (SELECT id FROM "rolesTable" WHERE label = $2)`,
+        [oldAdminId, permissions.is_admin]
+      );
+
+      // Log audit trail within transaction
+      await client.query(
+        `INSERT INTO "SystemAuditLog"
+         ("event_type", "actorId", "actorType", "targetId", "action", "details", "changedBy")
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          'ADMIN_TRANSFER_SUCCESS',
+          oldAdminId,
+          'Medical',
+          newAdminId,
+          'TRANSFER_ADMIN_PRIVILEGES',
+          JSON.stringify({
+            oldAdminId,
+            oldAdminEmail,
+            newAdminId,
+            newAdminEmail,
+            verificationTokenPrefix: verificationToken.substring(0, 8) + '...',
+            timestamp: new Date().toISOString(),
+          }),
+          oldAdminId,
+        ]
+      );
+
+      await client.query('COMMIT');
+
+      // Delete the transfer session
+      await deleteAdminTransferSession(verificationToken);
+
+      logger.info(`Admin transfer completed successfully: oldAdminId=${oldAdminId}, newAdminId=${newAdminId}`);
+
+      return {
+        ok: true,
+        message: 'Admin privileges transferred successfully.',
+        oldAdminId: oldAdminId.toString(),
+        newAdminId: newAdminId.toString(),
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+
+      // Log rollback failure
+      try {
+        await db.setSystemAuditLog({
+          eventType: 'ADMIN_TRANSFER_FAILED',
+          actorId: currentUserId,
+          actorType: 'Medical',
+          targetId: null,
+          action: 'CONFIRM_ADMIN_TRANSFER',
+          details: JSON.stringify({
+            reason: 'Transaction failed and rolled back',
+            error: error.message,
+            timestamp: new Date().toISOString(),
+          }),
+          changedBy: currentUserId,
+        });
+      } catch (logError) {
+        logger.error(`Failed to log admin transfer failure: ${logError.message}`);
+      }
+
+      logger.error(`Admin transfer failed: ${error.message}`);
+
+      // Only throw GraphQL error if it's not already a GraphQL error
+      if (!error.extensions) {
+        throwGraphQLError(res)
+          .message(`Admin transfer failed: ${error.message}`)
+          .status(500)
+          .throw();
+      }
+      throw error;
+    } finally {
+      client.release();
     }
   },
 };

@@ -4,7 +4,7 @@ const { graphqlHTTP } = require('express-graphql');
 const { makeExecutableSchema } = require('@graphql-tools/schema');
 const fs = require('fs');
 const path = require('path');
-
+const { ipRateLimiter } = require('../../config/middleware/ratelimiter.js');
 const adminResolver = require('./resolvers/admin/admin-resolver.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 
@@ -27,6 +27,7 @@ const adminSchema = makeExecutableSchema({
 function initRoleManagementGraphQL(app) {
   app.use(
     '/rolemanagement/admin',
+    ipRateLimiter("staffAuthentication", "admin"),
     jwtProtect('medical'),
     graphqlHTTP((req) => {
       if (!req.body || !req.body.query) {
