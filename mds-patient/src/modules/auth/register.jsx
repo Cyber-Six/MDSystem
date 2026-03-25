@@ -78,6 +78,14 @@ const Register = ({ onBackToLogin }) => {
       });
 
       if (response.data.ok) {
+        // Account already exists — redirect to login
+        if (response.data.userExists) {
+          setError('Account already exists. Redirecting to login...');
+          setTimeout(() => {
+            onBackToLogin();
+          }, 2000);
+          return;
+        }
         // Auto-send OTP immediately after successful registration
         try {
           const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
@@ -96,11 +104,7 @@ const Register = ({ onBackToLogin }) => {
       const errorCode = err.response?.data?.error;
       const errorMessage = err.response?.data?.message;
       
-      if (errorCode === 'EMAIL_EXISTS') {
-        setError('This email is already registered. Please login instead.');
-      } else if (errorCode === 'INVALID_EMAIL_FORMAT') {
-        setError('Please enter a valid email address.');
-      } else if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
+      if (errorCode === 'INVALID_INSTITUTION_EMAIL') {
         setError('Email must follow TIP institutional format.');
       } else {
         setError(errorMessage || 'Registration failed. Please try again.');

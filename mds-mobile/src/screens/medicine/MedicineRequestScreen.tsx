@@ -233,7 +233,34 @@ export const MedicineRequestScreen: React.FC = () => {
 
       {/* ── Form View ──────────────────────────────────────────────────── */}
       {view === 'form' ? (
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true);
+                if (location) {
+                  try {
+                    const meds = await getAvailableMedicine(location);
+                    setMedicines(meds);
+                    const groupMap: Record<string, GroupedMedicine> = {};
+                    meds.forEach((m) => {
+                      if (!groupMap[m.item_code]) {
+                        groupMap[m.item_code] = { item_code: m.item_code, item_name: m.item_name, category: m.category, batches: [] };
+                      }
+                      groupMap[m.item_code].batches.push(m);
+                    });
+                    setGrouped(Object.values(groupMap));
+                  } catch {}
+                }
+                setRefreshing(false);
+              }}
+              colors={[colors.primary[500]]}
+              tintColor={colors.primary[500]}
+              progressBackgroundColor={colors.secondary[900]}
+            />
+          }
+        >
           {/* Header */}
           <View style={[styles.headerBanner, { backgroundColor: colors.success[500] }]}>
             <Text style={styles.headerIcon}>💊</Text>
@@ -406,9 +433,17 @@ export const MedicineRequestScreen: React.FC = () => {
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadHistory(); }} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); loadHistory(); }}
+              colors={[colors.primary[500]]}
+              tintColor={colors.primary[500]}
+              progressBackgroundColor={colors.secondary[900]}
+            />
+          }
         >
-          {loadingStatus ? (
+          {loadingStatus && !refreshing ? (
             <View style={styles.centeredLoader}>
               <ActivityIndicator size="large" color={colors.primary[500]} />
               <Text style={[styles.loadingText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
@@ -472,7 +507,7 @@ export const MedicineRequestScreen: React.FC = () => {
                       {req.items.map((item, i) => (
                         <View key={item.id || i} style={[styles.statusMedItem, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
                           <Text style={[styles.medDosage, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>
-                            Medicine #{item.medicineId} × {item.quantity}
+                            {item.itemName || `Medicine #${item.medicineId}`} × {item.quantity}
                           </Text>
                         </View>
                       ))}

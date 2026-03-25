@@ -19,6 +19,7 @@
     "compression": "^1.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "expo-server-sdk": "^6.1.0",
     "express": "^5.2.1",
     "express-graphql": "^0.12.0",
     "file-type": "^21.3.1",

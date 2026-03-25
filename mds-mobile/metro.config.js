@@ -11,8 +11,9 @@ const extraNodeModules = {
 
 config.resolver.extraNodeModules = extraNodeModules;
 
-// Watch the core package for changes
+// Watch the core package for changes (extend Expo's defaults)
 config.watchFolders = [
+  ...(config.watchFolders ?? []),
   path.resolve(__dirname, '../packages/core'),
 ];
 

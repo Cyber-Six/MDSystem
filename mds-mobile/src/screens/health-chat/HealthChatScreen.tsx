@@ -12,13 +12,14 @@ import {
   FlatList,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { useHealthChatBadge } from '../../context/HealthChatNotificationProvider';
 import {
   Ticket,
   TicketMessage,
@@ -75,6 +76,12 @@ function computeGrouping(messages: TicketMessage[]) {
 
 export const HealthChatScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const { clearBadge } = useHealthChatBadge();
+
+  // Clear notification badge whenever this screen comes into focus
+  useFocusEffect(useCallback(() => {
+    clearBadge();
+  }, [clearBadge]));
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -89,6 +96,7 @@ export const HealthChatScreen: React.FC = () => {
   const [isStaffTyping, setIsStaffTyping] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const hasInitialized = useRef(false);
@@ -233,7 +241,7 @@ export const HealthChatScreen: React.FC = () => {
         } finally {
           setIsUploading(false);
         }
-        const result = await sendMessage(ticket.id, text || null, filename, 'image');
+        const result = await sendMessage(ticket.id, text || null, filename, 'file');
         if (result.success && result.message) {
           setMessages((prev) => [...prev, result.message!]);
           setPendingImage(null);
@@ -262,7 +270,7 @@ export const HealthChatScreen: React.FC = () => {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.8,
       allowsEditing: false,
     });
@@ -340,6 +348,7 @@ export const HealthChatScreen: React.FC = () => {
           styles.container,
           { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
         ]}
+        edges={['top']}
       >
         <View style={styles.centeredContainer}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
@@ -363,6 +372,7 @@ export const HealthChatScreen: React.FC = () => {
         styles.container,
         { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] },
       ]}
+      edges={['top']}
     >
       {/* Error Banner */}
       {error && (
@@ -410,9 +420,9 @@ export const HealthChatScreen: React.FC = () => {
       {/* Active Chat — Open (pending) or Ongoing */}
       {!isInitializing && ticket && ['Open', 'Ongoing'].includes(ticket.status) && (
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior="padding"
           style={styles.flex1}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          keyboardVerticalOffset={0}
         >
           {/* Chat Header */}
           <ChatHeader
@@ -441,9 +451,16 @@ export const HealthChatScreen: React.FC = () => {
             onContentSizeChange={scrollToBottom}
             refreshControl={
               <RefreshControl
-                refreshing={false}
-                onRefresh={() => ticket?.id && loadMessages(ticket.id)}
+                refreshing={isRefreshing}
+                onRefresh={async () => {
+                  if (!ticket?.id) return;
+                  setIsRefreshing(true);
+                  await loadMessages(ticket.id);
+                  setIsRefreshing(false);
+                }}
+                colors={[colors.primary[500]]}
                 tintColor={colors.primary[500]}
+                progressBackgroundColor={colors.secondary[900]}
               />
             }
             ListHeaderComponent={

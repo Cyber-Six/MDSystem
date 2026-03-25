@@ -8,6 +8,7 @@ import {
   View,
   Text,
   ScrollView,
+  RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
@@ -139,6 +140,7 @@ export const AppointmentScreen: React.FC = () => {
 
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -215,6 +217,12 @@ export const AppointmentScreen: React.FC = () => {
 
   useEffect(() => {
     loadStatus();
+  }, [loadStatus]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadStatus();
+    setRefreshing(false);
   }, [loadStatus]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -402,7 +410,7 @@ export const AppointmentScreen: React.FC = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
@@ -426,6 +434,15 @@ export const AppointmentScreen: React.FC = () => {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary[500]]}
+            tintColor={colors.primary[500]}
+            progressBackgroundColor={colors.secondary[900]}
+          />
+        }
       >
         {/* Header Banner */}
         <View style={[styles.headerBanner, { backgroundColor: colors.primary[500] }]}>

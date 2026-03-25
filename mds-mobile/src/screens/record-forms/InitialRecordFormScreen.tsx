@@ -20,7 +20,7 @@ import ObGyneStep from './steps/ObGyneStep';
 import ReviewStep from './steps/ReviewStep';
 import {
   createEmptyFormData, fetchAllCatalogs, createInitialMedicalRecord,
-  fetchRevisionPrefill, checkInitialRecordStatus,
+  submitUpdateRecord, fetchRevisionPrefill, checkInitialRecordStatus,
   type FormData, type AllCatalogs,
 } from '../../services/emr-service';
 
@@ -39,6 +39,8 @@ const InitialRecordFormScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
 
   const isRevision = route.params?.isRevision ?? false;
+  const isUpdate = route.params?.isUpdate ?? false;
+  const recordType: 'medical' | 'dental' | 'both' = route.params?.recordType ?? 'both';
 
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<FormData>(createEmptyFormData());
@@ -60,9 +62,9 @@ const InitialRecordFormScreen: React.FC = () => {
       });
   }, []);
 
-  // Load revision data if applicable
+  // Load revision/update data if applicable
   useEffect(() => {
-    if (!isRevision) return;
+    if (!isRevision && !isUpdate) return;
     fetchRevisionPrefill()
       .then(data => {
         if (data) {
@@ -76,23 +78,39 @@ const InitialRecordFormScreen: React.FC = () => {
           }));
         }
       })
-      .catch(err => console.warn('[RecordForm] Revision prefill failed:', err.message));
-  }, [isRevision]);
+      .catch(err => console.warn('[RecordForm] Prefill failed:', err.message));
+  }, [isRevision, isUpdate]);
 
   const isFemale = formData.personalInfo.gender === 'Female';
-  const steps = isFemale ? ALL_STEPS : ALL_STEPS.filter((_, i) => i !== 4);
 
-  // Map displayed step index to actual step index (0-5)
-  const toActualStep = (displayStep: number) => {
-    if (isFemale) return displayStep;
-    return displayStep >= 4 ? displayStep + 1 : displayStep; // skip OB-GYNE=4
-  };
-  const toDisplayStep = (actualStep: number) => {
-    if (isFemale) return actualStep;
-    return actualStep >= 5 ? actualStep - 1 : actualStep;
+  // Build steps based on mode (initial vs update) and recordType
+  const getSteps = () => {
+    if (!isUpdate) {
+      // Initial record: all steps
+      return isFemale ? ALL_STEPS : ALL_STEPS.filter((_, i) => i !== 4);
+    }
+    // Update mode: dynamic steps based on recordType
+    const updateSteps = ['Personal Info'];
+    if (recordType === 'medical' || recordType === 'both') {
+      updateSteps.push('Medical History', 'Medical Background');
+      if (isFemale) updateSteps.push('OB-GYNE');
+    }
+    if (recordType === 'dental' || recordType === 'both') {
+      updateSteps.push('Dental History');
+    }
+    updateSteps.push('Review');
+    return updateSteps;
   };
 
-  const actualStep = toActualStep(currentStep);
+  const steps = getSteps();
+
+  // Map step names to actual step indices (in ALL_STEPS)
+  const STEP_INDEX_MAP: Record<string, number> = {
+    'Personal Info': 0, 'Medical History': 1, 'Medical Background': 2,
+    'Dental History': 3, 'OB-GYNE': 4, 'Review': 5,
+  };
+  const getActualStepIndex = (displayStep: number) => STEP_INDEX_MAP[steps[displayStep]] ?? 0;
+  const actualStep = getActualStepIndex(currentStep);
 
   const scrollToTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
 
@@ -111,8 +129,13 @@ const InitialRecordFormScreen: React.FC = () => {
   };
 
   const handleEdit = (actualStepIndex: number) => {
-    setCurrentStep(toDisplayStep(actualStepIndex));
-    scrollToTop();
+    // Find display step index for the given actual step
+    const stepName = ALL_STEPS[actualStepIndex];
+    const displayIdx = steps.indexOf(stepName);
+    if (displayIdx >= 0) {
+      setCurrentStep(displayIdx);
+      scrollToTop();
+    }
   };
 
   // ─── Validation ─────────────────────────────────────────────────────────────
@@ -120,7 +143,7 @@ const InitialRecordFormScreen: React.FC = () => {
     const errors: string[] = [];
     const pi = formData.personalInfo;
 
-    // Personal Info
+    // Personal Info — always validated
     if (!pi.surname?.trim()) errors.push('Surname is required');
     if (!pi.firstName?.trim()) errors.push('First name is required');
     if (!pi.birthday) errors.push('Birthday is required');
@@ -145,21 +168,31 @@ const InitialRecordFormScreen: React.FC = () => {
     if (!c2?.contactNumber?.trim()) errors.push('2nd emergency contact number is required');
     else if (!isValidPhilippinePhone(c2.contactNumber.trim())) errors.push('2nd emergency contact number must be a valid PH number');
 
-    // Medical Background
-    const mb = formData.medicalBackground;
-    if (!mb.hasHospitalization) errors.push('Hospitalization question is required');
-    if (!mb.hasOperation) errors.push('Surgery/Operation question is required');
+    const showMedical = !isUpdate || recordType === 'medical' || recordType === 'both';
+    const showDental = !isUpdate || recordType === 'dental' || recordType === 'both';
 
-    // Dental History
-    const dh = formData.dentalHistory;
-    if (!dh.firstTimeDentist) errors.push('First time dentist question is required');
-    if (!dh.lastDentalCleaning) errors.push('Last dental cleaning is required');
-    if (!dh.hasIntraOralAppliance) errors.push('Intra-oral appliance question is required');
-    if (!dh.upperTeethPhoto) errors.push('Upper teeth photo is required');
-    if (!dh.lowerTeethPhoto) errors.push('Lower teeth photo is required');
+    // Medical Background — only when relevant
+    if (showMedical) {
+      const mb = formData.medicalBackground;
+      if (!mb.hasHospitalization) errors.push('Hospitalization question is required');
+      if (!mb.hasOperation) errors.push('Surgery/Operation question is required');
+    }
 
-    // OB-GYNE
-    if (isFemale && !formData.obgyne?.lastMenstrualPeriod) errors.push('Last menstrual period is required');
+    // Dental History — only when relevant
+    if (showDental) {
+      const dh = formData.dentalHistory;
+      if (!dh.firstTimeDentist) errors.push('First time dentist question is required');
+      if (!dh.lastDentalCleaning) errors.push('Last dental cleaning is required');
+      if (!dh.hasIntraOralAppliance) errors.push('Intra-oral appliance question is required');
+      // Photos are mandatory for initial record, optional for updates
+      if (!isUpdate) {
+        if (!dh.upperTeethPhoto) errors.push('Upper teeth photo is required');
+        if (!dh.lowerTeethPhoto) errors.push('Lower teeth photo is required');
+      }
+    }
+
+    // OB-GYNE — only for females with medical steps
+    if (isFemale && showMedical && !formData.obgyne?.lastMenstrualPeriod) errors.push('Last menstrual period is required');
 
     // Certification
     if (!formData.certification?.verified) errors.push('You must certify the information');
@@ -189,7 +222,11 @@ const InitialRecordFormScreen: React.FC = () => {
           onPress: async () => {
             setIsSubmitting(true);
             try {
-              await createInitialMedicalRecord(formData, { isRevision });
+              if (isUpdate) {
+                await submitUpdateRecord(formData, recordType);
+              } else {
+                await createInitialMedicalRecord(formData, { isRevision });
+              }
               await refreshRecordStatus();
               Alert.alert(
                 'Success!',
@@ -279,7 +316,9 @@ const InitialRecordFormScreen: React.FC = () => {
           <Text style={{ color: colors.primary[500], fontSize: 16 }}>← Back</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-          {isRevision ? 'Revise Medical Record' : 'Initial Medical Record'}
+          {isUpdate
+            ? `Update ${recordType === 'medical' ? 'Medical' : recordType === 'dental' ? 'Dental' : 'Medical & Dental'} Record`
+            : isRevision ? 'Revise Medical Record' : 'Initial Medical Record'}
         </Text>
         <View style={{ width: 60 }} />
       </View>

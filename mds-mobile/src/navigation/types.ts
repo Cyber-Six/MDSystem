@@ -12,9 +12,8 @@ export type MainTabParamList = {
   Home: undefined;
   Appointments: undefined;
   HealthChat: undefined;
-  Records: undefined;
-  More: undefined;
   Medicine: undefined;
+  More: undefined;
 };
 
 export type MoreStackParamList = {
@@ -26,7 +25,7 @@ export type MoreStackParamList = {
   FAQs: undefined;
   ContactSupport: undefined;
   Feedback: undefined;
-  InitialRecordForm: { isRevision?: boolean } | undefined;
+  InitialRecordForm: { isRevision?: boolean; recordType?: 'medical' | 'dental' | 'both'; isUpdate?: boolean } | undefined;
   Settings: undefined;
 };
 

@@ -247,7 +247,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
           {/* Bubble */}
           {isPatient ? (
-            <View style={[styles.patientBubble, getPatientRadius()]}>
+            <View style={[styles.patientBubble, getPatientRadius(), hasImage && styles.imageBubble]}>
               {hasImage && (
                 <AuthImage
                   filename={message.filename!}
@@ -270,6 +270,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
                   borderColor: isDark ? colors.neutral[700] : colors.neutral[200],
                 },
+                hasImage && styles.imageBubble,
               ]}
             >
               {hasImage && (
@@ -380,11 +381,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4C430',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    elevation: 2,
-    shadowColor: '#F4C430',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
   },
   patientText: {
     fontSize: 14,
@@ -396,11 +392,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderWidth: 1.5,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
   },
   staffText: {
     fontSize: 14,
@@ -413,20 +404,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   // Image support
+  imageBubble: {
+    paddingTop: 0,
+    paddingBottom: 0,
+    paddingLeft: 0,
+    paddingRight: 0,
+    borderWidth: 0,
+    overflow: 'hidden',
+  },
   imagePlaceholder: {
-    width: 200,
-    height: 140,
-    borderRadius: 10,
+    width: 220,
+    height: 155,
     alignItems: 'center',
     justifyContent: 'center',
   },
   thumbnailImage: {
-    width: 200,
-    height: 140,
-    borderRadius: 10,
+    width: 220,
+    height: 155,
   },
   imageCaption: {
-    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 10,
   },
   // Lightbox
   lightboxOverlay: {

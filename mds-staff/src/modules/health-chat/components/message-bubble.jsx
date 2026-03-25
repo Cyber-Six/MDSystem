@@ -165,9 +165,14 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
           )}
 
           {fileLoading ? (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
-              <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
-              <span className="text-xs text-neutral-400">Loading file…</span>
+            <div
+              className="flex items-center justify-center rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
+              style={{ width: '280px', minHeight: '180px' }}
+            >
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
+                <span className="text-xs text-neutral-400">Loading file…</span>
+              </div>
             </div>
           ) : fileError ? (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">

@@ -28,6 +28,7 @@ const ChatPanel = ({ emitTyping }) => {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const prevScrollHeightRef = useRef(0);
+  const isLoadingOlderRef = useRef(false);
 
   // Load older messages when scrolling to top
   const handleScroll = useCallback(async () => {
@@ -38,6 +39,7 @@ const ChatPanel = ({ emitTyping }) => {
     if (container.scrollTop < 80) {
       try {
         setLoadingOlder(true);
+        isLoadingOlderRef.current = true;
         prevScrollHeightRef.current = container.scrollHeight;
 
         const olderMessages = await getPatientMessages(
@@ -57,10 +59,13 @@ const ChatPanel = ({ emitTyping }) => {
 
           // Maintain scroll position after prepending
           requestAnimationFrame(() => {
-            if (scrollContainerRef.current) {
-              const newScrollHeight = scrollContainerRef.current.scrollHeight;
-              scrollContainerRef.current.scrollTop = newScrollHeight - prevScrollHeightRef.current;
-            }
+            requestAnimationFrame(() => {
+              if (scrollContainerRef.current) {
+                const newScrollHeight = scrollContainerRef.current.scrollHeight;
+                scrollContainerRef.current.scrollTop = newScrollHeight - prevScrollHeightRef.current;
+              }
+              isLoadingOlderRef.current = false;
+            });
           });
         }
       } catch (err) {
@@ -138,11 +143,13 @@ const ChatPanel = ({ emitTyping }) => {
   const isPending = selectedTicket?.status === 'Open';
 
   // Scroll to bottom when messages load or chat changes
-  // Use double-rAF to ensure DOM has rendered before scrolling
+  // Skip when loading older messages (pagination) to preserve scroll position
   useEffect(() => {
+    if (isLoadingOlderRef.current) return;
     const scrollToBottom = () => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          if (isLoadingOlderRef.current) return;
           messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
         });
       });
