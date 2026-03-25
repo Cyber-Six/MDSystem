@@ -234,8 +234,8 @@ const Query = {
          mp.designation AS branch,
          COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
        FROM "UserCredentials" uc
-       JOIN "UsersPersonal" up ON up.id = uc.id
-       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        LEFT JOIN "rolesMap" rm ON rm."personnelId" = uc.id
        LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
        WHERE uc.id = $1
