@@ -36,15 +36,82 @@ const crypto = require('crypto');
 const logger = require('../../../../utils/logger.js');
 const { throwGraphQLError } = require('../../../../utils/graphql-helper.js');
 
+/**
+ * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────
+ * 
+ * MIGRATION: Unified Permission Type (BranchPermission)
+ * 
+ * This module has been refactored to use a unified BranchPermission type across
+ * all permission queries and mutations. This ensures consistency and scalability.
+ * 
+ * BEFORE (Old Structure):
+ *   type Permissions {
+ *     is_admin: Boolean!
+ *     is_staff: Boolean!
+ *     emr_allow_view: Boolean!
+ *     ... 20+ individual boolean fields
+ *   }
+ * 
+ * AFTER (New Structure):
+ *   type BranchPermission {
+ *     key: String!           # Permission key (e.g., "emr_allow_view")
+ *     label: String!         # Permission label (e.g., "ALLOW_TO_VIEW_EMR")
+ *     enabled: Boolean!      # Whether permission is granted
+ *     branch: Designation    # Branch assignment (Manila, QuezonCity, Both)
+ *   }
+ * 
+ *   type Permissions {
+ *     permissions: [BranchPermission!]!
+ *     count: Int!
+ *   }
+ * 
+ * BENEFITS:
+ *   ✓ Scalable: Add new permissions without schema changes
+ *   ✓ Consistent: Same format for StaffPermissions, Permissions, templates
+ *   ✓ Branch-aware: Each permission has explicit branch assignment
+ *   ✓ Maintainable: Single source of truth for permission structure
+ * 
+ * IMPACT:
+ *   - SQL queries now use json_object_agg to map labels to branches
+ *   - Helper function converts label->branch map to BranchPermission array
+ *   - Permission checks use hasPermission() utility instead of direct property access
+ *   - All StaffAccount queries return unified permission format
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-function labelsToPermissions(labels) {
-  const labelSet = new Set(labels || []);
-  const perms = {};
+/**
+ * Convert label->branch map to BranchPermission array format
+ * @param {Object} labelToBranchMap - Map of label -> branch (from database query)
+ * @returns {Array} Array of BranchPermission objects
+ */
+function labelsAndBranchesToBranchPermissions(labelToBranchMap) {
+  const activePermissions = new Map(Object.entries(labelToBranchMap || {}));
+  
+  const permsList = [];
   for (const [key, label] of Object.entries(permissions)) {
-    perms[key] = labelSet.has(label);
+    const enabled = activePermissions.has(label);
+    permsList.push({
+      key,
+      label,
+      enabled,
+      branch: enabled ? activePermissions.get(label) : null
+    });
   }
-  return perms;
+  
+  return permsList;
+}
+
+/**
+ * Check if staff has a specific permission enabled
+ * @param {Array} branchPermissions - Array of BranchPermission objects
+ * @param {string} permissionKey - Permission key to check (e.g., 'is_staff')
+ * @returns {boolean} True if permission is enabled
+ */
+function hasPermission(branchPermissions, permissionKey) {
+  const perm = branchPermissions?.find(p => p.key === permissionKey);
+  return perm?.enabled || false;
 }
 
 function buildUserInfo(row) {
@@ -75,7 +142,7 @@ const Query = {
          uc.id, uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
-         COALESCE(array_agg(rt.label) FILTER (WHERE rt.label IS NOT NULL), '{}') AS labels
+         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
        FROM "UserCredentials" uc
        JOIN "UsersPersonal" up ON up.id = uc.id
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
@@ -108,12 +175,16 @@ const Query = {
     }
 
     const staff = result.rows.map((row) => {
-      const perms = labelsToPermissions(row.labels);
+      const labelBranchMap = typeof row.label_branch_map === 'string' 
+        ? JSON.parse(row.label_branch_map) 
+        : row.label_branch_map || {};
+      
+      const branchPermissions = labelsAndBranchesToBranchPermissions(labelBranchMap);
 
       let staffStatus;
       if (row.identity === 'Medical') {
         staffStatus = 'Active';
-      } else if (perms.is_staff) {
+      } else if (hasPermission(branchPermissions, 'is_staff')) {
         staffStatus = 'Suspended';
       } else {
         staffStatus = 'Pending';
@@ -134,7 +205,10 @@ const Query = {
         branch: row.branch || 'Both',
         identity: row.identity,
         status: staffStatus,
-        permissions: perms,
+        permissions: {
+          permissions: branchPermissions,
+          count: branchPermissions.length
+        },
         credentialsStatus: row.credentials_status,
         lastLogin: lastLogin
           ? new Date(lastLogin).toLocaleString('en-US', {
@@ -158,7 +232,7 @@ const Query = {
          uc.id, uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
-         COALESCE(array_agg(rt.label) FILTER (WHERE rt.label IS NOT NULL), '{}') AS labels
+         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
        FROM "UserCredentials" uc
        JOIN "UsersPersonal" up ON up.id = uc.id
        LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
@@ -175,12 +249,16 @@ const Query = {
     }
 
     const row = result.rows[0];
-    const perms = labelsToPermissions(row.labels);
+    const labelBranchMap = typeof row.label_branch_map === 'string' 
+      ? JSON.parse(row.label_branch_map) 
+      : row.label_branch_map || {};
+    
+    const branchPermissions = labelsAndBranchesToBranchPermissions(labelBranchMap);
 
     let staffStatus;
     if (row.identity === 'Medical') {
       staffStatus = 'Active';
-    } else if (perms.is_staff) {
+    } else if (hasPermission(branchPermissions, 'is_staff')) {
       staffStatus = 'Suspended';
     } else {
       staffStatus = 'Pending';
@@ -199,7 +277,10 @@ const Query = {
       branch: row.branch || 'Both',
       identity: row.identity,
       status: staffStatus,
-      permissions: perms,
+      permissions: {
+        permissions: branchPermissions,
+        count: branchPermissions.length
+      },
       credentialsStatus: row.credentials_status,
       lastLogin: null,
     };

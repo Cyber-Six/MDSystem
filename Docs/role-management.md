@@ -12,35 +12,122 @@ The role management system handles staff permissions and account status in the M
 
 **UserCredentials**
 
-- `id` - User ID (primary key)
-- `email` - User email
-- `identity` - User type: `'Medical'` (active staff), `'Employee'` (suspended staff), `'Student'`
-- `credentials_status` - Account status: `'Active'`, `'Suspended'`, `'Pending'`
+- `id` - User ID (primary key, auto-increment integer)
+- `email` - User email (unique, varchar(100))
+- `password_hash` - Hashed password (varchar(255))
+- `identity` - User type enum (`userIdentity`): `'Student'`, `'Employee'`, `'Superior'`
+  - **Note**: GraphQL layer uses `'Medical'` to represent active medical staff (maps to identity check + active MedicalPersonnel record)
+- `credentials_status` - Account status enum (`CredentialStatus`): `'Unverified'`, `'Active'`, `'Inactive'`, `'Locked'`
+  - **GraphQL CredentialsStatus enum**: `'Active'`, `'Unverified'`, `'Suspended'` (maps to database values)
+- `allow_email_2fa` - Two-factor authentication flag (boolean, default: false)
+- `data_consent` - User data consent (boolean)
+- `data_consent_version` - Consent version (varchar(8))
+- `data_consent_agreed` - Consent agreement timestamp
+- `locked_until` - Account lock expiration (timestamp)
+- `created_at` - Account creation timestamp
 
 **UsersPersonal**
 
-- `id` - User ID
-- `first_name`, `middle_name`, `last_name` - Name fields
+- `id` - User ID (primary key, references UserCredentials.id)
+- `first_name`, `middle_name`, `last_name` - Name fields (varchar(50))
+- `suffix` - Name suffix (varchar(10))
+- `date_of_birth` - Birth date
+- `sex` - Gender enum: `'Male'`, `'Female'`
+- `civil_status` - Civil status enum: `'Single'`, `'Married'`, `'Widowed'`, `'Separated'`
+- `nationality` - Nationality (varchar(50))
+- `religion` - Religion (varchar(50))
+- `contactNumber` - Contact number (varchar(15))
+- `present_address` - Present address (text)
+- `province_address` - Province address (text)
+- `identifier` - User identifier number (integer)
+- `branch` - User branch designation enum (`UserDesignation`): `'Manila'`, `'QuezonCity'`, `'Both'`
+- `updated_at` - Last update timestamp (default: current_timestamp)
 
 **MedicalPersonnel**
 
-- `id` - User ID (one-to-one with UserCredentials)
-- `role` - Staff role: `'Doctor'`, `'Nurse'`, `'Admin'`, `'Pharmacist'`, `'Dentist'`, `'Staff'`
-- `title` - Job title (e.g., "Senior Medical Officer")
-- `designation` - Branch/location: `'Manila'`, `'QuezonCity'`, `'Both'`
-- `is_active` - Boolean indicating if personnel record is active
+- `id` - User ID (primary key, one-to-one with UserCredentials, references UserCredentials.id)
+- `role` - Staff role (varchar(50)): `'Doctor'`, `'Nurse'`, `'Admin'`, `'Pharmacist'`, `'Dentist'`, `'Staff'`
+  - **GraphQL StaffRole enum**: Same values
+- `title` - Job title (varchar(50), e.g., "Senior Medical Officer", "Chief Nurse")
+- `designation` - Branch/location enum (`UserDesignation`): `'Manila'`, `'QuezonCity'`, `'Both'`
+  - **GraphQL Designation enum**: Same values
+- `is_active` - Boolean indicating if personnel record is active (default: true)
+- `created_at` - Record creation timestamp (default: current_timestamp)
 
 **rolesTable**
 
-- `id` - Role ID (primary key)
-- `label` - Permission label (e.g., `'IS_ADMIN'`, `'IS_STAFF'`, `'ALLOW_TO_VIEW_EMR'`)
+- `id` - Role ID (primary key, auto-increment integer)
+- `label` - Permission label (varchar(50), e.g., `'IS_ADMIN'`, `'IS_STAFF'`, `'ALLOW_TO_VIEW_EMR'`)
+- `data` - Additional role data (text, optional)
+- `created_at` - Role creation timestamp (default: current_timestamp)
 
 **rolesMap**
 
-- `personnelId` - User ID (foreign key to UserCredentials)
-- `rolesId` - Role ID (foreign key to rolesTable)
-- `branch` - Branch assignment: `'Manila'`, `'QuezonCity'`, `'Both'`
-- `assignedBy` - ID of admin who assigned this role
+- `id` - Map entry ID (primary key, auto-increment integer)
+- `personnelId` - User ID (integer, foreign key to MedicalPersonnel.id)
+- `rolesId` - Role ID (integer, foreign key to rolesTable.id)
+- `branch` - Branch assignment enum (`UserDesignation`): `'Manila'`, `'QuezonCity'`, `'Both'`
+- `assignedBy` - ID of admin who assigned this role (integer, foreign key to MedicalPersonnel.id)
+- `created_at` - Assignment timestamp (default: current_timestamp)
+- **Unique Constraint**: `(personnelId, rolesId)` - Each user can have each role only once
+
+**rolesTemplate**
+
+- `id` - Template ID (primary key, auto-increment integer)
+- `label` - Template name/label (varchar(200), e.g., "Nurse Standard", "Admin Full Access")
+- `created_by` - User ID of admin who created the template (integer, foreign key to MedicalPersonnel.id)
+- `created_at` - Template creation timestamp (default: current_timestamp)
+
+**rolesTemplateMap**
+
+- `id` - Map entry ID (primary key, auto-increment integer)
+- `templateId` - Template ID (integer, foreign key to rolesTemplate.id)
+- `rolesId` - Role ID (integer, foreign key to rolesTable.id)
+- `branch` - Branch designation enum (`UserDesignation`): `'Manila'`, `'QuezonCity'`, `'Both'`
+- `created_at` - Mapping creation timestamp (default: current_timestamp)
+
+---
+
+### GraphQL to Database Enum Mappings
+
+The GraphQL layer defines enums that may differ from the underlying database enums. Here's how they map:
+
+**Identity Mapping (GraphQL `Identity` enum ↔ Database `userIdentity` enum):**
+
+| GraphQL Value | Database Value | Meaning |
+|---------------|----------------|---------|
+| `Medical` | No direct DB value | Active medical staff (checked via: MedicalPersonnel record exists AND is_active = true) |
+| `Employee` | `'Employee'` | Employee (patient type or suspended medical staff) |
+| `Student` | `'Student'` | Student (patient type) |
+| `Superior` | `'Superior'` | Superior/VIP user |
+
+**Note**: The `Medical` identity in GraphQL is a derived value - it's determined by the existence of an active MedicalPersonnel record, not stored directly in the database `identity` field.
+
+**CredentialsStatus Mapping (GraphQL `CredentialsStatus` ↔ Database `CredentialStatus`):**
+
+| GraphQL Value | Database Value | Meaning |
+|---------------|----------------|---------|
+| `Active` | `'Active'` | Account is active and verified |
+| `Unverified` | `'Unverified'` | Account created but email not verified |
+| `Suspended` | `'Inactive'` or `'Locked'` | Account suspended/locked (maps to Inactive or Locked in database) |
+
+**AccountStatus (GraphQL only - used in rolemanagement context):**
+
+| GraphQL Value | Meaning |
+|---------------|---------|
+| `Active` | Staff account is active |
+| `Suspended` | Staff account is suspended |
+| `Pending` | Staff account is pending activation |
+
+**Designation / UserDesignation (Same in both GraphQL and Database):**
+
+| Value | Meaning |
+|-------|---------|
+| `Manila` | Manila branch only |
+| `QuezonCity` | Quezon City branch only |
+| `Both` | Both branches |
+
+**Note**: The database also has a `LocationDesignation` enum (`'Arlegui'`, `'Casal'`, `'QuezonCity'`) used for specific location tracking, which is separate from the user/role designation system.
 
 ---
 
@@ -2016,6 +2103,299 @@ await fetch('/rolemanagement/admin', {
 - Speed: Quickly onboard new staff by applying a template
 - Maintenance: Update templates to standardize permissions across the organization
 - Compliance: Document and audit standard permission configurations
+
+---
+
+## Admin Transfer
+
+The Admin Transfer feature provides a secure mechanism for transferring admin privileges from one user to another. This is a critical operation that requires multiple layers of verification to ensure security.
+
+### Overview
+
+Admin transfer is a **two-step process** with enhanced security measures:
+
+1. **Initiation**: Current admin initiates transfer with password re-authentication
+2. **Confirmation**: Admin confirms transfer using verification token sent via email
+
+**Security Features:**
+
+- Password re-authentication required to initiate
+- Verification token sent to admin's email (2FA must be enabled)
+- Token expires after 10 minutes
+- Rate limiting on password attempts (max 5 failed attempts, 15-minute lockout)
+- Atomic transaction ensures either complete success or rollback
+- Comprehensive audit logging of all attempts
+- Validation checks performed at both initiation and confirmation
+
+### Requirements
+
+Before initiating an admin transfer, the following requirements must be met:
+
+**Current Admin (Initiator):**
+- Must have `IS_ADMIN` permission
+- Must provide correct password
+- Account must not be password-locked
+
+**Target User (New Admin):**
+- Must be an active medical personnel (`is_active = true`)
+- Must have validated account (`credentials_status = 'Active'`)
+- Must have 2FA enabled (`allow_email_2fa = true`)
+- Cannot already be an admin
+
+### GraphQL Operations
+
+#### Mutation: initiateAdminTransfer
+
+Initiates the admin transfer process. Requires password re-authentication and sends verification token to admin's email.
+
+**Input:**
+```graphql
+mutation {
+  initiateAdminTransfer(
+    newAdminUserId: "456"
+    password: "current_admin_password"
+  ) {
+    ok
+    message
+    verificationRequired
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "initiateAdminTransfer": {
+      "ok": true,
+      "message": "Admin transfer initiated. Check your email for verification code.",
+      "verificationRequired": true
+    }
+  }
+}
+```
+
+**Process:**
+1. Validates current admin's password
+2. Verifies target user meets all requirements
+3. Generates secure verification token (32-byte random hex)
+4. Stores transfer session in Redis (10-minute TTL)
+5. Sends verification email to current admin
+6. Logs initiation attempt in audit log
+
+**Error Cases:**
+- Incorrect password (counts toward rate limit)
+- Password locked (5 failed attempts in 15 minutes)
+- Target user is already admin
+- Target user not active medical personnel
+- Target user not validated
+- Target user 2FA not enabled
+
+#### Mutation: confirmAdminTransfer
+
+Completes the admin transfer using the verification token from email.
+
+**Input:**
+```graphql
+mutation {
+  confirmAdminTransfer(
+    verificationToken: "abc123def456..."
+  ) {
+    ok
+    message
+    oldAdminId
+    newAdminId
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "confirmAdminTransfer": {
+      "ok": true,
+      "message": "Admin privileges transferred successfully.",
+      "oldAdminId": "123",
+      "newAdminId": "456"
+    }
+  }
+}
+```
+
+**Process:**
+1. Validates verification token (not expired, not already used)
+2. Re-validates current admin still has admin privileges
+3. Re-validates target user still meets all requirements
+4. Performs atomic database transaction:
+   - Grants `IS_ADMIN` permission to new admin (branch: 'Both')
+   - Removes `IS_ADMIN` permission from old admin
+   - Logs audit trail entry
+5. Deletes transfer session from Redis
+6. Returns success with both user IDs
+
+**Error Cases:**
+- Invalid or expired verification token
+- Token already used
+- Old admin no longer has admin privileges
+- Target user no longer active/validated
+- Target user 2FA disabled after initiation
+- Database transaction failure (automatic rollback)
+
+### Security Implementation Details
+
+#### Password Rate Limiting
+
+The system tracks failed password attempts to prevent brute-force attacks:
+
+- **Threshold**: 5 failed attempts
+- **Lockout Period**: 15 minutes from first failure
+- **Reset**: Successful password clears failure count
+- **Scope**: Per-user based on current admin's ID
+
+#### Verification Token
+
+- **Generation**: 32-byte cryptographically secure random hex string
+- **Storage**: Redis with 10-minute TTL
+- **Single Use**: Token deleted after successful confirmation
+- **Format**: Session stores `{ oldAdminId, newAdminId, createdAt }`
+
+#### Atomic Transaction
+
+The transfer operation uses PostgreSQL transaction to ensure atomicity:
+
+```sql
+BEGIN;
+  -- Grant admin to new user
+  INSERT INTO "rolesMap" ... ON CONFLICT ...
+  -- Remove admin from old user
+  DELETE FROM "rolesMap" ...
+  -- Log audit entry
+  INSERT INTO "SystemAuditLog" ...
+COMMIT; -- or ROLLBACK on error
+```
+
+If any step fails, the entire transaction is rolled back - no partial state.
+
+#### Re-validation at Confirmation
+
+Even if initiation succeeded, the system re-validates all requirements at confirmation:
+
+- Current admin still has admin privileges (prevents race conditions)
+- Target user still active medical personnel
+- Target user still validated
+- Target user still has 2FA enabled
+
+This prevents edge cases where user state changes during the 10-minute verification window.
+
+### Audit Logging
+
+All admin transfer operations are logged to `SystemAuditLog`:
+
+**Event Types:**
+- `ADMIN_TRANSFER_INITIATED` - Transfer initiation (success/failure)
+- `ADMIN_TRANSFER_SUCCESS` - Completed transfer
+- `ADMIN_TRANSFER_FAILED` - Failed confirmation or validation
+
+**Logged Details:**
+- Actor ID (old admin)
+- Target ID (new admin)
+- Email addresses
+- Verification token prefix (first 8 chars for correlation)
+- Failure reasons
+- Timestamps
+
+### Frontend Integration Example
+
+```javascript
+// Step 1: Initiate transfer
+const initiateMutation = `
+  mutation {
+    initiateAdminTransfer(
+      newAdminUserId: "456"
+      password: "${userPassword}"
+    ) {
+      ok
+      message
+      verificationRequired
+    }
+  }
+`;
+
+const response1 = await fetch('/rolemanagement/admin', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ query: initiateMutation })
+});
+
+const { data: initData } = await response1.json();
+if (initData.initiateAdminTransfer.ok) {
+  // Show message: "Check your email for verification code"
+  showEmailVerificationPrompt();
+}
+
+// Step 2: User receives email, copies verification token
+// Then confirms transfer with the token
+
+const confirmMutation = `
+  mutation {
+    confirmAdminTransfer(
+      verificationToken: "${emailToken}"
+    ) {
+      ok
+      message
+      oldAdminId
+      newAdminId
+    }
+  }
+`;
+
+const response2 = await fetch('/rolemanagement/admin', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ query: confirmMutation })
+});
+
+const { data: confirmData } = await response2.json();
+if (confirmData.confirmAdminTransfer.ok) {
+  // Transfer complete - old admin loses access
+  showSuccessMessage('Admin privileges transferred successfully');
+  // Redirect old admin or logout
+}
+```
+
+### Use Cases
+
+**Planned Admin Transition:**
+- Current admin is leaving position
+- Systematic handover of administrative responsibilities
+- New admin confirmed and prepared to take over
+
+**Emergency Access Transfer:**
+- Current admin unavailable or compromised
+- Need to quickly grant admin access to another authorized user
+- Requires current admin's cooperation (password + email access)
+
+**Administrative Restructuring:**
+- Organization changes requiring different admin personnel
+- Ensures single admin model is maintained
+- Audit trail for compliance and accountability
+
+### Important Notes
+
+- Only **one admin** exists in the system at a time (enforced by removing old admin when granting new admin)
+- Transfer is **irreversible** once confirmed - old admin immediately loses privileges
+- Verification token **expires in 10 minutes** - must complete both steps within this window
+- **Email access required** - admin must have access to their registered email to receive token
+- **2FA must be enabled** for both current and new admin
+- All operations are **audit-logged** for security compliance
+- Failed password attempts are **rate-limited** to prevent abuse
 
 ---
 

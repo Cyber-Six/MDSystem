@@ -54,45 +54,30 @@ type MedicalPersonnel {
   user: UserInfo
 }
 
-type Permissions {
-  is_admin: Boolean!
-  is_staff: Boolean!
-  privileged_to_perform_on_superior: Boolean!
-  emr_allow_approval: Boolean!
-  emr_allow_edit: Boolean!
-  emr_allow_view: Boolean!
-  emr_allow_set_dental_record: Boolean!
-  emr_allow_edit_catalogs: Boolean!
-  profile_allow_approval: Boolean!
-  profile_allow_view: Boolean!
-  profile_allow_edit: Boolean!
-  profile_allow_update_email_identifier: Boolean!
-  appointment_allow_approval: Boolean!
-  appointment_allow_view_records: Boolean!
-  appointment_allow_view_configuration: Boolean!
-  appointment_allow_edit_configuration: Boolean!
-  announcement_allow_crud: Boolean!
-  consultation_allow_view: Boolean!
-  consultation_allow_edit: Boolean!
-  inventory_allow_view: Boolean!
-  inventory_allow_dispense: Boolean!
-  inventory_allow_edit: Boolean!
-  inventory_allow_manage_requests: Boolean!
-  inventory_allow_prescribe: Boolean!
-  medicine_request_allow_approve: Boolean!
-}
+# ─── PERMISSION TYPES ──────────────────────────────────────────────────────────
 
-# Permission with branch information
-type PermissionWithBranch {
+# Reusable permission type with branch information
+# Represents a single permission with its enabled status and branch designation
+# Used consistently across staff permissions, templates, and accounts
+type BranchPermission {
   key: String!           # Permission key (e.g., "emr_allow_view")
   label: String!         # Permission label (e.g., "ALLOW_TO_VIEW_EMR")
-  enabled: Boolean!      # Whether permission is granted
+  enabled: Boolean!      # Whether permission is granted (true = exists in database, false = no record)
   branch: Designation    # Branch for this permission (null if not granted)
 }
 
-# Staff permissions with branch info (returned by getStaffPermissions)
+# Staff permissions wrapper type - array of BranchPermission
+# Returned by getStaffPermissions query and stored in StaffAccount
+# Unified format across all permission queries and mutations
+type Permissions {
+  permissions: [BranchPermission!]!
+  count: Int!
+}
+
+# Staff permissions with branch info (returned by getStaffPermissions query)
+# Identical structure to Permissions type for consistency
 type StaffPermissions {
-  permissions: [PermissionWithBranch!]!
+  permissions: [BranchPermission!]!
   count: Int!
 }
 
@@ -104,16 +89,8 @@ type PermissionTemplate {
   label: String!
   createdBy: ID!
   createdAt: String!
-  permissions: [TemplatePermission!]!
+  permissions: [BranchPermission!]!
   permissionCount: Int!
-}
-
-# Individual permission in a template
-type TemplatePermission {
-  key: String!           # Permission key (e.g., "emr_allow_view")
-  label: String!         # Permission label (e.g., "ALLOW_TO_VIEW_EMR")
-  enabled: Boolean!      # Whether permission is enabled in this template
-  branch: Designation    # Branch designation for this permission
 }
 
 # List of permission templates
@@ -129,7 +106,7 @@ type StaffAccount {
   branch: Designation
   identity: Identity!
   status: AccountStatus!
-  permissions: Permissions!
+  permissions: Permissions!                    # Array of BranchPermission objects with enabled status and branch
   credentialsStatus: CredentialsStatus
   lastLogin: String
 }
