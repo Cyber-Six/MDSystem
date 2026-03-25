@@ -2,15 +2,6 @@ scalar Date
 
 # ─── ENUMS ─────────────────────────────────────────────────────────────────────
 
-enum StaffRole {
-  Doctor
-  Nurse
-  Admin
-  Pharmacist
-  Dentist
-  Staff
-}
-
 enum Designation {
   Manila
   QuezonCity
@@ -47,11 +38,12 @@ type UserInfo {
 
 type MedicalPersonnel {
   id: ID!
-  role: StaffRole
+  role: String               # Free-form role string (can match template label)
   title: String
   designation: Designation
   isActive: Boolean
   user: UserInfo
+  roleTemplate: PermissionTemplate  # Optional: Associated permission template
 }
 
 # ─── PERMISSION TYPES ──────────────────────────────────────────────────────────
@@ -199,14 +191,17 @@ type UserSessionPage {
 input CreateMedicalPersonnelInput {
   userId: ID!
   title: String!
-  role: StaffRole!
+  role: String!                # Free-form role string (can match template label)
   designation: Designation!
+  templateId: ID               # Optional: Apply permissions from this template
 }
 
 input UpdateMedicalPersonnelInput {
   title: String
+  role: String                 # Optional: Update role string
   designation: Designation
   isActive: Boolean
+  templateId: ID               # Optional: Apply/update permissions from template
 }
 
 # Individual permission with optional branch (for extended mutation)
@@ -253,7 +248,7 @@ type Query {
   getStaffAccount(userId: ID!): StaffAccount
 
   # Medical Personnel
-  listMedicalPersonnel(role: StaffRole, designation: Designation, isActive: Boolean): MedicalPersonnelList!
+  listMedicalPersonnel(role: String, designation: Designation, isActive: Boolean): MedicalPersonnelList!
   getMedicalPersonnel(userId: ID!): MedicalPersonnel
 
   # Permissions - Returns all permissions with enabled status AND branch designation

@@ -493,7 +493,7 @@ const Mutation = {
       throwGraphQLError(res).message('Unauthorized').status(401).throw();
     }
 
-    const { userId, title, role, designation } = input;
+    const { userId, title, role, designation, templateId } = input;
 
     // Validate required fields
     if (!userId || !title || !role || !designation) {
@@ -506,20 +506,22 @@ const Mutation = {
       throwGraphQLError(res).message('designation must be Manila, QuezonCity, or Both.').status(400).throw();
     }
 
-    // Validate role
-    const validRoles = ['Doctor', 'Nurse', 'Admin', 'Pharmacist', 'Dentist', 'Staff'];
-    if (!validRoles.includes(role)) {
-      throwGraphQLError(res)
-        .message('role must be one of: Doctor, Nurse, Admin, Pharmacist, Dentist, Staff.')
-        .status(400)
-        .throw();
+    // Role is now a free-form string - no validation needed
+    // It can match a template label or be any custom role name
+
+    // If templateId provided, verify template exists
+    if (templateId) {
+      const template = await getPermissionTemplate(templateId);
+      if (!template) {
+        throwGraphQLError(res).message('Permission template not found.').status(404).throw();
+      }
     }
 
     // Verify user exists and has Employee identity
     const userResult = await db.query(
       `SELECT uc.id, md.id AS "medicalId", uc.identity FROM "UserCredentials" uc
       LEFT JOIN "MedicalPersonnel" md ON md.id = uc.id
-      WHERE uc.id = $1 
+      WHERE uc.id = $1
       LIMIT 1`,
       [userId]
     );
@@ -535,7 +537,7 @@ const Mutation = {
         .status(409)
         .throw();
     }
-    
+
     if (targetUser.medicalId) {
       throwGraphQLError(res).message('MedicalPersonnel record already exists for this user.').status(409).throw();
     }
@@ -549,6 +551,22 @@ const Mutation = {
     );
 
     const personnel = insertResult.rows[0];
+
+    // If template provided, apply permissions from template
+    if (templateId) {
+      try {
+        await applyTemplateToStaff({
+          personnelId: userId,
+          templateId,
+          assignedBy: user.id
+        });
+        logger.info(`Template ${templateId} applied to new medical personnel: userId=${userId}`);
+      } catch (error) {
+        logger.error(`Failed to apply template during creation: ${error.message}`);
+        // Continue - personnel created but template not applied
+      }
+    }
+
     logger.info(`MedicalPersonnel record created: userId=${userId}, role=${role}, by adminId=${user.id}`);
 
     return {
@@ -570,12 +588,12 @@ const Mutation = {
       throwGraphQLError(res).message('Unauthorized').status(401).throw();
     }
 
-    const { title, designation, isActive } = input;
+    const { title, role, designation, isActive, templateId } = input;
 
     // Validate at least one field provided
-    if (title === undefined && designation === undefined && isActive === undefined) {
+    if (title === undefined && role === undefined && designation === undefined && isActive === undefined && templateId === undefined) {
       throwGraphQLError(res)
-        .message('At least one field (title, designation, isActive) must be provided.')
+        .message('At least one field (title, role, designation, isActive, templateId) must be provided.')
         .status(400)
         .throw();
     }
@@ -585,6 +603,14 @@ const Mutation = {
       const validDesignations = ['Manila', 'QuezonCity', 'Both'];
       if (!validDesignations.includes(designation)) {
         throwGraphQLError(res).message('designation must be Manila, QuezonCity, or Both.').status(400).throw();
+      }
+    }
+
+    // If templateId provided, verify template exists
+    if (templateId !== undefined) {
+      const template = await getPermissionTemplate(templateId);
+      if (!template) {
+        throwGraphQLError(res).message('Permission template not found.').status(404).throw();
       }
     }
 
@@ -607,6 +633,10 @@ const Mutation = {
       updates.push(`title = $${paramIndex++}`);
       params.push(title);
     }
+    if (role !== undefined) {
+      updates.push(`role = $${paramIndex++}`);
+      params.push(role);
+    }
     if (designation !== undefined) {
       updates.push(`designation = $${paramIndex++}`);
       params.push(designation);
@@ -627,6 +657,21 @@ const Mutation = {
 
     const updateResult = await db.query(updateQuery, params);
     const personnel = updateResult.rows[0];
+
+    // If template provided, apply permissions from template
+    if (templateId !== undefined) {
+      try {
+        await applyTemplateToStaff({
+          personnelId: userId,
+          templateId,
+          assignedBy: user.id
+        });
+        logger.info(`Template ${templateId} applied to medical personnel: userId=${userId}`);
+      } catch (error) {
+        logger.error(`Failed to apply template during update: ${error.message}`);
+        // Continue - personnel updated but template not applied
+      }
+    }
 
     logger.info(`MedicalPersonnel record updated: userId=${userId}, by adminId=${user.id}`);
 

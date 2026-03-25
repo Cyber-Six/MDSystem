@@ -2,7 +2,20 @@
 
 ## Overview
 
-The role management system handles staff permissions and account status in the MDSystem. It uses a key-based permission model where each permission key maps to true/false based on database records.
+The role management system handles staff permissions and account status in the MDSystem. It uses a **template-based role model** where roles are defined by permission templates, allowing for flexible and dynamic role assignment.
+
+### Key Concepts
+
+**Permission Templates as Roles:**
+- Roles are no longer static enums but are dynamic strings that can match permission template labels
+- When creating/updating medical personnel, you can assign any role string (e.g., "Nurse Standard", "Doctor Advanced", "Pharmacist")
+- Optionally link a permission template to automatically apply its permissions when assigning a role
+- This provides flexibility to create custom roles while maintaining permission consistency through templates
+
+**Permission Model:**
+- Each permission key maps to true/false based on database records in `rolesMap`
+- Permissions can have independent branch designations (Manila, QuezonCity, Both)
+- Templates define reusable permission sets that can be applied to staff members
 
 ---
 
@@ -46,8 +59,10 @@ The role management system handles staff permissions and account status in the M
 **MedicalPersonnel**
 
 - `id` - User ID (primary key, one-to-one with UserCredentials, references UserCredentials.id)
-- `role` - Staff role (varchar(50)): `'Doctor'`, `'Nurse'`, `'Admin'`, `'Pharmacist'`, `'Dentist'`, `'Staff'`
-  - **GraphQL StaffRole enum**: Same values
+- `role` - Staff role (varchar(50)): **Free-form string** that can be any custom role name or match a permission template label
+  - Examples: `'Nurse Standard'`, `'Doctor Advanced'`, `'Pharmacist Lead'`, `'Admin Full Access'`
+  - **GraphQL**: `String` (no longer restricted to enum values)
+  - **Best Practice**: Use permission template labels for consistency
 - `title` - Job title (varchar(50), e.g., "Senior Medical Officer", "Chief Nurse")
 - `designation` - Branch/location enum (`UserDesignation`): `'Manila'`, `'QuezonCity'`, `'Both'`
   - **GraphQL Designation enum**: Same values
@@ -380,6 +395,237 @@ graphql.js                      # Entry point - mounts endpoint, applies JWT mid
 
 ---
 
+## Template-Based Role System
+
+### Overview
+
+The role system has been refactored to use **permission templates as roles**. Instead of static role enums (Doctor, Nurse, etc.), roles are now dynamic strings that can match permission template labels.
+
+### How It Works
+
+**Role Assignment:**
+1. When creating medical personnel, specify a `role` string (any value)
+2. Optionally provide a `templateId` to automatically apply template permissions
+3. The role string can match a template label for consistency, but it's not required
+
+**Benefits:**
+- **Flexibility**: Create custom roles without code changes
+- **Consistency**: Link roles to templates for standardized permissions
+- **Scalability**: Add new roles by creating templates
+- **Clarity**: Role names can be descriptive (e.g., "Nurse Standard" vs just "Nurse")
+
+### Creating Medical Personnel with Template-Based Roles
+
+**GraphQL Mutation:**
+
+```graphql
+mutation {
+  createMedicalPersonnel(input: {
+    userId: "123"
+    title: "Staff Nurse"
+    role: "Nurse Standard"           # Free-form string
+    designation: Manila
+    templateId: "5"                  # Optional: Apply template permissions
+  }) {
+    ok
+    message
+    personnel {
+      id
+      role
+      title
+      designation
+    }
+  }
+}
+```
+
+**What happens:**
+1. MedicalPersonnel record created with `role = "Nurse Standard"`
+2. If `templateId` provided, all enabled permissions from template #5 are copied to this staff member
+3. Staff can now log in with permissions from the template
+
+### Updating Roles and Templates
+
+**Change role and apply new template:**
+
+```graphql
+mutation {
+  updateMedicalPersonnel(
+    userId: "123"
+    input: {
+      role: "Nurse Advanced"         # Update role string
+      templateId: "8"                # Apply different template
+    }
+  ) {
+    ok
+    message
+    personnel {
+      role
+    }
+  }
+}
+```
+
+**Result:**
+- Role updated to "Nurse Advanced"
+- Permissions from template #8 are applied (replaces previous permissions)
+
+### Workflow Examples
+
+**Example 1: Role matches template label**
+
+```graphql
+# 1. Create template
+mutation {
+  createPermissionTemplate(input: {
+    label: "Pharmacist Standard"
+    permissions: [
+      { key: "inventory_allow_view", enabled: true, branch: Manila }
+      { key: "inventory_allow_dispense", enabled: true, branch: Manila }
+      { key: "medicine_request_allow_approve", enabled: true, branch: Manila }
+    ]
+  }) {
+    ok
+    template { id label }  # Returns: id = "12"
+  }
+}
+
+# 2. Create medical personnel with matching role
+mutation {
+  createMedicalPersonnel(input: {
+    userId: "456"
+    title: "Lead Pharmacist"
+    role: "Pharmacist Standard"      # Matches template label
+    designation: Manila
+    templateId: "12"
+  }) {
+    ok
+    message
+  }
+}
+```
+
+**Example 2: Custom role without template**
+
+```graphql
+# Create staff with custom role, manually set permissions later
+mutation {
+  createMedicalPersonnel(input: {
+    userId: "789"
+    title: "Medical Coordinator"
+    role: "Coordinator - Manila"     # Custom role string
+    designation: Manila
+    # No templateId - permissions set separately
+  }) {
+    ok
+    message
+  }
+}
+
+# Then set permissions manually
+mutation {
+  setStaffPermissionsExtended(
+    userId: "789"
+    permissions: [
+      { key: "profile_allow_view", enabled: true, branch: Manila }
+      { key: "appointment_allow_view_records", enabled: true, branch: Manila }
+    ]
+  ) {
+    ok
+    message
+  }
+}
+```
+
+**Example 3: Standardizing existing roles**
+
+```graphql
+# Create templates for common roles
+# 1. Nurse Standard template (id: 10)
+# 2. Doctor Full Access template (id: 11)
+# 3. Admin System Management template (id: 12)
+
+# Update existing personnel to use templates
+mutation {
+  updateMedicalPersonnel(userId: "100", input: {
+    role: "Nurse Standard"
+    templateId: "10"
+  }) { ok }
+
+  updateMedicalPersonnel(userId: "101", input: {
+    role: "Doctor Full Access"
+    templateId: "11"
+  }) { ok }
+}
+```
+
+### Querying with Template-Based Roles
+
+**List medical personnel by role:**
+
+```graphql
+query {
+  listMedicalPersonnel(role: "Nurse Standard") {
+    personnel {
+      id
+      role
+      title
+      designation
+      user {
+        name
+        email
+      }
+    }
+    count
+  }
+}
+```
+
+**Note:** Role filtering is now a string match, not enum-based. You can search for:
+- Exact matches: `role: "Nurse Standard"`
+- Any custom role string you've assigned
+
+### Best Practices
+
+1. **Use Template Labels for Roles**: When creating templates, use descriptive labels that work well as role names
+   - Good: "Nurse Standard", "Doctor Advanced", "Pharmacist Lead"
+   - Bad: "Template 1", "Test Role", "Permissions Set A"
+
+2. **Link Templates to Roles**: Always provide `templateId` when creating staff to ensure consistent permissions
+   - This creates a clear link between role name and permission set
+   - Makes it easy to update all users with a role by updating the template
+
+3. **Document Role-Template Mappings**: Maintain documentation of which template IDs correspond to which roles
+   - Example: "Nurse Standard" = Template #10
+   - Makes it easier to apply correct template when creating staff
+
+4. **Template Updates Don't Auto-Update Staff**: Remember that changing a template doesn't automatically update staff permissions
+   - You must re-apply the template to update existing staff
+   - Use `updateMedicalPersonnel` with `templateId` to re-apply
+
+### Migration from Old Role System
+
+**Old System (Static Enums):**
+```graphql
+# Before: Role was enum-validated
+role: Doctor  # Must be: Doctor, Nurse, Admin, Pharmacist, Dentist, Staff
+```
+
+**New System (Template-Based):**
+```graphql
+# After: Role is free-form string
+role: "Doctor Advanced"  # Any string value
+templateId: "15"         # Link to permission template
+```
+
+**Migration Steps:**
+1. Create permission templates for each old role type
+2. Update existing MedicalPersonnel records to use template labels as roles
+3. Apply corresponding templates to each staff member
+4. Remove old role enum validation from client code
+
+---
+
 ## Understanding the Identity System
 
 ### How Medical Staff Identity Works
@@ -415,14 +661,16 @@ Is Medical Staff? = EXISTS(MedicalPersonnel WHERE id = userId)
 
 ### Creating Medical Staff (Grant Access)
 
-To grant medical staff access to an Employee:
+To grant medical staff access to an Employee, create a MedicalPersonnel record. You can optionally apply a permission template during creation.
+
+**Basic Creation (without template):**
 
 ```graphql
 mutation {
   createMedicalPersonnel(input: {
     userId: "123"
     title: "Senior Doctor"
-    role: Doctor
+    role: "Doctor Advanced"       # Free-form string (can be any role name)
     designation: Manila
   }) {
     ok
@@ -438,7 +686,60 @@ mutation {
 }
 ```
 
-**Effect:** User can now access the medical portal.
+**Creation with Template (recommended):**
+
+```graphql
+mutation {
+  createMedicalPersonnel(input: {
+    userId: "123"
+    title: "Senior Doctor"
+    role: "Doctor Advanced"       # Matches template label
+    designation: Manila
+    templateId: "15"              # Automatically applies template permissions
+  }) {
+    ok
+    message
+    personnel {
+      id
+      role
+      title
+      designation
+      isActive
+    }
+  }
+}
+```
+
+**Effect:**
+- User can now access the medical portal
+- If `templateId` provided, permissions from the template are automatically applied
+- Role can be any string value (best practice: match template labels for clarity)
+
+### Updating Medical Staff
+
+Update medical personnel information, role, or apply/change permission template:
+
+```graphql
+mutation {
+  updateMedicalPersonnel(
+    userId: "123"
+    input: {
+      role: "Doctor Lead"         # Update role (optional)
+      title: "Lead Physician"     # Update title (optional)
+      designation: Both           # Update designation (optional)
+      templateId: "20"            # Apply new template (optional)
+    }
+  ) {
+    ok
+    message
+    personnel {
+      role
+      title
+      designation
+    }
+  }
+}
+```
 
 ### Revoking Medical Staff (Remove Access)
 
@@ -2401,12 +2702,30 @@ if (confirmData.confirmAdminTransfer.ok) {
 
 ## Notes
 
+**General:**
 - The system enforces that all active/suspended staff must have `is_staff: true`
 - Admins cannot suspend themselves
 - Only accounts with `credentials_status = 'Active'` can have permissions managed
 - Permission keys not included in the request are left unchanged
 - Invalid permission keys will throw an error
+
+**Roles:**
+- Roles are **free-form strings** (no longer restricted to enum values)
+- Best practice: Use permission template labels as role names for consistency
+- Role field accepts any string value (e.g., "Nurse Standard", "Doctor Advanced", "Custom Role")
+- Changing a role does not automatically change permissions - permissions must be set separately
+- Use `templateId` parameter to automatically apply template permissions when creating/updating staff
+
+**Permissions & Templates:**
 - Branch is always pulled from `MedicalPersonnel.designation`, not from request body
 - Templates are independent of staff permissions - updating a template does not update existing staff
 - Template permissions follow the same branch designation rules as staff permissions
+- To update staff after changing a template, re-apply the template using `updateMedicalPersonnel` with `templateId`
+- Templates can be applied during creation or update of medical personnel
+
+**Template-Based Workflow:**
+1. Create permission templates with descriptive labels (e.g., "Nurse Standard")
+2. Use template labels as role names when creating staff
+3. Apply template using `templateId` to grant permissions automatically
+4. Update templates as needed, then re-apply to existing staff to update their permissions
 
