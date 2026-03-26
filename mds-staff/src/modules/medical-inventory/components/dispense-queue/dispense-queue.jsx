@@ -141,7 +141,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
               <tr className="bg-neutral-50 dark:bg-neutral-700/50">
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">ID</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Patient</th>
-                <th className="px-3 py-1.5 text[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item</th>
+                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Qty</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Purpose</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Date</th>
@@ -184,7 +184,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                             itemName = itemData.item_name;
                           }
                           return (
-                            <div key={idx} className="text-xs">{itemName}{reqItem.quantity && ` (qty: ${reqItem.quantity})`}</div>
+                            <div key={idx} className="text-xs">{itemName}</div>
                           );
                         }) || '—'}
                       </td>

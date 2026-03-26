@@ -577,9 +577,25 @@ const MedicalInventory = () => {
       }));
 
       // Keep local queue row aligned with successful dispense transaction
+      // Also update request items with the actual dispensed quantity
+      const dispensedByItemIdx = {};
+      allocation.forEach((a) => {
+        if (a.itemIdx !== undefined) {
+          dispensedByItemIdx[a.itemIdx] = (dispensedByItemIdx[a.itemIdx] || 0) + a.allocate;
+        }
+      });
+      
       setRequests(requests.map((r) =>
         r.id === requestId
-          ? { ...r, status: 'Completed', notes: notes || r.notes }
+          ? {
+              ...r,
+              status: 'Completed',
+              notes: notes || r.notes,
+              items: (r.items || []).map((item, idx) => ({
+                ...item,
+                quantity: dispensedByItemIdx[idx] || item.quantity,
+              })),
+            }
           : r
       ));
 
