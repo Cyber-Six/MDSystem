@@ -287,14 +287,19 @@ const Mutation = {
     const result = await db.query(
       `INSERT INTO "Lifestyle" 
         ("id", "smoker", "numberOfCigarettesPerDay", "yearsSmoked", 
-        "alcoholConsumer", "frequencyOfAlcoholConsumption", "notes")
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+        "alcoholConsumer", "frequencyOfAlcoholConsumption", 
+        "vapeUser", "vapeType", "vapeFrequency", "yearsVaping", "notes")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (id) DO UPDATE
          SET "smoker" = EXCLUDED."smoker",
              "numberOfCigarettesPerDay" = EXCLUDED."numberOfCigarettesPerDay",
              "yearsSmoked" = EXCLUDED."yearsSmoked",
              "alcoholConsumer" = EXCLUDED."alcoholConsumer",
              "frequencyOfAlcoholConsumption" = EXCLUDED."frequencyOfAlcoholConsumption",
+             "vapeUser" = EXCLUDED."vapeUser",
+             "vapeType" = EXCLUDED."vapeType",
+             "vapeFrequency" = EXCLUDED."vapeFrequency",
+             "yearsVaping" = EXCLUDED."yearsVaping",
              "notes" = EXCLUDED."notes"
              RETURNING *;`,
       [
@@ -304,6 +309,10 @@ const Mutation = {
         args.input.yearsSmoked,
         args.input.alcoholConsumer,
         args.input.frequencyOfAlcoholConsumption,
+        args.input.vapeUser,
+        args.input.vapeType,
+        args.input.vapeFrequency,
+        args.input.yearsVaping,
         args.input.notes
       ]
     );

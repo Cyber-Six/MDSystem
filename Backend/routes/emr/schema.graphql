@@ -138,13 +138,32 @@ input ObgynHistoryUpdateInput {
 
 # Lifestyle
 
+enum LifeStyleFrequency {
+  Daily
+  Weekly
+  Monthly
+  Occasionally
+  Rare
+}
+
+enum VapeType {
+  Nicotine
+  CBD
+  THC
+  Flavored
+}
+
 type Lifestyle {
     id: ID!
     smoker: Boolean!
     numberOfCigarettesPerDay: Int
     yearsSmoked: Int
     alcoholConsumer: Boolean!
-    frequencyOfAlcoholConsumption: String
+    frequencyOfAlcoholConsumption: LifeStyleFrequency
+    vapeUser: Boolean!
+    vapeType: VapeType
+    vapeFrequency: LifeStyleFrequency
+    yearsVaping: Int
     notes: String
     archived_at: Date
     created_at: Date
@@ -156,6 +175,10 @@ input LifestyleInput {
     yearsSmoked: Int
     alcoholConsumer: Boolean!
     frequencyOfAlcoholConsumption: String
+    vapeUser: Boolean!
+    vapeType: VapeType
+    vapeFrequency: LifeStyleFrequency
+    yearsVaping: Int
     notes: String
 }
 
@@ -165,6 +188,10 @@ input LifestyleUpdateInput {
     yearsSmoked: Int
     alcoholConsumer: Boolean
     frequencyOfAlcoholConsumption: String
+    vapeUser: Boolean
+    vapeType: VapeType
+    vapeFrequency: LifeStyleFrequency
+    yearsVaping: Int
     notes: String
 }
 ## -------- Dental Photo Record -------- ##
