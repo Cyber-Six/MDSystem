@@ -141,101 +141,131 @@ const Mutation = {
     return {...(args.input), id: recordId, archived_at: null};
   },
 
-  _VitalSigns: async (_, {args, recordId}, { user, res }) => {
+  _VitalSigns: async (_, { args, recordId }, { user, res }) => {
     const result = await db.query(
-      `INSERT INTO "VitalSigns" 
-        ("id", "height_cm", "weight_kg", "blood_pressure", "heart_rate", 
-        "temperature", "notes")
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (id) DO UPDATE
-         SET "height_cm" = EXCLUDED."height_cm",
-             "weight_kg" = EXCLUDED."weight_kg",
-             "blood_pressure" = EXCLUDED."blood_pressure",
-             "heart_rate" = EXCLUDED."heart_rate",
-             "temperature" = EXCLUDED."temperature",
-             "notes" = EXCLUDED."notes"
-             RETURNING *;`,
+      `WITH inserted AS (
+         INSERT INTO "VitalSigns" 
+           ("height_cm", "weight_kg", "blood_pressure", "heart_rate", 
+            "temperature", "notes")
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id
+       )
+       UPDATE "patientUpdateLog"
+       SET "vitalSignsId" = inserted.id
+       FROM inserted
+       WHERE "patientUpdateLog".id = $7
+       RETURNING "patientUpdateLog".*, inserted.id AS vitalSignsId;`,
       [
-        recordId,
         args.input.height_cm,
         args.input.weight_kg,
         args.input.blood_pressure,
         args.input.heart_rate,
         args.input.temperature,
-        args.input.notes
+        args.input.notes,
+        recordId
       ]
     );
 
-    logger.debug("Upserted Vital Signs:", result.rows[0]);
-    return {...(args.input), id: recordId, archived_at: null};
+    logger.debug("Inserted Vital Signs + Updated Log:", result.rows[0]);
+
+    return {
+      ...(args.input),
+      id: result.rows[0].vitalSignsId,
+      archived_at: null
+    };
   },
 
   _DentalRecord: async (_, { args, recordId }, { user, res }) => {
+    const client = await db.connect();
+    let dentalRecordId;
+    let toothPlacementsResult = { rows: [] };
+    let oralFindingsResult = [];
 
-    await anchor.DentalRecord(recordId, args.input.notes);
-    let result;
     try {
-      const values = [];
-      const params = [];
-      args.input.toothPlacements.forEach((tooth, i) => {
-        const baseIndex = i * 3;
-        values.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`);
-        params.push(recordId, tooth.tooth_index, tooth.legend);
-      });
+      await client.query('BEGIN');
 
-      const query = `
-        INSERT INTO "ToothPlacement" ("dentalRecordId", "toothIndex", "legend")
-        VALUES ${values.join(", ")}
-        RETURNING *;
-      `;
-      result = await db.queryControlled(query, params);
+      const dentalRecordResult = await db.queryClient(
+        client,
+        `WITH inserted AS (
+           INSERT INTO "DentalRecord" ("notes")
+           VALUES ($1)
+           RETURNING id
+         )
+         UPDATE "patientUpdateLog"
+         SET "dentalRecordId" = inserted.id
+         FROM inserted
+         WHERE "patientUpdateLog".id = $2
+         RETURNING inserted.id AS dentalRecordId;`,
+        [args.input.notes, recordId]
+      );
 
-      logger.debug("Inserted Tooth Placements:", result.rows);
-    } catch (err) {
-      logger.error("Error inserting Tooth Placements:", err);
-      throwGraphQLError(res)
-        .status(400)
-        .message(`Failed to insert DentalRecord: ${err.message}`)
-        .throw();
+      dentalRecordId = dentalRecordResult.rows[0].dentalRecordId;
+
+      // Tooth Placements
+      if (args.input.toothPlacements?.length) {
+        const values = [];
+        const params = [];
+        args.input.toothPlacements.forEach((tooth, i) => {
+          const baseIndex = i * 3;
+          values.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`);
+          params.push(dentalRecordId, tooth.tooth_index, tooth.legend);
+        });
+
+        const query = `
+          INSERT INTO "ToothPlacement" ("dentalRecordId", "toothIndex", "legend")
+          VALUES ${values.join(", ")}
+          RETURNING *;
+        `;
+        toothPlacementsResult = await db.queryControlledClient(client, query, params);
+        logger.debug("Inserted Tooth Placements:", toothPlacementsResult.rows);
       }
-    // Oral Finding
 
-    let insert = [];
-    for (const finding of args.input.oralFindings) {
-      try {
-        const resultFinder = await db.queryControlled(
+      // Oral Findings
+      for (const finding of args.input.oralFindings || []) {
+        const resultFinder = await db.queryControlledClient(
+          client,
           `INSERT INTO "OralFindingRecord"
             ("dentalRecordId", "oralFindingId", "status", "notes")
            VALUES ($1, $2, $3, $4)
            RETURNING *;`,
           [
-            recordId,
+            dentalRecordId,
             finding.oralFindingId,
             finding.status,
             finding.notes || null
-            ]
-          );
-        insert.push(resultFinder.rows[0]);
-        } catch (err) {
-          if (err.code === '23503') { // foreign key violation
-            throwGraphQLError(res)
-              .status(400)
-              .message(`Invalid oralFindingId: ${finding.oralFindingId}`)
-              .throw();
-            }
-          else throw err;
-        }
+          ]
+        );
+        oralFindingsResult.push(resultFinder.rows[0]);
       }
-    logger.debug("Inserted Oral Findings:", insert);
-    return {
-      ...args.input,
-      id: recordId,
-      archived_at: null,
-      toothPlacements: result.rows,
-      oralFindings: insert
-    };
 
+      await client.query('COMMIT');
+      return {
+        ...args.input,
+        id: dentalRecordId,
+        archived_at: null,
+        toothPlacements: toothPlacementsResult.rows,
+        oralFindings: oralFindingsResult
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      
+      logger.error("Error inserting Dental Record:", err);
+      if (err.code === '23503') { // foreign key violation
+        throwGraphQLError(res)
+          .status(400)
+          .message(`You've provided an invalid oralFindingId. check again.`)
+          .throw();
+      }
+
+      throwGraphQLError(res)
+        .status(400)
+        .message(`Failed to insert DentalRecord: ${err.message}`)
+        .throw();
+    } finally {
+      client.release();
+    }
   },
+
 
 
   _DentalHistory: async (_, {args, recordId}, { user, res }) => {
