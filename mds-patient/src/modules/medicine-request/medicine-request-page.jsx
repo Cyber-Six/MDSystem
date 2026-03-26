@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { sendGraphQLRequest } from '../../utils/graphql-client';
 import { getMyPersonalEmail } from '../../services/emr-service';
 import RequestNotificationModal from './components/request-notification-modal';
+import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 
 const MedicineRequestPage = () => {
   // User info
@@ -24,6 +25,8 @@ const MedicineRequestPage = () => {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalData, setSuccessModalData] = useState({ title: 'Success', message: '' });
 
   // Cancel-and-resubmit confirmation
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -271,6 +274,12 @@ const MedicineRequestPage = () => {
     }
   };
 
+  // Helper function to show success modal
+  const showSuccess = (title = 'Success', message = '') => {
+    setSuccessModalData({ title, message });
+    setShowSuccessModal(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
@@ -418,8 +427,7 @@ const MedicineRequestPage = () => {
       });
       setSelectedMedicinesByCode({});
       
-      setSuccessMessage('Medicine request submitted successfully!');
-      setTimeout(() => setSuccessMessage(''), 5000);
+      showSuccess('Request Submitted', 'Medicine request submitted successfully!');
     } catch (error) {
       console.error('Error submitting request:', error);
       setErrorMessage(error.message || 'Error submitting request. Please try again.');
@@ -603,12 +611,14 @@ const MedicineRequestPage = () => {
               </div>
             )}
 
-            {/* Success Message */}
-            {successMessage && (
-              <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                <p className="text-sm text-green-800 dark:text-green-200">{successMessage}</p>
-              </div>
-            )}
+            {/* Success Modal */}
+            <SuccessMessageModal
+              isOpen={showSuccessModal}
+              onClose={() => setShowSuccessModal(false)}
+              title={successModalData.title}
+              message={successModalData.message}
+              autoCloseDuration={3000}
+            />
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Purpose */}
