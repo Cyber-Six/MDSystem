@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, allActions, hasCustomPermissions, detectRole } from '../role-permissions';
+import { DEFAULT_ROLE_TEMPLATES, allModules, hasCustomPermissions, detectRole } from '../role-permissions';
 import { axiosRequest } from '../../../packages-core-adapter.js';
 import StaffDetail from './staff-detail';
 
