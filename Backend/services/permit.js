@@ -669,6 +669,205 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
   };
 }
 
+// ─── MODULE-LEVEL PERMISSION MAP ─────────────────────────────────────────────
+// Maps frontend module IDs to their underlying backend permission keys.
+// When a module is ON, ALL listed keys are granted.
+// When a module is OFF, keys are revoked ONLY if no other enabled module uses them (union logic).
+
+const MODULE_PERMISSION_MAP = {
+  patientSearch: [
+    'profile_allow_view',
+    'emr_allow_view',
+  ],
+  pendingRequests: [
+    'emr_allow_approval',
+    'profile_allow_approval',
+    'appointment_allow_approval',
+    'medicine_request_allow_approve',
+  ],
+  medicalRecords: [
+    'emr_allow_view',
+    'emr_allow_edit',
+    'emr_allow_edit_catalogs',
+    'consultation_allow_view',
+    'consultation_allow_edit',
+    'profile_allow_view',
+    'profile_allow_edit',
+  ],
+  dentalRecords: [
+    'emr_allow_view',
+    'emr_allow_edit',
+    'emr_allow_set_dental_record',
+    'consultation_allow_view',
+    'consultation_allow_edit',
+  ],
+  appointments: [
+    'appointment_allow_approval',
+    'appointment_allow_view_records',
+    'appointment_allow_view_configuration',
+    'appointment_allow_edit_configuration',
+  ],
+  inventory: [
+    'inventory_allow_view',
+    'inventory_allow_edit',
+    'inventory_allow_dispense',
+    'inventory_allow_manage_requests',
+    'inventory_allow_prescribe',
+  ],
+  healthChat: [
+    // Reserved for future health-chat permission keys
+  ],
+  analytics: [
+    // Reserved for future analytics permission keys
+  ],
+  roleManagement: [
+    'is_admin',
+  ],
+};
+
+const MODULE_LABELS = {
+  patientSearch: 'Search Patient',
+  pendingRequests: 'Pending Requests',
+  medicalRecords: 'Medical Records',
+  dentalRecords: 'Dental Records',
+  appointments: 'Appointments',
+  inventory: 'Inventory',
+  healthChat: 'Health Chat',
+  analytics: 'Analytics',
+  roleManagement: 'Role Management',
+};
+
+/**
+ * Expand module toggles into granular permission keys with union logic.
+ * A key is enabled if ANY module that maps to it is enabled.
+ * A key is disabled only if ALL modules that map to it are OFF.
+ * @param {Array<{moduleId: string, enabled: boolean}>} modules
+ * @returns {Array<{key: string, enabled: boolean}>}
+ */
+function resolveModulePermissions(modules) {
+  const keyStates = new Map();
+
+  for (const { moduleId, enabled } of modules) {
+    const keys = MODULE_PERMISSION_MAP[moduleId] || [];
+    for (const key of keys) {
+      if (enabled) {
+        keyStates.set(key, true);
+      } else if (!keyStates.has(key)) {
+        keyStates.set(key, false);
+      }
+    }
+  }
+
+  return Array.from(keyStates.entries()).map(([key, enabled]) => ({ key, enabled }));
+}
+
+/**
+ * Set staff permissions at the module level.
+ * Expands module toggles to granular permission keys using union logic,
+ * then applies them via setStaffPermissionsExtended.
+ * Also ensures is_staff is always set when any module is enabled.
+ * @param {Object} params
+ * @param {number|string} params.personnelId
+ * @param {Array<{moduleId: string, enabled: boolean}>} params.modules
+ * @param {number|string} params.assignedBy
+ * @param {string} params.branch - Branch designation for all permissions
+ * @returns {Promise<Object>}
+ */
+async function setStaffModulePermissions({ personnelId, modules, assignedBy, branch = 'Both' }) {
+  // Validate all module IDs
+  for (const { moduleId } of modules) {
+    if (!MODULE_PERMISSION_MAP.hasOwnProperty(moduleId)) {
+      throw new Error(`Invalid module ID: ${moduleId}`);
+    }
+  }
+
+  // Resolve to granular permission keys with union logic
+  const resolvedKeys = resolveModulePermissions(modules);
+
+  // Ensure is_staff is always set if any module is enabled
+  const anyEnabled = modules.some(m => m.enabled);
+  const hasIsStaff = resolvedKeys.find(k => k.key === 'is_staff');
+  if (!hasIsStaff) {
+    resolvedKeys.push({ key: 'is_staff', enabled: anyEnabled });
+  }
+
+  // Apply via the existing extended permissions function
+  await setStaffPermissionsExtended({
+    personnelId: String(personnelId),
+    permissionsList: resolvedKeys,
+    assignedBy: String(assignedBy),
+    defaultBranch: branch,
+  });
+
+  logger.info(`Module permissions set: personnelId=${personnelId}, modules=${modules.map(m => `${m.moduleId}:${m.enabled}`).join(',')}, by userId=${assignedBy}`);
+
+  return { ok: true };
+}
+
+/**
+ * Derive module-level permission status from existing granular permissions.
+ * A module is considered enabled only if ALL its mapped keys are enabled.
+ * @param {number|string} personnelId
+ * @returns {Promise<{modules: Array<{moduleId: string, label: string, enabled: boolean}>, count: number}>}
+ */
+async function getStaffModulePermissions(personnelId) {
+  const { permissions: permsList } = await getStaffPermissions(personnelId);
+
+  // Build a set of enabled permission keys
+  const enabledKeys = new Set();
+  for (const p of permsList) {
+    if (p.enabled) {
+      enabledKeys.add(p.key);
+    }
+  }
+
+  const modules = [];
+  for (const [moduleId, keys] of Object.entries(MODULE_PERMISSION_MAP)) {
+    let enabled;
+    if (keys.length === 0) {
+      // Modules with no keys mapped yet are considered disabled
+      enabled = false;
+    } else {
+      // Module is enabled only if ALL its keys are enabled
+      enabled = keys.every(key => enabledKeys.has(key));
+    }
+
+    modules.push({
+      moduleId,
+      label: MODULE_LABELS[moduleId] || moduleId,
+      enabled,
+    });
+  }
+
+  return { modules, count: modules.length };
+}
+
+/**
+ * Convert a flat module permissions object { moduleId: boolean } to
+ * the modules array format [{ moduleId, enabled }]
+ * @param {Object} flatPerms - e.g. { patientSearch: true, appointments: false }
+ * @returns {Array<{moduleId: string, enabled: boolean}>}
+ */
+function flatModulePermsToArray(flatPerms) {
+  return Object.entries(flatPerms).map(([moduleId, enabled]) => ({
+    moduleId,
+    enabled: !!enabled,
+  }));
+}
+
+/**
+ * Convert module permissions result to flat object format for REST API
+ * @param {{modules: Array}} modulePermsResult
+ * @returns {Object} e.g. { patientSearch: true, appointments: false }
+ */
+function modulePermsToFlat(modulePermsResult) {
+  const flat = {};
+  for (const mod of modulePermsResult.modules) {
+    flat[mod.moduleId] = mod.enabled;
+  }
+  return flat;
+}
+
 module.exports = {
   setMedicalPermit,
   unsetMedicalPermit,
@@ -686,4 +885,12 @@ module.exports = {
   updatePermissionTemplate,
   deletePermissionTemplate,
   applyTemplateToStaff,
+  // Module-level permission functions
+  MODULE_PERMISSION_MAP,
+  MODULE_LABELS,
+  resolveModulePermissions,
+  setStaffModulePermissions,
+  getStaffModulePermissions,
+  flatModulePermsToArray,
+  modulePermsToFlat,
 };

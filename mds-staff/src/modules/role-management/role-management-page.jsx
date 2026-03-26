@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import RoleTemplates from '../components/role-templates';
-import StaffAccounts from '../components/staff-accounts';
+import RoleTemplates from './components/role-templates';
+import StaffAccounts from './components/staff-accounts';
 
 /**
  * Role Management Page

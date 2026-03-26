@@ -12,7 +12,11 @@ const {
   applyTemplateToStaff,
   setMedicalPermit,
   unsetMedicalPermit,
-  isMedicalPermitted
+  isMedicalPermitted,
+  MODULE_PERMISSION_MAP,
+  MODULE_LABELS,
+  setStaffModulePermissions,
+  getStaffModulePermissions,
 } = require('../../../../services/permit.js');
 const {
   listUserSessions,
@@ -114,6 +118,37 @@ function hasPermission(branchPermissions, permissionKey) {
   return perm?.enabled || false;
 }
 
+/**
+ * Derive module-level permissions from a BranchPermission array (in-memory, no DB hit)
+ * @param {Array} branchPermissions - Array of BranchPermission objects
+ * @returns {{modules: Array<{moduleId: string, label: string, enabled: boolean}>, count: number}}
+ */
+function deriveModulePermissions(branchPermissions) {
+  const enabledKeys = new Set();
+  for (const p of branchPermissions) {
+    if (p.enabled) {
+      enabledKeys.add(p.key);
+    }
+  }
+
+  const modules = [];
+  for (const [moduleId, keys] of Object.entries(MODULE_PERMISSION_MAP)) {
+    let enabled;
+    if (keys.length === 0) {
+      enabled = false;
+    } else {
+      enabled = keys.every(key => enabledKeys.has(key));
+    }
+    modules.push({
+      moduleId,
+      label: MODULE_LABELS[moduleId] || moduleId,
+      enabled,
+    });
+  }
+
+  return { modules, count: modules.length };
+}
+
 function buildUserInfo(row) {
   const nameParts = [
     row.first_name,
@@ -142,37 +177,27 @@ const Query = {
          uc.id, uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
-         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
+         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map,
+         lla.last_login
        FROM "UserCredentials" uc
        JOIN "UsersPersonal" up ON up.id = uc.id
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        LEFT JOIN "rolesMap" rm ON rm."personnelId" = uc.id
        LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
+       LEFT JOIN (
+         SELECT user_id, MAX(attempted_at) AS last_login
+         FROM "UserLoginAttempt"
+         WHERE was_successful = true
+         GROUP BY user_id
+       ) lla ON lla.user_id = uc.id
        WHERE
-          uc.identity = 'Medical'
-          AND ($1 IS NULL OR uc.credentials_status = $1)
+          ($1 IS NULL OR uc.credentials_status = $1)
           AND ($2 IS NULL OR mp.designation = $2)
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-                up.first_name, up.middle_name, up.last_name, mp.designation
+                up.first_name, up.middle_name, up.last_name, mp.designation, lla.last_login
        ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`,
       [status || null, location || null]
     );
-
-    // Fetch last login dates
-    let lastLoginMap = {};
-    try {
-      const loginResult = await db.query(
-        `SELECT ula.user_id, MAX(ula.attempted_at) AS last_login
-         FROM "UserLoginAttempt" ula
-         WHERE ula.was_successful = true
-         GROUP BY ula.user_id`
-      );
-      for (const row of loginResult.rows) {
-        lastLoginMap[row.user_id] = row.last_login;
-      }
-    } catch (_) {
-      // gracefully skip on error
-    }
 
     const staff = result.rows.map((row) => {
       const labelBranchMap = typeof row.label_branch_map === 'string' 
@@ -196,8 +221,6 @@ const Query = {
         row.last_name,
       ].filter(Boolean);
 
-      const lastLogin = lastLoginMap[row.id] || null;
-
       return {
         id: String(row.id),
         email: row.email,
@@ -209,9 +232,10 @@ const Query = {
           permissions: branchPermissions,
           count: branchPermissions.length
         },
+        modulePermissions: deriveModulePermissions(branchPermissions),
         credentialsStatus: row.credentials_status,
-        lastLogin: lastLogin
-          ? new Date(lastLogin).toLocaleString('en-US', {
+        lastLogin: row.last_login
+          ? new Date(row.last_login).toLocaleString('en-US', {
               month: 'short', day: 'numeric', year: 'numeric',
               hour: '2-digit', minute: '2-digit',
             })
@@ -281,6 +305,7 @@ const Query = {
         permissions: branchPermissions,
         count: branchPermissions.length
       },
+      modulePermissions: deriveModulePermissions(branchPermissions),
       credentialsStatus: row.credentials_status,
       lastLogin: null,
     };
@@ -357,6 +382,14 @@ const Query = {
     }
 
     return await getStaffPermissions(userId);
+  },
+
+  _getStaffModulePermissions: async (_, { userId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    return await getStaffModulePermissions(userId);
   },
 
   _listStaffSessions: async (_, { userId }, { user, res }) => {
@@ -792,6 +825,160 @@ const Mutation = {
     return {
       ok: true,
       message: 'Staff permissions updated successfully.',
+    };
+  },
+
+  _setStaffModulePermissions: async (_, { userId, modules, branch }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    // Validate branch
+    const validBranches = ['Manila', 'QuezonCity', 'Both'];
+    if (!validBranches.includes(branch)) {
+      throwGraphQLError(res).message('branch must be Manila, QuezonCity, or Both.').status(400).throw();
+    }
+
+    // Validate module IDs
+    for (const mod of modules) {
+      if (!MODULE_PERMISSION_MAP.hasOwnProperty(mod.moduleId)) {
+        throwGraphQLError(res)
+          .message(`Invalid module ID: "${mod.moduleId}".`)
+          .status(400)
+          .throw();
+      }
+    }
+
+    // Warn if roleManagement module is being enabled
+    const rmModule = modules.find(m => m.moduleId === 'roleManagement');
+    if (rmModule && rmModule.enabled) {
+      logger.warn(`⚠️ Admin privilege being granted to userId=${userId} by adminId=${user.id}`);
+    }
+
+    try {
+      await setStaffModulePermissions({
+        personnelId: String(userId),
+        modules,
+        assignedBy: String(user.id),
+        branch,
+      });
+
+      logger.info(`Staff module permissions set: userId=${userId}, branch=${branch}, by adminId=${user.id}`);
+
+      return {
+        ok: true,
+        message: 'Staff module permissions updated successfully.',
+      };
+    } catch (error) {
+      logger.error(`Failed to set module permissions: ${error.message}`);
+      throwGraphQLError(res)
+        .message(`Failed to set module permissions: ${error.message}`)
+        .status(500)
+        .throw();
+    }
+  },
+
+  /**
+   * Combined update for module permissions and/or account status.
+   * - modules: optional array of module toggles (auto-detects branch from MedicalPersonnel.designation)
+   * - status: optional Active/Suspended toggle
+   * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
+   */
+  _updateStaffAccount: async (_, { userId, modules, status }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message('Unauthorized').status(401).throw();
+    }
+
+    if (!modules && !status) {
+      throwGraphQLError(res)
+        .message('At least one of modules or status must be provided.')
+        .status(400)
+        .throw();
+    }
+
+    // Verify target user exists and is medical staff
+    const userResult = await db.query(
+      `SELECT uc.id, uc.identity, mp.designation
+       FROM "UserCredentials" uc
+       JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       WHERE uc.id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      throwGraphQLError(res).message('Staff account not found.').status(404).throw();
+    }
+
+    const targetUser = userResult.rows[0];
+    const branch = targetUser.designation || 'Both';
+
+    // Handle module permissions update
+    if (modules && modules.length > 0) {
+      // Validate module IDs
+      for (const mod of modules) {
+        if (!MODULE_PERMISSION_MAP.hasOwnProperty(mod.moduleId)) {
+          throwGraphQLError(res)
+            .message(`Invalid module ID: "${mod.moduleId}".`)
+            .status(400)
+            .throw();
+        }
+      }
+
+      // Warn on admin privilege grant
+      const rmModule = modules.find(m => m.moduleId === 'roleManagement');
+      if (rmModule && rmModule.enabled) {
+        logger.warn(`⚠️ Admin privilege being granted to userId=${userId} by adminId=${user.id}`);
+      }
+
+      await setStaffModulePermissions({
+        personnelId: String(userId),
+        modules,
+        assignedBy: String(user.id),
+        branch,
+      });
+    }
+
+    // Handle status change (Active ↔ Suspended)
+    if (status) {
+      const validStatuses = ['Active', 'Suspended'];
+      if (!validStatuses.includes(status)) {
+        throwGraphQLError(res)
+          .message(`Invalid status: "${status}". Must be Active or Suspended.`)
+          .status(400)
+          .throw();
+      }
+
+      if (status === 'Active' && targetUser.identity !== 'Medical') {
+        // Activate: set identity to Medical + ensure is_staff
+        await db.query(
+          `UPDATE "UserCredentials" SET identity = 'Medical' WHERE id = $1`,
+          [userId]
+        );
+
+        await setStaffPermissionsExtended({
+          personnelId: String(userId),
+          permissionsList: [{ key: 'is_staff', enabled: true }],
+          assignedBy: String(user.id),
+          defaultBranch: branch,
+        });
+
+        logger.info(`Staff account activated: userId=${userId} by adminId=${user.id}`);
+      } else if (status === 'Suspended' && targetUser.identity === 'Medical') {
+        // Suspend: revert identity to Employee (keeps permissions intact)
+        await db.query(
+          `UPDATE "UserCredentials" SET identity = 'Employee' WHERE id = $1`,
+          [userId]
+        );
+
+        logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
+      }
+    }
+
+    logger.info(`Staff account updated: userId=${userId}, by adminId=${user.id}`);
+
+    return {
+      ok: true,
+      message: 'Staff account updated successfully.',
     };
   },
 

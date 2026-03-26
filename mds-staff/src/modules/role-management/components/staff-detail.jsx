@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DEFAULT_ROLE_TEMPLATES, clonePermissions, hasCustomPermissions, allModules } from '../role-permissions';
-import { axiosRequest } from '../../../packages-core-adapter.js';
+import { updateStaffAccount } from '../staff-service';
 import PermissionMatrix from './permission-matrix';
 import ActivityLog from './activity-log';
 
@@ -51,14 +51,11 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
     setSaveError(null);
     setIsSaving(true);
     try {
-      await axiosRequest.put(`/admin/staff/accounts/${staff.id}`, {
-        permissions: clonePermissions(permissions),
-        status,
-      });
+      await updateStaffAccount(staff.id, clonePermissions(permissions), status);
       onSave({ ...staff, role, permissions: clonePermissions(permissions), status });
       setHasChanges(false);
     } catch (err) {
-      setSaveError(err.response?.data?.message || 'Failed to save changes. Please try again.');
+      setSaveError(err.message || 'Failed to save changes. Please try again.');
     } finally {
       setIsSaving(false);
     }

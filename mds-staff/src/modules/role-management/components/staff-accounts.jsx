@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DEFAULT_ROLE_TEMPLATES, allModules, hasCustomPermissions, detectRole } from '../role-permissions';
-import { axiosRequest } from '../../../packages-core-adapter.js';
+import { fetchStaffAccounts } from '../staff-service';
 import StaffDetail from './staff-detail';
 
 /**
@@ -22,8 +22,7 @@ const StaffAccounts = () => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const response = await axiosRequest.get('/admin/staff/accounts');
-      const records = response.data.staff || [];
+      const records = await fetchStaffAccounts();
       // Enrich each record with a detected role from the permissions
       const enriched = records.map((s) => ({
         ...s,
@@ -31,7 +30,7 @@ const StaffAccounts = () => {
       }));
       setStaffList(enriched);
     } catch (err) {
-      setLoadError(err.response?.data?.message || 'Failed to load staff accounts.');
+      setLoadError(err.message || 'Failed to load staff accounts.');
     } finally {
       setIsLoading(false);
     }

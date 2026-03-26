@@ -43,6 +43,11 @@ const Query = {
     return await Wrapper.Query._getStaffPermissions(_, args, context);
   },
 
+  getStaffModulePermissions: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._getStaffModulePermissions(_, args, context);
+  },
+
   listStaffSessions: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listStaffSessions(_, args, context);
@@ -95,6 +100,16 @@ const Mutation = {
   setStaffPermissionsExtended: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._setStaffPermissionsExtended(_, args, context);
+  },
+
+  setStaffModulePermissions: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._setStaffModulePermissions(_, args, context);
+  },
+
+  updateStaffAccount: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._updateStaffAccount(_, args, context);
   },
 
   rotateStaffAnchor: async (_, args, context) => {
