@@ -170,6 +170,7 @@ type patientSlot {
   schedulerLabel: String
   requirements: [patientScheduleRequirement!]!
   approvedBy: String
+  purpose: String
   notes: String
   arrived_at: Date
   created_at: Date!
@@ -211,7 +212,7 @@ type Query {
 
 # Mutations
 type Mutation {
-  submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!): patientSlot
+  submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!, purpose: String): patientSlot
   cancelAppointment: Boolean
 
   #----------- --^ Patient and --v Medical

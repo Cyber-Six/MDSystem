@@ -389,7 +389,7 @@ const Query = {
 };
 
 const Mutation = {
-  _submitAppointment: async (_, { schedulerId, date, session, requirements }, { user, res }) => {
+  _submitAppointment: async (_, { schedulerId, date, session, requirements, purpose }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -426,10 +426,10 @@ const Mutation = {
       }
       // 3. Create patientSlot row
       const psResult = await db.query(
-        `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session")
-         VALUES ($1, $2, 'Pending', $3)
+        `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session", "purpose")
+         VALUES ($1, $2, 'Pending', $3, $4)
          RETURNING *;`,
-        [user.id, scheduleData.id, session]
+        [user.id, scheduleData.id, session, purpose || null]
       );
 
       if (psResult.rowCount === 0) {
