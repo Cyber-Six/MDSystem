@@ -16,9 +16,9 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
     { path: '/search', icon: 'search', label: 'Search Patient' },
     { path: '/pending', icon: 'pending', label: 'Pending Requests' },
     { path: '/appointments', icon: 'calendar', label: 'Appointments' },
-    { path: '/analytics', icon: 'analytics', label: 'Analytics' },
     { path: '/inventory', icon: 'inventory', label: 'Inventory' },
     { path: '/health-chat', icon: 'healthchat', label: 'Health Chat' },
+    { path: '/analytics', icon: 'analytics', label: 'Analytics' },
     { path: '/settings/roles', icon: 'roles', label: 'Role Management' },
   ];
 

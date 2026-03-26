@@ -10,7 +10,7 @@ import PermissionMatrix from './permission-matrix';
 const RoleTemplates = () => {
   const [roles, setRoles] = useState(DEFAULT_ROLE_TEMPLATES);
   const [selectedRoleId, setSelectedRoleId] = useState(roles[0]?.id || null);
-  const [editingPermissions, setEditingPermissions] = useState(null);
+  const [workingPermissions, setWorkingPermissions] = useState(() => clonePermissions(roles[0]?.permissions || {}));
   const [hasChanges, setHasChanges] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -39,34 +39,30 @@ const RoleTemplates = () => {
     if (hasChanges) {
       if (!window.confirm('You have unsaved changes. Discard?')) return;
     }
+    const role = roles.find((r) => r.id === roleId);
     setSelectedRoleId(roleId);
-    setEditingPermissions(null);
+    setWorkingPermissions(clonePermissions(role?.permissions || {}));
     setHasChanges(false);
     setConfirmDeleteId(null);
   };
 
-  const handleStartEdit = () => {
-    setEditingPermissions(clonePermissions(selectedRole.permissions));
-  };
-
   const handlePermissionChange = (updated) => {
-    setEditingPermissions(updated);
+    setWorkingPermissions(updated);
     setHasChanges(true);
   };
 
   const handleSave = () => {
     setRoles((prev) =>
       prev.map((r) =>
-        r.id === selectedRoleId ? { ...r, permissions: clonePermissions(editingPermissions) } : r
+        r.id === selectedRoleId ? { ...r, permissions: clonePermissions(workingPermissions) } : r
       )
     );
-    setEditingPermissions(null);
     setHasChanges(false);
     // TODO: API call to save role template
   };
 
   const handleCancel = () => {
-    setEditingPermissions(null);
+    setWorkingPermissions(clonePermissions(selectedRole.permissions));
     setHasChanges(false);
   };
 
@@ -87,7 +83,7 @@ const RoleTemplates = () => {
     };
     setRoles((prev) => [...prev, newRole]);
     setSelectedRoleId(id);
-    setEditingPermissions(clonePermissions(newRole.permissions));
+    setWorkingPermissions(clonePermissions(newRole.permissions));
     setShowAddForm(false);
     setNewRoleName('');
     setHasChanges(true);
@@ -99,8 +95,9 @@ const RoleTemplates = () => {
     const updated = roles.filter((r) => r.id !== roleId);
     setRoles(updated);
     if (selectedRoleId === roleId) {
-      setSelectedRoleId(updated[0]?.id || null);
-      setEditingPermissions(null);
+      const fallback = updated[0];
+      setSelectedRoleId(fallback?.id || null);
+      setWorkingPermissions(clonePermissions(fallback?.permissions || {}));
       setHasChanges(false);
     }
     setConfirmDeleteId(null);
@@ -223,14 +220,7 @@ const RoleTemplates = () => {
               </div>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">{selectedRole.description}</p>
             </div>
-            {!editingPermissions && !selectedRole.locked && (
-              <button
-                onClick={handleStartEdit}
-                className="px-3 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-              >
-                Edit Permissions
-              </button>
-            )}
+
           </div>
 
           {/* Admin lock notice */}
@@ -248,25 +238,24 @@ const RoleTemplates = () => {
           {/* Permission Matrix */}
           <div className="max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
             <PermissionMatrix
-              permissions={editingPermissions || selectedRole.permissions}
+              permissions={workingPermissions}
               onChange={handlePermissionChange}
-              readOnly={!editingPermissions}
+              readOnly={selectedRole.locked}
             />
           </div>
 
           {/* Save / Cancel */}
-          {editingPermissions && (
+          {hasChanges && (
             <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700">
               <button
                 onClick={handleCancel}
                 className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors"
               >
-                Cancel
+                Discard
               </button>
               <button
                 onClick={handleSave}
-                disabled={!hasChanges}
-                className="px-4 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
               >
                 Save Template
               </button>
