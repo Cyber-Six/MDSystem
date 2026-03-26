@@ -142,7 +142,7 @@ const MedicalInventory = () => {
             return fetchMedicineBatches(Number(item.id)).then((bs) =>
               bs.map((b) => ({
                 id: b.id,
-                medicalItemId: b.medicalItemId,
+                medicalItemId: Number(b.medicalItemId),  // Ensure number type for linking
                 batchNumber: b.batchNumber,
                 currentQuantity: Number(b.availableQuantity ?? 0),
                 availableQuantity: Number(b.availableQuantity ?? 0),
@@ -159,9 +159,10 @@ const MedicalInventory = () => {
             return fetchSupplyBatches(Number(item.id)).then((bs) =>
               bs.map((b) => ({
                 id: b.id,
-                medicalItemId: b.supplyItemId,
+                medicalItemId: Number(b.supplyItemId),  // Ensure number type for linking
                 batchNumber: b.batchNumber,
-                currentQuantity: b.currentQuantity,
+                currentQuantity: Number(b.currentQuantity ?? 0),
+                availableQuantity: Number(b.currentQuantity ?? 0),  // Map both fields for consistency
                 unit: b.unit,
                 expiryDate: b.expiryDate,
                 location: b.location,
@@ -172,7 +173,8 @@ const MedicalInventory = () => {
           }
         })
       );
-      setBatches(batchResults.flat());
+      const flatBatches = batchResults.flat();
+      setBatches(flatBatches);
     } catch (err) {
       setItemsError(err.message || 'Failed to load medical items.');
     } finally {
