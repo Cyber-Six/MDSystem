@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, ROLE_COLORS, allActions, clonePermissions } from '../role-permissions';
+import { DEFAULT_ROLE_TEMPLATES, ROLE_COLORS, allModules, clonePermissions } from '../role-permissions';
 import PermissionMatrix from './permission-matrix';
 
 /**
@@ -83,7 +83,7 @@ const RoleTemplates = () => {
       description: 'Custom role — configure permissions below',
       color,
       locked: false,
-      permissions: allActions(false),
+      permissions: allModules(false),
     };
     setRoles((prev) => [...prev, newRole]);
     setSelectedRoleId(id);
