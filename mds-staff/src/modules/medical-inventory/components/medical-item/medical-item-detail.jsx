@@ -2,6 +2,18 @@ import React, { useState } from 'react';
 import { getExpiryStatus, CATEGORY_COLORS } from '../../inventory-seed-data';
 import { getDisplayLocation } from '../../medical-inventory-service';
 
+// Helper to format date for display (remove time portion)
+const formatDateDisplay = (dateValue) => {
+  if (!dateValue) return '—';
+  try {
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch (err) {
+    return '—';
+  }
+};
+
 /**
  * Medical Item Detail — batch table (FEFO sorted) + transaction history.
  * Matches the appointment-detail-modal layout but as a full page.
@@ -159,7 +171,7 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                       </td>
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-secondary-700 dark:text-neutral-300">{batch.expiryDate || '—'}</span>
+                          <span className="text-xs text-secondary-700 dark:text-neutral-300">{formatDateDisplay(batch.expiryDate)}</span>
                           <span className={`inline-flex px-1 py-0.5 text-[10px] font-medium rounded ${st.color}`}>{st.label}</span>
                         </div>
                       </td>

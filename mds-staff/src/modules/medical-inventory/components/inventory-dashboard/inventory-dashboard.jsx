@@ -14,7 +14,7 @@ const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate
   const expiringSoon = batches.filter((b) => {
     if (!b.expiryDate) return false;
     const days = Math.ceil((new Date(b.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
-    return days > 0 && days <= 30;
+    return days > 0 && days <= 60; // 2 months before expiry
   });
   const expiredBatches = batches.filter((b) => b.expiryDate && new Date(b.expiryDate) < new Date());
 
