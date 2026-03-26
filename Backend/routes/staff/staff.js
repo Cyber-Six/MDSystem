@@ -26,19 +26,18 @@ async function getUserIdViaName(name, branch) {
     if (!tags.length) return [];
 
     const scoreClauses = [];
-    const searchClauses = [];
+    const searchConditions = [];
     const params = [];
 
     tags.forEach((tag, i) => {
-        const paramIndex = params.length + 1;
+        const paramIndex = i + 1;
         params.push(`%${tag}%`);
         // Score weighting: first=3, middle=1, last=2
         scoreClauses.push(`(CASE WHEN up.first_name ILIKE $${paramIndex} THEN 3 ELSE 0 END +
                            CASE WHEN up.middle_name ILIKE $${paramIndex} THEN 1 ELSE 0 END +
                            CASE WHEN up.last_name ILIKE $${paramIndex} THEN 2 ELSE 0 END)`);
-        searchClauses.push(`up.first_name ILIKE $${paramIndex}`);
-        searchClauses.push(`up.middle_name ILIKE $${paramIndex}`);
-        searchClauses.push(`up.last_name ILIKE $${paramIndex}`);
+        // Each word must match at least one name field
+        searchConditions.push(`(up.first_name ILIKE $${paramIndex} OR up.middle_name ILIKE $${paramIndex} OR up.last_name ILIKE $${paramIndex})`);
     });
 
     const branchIndex = params.length + 1;
@@ -49,7 +48,7 @@ async function getUserIdViaName(name, branch) {
                (${scoreClauses.join(' + ')}) AS score
         FROM "UserCredentials" uc
         JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE (${searchClauses.join(' OR ')})
+        WHERE (${searchConditions.join(' AND ')})
           AND (up.branch = $${branchIndex} OR up.branch = 'Both' OR $${branchIndex} = 'Both')
         ORDER BY score DESC
         LIMIT 50
