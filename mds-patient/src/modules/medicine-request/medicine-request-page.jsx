@@ -206,15 +206,37 @@ const MedicineRequestPage = () => {
   useEffect(() => {
     if (!requests || requests.length === 0) return;
 
-    // Find first approved or rejected request that hasn't been dismissed
-    const notificationReq = requests.find((r) => {
+    // Filter for approved or rejected requests
+    const notificationWorthyRequests = requests.filter((r) => {
       const status = r.status?.toLowerCase();
-      const isNotificationStatus = status === 'approved' || status === 'rejected';
-      const isNotDismissed = !dismissedNotifications.includes(r.id);
-      return isNotificationStatus && isNotDismissed;
+      return status === 'approved' || status === 'rejected';
     });
 
-    setNotificationRequest(notificationReq || null);
+    if (notificationWorthyRequests.length === 0) {
+      setNotificationRequest(null);
+      return;
+    }
+
+    // Sort by created_at (most recent first)
+    const sortedByDate = notificationWorthyRequests.sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return dateB - dateA; // Newest first
+    });
+
+    // Only show notification for the most recent approved/rejected request that hasn't been dismissed
+    const mostRecentNotifiable = sortedByDate.find(
+      (r) => !dismissedNotifications.includes(r.id)
+    );
+
+    // If there's a most recent one that hasn't been dismissed, show it
+    // Otherwise, check if ALL notifications have been dismissed (meaning user has seen the recent ones)
+    if (mostRecentNotifiable) {
+      setNotificationRequest(mostRecentNotifiable);
+    } else {
+      // All recent notifications have been dismissed, don't show any
+      setNotificationRequest(null);
+    }
   }, [requests, dismissedNotifications]);
 
   const handleDismissNotification = () => {
