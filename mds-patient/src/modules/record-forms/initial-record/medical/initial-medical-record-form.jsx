@@ -131,6 +131,9 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       smokerYears: '',
       alcoholDrinker: 'no',
       alcoholFrequency: '',
+      vaper: 'no',
+      vapeType: '',
+      vapeFrequency: '',
       // Visual Acuity
       eyeglasses: false,
       contactLenses: false,

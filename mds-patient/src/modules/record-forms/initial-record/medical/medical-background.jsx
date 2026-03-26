@@ -1,5 +1,20 @@
 import React, { useState } from 'react';
-import { Checkbox, Input, Textarea, AccordionSection } from './form-elements';
+import { Checkbox, Input, Textarea, AccordionSection, Select } from './form-elements';
+
+const LIFESTYLE_FREQUENCY_OPTIONS = [
+  { value: 'Daily',        label: 'Daily' },
+  { value: 'Weekly',       label: 'Weekly' },
+  { value: 'Monthly',      label: 'Monthly' },
+  { value: 'Occasionally', label: 'Occasionally' },
+  { value: 'Rare',         label: 'Rare' },
+];
+
+const VAPE_TYPE_OPTIONS = [
+  { value: 'Nicotine', label: 'Nicotine' },
+  { value: 'CBD',      label: 'CBD' },
+  { value: 'THC',      label: 'THC' },
+  { value: 'Flavored', label: 'Flavored' },
+];
 
 // Allergen type display order
 const ALLERGEN_TYPE_ORDER = ['Food', 'Drug', 'Environmental', 'Insect', 'Chemical', 'Other'];
@@ -536,28 +551,6 @@ const MedicalBackgroundForm = ({
                   />
                   <span className="ml-2">Yes</span>
                 </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="smoker"
-                    value="quit"
-                    checked={data.smoker === 'quit'}
-                    onChange={(e) => handleChange('smoker', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">Yes, But I quit</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="smoker"
-                    value="vape"
-                    checked={data.smoker === 'vape'}
-                    onChange={(e) => handleChange('smoker', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">Vape</span>
-                </label>
               </div>
               {data.smoker === 'yes' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -607,13 +600,57 @@ const MedicalBackgroundForm = ({
                 </label>
               </div>
               {data.alcoholDrinker === 'yes' && (
-                <Input
+                <Select
                   label="Frequency"
-                  placeholder="e.g., 2 bottles per week"
+                  options={LIFESTYLE_FREQUENCY_OPTIONS}
                   value={data.alcoholFrequency || ''}
-                  onChange={(e) => handleChange('alcoholFrequency', e.target.value.slice(0, 30))}
-                  maxLength={30}
+                  onChange={(e) => handleChange('alcoholFrequency', e.target.value)}
                 />
+              )}
+            </div>
+
+            {/* Vaper */}
+            <div className="border-l-4 border-primary-500 pl-4">
+              <h4 className="font-semibold text-secondary-700 mb-3">Vaper</h4>
+              <div className="flex gap-4 mb-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="vaper"
+                    value="no"
+                    checked={data.vaper === 'no'}
+                    onChange={(e) => handleChange('vaper', e.target.value)}
+                    className="form-checkbox"
+                  />
+                  <span className="ml-2">No</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="vaper"
+                    value="yes"
+                    checked={data.vaper === 'yes'}
+                    onChange={(e) => handleChange('vaper', e.target.value)}
+                    className="form-checkbox"
+                  />
+                  <span className="ml-2">Yes</span>
+                </label>
+              </div>
+              {data.vaper === 'yes' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Select
+                    label="Vape Type"
+                    options={VAPE_TYPE_OPTIONS}
+                    value={data.vapeType || ''}
+                    onChange={(e) => handleChange('vapeType', e.target.value)}
+                  />
+                  <Select
+                    label="Frequency"
+                    options={LIFESTYLE_FREQUENCY_OPTIONS}
+                    value={data.vapeFrequency || ''}
+                    onChange={(e) => handleChange('vapeFrequency', e.target.value)}
+                  />
+                </div>
               )}
             </div>
           </div>

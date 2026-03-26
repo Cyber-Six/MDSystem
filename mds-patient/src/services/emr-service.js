@@ -847,6 +847,11 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
     alcoholConsumer: formData.medicalBackground.alcoholDrinker === 'yes',
     frequencyOfAlcoholConsumption: formData.medicalBackground.alcoholDrinker === 'yes'
       ? formData.medicalBackground.alcoholFrequency || null : null,
+    vapeUser: formData.medicalBackground.vaper === 'yes',
+    vapeType: formData.medicalBackground.vaper === 'yes'
+      ? formData.medicalBackground.vapeType || null : null,
+    vapeFrequency: formData.medicalBackground.vaper === 'yes'
+      ? formData.medicalBackground.vapeFrequency || null : null,
     notes: null
   };
 
@@ -1457,6 +1462,9 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
                                  ? String(ls.yearsSmoked) : '',
     alcoholDrinker:            ls.alcoholConsumer ? 'yes' : 'no',
     alcoholFrequency:          ls.frequencyOfAlcoholConsumption || '',
+    vaper:                     ls.vapeUser ? 'yes' : 'no',
+    vapeType:                  ls.vapeType || '',
+    vapeFrequency:             ls.vapeFrequency || '',
     eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes'),
     contactLenses:             vaNotesStr.includes('Contact Lenses: Yes'),
     gradeOD:                   va.acuity?.right_eye    || '',
@@ -1580,6 +1588,7 @@ export const fetchRevisionPrefill = async () => {
         lifestyle: getLifestyle {
           smoker numberOfCigarettesPerDay yearsSmoked
           alcoholConsumer frequencyOfAlcoholConsumption
+          vapeUser vapeType vapeFrequency
         }
         visualAcuity: getVisualAcuityProfile {
           notes
