@@ -1,93 +1,60 @@
 /**
  * Role Permission Constants & Defaults
- * Defines all modules, their actions, and default role templates
+ * Defines all modules and default role templates
+ * Simplified: each module is a single ON/OFF toggle (no per-action granularity)
  */
 
-// ─── Module action definitions ───────────────────────────────────────────
+// ─── Module definitions ──────────────────────────────────────────────────
 export const PERMISSION_MODULES = [
   {
     id: 'appointments',
     label: 'Appointments',
+    description: 'Queue, confirm, cancel, no-show, and complete appointments',
     icon: 'calendar',
-    actions: [
-      { id: 'view', label: 'View queue' },
-      { id: 'confirm', label: 'Confirm appointment' },
-      { id: 'cancel', label: 'Cancel appointment' },
-      { id: 'noshow', label: 'Mark no-show' },
-      { id: 'complete', label: 'Mark completed' },
-    ],
   },
   {
     id: 'pendingRequests',
     label: 'Pending Requests',
+    description: 'Approve or reject appointment, medicine, and record update requests',
     icon: 'pending',
-    actions: [
-      { id: 'view', label: 'View list' },
-      { id: 'approveAppointment', label: 'Approve appointment requests' },
-      { id: 'rejectAppointment', label: 'Reject appointment requests' },
-      { id: 'approveMedicine', label: 'Approve medicine requests' },
-      { id: 'rejectMedicine', label: 'Reject medicine requests' },
-      { id: 'approveRecordUpdate', label: 'Approve record update requests' },
-      { id: 'rejectRecordUpdate', label: 'Reject record update requests' },
-    ],
   },
   {
     id: 'medicalRecords',
     label: 'Medical Records',
+    description: 'View, edit, and add consultation notes to medical records',
     icon: 'medical',
-    actions: [
-      { id: 'view', label: 'View records' },
-      { id: 'edit', label: 'Edit / update records' },
-      { id: 'addNotes', label: 'Add consultation notes' },
-    ],
   },
   {
     id: 'dentalRecords',
     label: 'Dental Records',
+    description: 'View, edit, and add notes to dental records',
     icon: 'dental',
-    actions: [
-      { id: 'view', label: 'View records' },
-      { id: 'edit', label: 'Edit / update records' },
-      { id: 'addNotes', label: 'Add dental notes' },
-    ],
   },
   {
     id: 'patientSearch',
     label: 'Patient Search',
+    description: 'Search and view patient profiles',
     icon: 'search',
-    actions: [
-      { id: 'view', label: 'Search & view patients' },
-    ],
   },
   {
     id: 'inventory',
     label: 'Inventory',
+    description: 'View stock, add/restock items, and dispense medicine',
     icon: 'inventory',
-    actions: [
-      { id: 'view', label: 'View stock' },
-      { id: 'add', label: 'Add / restock items' },
-      { id: 'dispense', label: 'Dispense medicine' },
-    ],
   },
   {
     id: 'roleManagement',
     label: 'Settings / Role Mgmt',
+    description: 'View and edit roles, staff permissions, and system settings',
     icon: 'settings',
-    actions: [
-      { id: 'view', label: 'View roles & staff' },
-      { id: 'edit', label: 'Edit roles & permissions' },
-    ],
   },
 ];
 
-// ─── Helper: build a permission map with all actions set to a value ──────
-export const allActions = (val) => {
+// ─── Helper: build a permission map with all modules set to a value ─────
+export const allModules = (val) => {
   const map = {};
   PERMISSION_MODULES.forEach((mod) => {
-    map[mod.id] = {};
-    mod.actions.forEach((a) => {
-      map[mod.id][a.id] = val;
-    });
+    map[mod.id] = val;
   });
   return map;
 };
@@ -100,7 +67,7 @@ export const DEFAULT_ROLE_TEMPLATES = [
     description: 'Full access to all system features',
     color: 'error',
     locked: true,
-    permissions: allActions(true),
+    permissions: allModules(true),
   },
   {
     id: 'doctor',
@@ -109,14 +76,13 @@ export const DEFAULT_ROLE_TEMPLATES = [
     color: 'accent',
     locked: false,
     permissions: {
-      ...allActions(false),
-      appointments: { view: true, confirm: true, cancel: true, noshow: true, complete: true },
-      pendingRequests: { view: true, approveAppointment: true, rejectAppointment: true, approveMedicine: false, rejectMedicine: false, approveRecordUpdate: true, rejectRecordUpdate: true },
-      medicalRecords: { view: true, edit: true, addNotes: true },
-      dentalRecords: { view: false, edit: false, addNotes: false },
-      patientSearch: { view: true },
-      inventory: { view: false, add: false, dispense: false },
-      roleManagement: { view: false, edit: false },
+      appointments: true,
+      pendingRequests: true,
+      medicalRecords: true,
+      dentalRecords: false,
+      patientSearch: true,
+      inventory: false,
+      roleManagement: false,
     },
   },
   {
@@ -126,14 +92,13 @@ export const DEFAULT_ROLE_TEMPLATES = [
     color: 'primary',
     locked: false,
     permissions: {
-      ...allActions(false),
-      appointments: { view: true, confirm: true, cancel: true, noshow: true, complete: true },
-      pendingRequests: { view: true, approveAppointment: true, rejectAppointment: true, approveMedicine: false, rejectMedicine: false, approveRecordUpdate: true, rejectRecordUpdate: true },
-      medicalRecords: { view: false, edit: false, addNotes: false },
-      dentalRecords: { view: true, edit: true, addNotes: true },
-      patientSearch: { view: true },
-      inventory: { view: false, add: false, dispense: false },
-      roleManagement: { view: false, edit: false },
+      appointments: true,
+      pendingRequests: true,
+      medicalRecords: false,
+      dentalRecords: true,
+      patientSearch: true,
+      inventory: false,
+      roleManagement: false,
     },
   },
   {
@@ -143,14 +108,13 @@ export const DEFAULT_ROLE_TEMPLATES = [
     color: 'success',
     locked: false,
     permissions: {
-      ...allActions(false),
-      appointments: { view: true, confirm: true, cancel: false, noshow: false, complete: false },
-      pendingRequests: { view: true, approveAppointment: false, rejectAppointment: false, approveMedicine: true, rejectMedicine: false, approveRecordUpdate: false, rejectRecordUpdate: false },
-      medicalRecords: { view: true, edit: false, addNotes: false },
-      dentalRecords: { view: false, edit: false, addNotes: false },
-      patientSearch: { view: true },
-      inventory: { view: true, add: false, dispense: true },
-      roleManagement: { view: false, edit: false },
+      appointments: true,
+      pendingRequests: true,
+      medicalRecords: true,
+      dentalRecords: false,
+      patientSearch: true,
+      inventory: true,
+      roleManagement: false,
     },
   },
 ];

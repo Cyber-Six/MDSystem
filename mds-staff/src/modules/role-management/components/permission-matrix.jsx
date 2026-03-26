@@ -1,33 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { PERMISSION_MODULES } from '../role-permissions';
 
 /**
  * Permission Matrix Component
- * Renders collapsible module sections with action-level checkboxes
+ * Renders module-level toggle switches (simplified — no per-action granularity)
  * Used in both Role Template editing and per-Staff permissions
  */
 const PermissionMatrix = ({ permissions, onChange, readOnly = false }) => {
-  const [expanded, setExpanded] = useState({});
-
-  const toggleExpand = (modId) => {
-    setExpanded((prev) => ({ ...prev, [modId]: !prev[modId] }));
-  };
-
-  const handleToggle = (moduleId, actionId) => {
-    if (readOnly) return;
-    const updated = { ...permissions };
-    updated[moduleId] = { ...updated[moduleId], [actionId]: !updated[moduleId]?.[actionId] };
-    onChange(updated);
-  };
 
   const handleToggleModule = (moduleId) => {
     if (readOnly) return;
-    const mod = PERMISSION_MODULES.find((m) => m.id === moduleId);
-    if (!mod) return;
-    const allChecked = mod.actions.every((a) => permissions[moduleId]?.[a.id]);
-    const updated = { ...permissions };
-    updated[moduleId] = {};
-    mod.actions.forEach((a) => { updated[moduleId][a.id] = !allChecked; });
+    const updated = { ...permissions, [moduleId]: !permissions[moduleId] };
     onChange(updated);
   };
 
@@ -48,104 +31,64 @@ const PermissionMatrix = ({ permissions, onChange, readOnly = false }) => {
     );
   };
 
-  const getEnabledCount = (mod) => {
-    const count = mod.actions.filter((a) => permissions[mod.id]?.[a.id]).length;
-    return count;
-  };
+  const enabledCount = PERMISSION_MODULES.filter((mod) => permissions[mod.id]).length;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
+      {/* Summary */}
+      <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mb-2">
+        {enabledCount} of {PERMISSION_MODULES.length} modules enabled
+      </p>
+
       {PERMISSION_MODULES.map((mod) => {
-        const isExpanded = expanded[mod.id] ?? false;
-        const enabledCount = getEnabledCount(mod);
-        const allChecked = enabledCount === mod.actions.length;
-        const someChecked = enabledCount > 0 && !allChecked;
+        const isEnabled = !!permissions[mod.id];
 
         return (
-          <div key={mod.id} className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-            {/* Module Header */}
-            <div
-              className="flex items-center gap-3 px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800/50 cursor-pointer select-none hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-              onClick={() => toggleExpand(mod.id)}
-            >
-              {/* Module toggle */}
-              {!readOnly && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleToggleModule(mod.id); }}
-                  className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
-                    allChecked
-                      ? 'bg-primary-500 border-primary-500'
-                      : someChecked
-                        ? 'bg-primary-200 dark:bg-primary-800 border-primary-400'
-                        : 'border-neutral-300 dark:border-neutral-600'
-                  }`}
-                >
-                  {(allChecked || someChecked) && (
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      {allChecked
-                        ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 12h14" />
-                      }
-                    </svg>
-                  )}
-                </button>
-              )}
+          <div
+            key={mod.id}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors ${
+              isEnabled
+                ? 'border-primary-200 dark:border-primary-800/50 bg-primary-50/50 dark:bg-primary-900/10'
+                : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/30'
+            }`}
+          >
+            {/* Icon */}
+            <span className={`flex-shrink-0 ${isEnabled ? 'text-primary-500 dark:text-primary-400' : 'text-neutral-400 dark:text-neutral-500'}`}>
+              {getModuleIcon(mod.icon)}
+            </span>
 
-              <span className="text-secondary-500 dark:text-neutral-400">{getModuleIcon(mod.icon)}</span>
-              <span className="text-sm font-medium text-secondary-800 dark:text-white flex-1">{mod.label}</span>
-              <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                enabledCount === 0
-                  ? 'text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800'
-                  : allChecked
-                    ? 'text-success-700 dark:text-success-400 bg-success-100 dark:bg-success-900/30'
-                    : 'text-warning-700 dark:text-warning-400 bg-warning-100 dark:bg-warning-900/30'
-              }`}>
-                {enabledCount}/{mod.actions.length}
+            {/* Label + Description */}
+            <div className="flex-1 min-w-0">
+              <span className={`text-sm font-medium block ${isEnabled ? 'text-secondary-800 dark:text-white' : 'text-secondary-500 dark:text-neutral-400'}`}>
+                {mod.label}
               </span>
-              <svg className={`w-4 h-4 text-neutral-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              {mod.description && (
+                <span className="text-[10px] text-secondary-400 dark:text-neutral-500 block truncate">
+                  {mod.description}
+                </span>
+              )}
             </div>
 
-            {/* Action Checkboxes */}
-            {isExpanded && (
-              <div className="px-3 py-2 bg-white dark:bg-neutral-900 border-t border-neutral-100 dark:border-neutral-800">
-                <div className="space-y-1.5">
-                  {mod.actions.map((action) => {
-                    const checked = !!permissions[mod.id]?.[action.id];
-                    return (
-                      <label
-                        key={action.id}
-                        className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors ${
-                          readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => handleToggle(mod.id, action.id)}
-                          disabled={readOnly}
-                          className="sr-only"
-                        />
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
-                          checked
-                            ? 'bg-primary-500 border-primary-500'
-                            : 'border-neutral-300 dark:border-neutral-600'
-                        } ${readOnly ? 'opacity-60' : ''}`}>
-                          {checked && (
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                        <span className={`text-sm ${checked ? 'text-secondary-800 dark:text-white' : 'text-secondary-500 dark:text-neutral-400'}`}>
-                          {action.label}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+            {/* Toggle Switch */}
+            {readOnly ? (
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                isEnabled
+                  ? 'text-success-700 dark:text-success-400 bg-success-100 dark:bg-success-900/30'
+                  : 'text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800'
+              }`}>
+                {isEnabled ? 'On' : 'Off'}
+              </span>
+            ) : (
+              <button
+                onClick={() => handleToggleModule(mod.id)}
+                className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+                  isEnabled ? 'bg-primary-500' : 'bg-neutral-300 dark:bg-neutral-600'
+                }`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${
+                  isEnabled ? 'left-[18px]' : 'left-0.5'
+                }`} />
+              </button>
             )}
           </div>
         );
