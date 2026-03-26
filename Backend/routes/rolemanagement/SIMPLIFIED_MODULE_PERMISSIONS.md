@@ -49,12 +49,14 @@ This is the critical mapping. When a module is enabled, **all** listed permissio
 
 | Frontend Module ID | Backend Permission Keys (`permit.js`) | Backend Labels (`rolesTable.label`) |
 |---|---|---|
-| `appointments` | `appointment_allow_approval`, `appointment_allow_view_records`, `appointment_allow_view_configuration`, `appointment_allow_edit_configuration` | `ALLOW_TO_APPROVE_APPOINTMENT`, `ALLOW_TO_VIEW_APPOINTMENT`, `ALLOW_TO_VIEW_APPOINTMENT_CONFIGURATION`, `ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION` |
+| `patientSearch` | `profile_allow_view`, `emr_allow_view` | `ALLOW_TO_VIEW_PROFILE`, `ALLOW_TO_VIEW_EMR` |
 | `pendingRequests` | `emr_allow_approval`, `profile_allow_approval`, `appointment_allow_approval`, `medicine_request_allow_approve` | `ALLOW_TO_APPROVE_EMR`, `ALLOW_TO_APPROVE_PROFILE`, `ALLOW_TO_APPROVE_APPOINTMENT`, `ALLOW_TO_APPROVE_MEDICINE_REQUEST` |
 | `medicalRecords` | `emr_allow_view`, `emr_allow_edit`, `emr_allow_edit_catalogs`, `consultation_allow_view`, `consultation_allow_edit`, `profile_allow_view`, `profile_allow_edit` | `ALLOW_TO_VIEW_EMR`, `ALLOW_TO_EDIT_EMR`, `ALLOW_TO_EDIT_CATALOGS`, `ALLOW_TO_VIEW_CONSULTATION`, `ALLOW_TO_EDIT_CONSULTATION`, `ALLOW_TO_VIEW_PROFILE`, `ALLOW_TO_EDIT_PROFILE` |
 | `dentalRecords` | `emr_allow_view`, `emr_allow_edit`, `emr_allow_set_dental_record`, `consultation_allow_view`, `consultation_allow_edit` | `ALLOW_TO_VIEW_EMR`, `ALLOW_TO_EDIT_EMR`, `ALLOW_TO_SET_DENTAL_RECORD`, `ALLOW_TO_VIEW_CONSULTATION`, `ALLOW_TO_EDIT_CONSULTATION` |
-| `patientSearch` | `profile_allow_view`, `emr_allow_view` | `ALLOW_TO_VIEW_PROFILE`, `ALLOW_TO_VIEW_EMR` |
+| `appointments` | `appointment_allow_approval`, `appointment_allow_view_records`, `appointment_allow_view_configuration`, `appointment_allow_edit_configuration` | `ALLOW_TO_APPROVE_APPOINTMENT`, `ALLOW_TO_VIEW_APPOINTMENT`, `ALLOW_TO_VIEW_APPOINTMENT_CONFIGURATION`, `ALLOW_TO_EDIT_APPOINTMENT_CONFIGURATION` |
 | `inventory` | `inventory_allow_view`, `inventory_allow_edit`, `inventory_allow_dispense`, `inventory_allow_manage_requests`, `inventory_allow_prescribe` | `ALLOW_TO_VIEW_INVENTORY`, `ALLOW_TO_EDIT_INVENTORY`, `ALLOW_TO_DISPENSE_MEDICINE`, `ALLOW_TO_MANAGE_MEDICINE_REQUESTS`, `ALLOW_TO_PRESCRIBE` |
+| `healthChat` | (to be mapped to health-chat-related permission keys — define based on system health chat features) | (to be mapped) |
+| `analytics` | (to be mapped to analytics-related permission keys — define based on system analytics features) | (to be mapped) |
 | `roleManagement` | `is_admin` | `IS_ADMIN` |
 
 ### Important: Overlapping permissions
@@ -183,11 +185,9 @@ Place this in `permit.js` or a new `module-permissions.js` file:
 
 ```js
 const MODULE_PERMISSION_MAP = {
-  appointments: [
-    'appointment_allow_approval',
-    'appointment_allow_view_records',
-    'appointment_allow_view_configuration',
-    'appointment_allow_edit_configuration',
+  patientSearch: [
+    'profile_allow_view',
+    'emr_allow_view',
   ],
   pendingRequests: [
     'emr_allow_approval',
@@ -211,9 +211,11 @@ const MODULE_PERMISSION_MAP = {
     'consultation_allow_view',
     'consultation_allow_edit',
   ],
-  patientSearch: [
-    'profile_allow_view',
-    'emr_allow_view',
+  appointments: [
+    'appointment_allow_approval',
+    'appointment_allow_view_records',
+    'appointment_allow_view_configuration',
+    'appointment_allow_edit_configuration',
   ],
   inventory: [
     'inventory_allow_view',
@@ -221,6 +223,14 @@ const MODULE_PERMISSION_MAP = {
     'inventory_allow_dispense',
     'inventory_allow_manage_requests',
     'inventory_allow_prescribe',
+  ],
+  healthChat: [
+    // Add health-chat-related permission keys here
+    // e.g. 'health_chat_allow_access', 'health_chat_allow_moderate'
+  ],
+  analytics: [
+    // Add analytics-related permission keys here
+    // e.g. 'analytics_allow_view', 'analytics_allow_generate_reports'
   ],
   roleManagement: [
     'is_admin',
@@ -234,12 +244,12 @@ const MODULE_PERMISSION_MAP = {
 
 These match what the frontend hardcodes:
 
-| Role | appointments | pendingRequests | medicalRecords | dentalRecords | patientSearch | inventory | roleManagement |
-|---|---|---|---|---|---|---|---|
-| **Admin** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Doctor** | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ |
-| **Dentist** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
-| **Nurse** | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Role | patientSearch | pendingRequests | medicalRecords | dentalRecords | appointments | inventory | healthChat | analytics | roleManagement |
+|---|---|---|---|---|---|---|---|---|---|
+| **Admin** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Doctor** | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Dentist** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Nurse** | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -275,12 +285,14 @@ These match what the frontend hardcodes:
 {
   "userId": "42",
   "modules": [
-    { "moduleId": "appointments", "enabled": true },
+    { "moduleId": "patientSearch", "enabled": true },
     { "moduleId": "pendingRequests", "enabled": true },
     { "moduleId": "medicalRecords", "enabled": true },
     { "moduleId": "dentalRecords", "enabled": false },
-    { "moduleId": "patientSearch", "enabled": true },
+    { "moduleId": "appointments", "enabled": true },
     { "moduleId": "inventory", "enabled": false },
+    { "moduleId": "healthChat", "enabled": false },
+    { "moduleId": "analytics", "enabled": false },
     { "moduleId": "roleManagement", "enabled": false }
   ],
   "branch": "Both"
@@ -291,14 +303,16 @@ These match what the frontend hardcodes:
 ```json
 {
   "modules": [
-    { "moduleId": "appointments", "label": "Appointments", "enabled": true },
+    { "moduleId": "patientSearch", "label": "Search Patient", "enabled": true },
     { "moduleId": "pendingRequests", "label": "Pending Requests", "enabled": true },
     { "moduleId": "medicalRecords", "label": "Medical Records", "enabled": true },
     { "moduleId": "dentalRecords", "label": "Dental Records", "enabled": false },
-    { "moduleId": "patientSearch", "label": "Patient Search", "enabled": true },
+    { "moduleId": "appointments", "label": "Appointments", "enabled": true },
     { "moduleId": "inventory", "label": "Inventory", "enabled": false },
-    { "moduleId": "roleManagement", "label": "Settings / Role Mgmt", "enabled": false }
+    { "moduleId": "healthChat", "label": "Health Chat", "enabled": false },
+    { "moduleId": "analytics", "label": "Analytics", "enabled": false },
+    { "moduleId": "roleManagement", "label": "Role Management", "enabled": false }
   ],
-  "count": 7
+  "count": 9
 }
 ```
