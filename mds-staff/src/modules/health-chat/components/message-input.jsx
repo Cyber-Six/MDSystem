@@ -7,6 +7,43 @@ import PrescriptionModal from './PrescriptionModal';
 const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+// Maps common image extensions to MIME types for files copied from Windows Explorer (type is often '').
+const EXT_TO_MIME = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp',
+};
+/** Detect image MIME type from the first 12 magic bytes. */
+const detectMimeFromBytes = (bytes) => {
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'image/jpeg';
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image/png';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif';
+  if (bytes[0] === 0x42 && bytes[1] === 0x4D) return 'image/bmp';
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+  return null;
+};
+/** Resolves a DataTransferItem to a typed image File (async: may read magic bytes). */
+const resolveClipboardImageFile = (item) => {
+  if (item.kind !== 'file') return Promise.resolve(null);
+  const raw = item.getAsFile();
+  if (!raw) return Promise.resolve(null);
+  if (raw.type.startsWith('image/')) return Promise.resolve(raw);
+  const ext = raw.name.split('.').pop()?.toLowerCase();
+  const mimeFromExt = EXT_TO_MIME[ext];
+  if (mimeFromExt) return Promise.resolve(new File([raw], raw.name || `paste.${ext}`, { type: mimeFromExt }));
+  // Magic bytes fallback for screenshots / web-copied images with no name/type
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const bytes = new Uint8Array(ev.target.result);
+      const mime = detectMimeFromBytes(bytes);
+      resolve(mime ? new File([raw], `paste.${mime.split('/')[1]}`, { type: mime }) : null);
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsArrayBuffer(raw.slice(0, 12));
+  });
+};
+
 const MessageInput = ({ emitTyping }) => {
   const { selectedChatId, activeTicketId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
 
@@ -20,6 +57,7 @@ const MessageInput = ({ emitTyping }) => {
   const textareaRef  = useRef(null);
 
   const isPending = selectedTicket?.status === 'Open';
+  const isActive  = selectedTicket?.status === 'Ongoing';
   const isClosed  = ['Closed', 'Expired'].includes(selectedTicket?.status);
   const canSend   = isActive && (inputValue.trim() || attachedFile) && !isSending && activeTicketId;
 
@@ -44,15 +82,61 @@ const MessageInput = ({ emitTyping }) => {
   const handlePaste = useCallback((e) => {
     const items = e.clipboardData?.items;
     if (!items) return;
+
+    // First pass: direct image blob — resolveClipboardImageFile handles typed items,
+    // extension fallback, and magic-bytes for screenshots/web-copies with no name.
     for (const item of items) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
-        const file = item.getAsFile();
+      if (item.kind !== 'file') continue;
+      e.preventDefault(); // Prevent text insertion eagerly before async resolution
+      resolveClipboardImageFile(item).then((file) => {
         if (file && !attachedFile && !isUploading) {
-          e.preventDefault();
-          const named = new File([file], `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`, { type: file.type });
+          const ext = file.type.split('/')[1] || 'png';
+          const named = new File([file], `paste-${Date.now()}.${ext}`, { type: file.type });
           stageFile(named);
         }
-        break;
+      });
+      return;
+    }
+
+    // Second pass: extract image from HTML clipboard content (e.g. copy from browser page)
+    if (!attachedFile && !isUploading) {
+      const html = e.clipboardData.getData('text/html');
+      if (html) {
+        const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (match) {
+          const src = match[1];
+          const accepted = ACCEPTED_TYPES.split(',');
+          if (src.startsWith('data:image/')) {
+            e.preventDefault();
+            const [header, base64] = src.split(',');
+            const mimeMatch = header.match(/data:([^;]+);/);
+            const mime = mimeMatch?.[1] || 'image/png';
+            if (accepted.includes(mime)) {
+              const byteString = atob(base64);
+              const ab = new ArrayBuffer(byteString.length);
+              const ia = new Uint8Array(ab);
+              for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+              const ext = mime.split('/')[1] || 'png';
+              const file = new File([new Blob([ab], { type: mime })], `paste-${Date.now()}.${ext}`, { type: mime });
+              stageFile(file);
+            }
+          } else if (src.startsWith('https://') || src.startsWith('http://')) {
+            e.preventDefault();
+            (async () => {
+              try {
+                const resp = await fetch(src);
+                const blob = await resp.blob();
+                if (blob.type.startsWith('image/') && accepted.includes(blob.type)) {
+                  const ext = blob.type.split('/')[1] || 'png';
+                  const file = new File([blob], `paste-${Date.now()}.${ext}`, { type: blob.type });
+                  stageFile(file);
+                }
+              } catch {
+                // CORS or network error — silently ignore
+              }
+            })();
+          }
+        }
       }
     }
   }, [attachedFile, isUploading, stageFile]);
@@ -110,7 +194,6 @@ const MessageInput = ({ emitTyping }) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const isActive  = selectedTicket?.status === 'Ongoing';
   const FileIcon = attachedFile?.fileType?.startsWith('image/') ? Image
                  : attachedFile?.fileType?.startsWith('video/') ? Film
                  : File;

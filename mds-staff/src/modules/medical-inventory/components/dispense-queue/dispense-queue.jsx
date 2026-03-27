@@ -5,7 +5,7 @@ import { STATUS_BADGES } from '../../inventory-seed-data';
  * Dispense Queue — shows pending doctor / student medicine requests.
  * Key feature: "QTY PENDING" badge when quantity is null (student self-request).
  */
-const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject }) => {
+const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject, focusPatientId, onClearFocus }) => {
   const [search, setSearch] = useState('');
   const [filterLocation, setFilterLocation] = useState('Casal');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -53,6 +53,11 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
 
   const filtered = useMemo(() => {
     return (requests || []).filter((r) => {
+      // When a specific patient is focused, show all their requests across all locations/statuses
+      if (focusPatientId) {
+        return String(r.patientId) === String(focusPatientId);
+      }
+
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
 
       // Use the request's location field directly from the backend
@@ -83,8 +88,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
       }
       return true;
     });
-  }, [requests, search, filterLocation, filterStatus, itemMap]);
-
+  }, [requests, search, filterLocation, filterStatus, itemMap, focusPatientId]);
   const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
   const locations = ['Casal', 'Arlegui', 'QuezonCity'];
 
@@ -95,8 +99,24 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
 
   return (
     <div className="space-y-2">
+      {/* Focused patient banner */}
+      {focusPatientId && (
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 text-xs">
+          <span className="text-primary-700 dark:text-primary-300 font-medium">
+            Showing all requests for Patient ID: <span className="font-bold">{focusPatientId}</span>
+            {' '}({filtered.length} found across all locations)
+          </span>
+          <button
+            onClick={onClearFocus}
+            className="ml-3 flex-shrink-0 px-2 py-1 rounded text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors"
+          >
+            ✕ Clear
+          </button>
+        </div>
+      )}
+
       {/* Location Tabs */}
-      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-700">
+      <div className={`flex gap-1 border-b border-neutral-200 dark:border-neutral-700 ${focusPatientId ? 'opacity-40 pointer-events-none' : ''}`}>
         {locations.map((loc) => (
           <button
             key={loc}
