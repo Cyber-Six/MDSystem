@@ -927,19 +927,6 @@ async function recordAdminTransferPasswordFailure(adminId) {
 }
 
 /**
- * Get current admin transfer password failure count
- * @param {number} adminId
- * @returns {Promise<number>}
- */
-async function getAdminTransferPasswordFailureCount(adminId) {
-  if (!client) throw new Error("Redis client not initialized");
-
-  const failKey = `admin:transfer:pw:fail:${adminId}`;
-  const count = await client.get(failKey);
-  return Number(count) || 0;
-}
-
-/**
  * Check if admin is locked out from transfer password attempts
  * @param {number} adminId
  * @returns {Promise<{locked: boolean, ttl: number}>}
@@ -1102,7 +1089,6 @@ module.exports = {
   recordAdminTransferAttempt,
   getAdminActivePendingTransfer,
   recordAdminTransferPasswordFailure,
-  getAdminTransferPasswordFailureCount,
   isAdminTransferPasswordLocked,
   clearAdminTransferPasswordFailures,
 };
