@@ -331,12 +331,12 @@ type Mutation {
   # The 'branch' parameter is applied to ALL underlying permissions.
   setStaffModulePermissions(userId: ID!, modules: [ModulePermissionInput!]!, branch: Designation!): MutationResult!
 
-  # Staff Account - Combined update for module permissions, role, and/or account status
-  # Accepts optional module permissions, role change, and optional status change in one call.
+  # Staff Account - Combined update for role and/or account status
   # Branch is auto-detected from MedicalPersonnel.designation (defaults to 'Both').
-  # Status: Active = set identity to Medical + ensure is_staff; Suspended = revert identity to Employee.
+  # Status: Active = set is_active true; Suspended = set is_active false.
   # Role: If provided, updates MedicalPersonnel.role and applies matching template permissions.
-  updateStaffAccount(userId: ID!, modules: [ModulePermissionInput!], status: AccountStatus, role: String, templateId: ID): StaffAccountMutationResult!
+  # Admin accounts cannot have their role changed (use Admin Transfer instead).
+  updateStaffAccount(userId: ID!, status: AccountStatus, role: String, templateId: ID): StaffAccountMutationResult!
 
   # Session Management
   rotateStaffAnchor(userId: ID!): RotateAnchorResult!

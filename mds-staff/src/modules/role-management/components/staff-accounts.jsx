@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { allModules, hasCustomPermissions } from '../role-permissions';
 import { fetchStaffAccounts as fetchStaffAccountsAPI, searchUsers, createMedicalPersonnel, fetchTemplates } from '../staff-service';
 import StaffDetail from './staff-detail';
 
@@ -254,8 +253,6 @@ const StaffAccounts = () => {
             </thead>
             <tbody>
               {filteredStaff.map((s) => {
-                const tpl = templates.find(t => t.label === s.role);
-                const isCustom = tpl ? hasCustomPermissions(s.permissions, s.role, [{ id: s.role, permissions: tpl.permissions }]) : false;
                 const sc = statusConfig[s.status] || statusConfig.Pending;
                 return (
                   <tr
@@ -270,11 +267,6 @@ const StaffAccounts = () => {
                         </div>
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="text-xs font-medium text-secondary-900 dark:text-white truncate">{s.name}</span>
-                          {isCustom && s.status !== 'Pending' && (
-                            <span className="text-[8px] px-1 py-px bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium flex-shrink-0">
-                              Custom
-                            </span>
-                          )}
                         </div>
                       </div>
                     </td>
@@ -322,7 +314,7 @@ const StaffAccounts = () => {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddModal(false)} />
-          <div className="relative w-full max-w-md bg-white dark:bg-neutral-900 rounded-xl shadow-2xl flex flex-col max-h-[85vh]">
+          <div className="relative w-full max-w-md bg-white dark:bg-neutral-900 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between flex-shrink-0">
               <h3 className="text-sm font-semibold text-secondary-900 dark:text-white">Add Staff Account</h3>
@@ -367,7 +359,7 @@ const StaffAccounts = () => {
                     <p className="text-[10px] text-error-600 dark:text-error-400 mt-1.5">{addSearchError}</p>
                   )}
                   {addSearchResults.length > 0 && (
-                    <div className="mt-2 border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+                    <div className="mt-2 border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden max-h-80 overflow-y-auto">
                       {addSearchResults.map((u) => (
                         <button
                           key={u.id}
