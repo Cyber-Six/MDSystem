@@ -24,7 +24,9 @@ export const GQL_FULL_RECORD = `
     }
     getUserLifestyle(userId: $userId, limit: 1) {
       id smoker numberOfCigarettesPerDay yearsSmoked
-      alcoholConsumer frequencyOfAlcoholConsumption notes created_at
+      alcoholConsumer frequencyOfAlcoholConsumption
+      vapeUser vapeType vapeFrequency
+      notes created_at
     }
     getUserObgynHistory(userId: $userId, limit: 1) {
       id lastMenstrualPeriod hasDysmenorrhea notes created_at

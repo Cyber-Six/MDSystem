@@ -232,6 +232,9 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
         yearsSmoked: lifestyleData?.yearsSmoked ?? '',
         alcoholConsumer: lifestyleData?.alcoholConsumer ? 'Yes' : lifestyleData?.alcoholConsumer === false ? 'No' : '',
         alcoholFrequency: lifestyleData?.frequencyOfAlcoholConsumption ?? '',
+        vaper: lifestyleData?.vapeUser ? 'Yes' : lifestyleData?.vapeUser === false ? 'No' : '',
+        vapeType: lifestyleData?.vapeType ?? '',
+        vapeFrequency: lifestyleData?.vapeFrequency ?? '',
         notes: lifestyleData?.notes || '',
       },
       vision: {
