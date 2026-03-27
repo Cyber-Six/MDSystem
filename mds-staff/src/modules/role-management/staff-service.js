@@ -7,10 +7,14 @@ import { axiosRequest } from '../../packages-core-adapter';
 const ENDPOINT = '/rolemanagement/admin';
 
 const sendGraphQL = async (query, variables = {}) => {
-  const response = await axiosRequest.post(ENDPOINT, {
-    query,
-    variables,
-  });
+  let response;
+  try {
+    response = await axiosRequest.post(ENDPOINT, { query, variables });
+  } catch (err) {
+    // Extract GraphQL error message from non-2xx responses when available
+    const gqlMsg = err.response?.data?.errors?.[0]?.message;
+    throw new Error(gqlMsg || err.message || 'Network error');
+  }
 
   if (response.data.errors) {
     throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
@@ -43,6 +47,38 @@ const GQL_LIST_STAFF_ACCOUNTS = `
     listStaffAccounts {
       staff { ${STAFF_FIELDS} }
       count
+    }
+  }
+`;
+
+const GQL_SEARCH_USERS = `
+  query SearchUsers($query: String!) {
+    searchUsers(query: $query) {
+      users {
+        id
+        email
+        name
+        identity
+        credentialsStatus
+        isMedicalPersonnel
+      }
+      count
+    }
+  }
+`;
+
+const GQL_CREATE_MEDICAL_PERSONNEL = `
+  mutation CreateMedicalPersonnel($input: CreateMedicalPersonnelInput!) {
+    createMedicalPersonnel(input: $input) {
+      ok
+      message
+      personnel {
+        id
+        role
+        title
+        designation
+        isActive
+      }
     }
   }
 `;
@@ -206,6 +242,23 @@ function enrichStaff(s) {
 export const fetchStaffAccounts = async () => {
   const data = await sendGraphQL(GQL_LIST_STAFF_ACCOUNTS);
   return (data.listStaffAccounts.staff || []).map(enrichStaff);
+};
+
+/**
+ * Search users by email, name, or ID (for adding new staff).
+ */
+export const searchUsers = async (query) => {
+  const data = await sendGraphQL(GQL_SEARCH_USERS, { query });
+  return data.searchUsers.users || [];
+};
+
+/**
+ * Create a new medical personnel record (add staff).
+ * @param {Object} input - { userId, title, role, designation, templateId? }
+ */
+export const createMedicalPersonnel = async (input) => {
+  const data = await sendGraphQL(GQL_CREATE_MEDICAL_PERSONNEL, { input });
+  return data.createMedicalPersonnel;
 };
 
 /**

@@ -79,7 +79,7 @@ async function setMedicalPermit({ personnelId, assignedBy, roledata = [] }) {
 
   const result = await db.query(
     `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-     SELECT $1, r.id, v.branch, $2
+     SELECT $1, r.id, v.branch::"UserDesignation", $2
      FROM (VALUES ${values.join(",")}) AS v(label, branch)
      JOIN "rolesTable" r ON r.label = v.label
      ON CONFLICT ("personnelId", "rolesId") DO UPDATE
@@ -213,7 +213,7 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
 
     await db.query(
       `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-       SELECT $1, r.id, v.branch, $2
+       SELECT $1, r.id, v.branch::"UserDesignation", $2
        FROM (VALUES ${values.join(",")}) AS v(label, branch)
        JOIN "rolesTable" r ON r.label = v.label
        ON CONFLICT ("personnelId", "rolesId") DO UPDATE
@@ -282,9 +282,9 @@ async function isMedicalPermitted(userId, label, patientId) {
       [userId, label, patientId]
     );
   } else {
-    // Case: patientId null → skip patient join, only check role/branch
+    // Case: patientId null → skip patient join, only check if role exists
     result = await db.query(
-      `SELECT uc.identity
+      `SELECT 1
        FROM "rolesMap" rm
        JOIN "rolesTable" rt ON rm."rolesId" = rt.id
        WHERE rm."personnelId" = $1
@@ -331,7 +331,7 @@ async function isMedicalPermitted(userId, label, patientId) {
  * @returns {Promise<Object>} Created template with id
  */
 async function createPermissionTemplate({ label, permissionsList, createdBy, defaultBranch = 'Both' }) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
@@ -377,7 +377,7 @@ async function createPermissionTemplate({ label, permissionsList, createdBy, def
 
       await client.query(
         `INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
-         SELECT $1, r.id, v.branch, NOW()
+         SELECT $1, r.id, v.branch::"UserDesignation", NOW()
          FROM (VALUES ${values.join(",")}) AS v(label, branch)
          JOIN "rolesTable" r ON r.label = v.label;`,
         params
@@ -527,7 +527,7 @@ async function listPermissionTemplates() {
  * @returns {Promise<Object>} Updated template
  */
 async function updatePermissionTemplate({ templateId, label, permissionsList, defaultBranch = 'Both' }) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
@@ -581,7 +581,7 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
 
         await client.query(
           `INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
-           SELECT $1, r.id, v.branch, NOW()
+           SELECT $1, r.id, v.branch::"UserDesignation", NOW()
            FROM (VALUES ${values.join(",")}) AS v(label, branch)
            JOIN "rolesTable" r ON r.label = v.label;`,
           params
@@ -611,7 +611,7 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
  * @returns {Promise<boolean>} True if deleted
  */
 async function deletePermissionTemplate(templateId) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
