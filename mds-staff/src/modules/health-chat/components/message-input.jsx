@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useRef, useCallback } from 'react';
+import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { uploadFile, unstageFile } from '../health-chat-service';
+import PrescriptionModal from './PrescriptionModal';
 
-const ACCEPTED_TYPES = 'image/jpeg,image/png,application/pdf,video/mp4,video/quicktime';
+const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const MessageInput = ({ emitTyping }) => {
@@ -11,21 +12,21 @@ const MessageInput = ({ emitTyping }) => {
 
   const [inputValue, setInputValue]   = useState('');
   const [attachedFile, setAttachedFile] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSending, setIsSending]     = useState(false);
-  const [actionLoading, setActionLoading] = useState(null);
+  const [isUploading, setIsUploading]         = useState(false);
+  const [isSending, setIsSending]               = useState(false);
+  const [actionLoading, setActionLoading]       = useState(null);
+  const [showPrescription, setShowPrescription] = useState(false);
   const fileInputRef = useRef(null);
   const textareaRef  = useRef(null);
 
   const isPending = selectedTicket?.status === 'Open';
-  const isActive  = selectedTicket?.status === 'Ongoing';
   const isClosed  = ['Closed', 'Expired'].includes(selectedTicket?.status);
   const canSend   = isActive && (inputValue.trim() || attachedFile) && !isSending && activeTicketId;
 
-  const handleFileSelect = async (e) => {
-    const file = e.target.files[0];
+  const stageFile = useCallback(async (file) => {
     if (!file) return;
-    e.target.value = '';
+    const allowed = ACCEPTED_TYPES.split(',');
+    if (!allowed.includes(file.type)) { alert('Unsupported file type.'); return; }
     if (file.size > MAX_FILE_SIZE) { alert('File too large. Max 10MB.'); return; }
     try {
       setIsUploading(true);
@@ -33,7 +34,28 @@ const MessageInput = ({ emitTyping }) => {
       setAttachedFile({ fileId, fileName: file.name, fileType: file.type, fileSize: file.size });
     } catch { alert('Upload failed. Please try again.'); }
     finally { setIsUploading(false); }
+  }, []);
+
+  const handleFileSelect = (e) => {
+    stageFile(e.target.files[0]);
+    e.target.value = '';
   };
+
+  const handlePaste = useCallback((e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file && !attachedFile && !isUploading) {
+          e.preventDefault();
+          const named = new File([file], `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`, { type: file.type });
+          stageFile(named);
+        }
+        break;
+      }
+    }
+  }, [attachedFile, isUploading, stageFile]);
 
   const handleRemoveFile = async () => {
     if (attachedFile?.fileId) {
@@ -88,6 +110,7 @@ const MessageInput = ({ emitTyping }) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const isActive  = selectedTicket?.status === 'Ongoing';
   const FileIcon = attachedFile?.fileType?.startsWith('image/') ? Image
                  : attachedFile?.fileType?.startsWith('video/') ? Film
                  : File;
@@ -200,12 +223,26 @@ const MessageInput = ({ emitTyping }) => {
           }
         </button>
 
+        {/* Prescribe */}
+        {isActive && (
+          <button
+            onClick={() => setShowPrescription(true)}
+            disabled={isSending}
+            className="flex-shrink-0 p-1.5 rounded-lg transition-colors disabled:opacity-40
+                       text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+            title="Issue prescription"
+          >
+            <Pill className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Textarea */}
         <textarea
           ref={textareaRef}
           value={inputValue}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
           disabled={isSending}
           rows={1}
@@ -236,6 +273,12 @@ const MessageInput = ({ emitTyping }) => {
           }
         </button>
       </div>
+
+      <PrescriptionModal
+        isOpen={showPrescription}
+        onClose={() => setShowPrescription(false)}
+        patientId={selectedTicket?.patientId}
+      />
     </div>
   );
 };

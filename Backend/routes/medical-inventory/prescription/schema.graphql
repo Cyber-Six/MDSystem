@@ -72,6 +72,7 @@ input IssuePrescriptionInput {
 type Query {
   getAvailableMedicine(location: LocationDesignation, offset: Int, limit: Int): [AvailableMedicine!]
   getPatientPrescriptions(patientId: ID!, offset: Int, limit: Int): [PrescriptionTransaction!]
+  getMyPrescriptions(offset: Int, limit: Int): [PrescriptionTransaction!]
 }
 
 type Mutation {
