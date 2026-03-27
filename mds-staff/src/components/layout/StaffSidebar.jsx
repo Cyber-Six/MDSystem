@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '@core/assets/MDSystem.png';
 import { useHealthChatBadge } from '../../modules/health-chat/hooks/use-health-chat-badge';
+import { usePermissions } from '../../context/permissions-context';
 
 /**
  * Staff Sidebar Navigation Component
@@ -10,17 +11,27 @@ import { useHealthChatBadge } from '../../modules/health-chat/hooks/use-health-c
 const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const location = useLocation();
   const pendingChatCount = useHealthChatBadge();
+  const { hasPermission, isAdmin, isLoading } = usePermissions();
 
-  const navItems = [
+  const allNavItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
-    { path: '/search', icon: 'search', label: 'Search Patient' },
-    { path: '/pending', icon: 'pending', label: 'Pending Requests' },
-    { path: '/appointments', icon: 'calendar', label: 'Appointments' },
-    { path: '/inventory', icon: 'inventory', label: 'Inventory' },
-    { path: '/health-chat', icon: 'healthchat', label: 'Health Chat' },
-    { path: '/analytics', icon: 'analytics', label: 'Analytics' },
-    { path: '/settings/roles', icon: 'roles', label: 'Role Management' },
+    { path: '/search', icon: 'search', label: 'Search Patient', moduleId: 'patientSearch' },
+    { path: '/pending', icon: 'pending', label: 'Pending Requests', moduleId: 'pendingRequests' },
+    { path: '/appointments', icon: 'calendar', label: 'Appointments', moduleId: 'appointments' },
+    { path: '/inventory', icon: 'inventory', label: 'Inventory', moduleId: 'inventory' },
+    { path: '/health-chat', icon: 'healthchat', label: 'Health Chat', moduleId: 'healthChat' },
+    { path: '/analytics', icon: 'analytics', label: 'Analytics', moduleId: 'analytics' },
+    { path: '/settings/roles', icon: 'roles', label: 'Role Management', adminOnly: true },
   ];
+
+  const navItems = useMemo(() => {
+    if (isLoading) return allNavItems.filter((item) => !item.moduleId && !item.adminOnly);
+    return allNavItems.filter((item) => {
+      if (item.adminOnly) return isAdmin;
+      if (item.moduleId) return hasPermission(item.moduleId);
+      return true; // Dashboard always visible
+    });
+  }, [isLoading, isAdmin, hasPermission]);
 
   const icons = {
     dashboard: (

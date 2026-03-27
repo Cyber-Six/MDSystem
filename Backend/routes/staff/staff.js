@@ -71,6 +71,23 @@ async function getUserIdViaEmail(email, branch) {
     return result.rows;
 }
 
+// Route: Get current user's module permissions
+router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
+    try {
+        const { getStaffModulePermissions, isMedicalPermitted, permissions: permKeys } = require('../../services/permit.js');
+        const modulePerms = await getStaffModulePermissions(req.user.id);
+        const isAdmin = await isMedicalPermitted(req.user.id, permKeys.is_admin, null);
+
+        res.json({
+            modules: modulePerms.modules,
+            isAdmin: !!isAdmin,
+        });
+    } catch (error) {
+        logger.error('Error fetching own permissions:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Route: Get user ID by identifier
 router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (req, res) => {
     try {

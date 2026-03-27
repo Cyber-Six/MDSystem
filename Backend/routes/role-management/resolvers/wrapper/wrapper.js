@@ -188,7 +188,8 @@ const Query = {
           ($1 IS NULL OR uc.credentials_status = $1)
           AND ($2 IS NULL OR mp.designation = $2)
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-                up.first_name, up.middle_name, up.last_name, mp.designation
+                up.first_name, up.middle_name, up.last_name, mp.designation,
+                mp.is_active, lla.last_login
        ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`,
       [status || null, location || null]
     );
@@ -244,7 +245,9 @@ const Query = {
          uc.id, uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
-         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
+         mp.is_active,
+         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map,
+         lla.last_login
        FROM "UserCredentials" uc
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
@@ -258,7 +261,8 @@ const Query = {
        ) lla ON lla.user_id = uc.id
        WHERE uc.id = $1
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-                up.first_name, up.middle_name, up.last_name, mp.designation`,
+                up.first_name, up.middle_name, up.last_name, mp.designation,
+                mp.is_active, lla.last_login`,
       [userId]
     );
 
