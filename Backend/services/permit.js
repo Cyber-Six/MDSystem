@@ -79,7 +79,7 @@ async function setMedicalPermit({ personnelId, assignedBy, roledata = [] }) {
 
   const result = await db.query(
     `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-     SELECT $1, r.id, v.branch, $2
+     SELECT $1, r.id, v.branch::"UserDesignation", $2
      FROM (VALUES ${values.join(",")}) AS v(label, branch)
      JOIN "rolesTable" r ON r.label = v.label
      ON CONFLICT ("personnelId", "rolesId") DO UPDATE
@@ -213,7 +213,7 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
 
     await db.query(
       `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-       SELECT $1, r.id, v.branch, $2
+       SELECT $1, r.id, v.branch::"UserDesignation", $2
        FROM (VALUES ${values.join(",")}) AS v(label, branch)
        JOIN "rolesTable" r ON r.label = v.label
        ON CONFLICT ("personnelId", "rolesId") DO UPDATE
@@ -377,7 +377,7 @@ async function createPermissionTemplate({ label, permissionsList, createdBy, def
 
       await client.query(
         `INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
-         SELECT $1, r.id, v.branch, NOW()
+         SELECT $1, r.id, v.branch::"UserDesignation", NOW()
          FROM (VALUES ${values.join(",")}) AS v(label, branch)
          JOIN "rolesTable" r ON r.label = v.label;`,
         params
@@ -581,7 +581,7 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
 
         await client.query(
           `INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
-           SELECT $1, r.id, v.branch, NOW()
+           SELECT $1, r.id, v.branch::"UserDesignation", NOW()
            FROM (VALUES ${values.join(",")}) AS v(label, branch)
            JOIN "rolesTable" r ON r.label = v.label;`,
           params

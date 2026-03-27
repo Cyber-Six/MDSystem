@@ -51,6 +51,38 @@ const GQL_LIST_STAFF_ACCOUNTS = `
   }
 `;
 
+const GQL_SEARCH_USERS = `
+  query SearchUsers($query: String!) {
+    searchUsers(query: $query) {
+      users {
+        id
+        email
+        name
+        identity
+        credentialsStatus
+        isMedicalPersonnel
+      }
+      count
+    }
+  }
+`;
+
+const GQL_CREATE_MEDICAL_PERSONNEL = `
+  mutation CreateMedicalPersonnel($input: CreateMedicalPersonnelInput!) {
+    createMedicalPersonnel(input: $input) {
+      ok
+      message
+      personnel {
+        id
+        role
+        title
+        designation
+        isActive
+      }
+    }
+  }
+`;
+
 const GQL_GET_STAFF_ACCOUNT = `
   query GetStaffAccount($userId: ID!) {
     getStaffAccount(userId: $userId) {
@@ -210,6 +242,23 @@ function enrichStaff(s) {
 export const fetchStaffAccounts = async () => {
   const data = await sendGraphQL(GQL_LIST_STAFF_ACCOUNTS);
   return (data.listStaffAccounts.staff || []).map(enrichStaff);
+};
+
+/**
+ * Search users by email, name, or ID (for adding new staff).
+ */
+export const searchUsers = async (query) => {
+  const data = await sendGraphQL(GQL_SEARCH_USERS, { query });
+  return data.searchUsers.users || [];
+};
+
+/**
+ * Create a new medical personnel record (add staff).
+ * @param {Object} input - { userId, title, role, designation, templateId? }
+ */
+export const createMedicalPersonnel = async (input) => {
+  const data = await sendGraphQL(GQL_CREATE_MEDICAL_PERSONNEL, { input });
+  return data.createMedicalPersonnel;
 };
 
 /**
