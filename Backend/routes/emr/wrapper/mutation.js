@@ -142,47 +142,53 @@ const Mutation = {
   },
 
   _VitalSigns: async (_, { args, recordId }, { user, res }) => {
+    const client = await db.connect();
     try {
-      // Step 1: Insert into VitalSigns and get the ID
-      const insertResult = await db.query(
-        `INSERT INTO "VitalSigns"
-           ("height_cm", "weight_kg", "blood_pressure", "heart_rate",
-            "temperature", "notes")
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id;`,
+      await client.query('BEGIN');
+      await client.query('SET CONSTRAINTS ALL DEFERRED');
+
+      const result = await db.queryClient(
+        client,
+        `WITH inserted AS (
+           INSERT INTO "VitalSigns"
+             ("height_cm", "weight_kg", "blood_pressure", "heart_rate",
+              "temperature", "notes")
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id
+         )
+         UPDATE "patientUpdateLog"
+         SET "vitalSignsId" = inserted.id
+         FROM inserted
+         WHERE "patientUpdateLog".id = $7
+         RETURNING "patientUpdateLog".*, inserted.id AS vitalSignsId;`,
         [
           args.input.height_cm,
           args.input.weight_kg,
           args.input.blood_pressure,
           args.input.heart_rate,
           args.input.temperature,
-          args.input.notes
+          args.input.notes,
+          recordId
         ]
       );
 
-      const vitalSignsId = insertResult.rows[0].id;
-
-      // Step 2: Update patientUpdateLog with the VitalSigns ID
-      await db.query(
-        `UPDATE "patientUpdateLog"
-         SET "vitalSignsId" = $1
-         WHERE id = $2;`,
-        [vitalSignsId, recordId]
-      );
-
-      logger.debug("Inserted Vital Signs ID:", vitalSignsId);
+      await client.query('COMMIT');
+      logger.debug("Inserted Vital Signs + Updated Log:", result.rows[0]);
 
       return {
         ...(args.input),
-        id: vitalSignsId,
+        id: result.rows[0].vitalSignsId,
         archived_at: null
       };
     } catch (error) {
+      await client.query('ROLLBACK');
       logger.error('Error inserting Vital Signs:', error);
       throwGraphQLError(res)
         .status(400)
         .message(`Failed to save edits: Vital signs: ${error.message}`)
         .throw();
+    } finally {
+      client.release();
     }
   },
 
