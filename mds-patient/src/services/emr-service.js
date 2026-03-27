@@ -844,6 +844,13 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   // Lifestyle
   inputs.lifestyle = {
     smoker: formData.medicalBackground.smoker === 'yes',
+    vapeUser: formData.medicalBackground.smoker === 'vape',
+    vapeType: formData.medicalBackground.smoker === 'vape' 
+      ? formData.medicalBackground.vapeType || null : null,
+    vapeFrequency: formData.medicalBackground.smoker === 'vape'
+      ? formData.medicalBackground.vapeFrequency || null : null,
+    yearsVaping: formData.medicalBackground.smoker === 'vape'
+      ? (formData.medicalBackground.yearsVaping ? parseInt(formData.medicalBackground.yearsVaping) : null) : null,
     numberOfCigarettesPerDay: formData.medicalBackground.smoker === 'yes'
       ? parseInt(formData.medicalBackground.smokerSticksPerDay) || null : null,
     yearsSmoked: formData.medicalBackground.smoker === 'yes'
