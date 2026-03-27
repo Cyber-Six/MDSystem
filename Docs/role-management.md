@@ -19,7 +19,7 @@ GraphQL API for managing medical staff roles, permissions, access control, and a
 ### Identity & Roles
 - **Identity Types:** Medical, Employee, Student, Superior
 - **Roles:** Dynamic strings (any text), optionally linked to permission templates
-- **Status:** Active, Suspended, Pending (for credentials)
+- **CredentialsStatus:** Active, Unverified, Suspended
 
 ### Branches
 Permissions can be designated for specific locations:
@@ -34,72 +34,77 @@ Permissions can be designated for specific locations:
 ### Queries
 
 **Staff Accounts:**
-- `listStaffAccounts(status?, location?)` - List with optional filters
-- `getStaffAccount(userId)` - Single account with all permissions
-- `listStaffSessions(userId)` - Active device sessions
+- `listStaffAccounts(status: CredentialsStatus, location: Designation): StaffAccountList!`
+- `getStaffAccount(userId: ID!): StaffAccount`
+- `listStaffSessions(userId: ID!): StaffSessionList!`
 
 **Medical Personnel:**
-- `listMedicalPersonnel(role?, designation?, isActive?)` - List with optional filters
-- `getMedicalPersonnel(personnelId)` - Single entry with role and template info
+- `listMedicalPersonnel(role: String, designation: Designation, isActive: Boolean): MedicalPersonnelList!`
+- `getMedicalPersonnel(userId: ID!): MedicalPersonnel`
 
 **Permissions:**
-- `getStaffPermissions(userId)` - All granular permissions
-- `getStaffModulePermissions(userId)` - Module-level permission status
+- `getStaffPermissions(userId: ID!): Permissions!` — All granular BranchPermission objects
+- `getStaffModulePermissions(userId: ID!): ModulePermissionList!` — Module-level derived status
 
 **Permission Templates:**
-- `listPermissionTemplates()` - All templates
-- `getPermissionTemplate(templateId)` - Single template details
+- `listPermissionTemplates: PermissionTemplateList!`
+- `getPermissionTemplate(templateId: ID!): PermissionTemplate`
 
 **Sessions:**
-- `listUserSessions(userId, limit?, offset?)` - Paginated user sessions
-- `countActiveRefreshTokens(userId)` - Count of active tokens
+- `listUserSessions(offset: Int!, limit: Int!): UserSessionPage!` — Paginated global sessions
+- `countActiveRefreshTokens: Int!` — Count of all active tokens (no args)
 
 ### Mutations
 
 **Medical Personnel:**
-- `createMedicalPersonnel(email, firstName, lastName, title, role, designation, isActive, templateId?)` - Create staff
-- `updateMedicalPersonnel(personnelId, title?, role?, designation?, isActive?, templateId?)` - Update staff
-- `deleteMedicalPersonnel(personnelId, revertIdentity?)` - Delete staff
+- `createMedicalPersonnel(input: CreateMedicalPersonnelInput!): MedicalPersonnelMutationResult!`
+  - Input: `{ userId: ID!, title: String!, role: String!, designation: Designation!, templateId: ID }`
+- `updateMedicalPersonnel(userId: ID!, input: UpdateMedicalPersonnelInput!): MedicalPersonnelMutationResult!`
+  - Input: `{ title: String, role: String, designation: Designation, isActive: Boolean, templateId: ID }`
+- `deleteMedicalPersonnel(userId: ID!, revertIdentity: Boolean): DeleteMedicalPersonnelResult!`
 
 **Permissions:**
-- `setStaffPermissionsStandard(userId, permissionKeys[], branch)` - Set granular permissions (same branch for all)
-- `setStaffPermissionsExtended(userId, permissions[{key, branch}])` - Set granular permissions (per-key branches)
-- `setStaffModulePermissions(userId, modules{module: boolean}, branch)` - Set module-level permissions
-- `updateStaffAccount(userId, modules?, status?)` - Combine module updates and status changes
+- `setStaffPermissionsStandard(userId: ID!, permissions: [StandardPermissionInput!]!, branch: Designation!): MutationResult!`
+  - StandardPermissionInput: `{ key: String!, enabled: Boolean! }`
+- `setStaffPermissionsExtended(userId: ID!, permissions: [ExtendedPermissionInput!]!, defaultBranch: Designation): MutationResult!`
+  - ExtendedPermissionInput: `{ key: String!, enabled: Boolean!, branch: Designation }`
+- `setStaffModulePermissions(userId: ID!, modules: [ModulePermissionInput!]!, branch: Designation!): MutationResult!`
+  - ModulePermissionInput: `{ moduleId: String!, enabled: Boolean! }`
+- `updateStaffAccount(userId: ID!, modules: [ModulePermissionInput!], status: AccountStatus): StaffAccountMutationResult!`
 
 **Permission Templates:**
-- `createPermissionTemplate(label, permissionKeys[])` - Create template
-- `updatePermissionTemplate(templateId, label?, permissionKeys[]?)` - Update template
-- `deletePermissionTemplate(templateId)` - Delete template
-- `applyTemplateToStaff(userId, templateId)` - Apply template to staff member
+- `createPermissionTemplate(input: CreateTemplateInput!): TemplateMutationResult!`
+  - Input: `{ label: String!, permissions: [ExtendedPermissionInput!]!, defaultBranch: Designation }`
+- `updatePermissionTemplate(templateId: ID!, input: UpdateTemplateInput!): TemplateMutationResult!`
+  - Input: `{ label: String, permissions: [ExtendedPermissionInput!], defaultBranch: Designation }`
+- `deletePermissionTemplate(templateId: ID!): MutationResult!`
+- `applyTemplateToStaff(userId: ID!, templateId: ID!): MutationResult!`
 
 **Session Management:**
-- `rotateStaffAnchor(userId)` - Invalidate all staff sessions
+- `rotateStaffAnchor(userId: ID!): RotateAnchorResult!`
 
 **Admin Transfer:**
-- `initiateAdminTransfer(oldAdminPassword, newAdminEmail)` - Begin transfer with password verification
-- `confirmAdminTransfer(verificationToken, otpCode)` - Complete transfer with OTP
+- `initiateAdminTransfer(newAdminUserId: ID!, password: String!): InitiateAdminTransferResult!`
+- `confirmAdminTransfer(verificationToken: String!): ConfirmAdminTransferResult!`
 
 ---
 
 ## Example Workflows
 
-### Create Medical Staff with Permissions
+### Create Medical Staff with Template
 
 ```graphql
 mutation CreateDoctor {
-  createMedicalPersonnel(
-    email: "dr.smith@hospital.com"
-    firstName: "John"
-    lastName: "Smith"
+  createMedicalPersonnel(input: {
+    userId: "123"
     title: "Doctor"
     role: "Senior Doctor"
-    designation: "Both"
-    isActive: true
-    templateId: "doctor-template"
-  ) {
-    success
+    designation: Both
+    templateId: "1"
+  }) {
+    ok
     message
+    personnel { id role title designation isActive }
   }
 }
 ```
@@ -109,15 +114,34 @@ mutation CreateDoctor {
 ```graphql
 mutation UpdateModuleAccess {
   setStaffModulePermissions(
-    userId: 123
-    modules: {
-      patientSearch: true
-      appointments: true
-      inventory: false
-    }
-    branch: "Manila"
+    userId: "123"
+    modules: [
+      { moduleId: "patientSearch", enabled: true }
+      { moduleId: "appointments", enabled: true }
+      { moduleId: "inventory", enabled: false }
+    ]
+    branch: Manila
   ) {
-    success
+    ok
+    message
+  }
+}
+```
+
+### Set Granular Permissions (Extended)
+
+```graphql
+mutation SetGranularAccess {
+  setStaffPermissionsExtended(
+    userId: "123"
+    permissions: [
+      { key: "emr_allow_view", enabled: true, branch: Manila }
+      { key: "emr_allow_edit", enabled: true, branch: QuezonCity }
+      { key: "profile_allow_view", enabled: true }
+    ]
+    defaultBranch: Both
+  ) {
+    ok
     message
   }
 }
@@ -127,14 +151,16 @@ mutation UpdateModuleAccess {
 
 ```graphql
 query UserAccess {
-  getStaffAccount(userId: 123) {
+  getStaffAccount(userId: "123") {
     name
-    role
+    status
     permissions {
-      branchPermissions { key enabled branch }
+      permissions { key label enabled branch }
       count
     }
-    modulePermissions { module enabled }
+    modulePermissions {
+      modules { moduleId label enabled }
+    }
   }
 }
 ```
@@ -143,21 +169,24 @@ query UserAccess {
 
 ```graphql
 mutation CreateNurseTemplate {
-  createPermissionTemplate(
+  createPermissionTemplate(input: {
     label: "Nurse Standard"
-    permissionKeys: [
-      "view_patient_records"
-      "view_appointments"
-      "edit_appointments"
+    permissions: [
+      { key: "emr_allow_view", enabled: true }
+      { key: "appointment_allow_view_records", enabled: true }
+      { key: "inventory_allow_view", enabled: true }
     ]
-  ) {
-    id
+    defaultBranch: Both
+  }) {
+    ok
+    template { id label permissionCount }
   }
 }
 
 mutation ApplyTemplate {
-  applyTemplateToStaff(userId: 456, templateId: "nurse-template") {
-    success
+  applyTemplateToStaff(userId: "456", templateId: "1") {
+    ok
+    message
   }
 }
 ```
@@ -167,7 +196,7 @@ mutation ApplyTemplate {
 ```graphql
 mutation InitiateTransfer {
   initiateAdminTransfer(
-    newAdminUserId: 456
+    newAdminUserId: "456"
     password: "current-admin-password"
   ) {
     ok
@@ -178,7 +207,7 @@ mutation InitiateTransfer {
 
 mutation ConfirmTransfer {
   confirmAdminTransfer(
-    verificationToken: "verification-token-from-email"
+    verificationToken: "ABCD1234"
   ) {
     ok
     message
@@ -192,49 +221,30 @@ mutation ConfirmTransfer {
 
 ## Permission Keys
 
-Granular permissions available (mapped to modules):
+All granular permission keys (mapped to modules):
 
-**Patient Search:**
-- `profile_allow_view`
-- `emr_allow_view`
+**Patient Search:** `profile_allow_view`, `emr_allow_view`
 
-**Pending Requests:**
-- `emr_allow_approval`
-- `profile_allow_approval`
-- `appointment_allow_approval`
-- `medicine_request_allow_approve`
+**Pending Requests:** `emr_allow_approval`, `profile_allow_approval`, `appointment_allow_approval`, `medicine_request_allow_approve`
 
-**Medical Records:**
-- `emr_allow_view`
-- `emr_allow_edit`
-- `emr_allow_edit_catalogs`
-- `consultation_allow_view`
-- `consultation_allow_edit`
-- `profile_allow_view`
-- `profile_allow_edit`
+**Medical Records:** `emr_allow_view`, `emr_allow_edit`, `emr_allow_edit_catalogs`, `consultation_allow_view`, `consultation_allow_edit`, `profile_allow_view`, `profile_allow_edit`
 
-**Dental Records:**
-- `emr_allow_view`
-- `emr_allow_edit`
-- `emr_allow_set_dental_record`
-- `consultation_allow_view`
-- `consultation_allow_edit`
+**Dental Records:** `emr_allow_view`, `emr_allow_edit`, `emr_allow_set_dental_record`, `consultation_allow_view`, `consultation_allow_edit`
 
-**Appointments:**
-- `appointment_allow_approval`
-- `appointment_allow_view_records`
-- `appointment_allow_view_configuration`
-- `appointment_allow_edit_configuration`
+**Appointments:** `appointment_allow_approval`, `appointment_allow_view_records`, `appointment_allow_view_configuration`, `appointment_allow_edit_configuration`
 
-**Inventory:**
-- `inventory_allow_view`
-- `inventory_allow_edit`
-- `inventory_allow_dispense`
-- `inventory_allow_manage_requests`
-- `inventory_allow_prescribe`
+**Inventory:** `inventory_allow_view`, `inventory_allow_edit`, `inventory_allow_dispense`, `inventory_allow_manage_requests`, `inventory_allow_prescribe`
 
-**Role Management:**
-- `is_admin`
+**Health Chat:** *(no keys mapped yet)*
+
+**Analytics:** *(no keys mapped yet)*
+
+**Special (not in any module):**
+- `is_admin` — Admin access (label: `IS_ADMIN`)
+- `is_staff` — Staff portal gate (label: `IS_STAFF`, auto-managed)
+- `privileged_to_perform_on_superior` — Override for Superior identity patients
+- `profile_allow_update_email_identifier` — Update email identifier
+- `announcement_allow_crud` — CRUD announcements
 
 **Note:** Some keys appear in multiple modules (e.g., `emr_allow_view`). Union logic applies: permission enabled if ANY module using it is ON; revoked only if ALL modules using it are OFF.
 
@@ -246,42 +256,58 @@ Granular permissions available (mapped to modules):
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | INT | User ID (PK) |
-| email | VARCHAR(100) | Unique |
-| password_hash | VARCHAR(255) | Hashed |
-| identity | ENUM | Student, Employee, Superior |
-| credentials_status | ENUM | Active, Unverified, Inactive, Locked |
+| id | INT | PK |
+| email | VARCHAR | Unique |
+| password_hash | VARCHAR | Hashed |
+| identity | ENUM | Medical, Employee, Student, Superior |
+| credentials_status | ENUM | Active, Unverified, Suspended |
 
 ### MedicalPersonnel
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | INT | (PK) |
-| user_id | INT | FK to UserCredentials |
-| title | VARCHAR(100) | Job title |
-| role | VARCHAR(100) | Dynamic role string |
+| id | INT | PK, FK to UserCredentials.id |
+| role | VARCHAR | Free-form role string |
+| title | VARCHAR | Job title |
 | designation | ENUM | Manila, QuezonCity, Both |
 | is_active | BOOLEAN | Active status |
-| permission_template_id | INT | Optional FK |
 
-### RolesMap
+### rolesTable
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | INT | (PK) |
-| user_id | INT | FK to UserCredentials |
-| permission_key | VARCHAR(100) | e.g., "view_patient_records" |
+| id | INT | PK |
+| label | VARCHAR | Unique permission label (e.g., "IS_ADMIN", "ALLOW_TO_VIEW_EMR") |
+| description | VARCHAR | Human-readable description |
+
+### rolesMap
+
+| Column | Type | Notes |
+|--------|------|-------|
+| personnelId | INT | FK to MedicalPersonnel.id (composite PK with rolesId) |
+| rolesId | INT | FK to rolesTable.id (composite PK with personnelId) |
 | branch | ENUM | Manila, QuezonCity, Both |
-| enabled | BOOLEAN | Permission enabled |
+| assignedBy | INT | FK to UserCredentials.id |
 
-### PermissionTemplates
+Row existence = permission granted. No record = not granted.
+
+### rolesTemplate
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | INT | (PK) |
-| label | VARCHAR(100) | Template name |
-| permissions | JSON | Array of permission keys |
+| id | INT | PK |
+| label | VARCHAR | Template name |
 | created_by | INT | Creator user ID |
+| created_at | TIMESTAMP | Creation time |
+
+### rolesTemplateMap
+
+| Column | Type | Notes |
+|--------|------|-------|
+| templateId | INT | FK to rolesTemplate.id |
+| rolesId | INT | FK to rolesTable.id |
+| branch | ENUM | Manila, QuezonCity, Both |
+| created_at | TIMESTAMP | Creation time |
 
 ---
 
@@ -290,18 +316,20 @@ Granular permissions available (mapped to modules):
 Secure handoff of admin privileges with multi-factor verification and audit logging.
 
 **Flow:**
-1. Current admin initiates with password verification
-2. Verification token (8-char OTP) sent to current admin's email
-3. Current admin confirms with verification token
-4. System validates and atomically transfers admin privileges
-5. Audit log records all actions; old admin sessions invalidated
+1. Current admin initiates with `newAdminUserId` and their `password`
+2. Backend verifies password, validates target (active, validated, 2FA enabled)
+3. Verification token (8-char OTP) sent to current admin's email
+4. Current admin confirms with `verificationToken`
+5. System re-validates target, then atomically transfers admin privileges (DB transaction)
+6. Audit log records all actions
 
 **Requirements:**
 - Current admin password authentication
-- New admin must be active medical personnel
-- Both admins must have 2FA/email verification enabled
-- Password failures locked after 3 attempts
-- Transfer attempts rate-limited to 1 every 5 minutes
+- New admin must be active medical personnel with validated account
+- Both admins must have email 2FA enabled
+- Password failures locked after 3 attempts (Redis-based)
+- Transfer attempts rate-limited to 1 every 5 minutes (Redis-based)
+- Only one pending transfer at a time per admin
 
 ---
 
@@ -313,6 +341,10 @@ Secure handoff of admin privileges with multi-factor verification and audit logg
 - **Business Logic:** `Backend/routes/role-management/resolvers/wrapper/wrapper.js`
 - **Permission Service:** `Backend/services/permit.js`
 - **Redis Functions:** `Backend/config/redis.js` (session & admin transfer management)
+- **Frontend Page:** `mds-staff/src/modules/role-management/role-management-page.jsx`
+- **Frontend Service:** `mds-staff/src/modules/role-management/staff-service.js`
+- **Permission Matrix:** `mds-staff/src/modules/role-management/components/permission-matrix.jsx`
+- **Admin Transfer UI:** `mds-staff/src/modules/role-management/components/admin-transfer.jsx`
 
 ---
 
@@ -323,38 +355,11 @@ Common error responses:
 | Error | Cause |
 |-------|-------|
 | `Unauthorized` | Missing or invalid JWT token |
-| `Forbidden` | User lacks `is_admin` permission |
-| `User not found` | Invalid user ID |
-| `Template not found` | Invalid template ID |
-| `Account locked` | Admin transfer attempts exceeded |
-| `Invalid OTP` | OTP code incorrect or expired |
-
----
-
-## Best Practices
-
-1. **Use Templates** for common roles to maintain consistency
-2. **Use Module Permissions** for frontend role management (simpler abstraction)
-3. **Check Branches** carefully when assigning permissions to staff
-4. **Audit Logs** are automatically recorded; review for sensitive changes
-5. **Session Rotation** recommended when roles or permissions change
-6. **Admin Transfer** must be completed in single session; cannot be interrupted
-
----
-
-## Testing Module Permissions
-
-Module-level permissions simplify permission management. The system automatically maps modules to backend permission keys using union logic (enabled if ANY module using the key is ON).
-
-**Modules:**
-- `patientSearch` → profile & EMR view permissions
-- `pendingRequests` → approval permissions (EMR, profile, appointment, medicine request)
-- `medicalRecords` → EMR and consultation (view, edit), profile (view, edit), catalogs
-- `dentalRecords` → EMR, consultation, and dental record permissions
-- `appointments` → appointment approval, configuration, and history view
-- `inventory` → full inventory management (view, edit, dispense, requests, prescribe)
-- `healthChat` → health chat messaging (to be mapped)
-- `analytics` → analytics/reporting (to be mapped)
-- `roleManagement` → full admin access (is_admin)
-
-When setting module permissions, all underlying backend keys are automatically enabled/disabled.
+| `Admin access required.` | User lacks `is_admin` permission |
+| `Staff account not found.` | Invalid user ID for staff operations |
+| `Permission template not found.` | Invalid template ID |
+| `Too many password failures.` | Admin transfer password lockout (3 attempts) |
+| `Transfer already initiated.` | Rate limit on admin transfer initiation |
+| `Invalid or expired verification token.` | OTP incorrect or expired |
+| `Target user is not an active medical personnel.` | Admin transfer target validation |
+| `Target user must have 2FA enabled.` | Admin transfer 2FA requirement |

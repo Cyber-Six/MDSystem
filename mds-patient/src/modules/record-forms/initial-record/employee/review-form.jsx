@@ -16,6 +16,12 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
     });
   };
 
+  const getCatalogName = (catalog, id) => {
+    if (!catalog || id === undefined || id === null) return String(id ?? '');
+    const item = catalog.find((c) => String(c.id) === String(id));
+    return item?.name || String(id);
+  };
+
   const SectionHeader = ({ title, onEditClick }) => (
     <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-primary-400">
       <h4 className="text-lg font-heading font-semibold text-secondary-900">{title}</h4>
@@ -171,8 +177,11 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
               Object.entries(formData.medicalBackground.immunizations)
                 .filter(([_, value]) => value)
                 .map(([key, _]) => (
-                  <span key={key} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-success-100 text-success-800 font-medium">
-                    {key.toUpperCase()}
+                  <span key={key} className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-success-100 text-success-800 font-medium">
+                    {getCatalogName(catalogs?.immunizationCatalog, key)}
+                    {formData.medicalBackground?.immunizationDates?.[key] && (
+                      <span className="text-xs opacity-70">({formatDate(formData.medicalBackground.immunizationDates[key])})</span>
+                    )}
                   </span>
                 ))
             ) : (
@@ -184,10 +193,42 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
         <dl className="space-y-1">
           <DataRow label="Allergies" value={formData.medicalBackground?.hasAllergies} />
           <DataRow label="Hospitalizations" value={formData.medicalBackground?.hasHospitalization} />
+          {formData.medicalBackground?.hasHospitalization === 'Yes' &&
+            Object.entries(formData.medicalBackground?.hospitalizationConditions || {})
+              .filter(([, v]) => v)
+              .map(([id]) => (
+                <DataRow
+                  key={id}
+                  label={getCatalogName(catalogs?.hospitalizationCatalog, id)}
+                  value={[
+                    formData.medicalBackground?.hospitalizationDates?.[id]?.admissionDate
+                      ? `Admitted: ${formatDate(formData.medicalBackground.hospitalizationDates[id].admissionDate)}`
+                      : 'Admitted: Not specified',
+                    formData.medicalBackground?.hospitalizationDates?.[id]?.dischargeDate
+                      ? `Discharged: ${formatDate(formData.medicalBackground.hospitalizationDates[id].dischargeDate)}`
+                      : 'Discharged: Not specified',
+                  ].join(' | ')}
+                />
+              ))
+          }
           <DataRow label="Operations" value={formData.medicalBackground?.hasOperation} />
+          {formData.medicalBackground?.hasOperation === 'Yes' &&
+            Object.entries(formData.medicalBackground?.operationConditions || {})
+              .filter(([, v]) => v)
+              .map(([id]) => (
+                <DataRow
+                  key={id}
+                  label={getCatalogName(catalogs?.operationCatalog, id)}
+                  value={formData.medicalBackground?.operationDates?.[id]
+                    ? formatDate(formData.medicalBackground.operationDates[id])
+                    : 'Date not specified'}
+                />
+              ))
+          }
           <DataRow label="Medications" value={formData.medicalBackground?.hasMedications} />
           <DataRow label="Smoker" value={formData.medicalBackground?.smoker === 'yes' ? `Yes (${formData.medicalBackground?.smokerSticksPerDay || 0} sticks/day, ${formData.medicalBackground?.smokerYears || 0} years)` : 'No'} />
           <DataRow label="Alcohol Drinker" value={formData.medicalBackground?.alcoholDrinker === 'yes' ? `Yes (${formData.medicalBackground?.alcoholFrequency || 'Not specified'})` : 'No'} />
+          <DataRow label="Vaper" value={formData.medicalBackground?.vaper === 'yes' ? `Yes (${formData.medicalBackground?.vapeType || 'Not specified'}, ${formData.medicalBackground?.vapeFrequency || 'Not specified'})` : 'No'} />
           <DataRow label="Eyeglasses" value={formData.medicalBackground?.eyeglasses ? 'Yes' : 'No'} />
           <DataRow label="Contact Lenses" value={formData.medicalBackground?.contactLenses ? 'Yes' : 'No'} />
           {(formData.medicalBackground?.eyeglasses || formData.medicalBackground?.contactLenses) && (

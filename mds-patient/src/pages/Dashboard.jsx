@@ -82,25 +82,16 @@ const Dashboard = () => {
         console.log('[Dashboard] Checking initial record status...');
         console.log('[Dashboard] User role detected:', detectedRole);
         
-        // Get credential status first to determine if patient is verified
-        let credStatus = null;
-        try {
-          const credResponse = await axiosRequest.post('/profile/patient', {
-            query: `query { getCredentialStatus }`
-          });
-          credStatus = credResponse.data?.data?.getCredentialStatus;
-        } catch (err) {
-          console.warn('[Dashboard] Could not fetch credential status:', err.message);
-        }
-        
-        setIsVerified(credStatus && credStatus !== 'Unverified');
-        
         const [{ needsInitialRecord, status, notes: ticketNotes }, branchInfo] = await Promise.all([
           checkInitialRecordStatus(),
           getMyBranchIdentifier(),
         ]);
+
+        // Patient is verified when checkInitialRecordStatus confirms they no longer need the initial record form.
+        // needsInitialRecord === true means credential is still 'Unverified' (not yet approved by staff).
+        setIsVerified(!needsInitialRecord);
         
-        console.log('[Dashboard] Initial record check result:', { needsInitialRecord, status, isVerified: credStatus });
+        console.log('[Dashboard] Initial record check result:', { needsInitialRecord, status, isVerified: !needsInitialRecord });
         console.log('[Dashboard] Patient branch:', branchInfo?.branch ?? 'not set', '| identifier:', branchInfo?.identifier ?? 'not set');
         
         setRecordStatus(status);

@@ -105,6 +105,7 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
     medicalBackground: {
       // Immunizations — keys are vaccine catalog IDs
       immunizations: {},
+      immunizationDates: {},
       immunizationOther: '',
       // Allergies — keys are allergen catalog IDs
       hasAllergies: '',
@@ -113,12 +114,12 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       // Hospitalizations — keys are hospitalization condition catalog IDs
       hasHospitalization: '',
       hospitalizationConditions: {},
-      hospitalizationDate: '',
+      hospitalizationDates: {},
       hospitalizationNotes: '',
       // Operations — keys are operation procedure catalog IDs
       hasOperation: '',
       operationConditions: {},
-      operationDate: '',
+      operationDates: {},
       operationNotes: '',
       // Medications — keys are medication catalog IDs
       hasMedications: '',
@@ -134,6 +135,9 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
       yearsVaping: null,
       alcoholDrinker: 'no',
       alcoholFrequency: '',
+      vaper: 'no',
+      vapeType: '',
+      vapeFrequency: '',
       // Visual Acuity
       eyeglasses: false,
       contactLenses: false,
