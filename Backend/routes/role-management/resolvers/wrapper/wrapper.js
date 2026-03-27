@@ -10,8 +10,6 @@ const {
   updatePermissionTemplate,
   deletePermissionTemplate,
   applyTemplateToStaff,
-  setMedicalPermit,
-  unsetMedicalPermit,
   isMedicalPermitted,
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,
@@ -168,10 +166,6 @@ function buildUserInfo(row) {
 
 const Query = {
   _listStaffAccounts: async (_, { status, location }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const result = await db.query(
       `SELECT
          uc.id, uc.email, uc.identity, uc.credentials_status,
@@ -247,24 +241,27 @@ const Query = {
   },
 
   _getStaffAccount: async (_, { userId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const result = await db.query(
       `SELECT
          uc.id, uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
-         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
+         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map,
+         lla.last_login
        FROM "UserCredentials" uc
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        LEFT JOIN "rolesMap" rm ON rm."personnelId" = uc.id
        LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
+       LEFT JOIN (
+         SELECT user_id, MAX(attempted_at) AS last_login
+         FROM "UserLoginAttempt"
+         WHERE was_successful = true
+         GROUP BY user_id
+       ) lla ON lla.user_id = uc.id
        WHERE uc.id = $1
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-                up.first_name, up.middle_name, up.last_name, mp.designation`,
+                up.first_name, up.middle_name, up.last_name, mp.designation, lla.last_login`,
       [userId]
     );
 
@@ -307,15 +304,16 @@ const Query = {
       },
       modulePermissions: deriveModulePermissions(branchPermissions),
       credentialsStatus: row.credentials_status,
-      lastLogin: null,
+      lastLogin: row.last_login
+        ? new Date(row.last_login).toLocaleString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+          })
+        : null,
     };
   },
 
   _listMedicalPersonnel: async (_, { role, designation, isActive }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const result = await db.query(
       `SELECT
          mp.id, mp.role, mp.title, mp.designation, mp.is_active,
@@ -345,10 +343,6 @@ const Query = {
   },
 
   _getMedicalPersonnel: async (_, { userId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const result = await db.query(
       `SELECT
          mp.id, mp.role, mp.title, mp.designation, mp.is_active,
@@ -377,26 +371,14 @@ const Query = {
   },
 
   _getStaffPermissions: async (_, { userId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     return await getStaffPermissions(userId);
   },
 
   _getStaffModulePermissions: async (_, { userId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     return await getStaffModulePermissions(userId);
   },
 
   _listStaffSessions: async (_, { userId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Get all refresh sessions for this user from Redis
     const sessions = await listUserSessions(userId);
     const currentAnchor = await getStaffAnchor(userId);
@@ -423,10 +405,6 @@ const Query = {
    * Filters out expired sessions (exp < now) or those with status !== "active"
    */
   _countActiveRefreshTokens: async (_, __, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const now = Date.now();
     const allSessions = await scanAllRefreshSessions();
 
@@ -453,10 +431,6 @@ const Query = {
    * Returns userId, email, role, exp for each session
    */
   _listUserSessions: async (_, { offset = 0, limit }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Validate pagination parameters
     if (offset < 0) {
       throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
@@ -502,18 +476,10 @@ const Query = {
   },
 
   _listPermissionTemplates: async (_, __, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     return await listPermissionTemplates();
   },
 
   _getPermissionTemplate: async (_, { templateId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     return await getPermissionTemplate(templateId);
   },
 };
@@ -522,10 +488,6 @@ const Query = {
 
 const Mutation = {
   _createMedicalPersonnel: async (_, { input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const { userId, title, role, designation, templateId } = input;
 
     // Validate required fields
@@ -564,7 +526,7 @@ const Mutation = {
     }
 
     const targetUser = userResult.rows[0];
-    if (targetUser.identity !== 'Employee' || process.env.ALLOW_MEDICAL_CREATION_FOR_NON_EMPLOYEES === 'true') {
+    if (targetUser.identity !== 'Employee' && process.env.ALLOW_MEDICAL_CREATION_FOR_NON_EMPLOYEES !== 'true') {
       throwGraphQLError(res)
         .message('User must have Employee identity to be assigned a MedicalPersonnel role.')
         .status(409)
@@ -617,10 +579,6 @@ const Mutation = {
   },
 
   _updateMedicalPersonnel: async (_, { userId, input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const { title, role, designation, isActive, templateId } = input;
 
     // Validate at least one field provided
@@ -723,10 +681,6 @@ const Mutation = {
   },
 
   _deleteMedicalPersonnel: async (_, { userId, revertIdentity = true }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Verify MedicalPersonnel record exists
     const existingResult = await db.query(
       `SELECT id FROM "MedicalPersonnel" WHERE id = $1`,
@@ -767,10 +721,6 @@ const Mutation = {
   },
 
   _setStaffPermissionsStandard: async (_, { userId, permissions: permissionsList, branch }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Validate branch (required for standard)
     const validBranches = ['Manila', 'QuezonCity', 'Both'];
     if (!validBranches.includes(branch)) {
@@ -793,10 +743,6 @@ const Mutation = {
   },
 
   _setStaffPermissionsExtended: async (_, { userId, permissions: permissionsList, defaultBranch = 'Both' }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Validate defaultBranch
     const validBranches = ['Manila', 'QuezonCity', 'Both'];
     if (defaultBranch && !validBranches.includes(defaultBranch)) {
@@ -829,10 +775,6 @@ const Mutation = {
   },
 
   _setStaffModulePermissions: async (_, { userId, modules, branch }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Validate branch
     const validBranches = ['Manila', 'QuezonCity', 'Both'];
     if (!validBranches.includes(branch)) {
@@ -885,10 +827,6 @@ const Mutation = {
    * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
    */
   _updateStaffAccount: async (_, { userId, modules, status }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     if (!modules && !status) {
       throwGraphQLError(res)
         .message('At least one of modules or status must be provided.')
@@ -976,17 +914,17 @@ const Mutation = {
 
     logger.info(`Staff account updated: userId=${userId}, by adminId=${user.id}`);
 
+    // Fetch and return the updated staff account to avoid a round-trip on the frontend
+    const updatedStaff = await Query._getStaffAccount(_, { userId }, { user, res });
+
     return {
       ok: true,
       message: 'Staff account updated successfully.',
+      staff: updatedStaff,
     };
   },
 
   _rotateStaffAnchor: async (_, { userId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Verify target user exists and is Medical staff
     const targetResult = await db.query(
       `SELECT uc.id, uc.identity, uc.credentials_status
@@ -1030,10 +968,6 @@ const Mutation = {
   },
 
   _createPermissionTemplate: async (_, { input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const { label, permissions: permissionsList, defaultBranch = 'Both' } = input;
 
     // Validate required fields
@@ -1069,10 +1003,6 @@ const Mutation = {
   },
 
   _updatePermissionTemplate: async (_, { templateId, input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const { label, permissions: permissionsList, defaultBranch = 'Both' } = input;
 
     // Validate at least one field provided
@@ -1117,10 +1047,6 @@ const Mutation = {
   },
 
   _deletePermissionTemplate: async (_, { templateId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Verify template exists
     const existingTemplate = await getPermissionTemplate(templateId);
     if (!existingTemplate) {
@@ -1151,10 +1077,6 @@ const Mutation = {
   },
 
   _applyTemplateToStaff: async (_, { userId, templateId }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     // Verify user exists and is Medical staff
     const userResult = await db.query(
       `SELECT id, identity FROM "UserCredentials" WHERE id = $1`,
@@ -1205,10 +1127,6 @@ const Mutation = {
   },
 
   _initiateAdminTransfer: async (_, { newAdminUserId, password }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     if (!password) {
       throwGraphQLError(res)
         .message('Password is required to initiate admin transfer.')
@@ -1568,10 +1486,6 @@ const Mutation = {
   },
 
   _confirmAdminTransfer: async (_, { verificationToken }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message('Unauthorized').status(401).throw();
-    }
-
     const currentUserId = user.id;
     const pool = require('../../../../config/db.js');
     const client = await pool.pool.connect();

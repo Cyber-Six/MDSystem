@@ -35,7 +35,7 @@ function initRoleManagementGraphQL(app) {
       }
       return {
         schema: adminSchema,
-        graphiql: true,
+        graphiql: process.env.NODE_ENV !== 'production',
         context: {
           user: req.user || null,
           res: req.res,

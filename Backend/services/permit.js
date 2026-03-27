@@ -295,7 +295,6 @@ async function isMedicalPermitted(userId, label, patientId) {
   }
 
   if (result.rows.length === 0) {
-    console.log("userId, label, patientId", userId, label, patientId);
     logger.warn(
       `Unauthorized access attempt by staff ${userId} without ${label} permission${patientId ? ` on patient ${patientId}` : ""}`
     );
@@ -467,28 +466,50 @@ async function getPermissionTemplate(templateId) {
  * @returns {Promise<Array>} Array of templates with basic info
  */
 async function listPermissionTemplates() {
+  // Single query with JOIN — avoids N+1 by fetching all templates + their permissions at once
   const result = await db.query(
     `SELECT
        t.id,
        t.label,
        t.created_by,
        t.created_at,
-       COUNT(tm.id) AS permission_count
+       COALESCE(json_agg(
+         json_build_object('label', rt.label, 'branch', rtm.branch)
+       ) FILTER (WHERE rt.label IS NOT NULL), '[]'::json) AS perms
      FROM "rolesTemplate" t
-     LEFT JOIN "rolesTemplateMap" tm ON tm."templateId" = t.id
+     LEFT JOIN "rolesTemplateMap" rtm ON rtm."templateId" = t.id
+     LEFT JOIN "rolesTable" rt ON rtm."rolesId" = rt.id
      GROUP BY t.id, t.label, t.created_by, t.created_at
      ORDER BY t.created_at DESC;`
   );
 
-  const templates = [];
-
-  // For each template, get its full permissions for consistency with getPermissionTemplate
-  for (const row of result.rows) {
-    const fullTemplate = await getPermissionTemplate(row.id);
-    if (fullTemplate) {
-      templates.push(fullTemplate);
+  const templates = result.rows.map(row => {
+    const activePermissions = new Map();
+    const perms = typeof row.perms === 'string' ? JSON.parse(row.perms) : row.perms;
+    for (const p of perms) {
+      activePermissions.set(p.label, p.branch);
     }
-  }
+
+    const permsList = [];
+    for (const [key, label] of Object.entries(permissions)) {
+      const enabled = activePermissions.has(label);
+      permsList.push({
+        key,
+        label,
+        enabled,
+        branch: enabled ? activePermissions.get(label) : null
+      });
+    }
+
+    return {
+      id: String(row.id),
+      label: row.label,
+      createdBy: String(row.created_by),
+      createdAt: row.created_at.toISOString(),
+      permissions: permsList,
+      permissionCount: permsList.filter(p => p.enabled).length
+    };
+  });
 
   return {
     templates,
@@ -842,32 +863,6 @@ async function getStaffModulePermissions(personnelId) {
   return { modules, count: modules.length };
 }
 
-/**
- * Convert a flat module permissions object { moduleId: boolean } to
- * the modules array format [{ moduleId, enabled }]
- * @param {Object} flatPerms - e.g. { patientSearch: true, appointments: false }
- * @returns {Array<{moduleId: string, enabled: boolean}>}
- */
-function flatModulePermsToArray(flatPerms) {
-  return Object.entries(flatPerms).map(([moduleId, enabled]) => ({
-    moduleId,
-    enabled: !!enabled,
-  }));
-}
-
-/**
- * Convert module permissions result to flat object format for REST API
- * @param {{modules: Array}} modulePermsResult
- * @returns {Object} e.g. { patientSearch: true, appointments: false }
- */
-function modulePermsToFlat(modulePermsResult) {
-  const flat = {};
-  for (const mod of modulePermsResult.modules) {
-    flat[mod.moduleId] = mod.enabled;
-  }
-  return flat;
-}
-
 module.exports = {
   setMedicalPermit,
   unsetMedicalPermit,
@@ -891,6 +886,4 @@ module.exports = {
   resolveModulePermissions,
   setStaffModulePermissions,
   getStaffModulePermissions,
-  flatModulePermsToArray,
-  modulePermsToFlat,
 };

@@ -66,13 +66,6 @@ type Permissions {
   count: Int!
 }
 
-# Staff permissions with branch info (returned by getStaffPermissions query)
-# Identical structure to Permissions type for consistency
-type StaffPermissions {
-  permissions: [BranchPermission!]!
-  count: Int!
-}
-
 # ─── TEMPLATE TYPES ────────────────────────────────────────────────────────────
 
 # Permission template for reusable permission sets
@@ -137,6 +130,8 @@ type MutationResult {
 type StaffAccountMutationResult {
   ok: Boolean!
   message: String!
+  warnings: [String!]
+  staff: StaffAccount
 }
 
 type MedicalPersonnelMutationResult {
@@ -274,7 +269,7 @@ type Query {
   getMedicalPersonnel(userId: ID!): MedicalPersonnel
 
   # Permissions - Returns all permissions with enabled status AND branch designation
-  getStaffPermissions(userId: ID!): StaffPermissions!
+  getStaffPermissions(userId: ID!): Permissions!
 
   # Module Permissions - Returns module-level enabled status (derived from granular permissions)
   getStaffModulePermissions(userId: ID!): ModulePermissionList!

@@ -51,8 +51,12 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
     setSaveError(null);
     setIsSaving(true);
     try {
-      await updateStaffAccount(staff.id, clonePermissions(permissions), status);
-      onSave({ ...staff, role, permissions: clonePermissions(permissions), status });
+      const result = await updateStaffAccount(staff.id, clonePermissions(permissions), status);
+      // Use the returned staff from the mutation to avoid a separate re-fetch
+      const updatedStaff = result.staff
+        ? result.staff
+        : { ...staff, role, permissions: clonePermissions(permissions), status };
+      onSave(updatedStaff);
       setHasChanges(false);
     } catch (err) {
       setSaveError(err.message || 'Failed to save changes. Please try again.');
