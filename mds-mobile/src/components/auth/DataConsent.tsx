@@ -56,7 +56,7 @@ const renderInlineHtml = (
     );
 
   const regex =
-    /<(?:strong|b)>([\s\S]*?)<\/(?:strong|b)>|__LINK__([^_]*)__TEXT__([\s\S]*?)__ENDLINK__|([^<]+)/g;
+    /<(?:strong|b)>([\s\S]*?)<\/(?:strong|b)>|__LINK__(.*?)__TEXT__([\s\S]*?)__ENDLINK__|((?:(?!__LINK__)[^<])+)/g;
   let m: RegExpExecArray | null;
 
   while ((m = regex.exec(normalized)) !== null) {
@@ -220,6 +220,8 @@ const renderConsentHtml = (html: string, isDark: boolean): React.ReactNode[] => 
 
 interface ConsentData {
   ok: boolean;
+  email?: string;
+  data_consent?: boolean;
   consent_text?: string;
   required_version?: string;
   data_consent_version?: string;
@@ -386,6 +388,10 @@ export const DataConsent: React.FC<DataConsentProps> = ({
     consentData?.data_consent_version &&
     consentData.data_consent_version !== consentData.required_version;
 
+  const alreadyConsented =
+    consentData?.data_consent === true &&
+    !isNewVersion;
+
   const renderedHtml =
     consentData?.consent_text ? renderConsentHtml(consentData.consent_text, isDark) : null;
 
@@ -440,8 +446,21 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                       ? 'Required for Account Registration'
                       : isNewVersion
                         ? 'Policy Update — Renewal Required'
-                        : 'Review MDSystem Data Policy'}
+                        : alreadyConsented
+                          ? 'Re-confirm MDSystem Data Policy'
+                          : 'Review MDSystem Data Policy'}
                   </Text>
+                  {consentData?.email ? (
+                    <Text
+                      style={[
+                        styles.headerSubtitle,
+                        { color: textSecondary, marginTop: 2, fontSize: 11 },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {consentData.email}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
               <TouchableOpacity
@@ -506,8 +525,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                           { color: isDark ? '#FBBF24' : '#92400E' },
                         ]}
                       >
-                        Updated from v{consentData?.data_consent_version} to v
-                        {consentData?.required_version}. Please review and accept the new
+                        Updated from {consentData?.data_consent_version} to {consentData?.required_version}. Please review and accept the new
                         policy.
                       </Text>
                     </View>
@@ -536,6 +554,34 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                         ]}
                       >
                         ↓  Scroll down to read the full policy
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Already-consented notice */}
+                  {alreadyConsented && (
+                    <View
+                      style={[
+                        styles.versionNotice,
+                        {
+                          backgroundColor: isDark
+                            ? 'rgba(34,197,94,0.1)'
+                            : '#F0FDF4',
+                          borderColor: isDark ? 'rgba(34,197,94,0.3)' : '#BBF7D0',
+                          marginHorizontal: 16,
+                          marginTop: 12,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.versionNoticeTitle, { color: isDark ? '#4ADE80' : '#166534' }]}>✓ Previously Accepted</Text>
+                      <Text
+                        style={[
+                          styles.versionNoticeText,
+                          { color: isDark ? '#4ADE80' : '#166534' },
+                        ]}
+                      >
+                        You have already accepted {consentData?.required_version} of this
+                        policy. Please scroll and re-confirm to continue.
                       </Text>
                     </View>
                   )}
