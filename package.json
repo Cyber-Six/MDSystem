@@ -16,5 +16,9 @@
     "dev:mobile": "npm run start --workspace=mds-mobile",
     "start:patient": "node Backend/server.js",
     "start:staff": "node Backend/staff.js"
+  },
+  "devDependencies": {
+    "react-native-worklets": "^0.8.1",
+    "react-test-renderer": "^19.1.0"
   }
 }

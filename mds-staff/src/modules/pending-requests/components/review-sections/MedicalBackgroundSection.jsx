@@ -26,7 +26,7 @@ const MedicalBackgroundSection = ({
 }) => {
   const hasEdits = Object.keys(editedFields).length > 0;
 
-  const lifestyleKeys = ['smoker', 'cigarettesPerDay', 'yearsSmoked', 'alcoholConsumer', 'alcoholFrequency', 'lifestyleNotes'];
+  const lifestyleKeys = ['smoker', 'cigarettesPerDay', 'yearsSmoked', 'alcoholConsumer', 'alcoholFrequency', 'vaper', 'vapeType', 'vapeFrequency', 'lifestyleNotes'];
   const hasLifestyleEdits = lifestyleKeys.some((key) => editedFields[key] !== undefined);
   const acuityKeys = ['acuityLeft', 'acuityRight', 'acuityNotes'];
   const hasAcuityEdits = acuityKeys.some((key) => editedFields[key] !== undefined);
@@ -252,6 +252,29 @@ const MedicalBackgroundSection = ({
               originalValue={getOriginal('alcoholFrequency', lifestyle?.frequencyOfAlcoholConsumption ?? '')}
               isEditing={isEditing}
               onChange={(v) => onFieldChange?.('alcoholFrequency', v)}
+            />
+            <EditableField
+              label="Vaper"
+              value={getVal('vaper', lifestyle?.vapeUser ? 'Yes' : lifestyle ? 'No' : '')}
+              originalValue={getOriginal('vaper', lifestyle?.vapeUser ? 'Yes' : lifestyle ? 'No' : '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('vaper', v)}
+              type="select"
+              options={['Yes', 'No']}
+            />
+            <EditableField
+              label="Vape Type"
+              value={getVal('vapeType', lifestyle?.vapeType ?? '')}
+              originalValue={getOriginal('vapeType', lifestyle?.vapeType ?? '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('vapeType', v)}
+            />
+            <EditableField
+              label="Vape Frequency"
+              value={getVal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
+              originalValue={getOriginal('vapeFrequency', lifestyle?.vapeFrequency ?? '')}
+              isEditing={isEditing}
+              onChange={(v) => onFieldChange?.('vapeFrequency', v)}
             />
             <EditableField
               label="Notes"

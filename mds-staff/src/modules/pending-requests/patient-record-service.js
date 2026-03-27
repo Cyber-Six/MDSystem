@@ -142,6 +142,9 @@ export const getUserLifestyle = async (userId) => {
          yearsSmoked
          alcoholConsumer
          frequencyOfAlcoholConsumption
+         vapeUser
+         vapeType
+         vapeFrequency
          notes
          created_at
        }

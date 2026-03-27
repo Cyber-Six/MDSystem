@@ -664,12 +664,14 @@ const buildAllergyRecords = (medicalBackground) => {
 const buildHospitalizationRecords = (medicalBackground) => {
   if (medicalBackground?.hasHospitalization !== 'Yes') return { hospitalizations: [], notes: null };
   const today = new Date().toISOString().split('T')[0];
-  const admissionDate = medicalBackground.hospitalizationDate
-    ? new Date(medicalBackground.hospitalizationDate).toISOString().split('T')[0]
-    : today;
   const hospitalizations = Object.entries(medicalBackground.hospitalizationConditions || {})
     .filter(([, checked]) => checked)
-    .map(([id]) => ({ conditionId: id, admissionDate, dischargeDate: null, notes: medicalBackground.hospitalizationNotes || null }));
+    .map(([id]) => ({
+      conditionId: id,
+      admissionDate: medicalBackground.hospitalizationDates?.[id]?.admissionDate || today,
+      dischargeDate: medicalBackground.hospitalizationDates?.[id]?.dischargeDate || null,
+      notes: medicalBackground.hospitalizationNotes || null
+    }));
   return { hospitalizations, notes: medicalBackground.hospitalizationNotes || null };
 };
 
@@ -680,12 +682,13 @@ const buildHospitalizationRecords = (medicalBackground) => {
 const buildOperationRecords = (medicalBackground) => {
   if (medicalBackground?.hasOperation !== 'Yes') return { operations: [], notes: null };
   const today = new Date().toISOString().split('T')[0];
-  const operationDate = medicalBackground.operationDate
-    ? new Date(medicalBackground.operationDate).toISOString().split('T')[0]
-    : today;
   const operations = Object.entries(medicalBackground.operationConditions || {})
     .filter(([, checked]) => checked)
-    .map(([id]) => ({ procedureId: id, operationDate, notes: medicalBackground.operationNotes || null }));
+    .map(([id]) => ({
+      procedureId: id,
+      operationDate: medicalBackground.operationDates?.[id] || today,
+      notes: medicalBackground.operationNotes || null
+    }));
   return { operations, notes: medicalBackground.operationNotes || null };
 };
 
@@ -714,7 +717,8 @@ const buildImmunizationRecords = (medicalBackground, catalog) => {
     .filter(([, checked]) => checked)
     .flatMap(([id]) => {
       if (!validIds.has(id)) { noteParts.push(id); return []; }
-      return [{ vaccineTypeId: id, immunizationDate: today, doseNumber: 1 }];
+      const date = medicalBackground?.immunizationDates?.[id] || today;
+      return [{ vaccineTypeId: id, immunizationDate: date, doseNumber: 1 }];
     });
   if (medicalBackground?.immunizationOther?.trim()) {
     noteParts.push(`Other: ${medicalBackground.immunizationOther.trim()}`);
@@ -840,6 +844,13 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   // Lifestyle
   inputs.lifestyle = {
     smoker: formData.medicalBackground.smoker === 'yes',
+    vapeUser: formData.medicalBackground.smoker === 'vape',
+    vapeType: formData.medicalBackground.smoker === 'vape' 
+      ? formData.medicalBackground.vapeType || null : null,
+    vapeFrequency: formData.medicalBackground.smoker === 'vape'
+      ? formData.medicalBackground.vapeFrequency || null : null,
+    yearsVaping: formData.medicalBackground.smoker === 'vape'
+      ? (formData.medicalBackground.yearsVaping ? parseInt(formData.medicalBackground.yearsVaping) : null) : null,
     numberOfCigarettesPerDay: formData.medicalBackground.smoker === 'yes'
       ? parseInt(formData.medicalBackground.smokerSticksPerDay) || null : null,
     yearsSmoked: formData.medicalBackground.smoker === 'yes'
@@ -847,6 +858,11 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
     alcoholConsumer: formData.medicalBackground.alcoholDrinker === 'yes',
     frequencyOfAlcoholConsumption: formData.medicalBackground.alcoholDrinker === 'yes'
       ? formData.medicalBackground.alcoholFrequency || null : null,
+    vapeUser: formData.medicalBackground.vaper === 'yes',
+    vapeType: formData.medicalBackground.vaper === 'yes'
+      ? formData.medicalBackground.vapeType || null : null,
+    vapeFrequency: formData.medicalBackground.vaper === 'yes'
+      ? formData.medicalBackground.vapeFrequency || null : null,
     notes: null
   };
 
@@ -1421,30 +1437,37 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const ls           = emr?.lifestyle                        || {};
   const va           = emr?.visualAcuity                     || {};
 
-  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, true]));
-  const hospMap     = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
-  const opsMap      = Object.fromEntries(ops.map(o => [o.procedureId, true]));
-  const medsMap     = Object.fromEntries(meds.map(m => [m.medicineId, true]));
-  const immunMap    = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, true]));
+  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, { checked: true, severity: a.severity || 'Unknown' }]));
+  const hospMap         = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
+  const hospDatesMap    = Object.fromEntries(hosps.map(h => [h.conditionId, {
+    admissionDate: h.admissionDate ? new Date(h.admissionDate).toISOString().split('T')[0] : '',
+    dischargeDate: h.dischargeDate ? new Date(h.dischargeDate).toISOString().split('T')[0] : '',
+  }]));
+  const opsMap          = Object.fromEntries(ops.map(o => [o.procedureId, true]));
+  const opsDatesMap     = Object.fromEntries(ops.map(o => [o.procedureId,
+    o.operationDate ? new Date(o.operationDate).toISOString().split('T')[0] : ''
+  ]));
+  const medsMap         = Object.fromEntries(meds.map(m => [m.medicineId, true]));
+  const immunMap        = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, true]));
+  const immunDatesMap   = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId,
+    i.immunizationDate ? new Date(i.immunizationDate).toISOString().split('T')[0] : ''
+  ]));
 
   const vaNotesStr = va.notes || '';
   const medicalBackground = {
     immunizations:             immunMap,
+    immunizationDates:         immunDatesMap,
     immunizationOther:         '',
     hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
     allergies:                 allergyMap,
     allergyOther:              '',
     hasHospitalization:        hosps.length > 0        ? 'Yes' : 'No',
     hospitalizationConditions: hospMap,
-    hospitalizationDate:       hosps[0]?.admissionDate
-                                 ? new Date(hosps[0].admissionDate).toISOString().split('T')[0]
-                                 : '',
+    hospitalizationDates:      hospDatesMap,
     hospitalizationNotes:      emr?.hospitalizationProfile?.notes || '',
     hasOperation:              ops.length > 0          ? 'Yes' : 'No',
     operationConditions:       opsMap,
-    operationDate:             ops[0]?.operationDate
-                                 ? new Date(ops[0].operationDate).toISOString().split('T')[0]
-                                 : '',
+    operationDates:            opsDatesMap,
     operationNotes:            emr?.operationProfile?.notes || '',
     hasMedications:            meds.length > 0         ? 'Yes' : 'No',
     selectedMedications:       medsMap,
@@ -1457,6 +1480,9 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
                                  ? String(ls.yearsSmoked) : '',
     alcoholDrinker:            ls.alcoholConsumer ? 'yes' : 'no',
     alcoholFrequency:          ls.frequencyOfAlcoholConsumption || '',
+    vaper:                     ls.vapeUser ? 'yes' : 'no',
+    vapeType:                  ls.vapeType || '',
+    vapeFrequency:             ls.vapeFrequency || '',
     eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes'),
     contactLenses:             vaNotesStr.includes('Contact Lenses: Yes'),
     gradeOD:                   va.acuity?.right_eye    || '',
@@ -1470,7 +1496,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const dh        = emr?.dentalHistory || {};
   const oaProfile = emr?.oralAppliance || {};
   const appliances = oaProfile.appliances || [];
-  const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, true]));
+  const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, { checked: true, arch: a.arch || '' }]));
 
   const dentalHistory = {
     // seenByDentist=true means patient has been seen before → firstTimeDentist='no'
@@ -1558,11 +1584,11 @@ export const fetchRevisionPrefill = async () => {
           notes
         }
         allergyProfile: getAllergyProfile {
-          allergies { allergenCatalogId status }
+          allergies { allergenCatalogId status severity }
           notes
         }
         hospitalizationProfile: getHospitalizationProfile {
-          hospitalizations { conditionId admissionDate notes }
+          hospitalizations { conditionId admissionDate dischargeDate notes }
           notes
         }
         operationProfile: getOperationProfile {
@@ -1574,12 +1600,13 @@ export const fetchRevisionPrefill = async () => {
           notes
         }
         immunizationProfile: getImmunizationProfile {
-          immunizations { vaccineTypeId }
+          immunizations { vaccineTypeId immunizationDate }
           notes
         }
         lifestyle: getLifestyle {
           smoker numberOfCigarettesPerDay yearsSmoked
           alcoholConsumer frequencyOfAlcoholConsumption
+          vapeUser vapeType vapeFrequency
         }
         visualAcuity: getVisualAcuityProfile {
           notes

@@ -28,6 +28,11 @@ const Query = {
     return await Wrapper.Query._getStaffAccount(_, args, context);
   },
 
+  searchUsers: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._searchUsers(_, args, context);
+  },
+
   listMedicalPersonnel: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listMedicalPersonnel(_, args, context);

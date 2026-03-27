@@ -185,10 +185,11 @@ const Query = {
          GROUP BY user_id
        ) lla ON lla.user_id = uc.id
        WHERE
-          ($1 IS NULL OR uc.credentials_status = $1)
-          AND ($2 IS NULL OR mp.designation = $2)
+          ($1::"CredentialStatus" IS NULL OR uc.credentials_status = $1::"CredentialStatus")
+          AND ($2::"UserDesignation" IS NULL OR mp.designation = $2::"UserDesignation")
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-                up.first_name, up.middle_name, up.last_name, mp.designation
+                up.first_name, up.middle_name, up.last_name, mp.designation,
+                mp.is_active, lla.last_login
        ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`,
       [status || null, location || null]
     );
@@ -244,7 +245,9 @@ const Query = {
          uc.id, uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
-         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
+         mp.is_active,
+         COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map,
+         lla.last_login
        FROM "UserCredentials" uc
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
@@ -258,7 +261,8 @@ const Query = {
        ) lla ON lla.user_id = uc.id
        WHERE uc.id = $1
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-                up.first_name, up.middle_name, up.last_name, mp.designation`,
+                up.first_name, up.middle_name, up.last_name, mp.designation,
+                mp.is_active, lla.last_login`,
       [userId]
     );
 
@@ -308,6 +312,53 @@ const Query = {
     };
   },
 
+  _searchUsers: async (_, { query }, { user, res }) => {
+    if (!query || query.trim().length < 2) {
+      throwGraphQLError(res).message('Search query must be at least 2 characters.').status(400).throw();
+    }
+
+    const searchTerm = `%${query.trim()}%`;
+
+    const result = await db.query(
+      `SELECT
+         uc.id, uc.email, uc.identity, uc.credentials_status,
+         up.first_name, up.middle_name, up.last_name,
+         up.identifier,
+         CASE WHEN mp.id IS NOT NULL THEN true ELSE false END AS is_medical_personnel
+       FROM "UserCredentials" uc
+       JOIN "UsersPersonal" up ON up.id = uc.id
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       WHERE
+         uc.identity IN ('Employee', 'Medical')
+         AND (
+           uc.email ILIKE $1
+           OR up.first_name ILIKE $1
+           OR up.last_name ILIKE $1
+           OR CONCAT(up.first_name, ' ', up.last_name) ILIKE $1
+           OR CONCAT(up.first_name, ' ', up.middle_name, ' ', up.last_name) ILIKE $1
+           OR CAST(up.identifier AS TEXT) ILIKE $1
+           OR CAST(uc.id AS TEXT) = $2
+         )
+       ORDER BY up.last_name, up.first_name
+       LIMIT 20`,
+      [searchTerm, query.trim()]
+    );
+
+    const users = result.rows.map(row => {
+      const nameParts = [row.first_name, row.middle_name, row.last_name].filter(Boolean);
+      return {
+        id: String(row.id),
+        email: row.email,
+        name: nameParts.join(' ') || row.email,
+        identity: row.identity,
+        credentialsStatus: row.credentials_status,
+        isMedicalPersonnel: row.is_medical_personnel,
+      };
+    });
+
+    return { users, count: users.length };
+  },
+
   _listMedicalPersonnel: async (_, { role, designation, isActive }, { user, res }) => {
     const result = await db.query(
       `SELECT
@@ -318,9 +369,9 @@ const Query = {
        JOIN "UserCredentials" uc ON uc.id = mp.id
        JOIN "UsersPersonal" up ON up.id = mp.id
        WHERE
-         ($1 IS NULL OR mp.role = $1)
-         AND ($2 IS NULL OR mp.designation = $2)
-         AND ($3 IS NULL OR mp.is_active = $3::boolean)
+         ($1::text IS NULL OR mp.role = $1)
+         AND ($2::"UserDesignation" IS NULL OR mp.designation = $2::"UserDesignation")
+         AND ($3::boolean IS NULL OR mp.is_active = $3::boolean)
        ORDER BY mp.id DESC`,
       [role || null, designation || null, isActive !== undefined ? isActive : null]
     );
@@ -521,7 +572,7 @@ const Mutation = {
     }
 
     const targetUser = userResult.rows[0];
-    if (targetUser.identity !== 'Employee' && process.env.ALLOW_MEDICAL_CREATION_FOR_NON_EMPLOYEES !== 'true') {
+    if (targetUser.identity !== 'Employee' && targetUser.identity !== 'Medical' && process.env.ALLOW_MEDICAL_CREATION_FOR_NON_EMPLOYEES !== 'true') {
       throwGraphQLError(res)
         .message('User must have Employee identity to be assigned a MedicalPersonnel role.')
         .status(409)
@@ -541,6 +592,20 @@ const Mutation = {
     );
 
     const personnel = insertResult.rows[0];
+
+    // Update user identity to Medical so they can log in to staff portal
+    await db.query(
+      `UPDATE "UserCredentials" SET identity = 'Medical' WHERE id = $1`,
+      [userId]
+    );
+
+    // Grant is_staff permission
+    await setStaffPermissionsExtended({
+      personnelId: String(userId),
+      permissionsList: [{ key: 'is_staff', enabled: true }],
+      assignedBy: String(user.id),
+      defaultBranch: designation,
+    });
 
     // If template provided, apply permissions from template
     if (templateId) {
@@ -696,7 +761,8 @@ const Mutation = {
 
     return {
       ok: true,
-      message: 'MedicalPersonnel record deleted successfully.'
+      message: 'MedicalPersonnel record deleted successfully.',
+      identityReverted: false
     };
   },
 
@@ -1473,7 +1539,7 @@ const Mutation = {
   _confirmAdminTransfer: async (_, { verificationToken }, { user, res }) => {
     const currentUserId = user.id;
     const pool = require('../../../../config/db.js');
-    const client = await pool.pool.connect();
+    const client = await pool.connect();
 
     try {
       // Retrieve transfer session from Redis
@@ -1630,7 +1696,7 @@ const Mutation = {
       // Grant admin to new user - raw SQL
       await client.query(
         `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-         SELECT $1, r.id, 'Both', $2
+         SELECT $1, r.id, 'Both'::"UserDesignation", $2
          FROM "rolesTable" r
          WHERE r.label = $3
          ON CONFLICT ("personnelId", "rolesId") DO UPDATE

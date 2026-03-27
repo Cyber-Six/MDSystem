@@ -191,8 +191,11 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
               Object.entries(formData.medicalBackground.immunizations)
                 .filter(([_, value]) => value)
                 .map(([key]) => (
-                  <span key={key} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-success-100 text-success-800 font-medium">
+                  <span key={key} className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-success-100 text-success-800 font-medium">
                     {getCatalogName(catalogs?.immunizationCatalog, key)}
+                    {formData.medicalBackground?.immunizationDates?.[key] && (
+                      <span className="text-xs opacity-70">({formatDate(formData.medicalBackground.immunizationDates[key])})</span>
+                    )}
                   </span>
                 ))
             ) : (
@@ -226,10 +229,39 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
           )}
           <DataRow label="Allergy Notes" value={formData.medicalBackground?.allergyOther} />
           <DataRow label="Hospitalization" value={formData.medicalBackground?.hasHospitalization} />
-          <DataRow label="Hospitalization Date" value={formatDate(formData.medicalBackground?.hospitalizationDate)} />
+          {formData.medicalBackground?.hasHospitalization === 'Yes' &&
+            Object.entries(formData.medicalBackground?.hospitalizationConditions || {})
+              .filter(([, v]) => v)
+              .map(([id]) => (
+                <DataRow
+                  key={id}
+                  label={getCatalogName(catalogs?.hospitalizationCatalog, id)}
+                  value={[
+                    formData.medicalBackground?.hospitalizationDates?.[id]?.admissionDate
+                      ? `Admitted: ${formatDate(formData.medicalBackground.hospitalizationDates[id].admissionDate)}`
+                      : 'Admitted: Not specified',
+                    formData.medicalBackground?.hospitalizationDates?.[id]?.dischargeDate
+                      ? `Discharged: ${formatDate(formData.medicalBackground.hospitalizationDates[id].dischargeDate)}`
+                      : 'Discharged: Not specified',
+                  ].join(' | ')}
+                />
+              ))
+          }
           <DataRow label="Hospitalization Notes" value={formData.medicalBackground?.hospitalizationNotes} />
           <DataRow label="Surgery/Operation" value={formData.medicalBackground?.hasOperation} />
-          <DataRow label="Operation Date" value={formatDate(formData.medicalBackground?.operationDate)} />
+          {formData.medicalBackground?.hasOperation === 'Yes' &&
+            Object.entries(formData.medicalBackground?.operationConditions || {})
+              .filter(([, v]) => v)
+              .map(([id]) => (
+                <DataRow
+                  key={id}
+                  label={getCatalogName(catalogs?.operationCatalog, id)}
+                  value={formData.medicalBackground?.operationDates?.[id]
+                    ? formatDate(formData.medicalBackground.operationDates[id])
+                    : 'Date not specified'}
+                />
+              ))
+          }
           <DataRow label="Operation Notes" value={formData.medicalBackground?.operationNotes} />
           <DataRow label="Maintenance Medications" value={formData.medicalBackground?.hasMedications} />
           <DataRow label="Medication Reason" value={formData.medicalBackground?.medicationReason} />
@@ -238,6 +270,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
           <DataRow label="Piercing Location" value={formData.medicalBackground?.piercingLocation} />
           <DataRow label="Smoker" value={formData.medicalBackground?.smoker === 'yes' ? `Yes (${formData.medicalBackground?.smokerSticksPerDay || 0} sticks/day, ${formData.medicalBackground?.smokerYears || 0} years)` : 'No'} />
           <DataRow label="Alcohol Drinker" value={formData.medicalBackground?.alcoholDrinker === 'yes' ? `Yes (${formData.medicalBackground?.alcoholFrequency || 'Not specified'})` : 'No'} />
+          <DataRow label="Vaper" value={formData.medicalBackground?.vaper === 'yes' ? `Yes (${formData.medicalBackground?.vapeType || 'Not specified'}, ${formData.medicalBackground?.vapeFrequency || 'Not specified'})` : 'No'} />
           <DataRow label="Eyeglasses" value={formData.medicalBackground?.eyeglasses ? 'Yes' : 'No'} />
           <DataRow label="Contact Lenses" value={formData.medicalBackground?.contactLenses ? 'Yes' : 'No'} />
           {(formData.medicalBackground?.eyeglasses || formData.medicalBackground?.contactLenses) && (

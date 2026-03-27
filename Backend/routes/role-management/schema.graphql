@@ -146,6 +146,22 @@ type DeleteMedicalPersonnelResult {
   identityReverted: Boolean!
 }
 
+# ─── USER SEARCH TYPES ────────────────────────────────────────────────────────
+
+type UserSearchResult {
+  id: ID!
+  email: String!
+  name: String!
+  identity: Identity!
+  credentialsStatus: CredentialsStatus!
+  isMedicalPersonnel: Boolean!
+}
+
+type UserSearchResultList {
+  users: [UserSearchResult!]!
+  count: Int!
+}
+
 # ─── SESSION MANAGEMENT TYPES ──────────────────────────────────────────────────
 
 type StaffSession {
@@ -263,6 +279,9 @@ type Query {
   # Staff Accounts
   listStaffAccounts(status: CredentialsStatus, location: Designation): StaffAccountList!
   getStaffAccount(userId: ID!): StaffAccount
+
+  # User Search (for adding new staff)
+  searchUsers(query: String!): UserSearchResultList!
 
   # Medical Personnel
   listMedicalPersonnel(role: String, designation: Designation, isActive: Boolean): MedicalPersonnelList!
