@@ -318,8 +318,8 @@ const Mutation = {
       `INSERT INTO "Lifestyle" 
         ("id", "smoker", "numberOfCigarettesPerDay", "yearsSmoked", 
         "alcoholConsumer", "frequencyOfAlcoholConsumption", 
-        "vapeUser", "vapeType", "vapeFrequency", "yearsVaping", "notes")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        "vapeUser", "vapeType", "vapeFrequency", "yearsVaping")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (id) DO UPDATE
          SET "smoker" = EXCLUDED."smoker",
              "numberOfCigarettesPerDay" = EXCLUDED."numberOfCigarettesPerDay",
@@ -330,7 +330,6 @@ const Mutation = {
              "vapeType" = EXCLUDED."vapeType",
              "vapeFrequency" = EXCLUDED."vapeFrequency",
              "yearsVaping" = EXCLUDED."yearsVaping",
-             "notes" = EXCLUDED."notes"
              RETURNING *;`,
       [
         recordId,
@@ -343,7 +342,6 @@ const Mutation = {
         args.input.vapeType,
         args.input.vapeFrequency,
         args.input.yearsVaping,
-        args.input.notes
       ]
     );
     logger.debug("Upserted Lifestyle:", result.rows[0]);
