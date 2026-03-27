@@ -27,7 +27,8 @@ const HealthChat = () => {
   const [isStaffTyping, setIsStaffTyping] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [ticketPurpose, setTicketPurpose] = useState('');
-  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showCloseModal, setShowCloseModal]       = useState(false);
+  const [showPrescriptions, setShowPrescriptions] = useState(false);
 
   const messagesEndRef = useRef(null);
   const previousConversationEndRef = useRef(null);
@@ -626,6 +627,9 @@ const HealthChat = () => {
                 onFileRemoved={() => setAttachedFile(null)}
                 isSocketConnected={isSocketConnected}
                 socketError={socketError}
+                showPrescriptions={showPrescriptions}
+                onOpenPrescriptions={() => setShowPrescriptions(true)}
+                onClosePrescriptions={() => setShowPrescriptions(false)}
               />
             </div>
           </div>

@@ -1,9 +1,10 @@
 import React from 'react';
-import { Send, AlertCircle, X, Lock, RefreshCw, Stethoscope, Clock } from 'lucide-react';
+import { Send, AlertCircle, X, Lock, RefreshCw, Stethoscope, Clock, Pill } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
-import { FileAttachButton, FilePreview } from './FileAttachment';
+import { FileAttachButton, FilePreview, useClipboardPaste } from './FileAttachment';
 import ConfirmModal from './ConfirmModal';
+import MyPrescriptionsModal from './MyPrescriptionsModal';
 
 const ChatBox = ({
   messages,
@@ -32,12 +33,20 @@ const ChatBox = ({
   onFileStaged,
   onFileRemoved,
   isSocketConnected,
-  socketError
+  socketError,
+  showPrescriptions,
+  onOpenPrescriptions,
+  onClosePrescriptions,
 }) => {
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
   const isPending = ticketStatus === 'Open';
   const isActive = ticketStatus === 'Ongoing';
   const canSendMessage = isActive && connectionStatus === 'connected' && !isInitializing;
+
+  const { handlePaste } = useClipboardPaste({
+    onFileStaged,
+    disabled: !canSendMessage || isLoading || !!attachedFile,
+  });
 
   const getStatusDot = () => {
     if (isFrozen) return '#a19b93';
@@ -288,7 +297,7 @@ const ChatBox = ({
           </div>
         )}
 
-        {/* Active input */}
+            {/* Active input */}
         {isActive && (
           <div className="flex items-center gap-2">
             {/* Attach */}
@@ -297,6 +306,17 @@ const ChatBox = ({
               disabled={!canSendMessage || isLoading || attachedFile}
             />
 
+            {/* My Prescriptions */}
+            <button
+              type="button"
+              onClick={onOpenPrescriptions}
+              className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400
+                         hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+              title="My prescriptions"
+            >
+              <Pill className="w-5 h-5" />
+            </button>
+
             {/* Textarea */}
             <div className="flex-1 relative">
               <textarea
@@ -304,6 +324,7 @@ const ChatBox = ({
                 value={inputValue}
                 onChange={onInputChange}
                 onKeyDown={onKeyDown}
+                onPaste={handlePaste}
                 placeholder={getPlaceholder()}
                 disabled={!canSendMessage || isLoading}
                 className="w-full px-3 py-1.5 text-sm rounded-full resize-none leading-snug
@@ -359,6 +380,12 @@ const ChatBox = ({
         confirmText="Close Ticket"
         cancelText="Cancel"
         variant="warning"
+      />
+
+      {/* My Prescriptions Modal */}
+      <MyPrescriptionsModal
+        isOpen={showPrescriptions}
+        onClose={onClosePrescriptions}
       />
     </div>
   );

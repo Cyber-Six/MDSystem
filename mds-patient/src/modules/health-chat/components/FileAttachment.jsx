@@ -1,9 +1,62 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { Paperclip, X, File, Image, Film, Loader2 } from 'lucide-react';
 import { uploadFile, unstageFile, getFileUrl } from '../health-chat-service';
 
-const ACCEPTED_TYPES = 'image/jpeg,image/png,application/pdf,video/mp4,video/quicktime';
+const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime';
+const ACCEPTED_MIME_LIST = ACCEPTED_TYPES.split(',');
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+/**
+ * Stage a raw File object — shared by file picker and clipboard paste.
+ */
+const stageFileObject = async (file, onFileStaged, setIsUploading) => {
+  if (!ACCEPTED_MIME_LIST.includes(file.type)) {
+    alert('Unsupported file type.');
+    return;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    alert('File too large. Maximum size is 10MB.');
+    return;
+  }
+  try {
+    setIsUploading(true);
+    const fileId = await uploadFile(file);
+    onFileStaged?.({ fileId, fileName: file.name, fileType: file.type, fileSize: file.size });
+  } catch (error) {
+    console.error('[FileAttachment] Upload failed:', error);
+    alert('Failed to upload file. Please try again.');
+  } finally {
+    setIsUploading(false);
+  }
+};
+
+/**
+ * Hook: attach to a textarea/input onPaste to intercept clipboard images.
+ * Returns an onPaste handler that uploads pasted images as staged files.
+ */
+export const useClipboardPaste = ({ onFileStaged, disabled }) => {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handlePaste = useCallback((e) => {
+    if (disabled || isUploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          const ext = file.type.split('/')[1] || 'png';
+          const named = new File([file], `paste-${Date.now()}.${ext}`, { type: file.type });
+          stageFileObject(named, onFileStaged, setIsUploading);
+        }
+        break;
+      }
+    }
+  }, [disabled, isUploading, onFileStaged]);
+
+  return { handlePaste, isUploadingFromClipboard: isUploading };
+};
 
 /**
  * File attachment button with upload functionality
@@ -15,31 +68,8 @@ export const FileAttachButton = ({ onFileStaged, disabled }) => {
   const handleChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    // Reset input
     e.target.value = '';
-
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      alert('File too large. Maximum size is 10MB.');
-      return;
-    }
-
-    try {
-      setIsUploading(true);
-      const fileId = await uploadFile(file);
-      onFileStaged?.({
-        fileId,
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size
-      });
-    } catch (error) {
-      console.error('[FileAttachment] Upload failed:', error);
-      alert('Failed to upload file. Please try again.');
-    } finally {
-      setIsUploading(false);
-    }
+    await stageFileObject(file, onFileStaged, setIsUploading);
   };
 
   return (
