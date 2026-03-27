@@ -331,7 +331,7 @@ async function isMedicalPermitted(userId, label, patientId) {
  * @returns {Promise<Object>} Created template with id
  */
 async function createPermissionTemplate({ label, permissionsList, createdBy, defaultBranch = 'Both' }) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
@@ -527,7 +527,7 @@ async function listPermissionTemplates() {
  * @returns {Promise<Object>} Updated template
  */
 async function updatePermissionTemplate({ templateId, label, permissionsList, defaultBranch = 'Both' }) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
@@ -611,7 +611,7 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
  * @returns {Promise<boolean>} True if deleted
  */
 async function deletePermissionTemplate(templateId) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
