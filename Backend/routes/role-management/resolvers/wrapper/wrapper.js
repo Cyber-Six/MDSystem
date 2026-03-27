@@ -700,7 +700,8 @@ const Mutation = {
 
     return {
       ok: true,
-      message: 'MedicalPersonnel record deleted successfully.'
+      message: 'MedicalPersonnel record deleted successfully.',
+      identityReverted: false
     };
   },
 

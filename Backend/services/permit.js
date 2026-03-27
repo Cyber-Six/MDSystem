@@ -282,9 +282,9 @@ async function isMedicalPermitted(userId, label, patientId) {
       [userId, label, patientId]
     );
   } else {
-    // Case: patientId null → skip patient join, only check role/branch
+    // Case: patientId null → skip patient join, only check if role exists
     result = await db.query(
-      `SELECT uc.identity
+      `SELECT 1
        FROM "rolesMap" rm
        JOIN "rolesTable" rt ON rm."rolesId" = rt.id
        WHERE rm."personnelId" = $1

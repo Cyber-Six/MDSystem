@@ -49,6 +49,7 @@ const AdminTransfer = () => {
     try {
       const result = await initiateAdminTransfer(selectedUserId, password);
       if (result.ok && result.verificationRequired) {
+        setPassword('');
         setStep('verify');
       }
     } catch (err) {

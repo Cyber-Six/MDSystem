@@ -7,10 +7,14 @@ import { axiosRequest } from '../../packages-core-adapter';
 const ENDPOINT = '/rolemanagement/admin';
 
 const sendGraphQL = async (query, variables = {}) => {
-  const response = await axiosRequest.post(ENDPOINT, {
-    query,
-    variables,
-  });
+  let response;
+  try {
+    response = await axiosRequest.post(ENDPOINT, { query, variables });
+  } catch (err) {
+    // Extract GraphQL error message from non-2xx responses when available
+    const gqlMsg = err.response?.data?.errors?.[0]?.message;
+    throw new Error(gqlMsg || err.message || 'Network error');
+  }
 
   if (response.data.errors) {
     throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
