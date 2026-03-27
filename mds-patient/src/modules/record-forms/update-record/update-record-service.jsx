@@ -888,6 +888,10 @@ export async function createLifestyle(formData) {
 
   const input = {
     smoker: isSmoker,
+    vapeUser: false,
+    vapeType: null,
+    vapeFrequency: null,
+    yearsVaping: null,
     numberOfCigarettesPerDay: null,
     yearsSmoked: null,
     alcoholConsumer: isDrinker,
