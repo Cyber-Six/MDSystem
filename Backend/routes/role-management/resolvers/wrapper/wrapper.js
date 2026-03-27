@@ -28,7 +28,6 @@ const {
   recordAdminTransferAttempt,
   getAdminActivePendingTransfer,
   recordAdminTransferPasswordFailure,
-  getAdminTransferPasswordFailureCount,
   isAdminTransferPasswordLocked,
   clearAdminTransferPasswordFailures,
 } = require('../../../../config/redis.js');
