@@ -136,12 +136,23 @@ const MedicalBackgroundForm = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
               {immunizationCatalog.map((vaccine) => (
-                <Checkbox
-                  key={vaccine.id}
-                  label={vaccine.name}
-                  checked={data.immunizations?.[vaccine.id] || false}
-                  onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
-                />
+                <div key={vaccine.id} className="space-y-2">
+                  <Checkbox
+                    label={vaccine.name}
+                    checked={data.immunizations?.[vaccine.id] || false}
+                    onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
+                  />
+                  {data.immunizations?.[vaccine.id] && (
+                    <div className="ml-6">
+                      <Input
+                        label="Date of Immunization:"
+                        type="date"
+                        value={data.immunizationDates?.[vaccine.id] || ''}
+                        onChange={(e) => onChange({ ...data, immunizationDates: { ...data.immunizationDates, [vaccine.id]: e.target.value } })}
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -312,23 +323,32 @@ const MedicalBackgroundForm = ({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                     {hospitalizationCatalog.map((condition) => (
-                      <Checkbox
-                        key={condition.id}
-                        label={condition.name}
-                        checked={data.hospitalizationConditions?.[condition.id] || false}
-                        onChange={(e) => handleCatalogToggle('hospitalizationConditions', condition.id, e.target.checked)}
-                      />
+                      <div key={condition.id} className="space-y-2">
+                        <Checkbox
+                          label={condition.name}
+                          checked={data.hospitalizationConditions?.[condition.id] || false}
+                          onChange={(e) => handleCatalogToggle('hospitalizationConditions', condition.id, e.target.checked)}
+                        />
+                        {data.hospitalizationConditions?.[condition.id] && (
+                          <div className="ml-6 grid grid-cols-2 gap-2">
+                            <Input
+                              label="Admission Date:"
+                              type="date"
+                              value={data.hospitalizationDates?.[condition.id]?.admissionDate || ''}
+                              onChange={(e) => onChange({ ...data, hospitalizationDates: { ...data.hospitalizationDates, [condition.id]: { ...data.hospitalizationDates?.[condition.id], admissionDate: e.target.value } } })}
+                            />
+                            <Input
+                              label="Discharge Date:"
+                              type="date"
+                              value={data.hospitalizationDates?.[condition.id]?.dischargeDate || ''}
+                              onChange={(e) => onChange({ ...data, hospitalizationDates: { ...data.hospitalizationDates, [condition.id]: { ...data.hospitalizationDates?.[condition.id], dischargeDate: e.target.value } } })}
+                            />
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}
-              </div>
-              <div>
-                <Input
-                  label="Date of Admission:"
-                  type="date"
-                  value={data.hospitalizationDate || ''}
-                  onChange={(e) => handleChange('hospitalizationDate', e.target.value)}
-                />
               </div>
               <div>
                 <Textarea
@@ -398,23 +418,26 @@ const MedicalBackgroundForm = ({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                     {operationCatalog.map((procedure) => (
-                      <Checkbox
-                        key={procedure.id}
-                        label={procedure.name}
-                        checked={data.operationConditions?.[procedure.id] || false}
-                        onChange={(e) => handleCatalogToggle('operationConditions', procedure.id, e.target.checked)}
-                      />
+                      <div key={procedure.id} className="space-y-2">
+                        <Checkbox
+                          label={procedure.name}
+                          checked={data.operationConditions?.[procedure.id] || false}
+                          onChange={(e) => handleCatalogToggle('operationConditions', procedure.id, e.target.checked)}
+                        />
+                        {data.operationConditions?.[procedure.id] && (
+                          <div className="ml-6">
+                            <Input
+                              label="Date of Operation:"
+                              type="date"
+                              value={data.operationDates?.[procedure.id] || ''}
+                              onChange={(e) => onChange({ ...data, operationDates: { ...data.operationDates, [procedure.id]: e.target.value } })}
+                            />
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}
-              </div>
-              <div>
-                <Input
-                  label="Date of Operation:"
-                  type="date"
-                  value={data.operationDate || ''}
-                  onChange={(e) => handleChange('operationDate', e.target.value)}
-                />
               </div>
               <div>
                 <Textarea
