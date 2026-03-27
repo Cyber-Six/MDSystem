@@ -329,7 +329,7 @@ const Mutation = {
              "vapeUser" = EXCLUDED."vapeUser",
              "vapeType" = EXCLUDED."vapeType",
              "vapeFrequency" = EXCLUDED."vapeFrequency",
-             "yearsVaping" = EXCLUDED."yearsVaping",
+             "yearsVaping" = EXCLUDED."yearsVaping"
              RETURNING *;`,
       [
         recordId,
