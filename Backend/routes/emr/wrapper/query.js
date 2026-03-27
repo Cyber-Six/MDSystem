@@ -18,7 +18,7 @@ const Query = {
 
     const result = await db.query(
        `SELECT log.id, log.status, log.scope, log.notes, 
-        log.dentalRecordId, log.vitalSignsId, log.created_at
+        log.dentalRecordId, log."vitalSignsId", log.created_at
         FROM "patientUpdateLog" AS log
         JOIN "Patients" AS p ON p.id = log."patientId"
         WHERE p.id = $1
