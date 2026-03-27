@@ -1430,7 +1430,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const ls           = emr?.lifestyle                        || {};
   const va           = emr?.visualAcuity                     || {};
 
-  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, true]));
+  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, { checked: true, severity: a.severity || 'Unknown' }]));
   const hospMap         = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
   const hospDatesMap    = Object.fromEntries(hosps.map(h => [h.conditionId, {
     admissionDate: h.admissionDate ? new Date(h.admissionDate).toISOString().split('T')[0] : '',
@@ -1489,7 +1489,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const dh        = emr?.dentalHistory || {};
   const oaProfile = emr?.oralAppliance || {};
   const appliances = oaProfile.appliances || [];
-  const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, true]));
+  const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, { checked: true, arch: a.arch || '' }]));
 
   const dentalHistory = {
     // seenByDentist=true means patient has been seen before → firstTimeDentist='no'
@@ -1577,11 +1577,11 @@ export const fetchRevisionPrefill = async () => {
           notes
         }
         allergyProfile: getAllergyProfile {
-          allergies { allergenCatalogId status }
+          allergies { allergenCatalogId status severity }
           notes
         }
         hospitalizationProfile: getHospitalizationProfile {
-          hospitalizations { conditionId admissionDate notes }
+          hospitalizations { conditionId admissionDate dischargeDate notes }
           notes
         }
         operationProfile: getOperationProfile {
@@ -1593,7 +1593,7 @@ export const fetchRevisionPrefill = async () => {
           notes
         }
         immunizationProfile: getImmunizationProfile {
-          immunizations { vaccineTypeId }
+          immunizations { vaccineTypeId immunizationDate }
           notes
         }
         lifestyle: getLifestyle {
