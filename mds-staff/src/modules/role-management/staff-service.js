@@ -315,12 +315,16 @@ export const updateTemplate = async (templateId, label, granularPerms) => {
     input.defaultBranch = 'Both';
   }
   const data = await sendGraphQL(GQL_UPDATE_TEMPLATE, { templateId, input });
-  const t = data.updatePermissionTemplate.template;
-  return t ? {
-    id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
-    permissions: templatePermsToGranular(t.permissions),
-    permissionCount: t.permissionCount,
-  } : null;
+  const result = data.updatePermissionTemplate;
+  const t = result.template;
+  return {
+    message: result.message,
+    template: t ? {
+      id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
+      permissions: templatePermsToGranular(t.permissions),
+      permissionCount: t.permissionCount,
+    } : null,
+  };
 };
 
 export const deleteTemplate = async (templateId) => {

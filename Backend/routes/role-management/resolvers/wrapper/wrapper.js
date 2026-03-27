@@ -10,6 +10,7 @@ const {
   updatePermissionTemplate,
   deletePermissionTemplate,
   applyTemplateToStaff,
+  propagateTemplatePermissions,
   isMedicalPermitted,
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,
@@ -1108,11 +1109,36 @@ const Mutation = {
         defaultBranch
       });
 
-      logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}`);
+      // ── Propagate changes to all staff with this role ──────────────
+      let affectedStaffCount = 0;
+
+      // If label changed, update MedicalPersonnel.role for all linked staff first
+      if (label !== undefined && label !== null && label !== existingTemplate.label) {
+        await db.query(
+          `UPDATE "MedicalPersonnel" SET role = $1 WHERE role = $2`,
+          [label, existingTemplate.label]
+        );
+        logger.info(`Staff roles renamed from "${existingTemplate.label}" to "${label}"`);
+      }
+
+      // If permissions changed, propagate to all staff with this role
+      if (permissionsList && permissionsList.length > 0) {
+        const roleLabel = label || existingTemplate.label;
+        const propagation = await propagateTemplatePermissions({
+          templateId,
+          roleLabel,
+          assignedBy: user.id,
+        });
+        affectedStaffCount = propagation.affectedCount;
+      }
+
+      logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}, affectedStaff=${affectedStaffCount}`);
 
       return {
         ok: true,
-        message: 'Permission template updated successfully.',
+        message: affectedStaffCount > 0
+          ? `Permission template updated successfully. Permissions propagated to ${affectedStaffCount} staff member(s).`
+          : 'Permission template updated successfully.',
         template
       };
     } catch (error) {
