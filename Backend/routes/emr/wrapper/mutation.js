@@ -142,37 +142,54 @@ const Mutation = {
   },
 
   _VitalSigns: async (_, { args, recordId }, { user, res }) => {
-    const result = await db.query(
-      `WITH inserted AS (
-         INSERT INTO "VitalSigns" 
-           ("height_cm", "weight_kg", "blood_pressure", "heart_rate", 
-            "temperature", "notes")
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id
-       )
-       UPDATE "patientUpdateLog"
-       SET "vitalSignsId" = inserted.id
-       FROM inserted
-       WHERE "patientUpdateLog".id = $7
-       RETURNING "patientUpdateLog".*, inserted.id AS vitalSignsId;`,
-      [
-        args.input.height_cm,
-        args.input.weight_kg,
-        args.input.blood_pressure,
-        args.input.heart_rate,
-        args.input.temperature,
-        args.input.notes,
-        recordId
-      ]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET CONSTRAINTS ALL DEFERRED');
 
-    logger.debug("Inserted Vital Signs + Updated Log:", result.rows[0]);
+      const result = await db.queryClient(
+        client,
+        `WITH inserted AS (
+           INSERT INTO "VitalSigns"
+             ("height_cm", "weight_kg", "blood_pressure", "heart_rate",
+              "temperature", "notes")
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id
+         )
+         UPDATE "patientUpdateLog"
+         SET "vitalSignsId" = inserted.id
+         FROM inserted
+         WHERE "patientUpdateLog".id = $7
+         RETURNING "patientUpdateLog".*, inserted.id AS vitalSignsId;`,
+        [
+          args.input.height_cm,
+          args.input.weight_kg,
+          args.input.blood_pressure,
+          args.input.heart_rate,
+          args.input.temperature,
+          args.input.notes,
+          recordId
+        ]
+      );
 
-    return {
-      ...(args.input),
-      id: result.rows[0].vitalSignsId,
-      archived_at: null
-    };
+      await client.query('COMMIT');
+      logger.debug("Inserted Vital Signs + Updated Log:", result.rows[0]);
+
+      return {
+        ...(args.input),
+        id: result.rows[0].vitalSignsId,
+        archived_at: null
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error inserting Vital Signs:', error);
+      throwGraphQLError(res)
+        .status(400)
+        .message(`Failed to save edits: Vital signs: ${error.message}`)
+        .throw();
+    } finally {
+      client.release();
+    }
   },
 
   _DentalRecord: async (_, { args, recordId }, { user, res }) => {
