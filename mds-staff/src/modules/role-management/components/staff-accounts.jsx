@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, allModules, hasCustomPermissions, detectRole } from '../role-permissions';
+import { allModules, hasCustomPermissions } from '../role-permissions';
 import { fetchStaffAccounts as fetchStaffAccountsAPI, searchUsers, createMedicalPersonnel, fetchTemplates } from '../staff-service';
 import StaffDetail from './staff-detail';
 
@@ -29,10 +29,17 @@ const StaffAccounts = () => {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addError, setAddError] = useState(null);
   const [templates, setTemplates] = useState([]);
+  const [mdsOnly, setMdsOnly] = useState(false);
+  const [nonMdsWarningUser, setNonMdsWarningUser] = useState(null);
   const searchTimeoutRef = useRef(null);
 
+  // Load templates on mount for role display & filtering
+  useEffect(() => {
+    fetchTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
+
   // Debounced user search
-  const handleAddSearch = useCallback((value) => {
+  const handleAddSearch = useCallback((value, mdsFilter = mdsOnly) => {
     setAddSearch(value);
     setAddSearchError(null);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -43,7 +50,7 @@ const StaffAccounts = () => {
     searchTimeoutRef.current = setTimeout(async () => {
       setAddSearching(true);
       try {
-        const results = await searchUsers(value.trim());
+        const results = await searchUsers(value.trim(), mdsFilter);
         setAddSearchResults(results);
       } catch (err) {
         setAddSearchError(err.message);
@@ -51,19 +58,21 @@ const StaffAccounts = () => {
         setAddSearching(false);
       }
     }, 400);
-  }, []);
+  }, [mdsOnly]);
+
+  // Re-trigger search when mdsOnly filter changes
+  useEffect(() => {
+    if (showAddModal && addSearch.trim().length >= 2 && !selectedUser) {
+      handleAddSearch(addSearch, mdsOnly);
+    }
+  }, [mdsOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadStaffAccounts = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
       const records = await fetchStaffAccountsAPI();
-      // Enrich each record with a detected role from the permissions
-      const enriched = records.map((s) => ({
-        ...s,
-        role: detectRole(s.permissions),
-      }));
-      setStaffList(enriched);
+      setStaffList(records);
     } catch (err) {
       setLoadError(err.message || 'Failed to load staff accounts.');
     } finally {
@@ -78,6 +87,7 @@ const StaffAccounts = () => {
     setSelectedUser(null);
     setAddForm({ title: '', role: '', designation: 'Both', templateId: '' });
     setAddError(null);
+    setMdsOnly(false);
     try {
       const t = await fetchTemplates();
       setTemplates(t);
@@ -112,23 +122,21 @@ const StaffAccounts = () => {
     loadStaffAccounts();
   }, [loadStaffAccounts]);
 
-  const roleColors = {
-    admin:   'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
-    doctor:  'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400',
-    dentist: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400',
-    nurse:   'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
-    custom:  'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
+  const roleColorPool = [
+    'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
+    'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400',
+    'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400',
+    'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
+  ];
+  const getRoleColor = (roleName) => {
+    const idx = templates.findIndex(t => t.label === roleName);
+    return idx >= 0 ? roleColorPool[idx % roleColorPool.length] : 'bg-neutral-100 dark:bg-neutral-800 text-secondary-500 dark:text-neutral-400';
   };
 
   const statusConfig = {
     Active:    { dot: 'bg-success-500', text: 'text-success-600 dark:text-success-400' },
     Suspended: { dot: 'bg-error-500',   text: 'text-error-600 dark:text-error-400' },
     Pending:   { dot: 'bg-warning-500', text: 'text-warning-600 dark:text-warning-400' },
-  };
-
-  const getRoleName = (roleId) => {
-    const role = DEFAULT_ROLE_TEMPLATES.find((r) => r.id === roleId);
-    return role?.name || (roleId === 'custom' ? 'Custom' : roleId);
   };
 
   const filteredStaff = staffList.filter((s) => {
@@ -143,7 +151,7 @@ const StaffAccounts = () => {
 
   const handleSaveStaff = (updatedStaff) => {
     setStaffList((prev) =>
-      prev.map((s) => (s.id === updatedStaff.id ? { ...updatedStaff, role: detectRole(updatedStaff.permissions) } : s))
+      prev.map((s) => (s.id === updatedStaff.id ? updatedStaff : s))
     );
     setSelectedStaff(null);
   };
@@ -170,10 +178,9 @@ const StaffAccounts = () => {
           className="px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
         >
           <option value="all">All Roles</option>
-          {DEFAULT_ROLE_TEMPLATES.map((r) => (
-            <option key={r.id} value={r.id}>{r.name}</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.label}>{t.label}</option>
           ))}
-          <option value="custom">Custom</option>
         </select>
         <select
           value={filterStatus}
@@ -209,7 +216,7 @@ const StaffAccounts = () => {
       {/* Staff Count */}
       <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mb-1.5">
         {filteredStaff.length} staff account{filteredStaff.length !== 1 ? 's' : ''}
-        {filterRole !== 'all' && ` · ${getRoleName(filterRole)}`}
+        {filterRole !== 'all' && ` · ${filterRole}`}
         {filterStatus !== 'all' && ` · ${filterStatus}`}
       </p>
 
@@ -247,7 +254,8 @@ const StaffAccounts = () => {
             </thead>
             <tbody>
               {filteredStaff.map((s) => {
-                const isCustom = s.role === 'custom' || hasCustomPermissions(s.permissions, s.role);
+                const tpl = templates.find(t => t.label === s.role);
+                const isCustom = tpl ? hasCustomPermissions(s.permissions, s.role, [{ id: s.role, permissions: tpl.permissions }]) : false;
                 const sc = statusConfig[s.status] || statusConfig.Pending;
                 return (
                   <tr
@@ -279,8 +287,8 @@ const StaffAccounts = () => {
                           —
                         </span>
                       ) : (
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${roleColors[s.role] || roleColors.custom}`}>
-                          {getRoleName(s.role)}
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${getRoleColor(s.role)}`}>
+                          {s.role || 'Unassigned'}
                         </span>
                       )}
                     </td>
@@ -330,16 +338,28 @@ const StaffAccounts = () => {
               {!selectedUser ? (
                 <div>
                   <label className="block text-xs font-medium text-secondary-700 dark:text-neutral-300 mb-1.5">
-                    Search User by Email, Name, or ID
+                    Search Employee by Email, Name, or ID
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. juan@tip.edu.ph or Juan Dela Cruz"
+                    placeholder="e.g. juan.mds@tip.edu.ph or Juan Dela Cruz"
                     value={addSearch}
                     onChange={(e) => handleAddSearch(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-secondary-800 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                     autoFocus
                   />
+                  {/* .mds@tip filter checkbox */}
+                  <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={mdsOnly}
+                      onChange={(e) => setMdsOnly(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-[10px] text-secondary-600 dark:text-neutral-400">
+                      Show only <span className="font-medium text-primary-600 dark:text-primary-400">.mds@tip.edu.ph</span> accounts
+                    </span>
+                  </label>
                   {addSearching && (
                     <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1.5">Searching...</p>
                   )}
@@ -351,10 +371,17 @@ const StaffAccounts = () => {
                       {addSearchResults.map((u) => (
                         <button
                           key={u.id}
-                          onClick={() => !u.isMedicalPersonnel && setSelectedUser(u)}
-                          disabled={u.isMedicalPersonnel}
+                          onClick={() => {
+                            if (u.isMedicalPersonnel || u.identity !== 'Employee') return;
+                            if (!u.email?.endsWith('.mds@tip.edu.ph')) {
+                              setNonMdsWarningUser(u);
+                            } else {
+                              setSelectedUser(u);
+                            }
+                          }}
+                          disabled={u.isMedicalPersonnel || u.identity !== 'Employee'}
                           className={`w-full text-left px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 transition-colors ${
-                            u.isMedicalPersonnel
+                            u.isMedicalPersonnel || u.identity !== 'Employee'
                               ? 'opacity-50 cursor-not-allowed bg-neutral-50 dark:bg-neutral-800/30'
                               : 'hover:bg-primary-50 dark:hover:bg-primary-900/20 cursor-pointer'
                           }`}
@@ -369,9 +396,13 @@ const StaffAccounts = () => {
                                 <span className="text-[9px] px-1.5 py-0.5 bg-neutral-200 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400 rounded font-medium">
                                   Already Staff
                                 </span>
+                              ) : u.identity !== 'Employee' ? (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 rounded font-medium">
+                                  {u.identity} — Not Eligible
+                                </span>
                               ) : (
                                 <span className="text-[9px] px-1.5 py-0.5 bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400 rounded font-medium">
-                                  {u.identity} · ID {u.id}
+                                  Employee · ID {u.id}
                                 </span>
                               )}
                             </div>
@@ -416,16 +447,32 @@ const StaffAccounts = () => {
                     />
                   </div>
 
-                  {/* Role */}
+                  {/* Role (from templates only) */}
                   <div>
                     <label className="block text-[10px] font-medium text-secondary-600 dark:text-neutral-400 mb-1">Role</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Doctor, Dentist, Nurse"
+                    <select
                       value={addForm.role}
-                      onChange={(e) => setAddForm(prev => ({ ...prev, role: e.target.value }))}
-                      className="w-full px-3 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-secondary-800 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 outline-none"
-                    />
+                      onChange={(e) => {
+                        const selectedLabel = e.target.value;
+                        const matchedTemplate = templates.find(t => t.label === selectedLabel);
+                        setAddForm(prev => ({
+                          ...prev,
+                          role: selectedLabel,
+                          templateId: matchedTemplate ? matchedTemplate.id : '',
+                        }));
+                      }}
+                      className="w-full px-3 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                    >
+                      <option value="">Select a role…</option>
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.label}>{t.label} ({t.permissionCount} permissions)</option>
+                      ))}
+                    </select>
+                    {templates.length === 0 && (
+                      <p className="text-[9px] text-warning-600 dark:text-warning-400 mt-1">
+                        No role templates found. Create templates in the Role Templates tab first.
+                      </p>
+                    )}
                   </div>
 
                   {/* Designation */}
@@ -442,20 +489,17 @@ const StaffAccounts = () => {
                     </select>
                   </div>
 
-                  {/* Template */}
-                  <div>
-                    <label className="block text-[10px] font-medium text-secondary-600 dark:text-neutral-400 mb-1">Permission Template (Optional)</label>
-                    <select
-                      value={addForm.templateId}
-                      onChange={(e) => setAddForm(prev => ({ ...prev, templateId: e.target.value }))}
-                      className="w-full px-3 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
-                    >
-                      <option value="">No template (basic access)</option>
-                      {templates.map((t) => (
-                        <option key={t.id} value={t.id}>{t.label} ({t.permissionCount} permissions)</option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* Template auto-applied from role selection */}
+                  {addForm.templateId && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-success-50 dark:bg-success-900/20 rounded-lg border border-success-200 dark:border-success-800">
+                      <svg className="w-3.5 h-3.5 text-success-600 dark:text-success-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <p className="text-[10px] text-success-700 dark:text-success-400">
+                        Permissions from <span className="font-medium">{addForm.role}</span> template will be applied automatically.
+                      </p>
+                    </div>
+                  )}
 
                   {addError && (
                     <p className="text-[10px] text-error-600 dark:text-error-400 bg-error-50 dark:bg-error-900/20 rounded-lg px-3 py-2">{addError}</p>
@@ -482,6 +526,50 @@ const StaffAccounts = () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Non-MDS Warning Modal */}
+      {nonMdsWarningUser && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setNonMdsWarningUser(null)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-neutral-900 rounded-xl shadow-2xl p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-secondary-900 dark:text-white">Non-MDS Account</h4>
+                <p className="text-[10px] text-secondary-500 dark:text-neutral-400">This employee is not a TIP MDS account</p>
+              </div>
+            </div>
+            <div className="bg-warning-50 dark:bg-warning-900/20 rounded-lg px-3 py-2.5 mb-4 border border-warning-200 dark:border-warning-800">
+              <p className="text-xs text-warning-800 dark:text-warning-300">
+                <span className="font-semibold">{nonMdsWarningUser.name}</span>{' '}
+                (<span className="font-mono text-[10px]">{nonMdsWarningUser.email}</span>) does not use a{' '}
+                <span className="font-medium">.mds@tip.edu.ph</span> email address.
+              </p>
+              <p className="text-[10px] text-warning-700 dark:text-warning-400 mt-1">
+                Adding non-MDS employees as staff may cause access issues. Proceed only if intentional.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setNonMdsWarningUser(null)}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-neutral-200 dark:border-neutral-700 text-secondary-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setSelectedUser(nonMdsWarningUser); setNonMdsWarningUser(null); }}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-warning-600 hover:bg-warning-700 text-white transition-colors"
+              >
+                Proceed Anyway
+              </button>
+            </div>
           </div>
         </div>
       )}

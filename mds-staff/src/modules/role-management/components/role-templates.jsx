@@ -292,7 +292,7 @@ const RoleTemplates = () => {
               <div className="flex items-center gap-2">
                 <h4 className="text-lg font-semibold text-secondary-900 dark:text-white leading-none">{selectedRole.name}</h4>
                 <span className={`text-xs px-2 py-0.5 rounded-full border leading-none ${colorMap[selectedRole.color] || colorMap.primary}`}>
-                  {selectedRole.id}
+                  {selectedRole.locked ? 'System' : 'Custom'}
                 </span>
               </div>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">{selectedRole.description}</p>
