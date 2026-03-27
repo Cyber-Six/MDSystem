@@ -1,8 +1,27 @@
-# Simplified Module-Level Permissions — Backend Changes Required
+# Simplified Module-Level Permissions — Backend Implementation
 
-> **Date:** March 26, 2026  
+> **Date:** March 26, 2026 (Spec) · March 27, 2026 (Implemented)  
 > **Scope:** Role Management — permission model simplification  
-> **Access:** Admin-only (existing `requireAdmin` guard stays as-is)
+> **Access:** Admin-only (existing `requireAdmin` guard stays as-is)  
+> **Status:** ✅ Fully implemented — Pure GraphQL (no REST API)
+
+---
+
+## Implementation Status
+
+All backend changes below are **implemented** in the following files:
+
+| File | What Was Done |
+|---|---|
+| `Backend/services/permit.js` | Added `MODULE_PERMISSION_MAP`, `MODULE_LABELS`, `resolveModulePermissions()`, `setStaffModulePermissions()`, `getStaffModulePermissions()`, helper functions |
+| `Backend/routes/role-management/schema.graphql` | Added `ModulePermission`, `ModulePermissionList`, `ModulePermissionInput` types; `setStaffModulePermissions` & `updateStaffAccount` mutations; `getStaffModulePermissions` query; `modulePermissions` field on `StaffAccount` |
+| `Backend/routes/role-management/resolvers/wrapper/wrapper.js` | Added `deriveModulePermissions()` helper, `_setStaffModulePermissions`, `_updateStaffAccount` mutations, `_getStaffModulePermissions` query; optimized `_listStaffAccounts` SQL (merged last-login subquery, removed identity filter) |
+| `Backend/routes/role-management/resolvers/admin/admin-resolver.js` | Added `updateStaffAccount`, `setStaffModulePermissions`, `getStaffModulePermissions` resolver wiring |
+| `mds-staff/src/modules/role-management/staff-service.js` | **New** — GraphQL service with `fetchStaffAccounts()`, `updateStaffAccount()`, response transformation |
+| `mds-staff/src/modules/role-management/components/staff-accounts.jsx` | Switched from REST `GET /admin/staff/accounts` to GraphQL `listStaffAccounts` via staff-service |
+| `mds-staff/src/modules/role-management/components/staff-detail.jsx` | Switched from REST `PUT /admin/staff/accounts/:id` to GraphQL `updateStaffAccount` via staff-service |
+
+**Removed:** `rest-api.js` and its mount in `staff.js` — all operations now go through the GraphQL endpoint at `/rolemanagement/admin`.
 
 ---
 
