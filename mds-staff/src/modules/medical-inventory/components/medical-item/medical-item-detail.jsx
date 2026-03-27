@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { getExpiryStatus, CATEGORY_COLORS } from '../../inventory-seed-data';
 import { getDisplayLocation } from '../../medical-inventory-service';
+import TransactionHistory from '../transaction-history/transaction-history';
 
 // Helper to format date for display (remove time portion)
 const formatDateDisplay = (dateValue) => {
@@ -108,6 +109,9 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
         <button onClick={() => setTab('batches')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${tab === 'batches' ? 'bg-primary-500 text-white shadow-sm' : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'}`}>
           Batches ({sortedBatches.length})
         </button>
+        <button onClick={() => setTab('history')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${tab === 'history' ? 'bg-primary-500 text-white shadow-sm' : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'}`}>
+          History ({(transactions || []).length})
+        </button>
       </div>
 
       {/* Batch Table */}
@@ -204,6 +208,10 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
         </div>
       )}
 
+      {/* History Tab */}
+      {tab === 'history' && (
+        <TransactionHistory transactions={transactions} />
+      )}
 
     </div>
   );

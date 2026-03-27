@@ -175,6 +175,16 @@ const TransactionHistory = ({ transactions }) => {
                   const qtyDisplay = t.quantity > 0 ? `+${t.quantity}` : t.quantity;
                   const issuedByAndRecipient = t.action === 'issue' ? `To: ${t.patientName || '—'} / By: ${t.issuedByName}` : `By: ${t.issuedByName || '—'}`;
 
+                  // Enhanced details for adjustment records
+                  let detailsDisplay = t.notes || '—';
+                  if (t.action === 'adjust') {
+                    const prevQty = t.previousQuantity !== undefined ? t.previousQuantity : '?';
+                    const newQty = t.newQuantity !== undefined ? t.newQuantity : '?';
+                    const category = t.category || 'Item';
+                    const location = t.location ? ` @ ${t.location}` : '';
+                    detailsDisplay = `${category}: ${prevQty} → ${newQty}${location} | Reason: ${t.reason || t.notes || '—'}`;
+                  }
+
                   return (
                     <tr key={t.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors">
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-300 whitespace-nowrap">
@@ -197,8 +207,8 @@ const TransactionHistory = ({ transactions }) => {
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-300 max-w-[160px] truncate" title={issuedByAndRecipient}>
                         {issuedByAndRecipient}
                       </td>
-                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400 max-w-[200px] truncate" title={t.notes || '—'}>
-                        {t.notes || '—'}
+                      <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400 max-w-[300px] truncate" title={detailsDisplay}>
+                        {detailsDisplay}
                       </td>
                     </tr>
                   );

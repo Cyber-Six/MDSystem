@@ -453,7 +453,7 @@ const Mutation = {
           await db.query(
             `DELETE FROM "MedicineEntity"
              WHERE "batchId" = $1 AND "transactionId" IS NULL
-             LIMIT $2`,
+             LIMIT $2::integer`,
             [batchId, toDelete]
           );
         }
