@@ -59,7 +59,9 @@ const GQL_LIFESTYLE = `
   query GetLifestyle($userId: ID!) {
     getUserLifestyle(userId: $userId, limit: 1) {
       id smoker numberOfCigarettesPerDay yearsSmoked
-      alcoholConsumer frequencyOfAlcoholConsumption notes status created_at
+      alcoholConsumer frequencyOfAlcoholConsumption
+      vapeUser vapeType vapeFrequency yearsVaping
+      notes status created_at
     }
   }
 `;
@@ -153,7 +155,9 @@ const GQL_FULL_RECORD = `
     }
     getUserLifestyle(userId: $userId, limit: 1) {
       id smoker numberOfCigarettesPerDay yearsSmoked
-      alcoholConsumer frequencyOfAlcoholConsumption notes status created_at
+      alcoholConsumer frequencyOfAlcoholConsumption
+      vapeUser vapeType vapeFrequency yearsVaping
+      notes status created_at
     }
     getUserObgynHistory(userId: $userId, limit: 1) {
       id lastMenstrualPeriod hasDysmenorrhea notes status created_at
@@ -343,6 +347,7 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
       lifestyle: {
         smoker:        lifestyleData?.smoker ? `Yes (${lifestyleData.numberOfCigarettesPerDay || '?'} sticks/day, ${lifestyleData.yearsSmoked || '?'} yrs)` : 'No',
         alcoholDrinker:lifestyleData?.alcoholConsumer ? `Yes (${lifestyleData.frequencyOfAlcoholConsumption || 'occasional'})` : 'No',
+        vaper:         lifestyleData?.vapeUser ? `Yes (${lifestyleData.vapeType || 'Not specified'}, ${lifestyleData.vapeFrequency || 'Not specified'})` : 'No',
         tattoo:        lifestyleData?.notes || '',
         piercing:      '',
       },
@@ -663,6 +668,7 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
                 {Object.entries({
                   'Smoker': patient.medical.lifestyle.smoker,
                   'Alcohol Drinker': patient.medical.lifestyle.alcoholDrinker,
+                  'Vaper': patient.medical.lifestyle.vaper,
                   'Tattoo': patient.medical.lifestyle.tattoo,
                   'Piercing': patient.medical.lifestyle.piercing,
                 }).map(([label, value]) => (

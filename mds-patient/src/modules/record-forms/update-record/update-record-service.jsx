@@ -433,7 +433,7 @@ async function mapRevisionDataToFormData(backendData) {
       ? (backendData.lifestyle.numberOfCigarettesPerDay ? 'Current' : 'Former')
       : 'Never';
     formData.alcohol = backendData.lifestyle.alcoholConsumer 
-      ? backendData.lifestyle.frequencyOfAlcoholConsumption || 'Occasionally'
+      ? backendData.lifestyle.frequencyOfAlcoholConsumption || 'Occasional'
       : 'Never';
   }
 
@@ -877,7 +877,7 @@ export async function createLifestyle(formData) {
   `;
 
   const isSmoker = formData.smoking === 'Current' || formData.smoking === 'Former';
-  const isDrinker = formData.alcohol === 'Occasionally' || formData.alcohol === 'Regularly';
+  const isDrinker = formData.alcohol === 'Occasional' || formData.alcohol === 'Regularly';
 
   // Build lifestyle notes from form selections
   const lifestyleNotes = [

@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { Checkbox, Input, Textarea, AccordionSection, Select } from './form-elements';
 
 const LIFESTYLE_FREQUENCY_OPTIONS = [
-  { value: 'Daily',        label: 'Daily' },
-  { value: 'Weekly',       label: 'Weekly' },
-  { value: 'Monthly',      label: 'Monthly' },
-  { value: 'Occasionally', label: 'Occasionally' },
-  { value: 'Rare',         label: 'Rare' },
+  { value: 'Daily',      label: 'Daily' },
+  { value: 'Weekly',     label: 'Weekly' },
+  { value: 'Monthly',    label: 'Monthly' },
+  { value: 'Occasional', label: 'Occasionally' },
+  { value: 'Rare',       label: 'Rare' },
 ];
 
 const VAPE_TYPE_OPTIONS = [

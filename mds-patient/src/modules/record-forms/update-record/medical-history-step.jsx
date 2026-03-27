@@ -312,7 +312,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               required
               options={[
                 { value: 'Never', label: 'Never' },
-                { value: 'Occasionally', label: 'Occasionally' },
+                { value: 'Occasional', label: 'Occasionally' },
                 { value: 'Regularly', label: 'Regularly' }
               ]}
               value={formData.alcohol || ''}

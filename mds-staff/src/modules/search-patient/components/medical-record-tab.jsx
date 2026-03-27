@@ -296,6 +296,13 @@ export default function PatientMedicalRecordTab({ patient }) {
             {lifestyle.alcoholConsumer === 'Yes' && (
               <DataRow label="Alcohol Frequency" value={lifestyle.alcoholFrequency} />
             )}
+            <DataRow label="Vaper" value={lifestyle.vaper} />
+            {lifestyle.vaper === 'Yes' && (
+              <>
+                <DataRow label="Vape Type"      value={lifestyle.vapeType} />
+                <DataRow label="Vape Frequency" value={lifestyle.vapeFrequency} />
+              </>
+            )}
           </PatientSectionCard>
 
           {/* Visual Acuity */}
