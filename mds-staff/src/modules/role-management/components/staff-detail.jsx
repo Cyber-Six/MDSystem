@@ -1,33 +1,38 @@
-import React, { useState } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, clonePermissions, hasCustomPermissions, allKeys } from '../role-permissions';
-import { updateStaffAccount } from '../staff-service';
+import React, { useState, useEffect } from 'react';
+import { clonePermissions, hasCustomPermissions, allKeys } from '../role-permissions';
+import { updateStaffAccount, fetchTemplates } from '../staff-service';
 import PermissionMatrix from './permission-matrix';
 import ActivityLog from './activity-log';
 
 /**
  * Staff Detail Component
  * Centered modal with 3 tabs: Info, Permissions, Activity Log
+ * Role dropdown populated from backend Role Templates.
  */
 const StaffDetail = ({ staff, onClose, onSave }) => {
   const isPending = staff.status === 'Pending';
 
   const [activeTab, setActiveTab] = useState('info');
-  const [role, setRole] = useState(isPending ? DEFAULT_ROLE_TEMPLATES[1]?.id || 'doctor' : staff.role);
-  const [permissions, setPermissions] = useState(
-    isPending
-      ? clonePermissions(DEFAULT_ROLE_TEMPLATES.find(r => r.id !== 'admin')?.permissions || allKeys(false))
-      : clonePermissions(staff.permissions)
-  );
+  const [templates, setTemplates] = useState([]);
+  const [role, setRole] = useState(staff.role || '');
+  const [originalRole] = useState(staff.role || '');
+  const [permissions, setPermissions] = useState(clonePermissions(staff.permissions || allKeys(false)));
   const [status, setStatus] = useState(isPending ? 'Active' : staff.status);
-  const [hasChanges, setHasChanges] = useState(isPending); // pending always has unsaved state
+  const [hasChanges, setHasChanges] = useState(isPending);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
-  const isCustom = hasCustomPermissions(permissions, role);
+  // Load templates from backend
+  useEffect(() => {
+    fetchTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
 
-  const handleRoleChange = (newRoleId) => {
-    setRole(newRoleId);
-    const template = DEFAULT_ROLE_TEMPLATES.find((r) => r.id === newRoleId);
+  const currentTemplate = templates.find(t => t.label === role);
+  const isCustom = currentTemplate ? hasCustomPermissions(permissions, null, [{ id: role, permissions: currentTemplate.permissions }]) : role && Object.values(permissions).some(v => v);
+
+  const handleRoleChange = (newRole) => {
+    setRole(newRole);
+    const template = templates.find(t => t.label === newRole);
     if (template) {
       setPermissions(clonePermissions(template.permissions));
     }
@@ -40,7 +45,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
   };
 
   const handleResetToDefault = () => {
-    const template = DEFAULT_ROLE_TEMPLATES.find((r) => r.id === role);
+    const template = templates.find(t => t.label === role);
     if (template) {
       setPermissions(clonePermissions(template.permissions));
       setHasChanges(true);
@@ -51,8 +56,14 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
     setSaveError(null);
     setIsSaving(true);
     try {
-      const result = await updateStaffAccount(staff.id, clonePermissions(permissions), status);
-      // Use the returned staff from the mutation to avoid a separate re-fetch
+      const roleChanged = role !== originalRole;
+      const result = await updateStaffAccount(
+        staff.id,
+        clonePermissions(permissions),
+        status,
+        roleChanged ? role : undefined,
+        roleChanged && currentTemplate ? currentTemplate.id : undefined,
+      );
       const updatedStaff = result.staff
         ? result.staff
         : { ...staff, role, permissions: clonePermissions(permissions), status };
@@ -70,8 +81,6 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
     { id: 'permissions', label: 'Permissions' },
     { id: 'activity', label: 'Activity Log' },
   ];
-
-  const roleTemplate = DEFAULT_ROLE_TEMPLATES.find((r) => r.id === role);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -100,7 +109,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                 )}
               </div>
               <p className="text-[11px] text-secondary-500 dark:text-neutral-400 truncate">
-                {isPending ? 'No role assigned yet' : (roleTemplate?.name || role)} · {staff.email}
+                {isPending ? 'No role assigned yet' : (role || 'No role')} · {staff.email}
               </p>
             </div>
           </div>
@@ -173,11 +182,20 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                     onChange={(e) => handleRoleChange(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                   >
-                    {DEFAULT_ROLE_TEMPLATES.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
+                    <option value="">Select a role…</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.label}>{t.label}</option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">{roleTemplate?.description}</p>
+                  {currentTemplate ? (
+                    <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">
+                      Template with {currentTemplate.permissionCount} permissions
+                    </p>
+                  ) : templates.length === 0 ? (
+                    <p className="text-[9px] text-warning-600 dark:text-warning-400 mt-1">
+                      No role templates found. Create templates in the Role Templates tab first.
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -221,7 +239,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-secondary-500 dark:text-neutral-400">Role:</span>
-                  <span className="text-xs font-semibold text-secondary-800 dark:text-white">{roleTemplate?.name}</span>
+                  <span className="text-xs font-semibold text-secondary-800 dark:text-white">{role || 'No role'}</span>
                 </div>
                 {isCustom && (
                   <button
