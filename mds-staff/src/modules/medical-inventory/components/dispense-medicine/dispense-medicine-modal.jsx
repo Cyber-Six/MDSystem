@@ -2,6 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { fetchAvailableMedicine, issuePrescription } from '../../prescription-service';
 import { getDisplayLocation } from '../../medical-inventory-service';
 
+// Helper to format date for display (remove time portion)
+const formatDateDisplay = (dateValue) => {
+  if (!dateValue) return 'N/A';
+  try {
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) return 'N/A';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch (err) {
+    return 'N/A';
+  }
+};
+
 /**
  * Dispense Medicine Modal — issue medicine batch(es) to a patient.
  * Creates MedicineEntity assignments and transaction record with full audit trail.
@@ -203,7 +215,7 @@ const DispenseMedicineModal = ({ patientId, patientName, onClose, onSuccess }) =
                           {getDisplayLocation(med.location)}
                         </span>
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-400">
-                          Expires: {med.expiryDate || 'N/A'}
+                          Expires: {formatDateDisplay(med.expiryDate)}
                         </span>
                       </div>
                     </div>

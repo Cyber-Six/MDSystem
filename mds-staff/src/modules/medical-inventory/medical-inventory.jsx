@@ -13,9 +13,12 @@ import DispenseModal from './components/dispense-queue/dispense-modal';
 import DispenseMedicineModal from './components/dispense-medicine/dispense-medicine-modal';
 import RequestActionModal from './components/dispense-queue/request-action-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
-import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply } from './medical-inventory-service';
+import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
+import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
+import { getPatientBasicInfo } from '../../modules/pending-requests/patient-record-service';
+import { formatPatientName } from '../../services/patient-search-service';
 import {
   SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
@@ -69,7 +72,60 @@ const MedicalInventory = () => {
   // Feedback
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalData, setSuccessModalData] = useState({ title: 'Success', message: '' });
   const hasLoadedRequestsRef = useRef(false);
+  const patientNameCacheRef = useRef({}); // Cache for patient names to avoid redundant API calls
+
+  // Helper function to get patient name with caching
+  const getPatientNameCached = useCallback(async (patientId) => {
+    if (!patientId) return `Patient #${patientId}`;
+    
+    // Check cache first
+    if (patientNameCacheRef.current[patientId]) {
+      return patientNameCacheRef.current[patientId];
+    }
+    
+    try {
+      const patient = await getPatientBasicInfo(patientId);
+      if (patient) {
+        const name = formatPatientName(patient);
+        patientNameCacheRef.current[patientId] = name;
+        return name;
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch patient info for ID ${patientId}:`, err);
+    }
+    
+    // Fallback to ID if fetch fails
+    const fallback = `Patient #${patientId}`;
+    patientNameCacheRef.current[patientId] = fallback;
+    return fallback;
+  }, []);
+
+  // Helper function to enrich multiple requests with patient names
+  const enrichRequestsWithPatientNames = useCallback(async (requests) => {
+    const uniquePatientIds = [...new Set(requests.map(r => r.patientId))];
+    
+    // Fetch all patient names in parallel
+    const patientNames = await Promise.all(
+      uniquePatientIds.map(id => getPatientNameCached(id))
+    );
+    
+    // Create a map of patientId -> patientName
+    const patientNameMap = {};
+    uniquePatientIds.forEach((id, index) => {
+      patientNameMap[id] = patientNames[index];
+    });
+    
+    // Enrich requests with patient names
+    return requests.map(req => ({
+      ...req,
+      patientName: patientNameMap[req.patientId] || `Patient #${req.patientId}`,
+      patientType: 'Self-Request',
+      _isRealRequest: true,
+    }));
+  }, [getPatientNameCached]);
 
   // ── Fetch items from API ───────────────────────────────────────────────
   const loadItems = useCallback(async () => {
@@ -86,7 +142,7 @@ const MedicalInventory = () => {
             return fetchMedicineBatches(Number(item.id)).then((bs) =>
               bs.map((b) => ({
                 id: b.id,
-                medicalItemId: b.medicalItemId,
+                medicalItemId: Number(b.medicalItemId),  // Ensure number type for linking
                 batchNumber: b.batchNumber,
                 currentQuantity: Number(b.availableQuantity ?? 0),
                 availableQuantity: Number(b.availableQuantity ?? 0),
@@ -103,9 +159,10 @@ const MedicalInventory = () => {
             return fetchSupplyBatches(Number(item.id)).then((bs) =>
               bs.map((b) => ({
                 id: b.id,
-                medicalItemId: b.supplyItemId,
+                medicalItemId: Number(b.supplyItemId),  // Ensure number type for linking
                 batchNumber: b.batchNumber,
-                currentQuantity: b.currentQuantity,
+                currentQuantity: Number(b.currentQuantity ?? 0),
+                availableQuantity: Number(b.currentQuantity ?? 0),  // Map both fields for consistency
                 unit: b.unit,
                 expiryDate: b.expiryDate,
                 location: b.location,
@@ -116,7 +173,8 @@ const MedicalInventory = () => {
           }
         })
       );
-      setBatches(batchResults.flat());
+      const flatBatches = batchResults.flat();
+      setBatches(flatBatches);
     } catch (err) {
       setItemsError(err.message || 'Failed to load medical items.');
     } finally {
@@ -128,12 +186,19 @@ const MedicalInventory = () => {
     loadItems();
   }, [loadItems]);
 
+  // Helper function to show success modal
+  const showSuccess = useCallback((title = 'Success', message = '', details = null) => {
+    setSuccessMsg(message); // Keep backward compatibility if needed
+    setSuccessModalData({ title, message, details });
+    setShowSuccessModal(true);
+  }, []);
+
   useEffect(() => {
-    if (error || successMsg) {
-      const t = setTimeout(() => { setError(''); setSuccessMsg(''); }, 4000);
+    if (error) {
+      const t = setTimeout(() => { setError(''); }, 4000);
       return () => clearTimeout(t);
     }
-  }, [error, successMsg]);
+  }, [error]);
 
   // Compute enriched items
   const enrichedItems = useMemo(() => computeItemStats(items, batches), [items, batches]);
@@ -209,7 +274,7 @@ const MedicalInventory = () => {
     });
     setItems((prev) => [...prev, created]);
     setShowAddItem(false);
-    setSuccessMsg(`${created.item_name} added to inventory.`);
+    showSuccess('Item Added', `${created.item_name} added to inventory.`);
   };
 
   const handleEditItem = (item) => {
@@ -230,7 +295,7 @@ const MedicalInventory = () => {
     }
     setShowEditItem(false);
     setEditingItem(null);
-    setSuccessMsg(`${updated.item_name} updated successfully.`);
+    showSuccess('Item Updated', `${updated.item_name} updated successfully.`);
   };
 
   const handleDeleteItem = (item) => {
@@ -247,7 +312,7 @@ const MedicalInventory = () => {
     }
     setShowDeleteConfirm(false);
     setDeletingItem(null);
-    setSuccessMsg('Item deleted successfully.');
+    showSuccess('Item Deleted', 'Item deleted successfully.');
   };
 
   const handleAddSupply = async (batch) => {
@@ -306,7 +371,7 @@ const MedicalInventory = () => {
         };
     setBatches([...batches, normalized]);
     setShowAddSupply(false);
-    setSuccessMsg(`Batch ${batch.batchNumber} received (${batch.quantity} units).`);
+    showSuccess('Batch Received', `Batch ${batch.batchNumber} received (${batch.quantity} units).`);
   };
 
   const handleSplit = async ({ sourceBatchId, quantity, toClinic, notes }) => {
@@ -373,7 +438,7 @@ const MedicalInventory = () => {
       ]);
 
       setShowSplitSupply(false);
-      setSuccessMsg(`Successfully moved ${quantity} units to ${toClinic}.`);
+      showSuccess('Supply Transferred', `Successfully moved ${quantity} units to ${toClinic}.`);
     } catch (err) {
       setError(err.message || 'Failed to split supply. Please try again.');
     }
@@ -384,11 +449,9 @@ const MedicalInventory = () => {
     setIsLoadingRequests(true);
     try {
       const rawRequests = await fetchAllMedicineRequests(null);
-      const enriched = rawRequests.map((req) => ({
+      const enrichedWithNames = await enrichRequestsWithPatientNames(rawRequests);
+      const enriched = enrichedWithNames.map(req => ({
         ...req,
-        patientName: `Patient #${req.patientId}`,
-        patientType: 'Self-Request',
-        _isRealRequest: true,
         items: enrichRequestItems(req.items || []),
       }));
       setRequests(enriched);
@@ -397,7 +460,7 @@ const MedicalInventory = () => {
     } finally {
       setIsLoadingRequests(false);
     }
-  }, [enrichRequestItems]);
+  }, [enrichRequestItems, enrichRequestsWithPatientNames]);
 
   useEffect(() => {
     if (itemsLoading || hasLoadedRequestsRef.current) return;
@@ -413,12 +476,10 @@ const MedicalInventory = () => {
     try {
       const rawRequests = await fetchPatientMedicineRequests(String(patientId));
 
-      // Enrich with itemName by cross-referencing batches → items
-      const enriched = rawRequests.map((req) => ({
+      // Enrich with patient names and itemName by cross-referencing batches → items
+      const enrichedWithNames = await enrichRequestsWithPatientNames(rawRequests);
+      const enriched = enrichedWithNames.map(req => ({
         ...req,
-        patientName: `Patient #${req.patientId}`,
-        patientType: 'Self-Request',
-        _isRealRequest: true,
         items: enrichRequestItems(req.items || []),
       }));
 
@@ -445,19 +506,29 @@ const MedicalInventory = () => {
     }
   };
 
-  const handleAdjust = ({ batchId, delta, reason }) => {
-    setBatches(batches.map((b) => b.id === batchId ? { ...b, currentQuantity: Math.max(0, b.currentQuantity + delta) } : b));
-    const batch = batches.find((b) => b.id === batchId);
-    const item = items.find((i) => i.id === batch?.medicalItemId);
-    const txId = Math.max(...transactions.map((t) => t.id)) + 1;
-    setTransactions([{
-      id: txId, patientId: null, patientName: null, action: 'adjust',
-      quantity: delta, issuedBy: 101, issuedByName: 'Current User',
-      issuedAt: new Date().toISOString(), notes: reason,
-      itemName: item?.item_name || '', batchNumber: batch?.batchNumber || '',
-    }, ...transactions]);
-    setShowAdjustStock(false);
-    setSuccessMsg(`Stock adjusted by ${delta > 0 ? '+' : ''}${delta} units.`);
+   const handleAdjust = async ({ batchId, type, quantity, reason, newQuantity }) => {
+    try {
+      // Update in backend
+      await updateSupplyBatch(batchId, { currentQuantity: newQuantity });
+      
+      // Update in frontend state
+      setBatches(batches.map((b) => b.id === batchId ? { ...b, currentQuantity: newQuantity } : b));
+      const batch = batches.find((b) => b.id === batchId);
+      const item = items.find((i) => i.id === batch?.medicalItemId);
+      const delta = type === 'add' ? quantity : -quantity;
+      const txId = transactions.length > 0 ? Math.max(...transactions.map((t) => t.id)) + 1 : 1;
+      setTransactions([{
+        id: txId, patientId: null, patientName: null, action: 'adjust',
+        quantity: delta, issuedBy: 101, issuedByName: 'Current User',
+        issuedAt: new Date().toISOString(), notes: reason,
+        itemName: item?.item_name || '', batchNumber: batch?.batchNumber || '',
+      }, ...transactions]);
+      setShowAdjustStock(false);
+      setAdjustContext(null);
+      showSuccess('Stock Adjusted', `Stock ${type === 'add' ? 'increased' : 'decreased'} by ${quantity} units.`);
+    } catch (err) {
+      setError(err.message || 'Failed to adjust stock');
+    }
   };
 
   const handleDispense = async ({ request, quantity, allocation, notes }) => {
@@ -506,9 +577,25 @@ const MedicalInventory = () => {
       }));
 
       // Keep local queue row aligned with successful dispense transaction
+      // Also update request items with the actual dispensed quantity
+      const dispensedByItemIdx = {};
+      allocation.forEach((a) => {
+        if (a.itemIdx !== undefined) {
+          dispensedByItemIdx[a.itemIdx] = (dispensedByItemIdx[a.itemIdx] || 0) + a.allocate;
+        }
+      });
+      
       setRequests(requests.map((r) =>
         r.id === requestId
-          ? { ...r, status: 'Completed', notes: notes || r.notes }
+          ? {
+              ...r,
+              status: 'Completed',
+              notes: notes || r.notes,
+              items: (r.items || []).map((item, idx) => ({
+                ...item,
+                quantity: dispensedByItemIdx[idx] || item.quantity,
+              })),
+            }
           : r
       ));
 
@@ -529,7 +616,7 @@ const MedicalInventory = () => {
       }, ...transactions]);
 
       setShowDispense(false);
-      setSuccessMsg(`Dispensed ${totalQty} units to ${req?.patientName || 'patient'}. Transaction #${txId}`);
+      showSuccess('Medicine Dispensed', `Dispensed ${totalQty} units to ${req?.patientName || 'patient'}.`, `Transaction #${txId}`);
     } catch (err) {
       console.error('❌ Dispense mutation failed:', err);
       setError(err.message || 'Failed to dispense medicine. Please try again.');
@@ -566,7 +653,7 @@ const MedicalInventory = () => {
         r.id === requestId ? { ...r, status, notes: notes || null } : r
       ));
       
-      setSuccessMsg(`Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
+      showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
       setShowActionModal(false);
       setSelectedActionRequest(null);
       setActionType(null);
@@ -579,7 +666,10 @@ const MedicalInventory = () => {
   // Open modals with context
   const openAddSupply = (itemId) => { setSupplyContext({ itemId }); setShowAddSupply(true); };
   const openSplit = (batch) => { setSplitContext({ batch }); setShowSplitSupply(true); };
-  const openAdjust = (batch) => { setAdjustContext({ batch }); setShowAdjustStock(true); };
+  const openAdjust = (batch) => {
+    setAdjustContext({ batch });
+    setShowAdjustStock(true);
+  };
   const openDispense = async (request) => {
     if (!request?.id) {
       setError('Invalid request. Please refresh and try again.');
@@ -646,11 +736,16 @@ const MedicalInventory = () => {
           {error}
         </div>
       )}
-      {successMsg && (
-        <div className="px-3 py-2 bg-success-50 dark:bg-success-900/30 border border-success-200 dark:border-success-800 text-success-700 dark:text-success-400 text-xs rounded-lg">
-          {successMsg}
-        </div>
-      )}
+
+      {/* Success Modal */}
+      <SuccessMessageModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        title={successModalData.title}
+        message={successModalData.message}
+        details={successModalData.details}
+        autoCloseDuration={3000}
+      />
 
       {/* Header + Section Tabs */}
       <div className="flex items-center justify-between">
@@ -832,7 +927,10 @@ const MedicalInventory = () => {
         <AdjustStockModal
           batch={adjustContext.batch}
           itemName={items.find((i) => i.id === adjustContext.batch.medicalItemId)?.item_name || ''}
-          onClose={() => setShowAdjustStock(false)}
+          onClose={() => {
+            setShowAdjustStock(false);
+            setAdjustContext(null);
+          }}
           onAdjust={handleAdjust}
         />
       )}
@@ -853,7 +951,7 @@ const MedicalInventory = () => {
           patientName={dispenseMedicineContext.patientName}
           onClose={() => setShowDispenseMedicine(false)}
           onSuccess={(result) => {
-            setSuccessMsg(`Dispensed medicine to ${dispenseMedicineContext.patientName}. Transaction ID: ${result.id}`);
+            showSuccess('Medicine Dispensed', `Dispensed medicine to ${dispenseMedicineContext.patientName}.`, `Transaction ID: ${result.id}`);
             setShowDispenseMedicine(false);
           }}
         />
