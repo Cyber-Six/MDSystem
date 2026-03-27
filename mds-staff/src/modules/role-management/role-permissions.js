@@ -12,8 +12,9 @@ export const MODULE_PERMISSION_MAP = {
   dentalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_set_dental_record', 'consultation_allow_view', 'consultation_allow_edit'],
   appointments: ['appointment_allow_approval', 'appointment_allow_view_records', 'appointment_allow_view_configuration', 'appointment_allow_edit_configuration'],
   inventory: ['inventory_allow_view', 'inventory_allow_edit', 'inventory_allow_dispense', 'inventory_allow_manage_requests', 'inventory_allow_prescribe'],
-  healthChat: [],
-  analytics: [],
+  healthChat: ['health_chat_allow_access', 'health_chat_allow_manage'],
+  analytics: ['analytics_allow_view', 'analytics_allow_export'],
+  roleManagement: ['role_management_allow_access', 'role_management_allow_edit'],
 };
 
 // ─── Human-readable Labels for Permission Keys ──────────────────────────
@@ -38,6 +39,12 @@ export const PERMISSION_KEY_LABELS = {
   inventory_allow_manage_requests: 'Manage Medicine Requests',
   inventory_allow_prescribe: 'Prescribe Medicine',
   medicine_request_allow_approve: 'Approve Medicine Requests',
+  health_chat_allow_access: 'Access Health Chat',
+  health_chat_allow_manage: 'Manage Health Chat',
+  analytics_allow_view: 'View Analytics',
+  analytics_allow_export: 'Export Analytics',
+  role_management_allow_access: 'Access Role Management',
+  role_management_allow_edit: 'Edit Roles & Templates',
 };
 
 // ─── Module Definitions (for UI layout) ──────────────────────────────────
@@ -50,6 +57,7 @@ export const PERMISSION_MODULES = [
   { id: 'inventory', label: 'Inventory', description: 'View stock, add/restock items, and dispense medicine', icon: 'inventory' },
   { id: 'healthChat', label: 'Health Chat', description: 'Access health chat consultation and messaging features', icon: 'chat' },
   { id: 'analytics', label: 'Analytics', description: 'View reports, dashboards, and system analytics', icon: 'chart' },
+  { id: 'roleManagement', label: 'Role Management', description: 'Access role templates and staff permission management', icon: 'settings' },
 ];
 
 // ─── Collect all unique mapped keys ──────────────────────────────────────

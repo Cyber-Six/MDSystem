@@ -34,6 +34,15 @@ const permissions = {
   inventory_allow_manage_requests: "ALLOW_TO_MANAGE_MEDICINE_REQUESTS",
   inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",
 
+  health_chat_allow_access: "ALLOW_TO_ACCESS_HEALTH_CHAT",
+  health_chat_allow_manage: "ALLOW_TO_MANAGE_HEALTH_CHAT",
+
+  analytics_allow_view: "ALLOW_TO_VIEW_ANALYTICS",
+  analytics_allow_export: "ALLOW_TO_EXPORT_ANALYTICS",
+
+  role_management_allow_access: "ALLOW_TO_ACCESS_ROLE_MANAGEMENT",
+  role_management_allow_edit: "ALLOW_TO_EDIT_ROLE_MANAGEMENT",
+
 };
 
 async function getMedicalpermits(personnelId) {
@@ -736,10 +745,16 @@ const MODULE_PERMISSION_MAP = {
     'inventory_allow_prescribe',
   ],
   healthChat: [
-    // Reserved for future health-chat permission keys
+    'health_chat_allow_access',
+    'health_chat_allow_manage',
   ],
   analytics: [
-    // Reserved for future analytics permission keys
+    'analytics_allow_view',
+    'analytics_allow_export',
+  ],
+  roleManagement: [
+    'role_management_allow_access',
+    'role_management_allow_edit',
   ],
 };
 
@@ -752,6 +767,7 @@ const MODULE_LABELS = {
   inventory: 'Inventory',
   healthChat: 'Health Chat',
   analytics: 'Analytics',
+  roleManagement: 'Role Management',
 };
 
 /**
