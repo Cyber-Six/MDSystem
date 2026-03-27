@@ -142,6 +142,7 @@ const Query = {
          uc.id, uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
+         mp.is_active,
          COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
        FROM "UserCredentials" uc
        JOIN "UsersPersonal" up ON up.id = uc.id
@@ -149,11 +150,10 @@ const Query = {
        LEFT JOIN "rolesMap" rm ON rm."personnelId" = uc.id
        LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
        WHERE
-          uc.identity = 'Medical'
-          AND ($1 IS NULL OR uc.credentials_status = $1)
+          ($1 IS NULL OR uc.credentials_status = $1)
           AND ($2 IS NULL OR mp.designation = $2)
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-                up.first_name, up.middle_name, up.last_name, mp.designation
+                up.first_name, up.middle_name, up.last_name, mp.designation, mp.is_active
        ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`,
       [status || null, location || null]
     );
@@ -182,12 +182,10 @@ const Query = {
       const branchPermissions = labelsAndBranchesToBranchPermissions(labelBranchMap);
 
       let staffStatus;
-      if (row.identity === 'Medical') {
+      if (row.is_active) {
         staffStatus = 'Active';
-      } else if (hasPermission(branchPermissions, 'is_staff')) {
-        staffStatus = 'Suspended';
       } else {
-        staffStatus = 'Pending';
+        staffStatus = 'Suspended';
       }
 
       const nameParts = [
@@ -232,6 +230,7 @@ const Query = {
          uc.id, uc.email, uc.identity, uc.credentials_status,
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
+         mp.is_active,
          COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map
        FROM "UserCredentials" uc
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
@@ -240,7 +239,7 @@ const Query = {
        LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
        WHERE uc.id = $1
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-                up.first_name, up.middle_name, up.last_name, mp.designation`,
+                up.first_name, up.middle_name, up.last_name, mp.designation, mp.is_active`,
       [userId]
     );
 
@@ -256,12 +255,10 @@ const Query = {
     const branchPermissions = labelsAndBranchesToBranchPermissions(labelBranchMap);
 
     let staffStatus;
-    if (row.identity === 'Medical') {
+    if (row.is_active) {
       staffStatus = 'Active';
-    } else if (hasPermission(branchPermissions, 'is_staff')) {
-      staffStatus = 'Suspended';
     } else {
-      staffStatus = 'Pending';
+      staffStatus = 'Suspended';
     }
 
     const nameParts = [
@@ -710,26 +707,11 @@ const Mutation = {
       [userId]
     );
 
-    let identityReverted = false;
-
-    // Optionally revert identity to Employee
-    if (revertIdentity) {
-      const identityResult = await db.query(
-        `UPDATE "UserCredentials"
-         SET identity = 'Employee'
-         WHERE id = $1 AND identity = 'Medical'
-         RETURNING id`,
-        [userId]
-      );
-      identityReverted = identityResult.rowCount > 0;
-    }
-
-    logger.info(`MedicalPersonnel record deleted: userId=${userId}, identityReverted=${identityReverted}, by adminId=${user.id}`);
+    logger.info(`MedicalPersonnel record deleted: userId=${userId}, by adminId=${user.id}`);
 
     return {
       ok: true,
-      message: 'MedicalPersonnel record deleted successfully.',
-      identityReverted
+      message: 'MedicalPersonnel record deleted successfully.'
     };
   },
 
@@ -802,8 +784,9 @@ const Mutation = {
 
     // Verify target user exists and is Medical staff
     const targetResult = await db.query(
-      `SELECT uc.id, uc.identity, uc.credentials_status
+      `SELECT uc.id, uc.identity, uc.credentials_status, mp.id AS "medicalId"
        FROM "UserCredentials" uc
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id 
        WHERE uc.id = $1`,
       [userId]
     );
@@ -814,7 +797,7 @@ const Mutation = {
 
     const targetUser = targetResult.rows[0];
 
-    if (targetUser.identity !== 'Medical') {
+    if (targetUser.medicalId === null) {
       throwGraphQLError(res)
         .message('Can only rotate anchor for Medical staff accounts.')
         .status(403)
@@ -970,7 +953,11 @@ const Mutation = {
 
     // Verify user exists and is Medical staff
     const userResult = await db.query(
-      `SELECT id, identity FROM "UserCredentials" WHERE id = $1`,
+      `SELECT uc.id, uc.identity, mp.id AS "medicalId"
+       FROM "UserCredentials" uc
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       WHERE uc.id = $1
+       `,
       [userId]
     );
 
@@ -979,7 +966,7 @@ const Mutation = {
     }
 
     const targetUser = userResult.rows[0];
-    if (targetUser.identity !== 'Medical') {
+    if (targetUser.medicalId === null) {
       throwGraphQLError(res)
         .message('Template can only be applied to Medical staff accounts.')
         .status(403)
@@ -1562,27 +1549,23 @@ const Mutation = {
       );
 
       // Log audit trail within transaction
-      await client.query(
-        `INSERT INTO "SystemAuditLog"
-         ("event_type", "actorId", "actorType", "targetId", "action", "details", "changedBy")
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          'ADMIN_TRANSFER_SUCCESS',
+      await db.setSystemAuditLog({
+        client: client,
+        eventType: 'ADMIN_TRANSFER_SUCCESS',
+        actorId: oldAdminId,
+        actorType: 'Medical',
+        targetId: newAdminId,
+        action: 'TRANSFER_ADMIN_PRIVILEGES',
+        details: JSON.stringify({
           oldAdminId,
-          'Medical',
+          oldAdminEmail,
           newAdminId,
-          'TRANSFER_ADMIN_PRIVILEGES',
-          JSON.stringify({
-            oldAdminId,
-            oldAdminEmail,
-            newAdminId,
-            newAdminEmail,
-            verificationTokenPrefix: verificationToken.substring(0, 8) + '...',
-            timestamp: new Date().toISOString(),
-          }),
-          oldAdminId,
-        ]
-      );
+          newAdminEmail,
+          verificationTokenPrefix: verificationToken.substring(0, 8) + '...',
+          timestamp: new Date().toISOString(),
+        }),
+        changedBy: oldAdminId,
+      });
 
       await client.query('COMMIT');
 

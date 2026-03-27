@@ -253,7 +253,6 @@ VALUES
 
 INSERT INTO "rolesTable" (label, data)
 VALUES
-('IS_ADMIN', 'Grants full administrative privileges'),
 ('IS_STAFF', 'Marks user as an active staff member'),
 ('PRIVILEGED_TO_PERFORM_ON_SUPERIOR', 'Allows actions on superior accounts'),
 
