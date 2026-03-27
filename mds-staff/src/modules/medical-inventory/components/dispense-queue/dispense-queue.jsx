@@ -215,16 +215,20 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>
                       </td>
                       <td className="px-3 py-1.5">
-                        {req.notes && req.notes.length > 30 && (req.status === 'Approved' || req.status === 'Rejected') ? (
-                          <button
-                            onClick={() => setSelectedNotes(req.notes)}
-                            className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[120px] hover:underline"
-                            title={req.notes}
-                          >
-                            {req.notes.substring(0, 30)}...
-                          </button>
+                        {req.notes && req.notes.length > 0 ? (
+                          req.notes.length > 20 ? (
+                            <button
+                              onClick={() => setSelectedNotes(req.notes)}
+                              className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 hover:underline truncate max-w-[120px] text-left transition-colors"
+                              title={req.notes}
+                            >
+                              {req.notes.substring(0, 20)}...
+                            </button>
+                          ) : (
+                            <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.notes}</span>
+                          )
                         ) : (
-                          <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.notes || '—'}</span>
+                          <span className="text-xs text-secondary-400 dark:text-neutral-500">—</span>
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.approved_by ? `Staff #${req.approved_by}` : '—'}</td>
