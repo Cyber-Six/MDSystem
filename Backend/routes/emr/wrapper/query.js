@@ -17,7 +17,8 @@ const Query = {
     }
 
     const result = await db.query(
-       `SELECT log.id, log.status, log.scope, log.notes, log.created_at
+       `SELECT log.id, log.status, log.scope, log.notes, 
+        log.dentalRecordId, log.vitalSignsId, log.created_at
         FROM "patientUpdateLog" AS log
         JOIN "Patients" AS p ON p.id = log."patientId"
         WHERE p.id = $1
@@ -34,14 +35,14 @@ const Query = {
       const createdAt = new Date(ticket.created_at).getTime();
 
       if (createdAt >= cutoff || !(await db.isUserValidated(userId))) {
-        return {id: ticket.id, patientId: userId, status: "InProgress", scope: ticket.scope, notes: ticket.notes}; 
+        return { ...ticket, patientId: userId, status: "InProgress"}; 
         } // still valid until nth days or the first ticket
 
       await db.setExpiredUpdateTickets(ticket.id); // mark expired
-      return {id: ticket.id, patientId: userId, status: "Expired", scope: ticket.scope, notes: ticket.notes};
+      return { ...ticket, patientId: userId, status: "Expired"};
     }
 
-    return {id: ticket?.id, patientId: userId, status: ticket?.status, scope: ticket?.scope, notes: ticket?.notes}; // return scalar ID
+    return { ...ticket, patientId: userId}; // return scalar ID
   },
 
 
@@ -212,8 +213,8 @@ const Query = {
 
     const query = `
       SELECT dr.*, pul.created_at, pul.status
-      FROM "DentalRecord" dr
-      JOIN "patientUpdateLog" pul ON pul.id = dr.id
+      FROM "patientUpdateLog" pul
+      JOIN "DentalRecord" dr ON pul."dentalRecordId" = dr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
@@ -258,8 +259,8 @@ const Query = {
 
     const query = `
       SELECT vs.*, pul.created_at, pul.status
-      FROM "VitalSigns" vs
-      JOIN "patientUpdateLog" pul ON pul.id = vs.id
+      FROM "patientUpdateLog" pul
+      LEFT JOIN "VitalSigns" vs ON pul."vitalSignsId" = vs.id 
       WHERE pul."patientId" = $1 AND pul.created_at >= $4
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;

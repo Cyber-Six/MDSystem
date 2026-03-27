@@ -303,7 +303,30 @@ const Mutation = {
       }
 
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
-    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+    
+    if (record.scope === "Medical") {
+      logger.warn(`User ${user.id} attempted to update DentalRecord on a Medical-scoped ticket ${record.id}`);
+      throwGraphQLError(res)
+        .status(403)
+        .message("Forbidden: This update ticket is for Medical records. DentalRecord updates are not allowed.")
+        .throw();
+    }
+    
+    if (record.status !== "Approved") {
+      throwGraphQLError(res)
+        .status(403)
+        .message("Forbidden: This update ticket is not yet approved.")
+        .throw();
+    }
+
+    if (record.dentalRecordId) {
+      logger.warn(`User ${user.id} attempted to update DentalRecord on ticket ${record.id} which already has a DentalRecord (ID: ${record.dentalRecordId})`);
+      throwGraphQLError(res)
+        .status(403)
+        .message("Forbidden: A DentalRecord has already been created for this update ticket.")
+        .throw();
+    }
+
     console.log(args.input);
 
     const result = await Wrapper._DentalRecord(_, {args, recordId: record.id}, { user, res });
@@ -318,6 +341,15 @@ const Mutation = {
       }
 
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
+    
+    if (record.vitalSignsId) {
+      logger.warn(`User ${user.id} attempted to update VitalSigns on ticket ${record.id} which already has VitalSigns (ID: ${record.vitalSignsId})`);
+      throwGraphQLError(res)
+        .status(403)
+        .message("Forbidden: VitalSigns have already been created for this update ticket.")
+        .throw();
+    }
+
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
 

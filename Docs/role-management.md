@@ -391,6 +391,8 @@ graphql.js                      # Entry point - mounts endpoint, applies JWT mid
 | `deleteMedicalPersonnel(userId, revertIdentity)`              | Delete medical personnel record (revokes staff access) |
 | `setStaffPermissionsStandard(userId, permissions, branch)`    | Set permissions with umbrella branch (all same)        |
 | `setStaffPermissionsExtended(userId, permissions, defaultBranch)` | Set permissions with independent branch per permission |
+| `setStaffModulePermissions(userId, modules, branch)`          | Set permissions at module level (simplified toggle)    |
+| `updateStaffAccount(userId, modules, status)`                 | Combined module permissions + status update            |
 | `rotateStaffAnchor(userId)`                                   | Logout all devices for a user                          |
 
 ---
@@ -1124,316 +1126,73 @@ mutation {
 
 ---
 
-## REST MedicalPersonnel Management API (Backend/routes/staff/rolemanagement.js)
+## Mutation: updateStaffAccount
 
-> **Note:** The REST endpoints below remain available for backwards compatibility, but the GraphQL API above is preferred for new integrations.
-
-The MedicalPersonnel table stores supplementary staff information including role, title, designation (branch), and active status. These endpoints enable the complete Employee → Medical staff conversion workflow.
-
-### POST /admin/staff/medical-personnel
-
-Create a new MedicalPersonnel record for an Employee user.
+Combined update for module-level permissions and/or account status in one call. This is the primary mutation used by the staff account management UI.
 
 **Authentication:** Requires Medical identity with `IS_ADMIN` permission
 
-**Request Body:**
+**GraphQL Mutation:**
 
-```javascript
-{
-  "userId": 123,              // Required: User ID (must have identity='Employee')
-  "title": "Senior Doctor",   // Required: Job title
-  "role": "Doctor",           // Required: Staff role
-  "designation": "Manila"     // Required: Branch assignment
-}
-```
-
-**Validation:**
-
-- All fields required
-- `designation` must be: `'Manila'`, `'QuezonCity'`, or `'Both'`
-- `role` must be: `'Doctor'`, `'Nurse'`, `'Admin'`, `'Pharmacist'`, `'Dentist'`, or `'Staff'`
-- User must exist and have identity='Employee'
-- No existing MedicalPersonnel record (prevents duplicates)
-
-**Response (201 Created):**
-
-```javascript
-{
-  "ok": true,
-  "message": "MedicalPersonnel record created successfully.",
-  "personnel": {
-    "id": 123,
-    "userId": 123,
-    "role": "Doctor",
-    "title": "Senior Doctor",
-    "designation": "Manila",
-    "is_active": true
+```graphql
+mutation {
+  updateStaffAccount(
+    userId: "123"
+    modules: [
+      { moduleId: "emr", enabled: true }
+      { moduleId: "profile", enabled: true }
+      { moduleId: "appointment", enabled: false }
+      { moduleId: "consultation", enabled: true }
+      { moduleId: "inventory", enabled: false }
+    ]
+    status: Active
+  ) {
+    ok
+    message
+    warnings
   }
 }
 ```
 
-**Error Responses:**
+**Parameters:**
 
-- `400 MISSING_FIELDS` - Missing required fields
-- `400 INVALID_DESIGNATION` - Invalid designation value
-- `400 INVALID_ROLE` - Invalid role value
-- `403 FORBIDDEN` - Not admin
-- `404 USER_NOT_FOUND` - User doesn't exist
-- `409 INVALID_IDENTITY` - User is not Employee
-- `409 RECORD_EXISTS` - MedicalPersonnel already exists
-- `500 INTERNAL_ERROR` - Server error
+| Parameter | Type                       | Required | Description                                         |
+| --------- | -------------------------- | -------- | --------------------------------------------------- |
+| `userId`  | ID!                        | Yes      | Target staff user ID                                |
+| `modules` | [ModulePermissionInput!]   | No       | Module-level permission toggles                     |
+| `status`  | AccountStatus              | No       | `Active` or `Suspended`                             |
 
----
+> At least one of `modules` or `status` must be provided.
 
-### GET /admin/staff/medical-personnel
+**Branch Auto-Detection:**
 
-Retrieve all MedicalPersonnel records with optional filters.
+Branch is automatically resolved from `MedicalPersonnel.designation` — the frontend does not need to provide it. If a user has both branches, it defaults to `'Both'`.
 
-**Authentication:** Requires Medical identity with `IS_ADMIN` permission
+**Status Transitions:**
 
-**Query Parameters:**
-
-- `role` (optional) - Filter by role
-- `designation` (optional) - Filter by designation
-- `is_active` (optional) - Filter by active status (true/false)
-
-**Request Example:**
-
-```http
-GET /admin/staff/medical-personnel?role=Doctor&designation=Manila
-Authorization: Bearer <jwt-token>
-```
-
-**Response (200 OK):**
-
-```javascript
-{
-  "ok": true,
-  "personnel": [
-    {
-      "id": 123,
-      "role": "Doctor",
-      "title": "Senior Doctor",
-      "designation": "Manila",
-      "is_active": true,
-      "user": {
-        "email": "doctor@tip.edu.ph",
-        "identity": "Medical",
-        "credentials_status": "Active",
-        "name": "Juan D. Cruz"
-      }
-    }
-    // ... more records
-  ],
-  "count": 15
-}
-```
-
----
-
-### GET /admin/staff/medical-personnel/:userId
-
-Retrieve a single MedicalPersonnel record.
-
-**Authentication:** Requires Medical identity with `IS_ADMIN` permission
-
-**Request Example:**
-
-```http
-GET /admin/staff/medical-personnel/123
-Authorization: Bearer <jwt-token>
-```
-
-**Response (200 OK):**
-
-```javascript
-{
-  "ok": true,
-  "personnel": {
-    "id": 123,
-    "role": "Doctor",
-    "title": "Senior Doctor",
-    "designation": "Manila",
-    "is_active": true,
-    "user": {
-      "email": "doctor@tip.edu.ph",
-      "identity": "Medical",
-      "credentials_status": "Active",
-      "name": "Juan D. Cruz"
-    }
-  }
-}
-```
-
-**Error Responses:**
-
-- `403 FORBIDDEN` - Not admin
-- `404 RECORD_NOT_FOUND` - MedicalPersonnel not found
-- `500 INTERNAL_ERROR` - Server error
-
----
-
-### PUT /admin/staff/medical-personnel/:userId
-
-Update an existing MedicalPersonnel record (title, designation, is_active).
-
-**Authentication:** Requires Medical identity with `IS_ADMIN` permission
-
-**Request Body (all optional, at least one required):**
-
-```javascript
-{
-  "title": "Chief Medical Officer",  // Optional: Update job title
-  "designation": "Both",             // Optional: Update branch assignment
-  "is_active": true                  // Optional: Update active status
-}
-```
-
-**Note:** `role` field is immutable and cannot be updated. Changing roles requires DELETE + POST.
-
-**Response (200 OK):**
-
-```javascript
-{
-  "ok": true,
-  "message": "MedicalPersonnel record updated successfully.",
-  "personnel": {
-    "id": 123,
-    "role": "Doctor",
-    "title": "Chief Medical Officer",
-    "designation": "Both",
-    "is_active": true
-  }
-}
-```
-
-**Error Responses:**
-
-- `400 MISSING_FIELDS` - No fields provided
-- `400 INVALID_DESIGNATION` - Invalid designation value
-- `403 FORBIDDEN` - Not admin
-- `404 RECORD_NOT_FOUND` - MedicalPersonnel not found
-- `500 INTERNAL_ERROR` - Server error
-
----
-
-### DELETE /admin/staff/medical-personnel/:userId
-
-Remove a MedicalPersonnel record and optionally revert user identity.
-
-**Authentication:** Requires Medical identity with `IS_ADMIN` permission
-
-**Query Parameters:**
-
-- `revertIdentity` (optional, default: true) - Revert identity from 'Medical' to 'Employee'
-
-**Request Example:**
-
-```http
-DELETE /admin/staff/medical-personnel/123?revertIdentity=true
-Authorization: Bearer <jwt-token>
-```
-
-**Response (200 OK):**
-
-```javascript
-{
-  "ok": true,
-  "message": "MedicalPersonnel record deleted successfully.",
-  "identityReverted": true  // true if identity was changed to 'Employee'
-}
-```
-
-**Error Responses:**
-
-- `403 FORBIDDEN` - Not admin
-- `404 RECORD_NOT_FOUND` - MedicalPersonnel not found
-- `500 INTERNAL_ERROR` - Server error
-
----
-
-## Staff Account Management API (Backend/routes/staff/rolemanagement.js)
-
-### GET /admin/staff/accounts
-
-Get all staff accounts with their permissions and details.
-
-**Authentication:** Requires Medical identity with `IS_ADMIN` permission
-
-**Query Parameters:**
-
-- `status` (optional) - Filter by credentials_status: `'Active'`, `'Suspended'`, `'Pending'`
-- `location` (optional) - Filter by MedicalPersonnel.designation: `'Manila'`, `'QuezonCity'`, `'Both'`
-
-**Request Example:**
-
-```http
-GET /admin/staff/accounts?status=Active&location=Manila
-Authorization: Bearer <jwt-token>
-```
+- **Active** → Sets `identity = 'Medical'`, ensures `is_staff` permission exists
+- **Suspended** → Sets `identity = 'Employee'` (permissions remain in DB for reactivation)
 
 **Response:**
 
-```javascript
+```json
 {
-  ok: true,
-  staff: [
-    {
-      id: "123",
-      email: "doctor@tip.edu.ph",
-      name: "Juan D. Cruz",
-      branch: "Manila",                    // From MedicalPersonnel.designation
-      identity: "Medical",                 // UserCredentials.identity
-      status: "Active",                    // Computed: 'Active' | 'Suspended' | 'Pending'
-      credentialsStatus: "Active",         // UserCredentials.credentials_status
-      lastLogin: "Mar 22, 2026, 02:30 PM", // Last successful login (formatted)
-      permissions: {                       // All permission keys with true/false
-        is_admin: true,
-        is_staff: true,
-        privileged_to_perform_on_superior: true,
-        emr_allow_approval: true,
-        emr_allow_edit: true,
-        emr_allow_view: true,
-        emr_allow_set_dental_record: true,
-        emr_allow_edit_catalogs: false,
-        profile_allow_approval: true,
-        profile_allow_view: true,
-        profile_allow_edit: true,
-        profile_allow_update_email_identifier: false,
-        appointment_allow_approval: true,
-        appointment_allow_view_records: true,
-        appointment_allow_view_configuration: true,
-        appointment_allow_edit_configuration: false,
-        announcement_allow_crud: true,
-        consultation_allow_view: true,
-        consultation_allow_edit: true,
-        inventory_allow_view: true,
-        inventory_allow_dispense: true,
-        inventory_allow_edit: false,
-        inventory_allow_manage_requests: false,
-        inventory_allow_prescribe: true,
-        medicine_request_allow_approve: true
-      }
-    },
-    // ... more staff
-  ]
+  "data": {
+    "updateStaffAccount": {
+      "ok": true,
+      "message": "Staff account updated.",
+      "warnings": ["Admin permission granted — verify this is intentional."]
+    }
+  }
 }
 ```
 
-**Status Logic:**
-
-- `'Active'` - identity is `'Medical'`
-- `'Suspended'` - identity is NOT `'Medical'` but has `is_staff` permission
-- `'Pending'` - identity is NOT `'Medical'` and does NOT have `is_staff` permission
-
 **Error Responses:**
 
-```javascript
-// 403 - Not admin
-{ error: 'FORBIDDEN', message: 'Admin access required.' }
-
-// 500 - Server error
-{ error: 'INTERNAL_ERROR', message: 'Internal server error.' }
+```json
+{ "errors": [{ "message": "Admin access required." }] }
+{ "errors": [{ "message": "User not found or not a medical staff member." }] }
+{ "errors": [{ "message": "Provide at least modules or status to update." }] }
 ```
 
 ---
@@ -1815,64 +1574,76 @@ mutation {
 
 ### Granting Admin Access
 
-```javascript
-// Frontend sends PUT request
-PUT /admin/staff/accounts/123
-{
-  "permissions": {
-    "is_admin": true,
-    "is_staff": true,
-    "emr_allow_view": true,
-    "emr_allow_edit": true
-  },
-  "status": "Active"
+```graphql
+# Frontend sends GraphQL mutation via staff-service.js
+mutation {
+  updateStaffAccount(
+    userId: "123"
+    modules: [
+      { moduleId: "emr", enabled: true }
+      { moduleId: "profile", enabled: true }
+      { moduleId: "appointment", enabled: true }
+    ]
+    status: Active
+  ) {
+    ok
+    message
+    warnings    # Returns: ["Admin permission granted — verify this is intentional."]
+  }
 }
 
-// Backend processes:
-// 1. Validates admin perms
-// 2. Gets user's branch from MedicalPersonnel.designation
-// 3. Calls setStaffPermissionsExtended() which:
-//    - Inserts rows for is_admin, is_staff, emr_allow_view, emr_allow_edit
-// 4. Updates identity to 'Medical'
-// 5. Returns success
+# Backend processes:
+# 1. Validates admin perms (requireAdmin guard)
+# 2. Auto-detects branch from MedicalPersonnel.designation
+# 3. Expands module toggles to granular permission keys
+# 4. Calls setStaffModulePermissions() to apply permissions
+# 5. Sets identity to 'Medical' and ensures is_staff
+# 6. Returns success with any warnings
 ```
 
-### Revoking Specific Permission
+### Revoking Specific Module
 
-```javascript
-// Frontend sends PUT request
-PUT /admin/staff/accounts/123
-{
-  "permissions": {
-    "emr_allow_edit": false  // Revoke EMR editing
-  },
-  "status": "Active"
+```graphql
+# Disable consultation module while keeping others
+mutation {
+  updateStaffAccount(
+    userId: "123"
+    modules: [
+      { moduleId: "emr", enabled: true }
+      { moduleId: "profile", enabled: true }
+      { moduleId: "consultation", enabled: false }
+    ]
+    status: Active
+  ) {
+    ok
+    message
+  }
 }
 
-// Backend processes:
-// 1. Adds is_staff: true automatically
-// 2. Calls setStaffPermissionsExtended() which:
-//    - Deletes row for ALLOW_TO_EDIT_EMR
-//    - Ensures IS_STAFF row exists
-// 3. Keeps identity as 'Medical'
+# Backend processes:
+# 1. Expands modules to granular keys (e.g., consultation_allow_view, consultation_allow_edit)
+# 2. Deletes permission rows for disabled modules
+# 3. Ensures IS_STAFF row exists, identity remains 'Medical'
 ```
 
 ### Suspending Staff
 
-```javascript
-// Frontend sends PUT request
-PUT /admin/staff/accounts/123
-{
-  "permissions": {
-    // Keep current permissions as-is
-  },
-  "status": "Suspended"
+```graphql
+# Suspend account without changing permissions
+mutation {
+  updateStaffAccount(
+    userId: "123"
+    status: Suspended
+  ) {
+    ok
+    message
+  }
 }
 
-// Backend processes:
-// 1. Updates identity to 'Employee'
-// 2. Permissions remain in DB (can be reactivated later)
-// 3. User can no longer access medical routes (jwtProtect('medical') blocks them)
+# Backend processes:
+# 1. Updates identity to 'Employee'
+# 2. Permissions remain in DB (can be reactivated later)
+# 3. User can no longer access medical routes (jwtProtect('medical') blocks them)
 ```
 
 ---
@@ -1881,7 +1652,7 @@ PUT /admin/staff/accounts/123
 
 ### labelsToPermissions(labels)
 
-Internal helper in `rolemanagement.js` that converts an array of permission labels to a permissions object.
+Internal helper that converts an array of permission labels to a permissions object.
 
 **Input:**
 
@@ -1925,68 +1696,62 @@ Internal helper in `rolemanagement.js` that converts an array of permission labe
 
 ## Database Query Optimization
 
-The GET endpoint uses a single aggregated query instead of N+1 queries:
+The `listStaffAccounts` GraphQL query uses a single aggregated query with an inlined last-login subquery instead of N+1 queries:
 
 ```sql
 SELECT
   uc.id, uc.email, uc.identity, uc.credentials_status,
   up.first_name, up.middle_name, up.last_name,
   mp.designation AS branch,
-  COALESCE(array_agg(rt.label) FILTER (WHERE rt.label IS NOT NULL), '{}') AS labels
+  COALESCE(array_agg(rt.label) FILTER (WHERE rt.label IS NOT NULL), '{}') AS labels,
+  lla.last_login
 FROM "UserCredentials" uc
 JOIN "UsersPersonal" up ON up.id = uc.id
 JOIN "MedicalPersonnel" mp ON mp.id = uc.id
 LEFT JOIN "rolesMap" rm ON rm."personnelId" = uc.id
 LEFT JOIN "rolesTable" rt ON rt.id = rm."rolesId"
-WHERE uc.identity = 'Medical'
-  AND ($1 IS NULL OR uc.credentials_status = $1)
+LEFT JOIN (
+  SELECT user_id, MAX(attempted_at) AS last_login
+  FROM "UserLoginAttempt"
+  WHERE was_successful = true
+  GROUP BY user_id
+) lla ON lla.user_id = uc.id
+WHERE ($1 IS NULL OR uc.credentials_status = $1)
   AND ($2 IS NULL OR mp.designation = $2)
 GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
-         up.first_name, up.middle_name, up.last_name, mp.designation
+         up.first_name, up.middle_name, up.last_name, mp.designation, lla.last_login
 ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST
 ```
 
-This returns all labels for each user in a single query, which is then converted to the permissions object using `labelsToPermissions()`.
+This returns all permission labels and last login for each user in a single query, which is then converted to the module permissions structure by the resolver.
 
 ---
 
 ## Frontend Integration Example
 
 ```javascript
-// Fetch all staff
-const response = await fetch('/admin/staff/accounts?location=Manila', {
-  headers: { 'Authorization': `Bearer ${token}` }
-});
-const { staff } = await response.json();
+import { fetchStaffAccounts, updateStaffAccount } from './staff-service';
 
-// Display staff with checkboxes
+// Fetch all staff via GraphQL
+const staff = await fetchStaffAccounts();
+
+// Display staff with module toggles
 staff.forEach(member => {
   console.log(member.name);
-  console.log('Admin:', member.permissions.is_admin);
-  console.log('Can view EMR:', member.permissions.emr_allow_view);
-  console.log('Can edit EMR:', member.permissions.emr_allow_edit);
-  console.log('Can approve appointments:', member.permissions.appointment_allow_approval);
-  console.log('Can view consultations:', member.permissions.consultation_allow_view);
+  console.log('Status:', member.status);
+  console.log('Branch:', member.branch);
+  console.log('Modules:', member.modulePermissions);
+  // modulePermissions.modules = [{ moduleId: "emr", enabled: true }, ...]
 });
 
-// Update staff permissions
-await fetch(`/admin/staff/accounts/${userId}`, {
-  method: 'PUT',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    permissions: {
-      is_admin: true,
-      emr_allow_view: true,
-      emr_allow_edit: false,
-      consultation_allow_view: true,
-      appointment_allow_approval: false
-    },
-    status: 'Active'
-  })
-});
+// Update staff permissions and status via GraphQL
+await updateStaffAccount(userId, {
+  emr: true,
+  profile: true,
+  consultation: false,
+  appointment: true,
+  inventory: false
+}, 'Active');
 ```
 
 ---

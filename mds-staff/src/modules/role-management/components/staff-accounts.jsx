@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DEFAULT_ROLE_TEMPLATES, allModules, hasCustomPermissions, detectRole } from '../role-permissions';
-import { axiosRequest } from '../../../packages-core-adapter.js';
+import { fetchStaffAccounts as fetchStaffAccountsAPI } from '../staff-service';
 import StaffDetail from './staff-detail';
 
 /**
@@ -18,12 +18,11 @@ const StaffAccounts = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
-  const fetchStaffAccounts = useCallback(async () => {
+  const loadStaffAccounts = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const response = await axiosRequest.get('/admin/staff/accounts');
-      const records = response.data.staff || [];
+      const records = await fetchStaffAccountsAPI();
       // Enrich each record with a detected role from the permissions
       const enriched = records.map((s) => ({
         ...s,
@@ -31,15 +30,15 @@ const StaffAccounts = () => {
       }));
       setStaffList(enriched);
     } catch (err) {
-      setLoadError(err.response?.data?.message || 'Failed to load staff accounts.');
+      setLoadError(err.message || 'Failed to load staff accounts.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchStaffAccounts();
-  }, [fetchStaffAccounts]);
+    loadStaffAccounts();
+  }, [loadStaffAccounts]);
 
   const roleColors = {
     admin:   'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
@@ -115,7 +114,7 @@ const StaffAccounts = () => {
           <option value="Pending">Pending</option>
         </select>
         <button
-          onClick={fetchStaffAccounts}
+          onClick={loadStaffAccounts}
           disabled={isLoading}
           className="p-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
           title="Refresh"
@@ -142,7 +141,7 @@ const StaffAccounts = () => {
       ) : loadError ? (
         <div className="py-10 text-center">
           <p className="text-xs text-error-600 dark:text-error-400 mb-2">{loadError}</p>
-          <button onClick={fetchStaffAccounts} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">Retry</button>
+          <button onClick={loadStaffAccounts} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">Retry</button>
         </div>
       ) : filteredStaff.length === 0 ? (
         <div className="py-12 text-center">

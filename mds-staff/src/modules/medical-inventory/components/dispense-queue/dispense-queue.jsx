@@ -141,10 +141,9 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
               <tr className="bg-neutral-50 dark:bg-neutral-700/50">
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">ID</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Patient</th>
-                <th className="px-3 py-1.5 text[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item</th>
+                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Qty</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Purpose</th>
-                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Type</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Date</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Notes</th>
@@ -155,7 +154,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center">
+                  <td colSpan={10} className="px-4 py-10 text-center">
                     <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                     <p className="text-sm text-secondary-400 dark:text-neutral-500">No requests match your filters</p>
                   </td>
@@ -185,7 +184,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                             itemName = itemData.item_name;
                           }
                           return (
-                            <div key={idx} className="text-xs">{itemName}{reqItem.quantity && ` (qty: ${reqItem.quantity})`}</div>
+                            <div key={idx} className="text-xs">{itemName}</div>
                           );
                         }) || '—'}
                       </td>
@@ -209,9 +208,6 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                           <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.purpose || '—'}</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5">
-                        <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">{req.patientType}</span>
-                      </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">
                         {formatDate(req.created_at ?? req.createdAt ?? req.requestDate)}
                       </td>
@@ -219,16 +215,20 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>
                       </td>
                       <td className="px-3 py-1.5">
-                        {req.notes && req.notes.length > 30 && (req.status === 'Approved' || req.status === 'Rejected') ? (
-                          <button
-                            onClick={() => setSelectedNotes(req.notes)}
-                            className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[120px] hover:underline"
-                            title={req.notes}
-                          >
-                            {req.notes.substring(0, 30)}...
-                          </button>
+                        {req.notes && req.notes.length > 0 ? (
+                          req.notes.length > 20 ? (
+                            <button
+                              onClick={() => setSelectedNotes(req.notes)}
+                              className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 hover:underline truncate max-w-[120px] text-left transition-colors"
+                              title={req.notes}
+                            >
+                              {req.notes.substring(0, 20)}...
+                            </button>
+                          ) : (
+                            <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.notes}</span>
+                          )
                         ) : (
-                          <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.notes || '—'}</span>
+                          <span className="text-xs text-secondary-400 dark:text-neutral-500">—</span>
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.approved_by ? `Staff #${req.approved_by}` : '—'}</td>

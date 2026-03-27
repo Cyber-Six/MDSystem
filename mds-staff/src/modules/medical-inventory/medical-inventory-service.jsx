@@ -281,3 +281,20 @@ export const splitMedicalSupply = async (batchId, input) => {
   );
   return data.splitMedicalSupply;
 };
+
+/**
+ * Update a supply batch (currentQuantity, expiryDate, notes).
+ * @param {string|number} batchId - ID of the batch to update
+ * @param {{ currentQuantity?: number, expiryDate?: string, notes?: string }} input
+ * @returns {Promise<Object>} Updated SupplyBatch
+ */
+export const updateSupplyBatch = async (batchId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateSupplyBatch($batchId: ID!, $input: SupplyBatchUpdateInput!) {
+      updateSupplyBatch(batchId: $batchId, input: $input) {${SUPPLY_BATCH_FIELDS}
+      }
+    }`,
+    { batchId, input },
+  );
+  return data.updateSupplyBatch;
+};

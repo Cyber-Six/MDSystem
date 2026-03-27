@@ -16,8 +16,12 @@ async function connect() {
 }
 
 async function query(text, params) {
+  return await queryClient(pool, text, params);
+}
+
+async function queryClient(db, text, params) {
     try {
-        const result = await pool.query(text, params);
+        const result = await db.query(text, params);
         return result;
     } catch (err) {
         logger.error("DB QUERY ERROR:", err);
@@ -26,8 +30,12 @@ async function query(text, params) {
 }
 
 async function queryControlled(text, params) {
+  return await queryControlledClient(pool, text, params);
+}
+
+async function queryControlledClient(db, text, params) {
   try {
-    const result = await pool.query(text, params);
+    const result = await db.query(text, params);
     return { success: true, rows: result.rows };
   } catch (err) {
     if (err.code === '23503') {
@@ -399,7 +407,9 @@ async function setSystemAuditLog({client=pool, eventType, actorId, actorType, ta
 module.exports = {
     connect,
     query,
+    queryClient,
     queryControlled,
+    queryControlledClient,
     countUserByEmail,
     findUserByEmail,
     findEmailByUserId,
