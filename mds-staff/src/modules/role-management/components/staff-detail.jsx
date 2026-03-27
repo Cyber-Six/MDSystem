@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, clonePermissions, hasCustomPermissions, allModules } from '../role-permissions';
+import { DEFAULT_ROLE_TEMPLATES, clonePermissions, hasCustomPermissions, allKeys } from '../role-permissions';
 import { updateStaffAccount } from '../staff-service';
 import PermissionMatrix from './permission-matrix';
 import ActivityLog from './activity-log';
@@ -15,7 +15,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
   const [role, setRole] = useState(isPending ? DEFAULT_ROLE_TEMPLATES[1]?.id || 'doctor' : staff.role);
   const [permissions, setPermissions] = useState(
     isPending
-      ? clonePermissions(DEFAULT_ROLE_TEMPLATES.find(r => r.id !== 'admin')?.permissions || allModules(false))
+      ? clonePermissions(DEFAULT_ROLE_TEMPLATES.find(r => r.id !== 'admin')?.permissions || allKeys(false))
       : clonePermissions(staff.permissions)
   );
   const [status, setStatus] = useState(isPending ? 'Active' : staff.status);

@@ -2,6 +2,7 @@ const logger = require('../utils/logger.js');
 const db = require('../config/db.js');
 const permissions = {
   is_admin: "IS_ADMIN",
+  is_staff: "IS_STAFF",
   privileged_to_perform_on_superior: "PRIVILEGED_TO_PERFORM_ON_SUPERIOR",
 
   emr_allow_approval: "ALLOW_TO_APPROVE_EMR",
@@ -740,9 +741,6 @@ const MODULE_PERMISSION_MAP = {
   analytics: [
     // Reserved for future analytics permission keys
   ],
-  roleManagement: [
-    'is_admin',
-  ],
 };
 
 const MODULE_LABELS = {
@@ -754,7 +752,6 @@ const MODULE_LABELS = {
   inventory: 'Inventory',
   healthChat: 'Health Chat',
   analytics: 'Analytics',
-  roleManagement: 'Role Management',
 };
 
 /**

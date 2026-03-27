@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import StaffLayout from '../components/layout/StaffLayout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
 import { PatientTabsProvider } from '../context/patient-tabs-context.jsx';
+import { PermissionsProvider } from '../context/permissions-context.jsx';
+import PermissionRoute from '../components/guards/permission-route.jsx';
 
 // Lazy-loaded route modules for code splitting
 const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx'));
@@ -27,26 +29,28 @@ const RouteLoader = () => (
  */
 const Dashboard = () => {
   return (
-    <StaffLayout>
-      <PatientTabsProvider>
-        <ErrorBoundary>
-          <Suspense fallback={<RouteLoader />}>
-            <Routes>
-              <Route path="/" element={<DashboardHome />} />
-              <Route path="/search" element={<SearchPatient />} />
-              <Route path="/patient/:patientId" element={<PatientRecord />} />
-              <Route path="/pending" element={<PendingRequests />} />
-              <Route path="/appointments" element={<StaffAppointment />} />
-              <Route path="/inventory" element={<MedicalInventory />} />
-              <Route path="/health-chat" element={<HealthChatView />} />
-              <Route path="/announcements" element={<AnnouncementManagement />} />
-              <Route path="/settings/roles" element={<RoleManagementPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
-        </ErrorBoundary>
-      </PatientTabsProvider>
-    </StaffLayout>
+    <PermissionsProvider>
+      <StaffLayout>
+        <PatientTabsProvider>
+          <ErrorBoundary>
+            <Suspense fallback={<RouteLoader />}>
+              <Routes>
+                <Route path="/" element={<DashboardHome />} />
+                <Route path="/search" element={<PermissionRoute moduleId="patientSearch"><SearchPatient /></PermissionRoute>} />
+                <Route path="/patient/:patientId" element={<PermissionRoute moduleId="patientSearch"><PatientRecord /></PermissionRoute>} />
+                <Route path="/pending" element={<PermissionRoute moduleId="pendingRequests"><PendingRequests /></PermissionRoute>} />
+                <Route path="/appointments" element={<PermissionRoute moduleId="appointments"><StaffAppointment /></PermissionRoute>} />
+                <Route path="/inventory" element={<PermissionRoute moduleId="inventory"><MedicalInventory /></PermissionRoute>} />
+                <Route path="/health-chat" element={<PermissionRoute moduleId="healthChat"><HealthChatView /></PermissionRoute>} />
+                <Route path="/announcements" element={<AnnouncementManagement />} />
+                <Route path="/settings/roles" element={<PermissionRoute adminOnly><RoleManagementPage /></PermissionRoute>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </PatientTabsProvider>
+      </StaffLayout>
+    </PermissionsProvider>
   );
 };
 

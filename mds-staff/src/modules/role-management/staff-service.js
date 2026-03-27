@@ -19,27 +19,29 @@ const sendGraphQL = async (query, variables = {}) => {
   return response.data.data;
 };
 
+// ─── FRAGMENTS ────────────────────────────────────────────────────────────────
+
+const STAFF_FIELDS = `
+  id
+  email
+  name
+  branch
+  identity
+  status
+  permissions {
+    permissions { key enabled }
+    count
+  }
+  credentialsStatus
+  lastLogin
+`;
+
 // ─── QUERIES ──────────────────────────────────────────────────────────────────
 
 const GQL_LIST_STAFF_ACCOUNTS = `
   query ListStaffAccounts {
     listStaffAccounts {
-      staff {
-        id
-        email
-        name
-        branch
-        identity
-        status
-        modulePermissions {
-          modules {
-            moduleId
-            enabled
-          }
-        }
-        credentialsStatus
-        lastLogin
-      }
+      staff { ${STAFF_FIELDS} }
       count
     }
   }
@@ -48,48 +50,29 @@ const GQL_LIST_STAFF_ACCOUNTS = `
 const GQL_GET_STAFF_ACCOUNT = `
   query GetStaffAccount($userId: ID!) {
     getStaffAccount(userId: $userId) {
-      id
-      email
-      name
-      branch
-      identity
-      status
-      modulePermissions {
-        modules {
-          moduleId
-          enabled
-        }
-      }
-      credentialsStatus
-      lastLogin
+      ${STAFF_FIELDS}
     }
   }
 `;
 
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
 
+const GQL_SET_PERMISSIONS_EXTENDED = `
+  mutation SetStaffPermissionsExtended($userId: ID!, $permissions: [ExtendedPermissionInput!]!) {
+    setStaffPermissionsExtended(userId: $userId, permissions: $permissions) {
+      ok
+      message
+    }
+  }
+`;
+
 const GQL_UPDATE_STAFF_ACCOUNT = `
-  mutation UpdateStaffAccount($userId: ID!, $modules: [ModulePermissionInput!], $status: AccountStatus) {
-    updateStaffAccount(userId: $userId, modules: $modules, status: $status) {
+  mutation UpdateStaffAccount($userId: ID!, $status: AccountStatus) {
+    updateStaffAccount(userId: $userId, status: $status) {
       ok
       message
       warnings
-      staff {
-        id
-        email
-        name
-        branch
-        identity
-        status
-        modulePermissions {
-          modules {
-            moduleId
-            enabled
-          }
-        }
-        credentialsStatus
-        lastLogin
-      }
+      staff { ${STAFF_FIELDS} }
     }
   }
 `;
@@ -102,11 +85,7 @@ const GQL_LIST_TEMPLATES = `
         label
         createdBy
         createdAt
-        permissions {
-          key
-          enabled
-          branch
-        }
+        permissions { key enabled branch }
         permissionCount
       }
       count
@@ -124,11 +103,7 @@ const GQL_CREATE_TEMPLATE = `
         label
         createdBy
         createdAt
-        permissions {
-          key
-          enabled
-          branch
-        }
+        permissions { key enabled branch }
         permissionCount
       }
     }
@@ -145,11 +120,7 @@ const GQL_UPDATE_TEMPLATE = `
         label
         createdBy
         createdAt
-        permissions {
-          key
-          enabled
-          branch
-        }
+        permissions { key enabled branch }
         permissionCount
       }
     }
@@ -165,222 +136,175 @@ const GQL_DELETE_TEMPLATE = `
   }
 `;
 
+const GQL_INITIATE_ADMIN_TRANSFER = `
+  mutation InitiateAdminTransfer($newAdminUserId: ID!, $password: String!) {
+    initiateAdminTransfer(newAdminUserId: $newAdminUserId, password: $password) {
+      ok
+      message
+      verificationRequired
+    }
+  }
+`;
+
+const GQL_CONFIRM_ADMIN_TRANSFER = `
+  mutation ConfirmAdminTransfer($verificationToken: String!) {
+    confirmAdminTransfer(verificationToken: $verificationToken) {
+      ok
+      message
+      oldAdminId
+      newAdminId
+    }
+  }
+`;
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 /**
- * Module → backend permission key mapping.
- * Keep in sync with Backend/services/permit.js MODULE_PERMISSION_MAP.
+ * Convert backend Permissions { permissions: [{ key, enabled }] } to flat { key: boolean }.
  */
-const MODULE_PERMISSION_MAP = {
-  patientSearch: ['profile_allow_view', 'emr_allow_view'],
-  pendingRequests: ['emr_allow_approval', 'profile_allow_approval', 'appointment_allow_approval', 'medicine_request_allow_approve'],
-  medicalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_edit_catalogs', 'consultation_allow_view', 'consultation_allow_edit', 'profile_allow_view', 'profile_allow_edit'],
-  dentalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_set_dental_record', 'consultation_allow_view', 'consultation_allow_edit'],
-  appointments: ['appointment_allow_approval', 'appointment_allow_view_records', 'appointment_allow_view_configuration', 'appointment_allow_edit_configuration'],
-  inventory: ['inventory_allow_view', 'inventory_allow_edit', 'inventory_allow_dispense', 'inventory_allow_manage_requests', 'inventory_allow_prescribe'],
-  healthChat: [],
-  analytics: [],
-  roleManagement: ['is_admin'],
-};
-
-/**
- * Transform GraphQL modulePermissions into flat { moduleId: boolean } object
- * that the frontend Permission Matrix expects.
- */
-function toFlatPermissions(modulePermissions) {
+function toGranularPermissions(permsResponse) {
   const flat = {};
-  if (modulePermissions?.modules) {
-    for (const mod of modulePermissions.modules) {
-      flat[mod.moduleId] = mod.enabled;
+  if (permsResponse?.permissions) {
+    for (const p of permsResponse.permissions) {
+      flat[p.key] = p.enabled;
     }
   }
   return flat;
 }
 
 /**
- * Transform flat { moduleId: boolean } object into GraphQL ModulePermissionInput array.
+ * Convert flat { key: boolean } to ExtendedPermissionInput[] for template mutations.
  */
-function toModuleInputArray(flatPerms) {
-  return Object.entries(flatPerms).map(([moduleId, enabled]) => ({
-    moduleId,
-    enabled: Boolean(enabled),
-  }));
-}
-
-/**
- * Derive module toggles from BranchPermission[] (template permissions format).
- * A module is enabled if ALL its mapped keys are enabled.
- */
-function templatePermsToModules(branchPermissions) {
-  const enabledKeys = new Set();
-  for (const p of branchPermissions) {
-    if (p.enabled) enabledKeys.add(p.key);
-  }
-  const flat = {};
-  for (const [moduleId, keys] of Object.entries(MODULE_PERMISSION_MAP)) {
-    flat[moduleId] = keys.length > 0 && keys.every(k => enabledKeys.has(k));
-  }
-  return flat;
-}
-
-/**
- * Convert module toggles to ExtendedPermissionInput[] for template creation/update.
- * Uses union logic: a key is enabled if ANY module mapping to it is ON.
- */
-function modulesToTemplatePerms(flatPerms, branch = 'Both') {
-  const keyStates = new Map();
-  for (const [moduleId, keys] of Object.entries(MODULE_PERMISSION_MAP)) {
-    const enabled = Boolean(flatPerms[moduleId]);
-    for (const key of keys) {
-      if (enabled) {
-        keyStates.set(key, true);
-      } else if (!keyStates.has(key)) {
-        keyStates.set(key, false);
-      }
-    }
-  }
-  return Array.from(keyStates.entries()).map(([key, enabled]) => ({
+function granularToTemplatePerms(granularPerms, branch = 'Both') {
+  return Object.entries(granularPerms).map(([key, enabled]) => ({
     key,
-    enabled,
+    enabled: Boolean(enabled),
     branch,
   }));
+}
+
+/**
+ * Convert BranchPermission[] from backend to flat { key: boolean }.
+ */
+function templatePermsToGranular(branchPermissions) {
+  const flat = {};
+  for (const p of branchPermissions) {
+    flat[p.key] = p.enabled;
+  }
+  return flat;
+}
+
+function enrichStaff(s) {
+  return { ...s, permissions: toGranularPermissions(s.permissions) };
 }
 
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 /**
- * Fetch all staff accounts with module-level permissions.
- * Returns array of staff objects with flat `permissions` field.
+ * Fetch all staff accounts with granular permissions.
  */
 export const fetchStaffAccounts = async () => {
   const data = await sendGraphQL(GQL_LIST_STAFF_ACCOUNTS);
-  const staffList = data.listStaffAccounts.staff || [];
-
-  return staffList.map((s) => ({
-    ...s,
-    permissions: toFlatPermissions(s.modulePermissions),
-  }));
+  return (data.listStaffAccounts.staff || []).map(enrichStaff);
 };
 
 /**
  * Fetch a single staff account by ID.
- * Returns staff object with flat `permissions` field, or null.
  */
 export const fetchStaffAccount = async (userId) => {
   const data = await sendGraphQL(GQL_GET_STAFF_ACCOUNT, { userId });
   const staff = data.getStaffAccount;
-  if (!staff) return null;
-
-  return {
-    ...staff,
-    permissions: toFlatPermissions(staff.modulePermissions),
-  };
+  return staff ? enrichStaff(staff) : null;
 };
 
 /**
- * Update a staff member's module permissions and/or status.
- * @param {string} userId - Staff user ID
- * @param {Object} flatPerms - Flat permissions object { moduleId: boolean }
+ * Save staff granular permissions and/or status.
+ * @param {string} userId
+ * @param {Object} [granularPerms] - { key: boolean }
  * @param {string} [status] - 'Active' or 'Suspended'
  */
-export const updateStaffAccount = async (userId, flatPerms, status) => {
-  const variables = { userId };
-
-  if (flatPerms) {
-    variables.modules = toModuleInputArray(flatPerms);
+export const updateStaffAccount = async (userId, granularPerms, status) => {
+  // Step 1: Save granular permissions via setStaffPermissionsExtended
+  if (granularPerms) {
+    const permsList = Object.entries(granularPerms).map(([key, enabled]) => ({
+      key,
+      enabled: Boolean(enabled),
+    }));
+    await sendGraphQL(GQL_SET_PERMISSIONS_EXTENDED, { userId, permissions: permsList });
   }
 
+  // Step 2: If status provided, update via updateStaffAccount (handles activation/suspension)
   if (status) {
-    variables.status = status;
+    const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, { userId, status });
+    const result = data.updateStaffAccount;
+    if (result.staff) result.staff = enrichStaff(result.staff);
+    return result;
   }
 
-  const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, variables);
-  const result = data.updateStaffAccount;
-
-  // If the mutation returned the updated staff, attach flat permissions for the UI
-  if (result.staff) {
-    result.staff = {
-      ...result.staff,
-      permissions: toFlatPermissions(result.staff.modulePermissions),
-    };
-  }
-
-  return result;
+  // Step 3: If only permissions changed, fetch fresh data
+  const freshStaff = await fetchStaffAccount(userId);
+  return { ok: true, message: 'Permissions updated.', staff: freshStaff };
 };
 
 // ─── TEMPLATE OPERATIONS ──────────────────────────────────────────────────────
 
-/**
- * Fetch all permission templates. Returns array of templates
- * with flat module-level permissions.
- */
 export const fetchTemplates = async () => {
   const data = await sendGraphQL(GQL_LIST_TEMPLATES);
-  const templates = data.listPermissionTemplates.templates || [];
-  return templates.map((t) => ({
+  return (data.listPermissionTemplates.templates || []).map((t) => ({
     id: t.id,
     label: t.label,
     createdBy: t.createdBy,
     createdAt: t.createdAt,
-    permissions: templatePermsToModules(t.permissions),
+    permissions: templatePermsToGranular(t.permissions),
     permissionCount: t.permissionCount,
   }));
 };
 
-/**
- * Create a new permission template from module toggles.
- * @param {string} label - Template name
- * @param {Object} flatPerms - { moduleId: boolean }
- */
-export const createTemplate = async (label, flatPerms) => {
+export const createTemplate = async (label, granularPerms) => {
   const data = await sendGraphQL(GQL_CREATE_TEMPLATE, {
     input: {
       label,
-      permissions: modulesToTemplatePerms(flatPerms),
+      permissions: granularToTemplatePerms(granularPerms),
       defaultBranch: 'Both',
     },
   });
   const t = data.createPermissionTemplate.template;
   return t ? {
-    id: t.id,
-    label: t.label,
-    createdBy: t.createdBy,
-    createdAt: t.createdAt,
-    permissions: templatePermsToModules(t.permissions),
+    id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
+    permissions: templatePermsToGranular(t.permissions),
     permissionCount: t.permissionCount,
   } : null;
 };
 
-/**
- * Update an existing permission template.
- * @param {string} templateId
- * @param {string} [label] - Optional new label
- * @param {Object} [flatPerms] - Optional new module toggles
- */
-export const updateTemplate = async (templateId, label, flatPerms) => {
+export const updateTemplate = async (templateId, label, granularPerms) => {
   const input = {};
   if (label !== undefined) input.label = label;
-  if (flatPerms) {
-    input.permissions = modulesToTemplatePerms(flatPerms);
+  if (granularPerms) {
+    input.permissions = granularToTemplatePerms(granularPerms);
     input.defaultBranch = 'Both';
   }
   const data = await sendGraphQL(GQL_UPDATE_TEMPLATE, { templateId, input });
   const t = data.updatePermissionTemplate.template;
   return t ? {
-    id: t.id,
-    label: t.label,
-    createdBy: t.createdBy,
-    createdAt: t.createdAt,
-    permissions: templatePermsToModules(t.permissions),
+    id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
+    permissions: templatePermsToGranular(t.permissions),
     permissionCount: t.permissionCount,
   } : null;
 };
 
-/**
- * Delete a permission template.
- * @param {string} templateId
- */
 export const deleteTemplate = async (templateId) => {
   const data = await sendGraphQL(GQL_DELETE_TEMPLATE, { templateId });
   return data.deletePermissionTemplate;
+};
+
+// ─── ADMIN TRANSFER ───────────────────────────────────────────────────────────
+
+export const initiateAdminTransfer = async (newAdminUserId, password) => {
+  const data = await sendGraphQL(GQL_INITIATE_ADMIN_TRANSFER, { newAdminUserId, password });
+  return data.initiateAdminTransfer;
+};
+
+export const confirmAdminTransfer = async (verificationToken) => {
+  const data = await sendGraphQL(GQL_CONFIRM_ADMIN_TRANSFER, { verificationToken });
+  return data.confirmAdminTransfer;
 };
