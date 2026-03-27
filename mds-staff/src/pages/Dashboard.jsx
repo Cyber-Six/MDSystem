@@ -10,7 +10,7 @@ const SearchPatient = lazy(() => import('../modules/search-patient/search-patien
 const PatientRecord = lazy(() => import('./PatientRecord.jsx'));
 const PendingRequests = lazy(() => import('./PendingRequests.jsx'));
 const StaffAppointment = lazy(() => import('../modules/appointment/staff-appointment.jsx'));
-const RoleManagementPage = lazy(() => import('../modules/role-management/pages/RoleManagementPage.jsx'));
+const RoleManagementPage = lazy(() => import('../modules/role-management/role-management-page.jsx'));
 const MedicalInventory = lazy(() => import('../modules/medical-inventory/medical-inventory.jsx'));
 const HealthChatView = lazy(() => import('../modules/health-chat/health-chat-view.jsx'));
 const AnnouncementManagement = lazy(() => import('../modules/anouncement/components/announcement-management.jsx'));

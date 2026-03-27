@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DEFAULT_ROLE_TEMPLATES, ROLE_COLORS, allModules, clonePermissions } from '../role-permissions';
+import { fetchTemplates, createTemplate, updateTemplate, deleteTemplate } from '../staff-service';
 import PermissionMatrix from './permission-matrix';
 
 /**
@@ -15,6 +16,44 @@ const RoleTemplates = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load templates from API on mount
+  const loadTemplates = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const apiTemplates = await fetchTemplates();
+      // Merge: keep default locked templates + add API templates
+      const merged = [...DEFAULT_ROLE_TEMPLATES.filter(t => t.locked)];
+      for (const t of apiTemplates) {
+        // Skip if it matches a locked default
+        if (merged.find(m => m.id === t.id)) continue;
+        const defaultMatch = DEFAULT_ROLE_TEMPLATES.find(d => d.label === t.label || d.id === t.id);
+        merged.push({
+          id: t.id,
+          name: t.label,
+          description: defaultMatch?.description || 'Custom role — configure permissions below',
+          color: defaultMatch?.color || ROLE_COLORS[merged.length % ROLE_COLORS.length],
+          locked: false,
+          permissions: t.permissions,
+          _backendId: t.id,
+        });
+      }
+      setRoles(merged);
+      const sel = merged[0];
+      setSelectedRoleId(sel?.id || null);
+      setWorkingPermissions(clonePermissions(sel?.permissions || {}));
+    } catch {
+      // Fallback to defaults on error
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId);
 
@@ -51,14 +90,32 @@ const RoleTemplates = () => {
     setHasChanges(true);
   };
 
-  const handleSave = () => {
-    setRoles((prev) =>
-      prev.map((r) =>
-        r.id === selectedRoleId ? { ...r, permissions: clonePermissions(workingPermissions) } : r
-      )
-    );
-    setHasChanges(false);
-    // TODO: API call to save role template
+  const handleSave = async () => {
+    const role = roles.find((r) => r.id === selectedRoleId);
+    if (!role || role.locked) return;
+    setIsSaving(true);
+    try {
+      if (role._backendId) {
+        await updateTemplate(role._backendId, undefined, workingPermissions);
+      } else {
+        const created = await createTemplate(role.name, workingPermissions);
+        if (created) {
+          setRoles((prev) =>
+            prev.map((r) => r.id === selectedRoleId ? { ...r, _backendId: created.id, permissions: clonePermissions(workingPermissions) } : r)
+          );
+        }
+      }
+      setRoles((prev) =>
+        prev.map((r) =>
+          r.id === selectedRoleId ? { ...r, permissions: clonePermissions(workingPermissions) } : r
+        )
+      );
+      setHasChanges(false);
+    } catch (err) {
+      console.error('Failed to save template:', err.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -67,41 +124,61 @@ const RoleTemplates = () => {
   };
 
   // ── Add Role ──
-  const handleAddRole = () => {
+  const handleAddRole = async () => {
     if (!newRoleName.trim()) return;
     const id = newRoleName.trim().toLowerCase().replace(/\s+/g, '-');
     if (roles.find((r) => r.id === id)) return;
     const usedColors = roles.map((r) => r.color);
     const color = ROLE_COLORS.find((c) => !usedColors.includes(c)) || ROLE_COLORS[roles.length % ROLE_COLORS.length];
-    const newRole = {
-      id,
-      name: newRoleName.trim(),
-      description: 'Custom role — configure permissions below',
-      color,
-      locked: false,
-      permissions: allModules(false),
-    };
-    setRoles((prev) => [...prev, newRole]);
-    setSelectedRoleId(id);
-    setWorkingPermissions(clonePermissions(newRole.permissions));
-    setShowAddForm(false);
-    setNewRoleName('');
-    setHasChanges(true);
-    // TODO: API call to create role
+    const perms = allModules(false);
+    setIsSaving(true);
+    try {
+      const created = await createTemplate(newRoleName.trim(), perms);
+      const newRole = {
+        id: created?.id || id,
+        name: newRoleName.trim(),
+        description: 'Custom role — configure permissions below',
+        color,
+        locked: false,
+        permissions: created?.permissions || perms,
+        _backendId: created?.id || null,
+      };
+      setRoles((prev) => [...prev, newRole]);
+      setSelectedRoleId(newRole.id);
+      setWorkingPermissions(clonePermissions(newRole.permissions));
+      setShowAddForm(false);
+      setNewRoleName('');
+      setHasChanges(false);
+    } catch (err) {
+      console.error('Failed to create template:', err.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // ── Delete Role ──
-  const handleDeleteRole = (roleId) => {
-    const updated = roles.filter((r) => r.id !== roleId);
-    setRoles(updated);
-    if (selectedRoleId === roleId) {
-      const fallback = updated[0];
-      setSelectedRoleId(fallback?.id || null);
-      setWorkingPermissions(clonePermissions(fallback?.permissions || {}));
-      setHasChanges(false);
+  const handleDeleteRole = async (roleId) => {
+    const role = roles.find((r) => r.id === roleId);
+    if (!role || role.locked) return;
+    setIsSaving(true);
+    try {
+      if (role._backendId) {
+        await deleteTemplate(role._backendId);
+      }
+      const updated = roles.filter((r) => r.id !== roleId);
+      setRoles(updated);
+      if (selectedRoleId === roleId) {
+        const fallback = updated[0];
+        setSelectedRoleId(fallback?.id || null);
+        setWorkingPermissions(clonePermissions(fallback?.permissions || {}));
+        setHasChanges(false);
+      }
+    } catch (err) {
+      console.error('Failed to delete template:', err.message);
+    } finally {
+      setIsSaving(false);
+      setConfirmDeleteId(null);
     }
-    setConfirmDeleteId(null);
-    // TODO: API call to delete role
   };
 
   return (
@@ -255,9 +332,10 @@ const RoleTemplates = () => {
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+                disabled={isSaving}
+                className="px-4 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 transition-colors"
               >
-                Save Template
+                {isSaving ? 'Saving…' : 'Save Template'}
               </button>
             </div>
           )}
