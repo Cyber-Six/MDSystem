@@ -12,7 +12,7 @@ import AdjustStockModal from './components/adjust-stock/adjust-stock-modal';
 import DispenseModal from './components/dispense-queue/dispense-modal';
 import DispenseMedicineModal from './components/dispense-medicine/dispense-medicine-modal';
 import RequestActionModal from './components/dispense-queue/request-action-modal';
-import TransactionHistory from './components/transaction-history/transaction-history';
+
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
@@ -722,10 +722,7 @@ const MedicalInventory = () => {
       icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
       badge: requests.filter((r) => r.status === 'Pending' || r.status === 'InProgress').length,
     },
-    {
-      key: 'history', label: 'History',
-      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-    },
+
   ];
 
   return (
@@ -878,9 +875,7 @@ const MedicalInventory = () => {
         </div>
       )}
 
-      {activeSection === 'history' && (
-        <TransactionHistory transactions={transactions} items={items} />
-      )}
+
 
       {/* Modals */}
       {showAddItem && (
