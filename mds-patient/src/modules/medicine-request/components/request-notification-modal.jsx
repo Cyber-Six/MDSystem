@@ -47,53 +47,65 @@ const RequestNotificationModal = ({ request, onDismiss, batches, groupedMedicine
 
   if (!isApproved && !isRejected) return null;
 
-  // Look up medicine name from request items first
-  let itemName = 'Your medicine';
-  
-  // Try to get from items array
-  if (request.items?.[0]) {
-    const firstItem = request.items[0];
-    // Check if item has item details directly
-    if (firstItem.itemName) {
-      itemName = firstItem.itemName;
-    } else {
-      const medicineId = firstItem.medicineId;
-      const batchId = firstItem.batchId;
-      
-      // Try to find from availableMedicines (most reliable source)
-      const medicine = availableMedicines?.find((m) => 
-        String(m.id) === String(batchId) || 
-        String(m.id) === String(medicineId) ||
-        String(m.batchId) === String(medicineId)
+  // Helper function to resolve a single medicine name
+  const resolveMedicineName = (item) => {
+    if (item.itemName) {
+      return item.itemName;
+    }
+    
+    const medicineId = item.medicineId;
+    const batchId = item.batchId;
+    
+    // Try to find from availableMedicines (most reliable source)
+    const medicine = availableMedicines?.find((m) => 
+      String(m.id) === String(batchId) || 
+      String(m.id) === String(medicineId) ||
+      String(m.batchId) === String(medicineId)
+    );
+    if (medicine?.item_name) {
+      return medicine.item_name;
+    }
+    
+    // Try from batches using medicineId or batchId
+    const batch = batches?.find((b) => 
+      String(b.id) === String(batchId) || 
+      String(b.medicalItemId) === String(medicineId) ||
+      String(b.id) === String(medicineId)
+    );
+    if (batch?.item_name) {
+      return batch.item_name;
+    }
+    
+    // Try from groupedMedicines (has item_code -> medicine group mapping)
+    if (groupedMedicines && Object.values(groupedMedicines).length > 0) {
+      const medicineGroup = Object.values(groupedMedicines).find(m =>
+        m.batches?.some(b => 
+          String(b.id) === String(medicineId) || 
+          String(b.id) === String(batchId)
+        )
       );
-      if (medicine?.item_name) {
-        itemName = medicine.item_name;
-      } else {
-        // Try from batches using medicineId or batchId
-        const batch = batches?.find((b) => 
-          String(b.id) === String(batchId) || 
-          String(b.medicalItemId) === String(medicineId) ||
-          String(b.id) === String(medicineId)
-        );
-        if (batch?.item_name) {
-          itemName = batch.item_name;
-        } else {
-          // Try from groupedMedicines (has item_code -> medicine group mapping)
-          if (groupedMedicines && Object.values(groupedMedicines).length > 0) {
-            const medicineGroup = Object.values(groupedMedicines).find(m =>
-              m.batches?.some(b => 
-                String(b.id) === String(medicineId) || 
-                String(b.id) === String(batchId)
-              )
-            );
-            if (medicineGroup?.item_name) {
-              itemName = medicineGroup.item_name;
-            }
-          }
-        }
+      if (medicineGroup?.item_name) {
+        return medicineGroup.item_name;
       }
     }
+    
+    return null;
+  };
+  
+  // Get all medicine names from all items in the request
+  let medicineNames = [];
+  if (request.items && request.items.length > 0) {
+    medicineNames = request.items
+      .map(item => resolveMedicineName(item))
+      .filter(name => name !== null && name !== undefined);
   }
+  
+  // Format medicine names for display
+  let itemName = medicineNames.length > 0 
+    ? medicineNames.length === 1 
+      ? medicineNames[0]
+      : medicineNames.join(', ')
+    : 'Your medicine';
   
   const purpose = request.purpose || 'Medicine request';
   const notes = request.notes || '';
@@ -139,9 +151,19 @@ const RequestNotificationModal = ({ request, onDismiss, batches, groupedMedicine
               <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Request ID</span>
               <span className="text-xs font-mono text-secondary-700 dark:text-neutral-300">#{request.id}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Medicine</span>
-              <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{itemName}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Medicine{medicineNames.length > 1 ? 's' : ''}</span>
+              <div className="space-y-1">
+                {medicineNames.length > 0 ? (
+                  medicineNames.map((name, idx) => (
+                    <span key={idx} className="text-xs font-medium text-secondary-700 dark:text-neutral-300 block">
+                      • {name}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{itemName}</span>
+                )}
+              </div>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Purpose</span>

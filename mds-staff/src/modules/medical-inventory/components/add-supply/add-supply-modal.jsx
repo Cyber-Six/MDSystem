@@ -4,6 +4,33 @@ import { ITEM_CATEGORY, ALL_LOCATIONS, getDisplayLocation } from '../../medical-
 const DOSAGE_UNITS = ['mg', 'g', 'mcg', 'ml', 'L', 'IU'];
 const SUPPLY_UNITS = ['pcs', 'box', 'pack', 'set', 'kit'];
 
+// Helper to format date for display (remove time portion)
+const formatDateDisplay = (dateValue) => {
+  if (!dateValue) return '';
+  try {
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch (err) {
+    return dateValue;
+  }
+};
+
+// Helper to check if expiry date is in the past
+const isExpiryDateInPast = (expiryDate) => {
+  if (!expiryDate) return false;
+  try {
+    const expiry = new Date(expiryDate);
+    const today = new Date();
+    // Set time to midnight to compare dates only
+    today.setHours(0, 0, 0, 0);
+    expiry.setHours(0, 0, 0, 0);
+    return expiry < today;
+  } catch (err) {
+    return false;
+  }
+};
+
 /**
  * Add Supply Modal — receive a new batch for an existing medical item.
  * Supports both medicine batches (with dosage) and supply batches (with units).
@@ -24,20 +51,62 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
   const [saveAnother, setSaveAnother] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [touched, setTouched] = useState({});
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const touch = (k) => setTouched((t) => ({ ...t, [k]: true }));
+
+  // Validation helper: check required fields
+  const validateForm = () => {
+    const errors = [];
+    if (!selectedItemId) errors.push('Medical Item is required');
+    if (!form.batchNumber.trim()) errors.push('Batch / Lot Number is required');
+    if (!form.quantity) errors.push('Number of Units is required');
+    if (isMedicine && !form.dosageValue) errors.push('Dosage Value is required');
+    if (!form.location) errors.push('Clinic Location is required');
+    if (isMedicine && !form.expiryDate) errors.push('Expiry Date is required for medicine');
+    // New validation: check if expiry date is in the past
+    if (form.expiryDate && isExpiryDateInPast(form.expiryDate)) {
+      errors.push(`Expiry date must be a future date (${formatDateDisplay(form.expiryDate)} is in the past)`);
+    }
+    return errors;
+  };
+
+  // Helper to check if a field has validation error
+  const hasFieldError = (field) => {
+    if (!touched[field]) return false;
+    if (field === 'batchNumber') return !form.batchNumber.trim();
+    if (field === 'quantity') return !form.quantity;
+    if (field === 'dosageValue') return !form.dosageValue;
+    if (field === 'expiryDate') return isMedicine && !form.expiryDate;
+    return false;
+  };
   const selectedItem = items.find((i) => String(i.id) === String(selectedItemId));
   const isMedicine = selectedItem?.category?.toLowerCase() === ITEM_CATEGORY.MEDICINE.toLowerCase();
 
   const resetForm = () => {
     setForm({ batchNumber: '', expiryDate: '', quantity: '', dosageValue: '', dosageUnit: 'mg', unit: 'pcs', location: 'Casal', supplierName: '', notes: '' });
+    setTouched({});
   };
 
   const handleSubmit = async (e) => {
     if (e?.preventDefault) e.preventDefault();
-    if (!selectedItemId || !form.batchNumber.trim()) return;
-    if (!form.quantity) return;
-    if (isMedicine && !form.dosageValue) return;
+    
+    // Mark all fields as touched to show validation errors
+    setTouched({
+      batchNumber: true,
+      quantity: true,
+      dosageValue: isMedicine,
+      expiryDate: isMedicine,
+    });
+    
+    // Validate all required fields
+    const validationErrors = validateForm();
+    if (validationErrors.length > 0) {
+      setSubmitError(validationErrors.join(' • '));
+      return;
+    }
+    
     const batch = {
       medicalItemId: Number(selectedItemId),
       batchNumber: form.batchNumber.trim(),
@@ -98,14 +167,51 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Batch / Lot Number *</label>
-              <input type="text" value={form.batchNumber} onChange={(e) => set('batchNumber', e.target.value)} placeholder="e.g. CAS-PAR-003" required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+              <input 
+                type="text" 
+                value={form.batchNumber} 
+                onChange={(e) => set('batchNumber', e.target.value)}
+                onBlur={() => touch('batchNumber')}
+                placeholder="e.g. CAS-PAR-003" 
+                required 
+                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
+                  hasFieldError('batchNumber')
+                    ? 'border-error-500 dark:border-error-500 focus:ring-error-500'
+                    : 'border-neutral-300 dark:border-neutral-600'
+                }`}
+              />
+              {hasFieldError('batchNumber') && (
+                <p className="mt-1 text-[10px] text-error-500 font-medium flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1" clipRule="evenodd" /></svg>
+                  Batch number is required
+                </p>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
                 {isMedicine ? 'Number of Units' : 'Quantity'} *
               </label>
-              <input type="number" min={1} value={form.quantity} onChange={(e) => set('quantity', e.target.value)} placeholder={isMedicine ? "e.g. 50" : "e.g. 100"} required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
-              {isMedicine && form.quantity && (
+              <input 
+                type="number" 
+                min={1} 
+                value={form.quantity} 
+                onChange={(e) => set('quantity', e.target.value)}
+                onBlur={() => touch('quantity')}
+                placeholder={isMedicine ? "e.g. 50" : "e.g. 100"} 
+                required 
+                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
+                  hasFieldError('quantity')
+                    ? 'border-error-500 dark:border-error-500 focus:ring-error-500'
+                    : 'border-neutral-300 dark:border-neutral-600'
+                }`}
+              />
+              {hasFieldError('quantity') && (
+                <p className="mt-1 text-[10px] text-error-500 font-medium flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1" clipRule="evenodd" /></svg>
+                  Quantity is required
+                </p>
+              )}
+              {isMedicine && form.quantity && !hasFieldError('quantity') && (
                 <p className="mt-1 text-[10px] text-secondary-500 dark:text-neutral-400">
                   {form.quantity} unit{form.quantity > 1 ? 's' : ''} will be created with individual IDs
                 </p>
@@ -117,7 +223,26 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Dosage Value *</label>
-                <input type="number" min={1} value={form.dosageValue} onChange={(e) => set('dosageValue', e.target.value)} placeholder="e.g. 500" required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+                <input 
+                  type="number" 
+                  min={1} 
+                  value={form.dosageValue} 
+                  onChange={(e) => set('dosageValue', e.target.value)}
+                  onBlur={() => touch('dosageValue')}
+                  placeholder="e.g. 500" 
+                  required 
+                  className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
+                    hasFieldError('dosageValue')
+                      ? 'border-error-500 dark:border-error-500 focus:ring-error-500'
+                      : 'border-neutral-300 dark:border-neutral-600'
+                  }`}
+                />
+                {hasFieldError('dosageValue') && (
+                  <p className="mt-1 text-[10px] text-error-500 font-medium flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1" clipRule="evenodd" /></svg>
+                    Dosage value is required
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Dosage Unit *</label>
@@ -142,8 +267,31 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
               <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
                 Expiry Date {isMedicine ? '*' : ''}
               </label>
-              <input type="date" value={form.expiryDate} onChange={(e) => set('expiryDate', e.target.value)} required={isMedicine} className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
-              {!isMedicine && noExpiry && (
+              <input 
+                type="date" 
+                value={form.expiryDate} 
+                onChange={(e) => set('expiryDate', e.target.value)}
+                onBlur={() => touch('expiryDate')}
+                required={isMedicine}
+                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
+                  hasFieldError('expiryDate') || (form.expiryDate && isExpiryDateInPast(form.expiryDate))
+                    ? 'border-error-500 dark:border-error-500 focus:ring-error-500'
+                    : 'border-neutral-300 dark:border-neutral-600'
+                }`}
+              />
+              {hasFieldError('expiryDate') && (
+                <p className="mt-1 text-[10px] text-error-500 font-medium flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1" clipRule="evenodd" /></svg>
+                  Expiry date is required
+                </p>
+              )}
+              {form.expiryDate && isExpiryDateInPast(form.expiryDate) && (
+                <p className="mt-1 text-[10px] text-error-500 font-medium flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1" clipRule="evenodd" /></svg>
+                  This item is already expired
+                </p>
+              )}
+              {!isMedicine && noExpiry && !hasFieldError('expiryDate') && !isExpiryDateInPast(form.expiryDate) && (
                 <p className="mt-1 text-[10px] text-warning-600 dark:text-warning-400 flex items-center gap-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" /></svg>
                   No expiry set
@@ -152,7 +300,8 @@ const AddSupplyModal = ({ itemId, items, onClose, onSave }) => {
             </div>
             <div>
               <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Clinic Location *</label>
-              <select value={form.location} onChange={(e) => set('location', e.target.value)} className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+              <select value={form.location} onChange={(e) => set('location', e.target.value)} required className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                <option value="">Select a location...</option>
                 {ALL_LOCATIONS.map((l) => <option key={l} value={l}>{getDisplayLocation(l)}</option>)}
               </select>
             </div>
