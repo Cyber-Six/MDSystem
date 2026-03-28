@@ -255,16 +255,31 @@ input VitalSignsUpdateInput {
 
 ## -------- Dental Record-------- ##
 
+enum DentalLegend {
+  PRESENT
+  DUE_FILLING_DECAYED
+  DUE_EXTRACTION
+  ROOT_FRAGMENT
+  MISSING
+  FILLED
+  GOLD_CROWN
+  JACKET_CROWN
+  ABUTMENT
+  PONTIC
+  FIXED_BRIDGE
+  REMOVABLE_DENTURE
+  FULL_DENTURE
+}
 
 type ToothPlacement{ # singular tooth info
   id: ID!
   toothIndex: Int!
-  legend: String!
+  legend: DentalLegend!
 }
 
 input ToothPlacementInput{
   toothIndex: Int!
-  legend: String!
+  legend: DentalLegend!
 }
 
 
