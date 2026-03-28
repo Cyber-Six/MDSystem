@@ -1286,7 +1286,7 @@ const Mutation = {
             lockoutRemainingSeconds: pwLockTTL,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.warn(`Admin ${oldAdminId} attempted transfer while password-locked (TTL: ${pwLockTTL}s)`);
@@ -1311,7 +1311,7 @@ const Mutation = {
             retryAfterSeconds,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.info(`Admin ${oldAdminId} on transfer initiation cooldown (${retryAfterSeconds}s remaining)`);
@@ -1336,7 +1336,7 @@ const Mutation = {
             existingTokenPrefix: tokenPrefix,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.warn(`Admin ${oldAdminId} attempted duplicate transfer (token: ${tokenPrefix})`);
@@ -1360,7 +1360,7 @@ const Mutation = {
             reason: 'Current admin email not found',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1382,7 +1382,7 @@ const Mutation = {
             reason: 'Current admin credentials not found',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1414,7 +1414,7 @@ const Mutation = {
             lockoutTTL: locked ? lockoutTTL : null,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.warn(`Admin ${oldAdminId} invalid password (attempt ${failures}/${3}${locked ? ' - LOCKED' : ''})`);
@@ -1448,7 +1448,7 @@ const Mutation = {
             reason: 'Cannot transfer to self',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1470,7 +1470,7 @@ const Mutation = {
             reason: 'Target not active medical personnel',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1492,7 +1492,7 @@ const Mutation = {
             reason: 'Target user not validated',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1514,7 +1514,7 @@ const Mutation = {
             reason: 'Target user not found',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1535,7 +1535,7 @@ const Mutation = {
             reason: 'Target user 2FA not enabled',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1558,7 +1558,7 @@ const Mutation = {
             reason: 'Current admin 2FA not enabled',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.warn(`Admin ${oldAdminId} attempted transfer without 2FA enabled`);
@@ -1590,7 +1590,7 @@ const Mutation = {
           tokenPrefix: verificationToken.substring(0, 8) + '...',
           timestamp: new Date().toISOString(),
         }),
-        changedBy: oldAdminId,
+        changedBy: 'Medical',
       });
 
       logger.info(`Admin transfer initiated: oldAdminId=${oldAdminId}, newAdminId=${newAdminUserId}`);
@@ -1613,7 +1613,7 @@ const Mutation = {
             reason: error.message,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
       }
       throw error;
@@ -1642,7 +1642,7 @@ const Mutation = {
             tokenPrefix: verificationToken.substring(0, 8) + '...',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: currentUserId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1667,7 +1667,7 @@ const Mutation = {
             attemptedByUserId: currentUserId,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: currentUserId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1695,7 +1695,7 @@ const Mutation = {
             reason: 'Old admin no longer has admin privileges',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1718,7 +1718,7 @@ const Mutation = {
             reason: 'Target user no longer active medical personnel',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1740,7 +1740,7 @@ const Mutation = {
             reason: 'Target user no longer validated',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1763,7 +1763,7 @@ const Mutation = {
             reason: 'Target user 2FA no longer enabled',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1813,7 +1813,7 @@ const Mutation = {
           verificationTokenPrefix: verificationToken.substring(0, 8) + '...',
           timestamp: new Date().toISOString(),
         }),
-        changedBy: oldAdminId,
+        changedBy: 'Medical',
       });
 
       await client.query('COMMIT');
@@ -1845,7 +1845,7 @@ const Mutation = {
             error: error.message,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: currentUserId,
+          changedBy: 'Medical',
         });
       } catch (logError) {
         logger.error(`Failed to log admin transfer failure: ${logError.message}`);
