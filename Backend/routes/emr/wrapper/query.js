@@ -61,7 +61,7 @@ const Query = {
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -113,7 +113,7 @@ const Query = {
       FROM "DentalPhotoRecord" dpr
       JOIN "patientUpdateLog" pul ON pul.id = dpr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -141,7 +141,7 @@ const Query = {
       FROM "ObGynHistory" ogh
       JOIN "patientUpdateLog" pul ON pul.id = ogh.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -169,7 +169,7 @@ const Query = {
       FROM "Lifestyle" ls
       JOIN "patientUpdateLog" pul ON pul.id = ls.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -196,7 +196,7 @@ const Query = {
       FROM "DentalHistory" dh
       JOIN "patientUpdateLog" pul ON pul.id = dh.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -224,7 +224,7 @@ const Query = {
       FROM "patientUpdateLog" pul
       JOIN "DentalRecord" dr ON pul."dentalRecordId" = dr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -272,7 +272,7 @@ const Query = {
       FROM "patientUpdateLog" pul
       LEFT JOIN "VitalSigns" vs ON pul."vitalSignsId" = vs.id 
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -299,7 +299,7 @@ const Query = {
       FROM "OralAppliance" oa
       JOIN "patientUpdateLog" pul ON pul.id = oa.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -337,7 +337,7 @@ const Query = {
       FROM "EmergencyContact" ec
       JOIN "patientUpdateLog" pul ON pul.id = ec.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -379,7 +379,7 @@ const Query = {
       FROM "Allergy" al
       JOIN "patientUpdateLog" pul ON pul.id = al.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -416,7 +416,7 @@ const Query = {
       FROM "MaintenanceMedication" mm
       JOIN "patientUpdateLog" pul ON pul.id = mm.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -454,7 +454,7 @@ const Query = {
       FROM "DentalProcedure" dp
       JOIN "patientUpdateLog" pul ON pul.id = dp.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -492,7 +492,7 @@ const Query = {
       FROM "Immunization" im
       JOIN "patientUpdateLog" pul ON pul.id = im.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -530,7 +530,7 @@ const Query = {
       FROM "Operation" op
       JOIN "patientUpdateLog" pul ON pul.id = op.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -568,7 +568,7 @@ const Query = {
       FROM "Hospitalization" hp
       JOIN "patientUpdateLog" pul ON pul.id = hp.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -606,7 +606,7 @@ const Query = {
       FROM "MedicalHistory" mh
       JOIN "patientUpdateLog" pul ON pul.id = mh.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
@@ -643,7 +643,7 @@ const Query = {
       FROM "VisualAcuity" vap
       JOIN "patientUpdateLog" pul ON pul.id = vap.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
-        (pul.status = ANY($5::"UpdateStatus") OR $5 IS NULL)
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
       ORDER BY pul.created_at DESC
       LIMIT $2 OFFSET $3;
     `;
