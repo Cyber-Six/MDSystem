@@ -41,3 +41,25 @@ export const ORAL_FINDINGS = [
 
 // Helper function to get legend by code
 export const getLegend = (code) => LEGENDS.find(l => l.code === code);
+
+// Maps frontend short codes to backend DB enum values
+export const CODE_TO_ENUM = {
+  '✓': 'PRESENT',
+  'C':  'DUE_FILLING_DECAYED',
+  'X':  'DUE_EXTRACTION',
+  'R':  'ROOT_FRAGMENT',
+  'M':  'MISSING',
+  'F':  'FILLED',
+  'G':  'GOLD_CROWN',
+  'J':  'JACKET_CROWN',
+  'AB': 'ABUTMENT',
+  'P':  'PONTIC',
+  'FX': 'FIXED_BRIDGE',
+  'RD': 'REMOVABLE_DENTURE',
+  'FD': 'FULL_DENTURE',
+};
+
+// Maps backend DB enum values to frontend short codes
+export const ENUM_TO_CODE = Object.fromEntries(
+  Object.entries(CODE_TO_ENUM).map(([code, enumVal]) => [enumVal, code])
+);
