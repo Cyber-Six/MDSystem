@@ -241,7 +241,7 @@ const Mutation = {
       for (const finding of args.input.oralFindings || []) {
         const resultFinder = await db.queryControlledClient(
           client,
-          `INSERT INTO "OralFindingRecord"
+          `INSERT INTO "oralFindingRecord"
             ("dentalRecordId", "oralFindingId", "status", "notes")
            VALUES ($1, $2, $3, $4)
            RETURNING *;`,
