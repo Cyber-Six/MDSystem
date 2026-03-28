@@ -28,6 +28,7 @@ const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { initSocket, getIO } = require('./config/sockets');
 require('./config/sockets/health-chat-events'); // Register health chat socket handlers
 const { initPatientMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
+const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initPatientHealthChatGraphQL, initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
@@ -69,6 +70,7 @@ initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
 initMedicalAppointmentGraphQL(app);
 initPatientMedicineRequestGraphQL(app);
+initPrescriptionGraphQL(app);
 initPatientHealthChatGraphQL(app);
 initMedicalHealthChatGraphQL(app);
 
