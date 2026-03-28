@@ -890,10 +890,10 @@ const Mutation = {
    * - status: optional Active/Suspended toggle
    * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
    */
-  _updateStaffAccount: async (_, { userId, status, role, templateId }, { user, res }) => {
-    if (!status && !role) {
+  _updateStaffAccount: async (_, { userId, status, role, templateId, designation }, { user, res }) => {
+    if (!status && !role && !designation) {
       throwGraphQLError(res)
-        .message('At least one of status or role must be provided.')
+        .message('At least one of status, role, or designation must be provided.')
         .status(400)
         .throw();
     }
@@ -967,6 +967,15 @@ const Mutation = {
 
     // Handle status change (Active ↔ Suspended)
     if (status) {
+      // Admin accounts cannot be deactivated — only admin transfer can change admin control
+      const adminStatusCheck = await isMedicalPermitted(userId, permissions.is_admin, null);
+      if (adminStatusCheck && status === 'Suspended') {
+        throwGraphQLError(res)
+          .message('Admin account cannot be deactivated. Use Admin Transfer to change admin control.')
+          .status(403)
+          .throw();
+      }
+
       const validStatuses = ['Active', 'Suspended'];
       if (!validStatuses.includes(status)) {
         throwGraphQLError(res)
@@ -988,6 +997,24 @@ const Mutation = {
         );
         logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
       }
+    }
+
+    // Handle designation (branch) change
+    if (designation) {
+      const validDesignations = ['Manila', 'QuezonCity', 'Both'];
+      if (!validDesignations.includes(designation)) {
+        throwGraphQLError(res)
+          .message('designation must be Manila, QuezonCity, or Both.')
+          .status(400)
+          .throw();
+      }
+
+      await db.query(
+        `UPDATE "MedicalPersonnel" SET designation = $1 WHERE id = $2`,
+        [designation, userId]
+      );
+
+      logger.info(`Staff branch changed to "${designation}" for userId=${userId} by adminId=${user.id}`);
     }
 
     logger.info(`Staff account updated: userId=${userId}, by adminId=${user.id}`);

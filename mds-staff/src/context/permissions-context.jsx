@@ -15,7 +15,7 @@ const MODULE_ROUTE_MAP = {
   inventory: ['/inventory'],
   healthChat: ['/health-chat'],
   analytics: ['/analytics'],
-  roleManagement: ['/settings/roles'],
+  // roleManagement: '/settings/roles' — handled via isAdmin check, not module permissions
 };
 
 /**
@@ -82,6 +82,9 @@ export const PermissionsProvider = ({ children }) => {
 
       // Dashboard is always accessible
       if (path === '/' || path === '') return true;
+
+      // Admin-only routes — only accessible via is_admin
+      if (path === '/settings/roles' || path.startsWith('/settings/roles/')) return false;
 
       // Check if any module maps to this path
       for (const [moduleId, paths] of Object.entries(MODULE_ROUTE_MAP)) {

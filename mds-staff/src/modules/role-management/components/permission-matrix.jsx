@@ -165,26 +165,13 @@ const PermissionMatrix = ({ permissions, onChange, readOnly = false }) => {
                           {key}
                         </span>
                       </div>
-                      {isKeyDisabled ? (
-                        <span className={`text-[9px] font-medium px-1 py-0.5 rounded ${
-                          keyEnabled
-                            ? 'text-success-600 dark:text-success-400 bg-success-50 dark:bg-success-900/20'
-                            : 'text-neutral-400 dark:text-neutral-500 bg-neutral-50 dark:bg-neutral-800'
-                        }`}>
-                          {keyEnabled ? 'On' : 'Off'}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleToggleKey(key)}
-                          className={`relative w-7 h-4 rounded-full transition-colors flex-shrink-0 ${
-                            keyEnabled ? 'bg-primary-400' : 'bg-neutral-300 dark:bg-neutral-600'
-                          }`}
-                        >
-                          <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all duration-200 ${
-                            keyEnabled ? 'left-[13px]' : 'left-0.5'
-                          }`} />
-                        </button>
-                      )}
+                      <input
+                        type="checkbox"
+                        checked={keyEnabled}
+                        onChange={() => !isKeyDisabled && handleToggleKey(key)}
+                        disabled={isKeyDisabled}
+                        className={`w-3.5 h-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500 flex-shrink-0 ${isKeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      />
                     </div>
                   );
                 })}
