@@ -1278,7 +1278,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1303,7 +1303,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1328,7 +1328,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1353,7 +1353,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1375,7 +1375,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1404,7 +1404,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1441,7 +1441,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1463,7 +1463,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1485,7 +1485,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1507,7 +1507,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1528,7 +1528,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1551,7 +1551,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1581,7 +1581,7 @@ const Mutation = {
       await db.setSystemAuditLog({
         eventType: 'ADMIN_TRANSFER_INITIATED',
         actorId: oldAdminId,
-        actorType: 'Medical',
+        actorType: 'Staff',
         targetId: newAdminUserId,
         action: 'INITIATE_ADMIN_TRANSFER',
         details: JSON.stringify({
@@ -1606,7 +1606,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1634,7 +1634,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: currentUserId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: null,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1658,7 +1658,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: currentUserId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1688,7 +1688,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1711,7 +1711,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1733,7 +1733,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1756,7 +1756,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1802,7 +1802,7 @@ const Mutation = {
         client: client,
         eventType: 'ADMIN_TRANSFER_SUCCESS',
         actorId: oldAdminId,
-        actorType: 'Medical',
+        actorType: 'Staff',
         targetId: newAdminId,
         action: 'TRANSFER_ADMIN_PRIVILEGES',
         details: JSON.stringify({
@@ -1837,7 +1837,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: currentUserId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: null,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
