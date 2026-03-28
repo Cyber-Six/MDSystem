@@ -241,7 +241,7 @@ const Query = {
     
     for (const row of result.rows) { // define the every tooth status here
       const teethQuery = `
-        SELECT tp.id, tp.toothIndex, tp.legend
+        SELECT tp.id, tp."toothIndex", tp.legend
         FROM "ToothPlacement" tp
         WHERE "dentalRecordId" = $1;
       `;

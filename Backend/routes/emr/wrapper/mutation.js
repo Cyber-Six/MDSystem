@@ -212,7 +212,7 @@ const Mutation = {
          SET "dentalRecordId" = inserted.id
          FROM inserted
          WHERE "patientUpdateLog".id = $2
-         RETURNING inserted.id AS dentalRecordId;`,
+         RETURNING "patientUpdateLog".*, inserted.id AS dentalRecordId;`,
         [args.input.notes, recordId]
       );
 
