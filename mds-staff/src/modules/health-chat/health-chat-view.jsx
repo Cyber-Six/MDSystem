@@ -134,7 +134,7 @@ const HealthChatView = () => {
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          zIndex: 10,
+          zIndex: 5,
           transition: 'left 300ms ease-in-out',
         }}
       >
