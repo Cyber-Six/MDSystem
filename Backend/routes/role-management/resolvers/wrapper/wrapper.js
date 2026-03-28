@@ -10,6 +10,7 @@ const {
   updatePermissionTemplate,
   deletePermissionTemplate,
   applyTemplateToStaff,
+  propagateTemplatePermissions,
   isMedicalPermitted,
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,
@@ -605,12 +606,6 @@ const Mutation = {
 
     const personnel = insertResult.rows[0];
 
-    // Update user identity to Medical so they can log in to staff portal
-    await db.query(
-      `UPDATE "UserCredentials" SET identity = 'Medical' WHERE id = $1`,
-      [userId]
-    );
-
     // Grant is_staff permission
     await setStaffPermissionsExtended({
       personnelId: String(userId),
@@ -895,17 +890,17 @@ const Mutation = {
    * - status: optional Active/Suspended toggle
    * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
    */
-  _updateStaffAccount: async (_, { userId, modules, status, role, templateId }, { user, res }) => {
-    if (!modules && !status && !role) {
+  _updateStaffAccount: async (_, { userId, status, role, templateId }, { user, res }) => {
+    if (!status && !role) {
       throwGraphQLError(res)
-        .message('At least one of modules, status, or role must be provided.')
+        .message('At least one of status or role must be provided.')
         .status(400)
         .throw();
     }
 
     // Verify target user exists and is medical staff
     const userResult = await db.query(
-      `SELECT uc.id, uc.identity, mp.designation
+      `SELECT uc.id, mp.designation, mp.is_active
        FROM "UserCredentials" uc
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        WHERE uc.id = $1`,
@@ -921,6 +916,15 @@ const Mutation = {
 
     // Handle role change
     if (role) {
+      // Admin accounts cannot have their role changed (only via admin transfer)
+      const adminCheck = await isMedicalPermitted(userId, permissions.is_admin, null);
+      if (adminCheck) {
+        throwGraphQLError(res)
+          .message('Admin role cannot be changed directly. Use Admin Transfer instead.')
+          .status(403)
+          .throw();
+      }
+
       // Validate that the role matches an existing template label
       const templatesResult = await listPermissionTemplates();
       const matchingTemplate = templatesResult.templates.find(t => t.label === role);
@@ -961,32 +965,6 @@ const Mutation = {
       logger.info(`Staff role changed to "${role}" for userId=${userId} by adminId=${user.id}`);
     }
 
-    // Handle module permissions update
-    if (modules && modules.length > 0) {
-      // Validate module IDs
-      for (const mod of modules) {
-        if (!MODULE_PERMISSION_MAP.hasOwnProperty(mod.moduleId)) {
-          throwGraphQLError(res)
-            .message(`Invalid module ID: "${mod.moduleId}".`)
-            .status(400)
-            .throw();
-        }
-      }
-
-      // Warn on admin privilege grant
-      const rmModule = modules.find(m => m.moduleId === 'roleManagement');
-      if (rmModule && rmModule.enabled) {
-        logger.warn(`⚠️ Admin privilege being granted to userId=${userId} by adminId=${user.id}`);
-      }
-
-      await setStaffModulePermissions({
-        personnelId: String(userId),
-        modules,
-        assignedBy: String(user.id),
-        branch,
-      });
-    }
-
     // Handle status change (Active ↔ Suspended)
     if (status) {
       const validStatuses = ['Active', 'Suspended'];
@@ -997,28 +975,17 @@ const Mutation = {
           .throw();
       }
 
-      if (status === 'Active' && targetUser.identity !== 'Medical') {
-        // Activate: set identity to Medical + ensure is_staff
+      if (status === 'Active' && !targetUser.is_active) {
         await db.query(
-          `UPDATE "UserCredentials" SET identity = 'Medical' WHERE id = $1`,
+          `UPDATE "MedicalPersonnel" SET is_active = true WHERE id = $1`,
           [userId]
         );
-
-        await setStaffPermissionsExtended({
-          personnelId: String(userId),
-          permissionsList: [{ key: 'is_staff', enabled: true }],
-          assignedBy: String(user.id),
-          defaultBranch: branch,
-        });
-
         logger.info(`Staff account activated: userId=${userId} by adminId=${user.id}`);
-      } else if (status === 'Suspended' && targetUser.identity === 'Medical') {
-        // Suspend: revert identity to Employee (keeps permissions intact)
+      } else if (status === 'Suspended' && targetUser.is_active) {
         await db.query(
-          `UPDATE "UserCredentials" SET identity = 'Employee' WHERE id = $1`,
+          `UPDATE "MedicalPersonnel" SET is_active = false WHERE id = $1`,
           [userId]
         );
-
         logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
       }
     }
@@ -1142,11 +1109,36 @@ const Mutation = {
         defaultBranch
       });
 
-      logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}`);
+      // ── Propagate changes to all staff with this role ──────────────
+      let affectedStaffCount = 0;
+
+      // If label changed, update MedicalPersonnel.role for all linked staff first
+      if (label !== undefined && label !== null && label !== existingTemplate.label) {
+        await db.query(
+          `UPDATE "MedicalPersonnel" SET role = $1 WHERE role = $2`,
+          [label, existingTemplate.label]
+        );
+        logger.info(`Staff roles renamed from "${existingTemplate.label}" to "${label}"`);
+      }
+
+      // If permissions changed, propagate to all staff with this role
+      if (permissionsList && permissionsList.length > 0) {
+        const roleLabel = label || existingTemplate.label;
+        const propagation = await propagateTemplatePermissions({
+          templateId,
+          roleLabel,
+          assignedBy: user.id,
+        });
+        affectedStaffCount = propagation.affectedCount;
+      }
+
+      logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}, affectedStaff=${affectedStaffCount}`);
 
       return {
         ok: true,
-        message: 'Permission template updated successfully.',
+        message: affectedStaffCount > 0
+          ? `Permission template updated successfully. Permissions propagated to ${affectedStaffCount} staff member(s).`
+          : 'Permission template updated successfully.',
         template
       };
     } catch (error) {

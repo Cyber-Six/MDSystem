@@ -15,6 +15,7 @@ const MODULE_ROUTE_MAP = {
   inventory: ['/inventory'],
   healthChat: ['/health-chat'],
   analytics: ['/analytics'],
+  roleManagement: ['/settings/roles'],
 };
 
 /**

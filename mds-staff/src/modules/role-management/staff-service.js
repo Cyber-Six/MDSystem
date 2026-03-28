@@ -94,15 +94,6 @@ const GQL_GET_STAFF_ACCOUNT = `
 
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
 
-const GQL_SET_PERMISSIONS_EXTENDED = `
-  mutation SetStaffPermissionsExtended($userId: ID!, $permissions: [ExtendedPermissionInput!]!) {
-    setStaffPermissionsExtended(userId: $userId, permissions: $permissions) {
-      ok
-      message
-    }
-  }
-`;
-
 const GQL_UPDATE_STAFF_ACCOUNT = `
   mutation UpdateStaffAccount($userId: ID!, $status: AccountStatus, $role: String, $templateId: ID) {
     updateStaffAccount(userId: $userId, status: $status, role: $role, templateId: $templateId) {
@@ -272,55 +263,18 @@ export const fetchStaffAccount = async (userId) => {
 };
 
 /**
- * Save staff granular permissions, role, and/or status.
+ * Save staff role and/or status changes.
+ * Permissions are always derived from role templates — no per-staff overrides.
  * @param {string} userId
- * @param {Object} [granularPerms] - { key: boolean }
  * @param {string} [status] - 'Active' or 'Suspended'
  * @param {string} [role] - New role name (must match a template label)
  * @param {string} [templateId] - Template ID to apply
  */
-export const updateStaffAccount = async (userId, granularPerms, status, role, templateId) => {
-  // Step 1: If role changed, update role via updateStaffAccount mutation (handles permissions via template)
-  if (role) {
-    const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, { userId, status, role, templateId });
-    const result = data.updateStaffAccount;
-    if (result.staff) result.staff = enrichStaff(result.staff);
-
-    // Step 2: If custom permissions differ from template, apply overrides
-    if (granularPerms) {
-      const permsList = Object.entries(granularPerms).map(([key, enabled]) => ({
-        key,
-        enabled: Boolean(enabled),
-      }));
-      await sendGraphQL(GQL_SET_PERMISSIONS_EXTENDED, { userId, permissions: permsList });
-      // Fetch fresh data after permission override
-      const freshStaff = await fetchStaffAccount(userId);
-      return { ok: true, message: 'Role and permissions updated.', staff: freshStaff };
-    }
-
-    return result;
-  }
-
-  // Step 3: Save granular permissions via setStaffPermissionsExtended (no role change)
-  if (granularPerms) {
-    const permsList = Object.entries(granularPerms).map(([key, enabled]) => ({
-      key,
-      enabled: Boolean(enabled),
-    }));
-    await sendGraphQL(GQL_SET_PERMISSIONS_EXTENDED, { userId, permissions: permsList });
-  }
-
-  // Step 4: If status provided, update via updateStaffAccount (handles activation/suspension)
-  if (status) {
-    const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, { userId, status });
-    const result = data.updateStaffAccount;
-    if (result.staff) result.staff = enrichStaff(result.staff);
-    return result;
-  }
-
-  // Step 5: If only permissions changed, fetch fresh data
-  const freshStaff = await fetchStaffAccount(userId);
-  return { ok: true, message: 'Permissions updated.', staff: freshStaff };
+export const updateStaffAccount = async (userId, status, role, templateId) => {
+  const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, { userId, status, role, templateId });
+  const result = data.updateStaffAccount;
+  if (result.staff) result.staff = enrichStaff(result.staff);
+  return result;
 };
 
 // ─── TEMPLATE OPERATIONS ──────────────────────────────────────────────────────
@@ -361,12 +315,16 @@ export const updateTemplate = async (templateId, label, granularPerms) => {
     input.defaultBranch = 'Both';
   }
   const data = await sendGraphQL(GQL_UPDATE_TEMPLATE, { templateId, input });
-  const t = data.updatePermissionTemplate.template;
-  return t ? {
-    id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
-    permissions: templatePermsToGranular(t.permissions),
-    permissionCount: t.permissionCount,
-  } : null;
+  const result = data.updatePermissionTemplate;
+  const t = result.template;
+  return {
+    message: result.message,
+    template: t ? {
+      id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
+      permissions: templatePermsToGranular(t.permissions),
+      permissionCount: t.permissionCount,
+    } : null,
+  };
 };
 
 export const deleteTemplate = async (templateId) => {
