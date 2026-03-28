@@ -1009,6 +1009,19 @@ async function isLoginLocked(email, portal) {
   return ttl > 0 ? ttl : 0; // return remaining lockout time in seconds
 }
 
+async function triggerExpiredMedical(supply, batchId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `medical:exp:${supply}:${batchId}`;
+
+  // Try to set the key only if it doesn't exist, with 60s expiration
+  const result = await client.set(key, "1", { NX: true, EX: 60 });
+
+  // Redis returns "OK" if the key was set, null if it already existed
+  return result === "OK"; // true if set, false if existed
+}
+
+
 // ------------------------------------------------
 
 /**

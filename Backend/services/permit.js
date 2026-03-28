@@ -34,6 +34,15 @@ const permissions = {
   inventory_allow_manage_requests: "ALLOW_TO_MANAGE_MEDICINE_REQUESTS",
   inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",
 
+  health_chat_allow_access: "ALLOW_TO_ACCESS_HEALTH_CHAT",
+  health_chat_allow_manage: "ALLOW_TO_MANAGE_HEALTH_CHAT",
+
+  analytics_allow_view: "ALLOW_TO_VIEW_ANALYTICS",
+  analytics_allow_export: "ALLOW_TO_EXPORT_ANALYTICS",
+
+  role_management_allow_access: "ALLOW_TO_ACCESS_ROLE_MANAGEMENT",
+  role_management_allow_edit: "ALLOW_TO_EDIT_ROLE_MANAGEMENT",
+
 };
 
 async function getMedicalpermits(personnelId) {
@@ -79,7 +88,7 @@ async function setMedicalPermit({ personnelId, assignedBy, roledata = [] }) {
 
   const result = await db.query(
     `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-     SELECT $1, r.id, v.branch, $2
+     SELECT $1, r.id, v.branch::"UserDesignation", $2
      FROM (VALUES ${values.join(",")}) AS v(label, branch)
      JOIN "rolesTable" r ON r.label = v.label
      ON CONFLICT ("personnelId", "rolesId") DO UPDATE
@@ -213,7 +222,7 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
 
     await db.query(
       `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-       SELECT $1, r.id, v.branch, $2
+       SELECT $1, r.id, v.branch::"UserDesignation", $2
        FROM (VALUES ${values.join(",")}) AS v(label, branch)
        JOIN "rolesTable" r ON r.label = v.label
        ON CONFLICT ("personnelId", "rolesId") DO UPDATE
@@ -282,9 +291,9 @@ async function isMedicalPermitted(userId, label, patientId) {
       [userId, label, patientId]
     );
   } else {
-    // Case: patientId null → skip patient join, only check role/branch
+    // Case: patientId null → skip patient join, only check if role exists
     result = await db.query(
-      `SELECT uc.identity
+      `SELECT 1
        FROM "rolesMap" rm
        JOIN "rolesTable" rt ON rm."rolesId" = rt.id
        WHERE rm."personnelId" = $1
@@ -331,7 +340,7 @@ async function isMedicalPermitted(userId, label, patientId) {
  * @returns {Promise<Object>} Created template with id
  */
 async function createPermissionTemplate({ label, permissionsList, createdBy, defaultBranch = 'Both' }) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
@@ -377,7 +386,7 @@ async function createPermissionTemplate({ label, permissionsList, createdBy, def
 
       await client.query(
         `INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
-         SELECT $1, r.id, v.branch, NOW()
+         SELECT $1, r.id, v.branch::"UserDesignation", NOW()
          FROM (VALUES ${values.join(",")}) AS v(label, branch)
          JOIN "rolesTable" r ON r.label = v.label;`,
         params
@@ -527,7 +536,7 @@ async function listPermissionTemplates() {
  * @returns {Promise<Object>} Updated template
  */
 async function updatePermissionTemplate({ templateId, label, permissionsList, defaultBranch = 'Both' }) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
@@ -581,7 +590,7 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
 
         await client.query(
           `INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
-           SELECT $1, r.id, v.branch, NOW()
+           SELECT $1, r.id, v.branch::"UserDesignation", NOW()
            FROM (VALUES ${values.join(",")}) AS v(label, branch)
            JOIN "rolesTable" r ON r.label = v.label;`,
           params
@@ -611,7 +620,7 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
  * @returns {Promise<boolean>} True if deleted
  */
 async function deletePermissionTemplate(templateId) {
-  const client = await db.pool.connect();
+  const client = await db.connect();
 
   try {
     await client.query('BEGIN');
@@ -690,6 +699,69 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
   };
 }
 
+/**
+ * Propagate template permission changes to all staff assigned to this role.
+ * For each linked staff: clears existing permissions, re-applies from the
+ * updated template, and ensures is_staff is always set with the correct branch.
+ *
+ * @param {Object} params
+ * @param {number} params.templateId - The template that was updated
+ * @param {string} params.roleLabel  - The role label to match staff against
+ * @param {number} params.assignedBy - The admin user ID performing the update
+ * @returns {Promise<{ affectedCount: number }>}
+ */
+async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy }) {
+  // Get the updated template for its current permissions
+  const template = await getPermissionTemplate(templateId);
+  if (!template) {
+    throw new Error(`Template with id ${templateId} not found`);
+  }
+
+  // Find all staff with this role
+  const staffResult = await db.query(
+    `SELECT mp.id, mp.designation
+     FROM "MedicalPersonnel" mp
+     WHERE mp.role = $1`,
+    [roleLabel]
+  );
+
+  if (staffResult.rows.length === 0) {
+    return { affectedCount: 0 };
+  }
+
+  // Pre-compute enabled permissions from template (exclude is_staff — added per-staff with correct branch)
+  const enabledPermissions = template.permissions
+    .filter(p => p.enabled && p.key !== 'is_staff')
+    .map(p => ({ key: p.key, enabled: true, branch: p.branch }));
+
+  let affectedCount = 0;
+  for (const staff of staffResult.rows) {
+    const branch = staff.designation || 'Both';
+
+    // Clear existing permissions (clean slate)
+    await clearMedicalPermits(String(staff.id));
+
+    // Build full permissions: template perms + is_staff with staff-specific branch
+    const staffPermissions = [
+      ...enabledPermissions,
+      { key: 'is_staff', enabled: true, branch }
+    ];
+
+    // Apply all permissions in a single upsert
+    await setStaffPermissionsExtended({
+      personnelId: String(staff.id),
+      permissionsList: staffPermissions,
+      assignedBy: String(assignedBy),
+      defaultBranch: 'Both'
+    });
+
+    affectedCount++;
+  }
+
+  logger.info(`Template permissions propagated: templateId=${templateId}, role="${roleLabel}", affectedStaff=${affectedCount}`);
+  return { affectedCount };
+}
+
 // ─── MODULE-LEVEL PERMISSION MAP ─────────────────────────────────────────────
 // Maps frontend module IDs to their underlying backend permission keys.
 // When a module is ON, ALL listed keys are granted.
@@ -736,10 +808,16 @@ const MODULE_PERMISSION_MAP = {
     'inventory_allow_prescribe',
   ],
   healthChat: [
-    // Reserved for future health-chat permission keys
+    'health_chat_allow_access',
+    'health_chat_allow_manage',
   ],
   analytics: [
-    // Reserved for future analytics permission keys
+    'analytics_allow_view',
+    'analytics_allow_export',
+  ],
+  roleManagement: [
+    'role_management_allow_access',
+    'role_management_allow_edit',
   ],
 };
 
@@ -752,6 +830,7 @@ const MODULE_LABELS = {
   inventory: 'Inventory',
   healthChat: 'Health Chat',
   analytics: 'Analytics',
+  roleManagement: 'Role Management',
 };
 
 /**
@@ -876,6 +955,7 @@ module.exports = {
   updatePermissionTemplate,
   deletePermissionTemplate,
   applyTemplateToStaff,
+  propagateTemplatePermissions,
   // Module-level permission functions
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,

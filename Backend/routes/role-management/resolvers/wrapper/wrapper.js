@@ -10,11 +10,13 @@ const {
   updatePermissionTemplate,
   deletePermissionTemplate,
   applyTemplateToStaff,
+  propagateTemplatePermissions,
   isMedicalPermitted,
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,
   setStaffModulePermissions,
   getStaffModulePermissions,
+  clearMedicalPermits,
 } = require('../../../../services/permit.js');
 const {
   listUserSessions,
@@ -171,6 +173,7 @@ const Query = {
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
          mp.is_active,
+         mp.role AS personnel_role,
          COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map,
          lla.last_login
        FROM "UserCredentials" uc
@@ -185,11 +188,11 @@ const Query = {
          GROUP BY user_id
        ) lla ON lla.user_id = uc.id
        WHERE
-          ($1 IS NULL OR uc.credentials_status = $1)
-          AND ($2 IS NULL OR mp.designation = $2)
+          ($1::"CredentialStatus" IS NULL OR uc.credentials_status = $1::"CredentialStatus")
+          AND ($2::"UserDesignation" IS NULL OR mp.designation = $2::"UserDesignation")
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
                 up.first_name, up.middle_name, up.last_name, mp.designation,
-                mp.is_active, lla.last_login
+                mp.is_active, mp.role, lla.last_login
        ORDER BY up.last_name NULLS LAST, up.first_name NULLS LAST`,
       [status || null, location || null]
     );
@@ -218,6 +221,7 @@ const Query = {
         id: String(row.id),
         email: row.email,
         name: nameParts.join(' ') || row.email,
+        role: row.personnel_role || null,
         branch: row.branch || 'Both',
         identity: row.identity,
         status: staffStatus,
@@ -246,6 +250,7 @@ const Query = {
          up.first_name, up.middle_name, up.last_name,
          mp.designation AS branch,
          mp.is_active,
+         mp.role AS personnel_role,
          COALESCE(json_object_agg(rt.label, rm.branch) FILTER (WHERE rt.label IS NOT NULL), '{}'::json) AS label_branch_map,
          lla.last_login
        FROM "UserCredentials" uc
@@ -262,7 +267,7 @@ const Query = {
        WHERE uc.id = $1
        GROUP BY uc.id, uc.email, uc.identity, uc.credentials_status,
                 up.first_name, up.middle_name, up.last_name, mp.designation,
-                mp.is_active, lla.last_login`,
+                mp.is_active, mp.role, lla.last_login`,
       [userId]
     );
 
@@ -294,6 +299,7 @@ const Query = {
       id: String(row.id),
       email: row.email,
       name: nameParts.join(' ') || row.email,
+      role: row.personnel_role || null,
       branch: row.branch || 'Both',
       identity: row.identity,
       status: staffStatus,
@@ -312,6 +318,55 @@ const Query = {
     };
   },
 
+  _searchUsers: async (_, { query, mdsOnly }, { user, res }) => {
+    if (!query || query.trim().length < 2) {
+      throwGraphQLError(res).message('Search query must be at least 2 characters.').status(400).throw();
+    }
+
+    const searchTerm = `%${query.trim()}%`;
+
+    // Strictly search Employee identity only (Students excluded, Medical are already staff)
+    const result = await db.query(
+      `SELECT
+         uc.id, uc.email, uc.identity, uc.credentials_status,
+         up.first_name, up.middle_name, up.last_name,
+         up.identifier,
+         CASE WHEN mp.id IS NOT NULL THEN true ELSE false END AS is_medical_personnel
+       FROM "UserCredentials" uc
+       JOIN "UsersPersonal" up ON up.id = uc.id
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       WHERE
+         uc.identity = 'Employee'
+         AND ($3::boolean IS NOT TRUE OR uc.email LIKE '%.mds@tip.edu.ph')
+         AND (
+           uc.email ILIKE $1
+           OR up.first_name ILIKE $1
+           OR up.last_name ILIKE $1
+           OR CONCAT(up.first_name, ' ', up.last_name) ILIKE $1
+           OR CONCAT(up.first_name, ' ', up.middle_name, ' ', up.last_name) ILIKE $1
+           OR CAST(up.identifier AS TEXT) ILIKE $1
+           OR CAST(uc.id AS TEXT) = $2
+         )
+       ORDER BY up.last_name, up.first_name
+       LIMIT 20`,
+      [searchTerm, query.trim(), mdsOnly || false]
+    );
+
+    const users = result.rows.map(row => {
+      const nameParts = [row.first_name, row.middle_name, row.last_name].filter(Boolean);
+      return {
+        id: String(row.id),
+        email: row.email,
+        name: nameParts.join(' ') || row.email,
+        identity: row.identity,
+        credentialsStatus: row.credentials_status,
+        isMedicalPersonnel: row.is_medical_personnel,
+      };
+    });
+
+    return { users, count: users.length };
+  },
+
   _listMedicalPersonnel: async (_, { role, designation, isActive }, { user, res }) => {
     const result = await db.query(
       `SELECT
@@ -322,9 +377,9 @@ const Query = {
        JOIN "UserCredentials" uc ON uc.id = mp.id
        JOIN "UsersPersonal" up ON up.id = mp.id
        WHERE
-         ($1 IS NULL OR mp.role = $1)
-         AND ($2 IS NULL OR mp.designation = $2)
-         AND ($3 IS NULL OR mp.is_active = $3::boolean)
+         ($1::text IS NULL OR mp.role = $1)
+         AND ($2::"UserDesignation" IS NULL OR mp.designation = $2::"UserDesignation")
+         AND ($3::boolean IS NULL OR mp.is_active = $3::boolean)
        ORDER BY mp.id DESC`,
       [role || null, designation || null, isActive !== undefined ? isActive : null]
     );
@@ -503,13 +558,18 @@ const Mutation = {
     // Role is now a free-form string - no validation needed
     // It can match a template label or be any custom role name
 
-    // If templateId provided, verify template exists
-    if (templateId) {
-      const template = await getPermissionTemplate(templateId);
-      if (!template) {
-        throwGraphQLError(res).message('Permission template not found.').status(404).throw();
-      }
+    // Validate that role matches an existing template label
+    const templatesResult = await listPermissionTemplates();
+    const matchingTemplate = templatesResult.templates.find(t => t.label === role);
+    if (!matchingTemplate && !templateId) {
+      throwGraphQLError(res)
+        .message(`Role "${role}" does not match any existing Role Template. Only roles from Role Templates can be assigned.`)
+        .status(400)
+        .throw();
     }
+
+    // If no templateId provided, auto-select the matching template
+    const effectiveTemplateId = templateId || matchingTemplate?.id;
 
     // Verify user exists and has Employee identity
     const userResult = await db.query(
@@ -525,9 +585,9 @@ const Mutation = {
     }
 
     const targetUser = userResult.rows[0];
-    if (targetUser.identity !== 'Employee' && process.env.ALLOW_MEDICAL_CREATION_FOR_NON_EMPLOYEES !== 'true') {
+    if (targetUser.identity !== 'Employee') {
       throwGraphQLError(res)
-        .message('User must have Employee identity to be assigned a MedicalPersonnel role.')
+        .message('Only Employee accounts can be elevated to Staff. Students and other identities are not eligible.')
         .status(409)
         .throw();
     }
@@ -546,15 +606,23 @@ const Mutation = {
 
     const personnel = insertResult.rows[0];
 
+    // Grant is_staff permission
+    await setStaffPermissionsExtended({
+      personnelId: String(userId),
+      permissionsList: [{ key: 'is_staff', enabled: true }],
+      assignedBy: String(user.id),
+      defaultBranch: designation,
+    });
+
     // If template provided, apply permissions from template
-    if (templateId) {
+    if (effectiveTemplateId) {
       try {
         await applyTemplateToStaff({
           personnelId: userId,
-          templateId,
+          templateId: effectiveTemplateId,
           assignedBy: user.id
         });
-        logger.info(`Template ${templateId} applied to new medical personnel: userId=${userId}`);
+        logger.info(`Template ${effectiveTemplateId} applied to new medical personnel: userId=${userId}`);
       } catch (error) {
         logger.error(`Failed to apply template during creation: ${error.message}`);
         // Continue - personnel created but template not applied
@@ -690,17 +758,29 @@ const Mutation = {
       throwGraphQLError(res).message('MedicalPersonnel record not found.').status(404).throw();
     }
 
+    // Delete all permissions (rolesMap entries) for this staff
+    await clearMedicalPermits(String(userId));
+
     // Delete MedicalPersonnel record
     await db.query(
       `DELETE FROM "MedicalPersonnel" WHERE id = $1`,
       [userId]
     );
 
-    logger.info(`MedicalPersonnel record deleted: userId=${userId}, by adminId=${user.id}`);
+    // Revert identity to Employee
+    if (revertIdentity) {
+      await db.query(
+        `UPDATE "UserCredentials" SET identity = 'Employee' WHERE id = $1`,
+        [userId]
+      );
+    }
+
+    logger.info(`MedicalPersonnel record deleted: userId=${userId}, identityReverted=${revertIdentity}, by adminId=${user.id}`);
 
     return {
       ok: true,
-      message: 'MedicalPersonnel record deleted successfully.'
+      message: 'MedicalPersonnel record deleted successfully.',
+      identityReverted: revertIdentity
     };
   },
 
@@ -810,17 +890,17 @@ const Mutation = {
    * - status: optional Active/Suspended toggle
    * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
    */
-  _updateStaffAccount: async (_, { userId, modules, status }, { user, res }) => {
-    if (!modules && !status) {
+  _updateStaffAccount: async (_, { userId, status, role, templateId }, { user, res }) => {
+    if (!status && !role) {
       throwGraphQLError(res)
-        .message('At least one of modules or status must be provided.')
+        .message('At least one of status or role must be provided.')
         .status(400)
         .throw();
     }
 
     // Verify target user exists and is medical staff
     const userResult = await db.query(
-      `SELECT uc.id, uc.identity, mp.designation
+      `SELECT uc.id, mp.designation, mp.is_active
        FROM "UserCredentials" uc
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        WHERE uc.id = $1`,
@@ -834,30 +914,55 @@ const Mutation = {
     const targetUser = userResult.rows[0];
     const branch = targetUser.designation || 'Both';
 
-    // Handle module permissions update
-    if (modules && modules.length > 0) {
-      // Validate module IDs
-      for (const mod of modules) {
-        if (!MODULE_PERMISSION_MAP.hasOwnProperty(mod.moduleId)) {
-          throwGraphQLError(res)
-            .message(`Invalid module ID: "${mod.moduleId}".`)
-            .status(400)
-            .throw();
-        }
+    // Handle role change
+    if (role) {
+      // Admin accounts cannot have their role changed (only via admin transfer)
+      const adminCheck = await isMedicalPermitted(userId, permissions.is_admin, null);
+      if (adminCheck) {
+        throwGraphQLError(res)
+          .message('Admin role cannot be changed directly. Use Admin Transfer instead.')
+          .status(403)
+          .throw();
       }
 
-      // Warn on admin privilege grant
-      const rmModule = modules.find(m => m.moduleId === 'roleManagement');
-      if (rmModule && rmModule.enabled) {
-        logger.warn(`⚠️ Admin privilege being granted to userId=${userId} by adminId=${user.id}`);
+      // Validate that the role matches an existing template label
+      const templatesResult = await listPermissionTemplates();
+      const matchingTemplate = templatesResult.templates.find(t => t.label === role);
+      if (!matchingTemplate && !templateId) {
+        throwGraphQLError(res)
+          .message(`Role "${role}" does not match any existing Role Template. Only roles from Role Templates can be assigned.`)
+          .status(400)
+          .throw();
       }
 
-      await setStaffModulePermissions({
+      // Update MedicalPersonnel.role
+      await db.query(
+        `UPDATE "MedicalPersonnel" SET role = $1 WHERE id = $2`,
+        [role, userId]
+      );
+
+      // Clear existing permissions (clean slate for new role)
+      await clearMedicalPermits(String(userId));
+
+      // Apply template permissions
+      const effectiveTemplateId = templateId || matchingTemplate?.id;
+      if (effectiveTemplateId) {
+        await applyTemplateToStaff({
+          personnelId: userId,
+          templateId: effectiveTemplateId,
+          assignedBy: user.id,
+        });
+      }
+
+      // Always ensure is_staff permission is set
+      await setStaffPermissionsExtended({
         personnelId: String(userId),
-        modules,
+        permissionsList: [{ key: 'is_staff', enabled: true }],
         assignedBy: String(user.id),
-        branch,
+        defaultBranch: branch,
       });
+
+      logger.info(`Staff role changed to "${role}" for userId=${userId} by adminId=${user.id}`);
     }
 
     // Handle status change (Active ↔ Suspended)
@@ -870,28 +975,17 @@ const Mutation = {
           .throw();
       }
 
-      if (status === 'Active' && targetUser.identity !== 'Medical') {
-        // Activate: set identity to Medical + ensure is_staff
+      if (status === 'Active' && !targetUser.is_active) {
         await db.query(
-          `UPDATE "UserCredentials" SET identity = 'Medical' WHERE id = $1`,
+          `UPDATE "MedicalPersonnel" SET is_active = true WHERE id = $1`,
           [userId]
         );
-
-        await setStaffPermissionsExtended({
-          personnelId: String(userId),
-          permissionsList: [{ key: 'is_staff', enabled: true }],
-          assignedBy: String(user.id),
-          defaultBranch: branch,
-        });
-
         logger.info(`Staff account activated: userId=${userId} by adminId=${user.id}`);
-      } else if (status === 'Suspended' && targetUser.identity === 'Medical') {
-        // Suspend: revert identity to Employee (keeps permissions intact)
+      } else if (status === 'Suspended' && targetUser.is_active) {
         await db.query(
-          `UPDATE "UserCredentials" SET identity = 'Employee' WHERE id = $1`,
+          `UPDATE "MedicalPersonnel" SET is_active = false WHERE id = $1`,
           [userId]
         );
-
         logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
       }
     }
@@ -1015,11 +1109,36 @@ const Mutation = {
         defaultBranch
       });
 
-      logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}`);
+      // ── Propagate changes to all staff with this role ──────────────
+      let affectedStaffCount = 0;
+
+      // If label changed, update MedicalPersonnel.role for all linked staff first
+      if (label !== undefined && label !== null && label !== existingTemplate.label) {
+        await db.query(
+          `UPDATE "MedicalPersonnel" SET role = $1 WHERE role = $2`,
+          [label, existingTemplate.label]
+        );
+        logger.info(`Staff roles renamed from "${existingTemplate.label}" to "${label}"`);
+      }
+
+      // If permissions changed, propagate to all staff with this role
+      if (permissionsList && permissionsList.length > 0) {
+        const roleLabel = label || existingTemplate.label;
+        const propagation = await propagateTemplatePermissions({
+          templateId,
+          roleLabel,
+          assignedBy: user.id,
+        });
+        affectedStaffCount = propagation.affectedCount;
+      }
+
+      logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}, affectedStaff=${affectedStaffCount}`);
 
       return {
         ok: true,
-        message: 'Permission template updated successfully.',
+        message: affectedStaffCount > 0
+          ? `Permission template updated successfully. Permissions propagated to ${affectedStaffCount} staff member(s).`
+          : 'Permission template updated successfully.',
         template
       };
     } catch (error) {
@@ -1477,7 +1596,7 @@ const Mutation = {
   _confirmAdminTransfer: async (_, { verificationToken }, { user, res }) => {
     const currentUserId = user.id;
     const pool = require('../../../../config/db.js');
-    const client = await pool.pool.connect();
+    const client = await pool.connect();
 
     try {
       // Retrieve transfer session from Redis
@@ -1634,7 +1753,7 @@ const Mutation = {
       // Grant admin to new user - raw SQL
       await client.query(
         `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
-         SELECT $1, r.id, 'Both', $2
+         SELECT $1, r.id, 'Both'::"UserDesignation", $2
          FROM "rolesTable" r
          WHERE r.label = $3
          ON CONFLICT ("personnelId", "rolesId") DO UPDATE

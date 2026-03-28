@@ -10,7 +10,8 @@ async function requireAdmin(user, res) {
   }
 
   const isAdmin = await permit.isMedicalPermitted(user.id, permit.permissions.is_admin, null);
-  if (!isAdmin) {
+  const hasRoleMgmt = await permit.isMedicalPermitted(user.id, permit.permissions.role_management_allow_access, null);
+  if (!isAdmin && !hasRoleMgmt) {
     throwGraphQLError(res).message('Admin access required.').status(403).throw();
   }
 }
@@ -26,6 +27,11 @@ const Query = {
   getStaffAccount: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._getStaffAccount(_, args, context);
+  },
+
+  searchUsers: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._searchUsers(_, args, context);
   },
 
   listMedicalPersonnel: async (_, args, context) => {

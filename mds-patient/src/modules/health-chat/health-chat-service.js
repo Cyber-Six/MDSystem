@@ -297,3 +297,28 @@ export const getMostRecentTicket = async () => {
     return null;
   }
 };
+
+// ==================== PRESCRIPTIONS ====================
+
+/**
+ * Get the patient's own prescription history
+ * Endpoint: /medical-inventory/prescription/patient
+ */
+export const getMyPrescriptions = async (offset = 0, limit = 50) => {
+  const { sendGraphQLRequest } = await import('../../utils/graphql-client');
+  const query = `
+    query GetMyPrescriptions($offset: Int, $limit: Int) {
+      getMyPrescriptions(offset: $offset, limit: $limit) {
+        id
+        action
+        quantity
+        issuedAt
+        notes
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(query, { offset, limit }, {
+    endpoint: '/medical-inventory/prescription/patient'
+  });
+  return data.getMyPrescriptions;
+};

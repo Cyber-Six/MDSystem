@@ -219,13 +219,13 @@ const Mutation = {
       dentalRecordId = dentalRecordResult.rows[0].dentalRecordId;
 
       // Tooth Placements
-      if (args.input.toothPlacements?.length) {
+      if (args.input.ToothPlacements?.length) {
         const values = [];
         const params = [];
-        args.input.toothPlacements.forEach((tooth, i) => {
+        args.input.ToothPlacements.forEach((tooth, i) => {
           const baseIndex = i * 3;
           values.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`);
-          params.push(dentalRecordId, tooth.tooth_index, tooth.legend);
+          params.push(dentalRecordId, tooth.toothIndex, tooth.legend);
         });
 
         const query = `

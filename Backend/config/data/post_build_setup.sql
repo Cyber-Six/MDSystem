@@ -279,5 +279,16 @@ VALUES
 
 ('ALLOW_TO_VIEW_INVENTORY', 'Permission to view inventory'),
 ('ALLOW_TO_EDIT_INVENTORY', 'Permission to edit inventory'),
+('ALLOW_TO_DISPENSE_MEDICINE', 'Permission to dispense medicine'),
 ('ALLOW_TO_MANAGE_MEDICINE_REQUESTS', 'Permission to manage medicine requests'),
-('ALLOW_TO_PRESCRIBE', 'Permission to prescribe medicines');
+('ALLOW_TO_PRESCRIBE', 'Permission to prescribe medicines'),
+('ALLOW_TO_APPROVE_MEDICINE_REQUEST', 'Permission to approve medicine requests'),
+
+('ALLOW_TO_ACCESS_HEALTH_CHAT', 'Permission to access health chat features'),
+('ALLOW_TO_MANAGE_HEALTH_CHAT', 'Permission to manage health chat sessions'),
+
+('ALLOW_TO_VIEW_ANALYTICS', 'Permission to view analytics and reports'),
+('ALLOW_TO_EXPORT_ANALYTICS', 'Permission to export analytics data'),
+
+('ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'Permission to access role management panel'),
+('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates');

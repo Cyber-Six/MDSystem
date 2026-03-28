@@ -21,7 +21,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
     { path: '/inventory', icon: 'inventory', label: 'Inventory', moduleId: 'inventory' },
     { path: '/health-chat', icon: 'healthchat', label: 'Health Chat', moduleId: 'healthChat' },
     { path: '/analytics', icon: 'analytics', label: 'Analytics', moduleId: 'analytics' },
-    { path: '/settings/roles', icon: 'roles', label: 'Role Management', adminOnly: true },
+    { path: '/settings/roles', icon: 'roles', label: 'Role Management', moduleId: 'roleManagement' },
   ];
 
   const navItems = useMemo(() => {

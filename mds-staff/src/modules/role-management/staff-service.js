@@ -7,10 +7,14 @@ import { axiosRequest } from '../../packages-core-adapter';
 const ENDPOINT = '/rolemanagement/admin';
 
 const sendGraphQL = async (query, variables = {}) => {
-  const response = await axiosRequest.post(ENDPOINT, {
-    query,
-    variables,
-  });
+  let response;
+  try {
+    response = await axiosRequest.post(ENDPOINT, { query, variables });
+  } catch (err) {
+    // Extract GraphQL error message from non-2xx responses when available
+    const gqlMsg = err.response?.data?.errors?.[0]?.message;
+    throw new Error(gqlMsg || err.message || 'Network error');
+  }
 
   if (response.data.errors) {
     throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
@@ -25,6 +29,7 @@ const STAFF_FIELDS = `
   id
   email
   name
+  role
   branch
   identity
   status
@@ -47,6 +52,38 @@ const GQL_LIST_STAFF_ACCOUNTS = `
   }
 `;
 
+const GQL_SEARCH_USERS = `
+  query SearchUsers($query: String!, $mdsOnly: Boolean) {
+    searchUsers(query: $query, mdsOnly: $mdsOnly) {
+      users {
+        id
+        email
+        name
+        identity
+        credentialsStatus
+        isMedicalPersonnel
+      }
+      count
+    }
+  }
+`;
+
+const GQL_CREATE_MEDICAL_PERSONNEL = `
+  mutation CreateMedicalPersonnel($input: CreateMedicalPersonnelInput!) {
+    createMedicalPersonnel(input: $input) {
+      ok
+      message
+      personnel {
+        id
+        role
+        title
+        designation
+        isActive
+      }
+    }
+  }
+`;
+
 const GQL_GET_STAFF_ACCOUNT = `
   query GetStaffAccount($userId: ID!) {
     getStaffAccount(userId: $userId) {
@@ -57,18 +94,9 @@ const GQL_GET_STAFF_ACCOUNT = `
 
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
 
-const GQL_SET_PERMISSIONS_EXTENDED = `
-  mutation SetStaffPermissionsExtended($userId: ID!, $permissions: [ExtendedPermissionInput!]!) {
-    setStaffPermissionsExtended(userId: $userId, permissions: $permissions) {
-      ok
-      message
-    }
-  }
-`;
-
 const GQL_UPDATE_STAFF_ACCOUNT = `
-  mutation UpdateStaffAccount($userId: ID!, $status: AccountStatus) {
-    updateStaffAccount(userId: $userId, status: $status) {
+  mutation UpdateStaffAccount($userId: ID!, $status: AccountStatus, $role: String, $templateId: ID) {
+    updateStaffAccount(userId: $userId, status: $status, role: $role, templateId: $templateId) {
       ok
       message
       warnings
@@ -209,6 +237,23 @@ export const fetchStaffAccounts = async () => {
 };
 
 /**
+ * Search users by email, name, or ID (for adding new staff).
+ */
+export const searchUsers = async (query, mdsOnly = false) => {
+  const data = await sendGraphQL(GQL_SEARCH_USERS, { query, mdsOnly });
+  return data.searchUsers.users || [];
+};
+
+/**
+ * Create a new medical personnel record (add staff).
+ * @param {Object} input - { userId, title, role, designation, templateId? }
+ */
+export const createMedicalPersonnel = async (input) => {
+  const data = await sendGraphQL(GQL_CREATE_MEDICAL_PERSONNEL, { input });
+  return data.createMedicalPersonnel;
+};
+
+/**
  * Fetch a single staff account by ID.
  */
 export const fetchStaffAccount = async (userId) => {
@@ -218,32 +263,18 @@ export const fetchStaffAccount = async (userId) => {
 };
 
 /**
- * Save staff granular permissions and/or status.
+ * Save staff role and/or status changes.
+ * Permissions are always derived from role templates — no per-staff overrides.
  * @param {string} userId
- * @param {Object} [granularPerms] - { key: boolean }
  * @param {string} [status] - 'Active' or 'Suspended'
+ * @param {string} [role] - New role name (must match a template label)
+ * @param {string} [templateId] - Template ID to apply
  */
-export const updateStaffAccount = async (userId, granularPerms, status) => {
-  // Step 1: Save granular permissions via setStaffPermissionsExtended
-  if (granularPerms) {
-    const permsList = Object.entries(granularPerms).map(([key, enabled]) => ({
-      key,
-      enabled: Boolean(enabled),
-    }));
-    await sendGraphQL(GQL_SET_PERMISSIONS_EXTENDED, { userId, permissions: permsList });
-  }
-
-  // Step 2: If status provided, update via updateStaffAccount (handles activation/suspension)
-  if (status) {
-    const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, { userId, status });
-    const result = data.updateStaffAccount;
-    if (result.staff) result.staff = enrichStaff(result.staff);
-    return result;
-  }
-
-  // Step 3: If only permissions changed, fetch fresh data
-  const freshStaff = await fetchStaffAccount(userId);
-  return { ok: true, message: 'Permissions updated.', staff: freshStaff };
+export const updateStaffAccount = async (userId, status, role, templateId) => {
+  const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, { userId, status, role, templateId });
+  const result = data.updateStaffAccount;
+  if (result.staff) result.staff = enrichStaff(result.staff);
+  return result;
 };
 
 // ─── TEMPLATE OPERATIONS ──────────────────────────────────────────────────────
@@ -284,12 +315,16 @@ export const updateTemplate = async (templateId, label, granularPerms) => {
     input.defaultBranch = 'Both';
   }
   const data = await sendGraphQL(GQL_UPDATE_TEMPLATE, { templateId, input });
-  const t = data.updatePermissionTemplate.template;
-  return t ? {
-    id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
-    permissions: templatePermsToGranular(t.permissions),
-    permissionCount: t.permissionCount,
-  } : null;
+  const result = data.updatePermissionTemplate;
+  const t = result.template;
+  return {
+    message: result.message,
+    template: t ? {
+      id: t.id, label: t.label, createdBy: t.createdBy, createdAt: t.createdAt,
+      permissions: templatePermsToGranular(t.permissions),
+      permissionCount: t.permissionCount,
+    } : null,
+  };
 };
 
 export const deleteTemplate = async (templateId) => {

@@ -429,12 +429,27 @@ async function mapRevisionDataToFormData(backendData) {
 
   // Lifestyle
   if (backendData.lifestyle) {
-    formData.smoking = backendData.lifestyle.smoker 
-      ? (backendData.lifestyle.numberOfCigarettesPerDay ? 'Current' : 'Former')
-      : 'Never';
-    formData.alcohol = backendData.lifestyle.alcoholConsumer 
-      ? backendData.lifestyle.frequencyOfAlcoholConsumption || 'Occasional'
-      : 'Never';
+    // Determine smoking status
+    if (backendData.lifestyle.vapeUser) {
+      formData.smoking = 'Vape';
+      formData.vapeType = backendData.lifestyle.vapeType || null;
+      formData.vapeFrequency = backendData.lifestyle.vapeFrequency || null;
+      formData.yearsVaping = backendData.lifestyle.yearsVaping || null;
+    } else if (backendData.lifestyle.smoker) {
+      formData.smoking = 'Current';
+      formData.cigarettesPerDay = backendData.lifestyle.numberOfCigarettesPerDay || null;
+      formData.yearsSmoked = backendData.lifestyle.yearsSmoked || null;
+    } else {
+      formData.smoking = 'Never';
+    }
+    
+    // Determine alcohol status
+    if (backendData.lifestyle.alcoholConsumer) {
+      formData.alcohol = backendData.lifestyle.frequencyOfAlcoholConsumption || 'Occasionally';
+      formData.alcoholFrequency = backendData.lifestyle.frequencyOfAlcoholConsumption || null;
+    } else {
+      formData.alcohol = 'Never';
+    }
   }
 
   // Visual Acuity
@@ -870,14 +885,16 @@ export async function createLifestyle(formData) {
       createLifestyle(input: $input) {
         id
         smoker
+        vapeUser
         alcoholConsumer
         notes
       }
     }
   `;
 
-  const isSmoker = formData.smoking === 'Current' || formData.smoking === 'Former';
-  const isDrinker = formData.alcohol === 'Occasional' || formData.alcohol === 'Regularly';
+  const isSmoker = formData.smoking === 'Current';
+  const isVaper = formData.smoking === 'Vape';
+  const isDrinker = formData.alcohol === 'Occasionally' || formData.alcohol === 'Regularly';
 
   // Build lifestyle notes from form selections
   const lifestyleNotes = [
@@ -888,8 +905,12 @@ export async function createLifestyle(formData) {
 
   const input = {
     smoker: isSmoker,
-    numberOfCigarettesPerDay: null,
-    yearsSmoked: null,
+    vapeUser: isVaper,
+    vapeType: isVaper ? (formData.vapeType || null) : null,
+    vapeFrequency: isVaper ? (formData.vapeFrequency || null) : null,
+    yearsVaping: isVaper ? (formData.yearsVaping ? parseInt(formData.yearsVaping) : null) : null,
+    numberOfCigarettesPerDay: isSmoker ? (formData.cigarettesPerDay ? parseInt(formData.cigarettesPerDay) : null) : null,
+    yearsSmoked: isSmoker ? (formData.yearsSmoked ? parseInt(formData.yearsSmoked) : null) : null,
     alcoholConsumer: isDrinker,
     frequencyOfAlcoholConsumption: isDrinker
       ? formData.alcohol

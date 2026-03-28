@@ -270,6 +270,7 @@ input ToothPlacementInput{
 
 # Oral Finding
 type OralFindingCatalog{
+  id: ID! 
   name: String! # Calculus
   isActive: Boolean!
   description: String
@@ -850,7 +851,7 @@ type Query {
   getOralApplianceProfile: OralApplianceProfile
   getUserOralApplianceProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OralApplianceProfile!]
 
-  getEmergencyContact: EmergencyContact
+  getEmergencyContact(approved: Boolean): EmergencyContact
   getUserEmergencyContact(userId: ID!, from: Date, offset: Int, limit: Int): [EmergencyContact!]
 
   getAllergyProfile: AllergyProfile
