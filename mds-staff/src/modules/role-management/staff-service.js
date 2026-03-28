@@ -95,8 +95,8 @@ const GQL_GET_STAFF_ACCOUNT = `
 // ─── MUTATIONS ────────────────────────────────────────────────────────────────
 
 const GQL_UPDATE_STAFF_ACCOUNT = `
-  mutation UpdateStaffAccount($userId: ID!, $status: AccountStatus, $role: String, $templateId: ID) {
-    updateStaffAccount(userId: $userId, status: $status, role: $role, templateId: $templateId) {
+  mutation UpdateStaffAccount($userId: ID!, $status: AccountStatus, $role: String, $templateId: ID, $designation: Designation) {
+    updateStaffAccount(userId: $userId, status: $status, role: $role, templateId: $templateId, designation: $designation) {
       ok
       message
       warnings
@@ -263,15 +263,16 @@ export const fetchStaffAccount = async (userId) => {
 };
 
 /**
- * Save staff role and/or status changes.
+ * Save staff role, status, and/or branch designation changes.
  * Permissions are always derived from role templates — no per-staff overrides.
  * @param {string} userId
  * @param {string} [status] - 'Active' or 'Suspended'
  * @param {string} [role] - New role name (must match a template label)
  * @param {string} [templateId] - Template ID to apply
+ * @param {string} [designation] - Branch designation: 'Manila', 'QuezonCity', or 'Both'
  */
-export const updateStaffAccount = async (userId, status, role, templateId) => {
-  const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, { userId, status, role, templateId });
+export const updateStaffAccount = async (userId, status, role, templateId, designation) => {
+  const data = await sendGraphQL(GQL_UPDATE_STAFF_ACCOUNT, { userId, status, role, templateId, designation });
   const result = data.updateStaffAccount;
   if (result.staff) result.staff = enrichStaff(result.staff);
   return result;

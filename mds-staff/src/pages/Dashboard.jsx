@@ -43,7 +43,7 @@ const Dashboard = () => {
                 <Route path="/inventory" element={<PermissionRoute moduleId="inventory"><MedicalInventory /></PermissionRoute>} />
                 <Route path="/health-chat" element={<PermissionRoute moduleId="healthChat"><HealthChatView /></PermissionRoute>} />
                 <Route path="/announcements" element={<AnnouncementManagement />} />
-                <Route path="/settings/roles" element={<PermissionRoute moduleId="roleManagement"><RoleManagementPage /></PermissionRoute>} />
+                <Route path="/settings/roles" element={<PermissionRoute adminOnly><RoleManagementPage /></PermissionRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>

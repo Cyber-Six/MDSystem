@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchStaffAccounts as fetchStaffAccountsAPI, searchUsers, createMedicalPersonnel, fetchTemplates } from '../staff-service';
+import { fetchStaffAccounts as fetchStaffAccountsAPI, searchUsers, createMedicalPersonnel, fetchTemplates, updateStaffAccount } from '../staff-service';
 import StaffDetail from './staff-detail';
 
 /**
@@ -31,6 +31,53 @@ const StaffAccounts = () => {
   const [mdsOnly, setMdsOnly] = useState(false);
   const [nonMdsWarningUser, setNonMdsWarningUser] = useState(null);
   const searchTimeoutRef = useRef(null);
+
+  // Inline dropdown state for table cells
+  const [openDropdown, setOpenDropdown] = useState(null); // { staffId, field: 'role'|'branch'|'status' }
+  const [cellLoading, setCellLoading] = useState(null); // { staffId, field }
+  const dropdownRef = useRef(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openDropdown]);
+
+  const toggleDropdown = (staffId, field) => {
+    setOpenDropdown(prev =>
+      prev?.staffId === staffId && prev?.field === field ? null : { staffId, field }
+    );
+  };
+
+  const handleCellUpdate = useCallback(async (staffId, field, value, templateId) => {
+    setCellLoading({ staffId, field });
+    try {
+      const params = { status: undefined, role: undefined, templateId: undefined, designation: undefined };
+      if (field === 'role') {
+        params.role = value;
+        params.templateId = templateId;
+      } else if (field === 'status') {
+        params.status = value;
+      } else if (field === 'branch') {
+        params.designation = value;
+      }
+      const result = await updateStaffAccount(staffId, params.status, params.role, params.templateId, params.designation);
+      if (result.staff) {
+        setStaffList(prev => prev.map(s => s.id === staffId ? result.staff : s));
+      }
+      setOpenDropdown(null);
+    } catch (err) {
+      console.error(`Failed to update ${field}:`, err.message);
+    } finally {
+      setCellLoading(null);
+    }
+  }, []);
 
   // Load templates on mount for role display & filtering
   useEffect(() => {
@@ -247,6 +294,7 @@ const StaffAccounts = () => {
                 <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Name</th>
                 <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden md:table-cell">Email</th>
                 <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Role</th>
+                <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden md:table-cell">Branch</th>
                 <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden sm:table-cell">Status</th>
                 <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden lg:table-cell">Last Login</th>
               </tr>
@@ -254,6 +302,8 @@ const StaffAccounts = () => {
             <tbody>
               {filteredStaff.map((s) => {
                 const sc = statusConfig[s.status] || statusConfig.Pending;
+                const isStaffAdmin = s.permissions?.is_admin === true;
+                const isPending = s.status === 'Pending';
                 return (
                   <tr
                     key={s.id}
@@ -273,23 +323,135 @@ const StaffAccounts = () => {
                     <td className="py-3 px-3 hidden md:table-cell">
                       <span className="text-[11px] text-secondary-500 dark:text-neutral-400">{s.email}</span>
                     </td>
-                    <td className="py-3 px-3">
-                      {s.status === 'Pending' ? (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-secondary-400 dark:text-neutral-500">
-                          —
+
+                    {/* Role — inline dropdown */}
+                    <td className="py-3 px-3 relative">
+                      {isPending || isStaffAdmin ? (
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isPending ? 'bg-neutral-100 dark:bg-neutral-800 text-secondary-400 dark:text-neutral-500' : getRoleColor(s.role)}`}>
+                          {isPending ? '—' : (s.role || 'Unassigned')}
                         </span>
                       ) : (
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${getRoleColor(s.role)}`}>
-                          {s.role || 'Unassigned'}
-                        </span>
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'role'); }}
+                            disabled={!!cellLoading}
+                            className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full transition-colors ${getRoleColor(s.role)} hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-700`}
+                          >
+                            {cellLoading?.staffId === s.id && cellLoading?.field === 'role' ? (
+                              <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                {s.role || 'Unassigned'}
+                                <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </>
+                            )}
+                          </button>
+                          {openDropdown?.staffId === s.id && openDropdown?.field === 'role' && (
+                            <div ref={dropdownRef} className="absolute z-20 mt-1 left-3 w-40 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
+                              {templates.filter(t => t.label !== s.role).map(t => (
+                                <button
+                                  key={t.id}
+                                  onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'role', t.label, t.id); }}
+                                  className="w-full text-left px-3 py-1.5 text-[11px] text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                                >
+                                  {t.label}
+                                </button>
+                              ))}
+                              {templates.filter(t => t.label !== s.role).length === 0 && (
+                                <p className="px-3 py-1.5 text-[10px] text-secondary-400 dark:text-neutral-500">No other roles</p>
+                              )}
+                            </div>
+                          )}
+                        </>
                       )}
                     </td>
-                    <td className="py-3 px-3 hidden sm:table-cell">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${sc.text}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-                        {s.status}
-                      </span>
+
+                    {/* Branch — inline dropdown */}
+                    <td className="py-3 px-3 hidden md:table-cell relative">
+                      {isPending ? (
+                        <span className="text-[10px] text-secondary-500 dark:text-neutral-400">—</span>
+                      ) : isStaffAdmin ? (
+                        <span className="text-[10px] text-secondary-500 dark:text-neutral-400">
+                          {s.branch === 'QuezonCity' ? 'Quezon City' : (s.branch || 'Both')}
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'branch'); }}
+                            disabled={!!cellLoading}
+                            className="inline-flex items-center gap-1 text-[10px] text-secondary-600 dark:text-neutral-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                          >
+                            {cellLoading?.staffId === s.id && cellLoading?.field === 'branch' ? (
+                              <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                {s.branch === 'QuezonCity' ? 'Quezon City' : (s.branch || '—')}
+                                <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </>
+                            )}
+                          </button>
+                          {openDropdown?.staffId === s.id && openDropdown?.field === 'branch' && (
+                            <div ref={dropdownRef} className="absolute z-20 mt-1 left-3 w-36 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
+                              {['Manila', 'QuezonCity', 'Both'].filter(b => b !== s.branch).map(b => (
+                                <button
+                                  key={b}
+                                  onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'branch', b); }}
+                                  className="w-full text-left px-3 py-1.5 text-[11px] text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                                >
+                                  {b === 'QuezonCity' ? 'Quezon City' : b}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </td>
+
+                    {/* Status — inline dropdown */}
+                    <td className="py-3 px-3 hidden sm:table-cell relative">
+                      {isPending || isStaffAdmin ? (
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${sc.text}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+                          {s.status}
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'status'); }}
+                            disabled={!!cellLoading}
+                            className={`inline-flex items-center gap-1 text-[10px] font-medium ${sc.text} hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-700 rounded-full px-1.5 py-0.5 transition-colors`}
+                          >
+                            {cellLoading?.staffId === s.id && cellLoading?.field === 'status' ? (
+                              <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+                                {s.status}
+                                <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </>
+                            )}
+                          </button>
+                          {openDropdown?.staffId === s.id && openDropdown?.field === 'status' && (
+                            <div ref={dropdownRef} className="absolute z-20 mt-1 left-3 w-32 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
+                              {['Active', 'Suspended'].filter(st => st !== s.status).map(st => {
+                                const stc = statusConfig[st];
+                                return (
+                                  <button
+                                    key={st}
+                                    onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'status', st); }}
+                                    className="w-full text-left px-3 py-1.5 text-[11px] text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors flex items-center gap-1.5"
+                                  >
+                                    <span className={`w-1.5 h-1.5 rounded-full ${stc.dot}`} />
+                                    {st}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </td>
+
                     <td className="py-3 px-3 text-[10px] text-secondary-500 dark:text-neutral-400 hidden lg:table-cell whitespace-nowrap">
                       {s.lastLogin || 'Never'}
                     </td>

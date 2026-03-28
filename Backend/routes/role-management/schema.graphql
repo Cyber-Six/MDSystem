@@ -336,7 +336,7 @@ type Mutation {
   # Status: Active = set is_active true; Suspended = set is_active false.
   # Role: If provided, updates MedicalPersonnel.role and applies matching template permissions.
   # Admin accounts cannot have their role changed (use Admin Transfer instead).
-  updateStaffAccount(userId: ID!, status: AccountStatus, role: String, templateId: ID): StaffAccountMutationResult!
+  updateStaffAccount(userId: ID!, status: AccountStatus, role: String, templateId: ID, designation: Designation): StaffAccountMutationResult!
 
   # Session Management
   rotateStaffAnchor(userId: ID!): RotateAnchorResult!
