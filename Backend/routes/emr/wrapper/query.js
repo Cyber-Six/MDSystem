@@ -251,7 +251,7 @@ const Query = {
     logger.debug("User Dental Record with Tooth Placements:", result.rows);
     for (const row of result.rows) { // define the oral findings here
       const findingsQuery = `
-        SELECT oralFindingId, status, notes
+        SELECT "oralFindingId", status, notes
         FROM "oralFindingRecord"
         WHERE "dentalRecordId" = $1;
       `; // somewhere here
