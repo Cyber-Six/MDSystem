@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { fetchStaffAccounts as fetchStaffAccountsAPI, searchUsers, createMedicalPersonnel, fetchTemplates, updateStaffAccount } from '../staff-service';
 import StaffDetail from './staff-detail';
 
@@ -49,9 +50,11 @@ const StaffAccounts = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openDropdown]);
 
-  const toggleDropdown = (staffId, field) => {
+  const toggleDropdown = (staffId, field, buttonEl) => {
     setOpenDropdown(prev =>
-      prev?.staffId === staffId && prev?.field === field ? null : { staffId, field }
+      prev?.staffId === staffId && prev?.field === field
+        ? null
+        : { staffId, field, rect: buttonEl.getBoundingClientRect() }
     );
   };
 
@@ -325,7 +328,7 @@ const StaffAccounts = () => {
                     </td>
 
                     {/* Role — inline dropdown */}
-                    <td className="py-3 px-3 relative">
+                    <td className="py-3 px-3">
                       {isPending || isStaffAdmin ? (
                         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isPending ? 'bg-neutral-100 dark:bg-neutral-800 text-secondary-400 dark:text-neutral-500' : getRoleColor(s.role)}`}>
                           {isPending ? '—' : (s.role || 'Unassigned')}
@@ -333,7 +336,7 @@ const StaffAccounts = () => {
                       ) : (
                         <>
                           <button
-                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'role'); }}
+                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'role', e.currentTarget); }}
                             disabled={!!cellLoading}
                             className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full transition-colors ${getRoleColor(s.role)} hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-700`}
                           >
@@ -346,8 +349,8 @@ const StaffAccounts = () => {
                               </>
                             )}
                           </button>
-                          {openDropdown?.staffId === s.id && openDropdown?.field === 'role' && (
-                            <div ref={dropdownRef} className="absolute z-20 mt-1 left-3 w-40 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
+                          {openDropdown?.staffId === s.id && openDropdown?.field === 'role' && ReactDOM.createPortal(
+                            <div ref={dropdownRef} style={{ position: 'fixed', top: openDropdown.rect.bottom + 4, left: openDropdown.rect.left }} className="z-[9999] w-40 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
                               {templates.filter(t => t.label !== s.role).map(t => (
                                 <button
                                   key={t.id}
@@ -360,14 +363,15 @@ const StaffAccounts = () => {
                               {templates.filter(t => t.label !== s.role).length === 0 && (
                                 <p className="px-3 py-1.5 text-[10px] text-secondary-400 dark:text-neutral-500">No other roles</p>
                               )}
-                            </div>
+                            </div>,
+                            document.body
                           )}
                         </>
                       )}
                     </td>
 
                     {/* Branch — inline dropdown */}
-                    <td className="py-3 px-3 hidden md:table-cell relative">
+                    <td className="py-3 px-3 hidden md:table-cell">
                       {isPending ? (
                         <span className="text-[10px] text-secondary-500 dark:text-neutral-400">—</span>
                       ) : isStaffAdmin ? (
@@ -377,7 +381,7 @@ const StaffAccounts = () => {
                       ) : (
                         <>
                           <button
-                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'branch'); }}
+                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'branch', e.currentTarget); }}
                             disabled={!!cellLoading}
                             className="inline-flex items-center gap-1 text-[10px] text-secondary-600 dark:text-neutral-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                           >
@@ -390,8 +394,8 @@ const StaffAccounts = () => {
                               </>
                             )}
                           </button>
-                          {openDropdown?.staffId === s.id && openDropdown?.field === 'branch' && (
-                            <div ref={dropdownRef} className="absolute z-20 mt-1 left-3 w-36 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
+                          {openDropdown?.staffId === s.id && openDropdown?.field === 'branch' && ReactDOM.createPortal(
+                            <div ref={dropdownRef} style={{ position: 'fixed', top: openDropdown.rect.bottom + 4, left: openDropdown.rect.left }} className="z-[9999] w-36 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
                               {['Manila', 'QuezonCity', 'Both'].filter(b => b !== s.branch).map(b => (
                                 <button
                                   key={b}
@@ -401,14 +405,15 @@ const StaffAccounts = () => {
                                   {b === 'QuezonCity' ? 'Quezon City' : b}
                                 </button>
                               ))}
-                            </div>
+                            </div>,
+                            document.body
                           )}
                         </>
                       )}
                     </td>
 
                     {/* Status — inline dropdown */}
-                    <td className="py-3 px-3 hidden sm:table-cell relative">
+                    <td className="py-3 px-3 hidden sm:table-cell">
                       {isPending || isStaffAdmin ? (
                         <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${sc.text}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
@@ -417,7 +422,7 @@ const StaffAccounts = () => {
                       ) : (
                         <>
                           <button
-                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'status'); }}
+                            onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'status', e.currentTarget); }}
                             disabled={!!cellLoading}
                             className={`inline-flex items-center gap-1 text-[10px] font-medium ${sc.text} hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-700 rounded-full px-1.5 py-0.5 transition-colors`}
                           >
@@ -431,8 +436,8 @@ const StaffAccounts = () => {
                               </>
                             )}
                           </button>
-                          {openDropdown?.staffId === s.id && openDropdown?.field === 'status' && (
-                            <div ref={dropdownRef} className="absolute z-20 mt-1 left-3 w-32 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
+                          {openDropdown?.staffId === s.id && openDropdown?.field === 'status' && ReactDOM.createPortal(
+                            <div ref={dropdownRef} style={{ position: 'fixed', top: openDropdown.rect.bottom + 4, left: openDropdown.rect.left }} className="z-[9999] w-32 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg py-1">
                               {['Active', 'Suspended'].filter(st => st !== s.status).map(st => {
                                 const stc = statusConfig[st];
                                 return (
@@ -446,7 +451,8 @@ const StaffAccounts = () => {
                                   </button>
                                 );
                               })}
-                            </div>
+                            </div>,
+                            document.body
                           )}
                         </>
                       )}
