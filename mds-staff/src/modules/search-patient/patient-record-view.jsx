@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../../packages-core-adapter';
 import { GQL_FULL_RECORD, GQL_PERSONAL_PROFILE, MOCK_PATIENT_RECORDS, STATUS_BANNER } from './patient-record-data';
 import * as consultationService from './consultation-service';
+import { ENUM_TO_CODE } from './components/tooth-chart-constants';
 
 const GQL_BASIC_RECORD_FALLBACK = `
   query GetPatientBasicRecordFallback($userId: ID!) {
@@ -250,7 +251,7 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
       const procedureRecords = procedureData?.procedures || [];
       const allAppliances = applianceData?.appliances || [];
       const toothStates = {};
-      (dentalRecord?.ToothPlacements || []).forEach((tp) => { toothStates[tp.toothIndex] = tp.legend; });
+      (dentalRecord?.ToothPlacements || []).forEach((tp) => { toothStates[tp.toothIndex] = ENUM_TO_CODE[tp.legend] ?? tp.legend; });
       return {
         seenByDentist: dentalHistory?.seenByDentist ? 'No' : dentalHistory?.seenByDentist === false ? 'Yes' : '',
         firstTimeDentist: dentalHistory?.seenByDentist === false ? 'Yes (first time)' : dentalHistory?.seenByDentist ? 'No' : '',
