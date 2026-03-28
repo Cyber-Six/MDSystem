@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import PatientSectionCard from './section-card';
 import ToothChart from './tooth-chart';
 import PendingDentalSubmissions from './pending-dental-submissions';
-import { getLegend, ORAL_FINDINGS } from './tooth-chart-constants';
 import { axiosRequest } from '../../../packages-core-adapter';
 
 /* ─── AuthenticatedImage ─────────────────────────────────────── */
@@ -68,7 +67,10 @@ function AuthenticatedImage({ path, alt, className }) {
 }
 
 /* ─── Oral Findings Table ──────────────────────────────────────── */
-function OralFindingsTable({ findings, onFindingChange, readOnly = false }) {
+function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = false }) {
+  if (!catalogs || catalogs.length === 0) {
+    return <p className="text-xs text-neutral-400 dark:text-neutral-500 italic py-2">No oral finding catalog available.</p>;
+  }
   return (
     <div className="overflow-x-auto -mx-3 -mb-3">
       <table className="w-full text-sm">
@@ -86,22 +88,22 @@ function OralFindingsTable({ findings, onFindingChange, readOnly = false }) {
           </tr>
         </thead>
         <tbody>
-          {ORAL_FINDINGS.map((finding, idx) => {
-            const value = findings[finding];
+          {catalogs.map((catalog, idx) => {
+            const value = findings[catalog.id];
             return (
               <tr
-                key={finding}
+                key={catalog.id}
                 className={`${idx % 2 === 0 ? 'bg-white dark:bg-neutral-800' : 'bg-neutral-50 dark:bg-neutral-800/50'} hover:bg-primary-50/50 dark:hover:bg-neutral-700/30 transition-colors`}
               >
                 <td className="px-3 py-2 text-xs text-secondary-700 dark:text-neutral-300 border-b border-neutral-100 dark:border-neutral-700">
-                  {finding}
+                  {catalog.name}
                 </td>
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
                   <input
                     type="radio"
-                    name={`finding-${finding}`}
-                    checked={value === 'yes'}
-                    onChange={() => !readOnly && onFindingChange(finding, 'yes')}
+                    name={`finding-${catalog.id}`}
+                    checked={value === true || value === 'yes'}
+                    onChange={() => !readOnly && onFindingChange(catalog.id, true)}
                     disabled={readOnly}
                     className="w-4 h-4 text-green-600 border-neutral-300 dark:border-neutral-500 focus:ring-green-500 dark:bg-neutral-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                   />
@@ -109,9 +111,9 @@ function OralFindingsTable({ findings, onFindingChange, readOnly = false }) {
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
                   <input
                     type="radio"
-                    name={`finding-${finding}`}
-                    checked={value === 'no'}
-                    onChange={() => !readOnly && onFindingChange(finding, 'no')}
+                    name={`finding-${catalog.id}`}
+                    checked={value === false || value === 'no'}
+                    onChange={() => !readOnly && onFindingChange(catalog.id, false)}
                     disabled={readOnly}
                     className="w-4 h-4 text-red-600 border-neutral-300 dark:border-neutral-500 focus:ring-red-500 dark:bg-neutral-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                   />
@@ -127,87 +129,132 @@ function OralFindingsTable({ findings, onFindingChange, readOnly = false }) {
 
 /* ─── main component ────────────────────────────────────────── */
 
+const GQL_UPDATE_DENTAL_RECORD = `
+  mutation GradeDentalRecord($userId: ID!, $input: DentalRecordInput!) {
+    updateDentalRecord(userId: $userId, input: $input) {
+      id notes created_at
+      ToothPlacements { id toothIndex legend }
+      oralFindings { oralFindingId status }
+    }
+  }
+`;
+
 export default function PatientDentalRecordTab({ patient }) {
   const dental = patient.dental || {};
 
-  // Convert legacy chart format to new tooth states format
-  const convertLegacyChart = (chart) => {
+  // Memoize so the reference stays stable across re-renders triggered by onStateChange.
+  // A new object reference every render would fire the useEffect in ToothChart and reset
+  // the chart immediately after every tooth click.
+  const initialToothStates = useMemo(() => {
     const states = {};
-    if (chart?.missing) {
-      chart.missing.forEach(tooth => { states[tooth] = 'M'; });
-    }
-    if (chart?.filled) {
-      chart.filled.forEach(tooth => { states[tooth] = 'F'; });
-    }
-    if (chart?.decayed) {
-      chart.decayed.forEach(tooth => { states[tooth] = 'C'; });
-    }
-    // Also include any states from the new format if available
-    if (chart?.states) {
-      Object.assign(states, chart.states);
-    }
+    const chart = dental.toothChart;
+    if (chart?.missing) chart.missing.forEach(tooth => { states[tooth] = 'M'; });
+    if (chart?.filled)  chart.filled.forEach(tooth  => { states[tooth] = 'F'; });
+    if (chart?.decayed) chart.decayed.forEach(tooth => { states[tooth] = 'C'; });
+    if (chart?.states)  Object.assign(states, chart.states);
     return states;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dental]);
+
+  // Oral finding catalogs from backend
+  const oralFindingCatalogs = dental.oralFindingCatalogs || [];
+
+  // Build initial findings map from latest dental record { [catalogId]: boolean }
+  const buildInitialFindings = () => {
+    const map = {};
+    oralFindingCatalogs.forEach(c => { map[c.id] = null; });
+    (dental.latestOralFindings || []).forEach(f => { map[f.oralFindingId] = f.status; });
+    return map;
   };
 
-  const [toothStates, setToothStates] = useState(() =>
-    convertLegacyChart(dental.toothChart)
-  );
+  // Grade mode state (controls both tooth chart and oral findings editing)
+  const [isGrading, setIsGrading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [gradeError, setGradeError] = useState(null);
+  const [gradeSuccess, setGradeSuccess] = useState(false);
 
-  // Oral findings state - convert array format to object format
-  const [oralFindings, setOralFindings] = useState(() => {
-    const findingsObj = {};
-    // Initialize from existing data if available
-    if (dental.oralFindings && Array.isArray(dental.oralFindings)) {
-      dental.oralFindings.forEach(f => { findingsObj[f] = 'yes'; });
-    } else if (dental.oralFindings && typeof dental.oralFindings === 'object') {
-      return dental.oralFindings;
-    }
-    return findingsObj;
-  });
+  // chartResetKey forces ToothChart to re-mount on cancel
+  const [chartResetKey, setChartResetKey] = useState(0);
+  // currentToothStates tracks live edits reported by ToothChart
+  const [currentToothStates, setCurrentToothStates] = useState(initialToothStates);
 
-  const [isEditingFindings, setIsEditingFindings] = useState(false);
+  // Oral findings keyed by catalog id (boolean or null)
+  const [oralFindings, setOralFindings] = useState(buildInitialFindings);
 
-  // Mock pending submissions - in real app, this would come from API
   const [pendingSubmissions, setPendingSubmissions] = useState(() =>
     dental.pendingSubmissions || []
   );
 
-  const procedures       = dental.procedures  || [];
-  const appliances       = dental.appliances  || [];
-  const photoUpper       = dental.photoUpper  || null;
-  const photoLower       = dental.photoLower  || null;
-
-  // Handle tooth chart save
-  const handleSaveToothChart = async (newStates) => {
-    console.log('Saving tooth chart for patient:', patient.id, newStates);
-    setToothStates(newStates);
-    // TODO: API call to save tooth chart
-  };
+  const procedures = dental.procedures  || [];
+  const appliances = dental.appliances  || [];
+  const photoUpper = dental.photoUpper  || null;
+  const photoLower = dental.photoLower  || null;
 
   // Handle oral findings change
-  const handleFindingChange = (finding, value) => {
-    setOralFindings(prev => ({
-      ...prev,
-      [finding]: value
-    }));
+  const handleFindingChange = (catalogId, value) => {
+    setOralFindings(prev => ({ ...prev, [catalogId]: value }));
   };
 
-  // Save oral findings
-  const handleSaveFindings = async () => {
-    console.log('Saving oral findings for patient:', patient.id, oralFindings);
-    setIsEditingFindings(false);
-    // TODO: API call to save findings
+  const handleGradeStart = () => {
+    setGradeError(null);
+    setGradeSuccess(false);
+    setIsGrading(true);
+  };
+
+  const handleGradeCancel = () => {
+    // Reset tooth chart by bumping the key (forces re-mount with initialStates)
+    setChartResetKey(k => k + 1);
+    setCurrentToothStates(initialToothStates);
+    setOralFindings(buildInitialFindings());
+    setIsGrading(false);
+    setGradeError(null);
+  };
+
+  const handleGradeSave = async () => {
+    setIsSaving(true);
+    setGradeError(null);
+    try {
+      // Build ToothPlacements — only non-Caries-free teeth
+      const ToothPlacements = Object.entries(currentToothStates)
+        .filter(([, legend]) => legend !== '✓')
+        .map(([toothIndex, legend]) => ({ toothIndex: parseInt(toothIndex, 10), legend }));
+
+      // Build oralFindings — default unset values to false
+      const oralFindingsInput = oralFindingCatalogs.map(c => ({
+        oralFindingId: c.id,
+        status: oralFindings[c.id] === true || oralFindings[c.id] === 'yes' ? true : false,
+        notes: null,
+      }));
+
+      await axiosRequest.post('/emr/medical', {
+        query: GQL_UPDATE_DENTAL_RECORD,
+        variables: {
+          userId: patient.id,
+          input: {
+            notes: '',
+            ToothPlacements,
+            oralFindings: oralFindingsInput,
+          },
+        },
+      });
+
+      setGradeSuccess(true);
+      setIsGrading(false);
+    } catch (err) {
+      const msg = err?.response?.data?.errors?.[0]?.message || err?.message || 'Failed to save dental record.';
+      setGradeError(msg);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Handle verify submission
   const handleVerifySubmission = async (submissionId) => {
-    console.log('Verifying submission:', submissionId);
     setPendingSubmissions(prev => prev.filter(s => s.id !== submissionId));
   };
 
   // Handle dismiss submission
   const handleDismissSubmission = async (submissionId) => {
-    console.log('Dismissing submission:', submissionId);
     setPendingSubmissions(prev => prev.filter(s => s.id !== submissionId));
   };
 
@@ -216,8 +263,8 @@ export default function PatientDentalRecordTab({ patient }) {
     console.log('Refreshing submissions for patient:', patient.id);
   };
 
-  const hasToothData = Object.keys(toothStates).length > 0;
-  const hasFindings = Object.keys(oralFindings).some(k => oralFindings[k]);
+  const hasToothData = Object.values(currentToothStates).some(s => s !== '✓');
+  const hasFindings = Object.values(oralFindings).some(v => v === true || v === 'yes');
 
   return (
     <div className="space-y-3">
@@ -361,22 +408,72 @@ export default function PatientDentalRecordTab({ patient }) {
         </PatientSectionCard>
       )}
 
-      {/* ── Interactive Tooth Chart ──────────────────────────── */}
+      {/* ── Interactive Tooth Chart + Oral Findings (graded together) ──── */}
       <PatientSectionCard
         title="Tooth Chart"
         right={
-          hasToothData && (
-            <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
-              {Object.keys(toothStates).length} teeth marked
-            </span>
-          )
+          <div className="flex items-center gap-2">
+            {hasToothData && !isGrading && (
+              <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
+                {Object.values(currentToothStates).filter(s => s !== '✓').length} conditions marked
+              </span>
+            )}
+            {!isGrading ? (
+              <button
+                onClick={handleGradeStart}
+                className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+                Grade
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleGradeCancel}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleGradeSave}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 text-xs font-medium bg-success-500 hover:bg-success-600 text-white rounded-md transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSaving ? (
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  Save Grade
+                </button>
+              </div>
+            )}
+          </div>
         }
       >
+        {gradeError && (
+          <div className="mb-3 px-3 py-2 rounded-md bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-xs text-error-700 dark:text-error-400">
+            {gradeError}
+          </div>
+        )}
+        {gradeSuccess && (
+          <div className="mb-3 px-3 py-2 rounded-md bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 text-xs text-success-700 dark:text-success-400">
+            Dental record graded successfully.
+          </div>
+        )}
         <ToothChart
-          initialStates={toothStates}
-          onSave={handleSaveToothChart}
-          patientId={patient.id}
-          readOnly={false}
+          key={chartResetKey}
+          initialStates={initialToothStates}
+          isEditing={isGrading}
+          onStateChange={setCurrentToothStates}
         />
       </PatientSectionCard>
 
@@ -384,48 +481,20 @@ export default function PatientDentalRecordTab({ patient }) {
       <PatientSectionCard
         title="Oral Findings"
         right={
-          <div className="flex items-center gap-2">
-            {hasFindings && !isEditingFindings && (
-              <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
-                {Object.values(oralFindings).filter(v => v === 'yes').length} findings
-              </span>
-            )}
-            {!isEditingFindings ? (
-              <button
-                onClick={() => setIsEditingFindings(true)}
-                className="text-[10px] text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium flex items-center gap-1"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                Edit
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsEditingFindings(false)}
-                  className="text-[10px] text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveFindings}
-                  className="text-[10px] text-success-600 hover:text-success-700 dark:text-success-400 font-medium flex items-center gap-1"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Save
-                </button>
-              </div>
-            )}
-          </div>
+          hasFindings && !isGrading ? (
+            <span className="text-[10px] text-secondary-500 dark:text-neutral-500">
+              {Object.values(oralFindings).filter(v => v === true || v === 'yes').length} positive findings
+            </span>
+          ) : isGrading ? (
+            <span className="text-[10px] text-primary-600 dark:text-primary-400 font-medium">Grading mode</span>
+          ) : null
         }
       >
         <OralFindingsTable
+          catalogs={oralFindingCatalogs}
           findings={oralFindings}
           onFindingChange={handleFindingChange}
-          readOnly={!isEditingFindings}
+          readOnly={!isGrading}
         />
       </PatientSectionCard>
 

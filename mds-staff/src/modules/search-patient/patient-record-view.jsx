@@ -43,6 +43,7 @@ const PatientAppointmentsTab = lazy(() => import('./components/appointments-tab'
 const PatientMedicineRequestsTab = lazy(() => import('./components/medicine-requests-tab'));
 const PatientDocumentsTab = lazy(() => import('./components/documents-tab'));
 const PatientObgyneTab = lazy(() => import('./components/obgyne-tab'));
+const PatientDentalGradeHistoryTab = lazy(() => import('./components/dental-grade-history-tab'));
 
 function LoadingBlock({ label }) {
   return (
@@ -104,6 +105,8 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
 
   const applianceTagMap = {};
   (data?.oralApplianceCatalogs || []).forEach((c) => { applianceTagMap[c.id] = c.name; });
+
+  const oralFindingCatalogs = data?.oralFindingCatalogs || [];
 
   // Resolve allergies by type
   const allergyList = allergyData?.allergies || [];
@@ -272,6 +275,8 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
         oralFindings: [],
         treatments: [],
         toothChart: { missing: [], filled: [], decayed: [], notes: dentalRecord?.notes || '', states: toothStates },
+        oralFindingCatalogs,
+        latestOralFindings: (dentalRecord?.oralFindings || []).map((f) => ({ oralFindingId: f.oralFindingId, status: f.status })),
       };
     })(),
     obgyne: {
@@ -524,6 +529,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Record' },
     { id: 'dental', label: 'Dental Record' },
+    { id: 'dental-grade-history', label: 'Dental Grade History' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
@@ -547,6 +553,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return <PatientMedicalRecordTab patient={patient} />;
       case 'dental':
         return <PatientDentalRecordTab patient={patient} />;
+      case 'dental-grade-history':
+        return <PatientDentalGradeHistoryTab patient={patient} />;
       case 'consultation':
         return (
           <PatientConsultationTab

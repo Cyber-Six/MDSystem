@@ -46,6 +46,7 @@ export const GQL_FULL_RECORD = `
     getUserDentalRecord(userId: $userId, limit: 1) {
       id notes created_at
       ToothPlacements { id toothIndex legend }
+      oralFindings { oralFindingId status }
     }
     getUserOralApplianceProfile(userId: $userId, limit: 1) {
       id notes created_at
@@ -75,6 +76,7 @@ export const GQL_FULL_RECORD = `
     dentalProcedureCatalogs: getDomainCatalogs(domain: DentalProcedure) { id name }
     medicationCatalogs: getDomainCatalogs(domain: Medication) { id name }
     oralApplianceCatalogs: getOralApplianceCatalogs { id name }
+    oralFindingCatalogs: getOralFindingCatalogs { id name }
     getUserDentalPhotoRecord(userId: $userId, limit: 1) {
       id upperTeeth lowerTeeth isValid created_at
     }
