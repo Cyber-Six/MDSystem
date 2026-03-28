@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import PatientSectionCard from './section-card';
 import ToothChart from './tooth-chart';
 import { axiosRequest } from '../../../packages-core-adapter';
+import { ENUM_TO_CODE } from './tooth-chart-constants';
 
 const GQL_DENTAL_GRADE_HISTORY = `
   query GetDentalGradeHistory($userId: ID!) {
@@ -14,7 +15,7 @@ const GQL_DENTAL_GRADE_HISTORY = `
 `;
 
 /* ─── Read-only Oral Findings Display ─────────────────────────── */
-function ReadOnlyOralFindings({ catalogs, findings }) {
+function ReadOnlyOralFindings({ catalogs, oralFindings }) {
   if (!catalogs || catalogs.length === 0) {
     return (
       <p className="text-xs text-neutral-400 dark:text-neutral-500 italic py-2">
@@ -22,19 +23,6 @@ function ReadOnlyOralFindings({ catalogs, findings }) {
       </p>
     );
   }
-
-  const positiveFindings = catalogs.filter((c) => {
-    const val = findings[c.id];
-    return val === true || val === 'yes';
-  });
-  const negativeFindings = catalogs.filter((c) => {
-    const val = findings[c.id];
-    return val === false || val === 'no';
-  });
-  const unanswered = catalogs.filter((c) => {
-    const val = findings[c.id];
-    return val === null || val === undefined;
-  });
 
   return (
     <div className="overflow-x-auto -mx-3 -mb-3">
@@ -54,7 +42,8 @@ function ReadOnlyOralFindings({ catalogs, findings }) {
         </thead>
         <tbody>
           {catalogs.map((catalog, idx) => {
-            const value = findings[catalog.id];
+            const finding = oralFindings.find((f) => String(f.oralFindingId) === String(catalog.id));
+            const value = finding != null ? finding.status : null;
             return (
               <tr
                 key={catalog.id}
@@ -64,24 +53,26 @@ function ReadOnlyOralFindings({ catalogs, findings }) {
                   {catalog.name}
                 </td>
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
-                  <input
-                    type="radio"
-                    readOnly
-                    checked={value === true || value === 'yes'}
-                    onChange={() => {}}
-                    disabled
-                    className="w-4 h-4 text-green-600 border-neutral-300 dark:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
+                  <div className="flex justify-center items-center">
+                    <span className={`inline-flex w-4 h-4 rounded-full border-2 items-center justify-center ${
+                      value === true
+                        ? 'border-green-500 bg-green-500 dark:border-green-400 dark:bg-green-400'
+                        : 'border-neutral-300 dark:border-neutral-500 bg-transparent'
+                    }`}>
+                      {value === true && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
-                  <input
-                    type="radio"
-                    readOnly
-                    checked={value === false || value === 'no'}
-                    onChange={() => {}}
-                    disabled
-                    className="w-4 h-4 text-red-600 border-neutral-300 dark:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
+                  <div className="flex justify-center items-center">
+                    <span className={`inline-flex w-4 h-4 rounded-full border-2 items-center justify-center ${
+                      value === false
+                        ? 'border-red-500 bg-red-500 dark:border-red-400 dark:bg-red-400'
+                        : 'border-neutral-300 dark:border-neutral-500 bg-transparent'
+                    }`}>
+                      {value === false && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                    </span>
+                  </div>
                 </td>
               </tr>
             );
@@ -99,20 +90,15 @@ function GradeEntry({ record, catalogs, index }) {
   const toothStates = useMemo(() => {
     const states = {};
     (record.ToothPlacements || []).forEach((tp) => {
-      states[tp.toothIndex] = tp.legend;
+      states[tp.toothIndex] = ENUM_TO_CODE[tp.legend] ?? tp.legend;
     });
     return states;
   }, [record]);
 
-  const findings = useMemo(() => {
-    const map = {};
-    catalogs.forEach((c) => { map[c.id] = null; });
-    (record.oralFindings || []).forEach((f) => { map[f.oralFindingId] = f.status; });
-    return map;
-  }, [record, catalogs]);
+  const oralFindings = record.oralFindings || [];
 
   const conditionCount = Object.values(toothStates).filter((s) => s !== '✓').length;
-  const positiveCount = Object.values(findings).filter((v) => v === true || v === 'yes').length;
+  const positiveCount = oralFindings.filter((f) => f.status === true).length;
 
   const dateLabel = record.created_at
     ? new Date(record.created_at).toLocaleDateString('en-PH', {
@@ -198,7 +184,7 @@ function GradeEntry({ record, catalogs, index }) {
             <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-3 mt-2">
               Oral Findings
             </h4>
-            <ReadOnlyOralFindings catalogs={catalogs} findings={findings} />
+            <ReadOnlyOralFindings catalogs={catalogs} oralFindings={oralFindings} />
           </div>
 
           {/* Notes */}

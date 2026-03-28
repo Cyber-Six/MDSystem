@@ -3,7 +3,7 @@ import PatientSectionCard from './section-card';
 import ToothChart from './tooth-chart';
 import PendingDentalSubmissions from './pending-dental-submissions';
 import { axiosRequest } from '../../../packages-core-adapter';
-import { CODE_TO_ENUM } from './tooth-chart-constants';
+import { CODE_TO_ENUM, TOOTH_LAYOUT } from './tooth-chart-constants';
 
 /* ─── AuthenticatedImage ─────────────────────────────────────── */
 function AuthenticatedImage({ path, alt, className }) {
@@ -215,10 +215,15 @@ export default function PatientDentalRecordTab({ patient }) {
     setIsSaving(true);
     setGradeError(null);
     try {
-      // Build ToothPlacements — only non-Caries-free teeth, mapped to DB enum values
-      const ToothPlacements = Object.entries(currentToothStates)
-        .filter(([, legend]) => legend !== '✓')
-        .map(([toothIndex, legend]) => ({ toothIndex: parseInt(toothIndex, 10), legend: CODE_TO_ENUM[legend] ?? legend }));
+      // Build ToothPlacements — all 32 FDI teeth; uncolored teeth default to PRESENT
+      const allTeeth = [
+        ...TOOTH_LAYOUT.upper.right, ...TOOTH_LAYOUT.upper.left,
+        ...TOOTH_LAYOUT.lower.right, ...TOOTH_LAYOUT.lower.left,
+      ];
+      const ToothPlacements = allTeeth.map((toothIndex) => {
+        const code = currentToothStates[toothIndex] ?? '✓';
+        return { toothIndex, legend: CODE_TO_ENUM[code] ?? 'PRESENT' };
+      });
 
       // Build oralFindings — default unset values to false
       const oralFindingsInput = oralFindingCatalogs.map(c => ({
