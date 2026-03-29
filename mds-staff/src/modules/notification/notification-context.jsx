@@ -58,9 +58,16 @@ const EVENT_MAP = {
   'medicine:request:new': (data) => ({
     type: 'medicine',
     route: '/inventory',
+    routeState: { section: 'dispense' },
     title: 'New Medicine Request',
-    message: 'A patient submitted a new medicine request.',
+    message: [
+      data?.patientId ? `Patient #${data.patientId}` : null,
+      data?.location ? `at ${data.location}` : null,
+      'submitted a new medicine request.',
+    ].filter(Boolean).join(' '),
     refId: data?.requestId ?? null,
+    patientId: data?.patientId ?? null,
+    location: data?.location ?? null,
   }),
   'updateTicket': (data) => ({
     type: 'record',
@@ -95,6 +102,7 @@ const NotificationContext = createContext(null);
 
 export function StaffNotificationProvider({ children }) {
   const [notifications, setNotifications] = useState(() => loadPersistedNotifications());
+  const [inventoryAlerts, setInventoryAlerts] = useState([]);
   const socketRef = useRef(null);
   const subscribersRef = useRef({});
 
@@ -203,10 +211,10 @@ export function StaffNotificationProvider({ children }) {
     return () => subs[event].delete(callback);
   }, []);
 
-  const unreadCount = notifications.filter((n) => n.unread).length;
+  const unreadCount = notifications.filter((n) => n.unread).length + inventoryAlerts.length;
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll, subscribe }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll, subscribe, inventoryAlerts, setInventoryAlerts }}>
       {children}
     </NotificationContext.Provider>
   );

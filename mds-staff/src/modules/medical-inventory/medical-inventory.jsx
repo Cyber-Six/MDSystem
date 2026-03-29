@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import InventoryDashboard from './components/inventory-dashboard/inventory-dashboard';
 import MedicalItemList from './components/medical-item/medical-item-list';
 import MedicalItemDetail from './components/medical-item/medical-item-detail';
@@ -24,14 +25,18 @@ import {
   SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
 } from './inventory-seed-data';
+import { useInventoryNotifications } from './hooks/useInventoryNotifications';
 
 /**
  * Medical Inventory Page
  * Consistent with staff-appointment.jsx pattern: section tabs + sub-components.
  */
 const MedicalInventory = () => {
-  const { subscribe } = useStaffNotifications();
-  const [activeSection, setActiveSection] = useState('dashboard');
+  const routerLocation = useLocation();
+  const { subscribe, setInventoryAlerts } = useStaffNotifications();
+  const [activeSection, setActiveSection] = useState(
+    routerLocation.state?.section ?? 'dashboard'
+  );
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [itemsError, setItemsError] = useState('');
@@ -205,6 +210,15 @@ const MedicalInventory = () => {
 
   // Compute enriched items
   const enrichedItems = useMemo(() => computeItemStats(items, batches), [items, batches]);
+
+  // Compute inventory notifications (low stock + expiring batches)
+  const { notifications: inventoryNotifications } = useInventoryNotifications(enrichedItems, batches);
+
+  // Sync inventory alerts to the global notification bell
+  useEffect(() => {
+    setInventoryAlerts(inventoryNotifications);
+    return () => setInventoryAlerts([]);
+  }, [inventoryNotifications, setInventoryAlerts]);
 
   const enrichRequestItems = useCallback((requestItems = []) => {
     return requestItems.map((item) => {
@@ -819,24 +833,26 @@ const MedicalInventory = () => {
           <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Medical Inventory</h1>
           <p className="text-[11px] text-secondary-500 dark:text-neutral-400">Manage medicines, supplies, batches, and dispense requests</p>
         </div>
-        <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
-          {sections.map((s) => (
-            <button
-              key={s.key}
-              onClick={() => { setActiveSection(s.key); if (s.key !== 'detail') setSelectedItem(null); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                activeSection === s.key || (s.key === 'items' && activeSection === 'detail')
-                  ? 'bg-primary-500 text-white shadow-sm'
-                  : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
-              }`}
-            >
-              {s.icon}
-              {s.label}
-              {s.badge > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-error-500 text-white rounded-full">{s.badge}</span>
-              )}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
+            {sections.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => { setActiveSection(s.key); if (s.key !== 'detail') setSelectedItem(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  activeSection === s.key || (s.key === 'items' && activeSection === 'detail')
+                    ? 'bg-primary-500 text-white shadow-sm'
+                    : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                {s.icon}
+                {s.label}
+                {s.badge > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-error-500 text-white rounded-full">{s.badge}</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
