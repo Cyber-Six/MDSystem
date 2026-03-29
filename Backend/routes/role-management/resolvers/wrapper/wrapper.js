@@ -1271,8 +1271,12 @@ const Mutation = {
 
     const oldAdminId = user.id;
 
+    // 🔍 DEBUG: Log argument types at entry
+    logger.warn(`[ADMIN_TRANSFER_DEBUG] Entry: oldAdminId=${oldAdminId} (${typeof oldAdminId}), newAdminUserId=${newAdminUserId} (${typeof newAdminUserId}), password type=${typeof password}`);
+
     try {
       // ✅ RATE LIMIT 1: Check if admin is locked out from password failures
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 1: isAdminTransferPasswordLocked');
       const { locked: pwLocked, ttl: pwLockTTL } = await isAdminTransferPasswordLocked(oldAdminId);
       if (pwLocked) {
         await db.setSystemAuditLog({
@@ -1298,6 +1302,7 @@ const Mutation = {
       }
 
       // ✅ RATE LIMIT 2: Check initiation cooldown (5-minute minimum between transfers)
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 2: recordAdminTransferAttempt');
       const { allowed: canInitiate, retryAfterSeconds } = await recordAdminTransferAttempt(oldAdminId);
       if (!canInitiate) {
         await db.setSystemAuditLog({
@@ -1323,6 +1328,7 @@ const Mutation = {
       }
 
       // ✅ RATE LIMIT 3: Check for active pending transfer
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 3: getAdminActivePendingTransfer');
       const { hasPending, tokenPrefix } = await getAdminActivePendingTransfer(oldAdminId);
       if (hasPending) {
         await db.setSystemAuditLog({
@@ -1348,6 +1354,7 @@ const Mutation = {
       }
 
       // Get current admin's user record for password verification
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 4: findEmailByUserId');
       const oldAdminEmail = await db.findEmailByUserId(oldAdminId);
       if (!oldAdminEmail) {
         await db.setSystemAuditLog({
@@ -1370,7 +1377,9 @@ const Mutation = {
       }
 
       // Fetch admin credentials to verify password
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 5: findUserByEmail');
       const adminCredentials = await db.findUserByEmail(oldAdminEmail);
+      logger.warn(`[ADMIN_TRANSFER_DEBUG] Step 5 result: hasCredentials=${!!adminCredentials}, hasHash=${!!adminCredentials?.password_hash}, hashType=${typeof adminCredentials?.password_hash}`);
       if (!adminCredentials || !adminCredentials.password_hash) {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
@@ -1392,6 +1401,7 @@ const Mutation = {
       }
 
       // ✅ CRITICAL: Verify password
+      logger.warn(`[ADMIN_TRANSFER_DEBUG] Step 6: verifyPassword, passwordType=${typeof password}, hashType=${typeof adminCredentials.password_hash}, hashLength=${adminCredentials.password_hash?.length}`);
       const passwordValid = await verifyPassword(password, adminCredentials.password_hash);
       if (!passwordValid) {
         // Record the failed attempt and get updated failure count and lockout status
@@ -1433,6 +1443,7 @@ const Mutation = {
       }
 
       // ✅ Password valid - clear failure counter
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 7: clearAdminTransferPasswordFailures');
       await clearAdminTransferPasswordFailures(oldAdminId);
 
       // Validate that new admin user exists and is different from current admin
@@ -1458,6 +1469,7 @@ const Mutation = {
       }
 
       // Check if new admin is an active medical personnel
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 8: isActiveMedicalPersonnel');
       const isActive = await db.isActiveMedicalPersonnel(newAdminUserId);
       if (!isActive) {
         await db.setSystemAuditLog({
@@ -1480,6 +1492,7 @@ const Mutation = {
       }
 
       // Check if new admin is validated
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 9: isUserValidated');
       const isValidated = await db.isUserValidated(newAdminUserId);
       if (!isValidated) {
         await db.setSystemAuditLog({
@@ -1502,6 +1515,7 @@ const Mutation = {
       }
 
       // Check if new admin has 2FA enabled
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 10: findEmailByUserId(newAdminUserId)');
       const newAdminUser = await db.findEmailByUserId(newAdminUserId);
       if (!newAdminUser) {
         await db.setSystemAuditLog({
@@ -1523,6 +1537,7 @@ const Mutation = {
           .throw();
       }
 
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 11: getUserConsentStateByEmail(newAdminUser)');
       const newAdminData = await db.getUserConsentStateByEmail(newAdminUser);
       if (!newAdminData?.allow_email_2fa) {
         await db.setSystemAuditLog({
@@ -1545,6 +1560,7 @@ const Mutation = {
       }
 
       // Check if current admin has 2FA enabled
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 12: getUserConsentStateByEmail(oldAdminEmail)');
       const oldAdminData = await db.getUserConsentStateByEmail(oldAdminEmail);
 
       if (!oldAdminData?.allow_email_2fa) {
@@ -1569,12 +1585,15 @@ const Mutation = {
       }
 
       // Generate verification token
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 13: generateOTP');
       const verificationToken = generateOTP(8);
 
       // Store transfer session in Redis
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 14: createAdminTransferSession');
       await createAdminTransferSession(oldAdminId, newAdminUserId, verificationToken);
 
       // Send verification email to current admin
+      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 15: enqueueAdminTransferEmail');
       await enqueueAdminTransferEmail(oldAdminEmail, verificationToken, newAdminUser);
 
       // Log successful initiation
@@ -1601,6 +1620,9 @@ const Mutation = {
         verificationRequired: true,
       };
     } catch (error) {
+      // 🔍 DEBUG: Full error with stack trace
+      logger.error(`[ADMIN_TRANSFER_DEBUG] CAUGHT ERROR: ${error.message}`);
+      logger.error(`[ADMIN_TRANSFER_DEBUG] STACK: ${error.stack}`);
       // If error wasn't already logged (non-GraphQL errors)
       if (!error.extensions) {
         await db.setSystemAuditLog({
