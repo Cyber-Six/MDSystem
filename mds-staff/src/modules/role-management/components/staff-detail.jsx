@@ -1,61 +1,56 @@
-import React, { useState } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, clonePermissions, hasCustomPermissions, allKeys } from '../role-permissions';
-import { updateStaffAccount } from '../staff-service';
-import PermissionMatrix from './permission-matrix';
+import React, { useState, useEffect } from 'react';
+import { updateStaffAccount, fetchTemplates } from '../staff-service';
 import ActivityLog from './activity-log';
 
 /**
  * Staff Detail Component
- * Centered modal with 3 tabs: Info, Permissions, Activity Log
+ * Centered modal with 2 tabs: Info, Activity Log
+ * Role dropdown populated from backend Role Templates.
+ * Permissions are template-only — no per-staff overrides.
  */
 const StaffDetail = ({ staff, onClose, onSave }) => {
   const isPending = staff.status === 'Pending';
 
   const [activeTab, setActiveTab] = useState('info');
-  const [role, setRole] = useState(isPending ? DEFAULT_ROLE_TEMPLATES[1]?.id || 'doctor' : staff.role);
-  const [permissions, setPermissions] = useState(
-    isPending
-      ? clonePermissions(DEFAULT_ROLE_TEMPLATES.find(r => r.id !== 'admin')?.permissions || allKeys(false))
-      : clonePermissions(staff.permissions)
-  );
+  const [templates, setTemplates] = useState([]);
+  const [role, setRole] = useState(staff.role || '');
+  const [originalRole] = useState(staff.role || '');
+  const [branch, setBranch] = useState(staff.branch || 'Both');
+  const [originalBranch] = useState(staff.branch || 'Both');
   const [status, setStatus] = useState(isPending ? 'Active' : staff.status);
-  const [hasChanges, setHasChanges] = useState(isPending); // pending always has unsaved state
+  const [hasChanges, setHasChanges] = useState(isPending);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
-  const isCustom = hasCustomPermissions(permissions, role);
+  // Load templates from backend
+  useEffect(() => {
+    fetchTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
 
-  const handleRoleChange = (newRoleId) => {
-    setRole(newRoleId);
-    const template = DEFAULT_ROLE_TEMPLATES.find((r) => r.id === newRoleId);
-    if (template) {
-      setPermissions(clonePermissions(template.permissions));
-    }
+  const currentTemplate = templates.find(t => t.label === role);
+  const isAdmin = staff.permissions?.is_admin === true;
+
+  const handleRoleChange = (newRole) => {
+    setRole(newRole);
     setHasChanges(true);
-  };
-
-  const handlePermissionChange = (updated) => {
-    setPermissions(updated);
-    setHasChanges(true);
-  };
-
-  const handleResetToDefault = () => {
-    const template = DEFAULT_ROLE_TEMPLATES.find((r) => r.id === role);
-    if (template) {
-      setPermissions(clonePermissions(template.permissions));
-      setHasChanges(true);
-    }
   };
 
   const handleSave = async () => {
     setSaveError(null);
     setIsSaving(true);
     try {
-      const result = await updateStaffAccount(staff.id, clonePermissions(permissions), status);
-      // Use the returned staff from the mutation to avoid a separate re-fetch
+      const roleChanged = role !== originalRole;
+      const branchChanged = branch !== originalBranch;
+      const result = await updateStaffAccount(
+        staff.id,
+        status,
+        roleChanged ? role : undefined,
+        roleChanged && currentTemplate ? currentTemplate.id : undefined,
+        branchChanged ? branch : undefined,
+      );
       const updatedStaff = result.staff
         ? result.staff
-        : { ...staff, role, permissions: clonePermissions(permissions), status };
+        : { ...staff, role, status, branch };
       onSave(updatedStaff);
       setHasChanges(false);
     } catch (err) {
@@ -67,11 +62,8 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
 
   const tabs = [
     { id: 'info', label: 'Info' },
-    { id: 'permissions', label: 'Permissions' },
     { id: 'activity', label: 'Activity Log' },
   ];
-
-  const roleTemplate = DEFAULT_ROLE_TEMPLATES.find((r) => r.id === role);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -93,14 +85,14 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                   <span className="text-[9px] px-1.5 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium flex-shrink-0">
                     Pending
                   </span>
-                ) : isCustom && (
-                  <span className="text-[9px] px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-800 text-secondary-500 dark:text-neutral-400 rounded font-medium flex-shrink-0">
-                    Custom
+                ) : isAdmin && (
+                  <span className="text-[9px] px-1.5 py-0.5 bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400 rounded font-medium flex-shrink-0">
+                    Admin
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-secondary-500 dark:text-neutral-400 truncate">
-                {isPending ? 'No role assigned yet' : (roleTemplate?.name || role)} · {staff.email}
+                {isPending ? 'No role assigned yet' : (role || 'No role')} · {staff.email}
               </p>
             </div>
           </div>
@@ -155,6 +147,25 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.id}</p>
                   </div>
                   <div>
+                    <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Branch</p>
+                    {isAdmin ? (
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-medium text-secondary-900 dark:text-white">{branch === 'QuezonCity' ? 'Quezon City' : branch}</p>
+                        <span className="text-[8px] px-1 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium leading-none">Locked</span>
+                      </div>
+                    ) : (
+                      <select
+                        value={branch}
+                        onChange={(e) => { setBranch(e.target.value); setHasChanges(true); }}
+                        className="w-full mt-0.5 px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                      >
+                        <option value="Manila">Manila</option>
+                        <option value="QuezonCity">Quezon City</option>
+                        <option value="Both">Both</option>
+                      </select>
+                    )}
+                  </div>
+                  <div>
                     <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Last Login</p>
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.lastLogin || 'Never'}</p>
                   </div>
@@ -171,13 +182,27 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                   <select
                     value={role}
                     onChange={(e) => handleRoleChange(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                    disabled={isAdmin}
+                    className={`w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none ${isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
-                    {DEFAULT_ROLE_TEMPLATES.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
+                    <option value="">Select a role…</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.label}>{t.label}</option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">{roleTemplate?.description}</p>
+                  {isAdmin ? (
+                    <p className="text-[10px] text-warning-600 dark:text-warning-400 mt-1">
+                      Admin role cannot be changed directly. Use Admin Transfer instead.
+                    </p>
+                  ) : currentTemplate ? (
+                    <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">
+                      Template with {currentTemplate.permissionCount} permissions
+                    </p>
+                  ) : templates.length === 0 ? (
+                    <p className="text-[9px] text-warning-600 dark:text-warning-400 mt-1">
+                      No role templates found. Create templates in the Role Templates tab first.
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -191,6 +216,14 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                     <p className="text-xs text-secondary-500 dark:text-neutral-400">
                       This account is <span className="font-semibold text-warning-600 dark:text-warning-400">pending</span>. Assign a role and save to grant staff portal access.
                     </p>
+                  ) : isAdmin ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-success-500 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-secondary-800 dark:text-white">Admin Account — Always Active</p>
+                        <p className="text-[10px] text-secondary-400 dark:text-neutral-500">Admin account cannot be deactivated. Use Admin Transfer to change admin control.</p>
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-between">
                       <div>
@@ -214,35 +247,6 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
             </div>
           )}
 
-          {/* ── Permissions Tab ── */}
-          {activeTab === 'permissions' && (
-            <div>
-              {/* Role + Reset */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-secondary-500 dark:text-neutral-400">Role:</span>
-                  <span className="text-xs font-semibold text-secondary-800 dark:text-white">{roleTemplate?.name}</span>
-                </div>
-                {isCustom && (
-                  <button
-                    onClick={handleResetToDefault}
-                    className="text-[10px] font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors flex items-center gap-1"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Reset to Role Default
-                  </button>
-                )}
-              </div>
-
-              <PermissionMatrix
-                permissions={permissions}
-                onChange={handlePermissionChange}
-              />
-            </div>
-          )}
-
           {/* ── Activity Log Tab ── */}
           {activeTab === 'activity' && (
             <ActivityLog staffId={staff.id} />
@@ -261,7 +265,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
               {!isPending && (
                 <button
                   disabled={isSaving}
-                  onClick={() => { setRole(staff.role); setPermissions(clonePermissions(staff.permissions)); setStatus(staff.status); setHasChanges(false); setSaveError(null); }}
+                  onClick={() => { setRole(staff.role); setStatus(staff.status); setBranch(staff.branch || 'Both'); setHasChanges(false); setSaveError(null); }}
                   className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors disabled:opacity-50"
                 >
                   Discard

@@ -782,7 +782,7 @@ const ADMIN_TRANSFER_EXPIRATION = 600; // 10 minutes
 async function createAdminTransferSession(oldAdminId, newAdminId, verificationToken) {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `admin:transfer:${verificationToken}`;
+  const key = `admin:transfer:session:${verificationToken}`;
 
   await client.hSet(key, {
     old_admin_id: oldAdminId.toString(),
@@ -798,7 +798,7 @@ async function createAdminTransferSession(oldAdminId, newAdminId, verificationTo
 async function getAdminTransferSession(verificationToken) {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `admin:transfer:${verificationToken}`;
+  const key = `admin:transfer:session:${verificationToken}`;
   const session = await client.hGetAll(key);
 
   if (!session || !session.old_admin_id) return null;
@@ -813,7 +813,7 @@ async function getAdminTransferSession(verificationToken) {
 async function deleteAdminTransferSession(verificationToken) {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `admin:transfer:${verificationToken}`;
+  const key = `admin:transfer:session:${verificationToken}`;
   await client.del(key);
   return true;
 }
@@ -862,7 +862,7 @@ async function getAdminActivePendingTransfer(adminId) {
   if (!client) throw new Error("Redis client not initialized");
 
   // Scan for active transfer sessions with this admin
-  const pattern = `admin:transfer:*`;
+  const pattern = `admin:transfer:session:*`;
   let hasPending = false;
   let tokenFound = null;
 
@@ -870,7 +870,7 @@ async function getAdminActivePendingTransfer(adminId) {
     const session = await client.hGetAll(key);
     if (session && session.old_admin_id === adminId.toString()) {
       hasPending = true;
-      const token = key.replace('admin:transfer:', '');
+      const token = key.replace('admin:transfer:session:', '');
       tokenFound = token.substring(0, 8) + '...';
       break;
     }
@@ -1008,6 +1008,19 @@ async function isLoginLocked(email, portal) {
   const ttl = await client.ttl(lockKey);
   return ttl > 0 ? ttl : 0; // return remaining lockout time in seconds
 }
+
+async function triggerExpiredMedical(supply, batchId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `medical:exp:${supply}:${batchId}`;
+
+  // Try to set the key only if it doesn't exist, with 60s expiration
+  const result = await client.set(key, "1", { NX: true, EX: 60 });
+
+  // Redis returns "OK" if the key was set, null if it already existed
+  return result === "OK"; // true if set, false if existed
+}
+
 
 // ------------------------------------------------
 

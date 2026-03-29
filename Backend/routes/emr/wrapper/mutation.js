@@ -212,20 +212,20 @@ const Mutation = {
          SET "dentalRecordId" = inserted.id
          FROM inserted
          WHERE "patientUpdateLog".id = $2
-         RETURNING inserted.id AS dentalRecordId;`,
+         RETURNING "patientUpdateLog".*, inserted.id AS dentalRecordId;`,
         [args.input.notes, recordId]
       );
 
       dentalRecordId = dentalRecordResult.rows[0].dentalRecordId;
 
       // Tooth Placements
-      if (args.input.toothPlacements?.length) {
+      if (args.input.ToothPlacements?.length) {
         const values = [];
         const params = [];
-        args.input.toothPlacements.forEach((tooth, i) => {
+        args.input.ToothPlacements.forEach((tooth, i) => {
           const baseIndex = i * 3;
           values.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`);
-          params.push(dentalRecordId, tooth.tooth_index, tooth.legend);
+          params.push(dentalRecordId, tooth.toothIndex, tooth.legend);
         });
 
         const query = `
@@ -241,7 +241,7 @@ const Mutation = {
       for (const finding of args.input.oralFindings || []) {
         const resultFinder = await db.queryControlledClient(
           client,
-          `INSERT INTO "OralFindingRecord"
+          `INSERT INTO "oralFindingRecord"
             ("dentalRecordId", "oralFindingId", "status", "notes")
            VALUES ($1, $2, $3, $4)
            RETURNING *;`,

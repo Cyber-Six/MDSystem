@@ -18,6 +18,7 @@ const RoleTemplates = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState(null); // { type: 'success'|'error', message }
 
   // Load templates from API on mount
   const loadTemplates = useCallback(async () => {
@@ -94,16 +95,21 @@ const RoleTemplates = () => {
     const role = roles.find((r) => r.id === selectedRoleId);
     if (!role || role.locked) return;
     setIsSaving(true);
+    setSaveFeedback(null);
     try {
       if (role._backendId) {
-        await updateTemplate(role._backendId, undefined, workingPermissions);
+        const result = await updateTemplate(role._backendId, undefined, workingPermissions);
+        if (result.message) {
+          setSaveFeedback({ type: 'success', message: result.message });
+        }
       } else {
-        const created = await createTemplate(role.name, workingPermissions);
-        if (created) {
+        const result = await createTemplate(role.name, workingPermissions);
+        if (result) {
           setRoles((prev) =>
-            prev.map((r) => r.id === selectedRoleId ? { ...r, _backendId: created.id, permissions: clonePermissions(workingPermissions) } : r)
+            prev.map((r) => r.id === selectedRoleId ? { ...r, _backendId: result.id, permissions: clonePermissions(workingPermissions) } : r)
           );
         }
+        setSaveFeedback({ type: 'success', message: 'Template created successfully.' });
       }
       setRoles((prev) =>
         prev.map((r) =>
@@ -111,8 +117,12 @@ const RoleTemplates = () => {
         )
       );
       setHasChanges(false);
+      // Auto-dismiss feedback after 5 seconds
+      setTimeout(() => setSaveFeedback(null), 5000);
     } catch (err) {
       console.error('Failed to save template:', err.message);
+      setSaveFeedback({ type: 'error', message: err.message || 'Failed to save template.' });
+      setTimeout(() => setSaveFeedback(null), 5000);
     } finally {
       setIsSaving(false);
     }
@@ -292,7 +302,7 @@ const RoleTemplates = () => {
               <div className="flex items-center gap-2">
                 <h4 className="text-lg font-semibold text-secondary-900 dark:text-white leading-none">{selectedRole.name}</h4>
                 <span className={`text-xs px-2 py-0.5 rounded-full border leading-none ${colorMap[selectedRole.color] || colorMap.primary}`}>
-                  {selectedRole.id}
+                  {selectedRole.locked ? 'System' : 'Custom'}
                 </span>
               </div>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">{selectedRole.description}</p>
@@ -320,6 +330,29 @@ const RoleTemplates = () => {
               readOnly={selectedRole.locked}
             />
           </div>
+
+          {/* Save feedback banner */}
+          {saveFeedback && (
+            <div className={`flex items-center gap-2 px-3 py-2 mt-2 rounded-lg text-xs font-medium ${
+              saveFeedback.type === 'success'
+                ? 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-400 border border-success-200 dark:border-success-800'
+                : 'bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400 border border-error-200 dark:border-error-800'
+            }`}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {saveFeedback.type === 'success' ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                )}
+              </svg>
+              <span>{saveFeedback.message}</span>
+              <button onClick={() => setSaveFeedback(null)} className="ml-auto opacity-60 hover:opacity-100">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
 
           {/* Save / Cancel */}
           {hasChanges && (

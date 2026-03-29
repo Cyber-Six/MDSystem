@@ -34,7 +34,23 @@ const permissions = {
   inventory_allow_manage_requests: "ALLOW_TO_MANAGE_MEDICINE_REQUESTS",
   inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",
 
+  health_chat_allow_access: "ALLOW_TO_ACCESS_HEALTH_CHAT",
+  health_chat_allow_manage: "ALLOW_TO_MANAGE_HEALTH_CHAT",
+
+  analytics_allow_view: "ALLOW_TO_VIEW_ANALYTICS",
+  analytics_allow_export: "ALLOW_TO_EXPORT_ANALYTICS",
+
+  role_management_allow_access: "ALLOW_TO_ACCESS_ROLE_MANAGEMENT",
+  role_management_allow_edit: "ALLOW_TO_EDIT_ROLE_MANAGEMENT",
+
 };
+
+// ─── Admin-only permission keys — cannot be assigned via templates ────────────
+const ADMIN_ONLY_KEYS = new Set([
+  'is_admin',
+  'role_management_allow_access',
+  'role_management_allow_edit',
+]);
 
 async function getMedicalpermits(personnelId) {
   const result = await db.query(
@@ -44,6 +60,21 @@ async function getMedicalpermits(personnelId) {
     [personnelId]
   );
   return result.rows;
+}
+
+/**
+ * Get the staff member's branch designation from MedicalPersonnel.
+ * Returns 'Manila', 'QuezonCity', or 'Both'. Defaults to 'Both' if not found.
+ * Use this for list-level query filtering where no patientId is available.
+ * @param {string|number} userId
+ * @returns {Promise<string>}
+ */
+async function getStaffBranch(userId) {
+  const result = await db.query(
+    `SELECT designation FROM "MedicalPersonnel" WHERE id = $1 LIMIT 1`,
+    [userId]
+  );
+  return result.rows[0]?.designation || 'Both';
 }
 
 async function findMedicalPermit(personnelId, label) {
@@ -264,19 +295,22 @@ async function isMedicalPermitted(userId, label, patientId) {
   let result;
 
   if (patientId) {
-    // Case: patientId provided → join against patient branch
+    // Case: patientId provided → join against patient branch using staff designation
+    // Branch matching uses MedicalPersonnel.designation (the admin-assigned branch)
+    // rather than per-permission branch for consistent, staff-level filtering.
     result = await db.query(
       `SELECT uc.identity
        FROM "rolesMap" rm
        JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+       JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
        JOIN "UsersPersonal" up ON up.id = $3
        JOIN "UserCredentials" uc ON uc.id = up.id
        WHERE rm."personnelId" = $1
          AND rt.label = $2
          AND (
-           up.branch = 'Both'
-           OR rm.branch = up.branch
-           OR rm.branch = 'Both'
+           mp.designation = 'Both'
+           OR up.branch = mp.designation
+           OR up.branch = 'Both'
          )
        LIMIT 1;`,
       [userId, label, patientId]
@@ -347,10 +381,14 @@ async function createPermissionTemplate({ label, permissionsList, createdBy, def
     const template = templateResult.rows[0];
     const templateId = template.id;
 
-    // Prepare permissions to insert
+    // Prepare permissions to insert (strip admin-only keys)
     const toInsert = [];
     for (const perm of permissionsList) {
       const { key, enabled, branch } = perm;
+
+      // Skip admin-only keys — they cannot be assigned via templates
+      if (ADMIN_ONLY_KEYS.has(key)) continue;
+
       const permLabel = permissions[key];
 
       if (!permLabel) {
@@ -551,10 +589,14 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
         [templateId]
       );
 
-      // Prepare new permissions to insert
+      // Prepare new permissions to insert (strip admin-only keys)
       const toInsert = [];
       for (const perm of permissionsList) {
         const { key, enabled, branch } = perm;
+
+        // Skip admin-only keys — they cannot be assigned via templates
+        if (ADMIN_ONLY_KEYS.has(key)) continue;
+
         const permLabel = permissions[key];
 
         if (!permLabel) {
@@ -690,6 +732,69 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
   };
 }
 
+/**
+ * Propagate template permission changes to all staff assigned to this role.
+ * For each linked staff: clears existing permissions, re-applies from the
+ * updated template, and ensures is_staff is always set with the correct branch.
+ *
+ * @param {Object} params
+ * @param {number} params.templateId - The template that was updated
+ * @param {string} params.roleLabel  - The role label to match staff against
+ * @param {number} params.assignedBy - The admin user ID performing the update
+ * @returns {Promise<{ affectedCount: number }>}
+ */
+async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy }) {
+  // Get the updated template for its current permissions
+  const template = await getPermissionTemplate(templateId);
+  if (!template) {
+    throw new Error(`Template with id ${templateId} not found`);
+  }
+
+  // Find all staff with this role
+  const staffResult = await db.query(
+    `SELECT mp.id, mp.designation
+     FROM "MedicalPersonnel" mp
+     WHERE mp.role = $1`,
+    [roleLabel]
+  );
+
+  if (staffResult.rows.length === 0) {
+    return { affectedCount: 0 };
+  }
+
+  // Pre-compute enabled permissions from template (exclude is_staff — added per-staff with correct branch)
+  const enabledPermissions = template.permissions
+    .filter(p => p.enabled && p.key !== 'is_staff')
+    .map(p => ({ key: p.key, enabled: true, branch: p.branch }));
+
+  let affectedCount = 0;
+  for (const staff of staffResult.rows) {
+    const branch = staff.designation || 'Both';
+
+    // Clear existing permissions (clean slate)
+    await clearMedicalPermits(String(staff.id));
+
+    // Build full permissions: template perms + is_staff with staff-specific branch
+    const staffPermissions = [
+      ...enabledPermissions,
+      { key: 'is_staff', enabled: true, branch }
+    ];
+
+    // Apply all permissions in a single upsert
+    await setStaffPermissionsExtended({
+      personnelId: String(staff.id),
+      permissionsList: staffPermissions,
+      assignedBy: String(assignedBy),
+      defaultBranch: 'Both'
+    });
+
+    affectedCount++;
+  }
+
+  logger.info(`Template permissions propagated: templateId=${templateId}, role="${roleLabel}", affectedStaff=${affectedCount}`);
+  return { affectedCount };
+}
+
 // ─── MODULE-LEVEL PERMISSION MAP ─────────────────────────────────────────────
 // Maps frontend module IDs to their underlying backend permission keys.
 // When a module is ON, ALL listed keys are granted.
@@ -736,11 +841,14 @@ const MODULE_PERMISSION_MAP = {
     'inventory_allow_prescribe',
   ],
   healthChat: [
-    // Reserved for future health-chat permission keys
+    'health_chat_allow_access',
+    'health_chat_allow_manage',
   ],
   analytics: [
-    // Reserved for future analytics permission keys
+    'analytics_allow_view',
+    'analytics_allow_export',
   ],
+  // roleManagement intentionally excluded — admin-only via is_admin, not assignable via templates
 };
 
 const MODULE_LABELS = {
@@ -752,6 +860,7 @@ const MODULE_LABELS = {
   inventory: 'Inventory',
   healthChat: 'Health Chat',
   analytics: 'Analytics',
+  // roleManagement excluded — admin-only access
 };
 
 /**
@@ -865,6 +974,7 @@ module.exports = {
   isMedicalPermitted,
   clearMedicalPermits,
   getMedicalpermits,
+  getStaffBranch,
   permissions,
   getStaffPermissions,
   setStaffPermissionsExtended,
@@ -876,9 +986,11 @@ module.exports = {
   updatePermissionTemplate,
   deletePermissionTemplate,
   applyTemplateToStaff,
+  propagateTemplatePermissions,
   // Module-level permission functions
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,
+  ADMIN_ONLY_KEYS,
   resolveModulePermissions,
   setStaffModulePermissions,
   getStaffModulePermissions,

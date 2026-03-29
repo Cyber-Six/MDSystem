@@ -3,6 +3,7 @@ import AppointmentQueue from './components/appointment-queue';
 import AvailabilityManager from './components/availability-manager';
 import AppointmentDetailModal from './components/appointment-detail-modal';
 import PatientLookup from './components/patient-lookup';
+import { useStaffNotifications } from '../notification/notification-context';
 import {
   STATUS,
   SESSION,
@@ -44,6 +45,7 @@ import {
  * and scheduler config panels (in the legacy component) are fully connected.
  */
 const StaffAppointment = () => {
+  const { subscribe } = useStaffNotifications();
   const [activeSection, setActiveSection] = useState('queue');
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [error, setError] = useState('');
@@ -57,6 +59,14 @@ const StaffAppointment = () => {
       return () => clearTimeout(timer);
     }
   }, [error, successMsg]);
+
+  // Refresh the queue when a patient submits a new appointment via socket
+  useEffect(() => {
+    const unsub = subscribe('appointment:submitted', () => {
+      queueRef.current?.refresh();
+    });
+    return unsub;
+  }, [subscribe]);
 
   /* ── Handlers mapped to real service ─────────────────────────────────── */
 

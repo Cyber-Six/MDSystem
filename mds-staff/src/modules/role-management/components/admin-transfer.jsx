@@ -28,8 +28,8 @@ const AdminTransfer = () => {
     setIsLoadingStaff(true);
     try {
       const records = await fetchStaffAccounts();
-      // Filter to active staff only (excluding current admin — backend handles this check)
-      setStaffList(records.filter((s) => s.status === 'Active'));
+      // Filter to active non-admin staff only (admin cannot transfer to themselves)
+      setStaffList(records.filter((s) => s.status === 'Active' && !s.permissions?.is_admin));
     } catch {
       // Silently fail — staff list is for selection convenience
     } finally {

@@ -88,6 +88,7 @@ type StaffAccount {
   id: ID!
   email: String!
   name: String!
+  role: String                                 # Role string from MedicalPersonnel (e.g., "Doctor", "Nurse")
   branch: Designation
   identity: Identity!
   status: AccountStatus!
@@ -280,8 +281,8 @@ type Query {
   listStaffAccounts(status: CredentialsStatus, location: Designation): StaffAccountList!
   getStaffAccount(userId: ID!): StaffAccount
 
-  # User Search (for adding new staff)
-  searchUsers(query: String!): UserSearchResultList!
+  # User Search (for adding new staff — Employee identity only)
+  searchUsers(query: String!, mdsOnly: Boolean): UserSearchResultList!
 
   # Medical Personnel
   listMedicalPersonnel(role: String, designation: Designation, isActive: Boolean): MedicalPersonnelList!
@@ -330,11 +331,12 @@ type Mutation {
   # The 'branch' parameter is applied to ALL underlying permissions.
   setStaffModulePermissions(userId: ID!, modules: [ModulePermissionInput!]!, branch: Designation!): MutationResult!
 
-  # Staff Account - Combined update for module permissions and/or account status
-  # Accepts optional module permissions and optional status change in one call.
+  # Staff Account - Combined update for role and/or account status
   # Branch is auto-detected from MedicalPersonnel.designation (defaults to 'Both').
-  # Status: Active = set identity to Medical + ensure is_staff; Suspended = revert identity to Employee.
-  updateStaffAccount(userId: ID!, modules: [ModulePermissionInput!], status: AccountStatus): StaffAccountMutationResult!
+  # Status: Active = set is_active true; Suspended = set is_active false.
+  # Role: If provided, updates MedicalPersonnel.role and applies matching template permissions.
+  # Admin accounts cannot have their role changed (use Admin Transfer instead).
+  updateStaffAccount(userId: ID!, status: AccountStatus, role: String, templateId: ID, designation: Designation): StaffAccountMutationResult!
 
   # Session Management
   rotateStaffAnchor(userId: ID!): RotateAnchorResult!
