@@ -4,6 +4,7 @@ import PrivateRoute from './routes/private-route';
 import { BannerProvider } from './context/banner-context';
 import Banner from './components/banner/banner';
 import ErrorBoundary from './components/error-boundary';
+import { StaffNotificationProvider } from './modules/notification/notification-context';
 
 // Lazy-loaded pages for code splitting
 const Auth = lazy(() => import('./pages/Auth.jsx'));
@@ -36,7 +37,9 @@ function App() {
                 path="/*"
                 element={
                   <PrivateRoute>
-                    <Dashboard />
+                    <StaffNotificationProvider>
+                      <Dashboard />
+                    </StaffNotificationProvider>
                   </PrivateRoute>
                 }
               />

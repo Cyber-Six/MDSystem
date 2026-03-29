@@ -15,6 +15,8 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
   const [templates, setTemplates] = useState([]);
   const [role, setRole] = useState(staff.role || '');
   const [originalRole] = useState(staff.role || '');
+  const [branch, setBranch] = useState(staff.branch || 'Both');
+  const [originalBranch] = useState(staff.branch || 'Both');
   const [status, setStatus] = useState(isPending ? 'Active' : staff.status);
   const [hasChanges, setHasChanges] = useState(isPending);
   const [isSaving, setIsSaving] = useState(false);
@@ -38,15 +40,17 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
     setIsSaving(true);
     try {
       const roleChanged = role !== originalRole;
+      const branchChanged = branch !== originalBranch;
       const result = await updateStaffAccount(
         staff.id,
         status,
         roleChanged ? role : undefined,
         roleChanged && currentTemplate ? currentTemplate.id : undefined,
+        branchChanged ? branch : undefined,
       );
       const updatedStaff = result.staff
         ? result.staff
-        : { ...staff, role, status };
+        : { ...staff, role, status, branch };
       onSave(updatedStaff);
       setHasChanges(false);
     } catch (err) {
@@ -143,6 +147,25 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.id}</p>
                   </div>
                   <div>
+                    <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Branch</p>
+                    {isAdmin ? (
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-medium text-secondary-900 dark:text-white">{branch === 'QuezonCity' ? 'Quezon City' : branch}</p>
+                        <span className="text-[8px] px-1 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium leading-none">Locked</span>
+                      </div>
+                    ) : (
+                      <select
+                        value={branch}
+                        onChange={(e) => { setBranch(e.target.value); setHasChanges(true); }}
+                        className="w-full mt-0.5 px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                      >
+                        <option value="Manila">Manila</option>
+                        <option value="QuezonCity">Quezon City</option>
+                        <option value="Both">Both</option>
+                      </select>
+                    )}
+                  </div>
+                  <div>
                     <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Last Login</p>
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.lastLogin || 'Never'}</p>
                   </div>
@@ -193,6 +216,14 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                     <p className="text-xs text-secondary-500 dark:text-neutral-400">
                       This account is <span className="font-semibold text-warning-600 dark:text-warning-400">pending</span>. Assign a role and save to grant staff portal access.
                     </p>
+                  ) : isAdmin ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-success-500 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-secondary-800 dark:text-white">Admin Account — Always Active</p>
+                        <p className="text-[10px] text-secondary-400 dark:text-neutral-500">Admin account cannot be deactivated. Use Admin Transfer to change admin control.</p>
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-between">
                       <div>
@@ -234,7 +265,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
               {!isPending && (
                 <button
                   disabled={isSaving}
-                  onClick={() => { setRole(staff.role); setStatus(staff.status); setHasChanges(false); setSaveError(null); }}
+                  onClick={() => { setRole(staff.role); setStatus(staff.status); setBranch(staff.branch || 'Both'); setHasChanges(false); setSaveError(null); }}
                   className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors disabled:opacity-50"
                 >
                   Discard

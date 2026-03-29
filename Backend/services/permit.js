@@ -45,6 +45,13 @@ const permissions = {
 
 };
 
+// ─── Admin-only permission keys — cannot be assigned via templates ────────────
+const ADMIN_ONLY_KEYS = new Set([
+  'is_admin',
+  'role_management_allow_access',
+  'role_management_allow_edit',
+]);
+
 async function getMedicalpermits(personnelId) {
   const result = await db.query(
     `SELECT rt.label, rm.branch FROM "rolesMap" rm
@@ -53,6 +60,21 @@ async function getMedicalpermits(personnelId) {
     [personnelId]
   );
   return result.rows;
+}
+
+/**
+ * Get the staff member's branch designation from MedicalPersonnel.
+ * Returns 'Manila', 'QuezonCity', or 'Both'. Defaults to 'Both' if not found.
+ * Use this for list-level query filtering where no patientId is available.
+ * @param {string|number} userId
+ * @returns {Promise<string>}
+ */
+async function getStaffBranch(userId) {
+  const result = await db.query(
+    `SELECT designation FROM "MedicalPersonnel" WHERE id = $1 LIMIT 1`,
+    [userId]
+  );
+  return result.rows[0]?.designation || 'Both';
 }
 
 async function findMedicalPermit(personnelId, label) {
@@ -273,19 +295,22 @@ async function isMedicalPermitted(userId, label, patientId) {
   let result;
 
   if (patientId) {
-    // Case: patientId provided → join against patient branch
+    // Case: patientId provided → join against patient branch using staff designation
+    // Branch matching uses MedicalPersonnel.designation (the admin-assigned branch)
+    // rather than per-permission branch for consistent, staff-level filtering.
     result = await db.query(
       `SELECT uc.identity
        FROM "rolesMap" rm
        JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+       JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
        JOIN "UsersPersonal" up ON up.id = $3
        JOIN "UserCredentials" uc ON uc.id = up.id
        WHERE rm."personnelId" = $1
          AND rt.label = $2
          AND (
-           up.branch = 'Both'
-           OR rm.branch = up.branch
-           OR rm.branch = 'Both'
+           mp.designation = 'Both'
+           OR up.branch = mp.designation
+           OR up.branch = 'Both'
          )
        LIMIT 1;`,
       [userId, label, patientId]
@@ -356,10 +381,14 @@ async function createPermissionTemplate({ label, permissionsList, createdBy, def
     const template = templateResult.rows[0];
     const templateId = template.id;
 
-    // Prepare permissions to insert
+    // Prepare permissions to insert (strip admin-only keys)
     const toInsert = [];
     for (const perm of permissionsList) {
       const { key, enabled, branch } = perm;
+
+      // Skip admin-only keys — they cannot be assigned via templates
+      if (ADMIN_ONLY_KEYS.has(key)) continue;
+
       const permLabel = permissions[key];
 
       if (!permLabel) {
@@ -560,10 +589,14 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
         [templateId]
       );
 
-      // Prepare new permissions to insert
+      // Prepare new permissions to insert (strip admin-only keys)
       const toInsert = [];
       for (const perm of permissionsList) {
         const { key, enabled, branch } = perm;
+
+        // Skip admin-only keys — they cannot be assigned via templates
+        if (ADMIN_ONLY_KEYS.has(key)) continue;
+
         const permLabel = permissions[key];
 
         if (!permLabel) {
@@ -815,10 +848,7 @@ const MODULE_PERMISSION_MAP = {
     'analytics_allow_view',
     'analytics_allow_export',
   ],
-  roleManagement: [
-    'role_management_allow_access',
-    'role_management_allow_edit',
-  ],
+  // roleManagement intentionally excluded — admin-only via is_admin, not assignable via templates
 };
 
 const MODULE_LABELS = {
@@ -830,7 +860,7 @@ const MODULE_LABELS = {
   inventory: 'Inventory',
   healthChat: 'Health Chat',
   analytics: 'Analytics',
-  roleManagement: 'Role Management',
+  // roleManagement excluded — admin-only access
 };
 
 /**
@@ -944,6 +974,7 @@ module.exports = {
   isMedicalPermitted,
   clearMedicalPermits,
   getMedicalpermits,
+  getStaffBranch,
   permissions,
   getStaffPermissions,
   setStaffPermissionsExtended,
@@ -959,6 +990,7 @@ module.exports = {
   // Module-level permission functions
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,
+  ADMIN_ONLY_KEYS,
   resolveModulePermissions,
   setStaffModulePermissions,
   getStaffModulePermissions,
