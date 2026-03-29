@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill, Plus } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { uploadFile, unstageFile } from '../health-chat-service';
 import PrescriptionModal from './PrescriptionModal';
@@ -53,8 +53,21 @@ const MessageInput = ({ emitTyping }) => {
   const [isSending, setIsSending]               = useState(false);
   const [actionLoading, setActionLoading]       = useState(null);
   const [showPrescription, setShowPrescription] = useState(false);
-  const fileInputRef = useRef(null);
-  const textareaRef  = useRef(null);
+  const [showPlusMenu, setShowPlusMenu]         = useState(false);
+  const fileInputRef  = useRef(null);
+  const textareaRef   = useRef(null);
+  const plusMenuRef   = useRef(null);
+
+  useEffect(() => {
+    if (!showPlusMenu) return;
+    const handleClickOutside = (e) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target)) {
+        setShowPlusMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPlusMenu]);
 
   const isPending = selectedTicket?.status === 'Open';
   const isActive  = selectedTicket?.status === 'Ongoing';
@@ -292,32 +305,85 @@ const MessageInput = ({ emitTyping }) => {
 
       {/* Input row */}
       <div className="flex items-center gap-2 px-4 py-2.5">
-        {/* Attach */}
+        {/* Hidden file input */}
         <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES} onChange={handleFileSelect} className="hidden" />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading || isSending || !!attachedFile}
-          className="flex-shrink-0 p-1.5 rounded-lg transition-colors disabled:opacity-40
-                     text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
-        >
-          {isUploading
-            ? <Loader2 className="w-4 h-4 animate-spin" />
-            : <Paperclip className="w-4 h-4" />
-          }
-        </button>
 
-        {/* Prescribe */}
-        {isActive && (
+        {/* Plus action menu */}
+        <div ref={plusMenuRef} className="relative flex-shrink-0">
+          <style>{`
+            @keyframes hc-sheet-up {
+              from { opacity: 0; transform: translateY(14px) scale(0.97); }
+              to   { opacity: 1; transform: translateY(0)   scale(1); }
+            }
+          `}</style>
+          {showPlusMenu && (
+            <div
+              className="absolute bottom-full left-0 mb-2 z-50 min-w-[240px] rounded-2xl overflow-hidden
+                         bg-white dark:bg-[rgba(22,22,26,0.97)]
+                         border border-neutral-200 dark:border-white/[0.06]
+                         shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.3)]
+                         backdrop-blur-md"
+              style={{ animation: 'hc-sheet-up 0.22s cubic-bezier(0.34,1.56,0.64,1) both' }}
+            >
+              {/* Attach File */}
+              <button
+                type="button"
+                onClick={() => { fileInputRef.current?.click(); setShowPlusMenu(false); }}
+                disabled={isUploading || isSending || !!attachedFile}
+                className="w-full flex items-center justify-between px-5 py-4
+                           text-neutral-800 dark:text-white
+                           hover:bg-neutral-100 dark:hover:bg-white/[0.07]
+                           active:bg-neutral-200 dark:active:bg-white/10
+                           disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <span className="text-[15px] font-medium tracking-[-0.01em]">
+                  {isUploading ? 'Uploading…' : 'Attach file'}
+                </span>
+                <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-blue-100 dark:bg-[rgba(59,130,246,0.25)]">
+                  {isUploading
+                    ? <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+                    : <Paperclip className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  }
+                </span>
+              </button>
+
+              <div className="mx-4 border-b border-neutral-200 dark:border-white/[0.07]" />
+
+              {/* Prescription */}
+              <button
+                type="button"
+                onClick={() => { setShowPrescription(true); setShowPlusMenu(false); }}
+                disabled={isSending}
+                className="w-full flex items-center justify-between px-5 py-4
+                           text-neutral-800 dark:text-white
+                           hover:bg-neutral-100 dark:hover:bg-white/[0.07]
+                           active:bg-neutral-200 dark:active:bg-white/10
+                           disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <span className="text-[15px] font-medium tracking-[-0.01em]">Prescription</span>
+                <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-emerald-100 dark:bg-[rgba(16,185,129,0.25)]">
+                  <Pill className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </span>
+              </button>
+            </div>
+          )}
+          {/* Plus trigger button */}
           <button
-            onClick={() => setShowPrescription(true)}
+            type="button"
+            onClick={() => setShowPlusMenu(v => !v)}
             disabled={isSending}
-            className="flex-shrink-0 p-1.5 rounded-lg transition-colors disabled:opacity-40
-                       text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-            title="Issue prescription"
+            className={`p-1.5 rounded-full transition-all duration-200 disabled:opacity-40
+                        ${showPlusMenu
+                          ? 'bg-neutral-200 dark:bg-neutral-700 text-secondary-900 dark:text-white'
+                          : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                        }`}
           >
-            <Pill className="w-4 h-4" />
+            <Plus
+              className="w-5 h-5 transition-transform duration-200"
+              style={{ transform: showPlusMenu ? 'rotate(45deg)' : 'rotate(0deg)' }}
+            />
           </button>
-        )}
+        </div>
 
         {/* Textarea */}
         <textarea
@@ -360,8 +426,8 @@ const MessageInput = ({ emitTyping }) => {
       <PrescriptionModal
         isOpen={showPrescription}
         onClose={() => setShowPrescription(false)}
-        patientId={selectedTicket?.patientId}
       />
+
     </div>
   );
 };

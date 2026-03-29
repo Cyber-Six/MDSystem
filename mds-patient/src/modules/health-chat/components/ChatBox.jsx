@@ -1,10 +1,10 @@
-import React from 'react';
-import { Send, AlertCircle, X, Lock, RefreshCw, Stethoscope, Clock, Pill } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, AlertCircle, X, Lock, RefreshCw, Stethoscope, Clock, Pill, Plus, Paperclip, Loader2 } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
-import { FileAttachButton, FilePreview, useClipboardPaste } from './FileAttachment';
+import { FilePreview, useClipboardPaste } from './FileAttachment';
 import ConfirmModal from './ConfirmModal';
-import MyPrescriptionsModal from './MyPrescriptionsModal';
+import { uploadFile } from '../health-chat-service';
 
 const ChatBox = ({
   messages,
@@ -34,14 +34,47 @@ const ChatBox = ({
   onFileRemoved,
   isSocketConnected,
   socketError,
-  showPrescriptions,
-  onOpenPrescriptions,
-  onClosePrescriptions,
+  onOpenMedicineRequest,
 }) => {
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
   const isPending = ticketStatus === 'Open';
   const isActive = ticketStatus === 'Ongoing';
   const canSendMessage = isActive && connectionStatus === 'connected' && !isInitializing;
+
+  // Plus action menu
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [isFileUploading, setIsFileUploading] = useState(false);
+  const plusMenuRef = useRef(null);
+  const localFileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!showPlusMenu) return;
+    const handleClickOutside = (e) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target)) {
+        setShowPlusMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPlusMenu]);
+
+  const handleLocalFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    const allowed = 'image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime'.split(',');
+    if (!allowed.includes(file.type)) { alert('Unsupported file type.'); return; }
+    if (file.size > 10 * 1024 * 1024) { alert('File too large. Max 10MB.'); return; }
+    setIsFileUploading(true);
+    try {
+      const fileId = await uploadFile(file);
+      onFileStaged({ fileId, fileName: file.name, fileType: file.type, fileSize: file.size });
+    } catch {
+      alert('Upload failed. Please try again.');
+    } finally {
+      setIsFileUploading(false);
+    }
+  };
 
   const { handlePaste } = useClipboardPaste({
     onFileStaged,
@@ -300,22 +333,90 @@ const ChatBox = ({
             {/* Active input */}
         {isActive && (
           <div className="flex items-center gap-2">
-            {/* Attach */}
-            <FileAttachButton
-              onFileStaged={onFileStaged}
-              disabled={!canSendMessage || isLoading || attachedFile}
+            {/* Hidden file input */}
+            <input
+              ref={localFileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime"
+              onChange={handleLocalFileSelect}
+              className="hidden"
             />
 
-            {/* My Prescriptions */}
-            <button
-              type="button"
-              onClick={onOpenPrescriptions}
-              className="p-2 rounded-lg text-emerald-600 dark:text-emerald-400
-                         hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
-              title="My prescriptions"
-            >
-              <Pill className="w-5 h-5" />
-            </button>
+            {/* Plus action menu */}
+            <div ref={plusMenuRef} className="relative flex-shrink-0">
+              <style>{`
+                @keyframes hc-sheet-up {
+                  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+                  to   { opacity: 1; transform: translateY(0)   scale(1); }
+                }
+              `}</style>
+              {showPlusMenu && (
+                <div
+                  className="absolute bottom-full left-0 mb-2 z-50 min-w-[220px] rounded-2xl overflow-hidden
+                             bg-white dark:bg-[rgba(22,22,26,0.97)]
+                             border border-neutral-200 dark:border-white/[0.06]
+                             shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.3)]
+                             backdrop-blur-md"
+                  style={{ animation: 'hc-sheet-up 0.22s cubic-bezier(0.34,1.56,0.64,1) both' }}
+                >
+                  {/* Attach File */}
+                  <button
+                    type="button"
+                    onClick={() => { localFileInputRef.current?.click(); setShowPlusMenu(false); }}
+                    disabled={!canSendMessage || isLoading || !!attachedFile}
+                    className="w-full flex items-center justify-between px-5 py-4
+                               text-neutral-800 dark:text-white
+                               hover:bg-neutral-100 dark:hover:bg-white/[0.07]
+                               active:bg-neutral-200 dark:active:bg-white/10
+                               disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <span className="text-[15px] font-medium tracking-[-0.01em]">
+                      {isFileUploading ? 'Uploading…' : 'Attach file'}
+                    </span>
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-blue-100 dark:bg-[rgba(59,130,246,0.25)]">
+                      {isFileUploading
+                        ? <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+                        : <Paperclip className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      }
+                    </span>
+                  </button>
+
+                  <div className="mx-4 border-b border-neutral-200 dark:border-white/[0.07]" />
+
+                  {/* Medicine Request */}
+                  <button
+                    type="button"
+                    onClick={() => { onOpenMedicineRequest?.(); setShowPlusMenu(false); }}
+                    className="w-full flex items-center justify-between px-5 py-4
+                               text-neutral-800 dark:text-white
+                               hover:bg-neutral-100 dark:hover:bg-white/[0.07]
+                               active:bg-neutral-200 dark:active:bg-white/10
+                               transition-colors"
+                  >
+                    <span className="text-[15px] font-medium tracking-[-0.01em]">Medicine request</span>
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-emerald-100 dark:bg-[rgba(16,185,129,0.25)]">
+                      <Pill className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    </span>
+                  </button>
+                </div>
+              )}
+              {/* Plus trigger button */}
+              <button
+                type="button"
+                onClick={() => setShowPlusMenu(v => !v)}
+                disabled={!canSendMessage || isLoading}
+                className={`p-2 rounded-full transition-all duration-200 disabled:opacity-40
+                            ${showPlusMenu
+                              ? 'bg-neutral-200 dark:bg-neutral-700 text-secondary-900 dark:text-white'
+                              : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                            }`}
+              >
+                <Plus
+                  className="w-5 h-5 transition-transform duration-200"
+                  style={{ transform: showPlusMenu ? 'rotate(45deg)' : 'rotate(0deg)' }}
+                />
+              </button>
+            </div>
 
             {/* Textarea */}
             <div className="flex-1 relative">
@@ -382,11 +483,6 @@ const ChatBox = ({
         variant="warning"
       />
 
-      {/* My Prescriptions Modal */}
-      <MyPrescriptionsModal
-        isOpen={showPrescriptions}
-        onClose={onClosePrescriptions}
-      />
     </div>
   );
 };

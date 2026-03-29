@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, MessageCircleHeart, Stethoscope } from 'lucide-react';
 import ChatBox from './components/ChatBox';
 import TicketDivider from './components/TicketDivider';
@@ -15,6 +16,7 @@ import {
 import { useHealthChatSocket } from './hooks/use-health-chat-socket';
 
 const HealthChat = () => {
+  const navigate = useNavigate();
   const [ticket, setTicket] = useState(null);
   const [messages, setMessages] = useState([]);
   const [previousTickets, setPreviousTickets] = useState([]);
@@ -28,7 +30,6 @@ const HealthChat = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [ticketPurpose, setTicketPurpose] = useState('');
   const [showCloseModal, setShowCloseModal]       = useState(false);
-  const [showPrescriptions, setShowPrescriptions] = useState(false);
 
   const messagesEndRef = useRef(null);
   const previousConversationEndRef = useRef(null);
@@ -627,9 +628,7 @@ const HealthChat = () => {
                 onFileRemoved={() => setAttachedFile(null)}
                 isSocketConnected={isSocketConnected}
                 socketError={socketError}
-                showPrescriptions={showPrescriptions}
-                onOpenPrescriptions={() => setShowPrescriptions(true)}
-                onClosePrescriptions={() => setShowPrescriptions(false)}
+                onOpenMedicineRequest={() => navigate('/medicine-request')}
               />
             </div>
           </div>
