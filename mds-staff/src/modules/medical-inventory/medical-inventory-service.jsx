@@ -298,3 +298,20 @@ export const updateSupplyBatch = async (batchId, input) => {
   );
   return data.updateSupplyBatch;
 };
+
+/**
+ * Update a medicine batch (availableQuantity, expiryDate, notes).
+ * @param {string|number} batchId - ID of the batch to update
+ * @param {{ currentQuantity?: number, expiryDate?: string, notes?: string }} input
+ * @returns {Promise<Object>} Updated MedicineBatch
+ */
+export const updateMedicineBatch = async (batchId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateMedicalSupply($batchId: ID!, $input: MedicalSupplyUpdateInput!) {
+      updateMedicalSupply(batchId: $batchId, input: $input) {${MEDICINE_BATCH_FIELDS}
+      }
+    }`,
+    { batchId, input },
+  );
+  return data.updateMedicalSupply;
+};
