@@ -76,7 +76,7 @@ app.use('/auth/password', passwordResetRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
 app.use('/media', mediaRoutes);
-app.use('/documents', documentRoutes);
+//app.use('/documents', documentRoutes);
 
 // ======================================
 // AI Medical Chatbot — proxied to MDS-Chatbot microservice
