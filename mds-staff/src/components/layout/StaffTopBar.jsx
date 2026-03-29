@@ -1,6 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { logout } from '../../packages-core-adapter';
+import { useStaffNotifications } from '../../modules/notification/notification-context';
+
+function formatRelativeTime(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 /**
  * Staff Top Bar Component
@@ -8,12 +19,21 @@ import { logout } from '../../packages-core-adapter';
  */
 const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [themeMode, setThemeMode] = useState(() => {
     return localStorage.getItem('staff_themeMode') || 'system';
   });
-  
+
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useStaffNotifications();
+
+  const handleNotifClick = (notif) => {
+    markAsRead(notif.id);
+    setShowNotifications(false);
+    if (notif.route) navigate(notif.route);
+  };
+
   const notifRef = useRef(null);
   const userMenuRef = useRef(null);
 
@@ -46,15 +66,6 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
     if (path.includes('/settings')) return 'Role Management';
     return 'Staff Portal';
   };
-
-  // Mock notifications
-  const notifications = [
-    { id: 1, title: 'New Pending Request', message: 'Juan Dela Cruz submitted a record update', time: '5m ago', unread: true },
-    { id: 2, title: 'Appointment Today', message: '3 appointments scheduled for today', time: '1h ago', unread: true },
-    { id: 3, title: 'Low Stock Alert', message: 'Paracetamol stock is running low', time: '2h ago', unread: false },
-  ];
-
-  const unreadCount = notifications.filter(n => n.unread).length;
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -101,7 +112,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   };
 
   return (
-    <header className="h-14 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between px-4 sticky top-0 z-30">
+    <header className="h-14 bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between px-4 sticky top-0 z-20">
       {/* Left: Menu + Title */}
       <div className="flex items-center gap-3">
         {/* Mobile Menu Button */}
@@ -139,28 +150,48 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
 
           {/* Notifications Dropdown */}
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700 py-1 z-50">
-              <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
+            <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700 py-1 z-50">
+              <div className="px-3 py-2 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Notifications</h3>
-              </div>
-              <div className="max-h-64 overflow-y-auto">
-                {notifications.map((notif) => (
-                  <div
-                    key={notif.id}
-                    className={`px-3 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer ${
-                      notif.unread ? 'bg-primary-50 dark:bg-primary-900/20' : ''
-                    }`}
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
                   >
-                    <p className="text-sm font-medium text-secondary-800 dark:text-white">{notif.title}</p>
-                    <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{notif.message}</p>
-                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">{notif.time}</p>
-                  </div>
-                ))}
+                    Mark all read
+                  </button>
+                )}
               </div>
-              <div className="px-3 py-2 border-t border-neutral-200 dark:border-neutral-700">
-                <button className="text-xs text-primary-600 dark:text-primary-400 font-medium hover:underline">
-                  View all notifications
-                </button>
+              <div className="max-h-72 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="px-3 py-6 text-center">
+                    <svg className="w-8 h-8 text-neutral-300 dark:text-neutral-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <p className="text-xs text-secondary-400 dark:text-neutral-500">No notifications yet</p>
+                  </div>
+                ) : (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      onClick={() => handleNotifClick(notif)}
+                      className={`px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer border-b border-neutral-100 dark:border-neutral-700/50 last:border-0 ${
+                        notif.unread ? 'bg-primary-50 dark:bg-primary-900/20' : ''
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        {notif.unread && (
+                          <span className="w-1.5 h-1.5 bg-primary-500 rounded-full mt-1.5 flex-shrink-0"></span>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">{notif.title}</p>
+                          <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5 line-clamp-2">{notif.message}</p>
+                          <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">{formatRelativeTime(notif.time)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
