@@ -890,10 +890,10 @@ const Mutation = {
    * - status: optional Active/Suspended toggle
    * This replaces the REST PUT /admin/staff/accounts/:id endpoint.
    */
-  _updateStaffAccount: async (_, { userId, status, role, templateId }, { user, res }) => {
-    if (!status && !role) {
+  _updateStaffAccount: async (_, { userId, status, role, templateId, designation }, { user, res }) => {
+    if (!status && !role && !designation) {
       throwGraphQLError(res)
-        .message('At least one of status or role must be provided.')
+        .message('At least one of status, role, or designation must be provided.')
         .status(400)
         .throw();
     }
@@ -967,6 +967,15 @@ const Mutation = {
 
     // Handle status change (Active ↔ Suspended)
     if (status) {
+      // Admin accounts cannot be deactivated — only admin transfer can change admin control
+      const adminStatusCheck = await isMedicalPermitted(userId, permissions.is_admin, null);
+      if (adminStatusCheck && status === 'Suspended') {
+        throwGraphQLError(res)
+          .message('Admin account cannot be deactivated. Use Admin Transfer to change admin control.')
+          .status(403)
+          .throw();
+      }
+
       const validStatuses = ['Active', 'Suspended'];
       if (!validStatuses.includes(status)) {
         throwGraphQLError(res)
@@ -988,6 +997,24 @@ const Mutation = {
         );
         logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
       }
+    }
+
+    // Handle designation (branch) change
+    if (designation) {
+      const validDesignations = ['Manila', 'QuezonCity', 'Both'];
+      if (!validDesignations.includes(designation)) {
+        throwGraphQLError(res)
+          .message('designation must be Manila, QuezonCity, or Both.')
+          .status(400)
+          .throw();
+      }
+
+      await db.query(
+        `UPDATE "MedicalPersonnel" SET designation = $1 WHERE id = $2`,
+        [designation, userId]
+      );
+
+      logger.info(`Staff branch changed to "${designation}" for userId=${userId} by adminId=${user.id}`);
     }
 
     logger.info(`Staff account updated: userId=${userId}, by adminId=${user.id}`);
@@ -1251,7 +1278,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1259,7 +1286,7 @@ const Mutation = {
             lockoutRemainingSeconds: pwLockTTL,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.warn(`Admin ${oldAdminId} attempted transfer while password-locked (TTL: ${pwLockTTL}s)`);
@@ -1276,7 +1303,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1284,7 +1311,7 @@ const Mutation = {
             retryAfterSeconds,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.info(`Admin ${oldAdminId} on transfer initiation cooldown (${retryAfterSeconds}s remaining)`);
@@ -1301,7 +1328,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1309,7 +1336,7 @@ const Mutation = {
             existingTokenPrefix: tokenPrefix,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.warn(`Admin ${oldAdminId} attempted duplicate transfer (token: ${tokenPrefix})`);
@@ -1326,14 +1353,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Current admin email not found',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1348,14 +1375,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Current admin credentials not found',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1377,7 +1404,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1387,7 +1414,7 @@ const Mutation = {
             lockoutTTL: locked ? lockoutTTL : null,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.warn(`Admin ${oldAdminId} invalid password (attempt ${failures}/${3}${locked ? ' - LOCKED' : ''})`);
@@ -1414,14 +1441,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Cannot transfer to self',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1436,14 +1463,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Target not active medical personnel',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1458,14 +1485,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Target user not validated',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1480,14 +1507,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Target user not found',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1501,14 +1528,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Target user 2FA not enabled',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1524,14 +1551,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Current admin 2FA not enabled',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         logger.warn(`Admin ${oldAdminId} attempted transfer without 2FA enabled`);
@@ -1554,7 +1581,7 @@ const Mutation = {
       await db.setSystemAuditLog({
         eventType: 'ADMIN_TRANSFER_INITIATED',
         actorId: oldAdminId,
-        actorType: 'Medical',
+        actorType: 'Staff',
         targetId: newAdminUserId,
         action: 'INITIATE_ADMIN_TRANSFER',
         details: JSON.stringify({
@@ -1563,7 +1590,7 @@ const Mutation = {
           tokenPrefix: verificationToken.substring(0, 8) + '...',
           timestamp: new Date().toISOString(),
         }),
-        changedBy: oldAdminId,
+        changedBy: 'Medical',
       });
 
       logger.info(`Admin transfer initiated: oldAdminId=${oldAdminId}, newAdminId=${newAdminUserId}`);
@@ -1579,14 +1606,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminUserId,
           action: 'INITIATE_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: error.message,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
       }
       throw error;
@@ -1607,7 +1634,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: currentUserId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: null,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1615,7 +1642,7 @@ const Mutation = {
             tokenPrefix: verificationToken.substring(0, 8) + '...',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: currentUserId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1631,7 +1658,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: currentUserId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1640,7 +1667,7 @@ const Mutation = {
             attemptedByUserId: currentUserId,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: currentUserId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1661,14 +1688,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Old admin no longer has admin privileges',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1684,14 +1711,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Target user no longer active medical personnel',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1706,14 +1733,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Target user no longer validated',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1729,14 +1756,14 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: oldAdminId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: newAdminId,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
             reason: 'Target user 2FA no longer enabled',
             timestamp: new Date().toISOString(),
           }),
-          changedBy: oldAdminId,
+          changedBy: 'Medical',
         });
 
         throwGraphQLError(res)
@@ -1775,7 +1802,7 @@ const Mutation = {
         client: client,
         eventType: 'ADMIN_TRANSFER_SUCCESS',
         actorId: oldAdminId,
-        actorType: 'Medical',
+        actorType: 'Staff',
         targetId: newAdminId,
         action: 'TRANSFER_ADMIN_PRIVILEGES',
         details: JSON.stringify({
@@ -1786,7 +1813,7 @@ const Mutation = {
           verificationTokenPrefix: verificationToken.substring(0, 8) + '...',
           timestamp: new Date().toISOString(),
         }),
-        changedBy: oldAdminId,
+        changedBy: 'Medical',
       });
 
       await client.query('COMMIT');
@@ -1810,7 +1837,7 @@ const Mutation = {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: currentUserId,
-          actorType: 'Medical',
+          actorType: 'Staff',
           targetId: null,
           action: 'CONFIRM_ADMIN_TRANSFER',
           details: JSON.stringify({
@@ -1818,7 +1845,7 @@ const Mutation = {
             error: error.message,
             timestamp: new Date().toISOString(),
           }),
-          changedBy: currentUserId,
+          changedBy: 'Medical',
         });
       } catch (logError) {
         logger.error(`Failed to log admin transfer failure: ${logError.message}`);

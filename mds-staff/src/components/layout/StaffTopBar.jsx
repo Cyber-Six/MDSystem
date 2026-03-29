@@ -132,15 +132,6 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        {/* Theme Toggle */}
-        <button
-          onClick={toggleTheme}
-          className="p-1.5 rounded-md text-secondary-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
-          title={`Theme: ${themeMode}`}
-        >
-          {getThemeIcon()}
-        </button>
-
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button
@@ -232,6 +223,17 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
               </button>
               <button className="w-full px-3 py-2 text-left text-sm text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700">
                 Settings
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
+                className="w-full px-3 py-2 text-left text-sm text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700 flex items-center justify-between"
+                title={`Theme: ${themeMode}`}
+              >
+                <span>Theme</span>
+                <span className="flex items-center gap-1 text-xs">
+                  {getThemeIcon()}
+                  <span className="text-secondary-400 dark:text-neutral-500 capitalize">{themeMode}</span>
+                </span>
               </button>
               <div className="border-t border-neutral-200 dark:border-neutral-700 mt-1 pt-1">
                 <button 
