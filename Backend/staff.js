@@ -28,6 +28,7 @@ const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
 const { initSocket, getIO } = require('./config/sockets');
 require('./config/sockets/health-chat-events'); // Register health chat socket handlers
+require('./config/sockets/notification-events'); // Register notification socket handlers
 
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });

@@ -79,7 +79,8 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   }, []);
 
   /* Expose removeAppointment so the parent can optimistically move an item
-     out of the current tab after a status-changing action, and update counts */
+     out of the current tab after a status-changing action, and update counts.
+     Expose refresh so the parent can trigger a full queue reload (e.g., via socket). */
   useImperativeHandle(ref, () => ({
     removeAppointment: (id, newStatus) => {
       setAppointments((prev) => prev.filter((a) => a.id !== id));
@@ -98,7 +99,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       // Also re-fetch actual counts from server to stay in sync
       refreshCounts();
     },
-  }), [activeTab, refreshCounts]);
+    refresh: () => {
+      fetchAppointments(activeTab);
+      refreshCounts();
+    },
+  }), [activeTab, fetchAppointments, refreshCounts]);
 
   /* Load status counts once on mount */
   useEffect(() => {

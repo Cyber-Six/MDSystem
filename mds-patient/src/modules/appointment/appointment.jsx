@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePatientNotifications } from '../notification/notification-context';
 import {
   STATUS,
   getAppointmentStatus,
@@ -23,6 +24,8 @@ import InfoCard from './components/InfoCard';
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const PatientAppointment = () => {
+  const { subscribe } = usePatientNotifications();
+
   // Top-level state
   const [currentAppointment, setCurrentAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -97,6 +100,13 @@ const PatientAppointment = () => {
   useEffect(() => {
     loadStatus();
   }, [loadStatus]);
+
+  // Reload appointment status when staff responds or records attendance via socket
+  useEffect(() => {
+    const unsub1 = subscribe('appointment:responded', loadStatus);
+    const unsub2 = subscribe('appointment:attendance-recorded', loadStatus);
+    return () => { unsub1(); unsub2(); };
+  }, [subscribe, loadStatus]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 

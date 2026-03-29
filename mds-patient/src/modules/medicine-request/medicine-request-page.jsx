@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { sendGraphQLRequest } from '../../utils/graphql-client';
 import { getMyPersonalEmail } from '../../services/emr-service';
+import { usePatientNotifications } from '../notification/notification-context';
 import RequestNotificationModal from './components/request-notification-modal';
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 
 const MedicineRequestPage = () => {
+  const { subscribe } = usePatientNotifications();
   // User info
   const [userEmail, setUserEmail] = useState('');
   const [emailPrefix, setEmailPrefix] = useState('');
@@ -162,12 +164,11 @@ const MedicineRequestPage = () => {
     fetchAvailableMedicines();
   }, [assignedLocation, formData.location, emailPrefix]);
 
-  // Fetch request history on mount
-  useEffect(() => {
-    const fetchRequestHistory = async () => {
-      setIsLoadingHistory(true);
-      try {
-        const query = `
+  // Fetch request history
+  const fetchRequestHistory = useCallback(async () => {
+    setIsLoadingHistory(true);
+    try {
+      const query = `
           query GetMedicineStatus {
             getMedicineStatus {
               id
@@ -186,24 +187,34 @@ const MedicineRequestPage = () => {
             }
           }
         `;
-        
-        const data = await sendGraphQLRequest(
-          query,
-          {},
-          { endpoint: '/medical-inventory/medicine-request/patient' }
-        );
-        
-        setRequests(data.getMedicineStatus || []);
-      } catch (error) {
-        console.error('Error fetching request history:', error);
-        // Don't show error for history, just log it
-      } finally {
-        setIsLoadingHistory(false);
-      }
-    };
 
-    fetchRequestHistory();
+      const data = await sendGraphQLRequest(
+        query,
+        {},
+        { endpoint: '/medical-inventory/medicine-request/patient' }
+      );
+
+      setRequests(data.getMedicineStatus || []);
+    } catch (error) {
+      console.error('Error fetching request history:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
   }, []);
+
+  // Fetch request history on mount
+  useEffect(() => {
+    fetchRequestHistory();
+  }, [fetchRequestHistory]);
+
+  // Reload history when staff updates medicine request status via socket
+  useEffect(() => {
+    const unsub1 = subscribe('medicine:request:approved', fetchRequestHistory);
+    const unsub2 = subscribe('medicine:request:rejected', fetchRequestHistory);
+    const unsub3 = subscribe('medicine:request:pending', fetchRequestHistory);
+    const unsub4 = subscribe('medicine:prescription:issued', fetchRequestHistory);
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+  }, [subscribe, fetchRequestHistory]);
 
   // Check for notification-worthy requests (approved/rejected)
   useEffect(() => {

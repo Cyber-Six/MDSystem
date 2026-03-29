@@ -14,6 +14,7 @@ import DispenseMedicineModal from './components/dispense-medicine/dispense-medic
 import RequestActionModal from './components/dispense-queue/request-action-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
+import { useStaffNotifications } from '../notification/notification-context';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
@@ -29,6 +30,7 @@ import {
  * Consistent with staff-appointment.jsx pattern: section tabs + sub-components.
  */
 const MedicalInventory = () => {
+  const { subscribe } = useStaffNotifications();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -468,6 +470,12 @@ const MedicalInventory = () => {
     hasLoadedRequestsRef.current = true;
     loadAllMedicineRequests();
   }, [itemsLoading, loadAllMedicineRequests]);
+
+  // Reload dispense queue when a patient submits a new medicine request via socket
+  useEffect(() => {
+    const unsub = subscribe('medicine:request:new', loadAllMedicineRequests);
+    return unsub;
+  }, [subscribe, loadAllMedicineRequests]);
 
   // Load real patient medicine requests into the dispense queue
   const loadPatientMedicineRequests = async (patientId) => {
