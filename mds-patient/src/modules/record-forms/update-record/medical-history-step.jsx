@@ -209,7 +209,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                         onChange={(e) => handleInputChange('hasAllergies', e.target.value)}
                         className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                       />
-                      <span className="text-sm text-secondary-700">Yes</span>
+                      <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -220,7 +220,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                         onChange={(e) => handleInputChange('hasAllergies', e.target.value)}
                         className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                       />
-                      <span className="text-sm text-secondary-700">No</span>
+                      <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
                     </label>
                   </div>
                   {formData.hasAllergies === 'yes' && (
@@ -239,12 +239,12 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                           </div>
                           {(formData.selectedAllergies || []).length > 0 && (
                             <div className="space-y-3">
-                              <h4 className="text-sm font-medium text-secondary-700">Allergy Details:</h4>
+                              <h4 className="text-sm font-medium text-secondary-700 dark:text-white">Allergy Details:</h4>
                               {(formData.selectedAllergies || []).map((allergenId) => {
                                 const allergen = catalogs.allergens.find(a => a.id === allergenId);
                                 return allergen ? (
-                                  <div key={allergenId} className="bg-neutral-50 p-3 rounded-lg">
-                                    <p className="text-sm font-medium mb-2">{allergen.allergen}</p>
+                                  <div key={allergenId} className="bg-neutral-50 dark:bg-neutral-900 p-3 rounded-lg border border-neutral-200 dark:border-neutral-600">
+                                    <p className="text-sm font-medium mb-2 text-secondary-900 dark:text-neutral-100">{allergen.allergen}</p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                       <Select
                                         label="Status"
@@ -452,7 +452,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 mr-4">Do you wear glasses or contact lenses?</p>
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 mr-4">Do you wear glasses or contact lenses?</p>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -462,7 +462,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   onChange={(e) => handleInputChange('visualAcuity', e.target.value)}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm text-secondary-700">Yes</span>
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -473,7 +473,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   onChange={(e) => handleInputChange('visualAcuity', e.target.value)}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm text-secondary-700">No</span>
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
               </label>
             </div>
             {formData.visualAcuity === 'yes' && (
@@ -547,7 +547,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                       onChange={(e) => handleInputChange('dysmenorrhea', e.target.value)}
                       className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                     />
-                    <span className="text-sm text-secondary-700">Yes</span>
+                    <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -558,7 +558,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                       onChange={(e) => handleInputChange('dysmenorrhea', e.target.value)}
                       className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                     />
-                    <span className="text-sm text-secondary-700">No</span>
+                    <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
                   </label>
                 </div>
               </div>
@@ -575,7 +575,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
           onToggle={toggleAccordion}
         >
           <div className="space-y-4">
-            <p className="text-sm text-secondary-600 mb-4">Select vaccines you have received and provide details:</p>
+            <p className="text-sm text-secondary-600 dark:text-neutral-400 mb-4">Select vaccines you have received and provide details:</p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {immunizations.map((vaccine) => (
                 <Checkbox
@@ -588,12 +588,12 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
             </div>
             {(formData.immunizations || []).length > 0 && (
               <div className="space-y-3">
-                <h4 className="text-sm font-medium text-secondary-700">Immunization Details:</h4>
+                <h4 className="text-sm font-medium text-secondary-700 dark:text-white">Immunization Details:</h4>
                 {(formData.immunizations || []).map((vaccineId) => {
                   const vaccine = immunizations.find(v => v.id === vaccineId);
                   return vaccine ? (
-                    <div key={vaccineId} className="bg-neutral-50 p-3 rounded-lg">
-                      <p className="text-sm font-medium mb-2">{vaccine.name}</p>
+                    <div key={vaccineId} className="bg-neutral-50 dark:bg-neutral-900 p-3 rounded-lg border border-neutral-200 dark:border-neutral-600">
+                      <p className="text-sm font-medium mb-2 text-secondary-900 dark:text-neutral-100">{vaccine.name}</p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <Input
                           label="Date Received *"
@@ -644,7 +644,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 mr-4">Have you been hospitalized in the past?</p>
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 mr-4">Have you been hospitalized in the past?</p>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -654,7 +654,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm text-secondary-700">Yes</span>
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -665,7 +665,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   onChange={(e) => handleInputChange('hasHospitalizations', e.target.value)}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm text-secondary-700">No</span>
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
               </label>
             </div>
             {formData.hasHospitalizations === 'yes' && (
@@ -727,7 +727,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 mr-4">Have you had any surgeries?</p>
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 mr-4">Have you had any surgeries?</p>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -737,7 +737,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   onChange={(e) => handleInputChange('hasSurgeries', e.target.value)}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm text-secondary-700">Yes</span>
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -748,7 +748,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   onChange={(e) => handleInputChange('hasSurgeries', e.target.value)}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm text-secondary-700">No</span>
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
               </label>
             </div>
             {formData.hasSurgeries === 'yes' && (
@@ -802,7 +802,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <div className="flex items-center gap-6">
-              <p className="text-sm text-secondary-700 mr-4">Are you currently taking any medications?</p>
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 mr-4">Are you currently taking any medications?</p>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -812,7 +812,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   onChange={() => onChange({ ...formData, hasMedications: 'yes', currentMedications: formData.currentMedications?.length ? formData.currentMedications : [{ medicineId: '', description: '' }] })}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm text-secondary-700">Yes</span>
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">Yes</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -823,7 +823,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                   onChange={() => onChange({ ...formData, hasMedications: 'no', currentMedications: [] })}
                   className="w-4 h-4 text-primary-500 focus:ring-primary-500"
                 />
-                <span className="text-sm text-secondary-700">No</span>
+                <span className="text-sm text-secondary-700 dark:text-neutral-300">No</span>
               </label>
             </div>
             {formData.hasMedications === 'yes' && (
