@@ -1,92 +1,122 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { X, Search, Plus, Minus, Trash2, Loader2, Pill, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
-import { getAvailableMedicine, issuePrescription } from '../prescription-service';
+﻿import React, { useState, useEffect } from 'react';
+import { X, Plus, Trash2, Loader2, CheckCircle, AlertCircle, FileText, PenLine } from 'lucide-react';
+import { useHealthChat } from '../context/health-chat-context';
 
-const PrescriptionModal = ({ isOpen, onClose, patientId }) => {
-  const [medicines, setMedicines]           = useState([]);
-  const [search, setSearch]                 = useState('');
-  const [cart, setCart]                     = useState([]);
-  const [notes, setNotes]                   = useState('');
-  const [loading, setLoading]               = useState(false);
-  const [submitting, setSubmitting]         = useState(false);
-  const [error, setError]                   = useState(null);
-  const [success, setSuccess]               = useState(false);
-  const [locationFilter, setLocationFilter] = useState(null);
+const EMPTY_RX = () => ({ medicine: '', dosage: '', frequency: '', duration: '', instructions: '' });
 
-  const loadMedicines = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await getAvailableMedicine(locationFilter, 0, 200);
-      setMedicines(data || []);
-    } catch {
-      setError('Failed to load available medicines. Check your connection.');
-    } finally {
-      setLoading(false);
-    }
-  }, [locationFilter]);
+const Field = ({ label, value, onChange, placeholder = '', className = '', type = 'text' }) => (
+  <div className={`flex flex-col gap-0.5 ${className}`}>
+    <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 select-none">
+      {label}
+    </label>
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full bg-transparent border-b border-neutral-300 dark:border-neutral-600 text-sm text-secondary-900 dark:text-white
+                 placeholder-neutral-300 dark:placeholder-neutral-600
+                 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400
+                 py-1 transition-colors"
+    />
+  </div>
+);
+
+const PrescriptionModal = ({ isOpen, onClose }) => {
+  const { activeTicketId, selectedTicket, sendMessage } = useHealthChat();
+
+  const patient     = selectedTicket?.patient;
+  const patientName = patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : '';
+
+  const [form, setForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    patientName: '',
+    age: '',
+    sex: '',
+    address: '',
+    rxItems: [EMPTY_RX()],
+    subscription: '',
+    signature: '',
+    renewal: '',
+  });
+
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError]           = useState(null);
+  const [success, setSuccess]       = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     setSuccess(false);
     setError(null);
-    setCart([]);
-    setNotes('');
-    setSearch('');
-    setLocationFilter(null);
+    setForm({
+      date: new Date().toISOString().slice(0, 10),
+      patientName,
+      age: '',
+      sex: '',
+      address: patient?.branch || '',
+      rxItems: [EMPTY_RX()],
+      subscription: '',
+      signature: '',
+      renewal: '',
+    });
   }, [isOpen]);
 
-  useEffect(() => {
-    if (isOpen) loadMedicines();
-  }, [isOpen, loadMedicines]);
+  const setField = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  const filtered = search.trim()
-    ? medicines.filter(m =>
-        m.item_name?.toLowerCase().includes(search.toLowerCase()) ||
-        m.item_code?.toLowerCase().includes(search.toLowerCase()) ||
-        m.batchNumber?.toLowerCase().includes(search.toLowerCase())
-      )
-    : medicines;
-
-  const addToCart = (med) => {
-    setCart(prev => {
-      const existing = prev.find(i => i.batchId === med.batchId);
-      if (existing) {
-        return prev.map(i => i.batchId === med.batchId ? { ...i, quantity: i.quantity + 1 } : i);
-      }
-      return [...prev, {
-        batchId: med.batchId,
-        item_name: med.item_name,
-        dosageUnit: med.dosageUnit,
-        dosageValue: med.dosageValue,
-        batchNumber: med.batchNumber,
-        location: med.location,
-        quantity: 1
-      }];
+  const setRx = (idx, key, val) => {
+    setForm(prev => {
+      const items = prev.rxItems.map((r, i) => i === idx ? { ...r, [key]: val } : r);
+      return { ...prev, rxItems: items };
     });
   };
 
-  const updateQty = (batchId, qty) => {
-    if (qty < 1) { setCart(prev => prev.filter(i => i.batchId !== batchId)); return; }
-    setCart(prev => prev.map(i => i.batchId === batchId ? { ...i, quantity: qty } : i));
+  const addRx    = () => setForm(prev => ({ ...prev, rxItems: [...prev.rxItems, EMPTY_RX()] }));
+  const removeRx = idx => setForm(prev => ({ ...prev, rxItems: prev.rxItems.filter((_, i) => i !== idx) }));
+
+  const buildMessage = () => {
+    const divider = 'â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€';
+    const lines = [
+      'ðŸ“‹  PRESCRIPTION',
+      divider,
+      `ðŸ“… Date:    ${form.date}`,
+      `ðŸ‘¤ Patient: ${form.patientName}`,
+      form.age     ? `ðŸ”¢ Age:     ${form.age}`     : null,
+      form.sex     ? `âš§  Sex:     ${form.sex}`     : null,
+      form.address ? `ðŸ“ Address: ${form.address}` : null,
+      '',
+      divider,
+      'â„ž  PRESCRIPTION ITEMS',
+      divider,
+      ...form.rxItems
+        .filter(r => r.medicine.trim())
+        .flatMap((r, i) => [
+          `${i + 1}. ${r.medicine}`,
+          r.dosage       ? `   Dosage:        ${r.dosage}`       : null,
+          r.frequency    ? `   Frequency:     ${r.frequency}`    : null,
+          r.duration     ? `   Duration:      ${r.duration}`     : null,
+          r.instructions ? `   Instructions:  ${r.instructions}` : null,
+          '',
+        ]),
+      form.subscription ? `ðŸ“ Subscription:\n   ${form.subscription}` : null,
+      divider,
+      form.signature ? `âœï¸  Signature:  ${form.signature}` : null,
+      form.renewal   ? `ðŸ”„  Renewal:    ${form.renewal}`   : null,
+    ].filter(l => l !== null);
+
+    return lines.join('\n');
   };
 
-  const removeFromCart = (batchId) => setCart(prev => prev.filter(i => i.batchId !== batchId));
-
-  const handleSubmit = async () => {
-    if (!patientId) { setError('No patient selected.'); return; }
-    if (cart.length === 0) { setError('Add at least one medicine.'); return; }
+  const handleSend = async () => {
+    const rxFilled = form.rxItems.some(r => r.medicine.trim());
+    if (!rxFilled) { setError('Add at least one medicine in the Rx section.'); return; }
+    if (!activeTicketId) { setError('No active chat to send to.'); return; }
     try {
       setSubmitting(true);
       setError(null);
-      await issuePrescription({
-        patientId: parseInt(patientId),
-        items: cart.map(i => ({ batchId: parseInt(i.batchId), quantity: i.quantity })),
-        notes: notes.trim() || null
-      });
+      await sendMessage(activeTicketId, buildMessage(), null, 'text');
       setSuccess(true);
     } catch (err) {
-      setError(err.message || 'Failed to issue prescription.');
+      setError(err.message || 'Failed to send prescription.');
     } finally {
       setSubmitting(false);
     }
@@ -94,244 +124,190 @@ const PrescriptionModal = ({ isOpen, onClose, patientId }) => {
 
   if (!isOpen) return null;
 
-  const LOCATIONS = ['Arlegui', 'Casal', 'QuezonCity'];
-
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
       >
-        {/* ── Header ── */}
+        {/* â”€â”€ Header â”€â”€ */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-100 dark:bg-emerald-900/30">
-              <Pill className="w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />
+              <FileText className="w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-secondary-900 dark:text-white leading-tight">
-                Issue Prescription
-              </h2>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Select medicines and set quantities
-              </p>
+              <h2 className="text-base font-semibold text-secondary-900 dark:text-white leading-tight">Prescription</h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">Fill out and send to patient</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-neutral-500 dark:text-neutral-400"
+            className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-neutral-400"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* ── Success screen ── */}
+        {/* â”€â”€ Success â”€â”€ */}
         {success ? (
           <div className="flex-1 flex flex-col items-center justify-center p-10 gap-4">
             <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
               <CheckCircle className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <p className="text-base font-semibold text-secondary-900 dark:text-white">
-              Prescription Issued
-            </p>
+            <p className="text-base font-semibold text-secondary-900 dark:text-white">Prescription Sent</p>
             <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center max-w-xs">
-              The patient has been notified of their prescription.
+              The patient has received the prescription in the chat.
             </p>
             <button
               onClick={onClose}
               className="mt-2 px-7 py-2.5 rounded-xl text-sm font-semibold text-secondary-900 transition-all"
-              style={{
-                background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
-                boxShadow: '0 2px 8px rgba(244,196,48,0.3)'
-              }}
+              style={{ background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)', boxShadow: '0 2px 8px rgba(244,196,48,0.3)' }}
             >
               Done
             </button>
           </div>
         ) : (
-          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {/* ── Body ── */}
-            <div className="flex flex-1 min-h-0 divide-x divide-neutral-200 dark:divide-neutral-700">
+          <>
+            {/* â”€â”€ Prescription Pad (scrollable) â”€â”€ */}
+            <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+              <div className="mx-5 my-5 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
 
-              {/* Left: medicine catalogue */}
-              <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
+                {/* Pad header */}
+                <div className="bg-neutral-50 dark:bg-neutral-800 px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-400 dark:text-neutral-500 mb-1">
+                    Medical Department
+                  </p>
+                  <h3 className="text-lg font-black uppercase tracking-widest text-secondary-900 dark:text-white">
+                    Prescription
+                  </h3>
+                </div>
 
-                {/* Search + location filter */}
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 pointer-events-none" />
-                    <input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search by name, code, batch…"
-                      className="w-full pl-8 pr-3 py-2 rounded-xl text-xs
-                                 bg-neutral-100 dark:bg-neutral-800
-                                 border border-neutral-200 dark:border-neutral-700
-                                 text-secondary-900 dark:text-white
-                                 placeholder-neutral-400 dark:placeholder-neutral-500
-                                 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                <div className="px-6 py-5 space-y-5 bg-white dark:bg-neutral-900">
+
+                  {/* Row 1: Date + Patient name */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Date" value={form.date} onChange={v => setField('date', v)} type="date" />
+                    <Field label="Patient Name" value={form.patientName} onChange={v => setField('patientName', v)} placeholder="Full name" />
+                  </div>
+
+                  {/* Row 2: Age + Sex + Address */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <Field label="Age" value={form.age} onChange={v => setField('age', v)} placeholder="e.g. 21" />
+                    <Field label="Sex" value={form.sex} onChange={v => setField('sex', v)} placeholder="M / F" />
+                    <Field label="Address / Branch" value={form.address} onChange={v => setField('address', v)} placeholder="Location" />
+                  </div>
+
+                  <div className="border-t border-dashed border-neutral-200 dark:border-neutral-700" />
+
+                  {/* â„ž Inscription */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                          <span className="font-black text-base text-emerald-700 dark:text-emerald-300 leading-none" style={{ fontFamily: 'serif' }}>â„ž</span>
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
+                          Inscription
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addRx}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold
+                                   bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400
+                                   hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add medicine
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {form.rxItems.map((rx, idx) => (
+                        <div key={idx} className="rounded-xl border border-neutral-100 dark:border-neutral-800 p-4 relative">
+                          {form.rxItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeRx(idx)}
+                              className="absolute top-3 right-3 p-1 rounded-md
+                                         text-neutral-300 dark:text-neutral-600
+                                         hover:text-red-500 dark:hover:text-red-400
+                                         hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <div className="grid grid-cols-2 gap-3 pr-6">
+                            <Field
+                              label={`Medicine ${idx + 1}`}
+                              value={rx.medicine}
+                              onChange={v => setRx(idx, 'medicine', v)}
+                              placeholder="Drug name"
+                              className="col-span-2"
+                            />
+                            <Field label="Dosage"       value={rx.dosage}       onChange={v => setRx(idx, 'dosage', v)}       placeholder="e.g. 500mg" />
+                            <Field label="Frequency"    value={rx.frequency}    onChange={v => setRx(idx, 'frequency', v)}    placeholder="e.g. 3x daily" />
+                            <Field label="Duration"     value={rx.duration}     onChange={v => setRx(idx, 'duration', v)}     placeholder="e.g. 7 days" />
+                            <Field label="Instructions" value={rx.instructions} onChange={v => setRx(idx, 'instructions', v)} placeholder="e.g. after meals" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-dashed border-neutral-200 dark:border-neutral-700" />
+
+                  {/* Subscription / Notes */}
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 select-none">
+                      Subscription / Additional Notes
+                    </label>
+                    <textarea
+                      value={form.subscription}
+                      onChange={e => setField('subscription', e.target.value)}
+                      placeholder="Any additional prescribing notesâ€¦"
+                      rows={2}
+                      className="w-full bg-transparent border-b border-neutral-300 dark:border-neutral-600 text-sm
+                                 text-secondary-900 dark:text-white placeholder-neutral-300 dark:placeholder-neutral-600
+                                 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400
+                                 py-1 resize-none transition-colors"
+                      style={{ scrollbarWidth: 'none' }}
                     />
                   </div>
-                  <button
-                    onClick={loadMedicines}
-                    disabled={loading}
-                    className="p-2 rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
-                    title="Refresh"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
 
-                {/* Location chips */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    onClick={() => setLocationFilter(null)}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-colors border
-                      ${locationFilter === null
-                        ? 'border-primary-500 bg-primary-500/10 text-primary-700 dark:text-primary-400'
-                        : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                      }`}
-                  >
-                    All Locations
-                  </button>
-                  {LOCATIONS.map(loc => (
-                    <button
-                      key={loc}
-                      onClick={() => setLocationFilter(loc)}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-colors border
-                        ${locationFilter === loc
-                          ? 'border-primary-500 bg-primary-500/10 text-primary-700 dark:text-primary-400'
-                          : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                        }`}
-                    >
-                      {loc}
-                    </button>
-                  ))}
-                </div>
+                  <div className="border-t border-dashed border-neutral-200 dark:border-neutral-700" />
 
-                {/* Medicine list */}
-                <div
-                  className="flex-1 overflow-y-auto space-y-0.5 -mx-1 px-1"
-                  style={{ scrollbarWidth: 'thin' }}
-                >
-                  {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="w-5 h-5 animate-spin text-neutral-400" />
+                  {/* Signature + Renewal */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 select-none flex items-center gap-1">
+                        <PenLine className="w-3 h-3" /> Signature
+                      </label>
+                      <input
+                        value={form.signature}
+                        onChange={e => setField('signature', e.target.value)}
+                        placeholder="Prescriber name / license no."
+                        className="w-full bg-transparent border-b border-neutral-300 dark:border-neutral-600 text-sm
+                                   text-secondary-900 dark:text-white placeholder-neutral-300 dark:placeholder-neutral-600
+                                   focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-400
+                                   py-1 transition-colors"
+                      />
                     </div>
-                  ) : filtered.length === 0 ? (
-                    <p className="text-xs text-center text-neutral-400 py-12">
-                      {search ? 'No medicines match your search' : 'No medicines available'}
-                    </p>
-                  ) : (
-                    filtered.map((med) => {
-                      const inCart = cart.some(i => i.batchId === med.batchId);
-                      return (
-                        <button
-                          key={`${med.id}-${med.batchId}`}
-                          onClick={() => addToCart(med)}
-                          className={`w-full flex items-start justify-between gap-2 px-3 py-2.5 rounded-xl
-                                      text-left transition-colors
-                                      ${inCart
-                                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800'
-                                        : 'hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-transparent'
-                                      }`}
-                        >
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-secondary-800 dark:text-white truncate">
-                              {med.item_name}
-                            </p>
-                            <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-                              {med.dosageValue}{med.dosageUnit}
-                              {' · '}Batch {med.batchNumber}
-                              {med.location && ` · ${med.location}`}
-                            </p>
-                          </div>
-                          <Plus className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${inCart ? 'text-emerald-500' : 'text-neutral-400'}`} />
-                        </button>
-                      );
-                    })
-                  )}
+                    <Field label="Renewal" value={form.renewal} onChange={v => setField('renewal', v)} placeholder="e.g. 1x refill / None" />
+                  </div>
+
+                  <p className="text-[9px] text-center text-neutral-300 dark:text-neutral-600 pt-1 leading-relaxed border-t border-neutral-100 dark:border-neutral-800">
+                    Signature, Address, and Registration Number
+                  </p>
                 </div>
-              </div>
-
-              {/* Right: cart + notes */}
-              <div className="w-52 flex flex-col min-h-0 p-4 gap-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 flex-shrink-0">
-                  Prescription ({cart.length})
-                </p>
-
-                <div
-                  className="flex-1 overflow-y-auto space-y-2"
-                  style={{ scrollbarWidth: 'thin' }}
-                >
-                  {cart.length === 0 ? (
-                    <p className="text-xs text-neutral-400 text-center py-6 leading-relaxed">
-                      Click any medicine to add it
-                    </p>
-                  ) : (
-                    cart.map((item) => (
-                      <div
-                        key={item.batchId}
-                        className="bg-neutral-50 dark:bg-neutral-800 rounded-xl p-2.5"
-                      >
-                        <div className="flex items-start justify-between gap-1 mb-1">
-                          <p className="text-[11px] font-medium text-secondary-800 dark:text-white leading-snug">
-                            {item.item_name}
-                          </p>
-                          <button
-                            onClick={() => removeFromCart(item.batchId)}
-                            className="text-neutral-400 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                        <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mb-2">
-                          {item.dosageValue}{item.dosageUnit}
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => updateQty(item.batchId, item.quantity - 1)}
-                            className="w-5 h-5 rounded-md flex items-center justify-center
-                                       text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
-                          >
-                            <Minus className="w-2.5 h-2.5" />
-                          </button>
-                          <span className="text-xs w-5 text-center font-semibold text-secondary-800 dark:text-white">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQty(item.batchId, item.quantity + 1)}
-                            className="w-5 h-5 rounded-md flex items-center justify-center
-                                       text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
-                          >
-                            <Plus className="w-2.5 h-2.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Notes (optional)…"
-                  rows={2}
-                  className="px-3 py-2 rounded-xl text-xs resize-none flex-shrink-0
-                             bg-neutral-100 dark:bg-neutral-800
-                             border border-neutral-200 dark:border-neutral-700
-                             text-secondary-900 dark:text-white
-                             placeholder-neutral-400 dark:placeholder-neutral-500
-                             focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
-                  style={{ scrollbarWidth: 'none' }}
-                />
               </div>
             </div>
 
-            {/* ── Footer ── */}
+            {/* â”€â”€ Footer â”€â”€ */}
             <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-700 flex-shrink-0">
               {error && (
                 <div className="flex items-center gap-2 text-xs text-red-600 dark:text-red-400 mb-3">
@@ -349,28 +325,22 @@ const PrescriptionModal = ({ isOpen, onClose, patientId }) => {
                   Cancel
                 </button>
                 <button
-                  onClick={handleSubmit}
-                  disabled={submitting || cart.length === 0}
+                  onClick={handleSend}
+                  disabled={submitting}
                   className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold
-                             transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={!submitting && cart.length > 0 ? {
-                    background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
-                    color: '#1c1a17',
-                    boxShadow: '0 2px 8px rgba(244,196,48,0.3)'
-                  } : {
-                    background: '#e8e5e0',
-                    color: '#a19b93'
-                  }}
+                             transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={!submitting
+                    ? { background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)', color: '#1c1a17', boxShadow: '0 2px 8px rgba(244,196,48,0.3)' }
+                    : { background: '#e8e5e0', color: '#a19b93' }}
                 >
                   {submitting
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Pill className="w-4 h-4" />
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Sendingâ€¦</>
+                    : <><FileText className="w-4 h-4" /> Send Prescription</>
                   }
-                  Issue Prescription
                 </button>
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
