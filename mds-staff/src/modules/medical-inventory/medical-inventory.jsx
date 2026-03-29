@@ -406,19 +406,53 @@ const MedicalInventory = () => {
             notes: notes || undefined,
           });
 
-      // The batch location is updated by the backend
-      // Only update the state with the returned batch (location changed)
-      setBatches((prevBatches) =>
-        prevBatches.map((b) => 
-          b.id === sourceBatchId 
-            ? { 
-                ...b, 
-                location: updatedBatch.location,
-                currentQuantity: updatedBatch.currentQuantity ?? b.currentQuantity,
+      // The split mutation returns the NEW batch created at the target location.
+      // We need to: (1) reduce the source batch quantity in place, and
+      // (2) merge into an existing batch at the target location or append a new one.
+      setBatches((prevBatches) => {
+        // Step 1: Reduce source batch quantity without changing its location
+        const withReducedSource = prevBatches.map((b) =>
+          b.id === sourceBatchId
+            ? {
+                ...b,
+                currentQuantity: b.currentQuantity - quantity,
+                availableQuantity: (b.availableQuantity ?? b.currentQuantity) - quantity,
               }
             : b
-        )
-      );
+        );
+
+        // Step 2: Normalize the returned new batch fields
+        const newBatchQty = Number(updatedBatch.availableQuantity ?? updatedBatch.currentQuantity ?? 0);
+        const newBatch = {
+          ...updatedBatch,
+          medicalItemId: source.medicalItemId,
+          currentQuantity: newBatchQty,
+          availableQuantity: newBatchQty,
+        };
+
+        // Step 3: Merge into an existing entry for the same batch+item+location, or append
+        const existingIdx = withReducedSource.findIndex(
+          (b) =>
+            b.id !== sourceBatchId &&
+            b.batchNumber === newBatch.batchNumber &&
+            String(b.medicalItemId) === String(newBatch.medicalItemId) &&
+            b.location === newBatch.location
+        );
+
+        if (existingIdx >= 0) {
+          return withReducedSource.map((b, i) =>
+            i === existingIdx
+              ? {
+                  ...b,
+                  currentQuantity: (b.currentQuantity ?? 0) + newBatchQty,
+                  availableQuantity: (b.availableQuantity ?? 0) + newBatchQty,
+                }
+              : b
+          );
+        }
+
+        return [...withReducedSource, newBatch];
+      });
 
       // Record transaction
       const txId = Math.max(...transactions.map((t) => t.id), 0) + 1;

@@ -161,7 +161,23 @@ export const SEED_TRANSACTIONS = [
 
 export const computeItemStats = (items, batches) => {
   return items.map((item) => {
-    const itemBatches = batches.filter((b) => String(b.medicalItemId) === String(item.id));
+    const rawItemBatches = batches.filter((b) => String(b.medicalItemId) === String(item.id));
+
+    // Deduplicate: merge entries sharing the same batchNumber + location (safety guard)
+    const batchMap = new Map();
+    for (const batch of rawItemBatches) {
+      const key = `${batch.batchNumber}__${batch.location}`;
+      if (batchMap.has(key)) {
+        const existing = batchMap.get(key);
+        const mergedQty = (existing.availableQuantity ?? existing.currentQuantity ?? 0) +
+                          (batch.availableQuantity ?? batch.currentQuantity ?? 0);
+        batchMap.set(key, { ...existing, currentQuantity: mergedQty, availableQuantity: mergedQty });
+      } else {
+        batchMap.set(key, { ...batch });
+      }
+    }
+    const itemBatches = Array.from(batchMap.values());
+
     const casalBatches = itemBatches.filter((b) => b.location === 'Casal');
     const arleguiBatches = itemBatches.filter((b) => b.location === 'Arlegui');
     const quezonCityBatches = itemBatches.filter((b) => b.location === 'QuezonCity');
