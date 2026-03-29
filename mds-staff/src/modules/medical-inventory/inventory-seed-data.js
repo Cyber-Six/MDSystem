@@ -160,8 +160,26 @@ export const SEED_TRANSACTIONS = [
 /* ── Computed helpers for dashboard stats ─────────────────────────────── */
 
 export const computeItemStats = (items, batches) => {
+  const REORDER_THRESHOLD = 10;
+
   return items.map((item) => {
-    const itemBatches = batches.filter((b) => String(b.medicalItemId) === String(item.id));
+    const rawItemBatches = batches.filter((b) => String(b.medicalItemId) === String(item.id));
+
+    // Deduplicate: merge entries sharing the same batchNumber + location (safety guard)
+    const batchMap = new Map();
+    for (const batch of rawItemBatches) {
+      const key = `${batch.batchNumber}__${batch.location}`;
+      if (batchMap.has(key)) {
+        const existing = batchMap.get(key);
+        const mergedQty = (existing.availableQuantity ?? existing.currentQuantity ?? 0) +
+                          (batch.availableQuantity ?? batch.currentQuantity ?? 0);
+        batchMap.set(key, { ...existing, currentQuantity: mergedQty, availableQuantity: mergedQty });
+      } else {
+        batchMap.set(key, { ...batch });
+      }
+    }
+    const itemBatches = Array.from(batchMap.values());
+
     const casalBatches = itemBatches.filter((b) => b.location === 'Casal');
     const arleguiBatches = itemBatches.filter((b) => b.location === 'Arlegui');
     const quezonCityBatches = itemBatches.filter((b) => b.location === 'QuezonCity');
@@ -170,7 +188,7 @@ export const computeItemStats = (items, batches) => {
     const casalStock = casalBatches.reduce((sum, b) => sum + getStock(b), 0);
     const arlegui = arleguiBatches.reduce((sum, b) => sum + getStock(b), 0);
     const quezonCity = quezonCityBatches.reduce((sum, b) => sum + getStock(b), 0);
-    const isLowStock = totalStock <= item.reorder_level;
+    const isLowStock = totalStock <= REORDER_THRESHOLD;
     const hasExpired = itemBatches.some((b) => b.expiryDate && new Date(b.expiryDate) < new Date());
     const hasExpiringSoon = itemBatches.some((b) => {
       if (!b.expiryDate) return false;
@@ -181,18 +199,19 @@ export const computeItemStats = (items, batches) => {
     // Ensure category is normalized to lowercase
     const category = item.category ? item.category.toLowerCase() : 'supply';
     
-    return { 
-      ...item, 
+    return {
+      ...item,
       category, // Override with normalized lowercase version
-      batches: itemBatches, 
-      totalStock, 
-      casalStock, 
-      arlegui, 
-      quezonCity, 
-      isLowStock, 
-      hasExpired, 
-      hasExpiringSoon, 
-      batchCount: itemBatches.length 
+      reorder_level: REORDER_THRESHOLD,
+      batches: itemBatches,
+      totalStock,
+      casalStock,
+      arlegui,
+      quezonCity,
+      isLowStock,
+      hasExpired,
+      hasExpiringSoon,
+      batchCount: itemBatches.length
     };
   });
 };
