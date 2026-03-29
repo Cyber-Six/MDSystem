@@ -1,22 +1,41 @@
 /**
  * Prescription Service – Staff Health Chat
  *
- * GraphQL calls for issuing prescriptions from within the health-chat module.
- * Endpoint: /medical-inventory/prescription/medical
+ * Functions for generating prescription PDFs and issuing prescriptions from
+ * within the health-chat module.
  */
 
 import { axiosRequest } from '../../packages-core-adapter';
 
-const ENDPOINT = '/medical-inventory/prescription/medical';
+const INVENTORY_ENDPOINT = '/medical-inventory/prescription/medical';
+const PRESCRIPTION_PDF_ENDPOINT = '/documents/prescription';
 
 const sendGraphQL = async (query, variables = {}) => {
-  const response = await axiosRequest.post(ENDPOINT, { query, variables });
+  const response = await axiosRequest.post(INVENTORY_ENDPOINT, { query, variables });
   if (response.data.errors) {
     const error = new Error(response.data.errors[0]?.message || 'GraphQL error');
     error.graphQLErrors = response.data.errors;
     throw error;
   }
   return response.data.data;
+};
+
+/**
+ * Generate a prescription PDF via the document service.
+ *
+ * @param {Object} data
+ * @param {string} data.patient_name
+ * @param {string} data.patient_age
+ * @param {string} data.patient_sex
+ * @param {Array}  data.medications - [{ name, dosage, frequency, duration, quantity, instructions }]
+ * @param {string} [data.notes]
+ * @returns {Promise<Blob>} PDF blob
+ */
+export const generatePrescriptionPdf = async (data) => {
+  const response = await axiosRequest.post(PRESCRIPTION_PDF_ENDPOINT, data, {
+    responseType: 'blob',
+  });
+  return response.data;
 };
 
 export const getAvailableMedicine = async (location = null, offset = 0, limit = 200) => {

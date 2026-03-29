@@ -379,4 +379,89 @@ router.post('/create/report/:template', async (req, res) => {
 });
 
 
+// ── Prescription PDF (direct HTML → PDF) ────────────────────────────────
+
+/**
+ * POST /documents/prescription
+ *
+ * Orchestrates prescription PDF generation:
+ * 1. Accepts patient info + free-text medications from the frontend.
+ * 2. Fetches the requesting staff member's doctor credentials (name, license, PTR)
+ *    from the database using the JWT-authenticated user.
+ * 3. Forwards the complete payload to FastAPI /prescription/generate.
+ * 4. Returns the PDF to the client.
+ *
+ * Body: {
+ *   patient_name: string,
+ *   patient_age:  string,
+ *   patient_sex:  string,
+ *   medications:  [{ name, dosage, frequency, duration, quantity, instructions }],
+ *   notes?:       string
+ * }
+ */
+router.post('/prescription', async (req, res) => {
+  const { patient_name, patient_age, patient_sex, medications, notes } = req.body;
+
+  try {
+    // Validate required fields
+    if (!patient_name || !medications || medications.length === 0) {
+      return res.status(400).json({
+        error: 'MISSING_REQUIRED_FIELDS',
+        details: 'patient_name and at least one medication are required',
+      });
+    }
+
+    // Fetch doctor info from authenticated user's staff profile
+    const staffId = req.user?.id;
+    let doctorName = '', licenseNo = '', ptrNo = '';
+    if (staffId) {
+      try {
+        const result = await db.query(
+          `SELECT up.first_name, up.last_name, mp.license_no, mp.ptr_no
+           FROM "UsersPersonal" up
+           LEFT JOIN "MedicalPersonnel" mp ON mp.id = up.id
+           WHERE up.id = $1
+           LIMIT 1`,
+          [staffId]
+        );
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+          doctorName = `${row.first_name || ''} ${row.last_name || ''}`.trim();
+          licenseNo  = row.license_no || '';
+          ptrNo      = row.ptr_no || '';
+        }
+      } catch (dbErr) {
+        logger.warn('Could not fetch staff profile for prescription', { error: dbErr.message });
+      }
+    }
+
+    // Build filename from patient last name
+    const lastName = (patient_name || 'patient').split(',')[0].split(' ').pop();
+    const today = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+
+    const payload = {
+      patient_name,
+      patient_age:  patient_age || '',
+      patient_sex:  patient_sex || '',
+      date:         today,
+      medications,
+      notes:        notes || '',
+      doctor_name:  doctorName,
+      license_no:   licenseNo,
+      ptr_no:       ptrNo,
+      filename:     `${lastName}_prescription`,
+    };
+
+    await proxyPost(`${DOCX_SERVICE}/prescription/generate`, payload, res);
+
+  } catch (err) {
+    logger.error('Prescription PDF proxy error', { error: err.message });
+    res.status(502).json({
+      error: 'DOCUMENT_SERVICE_UNAVAILABLE',
+      message: 'Could not reach the document service.',
+    });
+  }
+});
+
+
 module.exports = router;

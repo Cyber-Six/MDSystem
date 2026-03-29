@@ -1,13 +1,12 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Plus, Stethoscope, FileText } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { uploadFile, unstageFile } from '../health-chat-service';
-import PrescriptionModal from './PrescriptionModal';
 
 const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-const MessageInput = ({ emitTyping }) => {
+const MessageInput = ({ emitTyping, onOpenPanel }) => {
   const { selectedChatId, activeTicketId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
 
   const [inputValue, setInputValue]   = useState('');
@@ -15,13 +14,25 @@ const MessageInput = ({ emitTyping }) => {
   const [isUploading, setIsUploading]         = useState(false);
   const [isSending, setIsSending]               = useState(false);
   const [actionLoading, setActionLoading]       = useState(null);
-  const [showPrescription, setShowPrescription] = useState(false);
+  const [showPlusMenu, setShowPlusMenu]         = useState(false);
   const fileInputRef = useRef(null);
   const textareaRef  = useRef(null);
+  const plusMenuRef   = useRef(null);
 
+  const isActive  = selectedTicket?.status === 'Ongoing';
   const isPending = selectedTicket?.status === 'Open';
   const isClosed  = ['Closed', 'Expired'].includes(selectedTicket?.status);
   const canSend   = isActive && (inputValue.trim() || attachedFile) && !isSending && activeTicketId;
+
+  // Close plus menu on outside click
+  useEffect(() => {
+    if (!showPlusMenu) return;
+    const handler = (e) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target)) setShowPlusMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPlusMenu]);
 
   const stageFile = useCallback(async (file) => {
     if (!file) return;
@@ -110,7 +121,6 @@ const MessageInput = ({ emitTyping }) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const isActive  = selectedTicket?.status === 'Ongoing';
   const FileIcon = attachedFile?.fileType?.startsWith('image/') ? Image
                  : attachedFile?.fileType?.startsWith('video/') ? Film
                  : File;
@@ -223,17 +233,53 @@ const MessageInput = ({ emitTyping }) => {
           }
         </button>
 
-        {/* Prescribe */}
+        {/* Plus menu (consultation / prescription) */}
         {isActive && (
-          <button
-            onClick={() => setShowPrescription(true)}
-            disabled={isSending}
-            className="flex-shrink-0 p-1.5 rounded-lg transition-colors disabled:opacity-40
-                       text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-            title="Issue prescription"
-          >
-            <Pill className="w-4 h-4" />
-          </button>
+          <div className="relative" ref={plusMenuRef}>
+            <button
+              onClick={() => setShowPlusMenu(prev => !prev)}
+              disabled={isSending}
+              className="flex-shrink-0 p-1.5 rounded-lg transition-colors disabled:opacity-40
+                         text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200
+                         hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              title="More actions"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+
+            {showPlusMenu && (
+              <div className="absolute bottom-full left-0 mb-2 w-52 rounded-xl shadow-lg border border-neutral-200 dark:border-neutral-700
+                              bg-white dark:bg-neutral-800 overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <button
+                  onClick={() => { setShowPlusMenu(false); onOpenPanel?.('consultation'); }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left
+                             hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-100 dark:bg-blue-900/30">
+                    <Stethoscope className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-secondary-900 dark:text-white">New Consultation</p>
+                    <p className="text-[10px] text-neutral-400 dark:text-neutral-500">Create virtual consultation</p>
+                  </div>
+                </button>
+                <div className="border-t border-neutral-100 dark:border-neutral-700" />
+                <button
+                  onClick={() => { setShowPlusMenu(false); onOpenPanel?.('prescription'); }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left
+                             hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-emerald-100 dark:bg-emerald-900/30">
+                    <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-secondary-900 dark:text-white">Issue Prescription</p>
+                    <p className="text-[10px] text-neutral-400 dark:text-neutral-500">Generate prescription PDF</p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Textarea */}
@@ -273,12 +319,6 @@ const MessageInput = ({ emitTyping }) => {
           }
         </button>
       </div>
-
-      <PrescriptionModal
-        isOpen={showPrescription}
-        onClose={() => setShowPrescription(false)}
-        patientId={selectedTicket?.patientId}
-      />
     </div>
   );
 };

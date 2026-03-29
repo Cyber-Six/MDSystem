@@ -68,6 +68,8 @@ export const getPendingTickets = async (offset = 0, limit = 50) => {
             email
             identifier
             branch
+            dateOfBirth
+            sex
           }
           medical {
             id
@@ -120,6 +122,8 @@ export const getActiveTickets = async (offset = 0, limit = 50) => {
             email
             identifier
             branch
+            dateOfBirth
+            sex
           }
           medical {
             id
@@ -172,6 +176,8 @@ export const getAllTickets = async (status = null, offset = 0, limit = 50) => {
             email
             identifier
             branch
+            dateOfBirth
+            sex
           }
           medical {
             id
@@ -229,6 +235,8 @@ export const getTicket = async (chatId) => {
           firstName
           lastName
           email
+          dateOfBirth
+          sex
         }
         medical {
           id
@@ -312,6 +320,8 @@ export const approveTicket = async (chatId, notes = null) => {
             email
             identifier
             branch
+            dateOfBirth
+            sex
           }
           medical {
             id
@@ -444,6 +454,8 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
             email
             identifier
             branch
+            dateOfBirth
+            sex
           }
           latestTicket {
             id

@@ -68,6 +68,8 @@ type ChatParticipant {
   email: String
   identifier: Int
   branch: String
+  dateOfBirth: String
+  sex: String
 }
 
 type HealthChatList {

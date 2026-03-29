@@ -6,6 +6,7 @@ from config import SERVICE_HOST, SERVICE_PORT, LOG_LEVEL
 from routes.document import router as document_router
 from routes.report import router as report_router
 from routes.legacy import router as legacy_router
+from routes.prescription import router as prescription_router
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -28,6 +29,7 @@ app = FastAPI(
 app.include_router(document_router)
 app.include_router(report_router)
 app.include_router(legacy_router)
+app.include_router(prescription_router)
 
 
 @app.get("/health")

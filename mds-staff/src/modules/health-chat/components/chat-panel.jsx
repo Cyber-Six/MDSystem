@@ -8,6 +8,8 @@ import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
+import PrescriptionPanel from './PrescriptionModal';
+import ConsultationPanel from './ConsultationPanel';
 
 const ChatPanel = ({ emitTyping }) => {
   const {
@@ -20,12 +22,15 @@ const ChatPanel = ({ emitTyping }) => {
     setMessages,
     typingUsers,
     refreshMessages,
-    socketError
+    socketError,
+    activeTicketId,
+    sendMessage
   } = useHealthChat();
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [panelMode, setPanelMode] = useState(null); // null | 'consultation' | 'prescription'
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const prevScrollHeightRef = useRef(0);
   const isLoadingOlderRef = useRef(false);
@@ -162,6 +167,11 @@ const ChatPanel = ({ emitTyping }) => {
     return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Close side panel when patient/chat changes
+  useEffect(() => {
+    setPanelMode(null);
+  }, [selectedChatId, selectedPatientId]);
+
   if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
   // Build unified list: synthetic purpose entry + messages with dividers
@@ -183,7 +193,12 @@ const ChatPanel = ({ emitTyping }) => {
 
   const allItems = [...purposeSynth, ...itemsWithDividers];
 
+  const patient = selectedTicket?.patient;
+  const patientFullName = patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : '';
+
   return (
+    <div className="flex-1 flex h-full min-h-0">
+    {/* Chat column */}
     <div
       className="flex-1 flex flex-col h-full min-h-0 bg-white dark:bg-neutral-900"
     >
@@ -281,7 +296,37 @@ const ChatPanel = ({ emitTyping }) => {
       </div>
 
       {/* Input */}
-      <MessageInput emitTyping={emitTyping} />
+      <MessageInput emitTyping={emitTyping} onOpenPanel={(mode) => setPanelMode(mode)} />
+    </div>
+
+    {/* ── Side panel with slide animation ── */}
+    <div
+      className={`h-full flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden ${
+        panelMode ? 'w-[380px] opacity-100' : 'w-0 opacity-0'
+      }`}
+    >
+      {panelMode === 'consultation' && (
+        <ConsultationPanel
+          isOpen={panelMode === 'consultation'}
+          onClose={() => setPanelMode(null)}
+          patientId={selectedTicket?.patientId}
+          patientName={patientFullName}
+          onIssuePrescription={() => setPanelMode('prescription')}
+        />
+      )}
+      {panelMode === 'prescription' && (
+        <PrescriptionPanel
+          isOpen={panelMode === 'prescription'}
+          onClose={() => setPanelMode(null)}
+          patientId={selectedTicket?.patientId}
+          patientName={patientFullName}
+          patientDob={patient?.dateOfBirth}
+          patientSex={patient?.sex}
+          activeTicketId={activeTicketId}
+          sendMessage={sendMessage}
+        />
+      )}
+    </div>
     </div>
   );
 };
