@@ -160,6 +160,8 @@ export const SEED_TRANSACTIONS = [
 /* ── Computed helpers for dashboard stats ─────────────────────────────── */
 
 export const computeItemStats = (items, batches) => {
+  const REORDER_THRESHOLD = 10;
+
   return items.map((item) => {
     const rawItemBatches = batches.filter((b) => String(b.medicalItemId) === String(item.id));
 
@@ -186,7 +188,7 @@ export const computeItemStats = (items, batches) => {
     const casalStock = casalBatches.reduce((sum, b) => sum + getStock(b), 0);
     const arlegui = arleguiBatches.reduce((sum, b) => sum + getStock(b), 0);
     const quezonCity = quezonCityBatches.reduce((sum, b) => sum + getStock(b), 0);
-    const isLowStock = totalStock <= item.reorder_level;
+    const isLowStock = totalStock <= REORDER_THRESHOLD;
     const hasExpired = itemBatches.some((b) => b.expiryDate && new Date(b.expiryDate) < new Date());
     const hasExpiringSoon = itemBatches.some((b) => {
       if (!b.expiryDate) return false;
@@ -197,18 +199,19 @@ export const computeItemStats = (items, batches) => {
     // Ensure category is normalized to lowercase
     const category = item.category ? item.category.toLowerCase() : 'supply';
     
-    return { 
-      ...item, 
+    return {
+      ...item,
       category, // Override with normalized lowercase version
-      batches: itemBatches, 
-      totalStock, 
-      casalStock, 
-      arlegui, 
-      quezonCity, 
-      isLowStock, 
-      hasExpired, 
-      hasExpiringSoon, 
-      batchCount: itemBatches.length 
+      reorder_level: REORDER_THRESHOLD,
+      batches: itemBatches,
+      totalStock,
+      casalStock,
+      arlegui,
+      quezonCity,
+      isLowStock,
+      hasExpired,
+      hasExpiringSoon,
+      batchCount: itemBatches.length
     };
   });
 };
