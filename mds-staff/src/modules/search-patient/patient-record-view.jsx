@@ -532,7 +532,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     { id: 'medical', label: 'Medical Record' },
     { id: 'medical-history', label: 'Medical Record History' },
     { id: 'dental', label: 'Dental Record' },
-    { id: 'dental-grade-history', label: 'Dental Grade History' },
+    { id: 'dental-grade-history', label: 'Dental Record History' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
