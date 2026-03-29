@@ -452,8 +452,12 @@ const Mutation = {
           const toDelete = Math.abs(quantityDiff);
           await db.query(
             `DELETE FROM "MedicineEntity"
-             WHERE "batchId" = $1 AND "transactionId" IS NULL
-             LIMIT $2`,
+             WHERE ctid IN (
+               SELECT ctid
+               FROM "MedicineEntity"
+               WHERE "batchId" = $1 AND "transactionId" IS NULL
+               LIMIT $2
+             )`,
             [batchId, toDelete]
           );
         }

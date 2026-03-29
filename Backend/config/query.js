@@ -15,6 +15,11 @@ async function connect() {
     }
 }
 
+// to be used on dbClient
+function db(){
+  return pool;
+}
+
 async function query(text, params) {
   return await queryClient(pool, text, params);
 }
@@ -405,6 +410,7 @@ async function setSystemAuditLog({client=pool, eventType, actorId, actorType, ta
 }
 
 module.exports = {
+    db,
     connect,
     query,
     queryClient,

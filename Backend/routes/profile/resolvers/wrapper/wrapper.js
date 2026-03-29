@@ -156,7 +156,7 @@ const Query = {
 
 const Mutation = {
   //continuation
-  _PersonalRecordLog: async (_, { userId, input }, { user, res }) => {
+  _PersonalRecordLog: async (_, { client = db.db(), userId, input }, { user, res }) => {
     const query = `
       INSERT INTO "UsersPersonalLog" (
         user_id,
@@ -188,7 +188,7 @@ const Mutation = {
     ];
 
     try {
-      const { rows } = await db.query(query, values);
+      const { rows } = await db.queryClient(client, query, values);
 
       console.log("Created personal record log with ID:", rows[0]);
       return rows[0];
@@ -198,7 +198,7 @@ const Mutation = {
     }
   },
 
-  _UserBranchIdentifier: async (_, { userId, input }, { user, res }) => {
+  _UserBranchIdentifier: async (_, { client = db.db(), userId, input }, { user, res }) => {
     if (!input.identifier || !input.branch) {
       throwGraphQLError(res).message("Both identifier and branch are required.").status(400).throw();
     }
@@ -219,7 +219,7 @@ const Mutation = {
     ];
 
     try {
-      const { rows } = await db.query(query, values);
+      const { rows } = await client.query(query, values);
       return rows[0];
     } catch (err) {
       logger.error("Error in _UserBranchIdentifier:", err);

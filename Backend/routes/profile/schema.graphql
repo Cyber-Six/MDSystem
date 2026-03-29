@@ -42,6 +42,23 @@ type userProfile{
   created_at: Date
 }
 
+input userProfileInitialInput{
+  first_name: String!
+  middle_name: String!
+  last_name: String!
+  suffix: String
+  date_of_birth: Date!
+  sex: USER_SEX!
+  civil_status: USER_CIVILSTATUS!
+  nationality: String!
+  religion: String!
+  contactNumber: String!
+  present_address: String!
+  province_address: String!
+  branch: USER_BRANCH!
+  identifier: ID!
+}
+
 input userProfileInput{
   first_name: String!
   middle_name: String!
@@ -148,6 +165,7 @@ type Query {
 
 # Mutations
 type Mutation {
+  createInitialPersonalRecord(input: userProfileInitialInput!): userProfile
   createPersonalRecordLog(input: userProfileInput!): userProfile
   # createPersonalRecordLog for patient pr creation, while updatePersonalRecordLog for patient pr update
   # while updatePatientPersonalRecordLog for patient pr update
