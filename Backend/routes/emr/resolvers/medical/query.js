@@ -47,9 +47,7 @@ const Query = {
 
     const result = await Wrapper._getUserDentalPhotoRecord(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserObgynHistory: async (_, args, { user, res }) => {
@@ -61,9 +59,7 @@ const Query = {
 
     const result = await Wrapper._getUserObgynHistory(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result; 
   },
 
   getUserLifestyle: async (_, args, { user, res }) => {
@@ -75,9 +71,7 @@ const Query = {
 
     const result = await Wrapper._getUserLifestyle(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserDentalHistory: async (_, args, { user, res }) => {
@@ -89,9 +83,7 @@ const Query = {
 
     const result = await Wrapper._getUserDentalHistory(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserDentalRecord: async (_, args, { user, res }) => {
@@ -116,9 +108,7 @@ const Query = {
 
     const result = await Wrapper._getUserVitalSigns(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
   
   getUserOralApplianceProfile: async (_, args, { user, res }) => {
@@ -130,9 +120,7 @@ const Query = {
 
     const result = await Wrapper._getUserOralApplianceProfile(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserEmergencyContact: async (_, args, { user, res }) => {
@@ -144,9 +132,7 @@ const Query = {
 
     const result = await Wrapper._getUserEmergencyContact(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserAllergyProfile: async (_, args, { user, res }) => {
@@ -158,9 +144,7 @@ const Query = {
 
     const result = await Wrapper._getUserAllergyProfile(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserMedicationProfile: async (_, args, { user, res }) => {
@@ -172,9 +156,7 @@ const Query = {
 
     const result = await Wrapper._getUserMedicationProfile(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserDentalProcedureProfile: async (_, args, { user, res }) => {
@@ -186,9 +168,7 @@ const Query = {
 
     const result = await Wrapper._getUserDentalProcedureProfile(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result
   },
 
   getUserImmunizationProfile: async (_, args, { user, res }) => {
@@ -200,9 +180,7 @@ const Query = {
 
     const result = await Wrapper._getUserImmunizationProfile(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserOperationProfile: async (_, args, { user, res }) => {
@@ -214,9 +192,7 @@ const Query = {
 
     const result = await Wrapper._getUserOperationProfile(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserHospitalizationProfile: async (_, args, { user, res }) => {
@@ -228,9 +204,7 @@ const Query = {
 
     const result = await Wrapper._getUserHospitalizationProfile(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserMedicalHistory: async (_, args, { user, res }) => {
@@ -242,9 +216,7 @@ const Query = {
 
     const result = await Wrapper._getUserMedicalHistory(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserVisualAcuityProfile: async (_, args, { user, res }) => {
@@ -256,9 +228,7 @@ const Query = {
 
     const result = await Wrapper._getUserVisualAcuityProfile(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getProcedureDomain: async (_, __, { user, res }) => {
