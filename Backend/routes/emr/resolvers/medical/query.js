@@ -103,9 +103,8 @@ const Query = {
 
     const result = await Wrapper._getUserDentalRecord(_, {...args, statuses: ["Approved"]}, { user, res });
     if (result.length === 0) return null;  
-    else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
+    return result;
   },
 
   getUserVitalSigns: async (_, args, { user, res }) => {
