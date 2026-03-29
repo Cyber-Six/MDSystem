@@ -350,33 +350,43 @@ const MedicineRequestPage = () => {
       const pendingRequests = requests.filter(
         (r) => r.status?.toLowerCase() === 'pending'
       );
+
+      // Use the cancelMedicineRequest mutation (patient endpoint)
+      // instead of setStatusMedicineRequest (which is staff-only)
       const cancelMutation = `
-        mutation CancelMedicineRequest($requestId: ID!, $status: RequestStatus!) {
-          setStatusMedicineRequest(requestId: $requestId, status: $status) {
+        mutation CancelMedicineRequest {
+          cancelMedicineRequest {
             id
             status
           }
         }
       `;
+
+      // Call cancel for each pending request
       const cancelResults = await Promise.all(
         pendingRequests.map((r) =>
           sendGraphQLRequest(
             cancelMutation,
-            { requestId: r.id, status: 'Cancelled' },
+            {},
             { endpoint: '/medical-inventory/medicine-request/patient' }
-          )
+          ).catch((error) => {
+            console.warn(`Failed to cancel request ${r.id}:`, error);
+            return null;
+          })
         )
       );
-      // Verify the cancel actually worked (patient endpoint may not support it)
+
+      // Verify at least one cancel succeeded
       const anySucceeded = cancelResults.some(
-        (r) => r?.setStatusMedicineRequest !== null && r?.setStatusMedicineRequest !== undefined
+        (r) => r?.cancelMedicineRequest !== null && r?.cancelMedicineRequest !== undefined
       );
-      if (!anySucceeded) {
+      if (!anySucceeded && pendingRequests.length > 0) {
         setErrorMessage(
           'Your pending request cannot be cancelled online. Please contact clinic staff to cancel your existing request before submitting a new one.'
         );
         return;
       }
+
       // Update local state to reflect cancelled
       setRequests((prev) =>
         prev.map((r) =>
