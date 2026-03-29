@@ -163,6 +163,35 @@ const Mutation = {
 
       transaction.items = items;
 
+      if (!linkedRequest) {
+        // Health-chat direct prescription — mirror into MedicineRequestLog so it appears in the dispense queue
+        const batchIds = mergedItems.map(i => i.batchId);
+        const batchInfoResult = await client.query(
+          `SELECT id, "medicalItemId", location FROM "MedicineBatch" WHERE id = ANY($1::int[])`,
+          [batchIds],
+        );
+        const batchInfo = new Map(batchInfoResult.rows.map(r => [r.id, r]));
+        const prescLocation = batchInfo.get(mergedItems[0].batchId)?.location ?? null;
+
+        const reqInsertResult = await client.query(
+          `INSERT INTO "MedicineRequestLog" ("patientId", status, location, purpose, notes, approved_by)
+           VALUES ($1, 'Completed', $2, 'Health Chat Prescription', $3, $4)
+           RETURNING id`,
+          [input.patientId, prescLocation, input.notes || null, issuedBy],
+        );
+        const newRequestId = reqInsertResult.rows[0].id;
+
+        for (const item of mergedItems) {
+          const medItemId = batchInfo.get(item.batchId)?.medicalItemId;
+          if (medItemId) {
+            await client.query(
+              `INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId", quantity) VALUES ($1, $2, $3)`,
+              [newRequestId, medItemId, item.quantity],
+            );
+          }
+        }
+      }
+
       if (linkedRequest) {
         await client.query(
           `UPDATE "MedicineRequestLog"

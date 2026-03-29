@@ -14,6 +14,7 @@ import DispenseMedicineModal from './components/dispense-medicine/dispense-medic
 import RequestActionModal from './components/dispense-queue/request-action-modal';
 import TransactionHistory from './components/transaction-history/transaction-history';
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
+import { useStaffNotifications } from '../notification/notification-context';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
@@ -29,6 +30,7 @@ import {
  * Consistent with staff-appointment.jsx pattern: section tabs + sub-components.
  */
 const MedicalInventory = () => {
+  const { subscribe } = useStaffNotifications();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -43,6 +45,7 @@ const MedicalInventory = () => {
   const [patientLookupId, setPatientLookupId] = useState('');
   const [isFetchingPatientReqs, setIsFetchingPatientReqs] = useState(false);
   const [patientReqsMsg, setPatientReqsMsg] = useState('');
+  const [loadedPatientId, setLoadedPatientId] = useState(null); // tracks which patient is focused in the queue
 
   // Selected item for detail view
   const [selectedItem, setSelectedItem] = useState(null);
@@ -468,6 +471,12 @@ const MedicalInventory = () => {
     loadAllMedicineRequests();
   }, [itemsLoading, loadAllMedicineRequests]);
 
+  // Reload dispense queue when a patient submits a new medicine request via socket
+  useEffect(() => {
+    const unsub = subscribe('medicine:request:new', loadAllMedicineRequests);
+    return unsub;
+  }, [subscribe, loadAllMedicineRequests]);
+
   // Load real patient medicine requests into the dispense queue
   const loadPatientMedicineRequests = async (patientId) => {
     if (!patientId) return;
@@ -494,12 +503,15 @@ const MedicalInventory = () => {
         return [...newOnes, ...updated];
       });
 
-      setPatientReqsMsg(
-        enriched.length === 0
-          ? `No requests found for Patient #${patientId}`
-          : `Loaded ${enriched.length} request(s) for Patient #${patientId}`,
-      );
+      if (enriched.length > 0) {
+        setLoadedPatientId(String(patientId));
+        setPatientReqsMsg(`Loaded ${enriched.length} request(s) for Patient #${patientId}`);
+      } else {
+        setLoadedPatientId(null);
+        setPatientReqsMsg(`No requests found for Patient #${patientId}`);
+      }
     } catch (err) {
+      setLoadedPatientId(null);
       setPatientReqsMsg(err.message || 'Failed to load patient requests. Check that the backend staff endpoint is registered.');
     } finally {
       setIsFetchingPatientReqs(false);
@@ -839,9 +851,19 @@ const MedicalInventory = () => {
                 </button>
               </div>
               {patientReqsMsg && (
-                <p className={`text-[11px] mt-1.5 ${patientReqsMsg.startsWith('No') || patientReqsMsg.includes('Failed') ? 'text-error-600 dark:text-error-400' : 'text-success-600 dark:text-success-400'}`}>
-                  {patientReqsMsg}
-                </p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <p className={`text-[11px] flex-1 ${patientReqsMsg.startsWith('No') || patientReqsMsg.includes('Failed') ? 'text-error-600 dark:text-error-400' : 'text-success-600 dark:text-success-400'}`}>
+                    {patientReqsMsg}
+                  </p>
+                  {loadedPatientId && (
+                    <button
+                      onClick={() => { setLoadedPatientId(null); setPatientReqsMsg(''); setPatientLookupId(''); }}
+                      className="text-[10px] px-1.5 py-0.5 rounded text-neutral-500 dark:text-neutral-400 hover:text-red-600 dark:hover:text-red-400 border border-neutral-300 dark:border-neutral-600 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -874,7 +896,16 @@ const MedicalInventory = () => {
             </div>
           </div>
 
-          <DispenseQueue requests={requests} items={items} batches={batches} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} />
+          <DispenseQueue
+            requests={requests}
+            items={items}
+            batches={batches}
+            onDispense={openDispense}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            focusPatientId={loadedPatientId}
+            onClearFocus={() => { setLoadedPatientId(null); setPatientReqsMsg(''); setPatientLookupId(''); }}
+          />
         </div>
       )}
 

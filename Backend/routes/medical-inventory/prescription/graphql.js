@@ -6,6 +6,7 @@ const path = require("path");
 const medicalResolver = require("./resolvers/medical/medical-resolver.js");
 const patientResolver = require("./resolvers/patient/patient-resolver.js");
 const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
+const { checkCredentialsStatus } = require("../../../config/middleware/activeCredential.js");
 
 const typeDefs = fs.readFileSync(path.join(__dirname, "./schema.graphql"), "utf8");
 
@@ -39,6 +40,7 @@ function initPrescriptionGraphQL(app) {
   app.use(
     "/medical-inventory/prescription/patient",
     jwtProtect("patient"),
+    checkCredentialsStatus,
     graphqlHTTP((req) => ({
       schema: patientSchema,
       graphiql: true,
