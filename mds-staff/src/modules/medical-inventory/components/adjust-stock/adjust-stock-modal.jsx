@@ -7,16 +7,22 @@ const AdjustStockModal = ({ batch, onClose, onAdjust }) => {
   const [type, setType] = useState('add');
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const qty = parseInt(quantity) || 0;
   const maxSubtract = batch.currentQuantity;
   const isValid = qty > 0 && reason.trim().length > 0 && (type === 'add' || qty <= maxSubtract);
   const newQty = type === 'add' ? batch.currentQuantity + qty : batch.currentQuantity - qty;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!isValid) return;
-    onAdjust({ batchId: batch.id, type, quantity: qty, reason, newQuantity: newQty });
+  const handleSubmit = async (e) => {
+    e?.preventDefault();
+    if (!isValid || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await onAdjust({ batchId: batch.id, type, quantity: qty, reason, newQuantity: newQty });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -104,9 +110,18 @@ const AdjustStockModal = ({ batch, onClose, onAdjust }) => {
         {/* Footer */}
         <div className="px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={!isValid} className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-1 ${isValid ? (type === 'add' ? 'bg-success-500 hover:bg-success-600' : 'bg-error-500 hover:bg-error-600') : 'bg-neutral-300 dark:bg-neutral-600 cursor-not-allowed'}`}>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" /></svg>
-            Confirm Adjustment
+          <button onClick={handleSubmit} disabled={!isValid || isSubmitting} className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-1.5 ${!isValid || isSubmitting ? 'bg-neutral-300 dark:bg-neutral-600 cursor-not-allowed' : (type === 'add' ? 'bg-success-500 hover:bg-success-600' : 'bg-error-500 hover:bg-error-600')}`}>
+            {isSubmitting ? (
+              <>
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                Processing...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" /></svg>
+                Confirm Adjustment
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -15,7 +15,7 @@ import RequestActionModal from './components/dispense-queue/request-action-modal
 import TransactionHistory from './components/transaction-history/transaction-history';
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 import { useStaffNotifications } from '../notification/notification-context';
-import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch } from './medical-inventory-service';
+import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
 import { getPatientBasicInfo } from '../../modules/pending-requests/patient-record-service';
@@ -552,13 +552,33 @@ const MedicalInventory = () => {
     }
   };
 
-   const handleAdjust = async ({ batchId, type, quantity, reason, newQuantity }) => {
+  const handleAdjust = async ({ batchId, type, quantity, reason }) => {
     try {
-      // Update in backend
-      await updateSupplyBatch(batchId, { currentQuantity: newQuantity });
-      
-      // Update in frontend state
-      setBatches(batches.map((b) => b.id === batchId ? { ...b, currentQuantity: newQuantity } : b));
+      const source = batches.find((b) => b.id === batchId);
+      const isMedicine = source?.dosageUnit !== undefined;
+
+      // Use the source batch's REAL individual quantity as the baseline — NOT the
+      // merged/deduplicated display value the modal computed newQuantity from.
+      // The modal may show a merged total (sum of several split records), but the
+      // backend updateMedicalSupply counts MedicineEntity rows for this specific
+      // batchId only. Sending the merged total as the target would make it insert
+      // far more entities than intended.
+      const realCurrentQty = source?.currentQuantity ?? 0;
+      const realNewQuantity =
+        type === 'add'
+          ? realCurrentQty + quantity
+          : Math.max(0, realCurrentQty - quantity);
+
+      if (isMedicine) {
+        await updateMedicineBatch(batchId, { currentQuantity: realNewQuantity, notes: reason });
+      } else {
+        await updateSupplyBatch(batchId, { currentQuantity: realNewQuantity, notes: reason });
+      }
+
+      // Reload all batches from the backend so merged totals are accurate.
+      // A local-only update is unreliable when there are multiple split records
+      // for the same batch+location in the database.
+      await loadItems();
       const batch = batches.find((b) => b.id === batchId);
       const item = items.find((i) => i.id === batch?.medicalItemId);
       const delta = type === 'add' ? quantity : -quantity;
