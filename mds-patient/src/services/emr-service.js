@@ -1725,46 +1725,24 @@ export const getPatientProfile = async () => {
   });
 
   const log = profileData?.personalLog || {};
-  const activeStatuses = new Set(['InProgress', 'Pending', 'Revision', 'Approved']);
-  const hasActiveProfile = activeStatuses.has(profileData?.personalLogStatus);
 
   let emergencyData = null;
 
-  if (hasActiveProfile) {
-    emergencyData = await sendGraphQLRequest(
-      `query GetEmergencyContact {
-        emergencyContact: getEmergencyContact {
-          firstContact { contactNumber }
-          secondContact { contactNumber }
-        }
-      }`,
-      {}
-    ).catch((error) => {
-      console.warn('[EMR Service] Active emergency contact fetch failed:', error.message);
-      return null;
-    });
-  }
-
-  // Fallback path for users without an active profile: request latest available
-  // emergency contact by user ID when available.
-  if (!emergencyData) {
-    const userId = profileData?.personalRecord?.id || profileData?.personalLog?.id || null;
-
-    if (userId) {
-      emergencyData = await sendGraphQLRequest(
-        `query GetLatestEmergencyContact($userId: ID!, $offset: Int, $limit: Int) {
-          emergencyContacts: getUserEmergencyContact(userId: $userId, offset: $offset, limit: $limit) {
-            firstContact { contactNumber }
-            secondContact { contactNumber }
-          }
-        }`,
-        { userId, offset: 0, limit: 1 }
-      ).catch((error) => {
-        console.warn('[EMR Service] Fallback emergency contact fetch failed:', error.message);
-        return null;
-      });
-    }
-  }
+  // Always fetch the approved emergency contact for profile display.
+  // Using approved:true works regardless of the current update ticket status
+  // (Cancelled, Pending, etc.) and avoids "No active profile found" errors.
+  emergencyData = await sendGraphQLRequest(
+    `query GetEmergencyContact {
+      emergencyContact: getEmergencyContact(approved: true) {
+        firstContact { contactNumber }
+        secondContact { contactNumber }
+      }
+    }`,
+    {}
+  ).catch((error) => {
+    console.warn('[EMR Service] Active emergency contact fetch failed:', error.message);
+    return null;
+  });
 
   const latestEmergency = emergencyData?.emergencyContact
     || (Array.isArray(emergencyData?.emergencyContacts) ? emergencyData.emergencyContacts[0] : null)

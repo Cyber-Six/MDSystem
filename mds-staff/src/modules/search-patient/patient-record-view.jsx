@@ -624,7 +624,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                 {patient.id} · {patient.program || patient.department || 'N/A'} · {patient.year || 'N/A'}
               </p>
               <div className="mt-1 flex items-center gap-1.5">
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status || 'N/A'}</span>
+                {['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(patient.status) && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status}</span>
+                )}
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">{patient.type}</span>
                 {isMockPatient && (
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">Mock Mode</span>
