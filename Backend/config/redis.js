@@ -344,29 +344,27 @@ async function createVerificationSession(email, purpose, account_type = "patient
   // ✅ Fetch user from DB (returns row OR null)
   const user = await query.getUserConsentStateByEmail(email);
   if (user) { // account do exist
-    await client.hSet(key, {
-      allow_email_2fa: user.allow_email_2fa ? "true" : "false",
-      email_2fa_verified: "false",
-      user_exists: "true",
-      user_id: user.id.toString(),       // ✅ internal only
-      email,
-      account_type,                      // ✅ NEW: store role for login/register flows
-      data_consent: user.data_consent ? "true" : "false",
-      data_consent_version: user.data_consent_version || "",
-      data_consent_agreed: user.data_consent_agreed
-        ? user.data_consent_agreed.toISOString()
-        : "",
-    });
+    await client.hSet(key,
+      'allow_email_2fa', user.allow_email_2fa ? "true" : "false",
+      'email_2fa_verified', "false",
+      'user_exists', "true",
+      'user_id', user.id.toString(),
+      'email', email,
+      'account_type', account_type,
+      'data_consent', user.data_consent ? "true" : "false",
+      'data_consent_version', user.data_consent_version || "",
+      'data_consent_agreed', user.data_consent_agreed ? user.data_consent_agreed.toISOString() : ""
+    );
   } else { // account doesnt exist
-    await client.hSet(key, {
-      user_exists: "false",
-      user_id: "",                       // ✅ consistent field
-      email,
-      account_type,                              // ✅ still store role even if user doesn't exist
-      data_consent: "false",
-      data_consent_version: "",
-      data_consent_agreed: "",
-    });
+    await client.hSet(key,
+      'user_exists', "false",
+      'user_id', "",
+      'email', email,
+      'account_type', account_type,
+      'data_consent', "false",
+      'data_consent_version', "",
+      'data_consent_agreed', ""
+    );
   }
 
   await client.expire(
@@ -398,11 +396,11 @@ async function updateConsentInSession(token, purpose) {
   const exists = await client.exists(key);
   if (!exists) return false;
 
-  await client.hSet(key, {
-    data_consent: "true",
-    data_consent_version: process.env.DATA_CONSENT_VERSION,
-    data_consent_timestamp: Date.now().toString()
-    });
+  await client.hSet(key,
+    'data_consent', "true",
+    'data_consent_version', process.env.DATA_CONSENT_VERSION,
+    'data_consent_timestamp', Date.now().toString()
+  );
   
   const userId = await getUserIdFromVerificationSession(token, purpose);
   if (userId) {
@@ -431,9 +429,7 @@ async function update2FAInSession(token, email, purpose) {
   }
 
   // ✅ 3. Mark 2FA as verified
-  await client.hSet(key, {
-    email_2fa_verified: "true"
-  });
+  await client.hSet(key, 'email_2fa_verified', "true");
 
   return true;
 }
@@ -784,11 +780,11 @@ async function createAdminTransferSession(oldAdminId, newAdminId, verificationTo
 
   const key = `admin:transfer:session:${verificationToken}`;
 
-  await client.hSet(key, {
-    old_admin_id: oldAdminId.toString(),
-    new_admin_id: newAdminId.toString(),
-    created_at: Date.now().toString(),
-  });
+  await client.hSet(key,
+    'old_admin_id', oldAdminId.toString(),
+    'new_admin_id', newAdminId.toString(),
+    'created_at', Date.now().toString()
+  );
 
   await client.expire(key, ADMIN_TRANSFER_EXPIRATION);
 
