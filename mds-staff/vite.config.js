@@ -137,6 +137,18 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),
         },
+        '/announcement': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: BACKEND_URL.startsWith('https'),
+          bypass: function(req) {
+            // Only let React Router handle /announcements (the SPA page, plural).
+            // API calls to /announcement (singular) must be proxied to the backend.
+            if (req.method === 'GET' && req.url.startsWith('/announcements')) {
+              return '/index.html';
+            }
+          },
+        },
       },
     }
   }
