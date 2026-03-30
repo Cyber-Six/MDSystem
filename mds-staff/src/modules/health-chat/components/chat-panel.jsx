@@ -8,6 +8,7 @@ import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
+import PrescriptionPanel from './PrescriptionPanel';
 
 const ChatPanel = ({ emitTyping }) => {
   const {
@@ -20,8 +21,12 @@ const ChatPanel = ({ emitTyping }) => {
     setMessages,
     typingUsers,
     refreshMessages,
-    socketError
+    socketError,
+    activeTicketId,
+    sendMessage,
   } = useHealthChat();
+
+  const [showPrescription, setShowPrescription] = useState(false);
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -162,6 +167,11 @@ const ChatPanel = ({ emitTyping }) => {
     return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Close prescription panel when patient changes
+  useEffect(() => {
+    setShowPrescription(false);
+  }, [selectedChatId, selectedPatientId]);
+
   if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
   // Build unified list: synthetic purpose entry + messages with dividers
@@ -183,7 +193,11 @@ const ChatPanel = ({ emitTyping }) => {
 
   const allItems = [...purposeSynth, ...itemsWithDividers];
 
+  const patient = selectedTicket?.patient;
+
   return (
+    <div className="flex-1 flex h-full min-h-0">
+    {/* Chat column */}
     <div
       className="flex-1 flex flex-col h-full min-h-0 bg-white dark:bg-neutral-900"
     >
@@ -281,7 +295,20 @@ const ChatPanel = ({ emitTyping }) => {
       </div>
 
       {/* Input */}
-      <MessageInput emitTyping={emitTyping} />
+      <MessageInput emitTyping={emitTyping} onOpenPrescription={() => setShowPrescription(true)} />
+    </div>
+
+    {/* Prescription side panel */}
+    <PrescriptionPanel
+      isOpen={showPrescription}
+      onClose={() => setShowPrescription(false)}
+      patientId={patient?.id}
+      patientName={patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}
+      patientDob={patient?.dateOfBirth}
+      patientSex={patient?.sex}
+      activeTicketId={activeTicketId}
+      sendMessage={sendMessage}
+    />
     </div>
   );
 };
