@@ -229,24 +229,34 @@ export function HealthChatProvider({ children }) {
 
         // Also populate legacy tickets array for backward compatibility
         // Transform conversations to ticket-like objects
-        const ticketLikeItems = conversationsWithReadState.map(conv => ({
-          id: conv.patientId, // Use patientId as the ID for selection
-          patientId: conv.patientId,
-          patient: conv.patient,
-          purpose: conv.latestTicket?.purpose,
-          status: conv.latestTicket?.status,
-          session_start: conv.latestTicket?.session_start,
-          session_end: conv.latestTicket?.session_end,
-          archived_at: conv.latestTicket?.archived_at,
-          closedBy: conv.latestTicket?.closedBy,
-          lastMessage: conv.lastMessage,
-          lastMessageAt: conv.lastMessageAt,
-          unreadCount: conv.unreadCount,
-          activeTicketCount: conv.activeTicketCount,
-          totalTicketCount: conv.totalTicketCount,
-          tickets: conv.tickets, // Array of all tickets for this patient
-          _isConversation: true // Flag to identify this is a patient conversation
-        }));
+        const now = Date.now();
+        const ticketLikeItems = conversationsWithReadState.map(conv => {
+          const rawStatus = conv.latestTicket?.status;
+          // Treat as Expired client-side if expiresAt has passed even if DB hasn't flipped yet
+          const effectiveStatus =
+            rawStatus === 'Ongoing' && conv.latestTicket?.expiresAt && new Date(conv.latestTicket.expiresAt).getTime() < now
+              ? 'Expired'
+              : rawStatus;
+          return {
+            id: conv.patientId, // Use patientId as the ID for selection
+            patientId: conv.patientId,
+            patient: conv.patient,
+            purpose: conv.latestTicket?.purpose,
+            status: effectiveStatus,
+            session_start: conv.latestTicket?.session_start,
+            session_end: conv.latestTicket?.session_end,
+            archived_at: conv.latestTicket?.archived_at,
+            expiresAt: conv.latestTicket?.expiresAt,
+            closedBy: conv.latestTicket?.closedBy,
+            lastMessage: conv.lastMessage,
+            lastMessageAt: conv.lastMessageAt,
+            unreadCount: conv.unreadCount,
+            activeTicketCount: conv.activeTicketCount,
+            totalTicketCount: conv.totalTicketCount,
+            tickets: conv.tickets, // Array of all tickets for this patient
+            _isConversation: true // Flag to identify this is a patient conversation
+          };
+        });
 
         setTickets(ticketLikeItems);
         setTicketsTotal(result.total || 0);

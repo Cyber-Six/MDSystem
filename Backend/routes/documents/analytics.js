@@ -108,6 +108,72 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
 });
 
 /**
+ * POST /analytics/batch
+ * Execute multiple analytics queries in a single request
+ * Reduces HTTP overhead when loading the analytics dashboard.
+ *
+ * Body: { dataTypes: string[], branch, startDate, endDate }
+ */
+router.post('/batch', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { dataTypes, branch, startDate, endDate } = req.body;
+
+    if (!Array.isArray(dataTypes) || dataTypes.length === 0) {
+      return res.status(400).json({ error: 'DATA_TYPES_REQUIRED' });
+    }
+    if (dataTypes.length > 20) {
+      return res.status(400).json({ error: 'TOO_MANY_QUERIES', message: 'Maximum 20 queries per batch' });
+    }
+    if (!branch || !startDate || !endDate) {
+      return res.status(400).json({ error: 'MISSING_PARAMS' });
+    }
+
+    const validBranches = ['Manila', 'QuezonCity', 'Both'];
+    if (!validBranches.includes(branch)) {
+      return res.status(400).json({ error: 'INVALID_BRANCH' });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
+      return res.status(400).json({ error: 'INVALID_DATE_RANGE' });
+    }
+
+    // Validate all query types exist
+    const invalidTypes = dataTypes.filter(dt => !analytics.hasQuery(dt));
+    if (invalidTypes.length > 0) {
+      return res.status(400).json({ error: 'INVALID_QUERY_TYPES', invalidTypes });
+    }
+
+    // Check user branch access
+    const userBranch = await query.getUserBranch(req.user.id);
+    if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
+      return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
+    }
+
+    logger.info('Analytics batch query requested', {
+      count: dataTypes.length,
+      branch,
+      startDate,
+      endDate,
+      userId: req.user.id,
+    });
+
+    const results = await analytics.executeBatchQueries(dataTypes, branch, startDate, endDate);
+
+    res.json({
+      success: true,
+      branch,
+      dateRange: { startDate, endDate },
+      results,
+    });
+  } catch (err) {
+    logger.error('Analytics batch query failed', { error: err.message });
+    res.status(500).json({ error: 'BATCH_QUERY_FAILED', message: err.message });
+  }
+});
+
+/**
  * GET /analytics/report/:reportType
  * Generate and download PDF report
  *
