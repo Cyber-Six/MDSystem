@@ -392,7 +392,7 @@ const MessageInput = ({ emitTyping }) => {
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+          placeholder="Type a message…"
           disabled={isSending}
           rows={1}
           className="flex-1 px-3.5 py-2 text-sm resize-none rounded-xl transition-all duration-150
