@@ -177,9 +177,11 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             label="Contact Number (Mobile / Landline)"
             type="tel"
             required
+            reserveErrorSpace
             value={data.contactNumber || ''}
             onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
             placeholder="+63 XXX XXX XXXX"
+            className="mb-0"
             error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
           />
           <Input
@@ -269,7 +271,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
 
       {/* ── Emergency Contacts Card ── */}
       <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex flex-wrap items-center gap-2">
+        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-3 flex flex-wrap items-center gap-2">
           <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-error-100 text-error-600 shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -279,8 +281,8 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
         </h3>
 
         {/* --- Contact 1 (Required) --- */}
-        <div className="mb-6 pb-6 border-b border-neutral-200">
-          <div className="space-y-4">
+        <div className="mb-3 pb-3 border-b border-neutral-200">
+          <div className="space-y-2">
             <Input
               label="Person/s to be Contacted in Case of Emergency"
               required
@@ -309,6 +311,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               label="Contact Number of the Person During Emergency"
               type="tel"
               required
+              reserveErrorSpace
               value={data.emergencyContacts[0]?.contactNumber || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', handlePhone('ec0', e.target.value))}
               placeholder="+63 XXX XXX XXXX"
@@ -319,11 +322,11 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
 
         {/* --- Contact 2 (Optional) --- */}
         <div>
-          <p className="text-sm font-semibold text-secondary-500 mb-4">
+          <p className="text-sm font-semibold text-secondary-500 mb-2">
             Additional Emergency Contact
             <span className="ml-2 text-xs font-normal bg-secondary-100 text-secondary-500 px-2 py-0.5 rounded-full">Optional</span>
           </p>
-          <div className="space-y-4">
+          <div className="space-y-2">
             <Input
               label="Person/s to be Contacted in Case of Emergency"
               value={data.emergencyContacts[1]?.name || ''}
@@ -348,6 +351,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             <Input
               label="Contact Number of the Person During Emergency"
               type="tel"
+              reserveErrorSpace
               value={data.emergencyContacts[1]?.contactNumber || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', handlePhone('ec1', e.target.value))}
               placeholder="+63 XXX XXX XXXX"

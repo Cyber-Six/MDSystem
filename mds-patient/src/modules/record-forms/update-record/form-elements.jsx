@@ -1,15 +1,15 @@
 import React from 'react';
 
-export const Input = ({ label, required, error, className = '', ...props }) => (
-  <div className="mb-4">
+export const Input = ({ label, required, error, reserveErrorSpace = false, className = '', ...props }) => (
+  <div className="mb-2">
     {label && (
-      <label className="block text-sm font-medium text-secondary-700 dark:text-primary-500 mb-1.5">
+      <label className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
         {label}
         {required && <span className="text-error-500 ml-1">*</span>}
       </label>
     )}
     <input
-      className={`w-full px-4 py-2.5 text-secondary-800 bg-white border border-neutral-300 rounded-lg
+      className={`w-full px-3 py-2 text-sm text-secondary-800 bg-white border border-neutral-300 rounded-lg
                  transition-all duration-200
                  hover:border-primary-400
                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
@@ -20,20 +20,22 @@ export const Input = ({ label, required, error, className = '', ...props }) => (
                  ${className}`}
       {...props}
     />
-    {error && <p className="mt-1.5 text-sm text-error-600">{error}</p>}
+    {(error || reserveErrorSpace) && (
+      <p className={`mt-0.5 min-h-4 text-xs text-error-600 ${error ? '' : 'invisible'}`}>{error || ' '}</p>
+    )}
   </div>
 );
 
 export const Select = ({ label, required, error, options, className = '', ...props }) => (
-  <div className="mb-4">
+  <div className="mb-2">
     {label && (
-      <label className="block text-sm font-medium text-secondary-700 dark:text-primary-500 mb-1.5">
+      <label className="block text-xs font-medium text-secondary-700 dark:text-primary-500 mb-1">
         {label}
         {required && <span className="text-error-500 ml-1">*</span>}
       </label>
     )}
     <select
-      className={`w-full px-4 py-2.5 text-secondary-800 bg-white border border-neutral-300 rounded-lg
+      className={`w-full px-3 py-2 text-sm text-secondary-800 bg-white border border-neutral-300 rounded-lg
                  transition-all duration-200
                  hover:border-primary-400
                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
@@ -50,7 +52,7 @@ export const Select = ({ label, required, error, options, className = '', ...pro
         </option>
       ))}
     </select>
-    {error && <p className="mt-1.5 text-sm text-error-600">{error}</p>}
+    {error && <p className="mt-0.5 text-xs text-error-600">{error}</p>}
   </div>
 );
 
