@@ -27,7 +27,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
     return localStorage.getItem('staff_themeMode') || 'system';
   });
 
-  const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts } = useStaffNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen } = useStaffNotifications();
 
   const handleNotifClick = (notif) => {
     markAsRead(notif.id);
@@ -136,7 +136,11 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={() => {
+              const opening = !showNotifications;
+              setShowNotifications(opening);
+              if (opening && activeNotifTab === 'inventory') markInventoryAlertsAsSeen();
+            }}
             className="p-1.5 rounded-md text-secondary-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 relative"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -210,7 +214,10 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                   {tabs.map((tab) => (
                     <button
                       key={tab.key}
-                      onClick={() => setActiveNotifTab(tab.key)}
+                      onClick={() => {
+                        setActiveNotifTab(tab.key);
+                        if (tab.key === 'inventory') markInventoryAlertsAsSeen();
+                      }}
                       className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[11px] font-semibold transition-colors border-b-2 ${
                         activeNotifTab === tab.key
                           ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-900/10'

@@ -25,7 +25,7 @@ import {
   SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
 } from './inventory-seed-data';
-import { useInventoryNotifications } from './hooks/useInventoryNotifications';
+
 
 /**
  * Medical Inventory Page
@@ -33,7 +33,7 @@ import { useInventoryNotifications } from './hooks/useInventoryNotifications';
  */
 const MedicalInventory = () => {
   const routerLocation = useLocation();
-  const { subscribe, setInventoryAlerts } = useStaffNotifications();
+  const { subscribe } = useStaffNotifications();
   const [activeSection, setActiveSection] = useState(
     routerLocation.state?.section ?? 'dashboard'
   );
@@ -210,15 +210,6 @@ const MedicalInventory = () => {
 
   // Compute enriched items
   const enrichedItems = useMemo(() => computeItemStats(items, batches), [items, batches]);
-
-  // Compute inventory notifications (low stock + expiring batches)
-  const { notifications: inventoryNotifications } = useInventoryNotifications(enrichedItems, batches);
-
-  // Sync inventory alerts to the global notification bell
-  useEffect(() => {
-    setInventoryAlerts(inventoryNotifications);
-    return () => setInventoryAlerts([]);
-  }, [inventoryNotifications, setInventoryAlerts]);
 
   const enrichRequestItems = useCallback((requestItems = []) => {
     return requestItems.map((item) => {

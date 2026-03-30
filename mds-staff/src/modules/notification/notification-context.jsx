@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { apiBaseUrlProvider, tokenService } from '../../packages-core-adapter';
+import { fetchMedicalItems, fetchMedicineBatches, fetchSupplyBatches } from '../medical-inventory/medical-inventory-service';
+import { computeItemStats } from '../medical-inventory/inventory-seed-data';
 
 /**
  * Staff notification events emitted by the backend.
@@ -78,7 +80,92 @@ const EVENT_MAP = {
   }),
 };
 
+// ── Inventory alert helpers ─────────────────────────────────────────────────
+
+const EXPIRY_WARN_DAYS = 60;
+const INVENTORY_POLL_MS = 5 * 60 * 1000; // 5 minutes
+
+function computeInventoryAlerts(enrichedItems, batches) {
+  const result = [];
+  const now = new Date();
+
+  enrichedItems.forEach((item) => {
+    if (!item.isLowStock) return;
+    const category = item.category?.toLowerCase();
+    result.push({
+      id: `low-stock-${item.id}`,
+      notificationType: 'low-stock',
+      itemType: category === 'medicine' ? 'Medicine' : 'Medical Supply',
+      itemId: item.id,
+      batchId: null,
+      itemName: item.item_name,
+      detail: `${item.totalStock} unit${item.totalStock === 1 ? '' : 's'} remaining (reorder at ≤ ${item.reorder_level})`,
+      currentQuantity: item.totalStock,
+      reorderLevel: item.reorder_level,
+      expiryDate: null,
+      daysLeft: null,
+    });
+  });
+
+  const itemMap = new Map(enrichedItems.map((i) => [String(i.id), i]));
+
+  batches.forEach((batch) => {
+    if (!batch.expiryDate) return;
+    const expiry = new Date(batch.expiryDate);
+    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+    if (daysLeft > EXPIRY_WARN_DAYS) return;
+
+    const item = itemMap.get(String(batch.medicalItemId));
+    const itemName = item?.item_name ?? `Item #${batch.medicalItemId}`;
+    const category = item?.category?.toLowerCase();
+    const itemType = category === 'medicine' ? 'Medicine' : 'Medical Supply';
+    const notificationType = daysLeft < 0 ? 'expired' : 'expiring';
+    const expiryLabel =
+      daysLeft < 0
+        ? `Expired ${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? '' : 's'} ago`
+        : daysLeft === 0
+        ? 'Expires today'
+        : `Expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`;
+
+    result.push({
+      id: `${notificationType}-batch-${batch.id}`,
+      notificationType,
+      itemType,
+      itemId: batch.medicalItemId,
+      batchId: batch.id,
+      itemName,
+      batchNumber: batch.batchNumber,
+      location: batch.location,
+      detail: `${expiryLabel} · Batch ${batch.batchNumber}${batch.location ? ` · ${batch.location}` : ''}`,
+      currentQuantity: batch.availableQuantity ?? batch.currentQuantity ?? 0,
+      reorderLevel: null,
+      expiryDate: batch.expiryDate,
+      daysLeft,
+    });
+  });
+
+  return result;
+}
+
 const STORAGE_KEY = 'staff_notifications';
+const SEEN_INVENTORY_KEY = 'staff_seen_inventory_alerts';
+
+function loadSeenInventoryIds() {
+  try {
+    const raw = sessionStorage.getItem(SEEN_INVENTORY_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function persistSeenInventoryIds(ids) {
+  try {
+    sessionStorage.setItem(SEEN_INVENTORY_KEY, JSON.stringify([...ids]));
+  } catch {
+    // ignore
+  }
+}
 const MAX_NOTIFICATIONS = 50;
 
 function loadPersistedNotifications() {
@@ -103,6 +190,7 @@ const NotificationContext = createContext(null);
 export function StaffNotificationProvider({ children }) {
   const [notifications, setNotifications] = useState(() => loadPersistedNotifications());
   const [inventoryAlerts, setInventoryAlerts] = useState([]);
+  const [seenInventoryIds, setSeenInventoryIds] = useState(() => loadSeenInventoryIds());
   const socketRef = useRef(null);
   const subscribersRef = useRef({});
 
@@ -204,6 +292,14 @@ export function StaffNotificationProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const markInventoryAlertsAsSeen = useCallback(() => {
+    setSeenInventoryIds((prev) => {
+      const next = new Set([...prev, ...inventoryAlerts.map((a) => a.id)]);
+      persistSeenInventoryIds(next);
+      return next;
+    });
+  }, [inventoryAlerts]);
+
   const subscribe = useCallback((event, callback) => {
     const subs = subscribersRef.current;
     if (!subs[event]) subs[event] = new Set();
@@ -211,10 +307,73 @@ export function StaffNotificationProvider({ children }) {
     return () => subs[event].delete(callback);
   }, []);
 
-  const unreadCount = notifications.filter((n) => n.unread).length + inventoryAlerts.length;
+  // Fetch inventory data and compute alerts at the app level so they are
+  // always available regardless of which page the user is currently on.
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchAndComputeAlerts = async () => {
+      try {
+        const items = await fetchMedicalItems(null, 0, 500);
+        const batchResults = await Promise.all(
+          items.map((item) => {
+            const isMedicine = item.category?.toLowerCase() === 'medicine';
+            if (isMedicine) {
+              return fetchMedicineBatches(Number(item.id)).then((bs) =>
+                bs.map((b) => ({
+                  id: b.id,
+                  medicalItemId: Number(b.medicalItemId),
+                  batchNumber: b.batchNumber,
+                  availableQuantity: Number(b.availableQuantity ?? 0),
+                  expiryDate: b.expiryDate,
+                  location: b.location,
+                }))
+              );
+            } else {
+              return fetchSupplyBatches(Number(item.id)).then((bs) =>
+                bs.map((b) => ({
+                  id: b.id,
+                  medicalItemId: Number(b.supplyItemId),
+                  batchNumber: b.batchNumber,
+                  availableQuantity: Number(b.currentQuantity ?? 0),
+                  expiryDate: b.expiryDate,
+                  location: b.location,
+                }))
+              );
+            }
+          })
+        );
+        const flatBatches = batchResults.flat();
+        const enrichedItems = computeItemStats(items, flatBatches);
+        if (!isMounted) return;
+        const alerts = computeInventoryAlerts(enrichedItems, flatBatches);
+        setInventoryAlerts(alerts);
+        // Prune seen IDs that no longer exist so the set doesn't grow unbounded
+        const currentIds = new Set(alerts.map((a) => a.id));
+        setSeenInventoryIds((prev) => {
+          const pruned = new Set([...prev].filter((id) => currentIds.has(id)));
+          persistSeenInventoryIds(pruned);
+          return pruned;
+        });
+      } catch (err) {
+        console.warn('[Inventory notifications] Failed to fetch:', err);
+      }
+    };
+
+    fetchAndComputeAlerts();
+    const pollId = setInterval(fetchAndComputeAlerts, INVENTORY_POLL_MS);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollId);
+    };
+  }, []);
+
+  const unseenInventoryCount = inventoryAlerts.filter((a) => !seenInventoryIds.has(a.id)).length;
+  const unreadCount = notifications.filter((n) => n.unread).length + unseenInventoryCount;
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll, subscribe, inventoryAlerts, setInventoryAlerts }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll, subscribe, inventoryAlerts, markInventoryAlertsAsSeen }}>
       {children}
     </NotificationContext.Provider>
   );
