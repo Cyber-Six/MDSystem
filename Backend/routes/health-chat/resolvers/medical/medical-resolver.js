@@ -53,6 +53,10 @@ const Mutation = {
 
   expireOldTickets: async (_, args, context) => {
     return await Wrapper.Mutation._expireOldTickets(_, args, context);
+  },
+
+  extendSession: async (_, args, context) => {
+    return await Wrapper.Mutation._extendSession(_, args, context);
   }
 };
 

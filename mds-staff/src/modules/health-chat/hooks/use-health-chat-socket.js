@@ -42,7 +42,8 @@ export function useHealthChatSocket() {
     setSocketError,
     markTicketPendingClosed,
     filter,
-    tickets
+    tickets,
+    updateTicketExpiresAt
   } = useHealthChat();
 
   // Use refs for ALL callbacks to avoid socket reconnection on dependency changes
@@ -58,6 +59,7 @@ export function useHealthChatSocket() {
   const markTicketPendingClosedRef = useRef(markTicketPendingClosed);
   const filterRef = useRef(filter);
   const ticketsRef = useRef(tickets);
+  const updateTicketExpiresAtRef = useRef(updateTicketExpiresAt);
 
   // Keep refs up to date
   useEffect(() => {
@@ -72,7 +74,8 @@ export function useHealthChatSocket() {
     markTicketPendingClosedRef.current = markTicketPendingClosed;
     filterRef.current = filter;
     ticketsRef.current = tickets;
-  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, markTicketPendingClosed, filter, tickets]);
+    updateTicketExpiresAtRef.current = updateTicketExpiresAt;
+  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, markTicketPendingClosed, filter, tickets, updateTicketExpiresAt]);
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
@@ -196,6 +199,13 @@ export function useHealthChatSocket() {
             // Otherwise refresh to get updated data
             refreshTicketsRef.current();
           }
+        }
+      });
+
+      // Listen for session extended (patient or other staff extended the session)
+      socketService.on('healthchat:session-extended', (data) => {
+        if (data.chatId && data.expiresAt) {
+          updateTicketExpiresAtRef.current(data.chatId, data.expiresAt);
         }
       });
     }).catch((err) => {

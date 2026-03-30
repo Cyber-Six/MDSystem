@@ -25,6 +25,10 @@ const Mutation = {
 
   closeMyTicket: async (_, args, context) => {
     return await Wrapper.Mutation._closeMyTicket(_, args, context);
+  },
+
+  extendSession: async (_, args, context) => {
+    return await Wrapper.Mutation._extendSession(_, args, context);
   }
 };
 
