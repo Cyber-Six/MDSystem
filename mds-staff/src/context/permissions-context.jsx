@@ -15,6 +15,7 @@ const MODULE_ROUTE_MAP = {
   inventory: ['/inventory'],
   healthChat: ['/health-chat'],
   analytics: ['/analytics'],
+  // announcements: visible to all medical staff, CRUD enforced server-side
   // roleManagement: '/settings/roles' — handled via isAdmin check, not module permissions
 };
 
