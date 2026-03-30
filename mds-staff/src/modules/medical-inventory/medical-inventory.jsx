@@ -557,27 +557,19 @@ const MedicalInventory = () => {
     }
   };
 
-  const handleAdjust = async ({ batchId, type, quantity, reason }) => {
+  const handleAdjust = async ({ batchId, type, quantity, reason, newQuantity }) => {
     try {
       const source = batches.find((b) => b.id === batchId);
       const isMedicine = source?.dosageUnit !== undefined;
 
-      // Use the source batch's REAL individual quantity as the baseline — NOT the
-      // merged/deduplicated display value the modal computed newQuantity from.
-      // The modal may show a merged total (sum of several split records), but the
-      // backend updateMedicalSupply counts MedicineEntity rows for this specific
-      // batchId only. Sending the merged total as the target would make it insert
-      // far more entities than intended.
-      const realCurrentQty = source?.currentQuantity ?? 0;
-      const realNewQuantity =
-        type === 'add'
-          ? realCurrentQty + quantity
-          : Math.max(0, realCurrentQty - quantity);
-
+      // Use newQuantity from the modal — it has the correct calculation based on
+      // the enriched batch (which may include merged deduplicated records).
+      // The modal already validated the quantity and performed the math correctly,
+      // so we trust its result rather than recalculating with potentially stale state.
       if (isMedicine) {
-        await updateMedicineBatch(batchId, { currentQuantity: realNewQuantity, notes: reason });
+        await updateMedicineBatch(batchId, { currentQuantity: newQuantity, notes: reason });
       } else {
-        await updateSupplyBatch(batchId, { currentQuantity: realNewQuantity, notes: reason });
+        await updateSupplyBatch(batchId, { currentQuantity: newQuantity, notes: reason });
       }
 
       // Reload all batches from the backend so merged totals are accurate.
