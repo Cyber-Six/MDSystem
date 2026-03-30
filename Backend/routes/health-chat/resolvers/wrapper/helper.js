@@ -43,7 +43,9 @@ async function getParticipantInfo(userId) {
       uc.email,
       up.identifier,
       p.profile,
-      up.branch
+      up.branch,
+      up.date_of_birth,
+      up.sex
      FROM "UserCredentials" uc
      LEFT JOIN "UsersPersonal" up ON up.id = uc.id
      LEFT JOIN "Patients" p ON p.id = uc.id
@@ -60,7 +62,9 @@ async function getParticipantInfo(userId) {
     lastName: row.last_name || 'User',
     email: row.email,
     identifier: row.identifier,
-    branch: row.profile || row.branch || null
+    branch: row.profile || row.branch || null,
+    dateOfBirth: row.date_of_birth ? row.date_of_birth.toISOString().split('T')[0] : null,
+    sex: row.sex || null
   };
 }
 
@@ -219,7 +223,9 @@ async function getParticipantInfoBatch(userIds) {
       uc.email,
       up.identifier,
       p.profile,
-      up.branch
+      up.branch,
+      up.date_of_birth,
+      up.sex
      FROM "UserCredentials" uc
      LEFT JOIN "UsersPersonal" up ON up.id = uc.id
      LEFT JOIN "Patients" p ON p.id = uc.id
@@ -235,7 +241,9 @@ async function getParticipantInfoBatch(userIds) {
       lastName: row.last_name || 'User',
       email: row.email,
       identifier: row.identifier,
-      branch: row.profile || row.branch || null
+      branch: row.profile || row.branch || null,
+      dateOfBirth: row.date_of_birth ? row.date_of_birth.toISOString().split('T')[0] : null,
+      sex: row.sex || null
     });
   }
   return map;

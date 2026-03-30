@@ -172,30 +172,8 @@ const ChatPanel = ({ emitTyping }) => {
     setShowPrescription(false);
   }, [selectedChatId, selectedPatientId]);
 
-  const [patientPersonal, setPatientPersonal] = useState(null);
   const patient = selectedTicket?.patient;
 
-  // Fetch full patient personal data for prescription panel
-  useEffect(() => {
-    if (!selectedPatientId) {
-      setPatientPersonal(null);
-      return;
-    }
-    const fetchPatientPersonal = async () => {
-      try {
-        const response = await fetch(`/api/patient/${selectedPatientId}/personal`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setPatientPersonal(data);
-        }
-      } catch (err) {
-        console.error('[ChatPanel] Failed to fetch patient personal info:', err);
-      }
-    };
-    fetchPatientPersonal();
-  }, [selectedPatientId]);
 
   if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
@@ -327,9 +305,8 @@ const ChatPanel = ({ emitTyping }) => {
       onClose={() => setShowPrescription(false)}
       patientId={patient?.id}
       patientName={patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}
-      patientDob={patientPersonal?.dateOfBirth || patient?.dateOfBirth}
-      patientSex={patientPersonal?.sex || patient?.sex}
-      patientAddress={patientPersonal?.address}
+      patientDob={patient?.dateOfBirth}
+      patientSex={patient?.sex}
       activeTicketId={activeTicketId}
       sendMessage={sendMessage}
     />

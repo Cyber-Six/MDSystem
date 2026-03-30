@@ -468,6 +468,8 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
             email
             identifier
             branch
+            dateOfBirth
+            sex
           }
           latestTicket {
             id

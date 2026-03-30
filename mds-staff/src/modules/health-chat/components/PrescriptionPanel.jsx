@@ -44,7 +44,6 @@ const PrescriptionPanel = ({
   patientName,
   patientDob,
   patientSex,
-  patientAddress,
   activeTicketId,
   sendMessage,
 }) => {
@@ -55,7 +54,6 @@ const PrescriptionPanel = ({
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [sex, setSex] = useState('');
-  const [address, setAddress] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -72,7 +70,6 @@ const PrescriptionPanel = ({
     setName(patientName || '');
     setAge(calcAge(patientDob) || '');
     setSex(patientSex || '');
-    setAddress('');
     setSubmitting(false);
     setError(null);
     setSuccess(false);
@@ -113,7 +110,6 @@ const PrescriptionPanel = ({
           lastName,
           dateOfBirth: patientDob || undefined,
           sex: sex || undefined,
-          address: address || undefined,
         },
         issuedDate: new Date().toISOString().split('T')[0],
         prescription: {
@@ -158,7 +154,7 @@ const PrescriptionPanel = ({
     } finally {
       setSubmitting(false);
     }
-  }, [medications, name, sex, address, diagnosis, specialInstructions, followUpDate, patientId, patientDob, activeTicketId, sendMessage]);
+  }, [medications, name, sex, diagnosis, specialInstructions, followUpDate, patientId, patientDob, activeTicketId, sendMessage]);
 
   if (!isOpen) return null;
 
@@ -275,7 +271,7 @@ const PrescriptionPanel = ({
                     <option value="Female">Female</option>
                   </select>
                 </div>
-                <input value={address} onChange={e => setAddress(e.target.value)} placeholder="Address (optional)" className={inputCls} />
+
               </div>
             </div>
 
