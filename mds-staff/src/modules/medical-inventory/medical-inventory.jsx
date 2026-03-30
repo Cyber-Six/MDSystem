@@ -555,20 +555,49 @@ const MedicalInventory = () => {
       const source = batches.find((b) => b.id === batchId);
       const isMedicine = source?.dosageUnit !== undefined;
 
-      // Compute newQuantity from the RAW source batch in `batches` state, NOT from the
-      // modal's pre-computed value. The modal receives an enriched (possibly merged) batch
-      // whose `currentQuantity` is the SUM of multiple DB records sharing the same
-      // batchNumber+location. Trusting that merged value here would send the wrong absolute
-      // quantity to a single record, inflating or deflating it incorrectly.
-      // Using `source.currentQuantity` (the individual record's actual stored value) ensures
-      // the delta is applied only to that record's real current state.
-      const rawCurrentQty = source?.currentQuantity ?? source?.availableQuantity ?? 0;
-      const computedNewQuantity = type === 'add' ? rawCurrentQty + quantity : rawCurrentQty - quantity;
-
-      if (isMedicine) {
-        await updateMedicineBatch(batchId, { currentQuantity: computedNewQuantity, notes: reason });
+      if (type === 'add') {
+        // ADD: apply the full increase to the source record directly.
+        // Even when computeItemStats has merged multiple DB records into one UI row,
+        // adding `quantity` to the individual record's actual value correctly raises
+        // the visible total by exactly `quantity`.
+        const rawCurrentQty = source?.currentQuantity ?? source?.availableQuantity ?? 0;
+        const computedNewQuantity = rawCurrentQty + quantity;
+        if (isMedicine) {
+          await updateMedicineBatch(batchId, { currentQuantity: computedNewQuantity, notes: reason });
+        } else {
+          await updateSupplyBatch(batchId, { currentQuantity: computedNewQuantity, notes: reason });
+        }
       } else {
-        await updateSupplyBatch(batchId, { currentQuantity: computedNewQuantity, notes: reason });
+        // SUBTRACT: a single merged UI row may represent multiple DB records sharing the
+        // same batchNumber+location. Draining only the first record can underflow when it
+        // holds fewer units than the requested quantity, leaving sibling records untouched
+        // and making only a partial subtraction. Distribute the removal across all siblings
+        // (largest-first) until the full requested quantity is consumed — mirroring the
+        // split transfer logic in handleSplit.
+        const siblings = batches
+          .filter((b) =>
+            b.batchNumber === source.batchNumber &&
+            b.location === source.location &&
+            String(b.medicalItemId) === String(source.medicalItemId)
+          )
+          .sort((a, b) =>
+            (b.availableQuantity ?? b.currentQuantity ?? 0) - (a.availableQuantity ?? a.currentQuantity ?? 0)
+          );
+
+        let remaining = quantity;
+        for (const sibling of siblings) {
+          if (remaining <= 0) break;
+          const siblingQty = sibling.availableQuantity ?? sibling.currentQuantity ?? 0;
+          const take = Math.min(siblingQty, remaining);
+          if (take <= 0) continue;
+          const newSiblingQty = siblingQty - take;
+          if (isMedicine) {
+            await updateMedicineBatch(sibling.id, { currentQuantity: newSiblingQty, notes: reason });
+          } else {
+            await updateSupplyBatch(sibling.id, { currentQuantity: newSiblingQty, notes: reason });
+          }
+          remaining -= take;
+        }
       }
 
       // Reload all batches from the backend so merged totals are accurate.
