@@ -3,16 +3,26 @@ import { LOCATIONS } from '../../inventory-seed-data';
 
 /**
  * Split Supply Modal — transfer stock from one batch to another clinic.
+ * Accepts allBatches to compute merged total (siblings with same batch#/location/item).
  */
-const SplitSupplyModal = ({ batch, onClose, onSplit }) => {
+const SplitSupplyModal = ({ batch, allBatches, onClose, onSplit }) => {
   const otherClinics = LOCATIONS.filter((l) => l !== batch.location);
   const [toClinic, setToClinic] = useState(otherClinics[0] || '');
   const [quantity, setQuantity] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Calculate merged total available (all siblings with same batchNumber+location+item)
+  const totalAvailable = (allBatches || [])
+    .filter((b) =>
+      b.batchNumber === batch.batchNumber &&
+      b.location === batch.location &&
+      String(b.medicalItemId) === String(batch.medicalItemId)
+    )
+    .reduce((sum, b) => sum + (b.availableQuantity ?? b.currentQuantity ?? 0), 0);
+
   const qty = parseInt(quantity) || 0;
-  const isValid = qty > 0 && qty <= batch.currentQuantity && toClinic;
+  const isValid = qty > 0 && qty <= totalAvailable && toClinic;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,7 +36,7 @@ const SplitSupplyModal = ({ batch, onClose, onSplit }) => {
     }
   };
 
-  const pct = batch.currentQuantity > 0 ? Math.round((qty / batch.currentQuantity) * 100) : 0;
+  const pct = totalAvailable > 0 ? Math.round((qty / totalAvailable) * 100) : 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -55,7 +65,7 @@ const SplitSupplyModal = ({ batch, onClose, onSplit }) => {
             </div>
             <div>
               <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Available</p>
-              <p className="text-xs font-bold text-secondary-800 dark:text-white">{batch.currentQuantity} units</p>
+              <p className="text-xs font-bold text-secondary-800 dark:text-white">{totalAvailable} units</p>
             </div>
           </div>
         </div>
@@ -71,13 +81,13 @@ const SplitSupplyModal = ({ batch, onClose, onSplit }) => {
 
           <div>
             <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">Quantity to Transfer *</label>
-            <input type="number" min={1} max={batch.currentQuantity} value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder={`Max: ${batch.currentQuantity}`} disabled={isSubmitting} className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed" />
+            <input type="number" min={1} max={totalAvailable} value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder={`Max: ${totalAvailable}`} disabled={isSubmitting} className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed" />
             {/* Visual slider */}
-            <input type="range" min={0} max={batch.currentQuantity} value={qty} onChange={(e) => setQuantity(e.target.value)} disabled={isSubmitting} className="w-full mt-2 accent-primary-500 disabled:opacity-50 disabled:cursor-not-allowed" />
+            <input type="range" min={0} max={totalAvailable} value={qty} onChange={(e) => setQuantity(e.target.value)} disabled={isSubmitting} className="w-full mt-2 accent-primary-500 disabled:opacity-50 disabled:cursor-not-allowed" />
             <div className="flex justify-between text-[10px] text-secondary-400 dark:text-neutral-500">
               <span>0</span>
               <span>{qty > 0 ? `${qty} units (${pct}%)` : 'Select quantity'}</span>
-              <span>{batch.currentQuantity}</span>
+              <span>{totalAvailable}</span>
             </div>
           </div>
 

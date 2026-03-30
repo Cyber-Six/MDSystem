@@ -296,7 +296,9 @@ const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate
                   <p className="text-[10px] text-secondary-400 dark:text-neutral-500 m-0">{item.item_code}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold text-error-600 dark:text-error-400 m-0">{item.totalStock} left</p>
+                  {(item.lowStockBranches || []).map(({ location, stock }) => (
+                    <p key={location} className="text-xs font-bold text-error-600 dark:text-error-400 m-0">{location}: {stock}</p>
+                  ))}
                   <p className="text-[10px] text-secondary-400 dark:text-neutral-500 m-0">Reorder: {item.reorder_level}</p>
                 </div>
               </button>
