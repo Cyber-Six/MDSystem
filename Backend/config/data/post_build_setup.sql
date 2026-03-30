@@ -259,6 +259,7 @@ VALUES
 ('ALLOW_TO_APPROVE_EMR', 'Permission to approve electronic medical records'),
 ('ALLOW_TO_EDIT_EMR', 'Permission to edit electronic medical records'),
 ('ALLOW_TO_VIEW_EMR', 'Permission to view electronic medical records'),
+('ALLOW_TO_SET_VITAL_SIGN', 'Permission to set vital signs'),
 ('ALLOW_TO_SET_DENTAL_RECORD', 'Permission to set dental records'),
 ('ALLOW_TO_EDIT_CATALOGS', 'Permission to edit EMR catalogs'),
 
