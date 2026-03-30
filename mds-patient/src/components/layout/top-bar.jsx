@@ -65,6 +65,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
     if (path.includes('/appointments')) return 'Appointment';
     if (path.includes('/medicine-request')) return 'Medicine Request';
     if (path.includes('/health-chat')) return 'Health Chat';
+    if (path.includes('/my-documents')) return 'My Documents';
     if (path.includes('/dashboard') || path === '/') return 'Dashboard';
     return 'MDSystem';
   };

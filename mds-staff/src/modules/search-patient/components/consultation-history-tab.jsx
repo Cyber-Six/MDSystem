@@ -183,6 +183,7 @@ export default function PatientConsultationHistoryTab({ patient, consultations: 
       {selectedConsultation && (
         <ConsultationDetailModal
           consultation={selectedConsultation}
+          patient={patient}
           onClose={handleCloseModal}
           onRefresh={handleRefresh}
         />
