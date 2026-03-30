@@ -1,9 +1,9 @@
 const express = require("express");
 const logger = require("../../../utils/logger.js");
-const { query, queryControlled, getUserBranch } = require("../../../config/query.js");
+const { query, queryClient, queryControlled, getUserBranch, connect } = require("../../../config/query.js");
 const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
 const { isMedicalPermitted, permissions } = require("../../../services/permit.js");
-const { promoteFile, checkFileByUuid } = require("../../../config/multer.js");
+const { promoteFile, deleteFile } = require("../../../config/multer.js");
 const { ValidateBranchbyUserBranch } = require("../../../utils/validator.js");
 const router = express.Router();
 
@@ -230,7 +230,10 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
 
 // ✅ DELETE announcement (Staff only)
 router.delete("/:id", jwtProtect("medical"), async (req, res) => {
+    const client = await connect();
     try {
+        await client.query("BEGIN");
+
         const userId = req.user.id;
         const { id } = req.params;
 
@@ -254,17 +257,26 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
             RETURNING *;
         `;
 
-        const result = await query(sql, [id, userBranch]);
+        const result = await queryClient(client, sql, [id, userBranch]);
+
 
         if (result.rowCount === 0) {
             return res.status(404).json({ error: "NOT_FOUND", message: "Announcement not found" });
         }
 
+        if (result.rows[0].pubmat) {
+            await deleteFile("announcement", result.rows[0].pubmat);
+            }
+
+        await client.query("COMMIT");
         logger.info(`Announcement deleted by userId=${userId}`, { id });
         return res.status(200).json({ success: true, message: "Announcement deleted successfully" });
     } catch (err) {
+        await client.query("ROLLBACK");
         logger.error("Failed to delete announcement:", err);
         return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to delete announcement" });
+    } finally {
+        client.release();
     }
 });
 
