@@ -83,7 +83,7 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
             (
               $2 = 'Both'
               OR an.location = 'Both'
-              OR ($2 = 'Manila' AND an.location = 'Manila')s
+              OR ($2 = 'Manila' AND an.location = 'Manila')
               OR ($2 = 'QuezonCity' AND an.location = 'QuezonCity')
             );
         `;
