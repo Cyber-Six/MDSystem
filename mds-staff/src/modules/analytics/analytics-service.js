@@ -127,6 +127,12 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
     const promises = dataTypes.map(async (dataType) => {
       try {
         const data = await fetchQueryData(dataType, branch, startDate, endDate);
+        // Guard: if the backend returned HTML instead of JSON (e.g. not yet deployed),
+        // treat it as an error so charts show an empty/error state instead of crashing.
+        if (typeof data !== 'object' || data === null) {
+          results.set(dataType, { success: false, error: true, dataType });
+          return;
+        }
         results.set(dataType, data);
       } catch {
         results.set(dataType, { success: false, error: true, dataType });

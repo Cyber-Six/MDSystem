@@ -44,6 +44,7 @@ const PrescriptionPanel = ({
   patientName,
   patientDob,
   patientSex,
+  patientAddress,
   activeTicketId,
   sendMessage,
 }) => {

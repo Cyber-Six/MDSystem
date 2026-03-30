@@ -1,18 +1,20 @@
 import React from 'react';
 
-export const Input = ({ label, required, error, ...props }) => (
-  <div className="mb-2">
+export const Input = ({ label, required, error, reserveErrorSpace = false, ...props }) => (
+  <div className="mb-1">
     {label && (
-      <label className="form-label">
+      <label className="form-label text-xs">
         {label}
         {required && <span className="text-error-500 ml-1">*</span>}
       </label>
     )}
     <input
-      className={`form-input ${error ? 'border-error-500 focus:ring-error-500' : ''}`}
+      className={`form-input py-1 px-2 text-sm ${error ? 'border-error-500 focus:ring-error-500' : ''}`}
       {...props}
     />
-    {error && <p className="mt-0.5 text-xs text-error-600">{error}</p>}
+    {(error || reserveErrorSpace) && (
+      <p className={`mt-0.5 min-h-4 text-xs text-error-600 ${error ? '' : 'invisible'}`}>{error || ' '}</p>
+    )}
   </div>
 );
 

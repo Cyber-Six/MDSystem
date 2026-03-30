@@ -429,27 +429,16 @@ async function mapRevisionDataToFormData(backendData) {
 
   // Lifestyle
   if (backendData.lifestyle) {
-    // Determine smoking status
-    if (backendData.lifestyle.vapeUser) {
-      formData.smoking = 'Vape';
-      formData.vapeType = backendData.lifestyle.vapeType || null;
-      formData.vapeFrequency = backendData.lifestyle.vapeFrequency || null;
-      formData.yearsVaping = backendData.lifestyle.yearsVaping || null;
-    } else if (backendData.lifestyle.smoker) {
-      formData.smoking = 'Current';
-      formData.cigarettesPerDay = backendData.lifestyle.numberOfCigarettesPerDay || null;
-      formData.yearsSmoked = backendData.lifestyle.yearsSmoked || null;
-    } else {
-      formData.smoking = 'Never';
-    }
-    
-    // Determine alcohol status
-    if (backendData.lifestyle.alcoholConsumer) {
-      formData.alcohol = backendData.lifestyle.frequencyOfAlcoholConsumption || 'Occasionally';
-      formData.alcoholFrequency = backendData.lifestyle.frequencyOfAlcoholConsumption || null;
-    } else {
-      formData.alcohol = 'Never';
-    }
+    formData.smoker = backendData.lifestyle.smoker ? 'yes' : 'no';
+    formData.smokerSticksPerDay = backendData.lifestyle.numberOfCigarettesPerDay || null;
+    formData.smokerYears = backendData.lifestyle.yearsSmoked || null;
+
+    formData.alcoholDrinker = backendData.lifestyle.alcoholConsumer ? 'yes' : 'no';
+    formData.alcoholFrequency = backendData.lifestyle.frequencyOfAlcoholConsumption || null;
+
+    formData.vaper = backendData.lifestyle.vapeUser ? 'yes' : 'no';
+    formData.vapeType = backendData.lifestyle.vapeType || null;
+    formData.vapeFrequency = backendData.lifestyle.vapeFrequency || null;
   }
 
   // Visual Acuity
@@ -892,30 +881,20 @@ export async function createLifestyle(formData) {
     }
   `;
 
-  const isSmoker = formData.smoking === 'Current';
-  const isVaper = formData.smoking === 'Vape';
-  const isDrinker = formData.alcohol === 'Occasionally' || formData.alcohol === 'Regularly';
-
-  // Build lifestyle notes from form selections
-  const lifestyleNotes = [
-    `Smoking: ${formData.smoking || 'Never'}`,
-    `Alcohol: ${formData.alcohol || 'Never'}`,
-    formData.lifestyleNotes || null
-  ].filter(Boolean).join('; ');
+  const isSmoker = formData.smoker === 'yes';
+  const isVaper = formData.vaper === 'yes';
+  const isDrinker = formData.alcoholDrinker === 'yes';
 
   const input = {
     smoker: isSmoker,
+    numberOfCigarettesPerDay: isSmoker ? (formData.smokerSticksPerDay ? parseInt(formData.smokerSticksPerDay) : null) : null,
+    yearsSmoked: isSmoker ? (formData.smokerYears ? parseInt(formData.smokerYears) : null) : null,
+    alcoholConsumer: isDrinker,
+    frequencyOfAlcoholConsumption: isDrinker ? (formData.alcoholFrequency || null) : null,
     vapeUser: isVaper,
     vapeType: isVaper ? (formData.vapeType || null) : null,
     vapeFrequency: isVaper ? (formData.vapeFrequency || null) : null,
-    yearsVaping: isVaper ? (formData.yearsVaping ? parseInt(formData.yearsVaping) : null) : null,
-    numberOfCigarettesPerDay: isSmoker ? (formData.cigarettesPerDay ? parseInt(formData.cigarettesPerDay) : null) : null,
-    yearsSmoked: isSmoker ? (formData.yearsSmoked ? parseInt(formData.yearsSmoked) : null) : null,
-    alcoholConsumer: isDrinker,
-    frequencyOfAlcoholConsumption: isDrinker
-      ? formData.alcohol
-      : null,
-    notes: lifestyleNotes
+    notes: null
   };
 
   console.log('🏃 Creating lifestyle...', input);
