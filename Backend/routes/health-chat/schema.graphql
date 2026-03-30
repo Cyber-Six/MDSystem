@@ -153,6 +153,9 @@ type Mutation {
   sendPatientMessage(input: SendMessageInput!): MessageResult!
   closeMyTicket(chatId: ID!): TicketResult!
 
+  # Session extension (available to both patient and medical)
+  extendSession(chatId: ID!): TicketResult!
+
   # Medical mutations
   approveTicket(input: ApproveTicketInput!): TicketResult!
   rejectTicket(chatId: ID!, reason: String): TicketResult!

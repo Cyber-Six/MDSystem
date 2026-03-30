@@ -8,6 +8,7 @@ import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
+import ExpiryWarningBanner from './expiry-warning-banner';
 
 const ChatPanel = ({ emitTyping }) => {
   const {
@@ -20,7 +21,10 @@ const ChatPanel = ({ emitTyping }) => {
     setMessages,
     typingUsers,
     refreshMessages,
-    socketError
+    socketError,
+    activeTicketId,
+    extendSessionChat,
+    isExtendingSession
   } = useHealthChat();
 
   const messagesEndRef = useRef(null);
@@ -281,6 +285,11 @@ const ChatPanel = ({ emitTyping }) => {
       </div>
 
       {/* Input */}
+      <ExpiryWarningBanner
+        expiresAt={selectedTicket?.expiresAt}
+        isExtending={isExtendingSession}
+        onExtend={() => activeTicketId && extendSessionChat(activeTicketId)}
+      />
       <MessageInput emitTyping={emitTyping} />
     </div>
   );
