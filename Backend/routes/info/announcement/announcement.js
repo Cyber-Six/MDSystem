@@ -251,7 +251,7 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
             (
                 $2 = 'Both'
                 OR location = 'Both'
-                OR ($2 = 'Manila' AND location IN ('Arlegui', 'Casal'))
+                OR ($2 = 'Manila' AND location = 'Manila')
                 OR ($2 = 'QuezonCity' AND location = 'QuezonCity')
             )
             RETURNING *;
