@@ -14,7 +14,8 @@ router.get("/", jwtProtect(""), async (req, res) => {
         const userBranch = await getUserBranch(req.user?.id);
 
         const sql = `
-            SELECT id, title as label, content as description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, pubmat, 
+                "isActive", created_at, location
             FROM "Announcement"
             WHERE "isActive" = true AND
             (
@@ -48,7 +49,8 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
         const userBranch = await getUserBranch(userId);
 
         const sql = `
-            SELECT id, title as label, content as description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, 
+                pubmat, "isActive", created_at, location
             FROM "Announcement"
             WHERE (
               $1 = 'Both'
@@ -77,7 +79,7 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
             SELECT an.id, an.title as label, 
             an.content as description, 
             an.pubmat, "isActive", 
-            an.created_at
+            an.created_at, an.location
             FROM "Announcement" an
             WHERE id = $1 AND 
             (
@@ -138,7 +140,7 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
         const sql = `
         INSERT INTO "Announcement" (title, content, pubmat, "isActive", location)
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, title as label, content as description, pubmat, "isActive", created_at;
+            RETURNING id, title as label, content as description, pubmat, "isActive", created_at, location;
         `;
 
         const params = [
