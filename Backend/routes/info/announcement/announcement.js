@@ -1,23 +1,32 @@
 const express = require("express");
 const logger = require("../../../utils/logger.js");
-const { query, queryControlled } = require("../../../config/query.js");
+const { query, queryControlled, getUserBranch } = require("../../../config/query.js");
 const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
 const { isMedicalPermitted, permissions } = require("../../../services/permit.js");
 const { promoteFile, checkFileByUuid } = require("../../../config/multer.js");
-
+const { ValidateBranchbyUserBranch } = require("../../../utils/validator.js");
 const router = express.Router();
 
 // ✅ GET all active announcements (Patient accessible)
 router.get("/", jwtProtect(""), async (req, res) => {
     try {
+
+        const userBranch = await getUserBranch(req.user?.id);
+
         const sql = `
             SELECT id, title as label, content as description, pubmat, "isActive", created_at
             FROM "Announcement"
-            WHERE "isActive" = true
+            WHERE "isActive" = true AND
+            (
+              $1 = 'Both'
+              OR location = 'Both'
+              OR ($1 = 'Manila' AND location IN ('Arlegui', 'Casal'))
+              OR ($1 = 'QuezonCity' AND location = 'QuezonCity')
+            )
             ORDER BY created_at DESC;
         `;
 
-        const result = await query(sql);
+        const result = await query(sql, [userBranch || 'Both']);
         return res.status(200).json({ success: true, data: result.rows });
     } catch (err) {
         logger.error("Failed to fetch announcements:", err);
@@ -36,13 +45,21 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
             return res.status(403).json({ error: "FORBIDDEN", message: "Not authorized to view all announcements" });
         }
 
+        const userBranch = await getUserBranch(userId);
+
         const sql = `
             SELECT id, title as label, content as description, pubmat, "isActive", created_at
             FROM "Announcement"
+            WHERE (
+              $1 = 'Both'
+              OR location = 'Both'
+              OR ($1 = 'Manila' AND location IN ('Arlegui', 'Casal'))
+              OR ($1 = 'QuezonCity' AND location = 'QuezonCity')
+            )
             ORDER BY created_at DESC;
         `;
 
-        const result = await query(sql);
+        const result = await query(sql, [userBranch || 'Both']);
         return res.status(200).json({ success: true, data: result.rows });
     } catch (err) {
         logger.error("Failed to fetch all announcements:", err);
@@ -55,13 +72,23 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
     try {
         const { id } = req.params;
 
+        const userBranch = await getUserBranch(req.user?.id);
         const sql = `
-            SELECT id, title as label, content as description, pubmat, "isActive", created_at
-            FROM "Announcement"
-            WHERE id = $1;
+            SELECT an.id, an.title as label, 
+            an.content as description, 
+            an.pubmat, "isActive", 
+            an.created_at
+            FROM "Announcement" an
+            WHERE id = $1 AND 
+            (
+              $2 = 'Both'
+              OR an.location = 'Both'
+              OR ($2 = 'Manila' AND an.location IN ('Arlegui', 'Casal'))
+              OR ($2 = 'QuezonCity' AND an.location = 'QuezonCity')
+            );
         `;
 
-        const result = await query(sql, [id]);
+        const result = await query(sql, [id, userBranch || 'Both']);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: "NOT_FOUND", message: "Announcement not found" });
@@ -78,7 +105,7 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
 router.post("/", jwtProtect("medical"), async (req, res) => {
     try {
         const userId = req.user.id;
-        const { label, description, pubmat, isActive } = req.body;
+        const { label, description, pubmat, isActive, location } = req.body;
 
         // Check permission
         const permitted = await isMedicalPermitted(userId, permissions.announcement_allow_crud, null);
@@ -97,10 +124,20 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
             }
         }
 
-        const sql = `
+        if (location && !['Manila', 'QuezonCity', 'Both'].includes(location)) {
+            return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
+        }
 
-        INSERT INTO "Announcement" (title, content, pubmat, "isActive")
-            VALUES ($1, $2, $3, $4)
+        const userBranch = await getUserBranch(userId);
+
+        const valid = ValidateBranchbyUserBranch(userBranch, location);
+        if (!valid) {
+            return res.status(400).json({ error: "INVALID_LOCATION", message: `Invalid location outside your scope "${location}".` });
+        }
+        
+        const sql = `
+        INSERT INTO "Announcement" (title, content, pubmat, "isActive", location)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id, title as label, content as description, pubmat, "isActive", created_at;
         `;
 
@@ -108,7 +145,8 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
             label || null,
             description || null,
             promotedPubmat,
-            isActive !== undefined ? isActive : true
+            isActive !== undefined ? isActive : true,
+            location || 'Both'
         ];
 
         const result = await queryControlled(sql, params);
@@ -126,7 +164,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
-        const { label, description, pubmat, isActive } = req.body;
+        const { label, description, pubmat, isActive, location } = req.body;
 
         // Check permission
         const permitted = await isMedicalPermitted(userId, permissions.announcement_allow_crud, null);
@@ -138,6 +176,14 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         const existsResult = await query(`SELECT id, pubmat FROM "Announcement" WHERE id = $1;`, [id]);
         if (existsResult.rows.length === 0) {
             return res.status(404).json({ error: "NOT_FOUND", message: "Announcement not found" });
+        }
+
+        if (location){
+            const userBranch = await getUserBranch(userId);
+            const valid = ValidateBranchbyUserBranch(userBranch, location);
+            if (!valid) {
+                return res.status(400).json({ error: "INVALID_LOCATION", message: `Invalid location outside your scope "${location}".` });
+            }
         }
 
         // Promote new pubmat file if provided
@@ -157,8 +203,9 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
                 title = COALESCE($1, title),
                 content = COALESCE($2, content),
                 pubmat = COALESCE($3, pubmat),
-                "isActive" = COALESCE($4, "isActive")
-            WHERE id = $5
+                "isActive" = COALESCE($4, "isActive"),
+                location = COALESCE($5, location)
+            WHERE id = $6
             RETURNING id, title as label, content as description, pubmat, "isActive", created_at;
         `;
 
@@ -167,6 +214,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
             description,
             promotedPubmat,
             isActive,
+            location,
             id
         ];
 
@@ -192,13 +240,21 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
             return res.status(403).json({ error: "FORBIDDEN", message: "Not authorized to delete announcements" });
         }
 
+        const userBranch = await getUserBranch(userId);
+
         const sql = `
             DELETE FROM "Announcement"
-            WHERE id = $1
+            WHERE id = $1 AND 
+            (
+                $2 = 'Both'
+                OR location = 'Both'
+                OR ($2 = 'Manila' AND location IN ('Arlegui', 'Casal'))
+                OR ($2 = 'QuezonCity' AND location = 'QuezonCity')
+            )
             RETURNING *;
         `;
 
-        const result = await query(sql, [id]);
+        const result = await query(sql, [id, userBranch]);
 
         if (result.rowCount === 0) {
             return res.status(404).json({ error: "NOT_FOUND", message: "Announcement not found" });

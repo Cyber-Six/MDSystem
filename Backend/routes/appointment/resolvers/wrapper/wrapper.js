@@ -34,6 +34,7 @@ const Query = {
               )
         AND (
               $4 = 'Both'
+           OR ss.location = 'Both'
            OR ($4 = 'Manila' AND ss.location IN ('Arlegui', 'Casal'))
            OR ($4 = 'QuezonCity' AND ss.location = 'QuezonCity')
             )

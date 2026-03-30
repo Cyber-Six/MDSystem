@@ -1,7 +1,7 @@
 const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
-
+const { ValidateBranchbyUserBranch } = require("../../../../../utils/validator.js");
 // Enhanced aggregation: includes medicine name by joining with MedicalItems
 // Note: mre."medicineId" stores the MedicalItems.id (the medicine item, not the batch)
 const getItemsWithNames = async (requestId) => {
@@ -160,10 +160,7 @@ const Mutation = {
     }
 
     const userBranch = await db.getUserBranch(patientId);
-    const valid =
-      (userBranch === "Manila" && ["Arlegui", "Casal"].includes(input.location)) ||
-      (userBranch === "QuezonCity" && input.location === "QuezonCity") ||
-      (userBranch === "Both");
+    const valid = ValidateBranchbyUserBranch(userBranch, input.location);
 
     if (!valid) {
       throwGraphQLError(res).message(`Invalid location outside your scope "${input.location}".`).status(400).throw();

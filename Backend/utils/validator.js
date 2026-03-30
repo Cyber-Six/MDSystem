@@ -123,6 +123,15 @@ function generateDomainCodes(names, domain) {
   });
 }
 
+function ValidateBranchbyUserBranch(userBranch, location) {
+  const valid =
+    (userBranch === "Manila" && ["Arlegui", "Casal"].includes(location)) ||
+    (userBranch === "QuezonCity" && location === "QuezonCity") ||
+    (userBranch === "Both");
+
+  return valid;
+}
+
 
 module.exports = {
   isStudentEmail,
@@ -138,5 +147,6 @@ module.exports = {
   isUserStaff,
   normalizeName,
   normalizeNumber,
-  generateDomainCodes
+  generateDomainCodes,
+  ValidateBranchbyUserBranch
 };
