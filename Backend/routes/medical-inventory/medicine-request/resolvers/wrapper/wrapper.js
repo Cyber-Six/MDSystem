@@ -159,6 +159,16 @@ const Mutation = {
       throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
     }
 
+    const valid =
+      (userBranch === "Manila" && ["Arlegui", "Casal"].includes(input.location)) ||
+      (userBranch === "QuezonCity" && input.location === "QuezonCity") ||
+      (userBranch === "Both");
+
+    if (!valid) {
+      throwGraphQLError(res).message("Invalid location").status(400).throw();
+    }
+
+
     const query = `
       INSERT INTO "MedicineRequestLog" ("patientId", status, location, purpose, notes)
       VALUES ($1, 'Pending', $2, $3, $4)
