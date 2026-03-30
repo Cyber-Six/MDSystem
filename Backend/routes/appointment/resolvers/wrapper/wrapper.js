@@ -11,7 +11,7 @@ const { encodeSchedulingFlags, decodeSchedulingFlags, validateSchedulerDate,
   getAppointmentCounts, isWithinFutureTimeframe,
   validateSatisfiedAllRequirements,
   insertSlotCustomDates, insertSchedulerWhitelist } = require("./helper.js");
-
+const { ValidateBranchbyUserBranch } = require("../../../../utils/validator.js");
 
 const MAX_SCHEDULING_DAYS = parseInt(dotenv.MAX_SCHEDULING_DAYS || 7);
 
@@ -638,6 +638,19 @@ const Mutation = {
         await insertSchedulerWhitelist(schedulerId, input.whiteLists, client);
       }
 
+      await db.setSystemAuditLog(
+        {
+          client,
+          userId: user.id,
+          eventType: "CREATE SCHEDULER",
+          actorId: user.id,
+          actorType: "Staff",
+          targetId: schedulerId,
+          changedBy: "Medical",
+          actions: `Created new slot scheduler with label: ${input.label}`
+        }
+      );
+
       await client.query("COMMIT");
       logger.info(`Created new scheduler with ID ${schedulerId} by user ${user.id}`);
 
@@ -725,15 +738,42 @@ const Mutation = {
       RETURNING *;
     `;
 
-    const result = await db.query(query, values);
+    const client = await db.connect();
 
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to update scheduler").status(500).throw();
+    try {
+      await client.query("BEGIN");
+      const result = await db.queryClient(client, query, values);
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res).message("Failed to update scheduler").status(500).throw();
+      }
+
+      await db.setSystemAuditLog(
+        {
+          client,
+          userId: user.id,
+          eventType: "UPDATE SCHEDULER",
+          actorId: user.id,
+          actorType: "Staff",
+          targetId: schedulerId,
+          changedBy: "Medical",
+          actions: `Updated slot scheduler with label: ${input.label}`
+        }
+      );
+
+      const scheduler = result.rows[0];
+      scheduler.schedulePerWeek = decodeSchedulingFlags(scheduler.scheduleFlags);
+
+      await client.query("COMMIT");
+      logger.info(`Updated scheduler with ID ${schedulerId} by user ${user.id}`);
+      return scheduler;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      logger.error("Error in _updateScheduler transaction:", err);
+      throwGraphQLError(res).message("Transaction failed: " + err.message).status(500).throw();
+    } finally {
+      client.release();
     }
-
-    const scheduler = result.rows[0];
-    scheduler.schedulePerWeek = decodeSchedulingFlags(scheduler.scheduleFlags);
-    return scheduler;
   },
 
   _deleteScheduler: async (_, { schedulerId }, { user, res }) => {
@@ -763,12 +803,38 @@ const Mutation = {
     await db.query(`DELETE FROM "SlotCustomDate" WHERE "slotScheduleId" = $1;`, [schedulerId]);
     await db.query(`DELETE FROM "ScheduleDateEntity" WHERE "slotId" = $1;`, [schedulerId]);
 
-    const result = await db.query(
-      `DELETE FROM "slotScheduler" WHERE id = $1;`,
-      [schedulerId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
 
-    return result.rowCount > 0;
+      const result = await db.queryClient(
+        client,
+        `DELETE FROM "slotScheduler" WHERE id = $1;`,
+        [schedulerId]
+      );
+
+      await db.setSystemAuditLog(
+        {
+          client,
+          userId: user.id,
+          eventType: "DELETE SCHEDULER",
+          actorId: user.id,
+          actorType: "Staff",
+          targetId: schedulerId,
+          changedBy: "Medical",
+          actions: `Deleted slot scheduler with ID: ${schedulerId}`
+        }
+      );
+      
+      await client.query("COMMIT");
+      return result.rowCount > 0;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      logger.error("Error in _deleteScheduler transaction:", err);
+      throwGraphQLError(res).message("Transaction failed: " + err.message).status(500).throw();
+    } finally {
+      client.release();
+    }
   },
 
   _updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
