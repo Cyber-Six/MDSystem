@@ -166,7 +166,7 @@ const Mutation = {
       (userBranch === "Both");
 
     if (!valid) {
-      throwGraphQLError(res).message(`Invalid location outside your scope ${input.location}.`).status(400).throw();
+      throwGraphQLError(res).message(`Invalid location outside your scope "${input.location}".`).status(400).throw();
     }
 
 
