@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { fetchActiveAnnouncements } from '../announcement-service';
+import { axiosRequest } from '../../../packages-core-adapter';
 import AnnouncementModal from './announcement-modal';
+
+/* Small authenticated image loader (media endpoints require JWT) */
+function AuthImage({ path, alt, className }) {
+  const [src, setSrc] = useState(null);
+  useEffect(() => {
+    let objectUrl = null, cancelled = false;
+    axiosRequest.get(path, { responseType: 'blob' })
+      .then((res) => { if (!cancelled) { objectUrl = URL.createObjectURL(res.data); setSrc(objectUrl); } })
+      .catch(() => {});
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [path]);
+  if (!src) return null;
+  return <img src={src} alt={alt} className={className} />;
+}
 
 /**
  * Announcement Carousel Component
@@ -12,6 +27,7 @@ const AnnouncementCarousel = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Fetch announcements on mount
   useEffect(() => {
@@ -32,29 +48,35 @@ const AnnouncementCarousel = () => {
     loadAnnouncements();
   }, []);
 
+  const goTo = (indexOrFn) => {
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setCurrentIndex(indexOrFn);
+      setIsTransitioning(false);
+    }, 200);
+  };
+
   // Auto-rotate announcements every 5 seconds
   useEffect(() => {
     if (announcements.length === 0) return;
 
     const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % announcements.length);
+      goTo((prev) => (prev + 1) % announcements.length);
     }, 5000);
 
     return () => clearInterval(timer);
   }, [announcements.length]);
 
   const handlePrevious = () => {
-    setCurrentIndex((prev) =>
-      prev === 0 ? announcements.length - 1 : prev - 1
-    );
+    goTo((prev) => (prev === 0 ? announcements.length - 1 : prev - 1));
   };
 
   const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % announcements.length);
+    goTo((prev) => (prev + 1) % announcements.length);
   };
 
   const handleDotClick = (index) => {
-    setCurrentIndex(index);
+    goTo(index);
   };
 
   if (isLoading) {
@@ -86,25 +108,40 @@ const AnnouncementCarousel = () => {
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
         {/* Announcement Content */}
         <div
-          className="p-4 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-700 dark:to-neutral-800 min-h-24 flex flex-col justify-between cursor-pointer hover:shadow-md transition-shadow"
+          className={`p-5 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-700 dark:to-neutral-800 min-h-32 flex gap-4 cursor-pointer hover:shadow-md transition-all duration-300 ${
+            isTransitioning ? 'opacity-0' : 'opacity-100'
+          }`}
           onClick={() => setSelectedAnnouncement(currentAnnouncement)}
         >
-          <div>
-            <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-1">
-              {currentAnnouncement.label || 'Announcement'}
-            </h3>
-            <p className="text-xs text-secondary-600 dark:text-neutral-300 line-clamp-2">
-              {currentAnnouncement.description || 'No description available'}
-            </p>
+          {/* Text Content */}
+          <div className="flex-1 flex flex-col justify-between min-w-0">
+            <div>
+              <h3 className="text-base font-bold text-secondary-800 dark:text-white mb-2">
+                {currentAnnouncement.label || 'Announcement'}
+              </h3>
+              <p className="text-sm text-secondary-600 dark:text-neutral-300 line-clamp-3">
+                {currentAnnouncement.description || 'No description available'}
+              </p>
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-xs text-secondary-500 dark:text-neutral-400">
+                {new Date(currentAnnouncement.created_at).toLocaleDateString()}
+              </span>
+              <span className="text-sm text-primary-600 dark:text-primary-400 hover:underline font-medium">
+                Read more →
+              </span>
+            </div>
           </div>
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-secondary-500 dark:text-neutral-400">
-              {new Date(currentAnnouncement.created_at).toLocaleDateString()}
-            </span>
-            <span className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
-              Read more →
-            </span>
-          </div>
+          {/* Pubmat Image */}
+          {currentAnnouncement.pubmat && (
+            <div className="flex-shrink-0">
+              <AuthImage
+                path={`/media/record/announcement/${currentAnnouncement.pubmat}`}
+                alt={currentAnnouncement.label || 'Announcement image'}
+                className="w-28 h-28 object-cover rounded border border-neutral-200 dark:border-neutral-600"
+              />
+            </div>
+          )}
         </div>
 
         {/* Navigation Controls */}
