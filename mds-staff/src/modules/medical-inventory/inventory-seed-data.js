@@ -188,7 +188,12 @@ export const computeItemStats = (items, batches) => {
     const casalStock = casalBatches.reduce((sum, b) => sum + getStock(b), 0);
     const arlegui = arleguiBatches.reduce((sum, b) => sum + getStock(b), 0);
     const quezonCity = quezonCityBatches.reduce((sum, b) => sum + getStock(b), 0);
-    const isLowStock = totalStock <= REORDER_THRESHOLD;
+    // Low stock is per-branch: triggered if any branch that carries this item has stock ≤ threshold
+    const branchStockMap = { Casal: casalStock, Arlegui: arlegui, QuezonCity: quezonCity };
+    const lowStockBranches = Object.entries(branchStockMap)
+      .filter(([loc, qty]) => itemBatches.some((b) => b.location === loc) && qty <= REORDER_THRESHOLD)
+      .map(([location, stock]) => ({ location, stock }));
+    const isLowStock = lowStockBranches.length > 0;
     const hasExpired = itemBatches.some((b) => b.expiryDate && new Date(b.expiryDate) < new Date());
     const hasExpiringSoon = itemBatches.some((b) => {
       if (!b.expiryDate) return false;
@@ -209,6 +214,7 @@ export const computeItemStats = (items, batches) => {
       arlegui,
       quezonCity,
       isLowStock,
+      lowStockBranches,
       hasExpired,
       hasExpiringSoon,
       batchCount: itemBatches.length
