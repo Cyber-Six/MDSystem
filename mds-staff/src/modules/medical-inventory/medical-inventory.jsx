@@ -562,23 +562,9 @@ const MedicalInventory = () => {
       if (isMedicine) {
         // Medicine batches: backend resolver handles `currentQuantity` via MedicineEntity add/delete
         await updateMedicineBatch(batchId, { currentQuantity: newQuantity, notes: reason });
-      } else if (type === 'add') {
-        // Supply batches: `updateSupplyBatch` cannot update quantity (no DB column — entity-based).
-        // Use `addSupplyBatch` to insert new SupplyEntity records for the delta quantity.
-        await addSupplyBatch({
-          supplyItemId: source.medicalItemId,
-          batchNumber: source.batchNumber,
-          unit: source.unit,
-          expiryDate: source.expiryDate || null,
-          location: source.location,
-          supplierName: source.supplierName || null,
-          notes: reason,
-          initialQuantity: quantity,
-        });
       } else {
-        // Supply batch subtract: requires backend support for SupplyEntity deletion.
-        // `updateSupplyBatch` is broken (DB has no currentQuantity column).
-        throw new Error('Supply item quantity reduction is not currently supported via adjustment. Please use the dispense workflow to reduce supply stock.');
+        // Supply batches: backend resolver now handles `currentQuantity` via SupplyEntity add/delete
+        await updateSupplyBatch(batchId, { currentQuantity: newQuantity, notes: reason });
       }
 
       // Reload all batches from the backend so merged totals are accurate.

@@ -542,9 +542,10 @@ const Mutation = {
     const params = [];
     const sets = [];
 
-    // Fetch old values for audit trail
+    // Fetch old batch row — currentQuantity is NOT a real column; it is a computed
+    // alias derived from counting SupplyEntity rows, so we must NOT select it here.
     const oldBatchResult = await db.query(
-      `SELECT "currentQuantity", "expiryDate", notes FROM "SupplyBatch" WHERE id = $1`,
+      `SELECT "expiryDate", notes FROM "SupplyBatch" WHERE id = $1`,
       [batchId]
     );
 
@@ -554,11 +555,17 @@ const Mutation = {
 
     const oldValues = oldBatchResult.rows[0];
 
-    if (input.currentQuantity !== undefined) sets.push(`"currentQuantity" = $${params.push(input.currentQuantity)}`);
+    // Fetch real current quantity from entity count (mirrors _getSupplyBatches)
+    const oldQtyResult = await db.query(
+      `SELECT COUNT(*)::int AS count FROM "SupplyEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL`,
+      [batchId]
+    );
+    const oldQuantity = oldQtyResult.rows[0].count;
+
     if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
     if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
 
-    if (sets.length === 0) {
+    if (sets.length === 0 && input.currentQuantity === undefined) {
       throwGraphQLError(res).message("No fields to update").status(400).throw();
     }
 
@@ -579,6 +586,32 @@ const Mutation = {
       }
 
       const newValues = result.rows[0];
+      let newQuantity = oldQuantity;
+
+      // Adjust quantity by inserting or deleting SupplyEntity rows (mirrors _updateMedicalSupply)
+      if (input.currentQuantity !== undefined) {
+        const quantityDiff = input.currentQuantity - oldQuantity;
+
+        if (quantityDiff > 0) {
+          const placeholders = Array(quantityDiff).fill('($1)').join(', ');
+          await db.query(
+            `INSERT INTO "SupplyEntity" ("batchId") VALUES ${placeholders}`,
+            [batchId]
+          );
+        } else if (quantityDiff < 0) {
+          const toDelete = Math.abs(quantityDiff);
+          await db.query(
+            `DELETE FROM "SupplyEntity"
+             WHERE ctid IN (
+               SELECT ctid FROM "SupplyEntity"
+               WHERE "batchId" = $1 AND "transactionId" IS NULL
+               LIMIT $2
+             )`,
+            [batchId, toDelete]
+          );
+        }
+        newQuantity = input.currentQuantity;
+      }
 
       // Log to SystemAuditLog
       if (user && user.id) {
@@ -589,8 +622,8 @@ const Mutation = {
           targetId: parseInt(batchId),
           action: "UPDATE_SUPPLY_BATCH",
           details: JSON.stringify({
-            oldQuantity: oldValues.currentQuantity,
-            newQuantity: newValues.currentQuantity,
+            oldQuantity,
+            newQuantity,
             oldExpiryDate: oldValues.expiryDate,
             newExpiryDate: newValues.expiryDate,
             oldNotes: oldValues.notes,
@@ -605,16 +638,16 @@ const Mutation = {
           emitToRole('medical', 'inventory:stock-changed', {
             action: 'adjust',
             batchId: parseInt(batchId),
-            quantityBefore: oldValues.currentQuantity,
-            quantityAfter: newValues.currentQuantity,
-            summary: `Stock adjusted: ${oldValues.currentQuantity} → ${newValues.currentQuantity} unit${newValues.currentQuantity !== 1 ? 's' : ''} (batch #${batchId})`,
+            quantityBefore: oldQuantity,
+            quantityAfter: newQuantity,
+            summary: `Stock adjusted: ${oldQuantity} → ${newQuantity} unit${newQuantity !== 1 ? 's' : ''} (batch #${batchId})`,
           });
         } catch (emitErr) {
           logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
         }
       }
 
-      return newValues;
+      return { ...newValues, currentQuantity: newQuantity };
     } catch (err) {
       logger.error("Error in _updateSupplyBatch:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
