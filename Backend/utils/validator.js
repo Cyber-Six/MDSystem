@@ -132,6 +132,15 @@ function ValidateBranchbyUserBranch(userBranch, location) {
   return valid;
 }
 
+function ValidateUserBranchbyUserBranch(ubranch1, ubranch2){
+  const valid =
+    (ubranch1 === "Manila" && ubranch2 === "Manila") ||
+    (ubranch1 === "QuezonCity" && ubranch2 === "QuezonCity") ||
+    (ubranch1 === "Both" || ubranch2 === "Both");
+
+  return valid;
+}
+
 
 module.exports = {
   isStudentEmail,
@@ -148,5 +157,6 @@ module.exports = {
   normalizeName,
   normalizeNumber,
   generateDomainCodes,
-  ValidateBranchbyUserBranch
+  ValidateBranchbyUserBranch,
+  ValidateUserBranchbyUserBranch
 };

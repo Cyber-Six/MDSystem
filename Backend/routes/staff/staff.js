@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../../config/query.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect');
 const logger = require('../../utils/logger');
+const notificationsRouter = require('./notifications');
 
 // Helper function to get user ID via identifier
 async function getUserIDViaIdentifier(identifier, branch) {
@@ -158,6 +159,9 @@ router.get('/id/email/:email/:branch', jwtProtect("patient"), async (req, res) =
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+// Register notification routes
+router.use('/', notificationsRouter);
 
 module.exports = router;
 
