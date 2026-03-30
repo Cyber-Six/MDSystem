@@ -23,6 +23,7 @@ import { apiBaseUrlProvider, tokenService } from '../../../packages-core-adapter
  * @param {Function} options.onTyping - Called when staff typing status changes
  * @param {Function} options.onTicketApproved - Called when ticket is approved
  * @param {Function} options.onTicketClosed - Called when ticket is closed
+ * @param {Function} [options.onSessionExtended] - Called when the session is extended
  */
 export function useHealthChatSocket({
   chatId,
@@ -30,7 +31,8 @@ export function useHealthChatSocket({
   onNewMessage,
   onTyping,
   onTicketApproved,
-  onTicketClosed
+  onTicketClosed,
+  onSessionExtended
 }) {
   const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -47,6 +49,7 @@ export function useHealthChatSocket({
   const onTypingRef = useRef(onTyping);
   const onTicketApprovedRef = useRef(onTicketApproved);
   const onTicketClosedRef = useRef(onTicketClosed);
+  const onSessionExtendedRef = useRef(onSessionExtended);
 
   // Keep refs up to date with latest callbacks
   useEffect(() => {
@@ -54,7 +57,8 @@ export function useHealthChatSocket({
     onTypingRef.current = onTyping;
     onTicketApprovedRef.current = onTicketApproved;
     onTicketClosedRef.current = onTicketClosed;
-  }, [onNewMessage, onTyping, onTicketApproved, onTicketClosed]);
+    onSessionExtendedRef.current = onSessionExtended;
+  }, [onNewMessage, onTyping, onTicketApproved, onTicketClosed, onSessionExtended]);
 
   // Determine if we should be connected
   // Only connect when chat is active (Ongoing) or pending (Open)
@@ -150,6 +154,13 @@ export function useHealthChatSocket({
       socketService.on('healthchat:ticket-rejected', (data) => {
         if (String(data.chat?.id) === String(chatIdRef.current)) {
           onTicketClosedRef.current?.(data);
+        }
+      });
+
+      // Listen for session extended
+      socketService.on('healthchat:session-extended', (data) => {
+        if (String(data.chatId) === String(chatIdRef.current)) {
+          onSessionExtendedRef.current?.(data);
         }
       });
 
