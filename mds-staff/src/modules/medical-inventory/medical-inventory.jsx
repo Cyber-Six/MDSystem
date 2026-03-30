@@ -550,21 +550,25 @@ const MedicalInventory = () => {
     }
   };
 
-  const handleAdjust = async ({ batchId, type, quantity, reason, newQuantity }) => {
+  const handleAdjust = async ({ batchId, type, quantity, reason }) => {
     try {
       const source = batches.find((b) => b.id === batchId);
       const isMedicine = source?.dosageUnit !== undefined;
 
-      // Use newQuantity from the modal — it has the correct calculation based on
-      // the enriched batch (which may include merged deduplicated records).
-      // The modal already validated the quantity and performed the math correctly,
-      // so we trust its result rather than recalculating with potentially stale state.
+      // Compute newQuantity from the RAW source batch in `batches` state, NOT from the
+      // modal's pre-computed value. The modal receives an enriched (possibly merged) batch
+      // whose `currentQuantity` is the SUM of multiple DB records sharing the same
+      // batchNumber+location. Trusting that merged value here would send the wrong absolute
+      // quantity to a single record, inflating or deflating it incorrectly.
+      // Using `source.currentQuantity` (the individual record's actual stored value) ensures
+      // the delta is applied only to that record's real current state.
+      const rawCurrentQty = source?.currentQuantity ?? source?.availableQuantity ?? 0;
+      const computedNewQuantity = type === 'add' ? rawCurrentQty + quantity : rawCurrentQty - quantity;
+
       if (isMedicine) {
-        // Medicine batches: backend resolver handles `currentQuantity` via MedicineEntity add/delete
-        await updateMedicineBatch(batchId, { currentQuantity: newQuantity, notes: reason });
+        await updateMedicineBatch(batchId, { currentQuantity: computedNewQuantity, notes: reason });
       } else {
-        // Supply batches: backend resolver now handles `currentQuantity` via SupplyEntity add/delete
-        await updateSupplyBatch(batchId, { currentQuantity: newQuantity, notes: reason });
+        await updateSupplyBatch(batchId, { currentQuantity: computedNewQuantity, notes: reason });
       }
 
       // Reload all batches from the backend so merged totals are accurate.
