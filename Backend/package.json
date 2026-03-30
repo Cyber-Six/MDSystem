@@ -16,6 +16,7 @@
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.65.0",
+    "chartjs-node-canvas": "^4.1.6",
     "compression": "^1.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
