@@ -58,22 +58,6 @@ const Query = {
 
     throwGraphQLError(res).message("No active profile found.").status(404).throw();
   },
-
-  getDentalRecord: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserDentalRecord(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
-
-  getVitalSigns: async (_, __, { user, res }) => {
-    const result = await Wrapper._getUserVitalSigns(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
-    if (result.length === 0) return null;  
-    else if (result[0].status === "InProgress" || result[0].status === "Revision") return result[0];
-
-    throwGraphQLError(res).message("No active profile found.").status(404).throw();
-  },
   
   getOralApplianceProfile: async (_, __, { user, res }) => {
     const result = await Wrapper._getUserOralApplianceProfile(_, {userId: user.id, offset: 0, limit: 1, statuses: null}, { user, res });
