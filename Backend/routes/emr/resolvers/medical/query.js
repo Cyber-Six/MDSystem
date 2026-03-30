@@ -251,11 +251,6 @@ const Query = {
     return result;
   },
 
-  getOralFindingCatalogs: async (_, args, { user, res }) => {
-    const result = await Wrapper._getOralFindingCatalogs(_, args, { user, res });
-    return result;
-  },
-
   searchDomainCatalogs: async (_, args, { user, res }) => {
     const result = await Wrapper._searchDomainCatalogs(_, args, { user, res });
     return result;

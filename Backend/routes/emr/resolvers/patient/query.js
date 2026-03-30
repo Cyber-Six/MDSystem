@@ -5,7 +5,7 @@ const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const logger = require("../../../../utils/logger.js");
 const path = require("path");
 const dotenv = require("dotenv");
-const { getOralFindingCatalogs } = require("../medical/query.js");
+
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 

@@ -738,25 +738,6 @@ const Query = {
     return result.rows;
   },
 
-  _getOralFindingCatalogs: async (_, { filterIsValid, offset, limit }, { user, res }) => {
-    const query = `
-      SELECT *
-      FROM "oralFindingCatalog"
-      WHERE "isActive" = COALESCE($1, "isActive")
-      ORDER BY created_at ASC
-      LIMIT $2 OFFSET $3;
-    `;
-
-    const result = await db.query(query, [
-      filterIsValid === undefined ? null : filterIsValid,
-      limit || 10,
-      offset || 0
-    ]);
-
-    logger.debug("User Oral Finding Profile with Findings:", result.rows);
-    return result.rows;
-  },
-
   _getStatusUpdateTickets: async (_, { statuses, branch, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).status(403).message("Forbidden").throw();

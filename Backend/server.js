@@ -22,6 +22,7 @@ const mediaRoutes = require('./routes/media/media.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
 
 const { initPatientEMRGraphQL, initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
+const { initStaffEMRGraphQL } = require('./routes/staff/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
@@ -67,6 +68,7 @@ app.use((err, req, res, next) => {
 //registerGraphQLRoutes(app);
 initPatientEMRGraphQL(app);
 initMedicalEMRGraphQL(app);
+initStaffEMRGraphQL(app);
 initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
 initMedicalAppointmentGraphQL(app);
