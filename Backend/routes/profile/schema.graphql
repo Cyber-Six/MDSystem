@@ -89,23 +89,6 @@ input userProfileUpdateInput{
   province_address: String
 }
 
-
-
-type BranchIdentifier{
-  branch: USER_BRANCH!
-  identifier: ID!
-}
-
-input BranchIdentifierInput{
-  branch: USER_BRANCH
-  identifier: ID!
-}
-
-input BranchIdentifierUpdateInput{
-  branch: USER_BRANCH
-  identifier: ID
-}
-
 enum UpdateStatus{
     InProgress
     Pending
@@ -156,9 +139,6 @@ type Query {
   getPersonalRecordLog: userProfile
   getUserPersonalRecordLog(userId: ID!, from: Date, offset: Int, limit: Int): [userProfile!]
 
-  getBranchIdentifier: BranchIdentifier
-  getUserBranchIdentifier(userId: ID!): BranchIdentifier
-
   getLoginEmail: String # returns the user's login email from UserCredentials (works before initial record is submitted)
   getUserLoginCredentials(userId: ID!): UserCredentials
 }
@@ -172,9 +152,6 @@ type Mutation {
   updatePatientPersonalRecordLog(input: userProfileUpdateInput!): userProfile
 
   updatePersonalRecordLog(userId: ID!, input: userProfileUpdateInput!): userProfile
-
-  createBranchIdentifier(input: BranchIdentifierInput!): BranchIdentifier 
-  updateUserBranchIdentifier(userId: ID!, input: BranchIdentifierUpdateInput!): BranchIdentifier
 
   setPersonalRecordLog(userId: ID!, status: UpdateStatus!): UpdateStatus
   cancelPersonalRecordLog: String
