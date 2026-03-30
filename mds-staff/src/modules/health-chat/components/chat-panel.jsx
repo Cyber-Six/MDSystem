@@ -1,16 +1,16 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, Lock } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { getPatientMessages } from '../health-chat-service';
 import ChatHeader from './chat-header';
 import MessageBubble from './message-bubble';
-import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
 import PrescriptionPanel from './PrescriptionPanel';
+import ExpiryWarningBanner from './expiry-warning-banner';
 
-const ChatPanel = ({ emitTyping }) => {
+const ChatPanel = () => {
   const {
     selectedChatId,
     selectedPatientId,
@@ -24,6 +24,8 @@ const ChatPanel = ({ emitTyping }) => {
     socketError,
     activeTicketId,
     sendMessage,
+    extendSessionChat,
+    isExtendingSession
   } = useHealthChat();
 
   const [showPrescription, setShowPrescription] = useState(false);
@@ -309,6 +311,22 @@ const ChatPanel = ({ emitTyping }) => {
       activeTicketId={activeTicketId}
       sendMessage={sendMessage}
     />
+      {/* Input — staff is read-only, patients initiate conversation */}
+      <ExpiryWarningBanner
+        expiresAt={selectedTicket?.expiresAt}
+        isExtending={isExtendingSession}
+        onExtend={() => activeTicketId && extendSessionChat(activeTicketId)}
+      />
+      <div className="flex-shrink-0 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+        <div className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800">
+          <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+          {isArchived
+            ? selectedTicket?.status === 'Expired'
+              ? 'This conversation has expired'
+              : 'This conversation is closed'
+            : 'Viewing only — patients initiate conversations'}
+        </div>
+      </div>
     </div>
   );
 };

@@ -27,6 +27,7 @@ const AnnouncementManagement = () => {
     label: '',
     description: '',
     isActive: true,
+    location: 'Both',
   });
 
   // Fetch announcements on mount
@@ -92,6 +93,7 @@ const AnnouncementManagement = () => {
       label: '',
       description: '',
       isActive: true,
+      location: 'Both',
     });
     setEditingId(null);
     setStagedFileId(null);
@@ -104,6 +106,7 @@ const AnnouncementManagement = () => {
       label: announcement.label || '',
       description: announcement.description || '',
       isActive: announcement.isActive !== false,
+      location: announcement.location || 'Both',
     });
     setEditingId(announcement.id);
     setStagedFileId(null);
@@ -277,6 +280,26 @@ const AnnouncementManagement = () => {
               )}
             </div>
 
+            {/* Branch / Location */}
+            <div>
+              <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
+                Branch Visibility
+              </label>
+              <select
+                name="location"
+                value={formData.location}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="Both">All Branches</option>
+                <option value="Manila">Manila (Arlegui &amp; Casal)</option>
+                <option value="QuezonCity">Quezon City</option>
+              </select>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                Controls which branch patients can see this announcement.
+              </p>
+            </div>
+
             {/* Active Status */}
             <div className="flex items-center gap-2">
               <input
@@ -331,7 +354,7 @@ const AnnouncementManagement = () => {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
                         {announcement.label}
                       </h3>
@@ -343,6 +366,21 @@ const AnnouncementManagement = () => {
                         }`}
                       >
                         {announcement.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 text-xs font-medium rounded ${
+                          announcement.location === 'Manila'
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                            : announcement.location === 'QuezonCity'
+                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                            : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400'
+                        }`}
+                      >
+                        {announcement.location === 'Manila'
+                          ? 'Manila'
+                          : announcement.location === 'QuezonCity'
+                          ? 'Quezon City'
+                          : 'All Branches'}
                       </span>
                     </div>
                     <p className="text-xs text-secondary-600 dark:text-neutral-400 line-clamp-2 mb-1">
