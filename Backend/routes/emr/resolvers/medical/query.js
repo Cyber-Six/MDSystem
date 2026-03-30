@@ -85,31 +85,6 @@ const Query = {
     if (result.length === 0) return null;  
     return result;
   },
-
-  getUserDentalRecord: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserDentalRecord`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
-
-    const result = await Wrapper._getUserDentalRecord(_, {...args, statuses: ["Approved"]}, { user, res });
-    if (result.length === 0) return null;  
-
-    return result;
-  },
-
-  getUserVitalSigns: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserVitalSigns`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
-
-    const result = await Wrapper._getUserVitalSigns(_, {...args, statuses: ["Approved"]}, { user, res });
-    if (result.length === 0) return null;  
-    return result;
-  },
   
   getUserOralApplianceProfile: async (_, args, { user, res }) => {
     const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
