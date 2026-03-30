@@ -45,6 +45,7 @@ const PatientMedicineRequestsTab = lazy(() => import('./components/medicine-requ
 const PatientDocumentsTab = lazy(() => import('./components/documents-tab'));
 const PatientObgyneTab = lazy(() => import('./components/obgyne-tab'));
 const PatientDentalGradeHistoryTab = lazy(() => import('./components/dental-grade-history-tab'));
+const PatientMedicalRecordHistoryTab = lazy(() => import('./components/medical-record-history-tab'));
 
 function LoadingBlock({ label }) {
   return (
@@ -529,8 +530,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const tabs = [
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Record' },
+    { id: 'medical-history', label: 'Medical Record History' },
     { id: 'dental', label: 'Dental Record' },
-    { id: 'dental-grade-history', label: 'Dental Grade History' },
+    { id: 'dental-grade-history', label: 'Dental Record History' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
@@ -552,6 +554,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return <PatientPersonalInfoTab patient={patient} />;
       case 'medical':
         return <PatientMedicalRecordTab patient={patient} />;
+      case 'medical-history':
+        return <PatientMedicalRecordHistoryTab patient={patient} />;
       case 'dental':
         return <PatientDentalRecordTab patient={patient} />;
       case 'dental-grade-history':
@@ -620,7 +624,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
                 {patient.id} · {patient.program || patient.department || 'N/A'} · {patient.year || 'N/A'}
               </p>
               <div className="mt-1 flex items-center gap-1.5">
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status || 'N/A'}</span>
+                {['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(patient.status) && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status}</span>
+                )}
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">{patient.type}</span>
                 {isMockPatient && (
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">Mock Mode</span>

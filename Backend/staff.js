@@ -18,6 +18,7 @@ const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.j
 const { initRoleManagementGraphQL } = require('./routes/role-management/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
+const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
@@ -78,6 +79,7 @@ app.use('/auth/password', passwordResetRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
 app.use('/media', mediaRoutes);
+app.use('/announcement', AnnouncementRoutes);
 //app.use('/documents', documentRoutes);
 
 // ======================================

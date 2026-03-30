@@ -98,3 +98,19 @@ export const fetchAllAnnouncementsAdmin = async () => {
     throw err;
   }
 };
+
+/**
+ * Upload an image/file to staging for use as pubmat
+ * @param {File} file - The file to upload
+ * @returns {Promise<string>} The staged fileId (UUID)
+ */
+export const uploadPubmat = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await axiosRequest.post('/media/stage/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+  return response.data.fileId;
+};
