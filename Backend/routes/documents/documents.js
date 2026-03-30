@@ -104,6 +104,34 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
       physician: data?.physician || { id: req.user.id },
     };
 
+    // Auto-fill physician details from DB when not provided by the caller
+    if (!enrichedData.physician?.firstName) {
+      try {
+        const physicianResult = await db.query(
+          `SELECT up.first_name, up.last_name,
+                  mp.title, mp.designation
+           FROM "UsersPersonal" up
+           LEFT JOIN "MedicalPersonnel" mp ON mp.id = up.id
+           WHERE up.id = $1`,
+          [req.user.id]
+        );
+        if (physicianResult.rows.length > 0) {
+          const row = physicianResult.rows[0];
+          enrichedData.physician = {
+            id: req.user.id,
+            ...enrichedData.physician,
+            firstName: row.first_name || '',
+            lastName: row.last_name || '',
+            title: row.title || enrichedData.physician?.title || 'MD',
+            licenseNo: enrichedData.physician?.licenseNo || '',
+            specialization: row.designation || '',
+          };
+        }
+      } catch (err) {
+        logger.warn('Physician auto-fill lookup failed', { error: err.message });
+      }
+    }
+
     if (shouldPersist) {
       if (!patientId && !data?.patient?.id) {
         return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });

@@ -7,6 +7,7 @@ import MessageBubble from './message-bubble';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
+import PrescriptionPanel from './PrescriptionPanel';
 import ExpiryWarningBanner from './expiry-warning-banner';
 
 const ChatPanel = () => {
@@ -22,9 +23,12 @@ const ChatPanel = () => {
     refreshMessages,
     socketError,
     activeTicketId,
+    sendMessage,
     extendSessionChat,
     isExtendingSession
   } = useHealthChat();
+
+  const [showPrescription, setShowPrescription] = useState(false);
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -165,6 +169,11 @@ const ChatPanel = () => {
     return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Close prescription panel when patient changes
+  useEffect(() => {
+    setShowPrescription(false);
+  }, [selectedChatId, selectedPatientId]);
+
   if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
   // Build unified list: synthetic purpose entry + messages with dividers
@@ -186,7 +195,11 @@ const ChatPanel = () => {
 
   const allItems = [...purposeSynth, ...itemsWithDividers];
 
+  const patient = selectedTicket?.patient;
+
   return (
+    <div className="flex-1 flex h-full min-h-0">
+    {/* Chat column */}
     <div
       className="flex-1 flex flex-col h-full min-h-0 bg-white dark:bg-neutral-900"
     >
@@ -283,6 +296,21 @@ const ChatPanel = () => {
         </div>
       </div>
 
+      {/* Input */}
+      <MessageInput emitTyping={emitTyping} onOpenPrescription={() => setShowPrescription(true)} />
+    </div>
+
+    {/* Prescription side panel */}
+    <PrescriptionPanel
+      isOpen={showPrescription}
+      onClose={() => setShowPrescription(false)}
+      patientId={patient?.id}
+      patientName={patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}
+      patientDob={patient?.dateOfBirth}
+      patientSex={patient?.sex}
+      activeTicketId={activeTicketId}
+      sendMessage={sendMessage}
+    />
       {/* Input — staff is read-only, patients initiate conversation */}
       <ExpiryWarningBanner
         expiresAt={selectedTicket?.expiresAt}
