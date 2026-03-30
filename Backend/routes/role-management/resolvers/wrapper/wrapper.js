@@ -1379,7 +1379,7 @@ const Mutation = {
       // Fetch admin credentials to verify password
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 5: findUserByEmail');
       const adminCredentials = await db.findUserByEmail(oldAdminEmail);
-      logger.warn(`[ADMIN_TRANSFER_DEBUG] Step 5 result: hasCredentials=${!!adminCredentials}, hasHash=${!!adminCredentials?.password_hash}, hashType=${typeof adminCredentials?.password_hash}`);
+
       if (!adminCredentials || !adminCredentials.password_hash) {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
