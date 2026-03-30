@@ -83,7 +83,6 @@ const EVENT_MAP = {
 // ── Inventory alert helpers ─────────────────────────────────────────────────
 
 const EXPIRY_WARN_DAYS = 60;
-const INVENTORY_POLL_MS = 5 * 60 * 1000; // 5 minutes
 
 function computeInventoryAlerts(enrichedItems, batches) {
   const result = [];
@@ -193,6 +192,7 @@ export function StaffNotificationProvider({ children }) {
   const [seenInventoryIds, setSeenInventoryIds] = useState(() => loadSeenInventoryIds());
   const socketRef = useRef(null);
   const subscribersRef = useRef({});
+  const fetchInventoryRef = useRef(null);
 
   const addNotification = useCallback((event, data) => {
     const factory = EVENT_MAP[event];
@@ -278,6 +278,12 @@ export function StaffNotificationProvider({ children }) {
           if (subs) subs.forEach((cb) => cb(data));
         });
       });
+
+      // Re-fetch inventory alerts immediately when any stock change occurs
+      service.on('inventory:stock-changed', () => {
+        if (!isMounted) return;
+        if (fetchInventoryRef.current) fetchInventoryRef.current();
+      });
     };
 
     connect();
@@ -360,12 +366,12 @@ export function StaffNotificationProvider({ children }) {
       }
     };
 
+    fetchInventoryRef.current = fetchAndComputeAlerts;
     fetchAndComputeAlerts();
-    const pollId = setInterval(fetchAndComputeAlerts, INVENTORY_POLL_MS);
 
     return () => {
       isMounted = false;
-      clearInterval(pollId);
+      fetchInventoryRef.current = null;
     };
   }, []);
 

@@ -3,6 +3,7 @@ const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const { validateItemActive } = require("./helper.js");
 const logger = require("../../../../../utils/logger.js");
 const { bool } = require("joi");
+const { emitToRole } = require("../../../../../config/sockets");
 
 const Query = {
   _getMedicalItems: async (_, { category, active, offset = 0, limit = 20 }, { res }) => {
@@ -182,6 +183,22 @@ const Mutation = {
         );
       }
 
+      try {
+        const itemRow = await db.query(`SELECT item_name FROM "MedicalItems" WHERE id = $1`, [input.medicalItemId]);
+        const itemName = itemRow.rows[0]?.item_name ?? 'Unknown';
+        emitToRole('medical', 'inventory:stock-changed', {
+          action: 'restock',
+          itemId: input.medicalItemId,
+          itemName,
+          batchId: batch.id,
+          location: batch.location,
+          quantityAdded: quantity,
+          summary: `${itemName} restocked: +${quantity} unit${quantity !== 1 ? 's' : ''} at ${batch.location}`,
+        });
+      } catch (emitErr) {
+        logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
+      }
+
       return batch;
     } catch (err) {
       logger.error("Error in _addMedicalSupply:", err);
@@ -216,6 +233,22 @@ const Mutation = {
           `INSERT INTO "SupplyEntity" ("batchId") VALUES ${placeholders}`,
           [batch.id],
         );
+      }
+
+      try {
+        const itemRow = await db.query(`SELECT item_name FROM "MedicalItems" WHERE id = $1`, [input.supplyItemId]);
+        const itemName = itemRow.rows[0]?.item_name ?? 'Unknown';
+        emitToRole('medical', 'inventory:stock-changed', {
+          action: 'restock',
+          itemId: input.supplyItemId,
+          itemName,
+          batchId: batch.id,
+          location: batch.location,
+          quantityAdded: quantity,
+          summary: `${itemName} restocked: +${quantity} unit${quantity !== 1 ? 's' : ''} at ${batch.location}`,
+        });
+      } catch (emitErr) {
+        logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
       }
 
       return batch;
@@ -484,6 +517,20 @@ const Mutation = {
         });
       }
 
+      if (input.currentQuantity !== undefined) {
+        try {
+          emitToRole('medical', 'inventory:stock-changed', {
+            action: 'adjust',
+            batchId: parseInt(batchId),
+            quantityBefore: oldQuantity,
+            quantityAfter: newQuantity,
+            summary: `Stock adjusted: ${oldQuantity} → ${newQuantity} unit${newQuantity !== 1 ? 's' : ''} (batch #${batchId})`,
+          });
+        } catch (emitErr) {
+          logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
+        }
+      }
+
       return newValues;
     } catch (err) {
       logger.error("Error in _updateMedicalSupply:", err);
@@ -551,6 +598,20 @@ const Mutation = {
           }),
           changedBy: "Medical"
         });
+      }
+
+      if (input.currentQuantity !== undefined) {
+        try {
+          emitToRole('medical', 'inventory:stock-changed', {
+            action: 'adjust',
+            batchId: parseInt(batchId),
+            quantityBefore: oldValues.currentQuantity,
+            quantityAfter: newValues.currentQuantity,
+            summary: `Stock adjusted: ${oldValues.currentQuantity} → ${newValues.currentQuantity} unit${newValues.currentQuantity !== 1 ? 's' : ''} (batch #${batchId})`,
+          });
+        } catch (emitErr) {
+          logger.warn('[INVENTORY] Failed to emit inventory:stock-changed:', emitErr.message);
+        }
       }
 
       return newValues;
