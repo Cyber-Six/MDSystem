@@ -108,7 +108,7 @@ const HealthChatContent = () => {
 
         {/* Right panel */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <ChatPanel />
+          <ChatPanel emitTyping={emitTyping} />
         </div>
 
       </div>
