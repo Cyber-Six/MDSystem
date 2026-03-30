@@ -159,6 +159,7 @@ const Mutation = {
       throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
     }
 
+    const userBranch = await db.getUserBranch(patientId);
     const valid =
       (userBranch === "Manila" && ["Arlegui", "Casal"].includes(input.location)) ||
       (userBranch === "QuezonCity" && input.location === "QuezonCity") ||
