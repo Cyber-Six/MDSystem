@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Sun, Moon, X, Check } from 'lucide-react';
+import { Sun, Moon, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Availability Calendar Component
  * Month-view calendar grid showing slot utilization for each day
- * Color-coded: Green (open) / Yellow (>70% booked) / Red (full/suspended) / Blue (event override)
+ * Color-coded: Green (open) / Amber (>70% booked) / Red (full/suspended) / Blue (event override)
  * SRS §3.4.2
  */
-const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults, activeScheduler, editForm, customDates = [], onEditSessionLimit }) => {
+const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults, activeScheduler, editForm, customDates = [], onEditSessionLimit, monthAvailability = {}, onMonthChange }) => {
   // Inline editor state
   const [editPopup, setEditPopup] = useState(null); // { dateStr, session: 'morning'|'afternoon', x, y }
   const [editValue, setEditValue] = useState(0);
@@ -45,34 +45,60 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
   const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   const navigateMonth = (delta) => {
-    setCurrentMonth(new Date(year, month + delta));
+    const newMonth = new Date(year, month + delta);
+    setCurrentMonth(newMonth);
   };
+
+  const goToToday = () => {
+    const now = new Date();
+    setCurrentMonth(new Date(now.getFullYear(), now.getMonth()));
+  };
+
+  // Today's date string for highlighting
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const isCurrentMonth = useMemo(() => {
+    const now = new Date();
+    return year === now.getFullYear() && month === now.getMonth();
+  }, [year, month]);
+
+  // Notify parent of month changes for data fetching
+  useEffect(() => {
+    if (onMonthChange) {
+      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+      onMonthChange(startDate, endDate);
+    }
+  }, [year, month, daysInMonth]);
 
   // Use editForm.schedulePerWeek for immediate reflection of changes, fallback to activeScheduler
   const currentSchedulePerWeek = editForm?.schedulePerWeek || activeScheduler?.schedulePerWeek || [];
 
-  // Create a set of custom date strings for quick lookup
-  const customDateSet = useMemo(() => {
-    return new Set(customDates.map(cd => cd.scheduledDate));
+  // Create a map of custom dates for quick lookup (date -> custom date info)
+  const customDateMap = useMemo(() => {
+    const map = {};
+    customDates.forEach(cd => {
+      const dateStr = cd.scheduledDate?.split('T')[0] || cd.scheduledDate;
+      map[dateStr] = cd;
+    });
+    return map;
   }, [customDates]);
 
-  // Mock booked data per day
+  const customDateSet = useMemo(() => new Set(Object.keys(customDateMap)), [customDateMap]);
+
+  // Build slot data per day using real availability from API
   const bookedSlots = useMemo(() => {
-    // Check if a day is available based on schedulePerWeek or custom dates
     const checkDayAvailable = (dayOfWeek, dateStr) => {
       const dayName = dayIndexToName[dayOfWeek];
-      // First check if it's in the regular weekly schedule
-      if (currentSchedulePerWeek.includes(dayName)) {
-        return true;
-      }
-      // Then check if it's a custom date
+      if (currentSchedulePerWeek.includes(dayName)) return true;
       return customDateSet.has(dateStr);
     };
 
-    // Check if a date is a custom date (outside regular schedule)
     const checkIsCustomDate = (dayOfWeek, dateStr) => {
       const dayName = dayIndexToName[dayOfWeek];
-      // It's a custom date if it's available but not in the regular weekly schedule
       return !currentSchedulePerWeek.includes(dayName) && customDateSet.has(dateStr);
     };
 
@@ -81,33 +107,45 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayOfWeek = new Date(year, month, d).getDay();
 
-      // Check if day is available based on scheduler's schedulePerWeek or custom dates
       if (!checkDayAvailable(dayOfWeek, dateStr)) {
-        data[dateStr] = { medical: { morning: 0, afternoon: 0 }, dental: { morning: 0, afternoon: 0 }, isClosed: true };
+        data[dateStr] = { isClosed: true };
         continue;
       }
 
-      // Check if this is a custom date
       const isCustom = checkIsCustomDate(dayOfWeek, dateStr);
-
-      // Check if event overrides this day
       const dayEvent = events.find((e) => dateStr >= e.startDate && dateStr <= e.endDate);
 
       if (dayEvent && dayEvent.effect === 'Suspend') {
-        data[dateStr] = { medical: { morning: 0, afternoon: 0 }, dental: { morning: 0, afternoon: 0 }, isSuspended: true, event: dayEvent, isCustomDate: isCustom };
+        data[dateStr] = { isSuspended: true, event: dayEvent, isCustomDate: isCustom };
         continue;
       }
 
-      // TODO: Replace with real booked slot counts from API (ScheduleDateEntity)
+      // Resolve slot data: monthAvailability (real API data) > customDate overrides > scheduler defaults
+      const apiData = monthAvailability[dateStr];
+      const customEntry = customDateMap[dateStr];
+
+      const morningAllowed = apiData?.morningAllowed ?? customEntry?.morningAllowed ?? slotDefaults?.morning ?? 0;
+      const afternoonAllowed = apiData?.afternoonAllowed ?? customEntry?.afternoonAllowed ?? slotDefaults?.afternoon ?? 0;
+      const morningRegistered = apiData?.morningRegistered ?? 0;
+      const morningPending = apiData?.morningPending ?? 0;
+      const afternoonRegistered = apiData?.afternoonRegistered ?? 0;
+      const afternoonPending = apiData?.afternoonPending ?? 0;
+
       data[dateStr] = {
-        medical: { morning: 0, afternoon: 0 },
-        dental: { morning: 0, afternoon: 0 },
+        morningAllowed,
+        afternoonAllowed,
+        morningBooked: morningRegistered + morningPending,
+        afternoonBooked: afternoonRegistered + afternoonPending,
+        morningRegistered,
+        morningPending,
+        afternoonRegistered,
+        afternoonPending,
         event: dayEvent || null,
         isCustomDate: isCustom,
       };
     }
     return data;
-  }, [year, month, daysInMonth, events, currentSchedulePerWeek, customDateSet, dayIndexToName]);
+  }, [year, month, daysInMonth, events, currentSchedulePerWeek, customDateSet, customDateMap, dayIndexToName, monthAvailability, slotDefaults]);
 
   const getDayStatus = (dateStr) => {
     const info = bookedSlots[dateStr];
@@ -116,38 +154,57 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     if (info.isSuspended) return 'suspended';
     if (info.event) return 'event';
 
-    // Check if it's a custom date (and not a regular weekday)
-    if (info.isCustomDate) return 'custom';
+    // Use per-day capacity (already resolved from API > customDate > defaults)
+    const totalCapacity = (info.morningAllowed || 0) + (info.afternoonAllowed || 0);
+    const totalBooked = (info.morningBooked || 0) + (info.afternoonBooked || 0);
 
-    const totalCapacity = (slotDefaults?.morning || 0) + (slotDefaults?.afternoon || 0);
-    const totalBooked = info.medical.morning + info.medical.afternoon;
+    // Custom date indicator takes priority if no bookings yet
+    if (info.isCustomDate && totalBooked === 0) return 'custom';
+
     const ratio = totalCapacity > 0 ? totalBooked / totalCapacity : 0;
 
     if (ratio >= 1) return 'full';
     if (ratio >= 0.7) return 'partial';
+    if (info.isCustomDate) return 'custom';
     return 'open';
   };
 
   const statusColors = {
-    open: 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-400 hover:bg-success-100 dark:hover:bg-success-900/30',
-    partial: 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30',
-    full: 'bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/30',
-    suspended: 'bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400 line-through hover:bg-error-200',
-    event: 'bg-accent-50 dark:bg-accent-900/20 text-accent-700 dark:text-accent-400 hover:bg-accent-100 dark:hover:bg-accent-900/30',
+    open: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30',
+    partial: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30',
+    full: 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30',
+    suspended: 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-200',
+    event: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/30',
     custom: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/30',
-    closed: 'bg-neutral-100 dark:bg-neutral-700/50 text-neutral-400 dark:text-neutral-500',
+    closed: 'bg-neutral-50 dark:bg-neutral-700/50 text-neutral-400 dark:text-neutral-500',
     none: 'bg-transparent text-neutral-300 dark:text-neutral-600',
   };
 
   const statusDots = {
-    open: 'bg-success-500',
-    partial: 'bg-primary-500',
-    full: 'bg-error-500',
-    suspended: 'bg-error-500',
-    event: 'bg-accent-500',
+    open: 'bg-emerald-500',
+    partial: 'bg-amber-500',
+    full: 'bg-rose-500',
+    suspended: 'bg-rose-500',
+    event: 'bg-sky-500',
     custom: 'bg-violet-500',
     closed: '',
     none: '',
+  };
+
+  // Compute fill ratio for capacity bar
+  const getFillRatio = (dateStr) => {
+    const info = bookedSlots[dateStr];
+    if (!info || info.isClosed || info.isSuspended) return 0;
+    const totalCapacity = (info.morningAllowed || 0) + (info.afternoonAllowed || 0);
+    const totalBooked = (info.morningBooked || 0) + (info.afternoonBooked || 0);
+    return totalCapacity > 0 ? Math.min(totalBooked / totalCapacity, 1) : 0;
+  };
+
+  const getFillBarColor = (ratio) => {
+    if (ratio >= 1) return 'bg-rose-500';
+    if (ratio >= 0.7) return 'bg-amber-500';
+    if (ratio > 0) return 'bg-emerald-500';
+    return 'bg-neutral-200 dark:bg-neutral-600';
   };
 
   // Build calendar grid
@@ -174,9 +231,10 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
   const handleSessionClick = (e, dateStr, session) => {
     e.stopPropagation(); // Prevent triggering date selection
     const rect = e.currentTarget.getBoundingClientRect();
+    const info = bookedSlots[dateStr];
     const currentValue = session === 'morning'
-      ? (slotDefaults?.morning || 0)
-      : (slotDefaults?.afternoon || 0);
+      ? (info?.morningAllowed ?? slotDefaults?.morning ?? 0)
+      : (info?.afternoonAllowed ?? slotDefaults?.afternoon ?? 0);
     setEditValue(currentValue);
     setEditPopup({
       dateStr,
@@ -202,34 +260,41 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
   };
 
   return (
-    <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700">
+    <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 shadow-sm">
       {/* Month navigation */}
-      <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-        <button
-          onClick={() => navigateMonth(-1)}
-          className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
-        >
-          <svg className="w-4 h-4 text-secondary-600 dark:text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
+      <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigateMonth(-1)}
+            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4 text-secondary-600 dark:text-neutral-300" />
+          </button>
+          <button
+            onClick={() => navigateMonth(1)}
+            className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+          >
+            <ChevronRight className="w-4 h-4 text-secondary-600 dark:text-neutral-300" />
+          </button>
+        </div>
+        <h3 className="text-sm font-bold text-secondary-800 dark:text-white tracking-wide">
           {monthNames[month]} {year}
         </h3>
-        <button
-          onClick={() => navigateMonth(1)}
-          className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
-        >
-          <svg className="w-4 h-4 text-secondary-600 dark:text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
+        {!isCurrentMonth && (
+          <button
+            onClick={goToToday}
+            className="px-2.5 py-1 text-[11px] font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors border border-primary-200 dark:border-primary-800"
+          >
+            Today
+          </button>
+        )}
+        {isCurrentMonth && <div className="w-14" />}
       </div>
 
       {/* Day labels */}
-      <div className="grid grid-cols-7 border-b border-neutral-200 dark:border-neutral-700">
+      <div className="grid grid-cols-7 bg-neutral-50 dark:bg-neutral-750 border-b border-neutral-200 dark:border-neutral-700">
         {dayLabels.map((label) => (
-          <div key={label} className="text-center py-2 text-[10px] sm:text-xs font-medium text-secondary-500 dark:text-neutral-400">
+          <div key={label} className="text-center py-2 text-[10px] sm:text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
             <span className="sm:hidden">{label.charAt(0)}</span>
             <span className="hidden sm:inline">{label}</span>
           </div>
@@ -241,72 +306,95 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         {calendarCells.map((cell, idx) => {
           if (cell.isOtherMonth) {
             return (
-              <div key={`other-${idx}`} className="p-1 sm:p-1.5 min-h-[56px] sm:min-h-[72px] border-b border-r border-neutral-100 dark:border-neutral-700/50">
-                <span className="text-xs sm:text-sm text-neutral-300 dark:text-neutral-600">{cell.day}</span>
+              <div key={`other-${idx}`} className="p-1 sm:p-1.5 min-h-[60px] sm:min-h-[80px] border-b border-r border-neutral-100 dark:border-neutral-700/50 bg-neutral-25 dark:bg-neutral-800/50">
+                <span className="text-[11px] sm:text-xs text-neutral-300 dark:text-neutral-600">{cell.day}</span>
               </div>
             );
           }
 
           const status = getDayStatus(cell.dateStr);
           const isSelected = cell.dateStr === selectedDate;
+          const isToday = cell.dateStr === todayStr;
           const isAvailable = status !== 'closed' && status !== 'none';
           const slotInfo = bookedSlots[cell.dateStr];
+          const fillRatio = getFillRatio(cell.dateStr);
 
           return (
             <div
               key={cell.dateStr}
               onClick={() => onSelectDate(cell.dateStr, isAvailable)}
-              className={`p-1 sm:p-1.5 min-h-[56px] sm:min-h-[72px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative ${
+              className={`p-1 sm:p-1.5 min-h-[60px] sm:min-h-[80px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative group ${
                 isSelected
-                  ? 'ring-2 ring-primary-500 ring-inset bg-primary-50 dark:bg-primary-900/20'
+                  ? 'ring-2 ring-primary-500 ring-inset bg-primary-50/80 dark:bg-primary-900/20'
                   : statusColors[status]
               }`}
             >
-              {/* Date number - bigger */}
+              {/* Date number row */}
               <div className="flex items-center justify-between mb-0.5">
-                <span className={`text-sm sm:text-base font-semibold ${isSelected ? 'text-primary-700 dark:text-primary-400' : ''}`}>
+                <span className={`text-xs sm:text-sm font-bold leading-none ${
+                  isToday
+                    ? 'bg-primary-500 text-white w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center'
+                    : isSelected
+                      ? 'text-primary-700 dark:text-primary-400'
+                      : ''
+                }`}>
                   {cell.day}
                 </span>
-                {statusDots[status] && (
-                  <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${statusDots[status]}`} />
-                )}
+                <div className="flex items-center gap-0.5">
+                  {slotInfo?.isCustomDate && (
+                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-violet-500" title="Custom date" />
+                  )}
+                  {statusDots[status] && !slotInfo?.isCustomDate && (
+                    <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${statusDots[status]}`} />
+                  )}
+                </div>
               </div>
 
-              {/* Morning/Afternoon counts - side by side, morning left, afternoon right */}
+              {/* Morning/Afternoon counts - compact chips */}
               {status !== 'closed' && status !== 'none' && slotInfo && !slotInfo.isSuspended && (
-                <div className="flex items-center justify-between gap-1 mt-1">
-                  {/* Morning count - LEFT */}
+                <div className="flex items-center gap-0.5 sm:gap-1 mt-0.5">
+                  {/* Morning chip */}
                   <button
                     onClick={(e) => handleSessionClick(e, cell.dateStr, 'morning')}
-                    className="flex-1 flex items-center justify-center gap-1 px-1 py-1 rounded border border-accent-300 dark:border-accent-700 hover:bg-accent-100 dark:hover:bg-accent-900/40 transition-colors group"
+                    className="flex-1 flex items-center justify-center gap-0.5 px-0.5 py-0.5 sm:py-1 rounded-md bg-white/60 dark:bg-neutral-700/60 border border-amber-200/80 dark:border-amber-800/50 hover:border-amber-400 dark:hover:border-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-all group/btn"
                     title="Click to edit morning limit"
                   >
-                    <Sun className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-accent-500 dark:text-accent-400 flex-shrink-0" />
-                    <span className="text-[9px] sm:text-xs font-semibold text-secondary-700 dark:text-neutral-200 group-hover:text-accent-600 dark:group-hover:text-accent-400">
-                      {slotInfo.medical.morning}/{slotDefaults?.morning || 0}
+                    <Sun className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-500 dark:text-amber-400 flex-shrink-0" />
+                    <span className="text-[8px] sm:text-[10px] font-bold text-secondary-700 dark:text-neutral-200 group-hover/btn:text-amber-600 dark:group-hover/btn:text-amber-400 tabular-nums">
+                      {slotInfo.morningBooked}/{slotInfo.morningAllowed}
                     </span>
                   </button>
-                  {/* Afternoon count - RIGHT */}
+                  {/* Afternoon chip */}
                   <button
                     onClick={(e) => handleSessionClick(e, cell.dateStr, 'afternoon')}
-                    className="flex-1 flex items-center justify-center gap-1 px-1 py-1 rounded border border-warning-300 dark:border-warning-700 hover:bg-warning-100 dark:hover:bg-warning-900/40 transition-colors group"
+                    className="flex-1 flex items-center justify-center gap-0.5 px-0.5 py-0.5 sm:py-1 rounded-md bg-white/60 dark:bg-neutral-700/60 border border-indigo-200/80 dark:border-indigo-800/50 hover:border-indigo-400 dark:hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all group/btn"
                     title="Click to edit afternoon limit"
                   >
-                    <Moon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-warning-500 dark:text-warning-400 flex-shrink-0" />
-                    <span className="text-[9px] sm:text-xs font-semibold text-secondary-700 dark:text-neutral-200 group-hover:text-warning-600 dark:group-hover:text-warning-400">
-                      {slotInfo.medical.afternoon}/{slotDefaults?.afternoon || 0}
+                    <Moon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
+                    <span className="text-[8px] sm:text-[10px] font-bold text-secondary-700 dark:text-neutral-200 group-hover/btn:text-indigo-600 dark:group-hover/btn:text-indigo-400 tabular-nums">
+                      {slotInfo.afternoonBooked}/{slotInfo.afternoonAllowed}
                     </span>
                   </button>
                 </div>
               )}
 
               {slotInfo?.isSuspended && (
-                <p className="text-[9px] sm:text-[10px] text-error-500 dark:text-error-400 mt-1 font-medium">Closed</p>
+                <p className="text-[9px] sm:text-[10px] text-rose-500 dark:text-rose-400 mt-1 font-semibold">Suspended</p>
               )}
               {slotInfo?.event && !slotInfo?.isSuspended && (
-                <p className="text-[7px] sm:text-[9px] text-accent-600 dark:text-accent-400 mt-0.5 truncate hidden sm:block">
+                <p className="text-[7px] sm:text-[9px] text-sky-600 dark:text-sky-400 mt-0.5 truncate hidden sm:block font-medium">
                   {slotInfo.event.name}
                 </p>
+              )}
+
+              {/* Capacity utilization bar */}
+              {isAvailable && slotInfo && !slotInfo.isSuspended && (
+                <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-neutral-100 dark:bg-neutral-700">
+                  <div
+                    className={`h-full transition-all duration-300 ${getFillBarColor(fillRatio)}`}
+                    style={{ width: `${Math.max(fillRatio * 100, fillRatio > 0 ? 4 : 0)}%` }}
+                  />
+                </div>
               )}
             </div>
           );
@@ -316,34 +404,42 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         {editPopup && (
           <div
             ref={popupRef}
-            className="fixed z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl p-3 min-w-[180px]"
+            className="fixed z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-2xl p-3.5 min-w-[200px]"
             style={{
               left: `${editPopup.x}px`,
               top: `${editPopup.y}px`,
               transform: 'translateX(-50%)',
             }}
           >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                {editPopup.session === 'morning' ? (
-                  <Sun className="w-4 h-4 text-accent-500" />
-                ) : (
-                  <Moon className="w-4 h-4 text-warning-500" />
-                )}
-                <span className="text-xs font-semibold text-secondary-800 dark:text-white capitalize">
-                  {editPopup.session} Limit
-                </span>
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                  editPopup.session === 'morning'
+                    ? 'bg-amber-100 dark:bg-amber-900/30'
+                    : 'bg-indigo-100 dark:bg-indigo-900/30'
+                }`}>
+                  {editPopup.session === 'morning' ? (
+                    <Sun className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  ) : (
+                    <Moon className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  )}
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-secondary-800 dark:text-white capitalize block leading-tight">
+                    {editPopup.session} Limit
+                  </span>
+                  <span className="text-[10px] text-secondary-500 dark:text-neutral-400 leading-tight">
+                    {new Date(editPopup.dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
               </div>
               <button
                 onClick={() => setEditPopup(null)}
-                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded"
+                className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
               >
                 <X className="w-3.5 h-3.5 text-secondary-400" />
               </button>
             </div>
-            <p className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-2">
-              {new Date(editPopup.dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-            </p>
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -356,7 +452,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
                   if (!isNaN(num) && num >= 0) setEditValue(num);
                 }}
                 onBlur={() => { if (editValue === '' || editValue == null) setEditValue(0); }}
-                className="flex-1 px-2 py-1.5 text-sm font-medium text-center border border-neutral-200 dark:border-neutral-600 rounded-md bg-neutral-50 dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="flex-1 px-3 py-2 text-sm font-bold text-center border border-neutral-200 dark:border-neutral-600 rounded-lg bg-neutral-50 dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSaveSession();
@@ -366,12 +462,12 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
               <button
                 onClick={handleSaveSession}
                 disabled={saving}
-                className="px-3 py-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1"
+                className="px-3.5 py-2 text-xs font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
               >
                 {saving ? (
-                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <Check className="w-3 h-3" />
+                  <Check className="w-3.5 h-3.5" />
                 )}
                 Save
               </button>
@@ -381,17 +477,18 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       </div>
 
       {/* Legend */}
-      <div className="p-2 border-t border-neutral-200 dark:border-neutral-700 flex flex-wrap gap-2 sm:gap-3">
+      <div className="px-4 py-2.5 border-t border-neutral-200 dark:border-neutral-700 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="text-[10px] font-semibold text-secondary-400 dark:text-neutral-500 uppercase tracking-wider mr-1">Status</span>
         {[
-          { color: 'bg-success-500', label: 'Open' },
-          { color: 'bg-primary-500', label: '>70%' },
-          { color: 'bg-error-500', label: 'Full' },
-          { color: 'bg-accent-500', label: 'Event' },
-          { color: 'bg-violet-500', label: 'Custom' },
+          { color: 'bg-emerald-500', label: 'Open' },
+          { color: 'bg-amber-500', label: 'Filling (>70%)' },
+          { color: 'bg-rose-500', label: 'Full' },
+          { color: 'bg-sky-500', label: 'Event' },
+          { color: 'bg-violet-500', label: 'Custom Date' },
         ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1 sm:gap-1.5">
-            <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${color}`} />
-            <span className="text-[9px] sm:text-[10px] text-secondary-500 dark:text-neutral-400">{label}</span>
+          <div key={label} className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${color} ring-1 ring-black/5`} />
+            <span className="text-[10px] sm:text-[11px] text-secondary-600 dark:text-neutral-400 font-medium">{label}</span>
           </div>
         ))}
       </div>
