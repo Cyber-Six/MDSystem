@@ -112,12 +112,17 @@ export const listRequirements = async (schedulerId, offset = 0, limit = 50) => {
  * @param {string} schedulerId
  * @param {number} [offset=0]
  * @param {number} [limit=100]
- * @returns {Promise<Array<string>>} Date strings
+ * @returns {Promise<Array>} SlotCustomDateEntry[]
  */
 export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
   const data = await sendGraphQL(`
     query ListCustomDates($schedulerId: ID!, $offset: Int, $limit: Int) {
-      listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit)
+      listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit) {
+        id
+        scheduledDate
+        morningAllowed
+        afternoonAllowed
+      }
     }
   `, { schedulerId, offset, limit });
   return data.listCustomDates;
@@ -147,6 +152,33 @@ export const getScheduleAvailability = async (schedulerId, date) => {
     }
   `, { schedulerId, date });
   return data.listAppointmentSchedule;
+};
+
+/**
+ * Get month availability for a scheduler (batch read-only).
+ * Returns existing ScheduleDateEntity records with booking counts.
+ * @param {string} schedulerId
+ * @param {string} startDate - YYYY-MM-DD
+ * @param {string} endDate - YYYY-MM-DD
+ * @returns {Promise<Array>} ScheduleDateEntity[]
+ */
+export const getMonthAvailability = async (schedulerId, startDate, endDate) => {
+  const data = await sendGraphQL(`
+    query ListMonthAvailability($schedulerId: ID!, $startDate: Date!, $endDate: Date!) {
+      listMonthAvailability(schedulerId: $schedulerId, startDate: $startDate, endDate: $endDate) {
+        id
+        slotId
+        morningAllowed
+        morningRegistered
+        morningPending
+        afternoonAllowed
+        afternoonRegistered
+        afternoonPending
+        scheduledDate
+      }
+    }
+  `, { schedulerId, startDate, endDate });
+  return data.listMonthAvailability;
 };
 
 // ── Mutations ────────────────────────────────────────────────────────────────

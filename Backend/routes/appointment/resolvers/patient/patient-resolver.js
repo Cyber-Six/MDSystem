@@ -25,6 +25,10 @@ const Query = {
     return await Wrapper.Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
   },
 
+  listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
+    return await Wrapper.Query._listMonthAvailability(_, { schedulerId, startDate, endDate }, { user, res });
+  },
+
   listAppointmentRequirements: async (_, { schedulerId, offset, limit }, { user, res }) => {
     return await Wrapper.Query._listAllAppointmentRequirements(_, { schedulerId, offset, limit, isActive: true }, { user, res });
   },
