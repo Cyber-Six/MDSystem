@@ -255,6 +255,7 @@ export function StaffNotificationProvider({ children }) {
       try {
         await service.connect();
       } catch {
+        console.error('[NOTIFICATION] Socket connection failed');
         return;
       }
 
@@ -263,6 +264,7 @@ export function StaffNotificationProvider({ children }) {
         return;
       }
 
+      console.log('[NOTIFICATION] Socket connected successfully');
       socketRef.current = service;
 
       // Join the staff member's branch room so they receive branch-scoped events
@@ -280,9 +282,18 @@ export function StaffNotificationProvider({ children }) {
       });
 
       // Re-fetch inventory alerts immediately when any stock change occurs
-      service.on('inventory:stock-changed', () => {
-        if (!isMounted) return;
-        if (fetchInventoryRef.current) fetchInventoryRef.current();
+      service.on('inventory:stock-changed', (data) => {
+        console.log('[NOTIFICATION] Received inventory:stock-changed event:', data);
+        if (!isMounted) {
+          console.warn('[NOTIFICATION] Not mounted, ignoring event');
+          return;
+        }
+        if (fetchInventoryRef.current) {
+          console.log('[NOTIFICATION] Triggering inventory re-fetch...');
+          fetchInventoryRef.current();
+        } else {
+          console.warn('[NOTIFICATION] fetchInventoryRef is null!');
+        }
       });
     };
 
@@ -320,6 +331,7 @@ export function StaffNotificationProvider({ children }) {
 
     const fetchAndComputeAlerts = async () => {
       try {
+        console.log('[INVENTORY_ALERTS] Fetching items and batches...');
         const items = await fetchMedicalItems(null, 0, 500);
         const batchResults = await Promise.all(
           items.map((item) => {
@@ -353,6 +365,7 @@ export function StaffNotificationProvider({ children }) {
         const enrichedItems = computeItemStats(items, flatBatches);
         if (!isMounted) return;
         const alerts = computeInventoryAlerts(enrichedItems, flatBatches);
+        console.log('[INVENTORY_ALERTS] Computed alerts:', alerts);
         setInventoryAlerts(alerts);
         // Prune seen IDs that no longer exist so the set doesn't grow unbounded
         const currentIds = new Set(alerts.map((a) => a.id));
