@@ -401,19 +401,19 @@ async function updateConsentInSession(token, purpose) {
   await client.hSet(key, {
     data_consent: "true",
     data_consent_version: process.env.DATA_CONSENT_VERSION,
-    data_consent_timestamp: Date.now().toString()
-    });
-  
+    data_consent_timestamp: Date.now().toString(),
+  });
+
   const userId = await getUserIdFromVerificationSession(token, purpose);
   if (userId) {
     await query.updateUserConsent(userId, {
       data_consent: true,
       data_consent_version: process.env.DATA_CONSENT_VERSION,
-      data_consent_agreed: new Date().toISOString()
-      });
-    } 
-  return true;
+      data_consent_agreed: new Date().toISOString(),
+    });
   }
+  return true;
+}
   
 async function update2FAInSession(token, email, purpose) {
   if (!client) throw new Error("Redis client not initialized");
@@ -444,9 +444,9 @@ async function deleteVerificationSession(token, purpose) {
 
   const key = `verify:${purpose}:${token}`;
   await client.del(key);
-  
+
   return true;
-  }
+}
 
 
 async function getUserIdFromVerificationSession(token, purpose) {

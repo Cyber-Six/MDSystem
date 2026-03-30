@@ -29,6 +29,7 @@ import {
   updateDateIdentity,
   listWhitelist,
   getScheduleAvailability,
+  getMonthAvailability,
   listCustomDates,
   setCustomDates as setCustomDatesAPI,
   unsetCustomDates as unsetCustomDatesAPI,
@@ -90,6 +91,10 @@ const AvailabilityManager = () => {
     useCustomSlots: false,
   });
 
+  // Month availability state (real booking data for calendar)
+  const [monthAvailability, setMonthAvailability] = useState({});
+  const [currentMonthRange, setCurrentMonthRange] = useState(null); // { startDate, endDate }
+
   // Derive slot defaults from the active scheduler (or editForm for immediate reflection)
   const slotDefaults = editForm
     ? { morning: editForm.morningAllowed, afternoon: editForm.afternoonAllowed }
@@ -148,6 +153,32 @@ const AvailabilityManager = () => {
     }
   };
 
+  // Load month availability (real booking data) for the calendar
+  const loadMonthAvailability = async (schedulerId, startDate, endDate) => {
+    if (!schedulerId || !startDate || !endDate) return;
+    try {
+      const data = await getMonthAvailability(schedulerId, startDate, endDate);
+      const lookup = {};
+      for (const entry of (data || [])) {
+        const dateStr = typeof entry.scheduledDate === 'string'
+          ? entry.scheduledDate.split('T')[0]
+          : entry.scheduledDate;
+        lookup[dateStr] = entry;
+      }
+      setMonthAvailability(lookup);
+    } catch (err) {
+      console.error('Failed to load month availability:', err);
+    }
+  };
+
+  // Handle calendar month change
+  const handleMonthChange = useCallback((startDate, endDate) => {
+    setCurrentMonthRange({ startDate, endDate });
+    if (activeScheduler?.id) {
+      loadMonthAvailability(activeScheduler.id, startDate, endDate);
+    }
+  }, [activeScheduler?.id]);
+
   // Load whitelist count for display
   const loadWhitelistCount = async (schedulerId) => {
     try {
@@ -172,6 +203,10 @@ const AvailabilityManager = () => {
       try {
         const data = await getScheduleAvailability(activeScheduler.id, dateStr);
         setDayOverrideData(data);
+        // Refresh month availability since getScheduleAvailability may create a new ScheduleDateEntity
+        if (currentMonthRange) {
+          loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+        }
       } catch (err) {
         console.error('Failed to load day data:', err);
         setDayOverrideData(null);
@@ -214,6 +249,10 @@ const AvailabilityManager = () => {
       // Now load the day data
       const data = await getScheduleAvailability(activeScheduler.id, dateStr);
       setDayOverrideData(data);
+      // Refresh month availability
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+      }
     } catch (err) {
       setError(err.message || 'Failed to add custom date');
     }
@@ -227,6 +266,10 @@ const AvailabilityManager = () => {
       await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
       await loadCustomDates(activeScheduler.id);
       setDayOverrideData(null);
+      // Refresh month availability
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+      }
     } catch (err) {
       setError(err.message || 'Failed to remove custom date');
     }
@@ -238,6 +281,10 @@ const AvailabilityManager = () => {
     try {
       const updated = await updateDateIdentity(activeScheduler.id, selectedCalendarDate, input);
       setDayOverrideData(updated);
+      // Refresh month availability to update calendar view
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+      }
     } catch (err) {
       setError(err.message || 'Failed to update day settings');
       throw err;
@@ -256,6 +303,10 @@ const AvailabilityManager = () => {
       if (dateStr === selectedCalendarDate) {
         const data = await getScheduleAvailability(activeScheduler.id, dateStr);
         setDayOverrideData(data);
+      }
+      // Refresh month availability to update calendar view
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
       }
     } catch (err) {
       setError(err.message || 'Failed to update session limit');
@@ -720,6 +771,8 @@ const AvailabilityManager = () => {
                   editForm={editForm}
                   customDates={customDates}
                   onEditSessionLimit={handleEditSessionLimit}
+                  monthAvailability={monthAvailability}
+                  onMonthChange={handleMonthChange}
                   allowSelectClosed={true}
                 />
               ) : (

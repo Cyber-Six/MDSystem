@@ -85,6 +85,14 @@ const Query = {
     return await Wrapper.Query._listAppointmentSchedule(_, { schedulerId, date, skipTimeframe: true }, { user, res });
   },
 
+  listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
+    if (!permitted) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._listMonthAvailability(_, { schedulerId, startDate, endDate }, { user, res });
+  },
+
   listSchedulerWhitelist: async (_, { schedulerId, offset, limit }, { user, res }) => {
     const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
     if (!permitted) {
