@@ -8,8 +8,28 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
     onChange({ ...data, [field]: value });
   };
 
-  // Strip any character that is not a digit, +, -, space, or parenthesis
-  const filterPhone = (val) => val.replace(/[^\d+\-\s()]/g, '');
+  const [phoneWarnings, setPhoneWarnings] = React.useState({});
+
+  // Strip non-phone chars and enforce a maximum of 11 digits
+  const handlePhone = (fieldKey, rawVal) => {
+    const filtered = rawVal.replace(/[^\d+\-\s()]/g, '');
+    const digits = filtered.replace(/\D/g, '');
+    if (digits.length > 11) {
+      let digitCount = 0;
+      let result = '';
+      for (const char of filtered) {
+        if (/\d/.test(char)) {
+          if (digitCount >= 11) break;
+          digitCount++;
+        }
+        result += char;
+      }
+      setPhoneWarnings(prev => ({ ...prev, [fieldKey]: true }));
+      return result;
+    }
+    setPhoneWarnings(prev => ({ ...prev, [fieldKey]: false }));
+    return filtered;
+  };
   // Strip any character that is not alphanumeric or a dash
   const filterEmployeeId = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
 
@@ -158,9 +178,9 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             type="tel"
             required
             value={data.contactNumber || ''}
-            onChange={(e) => handleChange('contactNumber', filterPhone(e.target.value))}
+            onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
             placeholder="+63 XXX XXX XXXX"
-            error={fieldErrors.contactNumber}
+            error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
           />
           <Input
             label="Active Email Address"
@@ -290,9 +310,9 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               type="tel"
               required
               value={data.emergencyContacts[0]?.contactNumber || ''}
-              onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', filterPhone(e.target.value))}
+              onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', handlePhone('ec0', e.target.value))}
               placeholder="+63 XXX XXX XXXX"
-              error={fieldErrors.emergencyContact1ContactNumber}
+              error={phoneWarnings.ec0 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact1ContactNumber}
             />
           </div>
         </div>
@@ -329,9 +349,9 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               label="Contact Number of the Person During Emergency"
               type="tel"
               value={data.emergencyContacts[1]?.contactNumber || ''}
-              onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', filterPhone(e.target.value))}
+              onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', handlePhone('ec1', e.target.value))}
               placeholder="+63 XXX XXX XXXX"
-              error={fieldErrors.emergencyContact2ContactNumber}
+              error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact2ContactNumber}
             />
           </div>
         </div>

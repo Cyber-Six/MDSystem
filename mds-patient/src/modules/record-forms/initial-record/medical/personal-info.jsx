@@ -8,8 +8,28 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
     onChange({ ...data, [field]: value });
   };
 
-  // Strip any character that is not a digit, +, -, space, or parenthesis
-  const filterPhone = (val) => val.replace(/[^\d+\-\s()]/g, '');
+  const [phoneWarnings, setPhoneWarnings] = React.useState({});
+
+  // Strip non-phone chars and enforce a maximum of 11 digits
+  const handlePhone = (fieldKey, rawVal) => {
+    const filtered = rawVal.replace(/[^\d+\-\s()]/g, '');
+    const digits = filtered.replace(/\D/g, '');
+    if (digits.length > 11) {
+      let digitCount = 0;
+      let result = '';
+      for (const char of filtered) {
+        if (/\d/.test(char)) {
+          if (digitCount >= 11) break;
+          digitCount++;
+        }
+        result += char;
+      }
+      setPhoneWarnings(prev => ({ ...prev, [fieldKey]: true }));
+      return result;
+    }
+    setPhoneWarnings(prev => ({ ...prev, [fieldKey]: false }));
+    return filtered;
+  };
   // Strip any character that is not alphanumeric or a dash
   const filterStudentNumber = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
 
@@ -177,9 +197,9 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             type="tel"
             required
             value={data.contactNumber || ''}
-            onChange={(e) => handleChange('contactNumber', filterPhone(e.target.value))}
+            onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
             placeholder="+63 XXX XXX XXXX"
-            error={fieldErrors.contactNumber}
+            error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
           />
         </div>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -342,9 +362,9 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 type="tel"
                 required
                 value={data.emergencyContacts[index]?.contactNumber || ''}
-                onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', filterPhone(e.target.value))}
+                onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', handlePhone(`ec${index}`, e.target.value))}
                 placeholder="+63 XXX XXX XXXX"
-                error={index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber}
+                error={phoneWarnings[`ec${index}`] ? 'Contact number cannot exceed 11 digits.' : (index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber)}
               />
             </div>
             <div className="mt-4">

@@ -40,8 +40,28 @@ const PersonalInfoStep = ({ formData, onChange }) => {
     onChange({ ...formData, [field]: value });
   };
 
-  // Strip any character that is not a digit, +, -, space, or parenthesis
-  const filterPhone = (val) => val.replace(/[^\d+\-\s()]/g, '');
+  const [phoneWarnings, setPhoneWarnings] = React.useState({});
+
+  // Strip non-phone chars and enforce a maximum of 11 digits
+  const handlePhone = (fieldKey, rawVal) => {
+    const filtered = rawVal.replace(/[^\d+\-\s()]/g, '');
+    const digits = filtered.replace(/\D/g, '');
+    if (digits.length > 11) {
+      let digitCount = 0;
+      let result = '';
+      for (const char of filtered) {
+        if (/\d/.test(char)) {
+          if (digitCount >= 11) break;
+          digitCount++;
+        }
+        result += char;
+      }
+      setPhoneWarnings(prev => ({ ...prev, [fieldKey]: true }));
+      return result;
+    }
+    setPhoneWarnings(prev => ({ ...prev, [fieldKey]: false }));
+    return filtered;
+  };
 
   return (
     <div className="space-y-6">
@@ -123,7 +143,8 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               placeholder="Contact Number"
               value={formData.emergencyContact1Number || ''}
-              onChange={(e) => handleInputChange('emergencyContact1Number', filterPhone(e.target.value))}
+              onChange={(e) => handleInputChange('emergencyContact1Number', handlePhone('ec1', e.target.value))}
+              error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : undefined}
             />
           </div>
         </div>
@@ -152,7 +173,8 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               type="tel"
               placeholder="Contact Number"
               value={formData.emergencyContact2Number || ''}
-              onChange={(e) => handleInputChange('emergencyContact2Number', filterPhone(e.target.value))}
+              onChange={(e) => handleInputChange('emergencyContact2Number', handlePhone('ec2', e.target.value))}
+              error={phoneWarnings.ec2 ? 'Contact number cannot exceed 11 digits.' : undefined}
             />
           </div>
         </div>
