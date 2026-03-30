@@ -23,23 +23,35 @@ export function useInventoryNotifications(enrichedItems = [], batches = []) {
     const result = [];
     const now = new Date();
 
-    // ── Low-stock notifications ─────────────────────────────────────────
+    // ── Low-stock notifications (per branch) ────────────────────────────
     enrichedItems.forEach((item) => {
       if (!item.isLowStock) return;
 
       const category = item.category?.toLowerCase();
-      result.push({
-        id: `low-stock-${item.id}`,
-        notificationType: 'low-stock',
-        itemType: category === 'medicine' ? 'Medicine' : 'Medical Supply',
-        itemId: item.id,
-        batchId: null,
-        itemName: item.item_name,
-        detail: `${item.totalStock} unit${item.totalStock === 1 ? '' : 's'} remaining (reorder at ≤ ${item.reorder_level})`,
-        currentQuantity: item.totalStock,
-        reorderLevel: item.reorder_level,
-        expiryDate: null,
-        daysLeft: null,
+      const lowBranches = item.lowStockBranches || [];
+
+      lowBranches.forEach(({ location, stock }) => {
+        // Find all batches for this item in this location
+        const batchesForThisBranch = (batches || []).filter(
+          (b) => String(b.medicalItemId) === String(item.id) && b.location === location
+        );
+        const batchNumbers = batchesForThisBranch.map((b) => b.batchNumber).filter(Boolean);
+        const batchLabel = batchNumbers.length > 0 ? ` · Batch ${batchNumbers.join(', ')}` : '';
+
+        result.push({
+          id: `low-stock-${item.id}-${location}`,
+          notificationType: 'low-stock',
+          itemType: category === 'medicine' ? 'Medicine' : 'Medical Supply',
+          itemId: item.id,
+          batchId: null,
+          itemName: item.item_name,
+          location,
+          detail: `${stock} unit${stock === 1 ? '' : 's'} remaining in ${location}${batchLabel}`,
+          currentQuantity: stock,
+          reorderLevel: item.reorder_level,
+          expiryDate: null,
+          daysLeft: null,
+        });
       });
     });
 
