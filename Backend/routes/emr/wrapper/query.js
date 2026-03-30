@@ -839,6 +839,82 @@ const Query = {
     return result.rows;
   },
 
+  _getTicketVitalSignsId: async (_, { ticketId }, { user, res }) => {
+    if (!user?.id) {
+      throwGraphQLError(res).status(401).message("Unauthorized").throw();
+    }
+
+    const query = `
+      SELECT pul.id, pul."vitalSignsId", pul.created_at
+      FROM "patientUpdateLog" pul
+      WHERE pul.id = $1
+      LIMIT 1;
+    `;
+
+    const result = await db.query(query, [ticketId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    logger.debug("Ticket VitalSignsId Query Result:", result.rows[0]);
+    return result.rows[0];
+  },
+
+  _getTicketDentalRecordId: async (_, { ticketId }, { user, res }) => {
+    if (!user?.id) {
+      throwGraphQLError(res).status(401).message("Unauthorized").throw();
+    }
+
+    const query = `
+      SELECT pul.id, pul."dentalRecordId", pul.created_at
+      FROM "patientUpdateLog" pul
+      WHERE pul.id = $1
+      LIMIT 1;
+    `;
+
+    const result = await db.query(query, [ticketId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    logger.debug("Ticket DentalRecordId Query Result:", result.rows[0]);
+    return result.rows[0];
+  },
+
+  _getUserTicketIds: async (_, { userId, from=DEFAULT_DATE_STRING, offset, limit, statuses }, { user, res }) => {
+    if (!user?.id) {
+      throwGraphQLError(res).status(401).message("Unauthorized").throw();
+    }
+
+    const query = `
+      SELECT
+        pul.id,
+        pul."vitalSignsId",
+        pul."dentalRecordId",
+        pul.status,
+        pul.scope,
+        pul.created_at
+      FROM "patientUpdateLog" pul
+      WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
+        (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
+      ORDER BY pul.created_at DESC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [
+      userId,
+      limit || 10,
+      offset || 0,
+      new Date(from),
+      statuses || null
+    ]);
+
+    logger.debug("User Ticket IDs Query Result:", result.rows);
+    return result.rows;
+  },
+
   // ─── Patient Search ───────────────────────────────────────────────────────
   _getPatientBasicInfo: async (_, { userId }, { user, res }) => {
     const query = `

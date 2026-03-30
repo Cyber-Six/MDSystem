@@ -485,7 +485,7 @@ const Mutation = {
 
   // Link existing DentalRecord to update ticket
   linkDentalRecordToTicket: async (_, { userId, dentalRecordId }, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_set_dental_record, userId);
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to link DentalRecord to ticket`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

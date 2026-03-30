@@ -692,6 +692,27 @@ type UpdateTicket {
   created_at: Date
 }
 
+type TicketVitalSignsId {
+  id: ID!
+  vitalSignsId: ID
+  created_at: Date
+}
+
+type TicketDentalRecordId {
+  id: ID!
+  dentalRecordId: ID
+  created_at: Date
+}
+
+type UserTicketIds {
+  id: ID!
+  vitalSignsId: ID
+  dentalRecordId: ID
+  status: UpdateStatus!
+  scope: UpdateScope
+  created_at: Date
+}
+
 ## -------- Patient Search -------- ##
 
 type PatientSearchResult {
@@ -798,6 +819,12 @@ type Query {
 
   getVisualAcuityProfile: VisualAcuityProfile
   getUserVisualAcuityProfile(userId: ID!, from: Date, offset: Int, limit: Int): [VisualAcuityProfile!]
+  
+
+  # Ticket IDs queries
+  getTicketVitalSignsId(ticketId: ID!): TicketVitalSignsId
+  getTicketDentalRecordId(ticketId: ID!): TicketDentalRecordId
+  getUserTicketIds(userId: ID!, from: Date, offset: Int, limit: Int): [UserTicketIds!]!
   
   # miscellaneous
 
