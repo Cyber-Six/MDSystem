@@ -919,6 +919,7 @@ const Query = {
         sp.year,
         ep.department,
         ep.role,
+        uc.credentials_status,
         latest.id           AS latest_ticket_id,
         latest.status       AS latest_status,
         latest.scope        AS latest_scope,
