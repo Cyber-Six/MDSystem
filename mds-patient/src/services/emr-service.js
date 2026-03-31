@@ -1578,7 +1578,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     vaper:                     ls.vapeUser ? 'yes' : 'no',
     vapeType:                  ls.vapeType || '',
     vapeFrequency:             ls.vapeFrequency || '',
-    eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes'),
+    eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes') || !!(va.acuity?.right_eye || va.acuity?.left_eye),
     contactLenses:             vaNotesStr.includes('Contact Lenses: Yes'),
     gradeOD:                   va.acuity?.right_eye    || '',
     gradeOS:                   va.acuity?.left_eye     || '',
@@ -1593,6 +1593,9 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const appliances = oaProfile.appliances || [];
   const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, { checked: true, arch: a.arch || '' }]));
 
+  const dpProcedures = emr?.dentalProcedureProfile?.procedures || [];
+  const selectedDentalProcedures = Object.fromEntries(dpProcedures.map(p => [p.procedureTypeId, true]));
+
   const dentalHistory = {
     // seenByDentist=true means patient has been seen before → firstTimeDentist='no'
     // seenByDentist=false means patient has NEVER been seen → firstTimeDentist='yes'
@@ -1605,6 +1608,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     hasIntraOralAppliance: appliances.length > 0 ? 'yes' : 'no',
     intraOralAppliances:   applianceMap,
     applianceLocation:     appliances[0]?.arch || '',
+    selectedDentalProcedures,
     toothExtraction:       '',   // never persisted to backend
     dentalFilling:         '',   // never persisted to backend
     upperTeethPhoto:       null, // files must be re-uploaded
@@ -1654,6 +1658,10 @@ export const fetchRevisionPrefill = async () => {
           first_name middle_name last_name suffix
           date_of_birth sex civil_status nationality religion
           contactNumber present_address province_address
+        }
+        branchId: getPersonalRecord {
+          branch
+          identifier
         }
       }`,
       {},
@@ -1707,6 +1715,12 @@ export const fetchRevisionPrefill = async () => {
         dentalHistory: getDentalHistory {
           seenByDentist lastDentalCleaning lastVisitDate
         }
+        dentalProcedureProfile: getDentalProcedureProfile {
+          procedures { procedureTypeId }
+        }
+        dentalPhotoRecord: getDentalPhotoRecord {
+          upperTeeth lowerTeeth
+        }
         oralAppliance: getOralApplianceProfile {
           appliances { tagId arch }
         }
@@ -1740,8 +1754,71 @@ export const fetchRevisionPrefill = async () => {
   }
 
   const mapped = mapRevisionDataToFormData(profileData, emrData);
+
+  // Fetch previously submitted dental photos.
+  // Store them as { file, preview } so uploadMediaFile() can re-stage the photo
+  // via the normal flow — passing a permanent UUID directly to createDentalPhotoRecord
+  // would fail because the backend expects a staged file UUID.
+  const dentalPhotoRecord = emrData?.dentalPhotoRecord;
+  if (dentalPhotoRecord?.upperTeeth) {
+    try {
+      const result = await fetchDentalPhotoAsBlob(dentalPhotoRecord.upperTeeth, 'upper-teeth');
+      if (result) {
+        mapped.dentalHistory.upperTeethPhoto = {
+          file: result.file,
+          preview: result.preview,
+          name: 'Upper Teeth (previous submission)',
+        };
+      }
+    } catch (err) {
+      console.warn('[EMR Service] Could not fetch upper teeth photo preview:', err.message);
+    }
+  }
+  if (dentalPhotoRecord?.lowerTeeth) {
+    try {
+      const result = await fetchDentalPhotoAsBlob(dentalPhotoRecord.lowerTeeth, 'lower-teeth');
+      if (result) {
+        mapped.dentalHistory.lowerTeethPhoto = {
+          file: result.file,
+          preview: result.preview,
+          name: 'Lower Teeth (previous submission)',
+        };
+      }
+    } catch (err) {
+      console.warn('[EMR Service] Could not fetch lower teeth photo preview:', err.message);
+    }
+  }
+
   console.log('[EMR Service] Revision pre-fill data mapped successfully');
   return mapped;
+};
+
+/**
+ * Fetch a dental photo from the backend and return a File + preview URL.
+ * The File is used by uploadMediaFile() to re-stage the photo so the normal
+ * stage → createDentalPhotoRecord flow works correctly on revision submission.
+ *
+ * @param {string} fileId - UUID from DentalPhotoRecord.upperTeeth / lowerTeeth
+ * @param {string} label  - Human-readable label used as the file name
+ * @returns {Promise<{file: File, preview: string}|null>}
+ */
+const fetchDentalPhotoAsBlob = async (fileId, label = 'teeth') => {
+  if (!fileId) return null;
+  try {
+    const response = await axiosRequest({
+      method: 'GET',
+      url: `/media/record/dentalPhoto/${fileId}`,
+      responseType: 'blob',
+    });
+    const blob = response.data;
+    const ext = blob.type?.split('/')[1] || 'jpg';
+    const file = new File([blob], `${label}.${ext}`, { type: blob.type || 'image/jpeg' });
+    const preview = URL.createObjectURL(blob);
+    return { file, preview };
+  } catch (err) {
+    console.warn('[EMR Service] fetchDentalPhotoAsBlob failed:', err.message);
+    return null;
+  }
 };
 
 export const getMyBranchIdentifier = async () => {
