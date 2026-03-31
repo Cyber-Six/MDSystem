@@ -23,7 +23,14 @@ const { v4: uuidv4 } = require('uuid');
  *   }
  * }>}
  */
-async function notifyPatients(staffUserId, message) {
+/**
+ * @param {string} staffUserId
+ * @param {string} message
+ * @param {Array<string|number>|null} [recipientIds] - Optional. If provided, notify only these patient IDs.
+ *   Each ID is still validated against the staff member's branch/location — out-of-scope patients are skipped.
+ *   If null/empty, all patients in the staff's branch/location are notified.
+ */
+async function notifyPatients(staffUserId, message, recipientIds = null) {
   if (!message || typeof message !== 'string' || !message.trim()) {
     throw new Error('Message is required and must be a non-empty string');
   }
@@ -31,54 +38,55 @@ async function notifyPatients(staffUserId, message) {
   const notificationId = `notif_staff_${uuidv4()}`;
 
   try {
-    // Get staff member's branch and location
+    // Get staff member's branch scope from MedicalPersonnel
     const staffQuery = `
-      SELECT uc.id, up.branch, up.location, up.status
-      FROM "UserCredentials" uc
-      INNER JOIN "UsersPersonal" up ON uc.id = up.id
-      WHERE uc.id = $1
+      SELECT mp.id, mp.designation AS branch
+      FROM "MedicalPersonnel" mp
+      WHERE mp.id = $1 AND mp.is_active = true
     `;
 
     const staffResult = await db.query(staffQuery, [staffUserId]);
     const staffMember = staffResult.rows[0];
 
     if (!staffMember) {
-      throw new Error(`Staff member not found`);
-    }
-
-    // Verify the user is actually staff (Medical role)
-    if (staffMember.status !== 'Medical') {
-      throw new Error(`User is not a staff member`);
+      throw new Error(`Staff member not found or not active`);
     }
 
     const staffBranch = staffMember.branch;
-    const staffLocation = staffMember.location;
 
-    // FIXED: Validate that branch and location are not null
-    if (!staffBranch || !staffLocation) {
-      throw new Error(`Staff member branch/location not configured`);
+    logger.debug(`[NOTIFY_PATIENTS] Staff ${staffUserId} branch=${staffBranch}`);
+
+    // Determine which patients to notify
+    let validPatients;
+    if (recipientIds && recipientIds.length > 0) {
+      // Notify specific patients — validate they exist in the Patients table
+      const filteredQuery = `
+        SELECT DISTINCT uc.id as "userId", up.branch
+        FROM "UserCredentials" uc
+        INNER JOIN "Patients" p ON uc.id = p.id
+        INNER JOIN "UsersPersonal" up ON uc.id = up.id
+        WHERE uc.id::text = ANY($1)
+        ORDER BY uc.id
+      `;
+      const filteredResult = await db.query(filteredQuery, [recipientIds.map(String)]);
+      validPatients = filteredResult.rows.filter(patient =>
+        ValidateUserBranchbyUserBranch(staffBranch, patient.branch)
+      );
+      logger.debug(`[NOTIFY_PATIENTS] Filtered to ${validPatients.length} valid patients from ${recipientIds.length} requested IDs`);
+    } else {
+      // Get all patients, then filter by branch in JS via ValidateUserBranchbyUserBranch
+      const patientQuery = `
+        SELECT DISTINCT uc.id as "userId", up.branch
+        FROM "UserCredentials" uc
+        INNER JOIN "Patients" p ON uc.id = p.id
+        INNER JOIN "UsersPersonal" up ON uc.id = up.id
+        ORDER BY uc.id
+      `;
+      const patientResult = await db.query(patientQuery);
+      validPatients = patientResult.rows.filter(patient =>
+        ValidateUserBranchbyUserBranch(staffBranch, patient.branch)
+      );
     }
-
-    logger.debug(`[NOTIFY_PATIENTS] Staff ${staffUserId} branch=${staffBranch}, location=${staffLocation}`);
-
-    // Get all patients under the same location
-    // FIXED: Removed "OR up.location IS NULL" to prevent unscoped notifications
-    const patientQuery = `
-      SELECT DISTINCT uc.id as "userId", up.branch
-      FROM "UserCredentials" uc
-      INNER JOIN "UsersPersonal" up ON uc.id = up.id
-      WHERE up.status != 'Medical'
-        AND up.location = $1
-      ORDER BY uc.id
-    `;
-
-    const patientResult = await db.query(patientQuery, [staffLocation]);
-    const allPatients = patientResult.rows;
-
-    // Filter patients by branch compatibility using ValidateUserBranchbyUserBranch
-    const validPatients = allPatients.filter(patient =>
-      ValidateUserBranchbyUserBranch(staffBranch, patient.branch)
-    );
 
     if (!validPatients || validPatients.length === 0) {
       logger.info(`[NOTIFY_PATIENTS] No patients found for staff ${staffUserId}`);
@@ -99,8 +107,7 @@ async function notifyPatients(staffUserId, message) {
       message: message.trim(),
       timestamp: new Date().toISOString(),
       from: staffUserId,
-      staffBranch: staffBranch,
-      staffLocation: staffLocation
+      staffBranch: staffBranch
     };
 
     logger.info(`[NOTIFY_PATIENTS] Sending notification ${notificationId} to ${patientIds.length} patients from staff:${staffUserId}`);

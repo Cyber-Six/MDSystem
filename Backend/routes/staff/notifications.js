@@ -61,7 +61,7 @@ router.post('/notify-staffs', jwtProtect('medical'), async (req, res) => {
       });
     }
 
-    const { message } = req.body;
+    const { message, recipientIds } = req.body;
 
     if (!message) {
       return res.status(400).json({
@@ -70,9 +70,20 @@ router.post('/notify-staffs', jwtProtect('medical'), async (req, res) => {
       });
     }
 
-    logger.info(`[NOTIFY_STAFFS_ROUTE] Admin ${adminUserId} sending notification to all staff`);
+    // Validate recipientIds if provided
+    if (recipientIds !== undefined) {
+      if (!Array.isArray(recipientIds) || recipientIds.some(id => typeof id !== 'string' && typeof id !== 'number')) {
+        return res.status(400).json({
+          error: 'VALIDATION_ERROR',
+          message: 'recipientIds must be an array of IDs'
+        });
+      }
+    }
 
-    const results = await notifyStaffs(adminUserId, message);
+    const targetCount = recipientIds?.length;
+    logger.info(`[NOTIFY_STAFFS_ROUTE] Admin ${adminUserId} sending notification to ${targetCount ? targetCount + ' specific staff' : 'all staff'}`);
+
+    const results = await notifyStaffs(adminUserId, message, recipientIds?.length ? recipientIds : null);
 
     return res.status(200).json({
       success: true,
@@ -124,7 +135,7 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
       });
     }
 
-    const { message } = req.body;
+    const { message, recipientIds } = req.body;
 
     if (!message) {
       return res.status(400).json({
@@ -133,9 +144,20 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
       });
     }
 
-    logger.info(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} sending notification to patients`);
+    // Validate recipientIds if provided
+    if (recipientIds !== undefined) {
+      if (!Array.isArray(recipientIds) || recipientIds.some(id => typeof id !== 'string' && typeof id !== 'number')) {
+        return res.status(400).json({
+          error: 'VALIDATION_ERROR',
+          message: 'recipientIds must be an array of IDs'
+        });
+      }
+    }
 
-    const results = await notifyPatients(staffUserId, message);
+    const targetCount = recipientIds?.length;
+    logger.info(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} sending notification to ${targetCount ? targetCount + ' specific patients' : 'all patients in branch'}`);
+
+    const results = await notifyPatients(staffUserId, message, recipientIds?.length ? recipientIds : null);
 
     return res.status(200).json({
       success: true,

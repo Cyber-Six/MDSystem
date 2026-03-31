@@ -15,9 +15,11 @@
     "start:patient": "node Backend/server.js",
     "start:staff": "node Backend/staff.js"
   },
-  "devDependencies": {},
   "optionalDependencies": {
     "@rollup/rollup-linux-arm64-gnu": "4.59.0",
     "@rollup/rollup-linux-arm64-musl": "4.59.0"
+  },
+  "dependencies": {
+    "recharts": "^3.8.1"
   }
 }
