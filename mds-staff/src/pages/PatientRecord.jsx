@@ -21,9 +21,9 @@ const GQL_UPDATE_TICKET = `
 `;
 
 const GQL_VITAL_SIGNS = `
-  query GetVitals($userId: ID!) {
-    getUserVitalSigns(userId: $userId, limit: 1) {
-      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at status
+  query GetVitals($patientId: ID!) {
+    getPatientVitalSigns(patientId: $patientId, limit: 1) {
+      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
     }
   }
 `;
@@ -138,9 +138,6 @@ const GQL_FULL_RECORD = `
       latest_ticket_id latest_status latest_scope latest_updated_at
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
-    getUserVitalSigns(userId: $userId, limit: 1) {
-      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at status
-    }
     getUserMedicalHistory(userId: $userId, limit: 1) {
       id notes status created_at
       conditions { id conditionId description diagnosedDate relationship }
@@ -237,17 +234,21 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
     setIsLoading(true);
     setLoadError(null);
 
-    axiosRequest
-      .post('/emr/medical', { query: GQL_FULL_RECORD, variables: { userId: patientId } })
-      .then(({ data }) => {
+    // Fetch EMR data and VitalSigns in parallel (VitalSigns moved to /staff/emr)
+    const emrPromise = axiosRequest.post('/emr/medical', { query: GQL_FULL_RECORD, variables: { userId: patientId } });
+    const vitalsPromise = axiosRequest.post('/staff/emr', { query: GQL_VITAL_SIGNS, variables: { patientId } })
+      .catch(err => { console.warn('[PatientRecord] VitalSigns fetch failed:', err.message); return null; });
+
+    Promise.all([emrPromise, vitalsPromise])
+      .then(([emrRes, vitalsRes]) => {
         if (cancelled) return;
-        const d = data.data;
+        const d = emrRes.data.data;
         if (!d?.getPatientBasicInfo) {
-          throw new Error(data.errors?.[0]?.message || 'Patient not found');
+          throw new Error(emrRes.data.errors?.[0]?.message || 'Patient not found');
         }
         setBasicInfo(d.getPatientBasicInfo);
         setUpdateTicket(d.getUserUpdateTicket || null);
-        setVitalSigns(d.getUserVitalSigns?.[0] || null);
+        setVitalSigns(vitalsRes?.data?.data?.getPatientVitalSigns?.[0] || null);
         setMedicalHistory(d.getUserMedicalHistory?.[0] || null);
         setAllergyData(d.getUserAllergyProfile?.[0] || null);
         setImmunizationData(d.getUserImmunizationProfile?.[0] || null);
