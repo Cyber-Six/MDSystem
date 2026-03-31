@@ -8,7 +8,7 @@ import { tokenService } from '../packages-core-adapter';
 const DEFAULT_SETTINGS = {
   // ── Sound Settings ──
   soundEnabled: true,
-  soundVolume: 0.5,
+  soundVolume: 1,
   soundByModule: {
     healthChat: true,
     appointments: true,
