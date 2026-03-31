@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Info, File, Image, Film, Loader2 } from 'lucide-react';
 import { getFileUrl } from '../health-chat-service';
 import { useAuthFile } from '../hooks/use-auth-file';
-import MediaLightbox from '../../../components/modals/MediaLightbox';
+import MediaViewer from '../../../components/ui/MediaViewer';
 
 /**
  * Staff-side MessageBubble
@@ -52,7 +52,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
   // ── Text message ──
   return (
     <div
-      className={`flex gap-2 ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
+      className={`flex gap-2 w-full overflow-hidden ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
       style={{ marginBottom: isLastInGroup ? '5px' : '1px' }}
     >
       {/* Avatar — patient only, last in group; hidden spacer otherwise */}
@@ -141,7 +141,7 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
   return (
     <>
       <div
-        className={`flex gap-2 ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
+        className={`flex gap-2 w-full overflow-hidden ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
         style={{ marginBottom: isLastInGroup ? '5px' : '1px' }}
       >
         {isPatient && (
@@ -154,7 +154,7 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
         )}
 
         <div
-          className={`flex flex-col min-w-0 max-w-[88%] sm:max-w-[78%] lg:max-w-[70%] xl:max-w-[68%] ${isPatient ? 'items-start' : 'items-end'}`}
+          className={`flex flex-col min-w-0 max-w-[88%] sm:max-w-[80%] lg:max-w-[70%] xl:max-w-[60%] ${isPatient ? 'items-start' : 'items-end'}`}
         >
           {isFirstInGroup && (
             <span className="text-[10px] font-medium mb-0.5 px-1 text-neutral-400 dark:text-neutral-500">
@@ -162,83 +162,79 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
             </span>
           )}
 
-          {fileLoading ? (
-            <div
-              className="flex items-center justify-center rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
-              style={{ width: '280px', minHeight: '180px' }}
-            >
+          {/* Loading state */}
+          {fileLoading && (
+            <div className="flex items-center justify-center rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 w-full max-w-[280px] min-h-[100px]">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
-                <span className="text-xs text-neutral-400">Loading file…</span>
+                <span className="text-xs text-neutral-400">Loading…</span>
               </div>
             </div>
-          ) : fileError ? (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
-              <Icon className="w-4 h-4 text-neutral-400" />
+          )}
+
+          {/* Error state */}
+          {!fileLoading && fileError && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 w-full max-w-[280px]">
+              <Icon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
               <span className="text-xs text-neutral-400">Unable to load file</span>
             </div>
-          ) : isPatient ? (
-            // Patient file container
-            <div className="overflow-hidden rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-sm">
-              {isImage && (
-                <button
-                  onClick={() => setLightboxOpen(true)}
-                  className="cursor-zoom-in block"
-                >
-                  <img src={displayUrl} alt="Attachment" className="max-w-full max-h-52 object-contain block" loading="lazy" />
-                </button>
-              )}
-              {isPdf && (
-                <button
-                  onClick={() => setLightboxOpen(true)}
-                  className="flex items-center gap-2 px-4 py-3 text-xs font-medium hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300"
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  View PDF Document
-                </button>
-              )}
-              {isVideo && <video src={displayUrl} controls className="max-w-full max-h-52 block" preload="metadata" />}
-              {!isImage && !isPdf && !isVideo && (
-                <button
-                  onClick={() => setLightboxOpen(true)}
-                  className="flex items-center gap-2 px-4 py-3 text-xs hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300"
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  View Attachment
-                </button>
-              )}
-            </div>
-          ) : (
-            // Staff file container
-            <div className="overflow-hidden rounded-xl bg-neutral-800 dark:bg-neutral-900 shadow-sm">
-              {isImage && (
-                <button
-                  onClick={() => setLightboxOpen(true)}
-                  className="cursor-zoom-in block"
-                >
-                  <img src={displayUrl} alt="Attachment" className="max-w-full max-h-52 object-contain block" loading="lazy" />
-                </button>
-              )}
-              {isPdf && (
-                <button
-                  onClick={() => setLightboxOpen(true)}
-                  className="flex items-center gap-2 px-4 py-3 text-xs font-medium hover:opacity-80 transition-opacity text-neutral-100"
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  View PDF Document
-                </button>
-              )}
-              {isVideo && <video src={displayUrl} controls className="max-w-full max-h-52 block" preload="metadata" />}
-              {!isImage && !isPdf && !isVideo && (
-                <button
-                  onClick={() => setLightboxOpen(true)}
-                  className="flex items-center gap-2 px-4 py-3 text-xs hover:opacity-80 transition-opacity text-neutral-100"
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  View Attachment
-                </button>
-              )}
-            </div>
+          )}
+
+          {/* Loaded content */}
+          {!fileLoading && !fileError && (
+            isPatient ? (
+              // Patient file container
+              <div className="overflow-hidden rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-sm max-w-full">
+                {isImage && (
+                  <button onClick={() => setLightboxOpen(true)} className="cursor-zoom-in block max-w-full">
+                    <img src={displayUrl} alt="Attachment" className="max-w-full max-h-52 object-contain block" loading="lazy" />
+                  </button>
+                )}
+                {isPdf && (
+                  <button onClick={() => setLightboxOpen(true)} className="flex items-center gap-2 px-4 py-3 text-xs font-medium hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300 w-full">
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    View PDF Document
+                  </button>
+                )}
+                {isVideo && (
+                  <button onClick={() => setLightboxOpen(true)} className="cursor-pointer block w-full">
+                    <video src={displayUrl} className="max-w-full max-h-52 block pointer-events-none" preload="metadata" />
+                  </button>
+                )}
+                {!isImage && !isPdf && !isVideo && (
+                  <button onClick={() => setLightboxOpen(true)} className="flex items-center gap-2 px-4 py-3 text-xs hover:opacity-80 transition-opacity text-neutral-600 dark:text-neutral-300 w-full">
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    View Attachment
+                  </button>
+                )}
+              </div>
+            ) : (
+              // Staff file container
+              <div className="overflow-hidden rounded-xl bg-neutral-800 dark:bg-neutral-900 shadow-sm max-w-full">
+                {isImage && (
+                  <button onClick={() => setLightboxOpen(true)} className="cursor-zoom-in block max-w-full">
+                    <img src={displayUrl} alt="Attachment" className="max-w-full max-h-52 object-contain block" loading="lazy" />
+                  </button>
+                )}
+                {isPdf && (
+                  <button onClick={() => setLightboxOpen(true)} className="flex items-center gap-2 px-4 py-3 text-xs font-medium hover:opacity-80 transition-opacity text-neutral-100 w-full">
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    View PDF Document
+                  </button>
+                )}
+                {isVideo && (
+                  <button onClick={() => setLightboxOpen(true)} className="cursor-pointer block w-full">
+                    <video src={displayUrl} className="max-w-full max-h-52 block pointer-events-none" preload="metadata" />
+                  </button>
+                )}
+                {!isImage && !isPdf && !isVideo && (
+                  <button onClick={() => setLightboxOpen(true)} className="flex items-center gap-2 px-4 py-3 text-xs hover:opacity-80 transition-opacity text-neutral-100 w-full">
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    View Attachment
+                  </button>
+                )}
+              </div>
+            )
           )}
 
           {isLastInGroup && (
@@ -252,9 +248,9 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
         </div>
       </div>
 
-      {/* Media Lightbox */}
+      {/* Media Viewer */}
       {lightboxOpen && blobUrl && (
-        <MediaLightbox
+        <MediaViewer
           url={blobUrl}
           filename={message.filename}
           contentType={contentType}
