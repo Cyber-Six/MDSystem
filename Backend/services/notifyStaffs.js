@@ -20,7 +20,14 @@ const { v4: uuidv4 } = require('uuid');
  *   }
  * }>}
  */
-async function notifyStaffs(adminUserId, message) {
+/**
+ * @param {string} adminUserId
+ * @param {string} message
+ * @param {Array<string|number>|null} [recipientIds] - Optional. If provided, notify only these staff IDs.
+ *   The IDs are validated against the Medical status — any ID not belonging to a Medical user is silently skipped.
+ *   If null/empty, all staff are notified.
+ */
+async function notifyStaffs(adminUserId, message, recipientIds = null) {
   if (!message || typeof message !== 'string' || !message.trim()) {
     throw new Error('Message is required and must be a non-empty string');
   }
@@ -41,16 +48,32 @@ async function notifyStaffs(adminUserId, message) {
       throw new Error(`Admin user not found or not a staff member`);
     }
 
-    // Get all staff members (Medical role users)
-    const staffQuery = `
-      SELECT DISTINCT uc.id as "userId", up.email
-      FROM "UserCredentials" uc
-      INNER JOIN "UsersPersonal" up ON uc.id = up.id
-      WHERE up.status = 'Medical'
-    `;
-
-    const result = await db.query(staffQuery);
-    const staffMembers = result.rows;
+    // Determine which staff to notify
+    let staffMembers;
+    if (recipientIds && recipientIds.length > 0) {
+      // Notify specific staff — validate they are Medical users
+      // Cast id to text so the query is safe for both integer and UUID id columns
+      const filteredQuery = `
+        SELECT DISTINCT uc.id as "userId"
+        FROM "UserCredentials" uc
+        INNER JOIN "UsersPersonal" up ON uc.id = up.id
+        WHERE up.status = 'Medical'
+          AND uc.id::text = ANY($1)
+      `;
+      const filteredResult = await db.query(filteredQuery, [recipientIds.map(String)]);
+      staffMembers = filteredResult.rows;
+      logger.debug(`[NOTIFY_STAFFS] Filtered to ${staffMembers.length} valid staff from ${recipientIds.length} requested IDs`);
+    } else {
+      // Notify all staff members (Medical role users)
+      const staffQuery = `
+        SELECT DISTINCT uc.id as "userId"
+        FROM "UserCredentials" uc
+        INNER JOIN "UsersPersonal" up ON uc.id = up.id
+        WHERE up.status = 'Medical'
+      `;
+      const result = await db.query(staffQuery);
+      staffMembers = result.rows;
+    }
 
     if (!staffMembers || staffMembers.length === 0) {
       logger.info('[NOTIFY_STAFFS] No staff members found');
