@@ -66,6 +66,11 @@ export function HealthChatProvider({ children }) {
   const readTimestampsRef = useRef(readTimestamps);
   useEffect(() => { readTimestampsRef.current = readTimestamps; }, [readTimestamps]);
 
+  // Ref that always mirrors tickets state — used by addTicket to detect existing patients
+  // without capturing tickets as a closure dependency (would cause stale value issues)
+  const ticketsRef = useRef([]);
+  useEffect(() => { ticketsRef.current = tickets; }, [tickets]);
+
   // Typing indicators (patientId -> { userId, isTyping })
   const [typingUsers, setTypingUsers] = useState({});
 
@@ -333,6 +338,10 @@ export function HealthChatProvider({ children }) {
    */
   const markConversationAsRead = useCallback((patientId) => {
     const now = new Date().toISOString();
+    // Update the ref synchronously so any concurrent refreshMultipleFilters call
+    // (e.g. triggered by a socket event in the same tick) sees the latest read time
+    // rather than waiting for the useEffect to sync it after the next render.
+    readTimestampsRef.current = { ...readTimestampsRef.current, [patientId]: now };
     setReadTimestamps(prev => {
       const updated = { ...prev, [patientId]: now };
       localStorage.setItem('health-chat-read-timestamps', JSON.stringify(updated));
@@ -656,16 +665,51 @@ export function HealthChatProvider({ children }) {
       (selectedFilters.includes('active') && ticket.status === 'Ongoing') ||
       (selectedFilters.includes('archive') && ['Closed', 'Expired'].includes(ticket.status));
 
-    if (shouldShow) {
-      // Debounce: batch multiple rapid ticket events into a single refresh
-      if (addTicketDebounceRef.current) {
-        clearTimeout(addTicketDebounceRef.current);
-      }
-      addTicketDebounceRef.current = setTimeout(() => {
-        refreshMultipleFilters(selectedFilters);
-        addTicketDebounceRef.current = null;
-      }, 500);
+    if (!shouldShow) return;
+
+    // If this ticket belongs to a patient already in the list, update in-place instead
+    // of triggering a full API refresh. A full refresh causes:
+    //   (a) the list to flicker/re-order unexpectedly after an accept
+    //   (b) server unread counts to overwrite locally-zeroed read state
+    const existingEntry = ticketsRef.current.find(t =>
+      String(t.patientId) === String(ticket.patientId) ||
+      t.tickets?.some(sub => String(sub.id) === String(ticket.id))
+    );
+
+    if (existingEntry) {
+      // Status change for a known patient — update both state arrays in-place
+      setTickets(prev => prev.map(t => {
+        const isTarget =
+          String(t.patientId) === String(ticket.patientId) ||
+          t.tickets?.some(sub => String(sub.id) === String(ticket.id));
+        if (!isTarget) return t;
+        const updatedSubTickets = t.tickets?.map(sub =>
+          String(sub.id) === String(ticket.id) ? { ...sub, status: ticket.status } : sub
+        );
+        return { ...t, status: ticket.status, tickets: updatedSubTickets || t.tickets };
+      }));
+      setConversations(prev => prev.map(c => {
+        if (String(c.patientId) !== String(existingEntry.patientId)) return c;
+        const updatedSubTickets = c.tickets?.map(sub =>
+          String(sub.id) === String(ticket.id) ? { ...sub, status: ticket.status } : sub
+        );
+        const latestTicket = c.latestTicket && String(c.latestTicket.id) === String(ticket.id)
+          ? { ...c.latestTicket, status: ticket.status }
+          : c.latestTicket;
+        return { ...c, tickets: updatedSubTickets || c.tickets, latestTicket };
+      }));
+      return; // No full refresh needed
     }
+
+    // Genuinely new patient — debounce a full refresh so rapid back-to-back events
+    // are batched into a single network call
+    if (addTicketDebounceRef.current) {
+      clearTimeout(addTicketDebounceRef.current);
+    }
+    addTicketDebounceRef.current = setTimeout(() => {
+      refreshMultipleFilters(selectedFilters);
+      addTicketDebounceRef.current = null;
+    }, 500);
   }, [selectedFilters, refreshMultipleFilters]);
 
   /**

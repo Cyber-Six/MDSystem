@@ -67,8 +67,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
 
       {/* Content */}
       <div
-        className={`flex flex-col ${isPatient ? 'items-start' : 'items-end'}`}
-        style={{ maxWidth: '52%' }}
+        className={`flex flex-col min-w-0 max-w-[85%] sm:max-w-[75%] lg:max-w-[62%] xl:max-w-[52%] ${isPatient ? 'items-start' : 'items-end'}`}
       >
         {/* Sender label — only first in group */}
         {isFirstInGroup && (
@@ -84,7 +83,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
         {isPatient ? (
           // Patient bubble - needs dark mode
           <div
-            className="px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap bg-white dark:bg-neutral-800 text-secondary-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700 shadow-sm"
+            className="px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words bg-white dark:bg-neutral-800 text-secondary-900 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700 shadow-sm"
             style={{
               borderRadius: isFirstInGroup && isLastInGroup ? '4px 14px 14px 14px'
                           : isFirstInGroup                  ? '4px 14px 14px 14px'
@@ -97,7 +96,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
         ) : (
           // Staff bubble - keeps brand gradient (works in both modes)
           <div
-            className="px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap text-secondary-900"
+            className="px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words text-secondary-900"
             style={{
               background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
               borderRadius: isFirstInGroup && isLastInGroup ? '14px 4px 14px 14px'
@@ -155,8 +154,7 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
         )}
 
         <div
-          className={`flex flex-col ${isPatient ? 'items-start' : 'items-end'}`}
-          style={{ maxWidth: '68%' }}
+          className={`flex flex-col min-w-0 max-w-[88%] sm:max-w-[78%] lg:max-w-[70%] xl:max-w-[68%] ${isPatient ? 'items-start' : 'items-end'}`}
         >
           {isFirstInGroup && (
             <span className="text-[10px] font-medium mb-0.5 px-1 text-neutral-400 dark:text-neutral-500">
