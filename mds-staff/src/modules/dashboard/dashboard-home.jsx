@@ -3,6 +3,35 @@ import { Link } from 'react-router-dom';
 import { AnnouncementCarousel } from '../anouncement';
 import { fetchDashboardStats } from './dashboard-service';
 
+const DEFAULT_STATS = {
+  pendingRequests: 0,
+  pendingBreakdown: { emr: 0, appointments: 0, medicine: 0 },
+  todayAppointments: 0,
+  todayRemaining: 0,
+  activeConsultations: 0,
+  lowStockItems: 0,
+};
+
+const normalizeStats = (incoming) => {
+  const source = incoming && typeof incoming === 'object' ? incoming : {};
+  const breakdown = source.pendingBreakdown && typeof source.pendingBreakdown === 'object'
+    ? source.pendingBreakdown
+    : {};
+
+  return {
+    pendingRequests: Number(source.pendingRequests) || 0,
+    pendingBreakdown: {
+      emr: Number(breakdown.emr) || 0,
+      appointments: Number(breakdown.appointments) || 0,
+      medicine: Number(breakdown.medicine) || 0,
+    },
+    todayAppointments: Number(source.todayAppointments) || 0,
+    todayRemaining: Number(source.todayRemaining) || 0,
+    activeConsultations: Number(source.activeConsultations) || 0,
+    lowStockItems: Number(source.lowStockItems) || 0,
+  };
+};
+
 /**
  * Staff Dashboard Home Page
  * Dynamically fetches and displays key metrics, recent patients, and pending requests.
@@ -11,14 +40,7 @@ const StaffDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [stats, setStats] = useState({
-    pendingRequests: 0,
-    pendingBreakdown: { emr: 0, appointments: 0, medicine: 0 },
-    todayAppointments: 0,
-    todayRemaining: 0,
-    activeConsultations: 0,
-    lowStockItems: 0,
-  });
+  const [stats, setStats] = useState(DEFAULT_STATS);
   const [tomorrowAvailability, setTomorrowAvailability] = useState({});
   const [recentPatients, setRecentPatients] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -27,12 +49,16 @@ const StaffDashboard = () => {
     try {
       setError(null);
       const data = await fetchDashboardStats();
-      setStats(data.stats);
-      setTomorrowAvailability(data.tomorrowAvailability || {});
-      setRecentPatients(data.recentPatients || []);
-      setPendingRequests(data.pendingRequests || []);
+      setStats(normalizeStats(data?.stats));
+      setTomorrowAvailability(data?.tomorrowAvailability && typeof data.tomorrowAvailability === 'object' ? data.tomorrowAvailability : {});
+      setRecentPatients(Array.isArray(data?.recentPatients) ? data.recentPatients : []);
+      setPendingRequests(Array.isArray(data?.pendingRequests) ? data.pendingRequests : []);
     } catch (err) {
       console.error('Failed to load dashboard stats:', err);
+      setStats(DEFAULT_STATS);
+      setTomorrowAvailability({});
+      setRecentPatients([]);
+      setPendingRequests([]);
       setError('Failed to load dashboard data');
     } finally {
       setLoading(false);
