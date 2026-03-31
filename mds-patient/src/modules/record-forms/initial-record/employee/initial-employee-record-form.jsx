@@ -76,6 +76,7 @@ const InitialEmployeeRecordForm = ({ onComplete, isModal = false, revisionData =
       surname: '',
       firstName: '',
       middleName: '',
+      suffix: '',
       birthday: '',
       age: '',
       gender: '',

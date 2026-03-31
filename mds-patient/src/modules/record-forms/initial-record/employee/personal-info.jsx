@@ -113,6 +113,12 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             placeholder="Enter middle name"
           />
           <Input
+            label="Suffix"
+            value={data.suffix || ''}
+            onChange={(e) => handleChange('suffix', e.target.value)}
+            placeholder="e.g., Jr., Sr., III"
+          />
+          <Input
             label="Employee ID Number"
             required
             value={data.employeeId || ''}
@@ -180,7 +186,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             reserveErrorSpace
             value={data.contactNumber || ''}
             onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
-            placeholder="+63 XXX XXX XXXX"
+            placeholder="09XXXXXXXXX"
             className="mb-0"
             error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
           />
@@ -314,7 +320,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               reserveErrorSpace
               value={data.emergencyContacts[0]?.contactNumber || ''}
               onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', handlePhone('ec0', e.target.value))}
-              placeholder="+63 XXX XXX XXXX"
+              placeholder="09XXXXXXXXX"
               error={phoneWarnings.ec0 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact1ContactNumber}
             />
           </div>
@@ -354,7 +360,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               reserveErrorSpace
               value={data.emergencyContacts[1]?.contactNumber || ''}
               onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', handlePhone('ec1', e.target.value))}
-              placeholder="+63 XXX XXX XXXX"
+              placeholder="09XXXXXXXXX"
               error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact2ContactNumber}
             />
           </div>
