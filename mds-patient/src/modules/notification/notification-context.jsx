@@ -77,6 +77,34 @@ const EVENT_MAP = {
     title: `Record Update ${data?.newStatus ?? 'Updated'}`,
     message: data?.message ?? `Your record update request has been ${(data?.newStatus ?? '').toLowerCase()}.`,
   }),
+  'staff:notification': (data) => {
+    // Parse message field which may contain JSON with title and body
+    let title = 'Message from Staff';
+    let message = '';
+    
+    if (data?.message) {
+      // Try to parse as JSON first
+      if (typeof data.message === 'string' && data.message.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(data.message);
+          title = parsed.title || title;
+          message = parsed.body || '';
+        } catch {
+          // If parsing fails, use message as-is
+          message = data.message;
+        }
+      } else {
+        message = data.message;
+      }
+    }
+    
+    return {
+      type: 'general',
+      route: null, // No specific route for general notifications
+      title: title,
+      message: message,
+    };
+  },
 };
 
 const STORAGE_KEY = 'patient_notifications';
