@@ -21,35 +21,35 @@ const PageLoader = () => (
 function App() {
   return (
     <ErrorBoundary>
-      <BannerProvider>
-        <Banner />
-        <Router>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route
-                path="/auth/password/reset-password/:verificationKey"
-                element={<ResetPassword />}
-              />
-              <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
-              <Route path="/auth/login" element={<Auth />} />
+      <SettingsProvider>
+        <BannerProvider>
+          <Banner />
+          <Router>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route
+                  path="/auth/password/reset-password/:verificationKey"
+                  element={<ResetPassword />}
+                />
+                <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
+                <Route path="/auth/login" element={<Auth />} />
 
-              {/* Staff portal routes — requires auth */}
-              <Route
-                path="/*"
-                element={
-                  <PrivateRoute>
-                    <SettingsProvider>
+                {/* Staff portal routes — requires auth */}
+                <Route
+                  path="/*"
+                  element={
+                    <PrivateRoute>
                       <StaffNotificationProvider>
                         <Dashboard />
                       </StaffNotificationProvider>
-                    </SettingsProvider>
-                  </PrivateRoute>
-                }
-              />
-            </Routes>
-          </Suspense>
-        </Router>
-      </BannerProvider>
+                    </PrivateRoute>
+                  }
+                />
+              </Routes>
+            </Suspense>
+          </Router>
+        </BannerProvider>
+      </SettingsProvider>
     </ErrorBoundary>
   );
 }

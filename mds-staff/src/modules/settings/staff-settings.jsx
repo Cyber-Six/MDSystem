@@ -157,18 +157,26 @@ const StaffSettings = () => {
   useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
 
   // ── Intercept browser back button when there are unsaved changes ──
-  useEffect(() => {
-    // Push a history entry so we can catch the back gesture.
-    window.history.pushState(null, '', window.location.href);
+  const guardPushedRef = useRef(false);
 
+  // Push a guard history entry when unsaved changes first appear.
+  useEffect(() => {
+    if (hasChanges && !guardPushedRef.current) {
+      window.history.pushState(null, '', window.location.href);
+      guardPushedRef.current = true;
+    }
+  }, [hasChanges]);
+
+  useEffect(() => {
     const onPopState = () => {
       if (hasChangesRef.current) {
         // Re-push so the URL stays, then show the dialog.
         window.history.pushState(null, '', window.location.href);
         pendingActionRef.current = 'back';
         setShowDiscardDialog(true);
+      } else {
+        guardPushedRef.current = false;
       }
-      // If no unsaved changes, let the navigation happen naturally.
     };
 
     window.addEventListener('popstate', onPopState);
@@ -207,7 +215,7 @@ const StaffSettings = () => {
     setShowDiscardDialog(false);
     setDraft(structuredClone(savedSettings));
     if (pendingActionRef.current === 'back') {
-      // Go back for real — we already pushed a state entry, so one go-back lands on the prev page.
+      guardPushedRef.current = false;
       window.history.go(-2);
     }
     pendingActionRef.current = null;
@@ -217,6 +225,7 @@ const StaffSettings = () => {
     updateSettings(structuredClone(draft));
     setShowDiscardDialog(false);
     if (pendingActionRef.current === 'back') {
+      guardPushedRef.current = false;
       window.history.go(-2);
     }
     pendingActionRef.current = null;

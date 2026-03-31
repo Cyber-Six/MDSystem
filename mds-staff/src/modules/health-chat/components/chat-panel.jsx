@@ -219,7 +219,7 @@ const ChatPanel = ({ emitTyping }) => {
         onScroll={handleScroll}
         className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-neutral-100 dark:bg-neutral-800"
       >
-        <div className="px-5 py-4 min-w-0 max-w-full">
+        <div className="px-5 py-4 w-full box-border">
 
           {/* Loading older messages spinner */}
           {loadingOlder && (

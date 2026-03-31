@@ -52,8 +52,8 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
   // ── Text message ──
   return (
     <div
-      className={`flex gap-2 w-full min-w-0 ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
-      style={{ marginBottom: isLastInGroup ? '5px' : '1px' }}
+      className={`flex gap-2 min-w-0 ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
+      style={{ marginBottom: isLastInGroup ? '5px' : '1px', width: '100%' }}
     >
       {/* Avatar — patient only, last in group; hidden spacer otherwise */}
       {isPatient && (
@@ -67,7 +67,8 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
 
       {/* Content */}
       <div
-        className={`flex flex-col min-w-0 max-w-[85%] sm:max-w-[75%] lg:max-w-[62%] xl:max-w-[52%] ${isPatient ? 'items-start' : 'items-end'}`}
+        className={`flex flex-col min-w-0 ${isPatient ? 'items-start' : 'items-end'}`}
+        style={{ maxWidth: '75%' }}
       >
         {/* Sender label — only first in group */}
         {isFirstInGroup && (
@@ -141,8 +142,8 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
   return (
     <>
       <div
-        className={`flex gap-2 w-full min-w-0 ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
-        style={{ marginBottom: isLastInGroup ? '5px' : '1px' }}
+        className={`flex gap-2 min-w-0 ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
+        style={{ marginBottom: isLastInGroup ? '5px' : '1px', width: '100%' }}
       >
         {isPatient && (
           <div
@@ -154,7 +155,8 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
         )}
 
         <div
-          className={`flex flex-col min-w-0 max-w-[88%] sm:max-w-[80%] lg:max-w-[70%] xl:max-w-[60%] ${isPatient ? 'items-start' : 'items-end'}`}
+          className={`flex flex-col min-w-0 ${isPatient ? 'items-start' : 'items-end'}`}
+          style={{ maxWidth: '75%' }}
         >
           {isFirstInGroup && (
             <span className="text-[10px] font-medium mb-0.5 px-1 text-neutral-400 dark:text-neutral-500">

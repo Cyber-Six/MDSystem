@@ -1,9 +1,12 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useBanner } from '../../context/use-banner.js';
-import { getStaffSettings } from '../../context/settings-context.jsx';
+import SettingsContext, { DEFAULT_SETTINGS } from '../../context/settings-context.jsx';
 import styles from './banner.module.css';
 
 const SLIDE_OUT_DURATION = 320; // ms — must match CSS animation duration
+
+// When Banner renders outside SettingsProvider (e.g. auth pages), use defaults.
+const FALLBACK_SETTINGS = { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
 
 /**
  * Group banners by "type:message" key, preserving first-seen order.
@@ -23,6 +26,8 @@ function buildGroupMap(banners) {
 
 const Banner = () => {
   const { banners, dismissBanner } = useBanner();
+  const settingsCtx = useContext(SettingsContext);
+  const s = settingsCtx?.settings ?? FALLBACK_SETTINGS;
   const autoDismissTimersRef = useRef({});
   const [exitingIds, setExitingIds] = useState(new Set());
 
@@ -62,8 +67,6 @@ const Banner = () => {
    * Normal mode   → one timer per individual banner id.
    */
   useEffect(() => {
-    const s = getStaffSettings();
-
     if (!s.bannerAutoDismiss) {
       Object.values(autoDismissTimersRef.current).forEach(clearTimeout);
       autoDismissTimersRef.current = {};
@@ -145,11 +148,17 @@ const Banner = () => {
         });
       };
     }
-  }, [banners, triggerDismiss, triggerDismissGroup]);
+  }, [banners, s, triggerDismiss, triggerDismissGroup]);
+
+  // Clear all timers on unmount to prevent memory leaks / setState-after-unmount.
+  useEffect(() => {
+    return () => {
+      Object.values(autoDismissTimersRef.current).forEach(clearTimeout);
+      autoDismissTimersRef.current = {};
+    };
+  }, []);
 
   if (banners.length === 0 && exitingIds.size === 0) return null;
-
-  const s = getStaffSettings();
 
   // Apply banner visibility filters.
   let visibleBanners = [...banners];
@@ -189,7 +198,7 @@ const Banner = () => {
                 <div className={styles.message}>
                   {group.message}
                   {group.ids.length > 1 && (
-                    <span className={styles.countBadge}>({group.ids.length})</span>
+                    <span className={styles.countBadge}>{group.ids.length}</span>
                   )}
                 </div>
               </div>
