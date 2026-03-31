@@ -24,6 +24,7 @@ const analyticsRoutes = require('./routes/documents/analytics.js');
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 const staffRoutes = require('./routes/staff/staff.js');
+const dashboardRoutes = require('./routes/dashboard/dashboard.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentRoutes = require('./routes/documents/documents.js');
 
@@ -79,6 +80,7 @@ app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
+app.use('/dashboard', dashboardRoutes);
 app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
 app.use('/analytics', analyticsRoutes);

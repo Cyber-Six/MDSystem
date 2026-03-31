@@ -59,12 +59,12 @@ function LoadingBlock({ label }) {
   );
 }
 
-function toDisplayPatient(patientId, data, mockPatient, profileData) {
+function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData) {
   if (mockPatient) return mockPatient;
 
   const basicInfo = data?.getPatientBasicInfo;
   const updateTicket = data?.getUserUpdateTicket || null;
-  const vitalSigns = data?.getUserVitalSigns?.[0] || null;
+  const vitalSigns = vitalsData?.[0] || null;
   const medicalHistory = data?.getUserMedicalHistory?.[0] || null;
   const allergyData = data?.getUserAllergyProfile?.[0] || null;
   const immunizationData = data?.getUserImmunizationProfile?.[0] || null;
@@ -279,6 +279,7 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
         toothChart: { missing: [], filled: [], decayed: [], notes: dentalRecord?.notes || '', states: toothStates },
         oralFindingCatalogs,
         latestOralFindings: (dentalRecord?.oralFindings || []).map((f) => ({ oralFindingId: f.oralFindingId, status: f.status })),
+        dentalRecordId: dentalRecord?.id || null,
       };
     })(),
     obgyne: {
@@ -304,6 +305,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
   const [profileData, setProfileData] = useState(null);
+  const [vitalsData, setVitalsData] = useState(null);
   const [consultations, setConsultations] = useState([]);
 
   const isMockPatient = String(patientId || '').startsWith('mock-');
@@ -331,8 +333,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
     const loadRecord = async () => {
       try {
-        // Fetch EMR data and personal profile in parallel
-        const [emrResult, profileResult] = await Promise.allSettled([
+        // Fetch EMR data, personal profile, VitalSigns, and dental data in parallel
+        const [emrResult, profileResult, vitalsResult, staffDentalResult] = await Promise.allSettled([
           axiosRequest.post('/emr/medical', {
             query: GQL_FULL_RECORD,
             variables: { userId: patientId },
@@ -340,6 +342,25 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           axiosRequest.post('/profile/medical', {
             query: GQL_PERSONAL_PROFILE,
             variables: { userId: patientId },
+          }),
+          axiosRequest.post('/staff/emr', {
+            query: `query GetVitals($patientId: ID!) {
+              getPatientVitalSigns(patientId: $patientId, limit: 1) {
+                id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
+              }
+            }`,
+            variables: { patientId },
+          }),
+          axiosRequest.post('/staff/emr', {
+            query: `query GetStaffDentalData($patientId: ID!) {
+              getPatientDentalRecord(patientId: $patientId, limit: 1) {
+                id notes created_at
+                ToothPlacements { id toothIndex legend }
+                oralFindings { oralFindingId status }
+              }
+              getOralFindingCatalogs { id name }
+            }`,
+            variables: { patientId },
           }),
         ]);
 
@@ -355,6 +376,17 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           throw new Error(emrResponse?.errors?.[0]?.message || 'Patient not found');
         }
 
+        // Merge dental record and oral finding catalogs from /staff/emr into the payload
+        if (staffDentalResult.status === 'fulfilled') {
+          const staffDentalData = staffDentalResult.value.data?.data;
+          if (staffDentalData?.getPatientDentalRecord) {
+            payload.getUserDentalRecord = staffDentalData.getPatientDentalRecord;
+          }
+          if (staffDentalData?.getOralFindingCatalogs) {
+            payload.oralFindingCatalogs = staffDentalData.getOralFindingCatalogs;
+          }
+        }
+
         setRecordData(payload);
 
         // Personal profile is optional — set if available
@@ -363,6 +395,14 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         } else {
           const profilePartial = profileResult.reason?.response?.data?.data;
           setProfileData(profilePartial || null);
+        }
+
+        // VitalSigns is optional — set if available (fetched from /staff/emr)
+        if (vitalsResult.status === 'fulfilled') {
+          setVitalsData(vitalsResult.value.data?.data?.getPatientVitalSigns || null);
+        } else {
+          console.warn('[PatientRecordView] VitalSigns fetch failed:', vitalsResult.reason?.message);
+          setVitalsData(null);
         }
       } catch (err) {
         if (cancelled) return;
@@ -406,7 +446,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     };
   }, [patientId, isMockPatient, mockPatient]);
 
-  const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient, profileData), [patientId, recordData, mockPatient, profileData]);
+  const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient, profileData, vitalsData), [patientId, recordData, mockPatient, profileData, vitalsData]);
 
   // Fetch consultations from backend on page load
   useEffect(() => {

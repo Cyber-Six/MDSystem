@@ -325,6 +325,65 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
   }
 };
 
+/**
+ * Register initial profile using the reworked createInitialPersonalRecord mutation.
+ * This single mutation atomically creates the personal record log AND sets the
+ * branch identifier, replacing the old compound approach that called
+ * createBranchIdentifier + createPersonalRecordLog separately.
+ *
+ * Only works for unverified users (initial submission). Revisions must still
+ * use registerProfileSetup.
+ *
+ * @param {string} identifier - Student/employee number (e.g. "2022-12345")
+ * @param {object} personalInfo - formData.personalInfo
+ * @param {object} [options]
+ * @param {string} [options.branch] - Explicit branch for employees; students have it auto-detected by backend
+ */
+const registerInitialProfile = async (identifier, personalInfo, { branch } = {}) => {
+  const pi = personalInfo || {};
+
+  const input = {
+    first_name:       pi.firstName?.trim()        || '',
+    middle_name:      pi.middleName?.trim()       || '',
+    last_name:        pi.surname?.trim()          || '',
+    suffix:           pi.suffix?.trim()           || null,
+    date_of_birth:    pi.birthday                 || null,
+    sex:              pi.gender                   || null,
+    civil_status:     pi.civilStatus              || null,
+    nationality:      pi.nationality?.trim()      || '',
+    religion:         pi.religion?.trim()         || '',
+    contactNumber:    pi.contactNumber?.trim()    || '',
+    present_address:  pi.address?.trim()          || '',
+    province_address: pi.provinceAddress?.trim()  || pi.address?.trim() || '',
+    branch:           branch                      || 'Manila', // Backend overrides for students based on email
+    identifier:       identifier?.trim()          || '',
+  };
+
+  const mutation = `
+    mutation CreateInitialPersonalRecord($input: userProfileInitialInput!) {
+      createInitialPersonalRecord(input: $input) {
+        first_name
+        last_name
+        branch
+        identifier
+      }
+    }
+  `;
+
+  try {
+    const result = await sendGraphQLRequest(mutation, { input }, { endpoint: '/profile/patient' });
+    console.log('[EMR Service] Initial profile created:', {
+      name: `${result?.createInitialPersonalRecord?.first_name} ${result?.createInitialPersonalRecord?.last_name}`,
+      branch: result?.createInitialPersonalRecord?.branch,
+      identifier: result?.createInitialPersonalRecord?.identifier,
+    });
+    return result;
+  } catch (error) {
+    console.error('[EMR Service] Failed to create initial profile:', error);
+    throw error;
+  }
+};
+
 export const createInitialMedicalRecord = async (formData, { isRevision = false } = {}) => {
   console.log('[EMR Service] Starting initial medical record creation (batched)', isRevision ? '(revision)' : '(new)');
   console.log('[EMR Service] Form data received:', formData);
@@ -341,11 +400,16 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    // Both mutations go to /profile/patient — batched into ONE request.
-    // Must complete before ticket creation so the branch is already set.
-    // For revisions: uses updatePatientPersonalRecordLog directly (no create → no 400).
-    console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
-    await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
+    // For new submissions: uses the reworked createInitialPersonalRecord which atomically
+    // creates both the personal record log and branch identifier in a single mutation.
+    // For revisions: uses the legacy registerProfileSetup (createInitialPersonalRecord
+    // only works for unverified users).
+    console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
+    if (isRevision) {
+      await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
+    } else {
+      await registerInitialProfile(formData.personalInfo?.studentNumber, formData.personalInfo);
+    }
     profileLogCreated = !isRevision; // only mark for cleanup if a new log was created
 
     // ======== REQUEST 2 (parallel): Resolve ticket + upload dental photos ========
@@ -450,8 +514,10 @@ export const createInitialEmployeeRecord = async (formData) => {
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
-    await registerProfileSetup(formData.personalInfo?.employeeId, formData.personalInfo, false, { branch: formData.personalInfo?.branch });
+    // Uses the reworked createInitialPersonalRecord which atomically creates both
+    // the personal record log and branch identifier in a single mutation.
+    console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
+    await registerInitialProfile(formData.personalInfo?.employeeId, formData.personalInfo, { branch: formData.personalInfo?.branch });
     profileLogCreated = true;
 
     // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========
@@ -1701,48 +1767,68 @@ const _extractEmergencyContactNumber = (contact) => {
 export const getPatientProfile = async () => {
   if (_patientProfileCache) return _patientProfileCache;
 
-  const profileData = await sendGraphQLRequest(
-    `query GetPatientProfileData {
-      personalLog: getPersonalRecordLog {
-        id
-        first_name middle_name last_name suffix
-        contactNumber
-      }
-      personalRecord: getPersonalRecord {
-        id
-      }
-      personalLogStatus: getPersonalRecordLogStatus
-      loginEmail: getLoginEmail
-      branchId: getBranchIdentifier {
-        identifier
-      }
-    }`,
-    {},
-    { endpoint: '/profile/patient' }
-  ).catch((error) => {
-    console.warn('[EMR Service] Could not fetch patient profile data:', error.message);
-    return {};
-  });
+  const [profileResult, branchResult, emergencyResult] = await Promise.allSettled([
+    sendGraphQLRequest(
+      `query GetPatientProfileData {
+        personalLog: getPersonalRecordLog {
+          id
+          first_name middle_name last_name suffix
+          contactNumber
+        }
+        personalRecord: getPersonalRecord {
+          id
+        }
+        personalLogStatus: getPersonalRecordLogStatus
+        loginEmail: getLoginEmail
+      }`,
+      {},
+      { endpoint: '/profile/patient' }
+    ),
+    sendGraphQLRequest(
+      `query GetBranchIdentifier {
+        getBranchIdentifier {
+          identifier
+        }
+      }`,
+      {},
+      { endpoint: '/profile/patient' }
+    ),
+    sendGraphQLRequest(
+      `query GetEmergencyContact {
+        emergencyContact: getEmergencyContact(approved: true) {
+          firstContact { contactNumber }
+          secondContact { contactNumber }
+        }
+      }`,
+      {}
+    ),
+  ]);
+
+  const profileData = profileResult.status === 'fulfilled'
+    ? profileResult.value
+    : (profileResult.reason?.data || {});
+
+  if (profileResult.status === 'rejected') {
+    console.warn('[EMR Service] Could not fetch patient profile data:', profileResult.reason?.message);
+  }
+
+  const branchData = branchResult.status === 'fulfilled'
+    ? branchResult.value
+    : null;
+
+  if (branchResult.status === 'rejected') {
+    console.warn('[EMR Service] Could not fetch branch identifier:', branchResult.reason?.message);
+  }
+
+  const emergencyData = emergencyResult.status === 'fulfilled'
+    ? emergencyResult.value
+    : null;
+
+  if (emergencyResult.status === 'rejected') {
+    console.warn('[EMR Service] Active emergency contact fetch failed:', emergencyResult.reason?.message);
+  }
 
   const log = profileData?.personalLog || {};
-
-  let emergencyData = null;
-
-  // Always fetch the approved emergency contact for profile display.
-  // Using approved:true works regardless of the current update ticket status
-  // (Cancelled, Pending, etc.) and avoids "No active profile found" errors.
-  emergencyData = await sendGraphQLRequest(
-    `query GetEmergencyContact {
-      emergencyContact: getEmergencyContact(approved: true) {
-        firstContact { contactNumber }
-        secondContact { contactNumber }
-      }
-    }`,
-    {}
-  ).catch((error) => {
-    console.warn('[EMR Service] Active emergency contact fetch failed:', error.message);
-    return null;
-  });
 
   const latestEmergency = emergencyData?.emergencyContact
     || (Array.isArray(emergencyData?.emergencyContacts) ? emergencyData.emergencyContacts[0] : null)
@@ -1756,7 +1842,7 @@ export const getPatientProfile = async () => {
     contactNumber: log.contactNumber || null,
     firstEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.firstContact),
     secondEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.secondContact),
-    identifier: profileData?.branchId?.identifier || null,
+    identifier: branchData?.getBranchIdentifier?.identifier || null,
   };
 
   return _patientProfileCache;

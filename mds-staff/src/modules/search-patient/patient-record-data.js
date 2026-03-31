@@ -7,9 +7,6 @@ export const GQL_FULL_RECORD = `
       latest_ticket_id latest_status latest_scope latest_updated_at
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
-    getUserVitalSigns(userId: $userId, limit: 1) {
-      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
-    }
     getUserMedicalHistory(userId: $userId, limit: 1) {
       id notes created_at
       conditions { id conditionId description diagnosedDate relationship }
@@ -43,11 +40,6 @@ export const GQL_FULL_RECORD = `
     getUserDentalHistory(userId: $userId, limit: 1) {
       id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at
     }
-    getUserDentalRecord(userId: $userId, limit: 1) {
-      id notes created_at
-      ToothPlacements { id toothIndex legend }
-      oralFindings { oralFindingId status }
-    }
     getUserOralApplianceProfile(userId: $userId, limit: 1) {
       id notes created_at
       appliances { id tagId status dateIssued arch }
@@ -76,7 +68,6 @@ export const GQL_FULL_RECORD = `
     dentalProcedureCatalogs: getDomainCatalogs(domain: DentalProcedure) { id name }
     medicationCatalogs: getDomainCatalogs(domain: Medication) { id name }
     oralApplianceCatalogs: getOralApplianceCatalogs { id name }
-    oralFindingCatalogs: getOralFindingCatalogs { id name }
     getUserDentalPhotoRecord(userId: $userId, limit: 1) {
       id upperTeeth lowerTeeth isValid created_at
     }
