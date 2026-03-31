@@ -117,8 +117,8 @@ const RecordUpdateForm = () => {
 
     if (stepName === 'Medical History') {
       // Lifestyle habits are always required
-      if (!formData.smoking || !formData.alcohol) {
-        errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in all Lifestyle Habits (Smoking, Alcohol) before proceeding.' });
+      if (!formData.smoker || !formData.alcoholDrinker) {
+        errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in all Lifestyle Habits (Smoker, Alcohol Drinker) before proceeding.' });
       }
       // If user said yes to allergies, check sub-fields
       if (formData.hasAllergies === 'yes') {

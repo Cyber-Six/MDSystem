@@ -204,6 +204,7 @@ type Query {
 
   listAllOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]
   listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
+  listMonthAvailability(schedulerId: ID!, startDate: Date!, endDate: Date!): [ScheduleDateEntity!]
 
   searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]
   getAppointmentStatusCounts: [StatusCount!]

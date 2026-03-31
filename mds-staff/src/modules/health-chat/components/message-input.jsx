@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill, Plus } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { uploadFile, unstageFile } from '../health-chat-service';
-import PrescriptionModal from './PrescriptionModal';
+
 
 const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -44,7 +44,7 @@ const resolveClipboardImageFile = (item) => {
   });
 };
 
-const MessageInput = ({ emitTyping }) => {
+const MessageInput = ({ emitTyping, onOpenPrescription }) => {
   const { selectedChatId, activeTicketId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
 
   const [inputValue, setInputValue]   = useState('');
@@ -52,7 +52,6 @@ const MessageInput = ({ emitTyping }) => {
   const [isUploading, setIsUploading]         = useState(false);
   const [isSending, setIsSending]               = useState(false);
   const [actionLoading, setActionLoading]       = useState(null);
-  const [showPrescription, setShowPrescription] = useState(false);
   const [showPlusMenu, setShowPlusMenu]         = useState(false);
   const fileInputRef  = useRef(null);
   const textareaRef   = useRef(null);
@@ -352,7 +351,7 @@ const MessageInput = ({ emitTyping }) => {
               {/* Prescription */}
               <button
                 type="button"
-                onClick={() => { setShowPrescription(true); setShowPlusMenu(false); }}
+                onClick={() => { onOpenPrescription?.(); setShowPlusMenu(false); }}
                 disabled={isSending}
                 className="w-full flex items-center justify-between px-5 py-4
                            text-neutral-800 dark:text-white
@@ -422,11 +421,6 @@ const MessageInput = ({ emitTyping }) => {
           }
         </button>
       </div>
-
-      <PrescriptionModal
-        isOpen={showPrescription}
-        onClose={() => setShowPrescription(false)}
-      />
 
     </div>
   );

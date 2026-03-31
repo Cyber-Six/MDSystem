@@ -16,6 +16,8 @@ const RoleManagementPage = lazy(() => import('../modules/role-management/role-ma
 const MedicalInventory = lazy(() => import('../modules/medical-inventory/medical-inventory.jsx'));
 const HealthChatView = lazy(() => import('../modules/health-chat/health-chat-view.jsx'));
 const AnnouncementManagement = lazy(() => import('../modules/anouncement/components/announcement-management.jsx'));
+const StaffAnalytics = lazy(() => import('../modules/analytics/staff-analytics.jsx'));
+const SendNotificationView = lazy(() => import('../modules/notification/send-notification-view.jsx'));
 
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-[50vh]">
@@ -42,7 +44,9 @@ const Dashboard = () => {
                 <Route path="/appointments" element={<PermissionRoute moduleId="appointments"><StaffAppointment /></PermissionRoute>} />
                 <Route path="/inventory" element={<PermissionRoute moduleId="inventory"><MedicalInventory /></PermissionRoute>} />
                 <Route path="/health-chat" element={<PermissionRoute moduleId="healthChat"><HealthChatView /></PermissionRoute>} />
+                <Route path="/analytics" element={<PermissionRoute moduleId="analytics"><StaffAnalytics /></PermissionRoute>} />
                 <Route path="/announcements" element={<AnnouncementManagement />} />
+                <Route path="/notifications" element={<SendNotificationView />} />
                 <Route path="/settings/roles" element={<PermissionRoute adminOnly><RoleManagementPage /></PermissionRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

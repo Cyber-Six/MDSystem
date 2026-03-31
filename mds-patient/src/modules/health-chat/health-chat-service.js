@@ -260,6 +260,30 @@ export const getFileUrl = (fileId) => {
 };
 
 /**
+ * Extend the active session by 1 day
+ * @param {string} chatId - The ticket/chat ID
+ */
+export const extendSession = async (chatId) => {
+  const mutation = `
+    mutation ExtendSession($chatId: ID!) {
+      extendSession(chatId: $chatId) {
+        success
+        message
+        chat {
+          id
+          status
+          session_start
+          expiresAt
+        }
+      }
+    }
+  `;
+
+  const data = await sendHealthChatRequest(mutation, { chatId });
+  return data.extendSession;
+};
+
+/**
  * Get the current active ticket (if any)
  * Returns the first active (Open or Ongoing) ticket, or null
  */

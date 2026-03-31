@@ -578,7 +578,7 @@ const Mutation = {
   _HospitalizationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Hospitalization(recordId, args.input.notes);
+    await anchor.Hospitalization(recordId);
     await remove.HospitalizationRecord(recordId);
 
     if (args.input.hospitalizations.length === 0) {

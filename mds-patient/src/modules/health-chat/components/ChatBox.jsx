@@ -4,6 +4,7 @@ import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
 import { FilePreview, useClipboardPaste } from './FileAttachment';
 import ConfirmModal from './ConfirmModal';
+import ExpiryWarningBanner from './ExpiryWarningBanner';
 import { uploadFile } from '../health-chat-service';
 
 const ChatBox = ({
@@ -35,6 +36,9 @@ const ChatBox = ({
   isSocketConnected,
   socketError,
   onOpenMedicineRequest,
+  expiresAt,
+  isExtendingSession,
+  onExtendSession,
 }) => {
   const isFrozen = ['Closed', 'Expired'].includes(ticketStatus);
   const isPending = ticketStatus === 'Open';
@@ -302,6 +306,13 @@ const ChatBox = ({
           <FilePreview file={attachedFile} onRemove={onFileRemoved} />
         </div>
       )}
+
+      {/* ── Expiry warning banner ── */}
+      <ExpiryWarningBanner
+        expiresAt={expiresAt}
+        isExtending={isExtendingSession}
+        onExtend={onExtendSession}
+      />
 
       {/* ── Input area ── */}
       <div

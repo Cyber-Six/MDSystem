@@ -11,7 +11,8 @@ import {
   getTicketMessages,
   createTicket,
   sendMessage,
-  closeTicket
+  closeTicket,
+  extendSession
 } from './health-chat-service';
 import { useHealthChatSocket } from './hooks/use-health-chat-socket';
 
@@ -30,6 +31,7 @@ const HealthChat = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [ticketPurpose, setTicketPurpose] = useState('');
   const [showCloseModal, setShowCloseModal]       = useState(false);
+  const [isExtendingSession, setIsExtendingSession] = useState(false);
 
   const messagesEndRef = useRef(null);
   const previousConversationEndRef = useRef(null);
@@ -93,6 +95,20 @@ const HealthChat = () => {
     }
   }, [loadMessages]);
 
+  // Handle session-extended via socket (another party extended, or own extension confirmed)
+  const handleSessionExtended = useCallback((data) => {
+    console.log('[HealthChat] Session extended event received:', data);
+    setTicket(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        expiresAt: data.expiresAt || prev.expiresAt,
+        session_start: data.chat?.session_start || prev.session_start,
+      };
+    });
+    if (data?.chatId) loadMessages(data.chatId);
+  }, [loadMessages]);
+
   // Socket hook
   const { isConnected: isSocketConnected, socketError, emitTyping } = useHealthChatSocket({
     chatId: ticket?.id,
@@ -100,7 +116,8 @@ const HealthChat = () => {
     onNewMessage: handleNewMessage,
     onTyping: handleTypingIndicator,
     onTicketApproved: handleTicketApproved,
-    onTicketClosed: handleTicketClosed
+    onTicketClosed: handleTicketClosed,
+    onSessionExtended: handleSessionExtended
   });
 
   const scrollToBottom = useCallback(() => {
@@ -150,6 +167,21 @@ const HealthChat = () => {
       clearInterval(pollInterval);
     };
   }, [ticket?.id, ticket?.status, loadMessages]);
+
+  // Proactively freeze UI when the session's expiresAt time is reached
+  useEffect(() => {
+    if (ticket?.status !== 'Ongoing' || !ticket?.expiresAt) return;
+    const msUntilExpiry = new Date(ticket.expiresAt).getTime() - Date.now();
+    if (msUntilExpiry <= 0) {
+      // Already past expiry — mark expired immediately
+      setTicket(prev => prev ? { ...prev, status: 'Expired' } : null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setTicket(prev => prev ? { ...prev, status: 'Expired' } : null);
+    }, msUntilExpiry);
+    return () => clearTimeout(timer);
+  }, [ticket?.id, ticket?.status, ticket?.expiresAt]);
 
   // Poll for new messages when socket is disconnected (fallback mechanism)
   useEffect(() => {
@@ -279,6 +311,11 @@ const HealthChat = () => {
         setInputValue('');
       }
     } catch (err) {
+      // If the session expired server-side, update local state so the UI freezes
+      if (err.message && /expired/i.test(err.message)) {
+        setTicket(prev => prev ? { ...prev, status: 'Expired' } : null);
+        if (ticket?.id) loadMessages(ticket.id);
+      }
       setError(err.message || 'Failed to send message.');
     } finally {
       setIsLoading(false);
@@ -306,6 +343,29 @@ const HealthChat = () => {
       setError(err.message || 'Failed to close ticket.');
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleExtendSession() {
+    if (!ticket?.id || isExtendingSession) return;
+    try {
+      setIsExtendingSession(true);
+      setError(null);
+      const result = await extendSession(ticket.id);
+      if (result.success && result.chat) {
+        setTicket(prev => prev ? {
+          ...prev,
+          expiresAt: result.chat.expiresAt,
+          session_start: result.chat.session_start,
+        } : null);
+        await loadMessages(ticket.id);
+      } else {
+        setError(result.message || 'Failed to extend session.');
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to extend session.');
+    } finally {
+      setIsExtendingSession(false);
     }
   }
 
@@ -629,6 +689,9 @@ const HealthChat = () => {
                 isSocketConnected={isSocketConnected}
                 socketError={socketError}
                 onOpenMedicineRequest={() => navigate('/medicine-request')}
+                expiresAt={ticket.expiresAt}
+                isExtendingSession={isExtendingSession}
+                onExtendSession={handleExtendSession}
               />
             </div>
           </div>

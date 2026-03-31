@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as consultationService from '../consultation-service';
+import ConsultationPrescriptionModal from './consultation-prescription-modal';
 
 const DIAGNOSIS_TYPES = [
   { value: 'Primary', label: 'Primary' },
@@ -204,11 +205,12 @@ function OutcomeCard({ outcome, index, total }) {
   );
 }
 
-export default function ConsultationDetailModal({ consultation, onClose, onRefresh }) {
+export default function ConsultationDetailModal({ consultation, patient, onClose, onRefresh }) {
   const [outcomes, setOutcomes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [showPrescription, setShowPrescription] = useState(false);
   const [showReopenForm, setShowReopenForm] = useState(false);
   const [reopenLoading, setReopenLoading] = useState(false);
   const [reopenError, setReopenError] = useState('');
@@ -713,21 +715,43 @@ export default function ConsultationDetailModal({ consultation, onClose, onRefre
               >
                 Close
               </button>
-              {canReopen && (
-                <button
-                  onClick={() => setShowReopenForm(true)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors inline-flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add New Details
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {patient && (
+                  <button
+                    onClick={() => setShowPrescription(true)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors inline-flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Generate Prescription
+                  </button>
+                )}
+                {canReopen && (
+                  <button
+                    onClick={() => setShowReopenForm(true)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors inline-flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add New Details
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>
       </div>
+
+      {/* Prescription modal overlay */}
+      <ConsultationPrescriptionModal
+        isOpen={showPrescription}
+        onClose={() => setShowPrescription(false)}
+        patient={patient}
+        consultation={consultation}
+        outcomes={outcomes}
+      />
     </div>
   );
 }

@@ -124,6 +124,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
+        '/announcement': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
+        },
       },
     }
   }

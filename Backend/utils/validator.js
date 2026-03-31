@@ -123,6 +123,24 @@ function generateDomainCodes(names, domain) {
   });
 }
 
+function ValidateBranchbyUserBranch(userBranch, location) {
+  const valid =
+    (userBranch === "Manila" && ["Arlegui", "Casal"].includes(location)) ||
+    (userBranch === "QuezonCity" && location === "QuezonCity") ||
+    (userBranch === "Both");
+
+  return valid;
+}
+
+function ValidateUserBranchbyUserBranch(ubranch1, ubranch2){
+  const valid =
+    (ubranch1 === "Manila" && ubranch2 === "Manila") ||
+    (ubranch1 === "QuezonCity" && ubranch2 === "QuezonCity") ||
+    (ubranch1 === "Both" || ubranch2 === "Both");
+
+  return valid;
+}
+
 
 module.exports = {
   isStudentEmail,
@@ -138,5 +156,7 @@ module.exports = {
   isUserStaff,
   normalizeName,
   normalizeNumber,
-  generateDomainCodes
+  generateDomainCodes,
+  ValidateBranchbyUserBranch,
+  ValidateUserBranchbyUserBranch
 };

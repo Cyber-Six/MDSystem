@@ -13,6 +13,12 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
   const initials = getPatientInitials(patient);
   const hasUnread = ticket.unreadCount > 0;
 
+  // If expiresAt has passed but DB status hasn't been flipped yet, treat as Expired
+  const effectiveStatus =
+    ticket.status === 'Ongoing' && ticket.expiresAt && new Date(ticket.expiresAt) < new Date()
+      ? 'Expired'
+      : ticket.status;
+
   // Get last message preview text
   const getLastMessagePreview = () => {
     if (isTyping) {
@@ -106,7 +112,7 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
             {/* Pending: creation time; Active: last message time; Archive: close time */}
             {ticket.status === 'Open'
               ? formatRelativeTime(ticket.lastMessageAt || ticket.archived_at)
-              : ['Closed', 'Expired'].includes(ticket.status)
+              : ['Closed', 'Expired'].includes(effectiveStatus)
                 ? formatRelativeTime(ticket.session_end || ticket.archived_at || ticket.lastMessageAt || ticket.session_start)
                 : formatRelativeTime(ticket.lastMessageAt || ticket.session_start)}
           </span>
@@ -127,12 +133,12 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
                 {ticket.unreadCount > 99 ? '99+' : ticket.unreadCount}
               </span>
             )}
-            {needsReply && !hasUnread && !isSelected && !['Closed', 'Expired'].includes(ticket.status) && (
+            {needsReply && !hasUnread && !isSelected && !['Closed', 'Expired'].includes(effectiveStatus) && (
               <span className="text-[12px] text-neutral-400 dark:text-neutral-500 italic">
                 respond?
               </span>
             )}
-            <TicketStatusBadge status={ticket.status} />
+            <TicketStatusBadge status={effectiveStatus} />
           </div>
         </div>
       </div>

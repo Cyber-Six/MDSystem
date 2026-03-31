@@ -11,8 +11,31 @@ const PatientList = () => {
     selectChat,
     typingUsers,
     needsReplyChats,
-    pendingClosedChats
+    pendingClosedChats,
+    selectedFilters
   } = useHealthChat();
+
+  // Which statuses each filter bucket covers
+  const FILTER_STATUS_MAP = {
+    active:  ['Ongoing'],
+    pending: ['Open'],
+    archive: ['Closed', 'Expired'],
+  };
+
+  // Build the full set of statuses the current filters allow
+  const allowedStatuses = new Set(
+    (selectedFilters || []).flatMap(f => FILTER_STATUS_MAP[f] || [])
+  );
+
+  // Filter tickets by effective status (expiresAt-aware)
+  const now = Date.now();
+  const visibleTickets = tickets.filter(ticket => {
+    const effectiveStatus =
+      ticket.status === 'Ongoing' && ticket.expiresAt && new Date(ticket.expiresAt).getTime() < now
+        ? 'Expired'
+        : ticket.status;
+    return allowedStatuses.size === 0 || allowedStatuses.has(effectiveStatus);
+  });
 
   // Track known ticket IDs to detect genuinely new entries for enter animation
   // Uses a persistent ref that only grows — IDs are never removed so re-renders
@@ -22,7 +45,7 @@ const PatientList = () => {
   const isInitialLoad = useRef(true);
 
   useEffect(() => {
-    const currentIds = new Set(tickets.map(t => String(t.id)));
+    const currentIds = new Set(visibleTickets.map(t => String(t.id)));
 
     // On initial load, seed the known set without animating
     if (isInitialLoad.current) {
@@ -49,7 +72,7 @@ const PatientList = () => {
     }
   }, [tickets]);
 
-  if (ticketsLoading && tickets.length === 0) {
+  if (ticketsLoading && visibleTickets.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center py-12">
         <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#d5d1cb' }} />
@@ -57,7 +80,7 @@ const PatientList = () => {
     );
   }
 
-  if (tickets.length === 0) {
+  if (visibleTickets.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center py-12 px-6 text-center">
         {ticketsLoading ? (
@@ -84,7 +107,7 @@ const PatientList = () => {
           to { opacity: 0; transform: translateX(-100%); max-height: 0; overflow: hidden; }
         }
       `}</style>
-      {tickets.map((ticket) => {
+      {visibleTickets.map((ticket) => {
         const ticketId = String(ticket.id);
         const patientId = String(ticket.patientId);
         const isNew = newTicketIds.has(ticketId);
@@ -110,7 +133,7 @@ const PatientList = () => {
       })}
 
       {/* Loading indicator at bottom of list */}
-      {ticketsLoading && tickets.length > 0 && (
+      {ticketsLoading && visibleTickets.length > 0 && (
         <div className="flex items-center justify-center py-3 border-t border-neutral-100 dark:border-neutral-800">
           <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
         </div>

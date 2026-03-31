@@ -429,6 +429,30 @@ export const deleteArchivedTicket = async (chatId) => {
 // ==================== FILE HANDLING ====================
 
 /**
+ * Extend an active session by 1 day
+ * @param {string} chatId - The ticket/chat ID
+ */
+export const extendSession = async (chatId) => {
+  const mutation = `
+    mutation ExtendSession($chatId: ID!) {
+      extendSession(chatId: $chatId) {
+        success
+        message
+        chat {
+          id
+          status
+          session_start
+          expiresAt
+        }
+      }
+    }
+  `;
+
+  const data = await sendGraphQL(mutation, { chatId });
+  return data.extendSession;
+};
+
+/**
  * Get patient conversations grouped by patient (1 row per patient)
  */
 export const getPatientConversations = async (statuses = null, offset = 0, limit = 50) => {
@@ -444,6 +468,8 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
             email
             identifier
             branch
+            dateOfBirth
+            sex
           }
           latestTicket {
             id

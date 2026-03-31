@@ -8,6 +8,7 @@ import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
+import PrescriptionPanel from './PrescriptionPanel';
 
 const ChatPanel = ({ emitTyping }) => {
   const {
@@ -20,8 +21,12 @@ const ChatPanel = ({ emitTyping }) => {
     setMessages,
     typingUsers,
     refreshMessages,
-    socketError
+    socketError,
+    activeTicketId,
+    sendMessage,
   } = useHealthChat();
+
+  const [showPrescription, setShowPrescription] = useState(false);
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -138,9 +143,14 @@ const ChatPanel = ({ emitTyping }) => {
     return result;
   }, [messages, ticketDetailsMap]);
 
-  const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
+  // Mirror the same status checks as chat-header.jsx — selectedTicket.status is the reliable source
+  // Also treat as expired if expiresAt has already passed (DB job may not have flipped status yet)
+  const isEffectivelyExpired = selectedTicket?.expiresAt && new Date(selectedTicket.expiresAt) < new Date();
+  const isExpired  = selectedTicket?.status === 'Expired' || !!isEffectivelyExpired;
+  const isClosed   = selectedTicket?.status === 'Closed';
+  const isArchived = isExpired || isClosed;
   const isPatientTyping = !isArchived && typingUsers[selectedPatientId || selectedChatId]?.isTyping;
-  const isPending = selectedTicket?.status === 'Open';
+  const isPending  = selectedTicket?.status === 'Open';
 
   // Scroll to bottom when messages load or chat changes
   // Skip when loading older messages (pagination) to preserve scroll position
@@ -161,6 +171,14 @@ const ChatPanel = ({ emitTyping }) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
+
+  // Close prescription panel when patient changes
+  useEffect(() => {
+    setShowPrescription(false);
+  }, [selectedChatId, selectedPatientId]);
+
+  const patient = selectedTicket?.patient;
+
 
   if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
@@ -184,6 +202,8 @@ const ChatPanel = ({ emitTyping }) => {
   const allItems = [...purposeSynth, ...itemsWithDividers];
 
   return (
+    <div className="flex-1 flex h-full min-h-0">
+    {/* Chat column */}
     <div
       className="flex-1 flex flex-col h-full min-h-0 bg-white dark:bg-neutral-900"
     >
@@ -281,7 +301,36 @@ const ChatPanel = ({ emitTyping }) => {
       </div>
 
       {/* Input */}
-      <MessageInput emitTyping={emitTyping} />
+      <MessageInput emitTyping={emitTyping} onOpenPrescription={() => setShowPrescription(true)} />
+    </div>
+
+    {/* Prescription side panel */}
+    <PrescriptionPanel
+      isOpen={showPrescription}
+      onClose={() => setShowPrescription(false)}
+      patientId={patient?.id}
+      patientName={patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}
+      patientDob={patient?.dateOfBirth}
+      patientSex={patient?.sex}
+      activeTicketId={activeTicketId}
+      sendMessage={sendMessage}
+    />
+      <ExpiryWarningBanner
+        expiresAt={selectedTicket?.expiresAt}
+        isExtending={isExtendingSession}
+        onExtend={() => activeTicketId && extendSessionChat(activeTicketId)}
+      />
+      {isArchived ? (
+        <div className="flex-shrink-0 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+          <div className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800">
+            <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+            {isExpired ? 'This conversation is expired' : 'This conversation is closed'}
+          </div>
+        </div>
+      ) : (
+        <MessageInput emitTyping={emitTyping} />
+      )}
+    </div>
     </div>
   );
 };

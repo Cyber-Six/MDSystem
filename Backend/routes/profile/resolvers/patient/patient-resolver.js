@@ -44,13 +44,6 @@ Query = {
     return result?.status;
   },
 
-  getBranchIdentifier: async (_, __, { user, res }) => { // getting the identifier and the branch of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    return await Wrapper.Query._getBranchIdentifier(_, { userId: user.id }, { user, res });
-  },
-
   getLoginEmail: async (_, __, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

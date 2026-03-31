@@ -63,20 +63,6 @@ const Query = {
     return result;
    },
 
-  getBranchIdentifier: async (_, { userId }, { user, res }) => { // getting the identifier and the branch of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to view branch identifier of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    return await Wrapper.Query._getBranchIdentifier(_, { userId }, { user, res }); 
-  },
-
   getUserLoginCredentials: async (_, { userId }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -116,21 +102,6 @@ const Mutation = {
 
     const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId }, { user, res });
     const result = await Wrapper.Mutation._StaffUpdatePersonalRecordLog(_, { userId, id: latest.id, input }, { user, res });
-    return result;
-   },
-
-  updateUserBranchIdentifier: async (_, { userId, input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_update_email_identifier, userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by staff ${user.id} to update branch identifier of user ${userId}`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-
-    const result = await Wrapper.Mutation._UserBranchIdentifier(_, { userId, input }, { user, res });
     return result;
    },
   

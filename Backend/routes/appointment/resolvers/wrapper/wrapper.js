@@ -11,7 +11,7 @@ const { encodeSchedulingFlags, decodeSchedulingFlags, validateSchedulerDate,
   getAppointmentCounts, isWithinFutureTimeframe,
   validateSatisfiedAllRequirements,
   insertSlotCustomDates, insertSchedulerWhitelist } = require("./helper.js");
-
+const { ValidateBranchbyUserBranch } = require("../../../../utils/validator.js");
 
 const MAX_SCHEDULING_DAYS = parseInt(dotenv.MAX_SCHEDULING_DAYS || 7);
 
@@ -34,6 +34,7 @@ const Query = {
               )
         AND (
               $4 = 'Both'
+           OR ss.location = 'Both'
            OR ($4 = 'Manila' AND ss.location IN ('Arlegui', 'Casal'))
            OR ($4 = 'QuezonCity' AND ss.location = 'QuezonCity')
             )
@@ -366,6 +367,30 @@ const Query = {
     return result.rows;
   },
 
+  _listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const result = await db.query(`
+      SELECT sde.id, sde."slotId", sde."scheduledDate",
+             sde."morningAllowed", sde."afternoonAllowed", sde."allowDuring",
+             COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "morningRegistered",
+             COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "morningPending",
+             COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "afternoonRegistered",
+             COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "afternoonPending"
+      FROM "ScheduleDateEntity" sde
+      LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
+      WHERE sde."slotId" = $1
+        AND sde."scheduledDate" >= $2
+        AND sde."scheduledDate" <= $3
+      GROUP BY sde.id
+      ORDER BY sde."scheduledDate" ASC;
+    `, [schedulerId, startDate, endDate]);
+
+    return result.rows;
+  },
+
   _listSchedulerWhitelist: async (_, { schedulerId, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -637,6 +662,19 @@ const Mutation = {
         await insertSchedulerWhitelist(schedulerId, input.whiteLists, client);
       }
 
+      await db.setSystemAuditLog(
+        {
+          client,
+          userId: user.id,
+          eventType: "CREATE SCHEDULER",
+          actorId: user.id,
+          actorType: "Staff",
+          targetId: schedulerId,
+          changedBy: "Medical",
+          actions: `Created new slot scheduler with label: ${input.label}`
+        }
+      );
+
       await client.query("COMMIT");
       logger.info(`Created new scheduler with ID ${schedulerId} by user ${user.id}`);
 
@@ -724,15 +762,42 @@ const Mutation = {
       RETURNING *;
     `;
 
-    const result = await db.query(query, values);
+    const client = await db.connect();
 
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to update scheduler").status(500).throw();
+    try {
+      await client.query("BEGIN");
+      const result = await db.queryClient(client, query, values);
+
+      if (result.rowCount === 0) {
+        throwGraphQLError(res).message("Failed to update scheduler").status(500).throw();
+      }
+
+      await db.setSystemAuditLog(
+        {
+          client,
+          userId: user.id,
+          eventType: "UPDATE SCHEDULER",
+          actorId: user.id,
+          actorType: "Staff",
+          targetId: schedulerId,
+          changedBy: "Medical",
+          actions: `Updated slot scheduler with label: ${input.label}`
+        }
+      );
+
+      const scheduler = result.rows[0];
+      scheduler.schedulePerWeek = decodeSchedulingFlags(scheduler.scheduleFlags);
+
+      await client.query("COMMIT");
+      logger.info(`Updated scheduler with ID ${schedulerId} by user ${user.id}`);
+      return scheduler;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      logger.error("Error in _updateScheduler transaction:", err);
+      throwGraphQLError(res).message("Transaction failed: " + err.message).status(500).throw();
+    } finally {
+      client.release();
     }
-
-    const scheduler = result.rows[0];
-    scheduler.schedulePerWeek = decodeSchedulingFlags(scheduler.scheduleFlags);
-    return scheduler;
   },
 
   _deleteScheduler: async (_, { schedulerId }, { user, res }) => {
@@ -762,12 +827,38 @@ const Mutation = {
     await db.query(`DELETE FROM "SlotCustomDate" WHERE "slotScheduleId" = $1;`, [schedulerId]);
     await db.query(`DELETE FROM "ScheduleDateEntity" WHERE "slotId" = $1;`, [schedulerId]);
 
-    const result = await db.query(
-      `DELETE FROM "slotScheduler" WHERE id = $1;`,
-      [schedulerId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
 
-    return result.rowCount > 0;
+      const result = await db.queryClient(
+        client,
+        `DELETE FROM "slotScheduler" WHERE id = $1;`,
+        [schedulerId]
+      );
+
+      await db.setSystemAuditLog(
+        {
+          client,
+          userId: user.id,
+          eventType: "DELETE SCHEDULER",
+          actorId: user.id,
+          actorType: "Staff",
+          targetId: schedulerId,
+          changedBy: "Medical",
+          actions: `Deleted slot scheduler with ID: ${schedulerId}`
+        }
+      );
+      
+      await client.query("COMMIT");
+      return result.rowCount > 0;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      logger.error("Error in _deleteScheduler transaction:", err);
+      throwGraphQLError(res).message("Transaction failed: " + err.message).status(500).throw();
+    } finally {
+      client.release();
+    }
   },
 
   _updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {

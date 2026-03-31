@@ -30,7 +30,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     else if (reviewable_statuses.includes(result[0].status)) return [result[0]];
 
@@ -45,7 +45,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserDentalPhotoRecord(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserDentalPhotoRecord(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -57,7 +57,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserObgynHistory(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserObgynHistory(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result; 
   },
@@ -69,7 +69,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserLifestyle(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserLifestyle(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -81,32 +81,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserDentalHistory(_, {...args, statuses: ["Approved"]}, { user, res });
-    if (result.length === 0) return null;  
-    return result;
-  },
-
-  getUserDentalRecord: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserDentalRecord`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
-
-    const result = await Wrapper._getUserDentalRecord(_, {...args, statuses: ["Approved"]}, { user, res });
-    if (result.length === 0) return null;  
-
-    return result;
-  },
-
-  getUserVitalSigns: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
-    if (!isPermitted) {
-      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserVitalSigns`);
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
-
-    const result = await Wrapper._getUserVitalSigns(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserDentalHistory(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -118,7 +93,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserOralApplianceProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserOralApplianceProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -130,7 +105,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserEmergencyContact(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserEmergencyContact(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -142,7 +117,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserAllergyProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserAllergyProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -154,7 +129,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserMedicationProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserMedicationProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -166,7 +141,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserDentalProcedureProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserDentalProcedureProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result
   },
@@ -178,7 +153,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserImmunizationProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserImmunizationProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -190,7 +165,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserOperationProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserOperationProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -202,7 +177,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserHospitalizationProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserHospitalizationProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -214,7 +189,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserMedicalHistory(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserMedicalHistory(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
@@ -226,10 +201,40 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
 
-    const result = await Wrapper._getUserVisualAcuityProfile(_, {...args, statuses: ["Approved"]}, { user, res });
+    const result = await Wrapper._getUserVisualAcuityProfile(_, {...args, statuses: reviewable_statuses}, { user, res });
     if (result.length === 0) return null;  
     return result;
   },
+
+  // staff queries for specific records by ID (with permission checks)
+  getTicketVitalSignsId: async (_, args, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
+    if (!isPermitted) {
+      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getTicketVitalSignsId`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper._getTicketVitalSignsId(_, args, { user, res });
+  },
+
+  getTicketDentalRecordId: async (_, args, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
+    if (!isPermitted) {
+      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getTicketDentalRecordId`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper._getTicketDentalRecordId(_, args, { user, res });
+  },
+
+  getUserTicketIds: async (_, args, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view, args.userId);
+    if (!isPermitted) {
+      logger.warn(`Unauthorized access attempt by user ID ${user.id} to getUserTicketIds for user ${args.userId}`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper._getUserTicketIds(_, {...args, statuses: ["Approved"]}, { user, res });
+  },
+
+  // miscellaneous queries
 
   getProcedureDomain: async (_, __, { user, res }) => {
     const result = await Wrapper._getProcedureDomain(_, {}, { user, res });
@@ -248,11 +253,6 @@ const Query = {
 
   getOralApplianceCatalogs: async (_, args, { user, res }) => {
     const result = await Wrapper._getOralApplianceCatalogs(_, args, { user, res });
-    return result;
-  },
-
-  getOralFindingCatalogs: async (_, args, { user, res }) => {
-    const result = await Wrapper._getOralFindingCatalogs(_, args, { user, res });
     return result;
   },
 
@@ -300,7 +300,7 @@ const Query = {
     if (!args.searchTerm || args.searchTerm.trim().length < 2) return [];
     return await Wrapper._searchPatients(_, args, { user, res });
   },
-  
+
 };
 
 

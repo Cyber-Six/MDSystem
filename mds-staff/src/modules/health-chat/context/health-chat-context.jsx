@@ -10,7 +10,8 @@ import {
   rejectTicket as rejectTicketService,
   sendMessage as sendMessageService,
   closeTicket as closeTicketService,
-  deleteArchivedTicket as deleteArchivedTicketService
+  deleteArchivedTicket as deleteArchivedTicketService,
+  extendSession as extendSessionService
 } from '../health-chat-service';
 
 const HealthChatContext = createContext(null);
@@ -99,6 +100,7 @@ export function HealthChatProvider({ children }) {
   // Error state
   const [error, setError] = useState(null);
   const [socketError, setSocketError] = useState(false);
+  const [isExtendingSession, setIsExtendingSession] = useState(false);
 
   /**
    * Refresh messages for current patient (manual refresh via HTTP)
@@ -227,24 +229,34 @@ export function HealthChatProvider({ children }) {
 
         // Also populate legacy tickets array for backward compatibility
         // Transform conversations to ticket-like objects
-        const ticketLikeItems = conversationsWithReadState.map(conv => ({
-          id: conv.patientId, // Use patientId as the ID for selection
-          patientId: conv.patientId,
-          patient: conv.patient,
-          purpose: conv.latestTicket?.purpose,
-          status: conv.latestTicket?.status,
-          session_start: conv.latestTicket?.session_start,
-          session_end: conv.latestTicket?.session_end,
-          archived_at: conv.latestTicket?.archived_at,
-          closedBy: conv.latestTicket?.closedBy,
-          lastMessage: conv.lastMessage,
-          lastMessageAt: conv.lastMessageAt,
-          unreadCount: conv.unreadCount,
-          activeTicketCount: conv.activeTicketCount,
-          totalTicketCount: conv.totalTicketCount,
-          tickets: conv.tickets, // Array of all tickets for this patient
-          _isConversation: true // Flag to identify this is a patient conversation
-        }));
+        const now = Date.now();
+        const ticketLikeItems = conversationsWithReadState.map(conv => {
+          const rawStatus = conv.latestTicket?.status;
+          // Treat as Expired client-side if expiresAt has passed even if DB hasn't flipped yet
+          const effectiveStatus =
+            rawStatus === 'Ongoing' && conv.latestTicket?.expiresAt && new Date(conv.latestTicket.expiresAt).getTime() < now
+              ? 'Expired'
+              : rawStatus;
+          return {
+            id: conv.patientId, // Use patientId as the ID for selection
+            patientId: conv.patientId,
+            patient: conv.patient,
+            purpose: conv.latestTicket?.purpose,
+            status: effectiveStatus,
+            session_start: conv.latestTicket?.session_start,
+            session_end: conv.latestTicket?.session_end,
+            archived_at: conv.latestTicket?.archived_at,
+            expiresAt: conv.latestTicket?.expiresAt,
+            closedBy: conv.latestTicket?.closedBy,
+            lastMessage: conv.lastMessage,
+            lastMessageAt: conv.lastMessageAt,
+            unreadCount: conv.unreadCount,
+            activeTicketCount: conv.activeTicketCount,
+            totalTicketCount: conv.totalTicketCount,
+            tickets: conv.tickets, // Array of all tickets for this patient
+            _isConversation: true // Flag to identify this is a patient conversation
+          };
+        });
 
         setTickets(ticketLikeItems);
         setTicketsTotal(result.total || 0);
@@ -865,6 +877,54 @@ export function HealthChatProvider({ children }) {
   }, [removeTicket, selectedChatId]);
 
   /**
+   * Update the expiresAt for a ticket (called on healthchat:session-extended socket event)
+   */
+  const updateTicketExpiresAt = useCallback((chatId, expiresAt) => {
+    const id = String(chatId);
+    // Update legacy tickets list
+    setTickets(prev => prev.map(t => String(t.id) === id ? { ...t, expiresAt } : t));
+    // Update conversations (nested tickets array)
+    setConversations(prev => prev.map(conv => ({
+      ...conv,
+      tickets: conv.tickets?.map(t => String(t.id) === id ? { ...t, expiresAt } : t),
+    })));
+    // Update selectedTicket if it's the same chat
+    setSelectedTicket(prev => prev && String(prev.id) === id ? { ...prev, expiresAt } : prev);
+  }, []);
+
+  /**
+   * Extend session for a ticket (+1 day)
+   */
+  const extendSessionChat = useCallback(async (chatId) => {
+    if (!chatId || isExtendingSession) return;
+    try {
+      setIsExtendingSession(true);
+      setError(null);
+      const result = await extendSessionService(chatId);
+      if (result.success && result.chat) {
+        updateTicketExpiresAt(chatId, result.chat.expiresAt);
+        // Reload messages to show the system message
+        if (selectedPatientId) {
+          const fetched = await getPatientMessages(Number(selectedPatientId), { limit: 50 });
+          setMessages(fetched || []);
+        } else if (String(chatId) === String(selectedChatId)) {
+          const fetched = await getMessages(chatId);
+          setMessages(fetched || []);
+        }
+      } else {
+        setError(result.message || 'Failed to extend session.');
+      }
+      return result;
+    } catch (err) {
+      console.error('[HealthChatContext] Failed to extend session:', err);
+      setError(err.message || 'Failed to extend session.');
+      throw err;
+    } finally {
+      setIsExtendingSession(false);
+    }
+  }, [isExtendingSession, updateTicketExpiresAt, selectedPatientId, selectedChatId]);
+
+  /**
    * Get filtered tickets by search term
    */
   const filteredTickets = searchTerm
@@ -922,6 +982,9 @@ export function HealthChatProvider({ children }) {
     sendMessage,
     closeTicket,
     deleteTicket,
+    extendSessionChat,
+    isExtendingSession,
+    updateTicketExpiresAt,
 
     // Filter
     filter,

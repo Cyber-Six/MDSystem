@@ -1,0 +1,151 @@
+scalar Date
+scalar UUID
+
+### ====================== VITAL SIGNS ==================== ###
+
+type VitalSigns {
+  id: ID!
+  patientId: ID
+  height_cm: Float!
+  weight_kg: Float!
+  blood_pressure: String!
+  heart_rate: Int!
+  temperature: Float!
+  notes: String
+  created_at: Date
+  archived_at: Date
+}
+
+input VitalSignsInput {
+  height_cm: Float!
+  weight_kg: Float!
+  blood_pressure: String!
+  heart_rate: Int!
+  temperature: Float!
+  notes: String
+}
+
+input VitalSignsUpdateInput {
+  height_cm: Float
+  weight_kg: Float
+  blood_pressure: String
+  heart_rate: Int
+  temperature: Float
+  notes: String
+}
+
+### ====================== DENTAL RECORD ==================== ###
+
+enum DentalLegend {
+  PRESENT
+  DUE_FILLING_DECAYED
+  DUE_EXTRACTION
+  ROOT_FRAGMENT
+  MISSING
+  FILLED
+  GOLD_CROWN
+  JACKET_CROWN
+  ABUTMENT
+  PONTIC
+  FIXED_BRIDGE
+  REMOVABLE_DENTURE
+  FULL_DENTURE
+}
+
+type ToothPlacement {
+  id: ID!
+  toothIndex: Int!
+  legend: DentalLegend!
+}
+
+input ToothPlacementInput {
+  toothIndex: Int!
+  legend: DentalLegend!
+}
+
+### ====================== ORAL FINDING CATALOG ==================== ###
+
+type OralFindingCatalog {
+  id: ID!
+  name: String!
+  isActive: Boolean!
+  description: String
+  created_at: Date
+}
+
+input OralFindingCatalogInput {
+  name: String!
+  isActive: Boolean
+  description: String
+}
+
+type OralFindingRecord {
+  oralFindingId: ID!
+  status: String!
+  notes: String
+}
+
+input OralFindingRecordInput {
+  oralFindingId: ID!
+  status: String!
+  notes: String
+}
+
+type DentalRecord {
+  id: ID!
+  patientId: ID
+  notes: String
+  oralFindings: [OralFindingRecord!]!
+  ToothPlacements: [ToothPlacement!]!
+  created_at: Date
+}
+
+input DentalRecordInput {
+  notes: String
+  oralFindings: [OralFindingRecordInput!]!
+  ToothPlacements: [ToothPlacementInput!]!
+}
+
+### ====================== QUERIES ==================== ###
+
+type Query {
+  # Get VitalSigns for a patient
+  getPatientVitalSigns(patientId: ID!, limit: Int, offset: Int): [VitalSigns!]!
+
+  # Get DentalRecord for a patient
+  getPatientDentalRecord(patientId: ID!, limit: Int, offset: Int): [DentalRecord!]!
+
+  # Get specific VitalSigns by ID
+  getVitalSignsById(id: ID!): VitalSigns
+
+  # Get specific DentalRecord by ID
+  getDentalRecordById(id: ID!): DentalRecord
+
+  # Get all OralFindingCatalogs
+  getOralFindingCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralFindingCatalog!]!
+}
+
+### ====================== MUTATIONS ==================== ###
+
+type Mutation {
+  # Create standalone VitalSigns
+  createVitalSigns(patientId: ID!, input: VitalSignsInput!): VitalSigns!
+
+  # Create standalone DentalRecord
+  createDentalRecord(patientId: ID!, input: DentalRecordInput!): DentalRecord!
+
+  # Update existing VitalSigns (only allowed within 1 day of creation)
+  updateVitalSigns(id: ID!, input: VitalSignsUpdateInput!): VitalSigns!
+
+  # Update existing DentalRecord (only allowed within 1 day of creation)
+  updateDentalRecord(id: ID!, input: DentalRecordInput!): DentalRecord!
+
+  # Create OralFindingCatalog
+  createOralFindingCatalog(input: OralFindingCatalogInput!): OralFindingCatalog!
+
+  # Update OralFindingCatalog
+  updateOralFindingCatalog(id: ID!, input: OralFindingCatalogInput!): OralFindingCatalog!
+
+  # Delete OralFindingCatalog
+  deleteOralFindingCatalog(id: ID!): OralFindingCatalog!
+}
