@@ -319,7 +319,6 @@ const ChatPanel = ({ emitTyping }) => {
         <MessageInput emitTyping={emitTyping} />
       )}
     </div>
-    </div>
   );
 };
 
