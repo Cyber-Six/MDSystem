@@ -1626,9 +1626,6 @@ export const fetchRevisionPrefill = async () => {
           date_of_birth sex civil_status nationality religion
           contactNumber present_address province_address
         }
-        branchId: getBranchIdentifier {
-          identifier
-        }
       }`,
       {},
       { endpoint: '/profile/patient' }
@@ -1720,8 +1717,8 @@ export const fetchRevisionPrefill = async () => {
 
 export const getMyBranchIdentifier = async () => {
   const query = `
-    query GetBranchIdentifier {
-      getBranchIdentifier {
+    query GetMyBranchIdentifier {
+      getPersonalRecord {
         branch
         identifier
       }
@@ -1729,7 +1726,9 @@ export const getMyBranchIdentifier = async () => {
   `;
   try {
     const data = await sendGraphQLRequest(query, {}, { endpoint: '/profile/patient' });
-    return data?.getBranchIdentifier || null;
+    const record = data?.getPersonalRecord;
+    if (!record) return null;
+    return { branch: record.branch ?? null, identifier: record.identifier ?? null };
   } catch (error) {
     console.warn('[EMR Service] Could not fetch branch identifier:', error.message);
     return null;
@@ -1767,7 +1766,7 @@ const _extractEmergencyContactNumber = (contact) => {
 export const getPatientProfile = async () => {
   if (_patientProfileCache) return _patientProfileCache;
 
-  const [profileResult, branchResult, emergencyResult] = await Promise.allSettled([
+  const [profileResult, emergencyResult] = await Promise.allSettled([
     sendGraphQLRequest(
       `query GetPatientProfileData {
         personalLog: getPersonalRecordLog {
@@ -1777,18 +1776,10 @@ export const getPatientProfile = async () => {
         }
         personalRecord: getPersonalRecord {
           id
+          identifier
         }
         personalLogStatus: getPersonalRecordLogStatus
         loginEmail: getLoginEmail
-      }`,
-      {},
-      { endpoint: '/profile/patient' }
-    ),
-    sendGraphQLRequest(
-      `query GetBranchIdentifier {
-        getBranchIdentifier {
-          identifier
-        }
       }`,
       {},
       { endpoint: '/profile/patient' }
@@ -1810,14 +1801,6 @@ export const getPatientProfile = async () => {
 
   if (profileResult.status === 'rejected') {
     console.warn('[EMR Service] Could not fetch patient profile data:', profileResult.reason?.message);
-  }
-
-  const branchData = branchResult.status === 'fulfilled'
-    ? branchResult.value
-    : null;
-
-  if (branchResult.status === 'rejected') {
-    console.warn('[EMR Service] Could not fetch branch identifier:', branchResult.reason?.message);
   }
 
   const emergencyData = emergencyResult.status === 'fulfilled'
@@ -1842,7 +1825,7 @@ export const getPatientProfile = async () => {
     contactNumber: log.contactNumber || null,
     firstEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.firstContact),
     secondEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.secondContact),
-    identifier: branchData?.getBranchIdentifier?.identifier || null,
+    identifier: profileData?.personalRecord?.identifier || null,
   };
 
   return _patientProfileCache;
