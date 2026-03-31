@@ -325,6 +325,65 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
   }
 };
 
+/**
+ * Register initial profile using the reworked createInitialPersonalRecord mutation.
+ * This single mutation atomically creates the personal record log AND sets the
+ * branch identifier, replacing the old compound approach that called
+ * createBranchIdentifier + createPersonalRecordLog separately.
+ *
+ * Only works for unverified users (initial submission). Revisions must still
+ * use registerProfileSetup.
+ *
+ * @param {string} identifier - Student/employee number (e.g. "2022-12345")
+ * @param {object} personalInfo - formData.personalInfo
+ * @param {object} [options]
+ * @param {string} [options.branch] - Explicit branch for employees; students have it auto-detected by backend
+ */
+const registerInitialProfile = async (identifier, personalInfo, { branch } = {}) => {
+  const pi = personalInfo || {};
+
+  const input = {
+    first_name:       pi.firstName?.trim()        || '',
+    middle_name:      pi.middleName?.trim()       || '',
+    last_name:        pi.surname?.trim()          || '',
+    suffix:           pi.suffix?.trim()           || null,
+    date_of_birth:    pi.birthday                 || null,
+    sex:              pi.gender                   || null,
+    civil_status:     pi.civilStatus              || null,
+    nationality:      pi.nationality?.trim()      || '',
+    religion:         pi.religion?.trim()         || '',
+    contactNumber:    pi.contactNumber?.trim()    || '',
+    present_address:  pi.address?.trim()          || '',
+    province_address: pi.provinceAddress?.trim()  || pi.address?.trim() || '',
+    branch:           branch                      || 'Manila', // Backend overrides for students based on email
+    identifier:       identifier?.trim()          || '',
+  };
+
+  const mutation = `
+    mutation CreateInitialPersonalRecord($input: userProfileInitialInput!) {
+      createInitialPersonalRecord(input: $input) {
+        first_name
+        last_name
+        branch
+        identifier
+      }
+    }
+  `;
+
+  try {
+    const result = await sendGraphQLRequest(mutation, { input }, { endpoint: '/profile/patient' });
+    console.log('[EMR Service] Initial profile created:', {
+      name: `${result?.createInitialPersonalRecord?.first_name} ${result?.createInitialPersonalRecord?.last_name}`,
+      branch: result?.createInitialPersonalRecord?.branch,
+      identifier: result?.createInitialPersonalRecord?.identifier,
+    });
+    return result;
+  } catch (error) {
+    console.error('[EMR Service] Failed to create initial profile:', error);
+    throw error;
+  }
+};
+
 export const createInitialMedicalRecord = async (formData, { isRevision = false } = {}) => {
   console.log('[EMR Service] Starting initial medical record creation (batched)', isRevision ? '(revision)' : '(new)');
   console.log('[EMR Service] Form data received:', formData);
@@ -341,11 +400,16 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    // Both mutations go to /profile/patient — batched into ONE request.
-    // Must complete before ticket creation so the branch is already set.
-    // For revisions: uses updatePatientPersonalRecordLog directly (no create → no 400).
-    console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
-    await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
+    // For new submissions: uses the reworked createInitialPersonalRecord which atomically
+    // creates both the personal record log and branch identifier in a single mutation.
+    // For revisions: uses the legacy registerProfileSetup (createInitialPersonalRecord
+    // only works for unverified users).
+    console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
+    if (isRevision) {
+      await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
+    } else {
+      await registerInitialProfile(formData.personalInfo?.studentNumber, formData.personalInfo);
+    }
     profileLogCreated = !isRevision; // only mark for cleanup if a new log was created
 
     // ======== REQUEST 2 (parallel): Resolve ticket + upload dental photos ========
@@ -450,8 +514,10 @@ export const createInitialEmployeeRecord = async (formData) => {
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
-    await registerProfileSetup(formData.personalInfo?.employeeId, formData.personalInfo, false, { branch: formData.personalInfo?.branch });
+    // Uses the reworked createInitialPersonalRecord which atomically creates both
+    // the personal record log and branch identifier in a single mutation.
+    console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
+    await registerInitialProfile(formData.personalInfo?.employeeId, formData.personalInfo, { branch: formData.personalInfo?.branch });
     profileLogCreated = true;
 
     // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========

@@ -6,11 +6,6 @@ import { ENUM_TO_CODE } from './tooth-chart-constants';
 
 const GQL_DENTAL_RECORD_HISTORY = `
   query GetDentalRecordHistory($userId: ID!) {
-    getUserDentalRecord(userId: $userId, limit: 50) {
-      id notes created_at
-      ToothPlacements { id toothIndex legend }
-      oralFindings { oralFindingId status }
-    }
     getUserDentalHistory(userId: $userId, limit: 50) {
       id seenByDentist lastDentalCleaning purpose lastVisitDate
     }
@@ -27,7 +22,17 @@ const GQL_DENTAL_RECORD_HISTORY = `
     }
     dentalProcedureCatalogs: getDomainCatalogs(domain: DentalProcedure) { id name }
     oralApplianceCatalogs: getOralApplianceCatalogs { id name }
-    oralFindingCatalogs: getOralFindingCatalogs { id name }
+  }
+`;
+
+const GQL_STAFF_DENTAL_RECORDS = `
+  query GetStaffDentalRecords($patientId: ID!) {
+    getPatientDentalRecord(patientId: $patientId, limit: 50) {
+      id notes created_at
+      ToothPlacements { id toothIndex legend }
+      oralFindings { oralFindingId status }
+    }
+    getOralFindingCatalogs { id name }
   }
 `;
 
@@ -398,14 +403,25 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
     setLoading(true);
     setError(null);
 
-    axiosRequest
-      .post('/emr/medical', {
+    Promise.all([
+      axiosRequest.post('/emr/medical', {
         query: GQL_DENTAL_RECORD_HISTORY,
         variables: { userId: patient.id },
-      })
-      .then((res) => {
+      }),
+      axiosRequest.post('/staff/emr', {
+        query: GQL_STAFF_DENTAL_RECORDS,
+        variables: { patientId: patient.id },
+      }),
+    ])
+      .then(([emrRes, staffRes]) => {
         if (cancelled) return;
-        setHistoryData(res.data?.data || {});
+        const emrData = emrRes.data?.data || {};
+        const staffData = staffRes.data?.data || {};
+        setHistoryData({
+          ...emrData,
+          getUserDentalRecord: staffData.getPatientDentalRecord || [],
+          oralFindingCatalogs: staffData.getOralFindingCatalogs || [],
+        });
       })
       .catch((err) => {
         if (cancelled) return;
