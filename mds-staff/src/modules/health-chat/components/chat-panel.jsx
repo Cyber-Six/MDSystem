@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, Lock } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { getPatientMessages } from '../health-chat-service';
 import ChatHeader from './chat-header';
@@ -9,6 +9,7 @@ import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
 import PrescriptionPanel from './PrescriptionPanel';
+import ExpiryWarningBanner from './expiry-warning-banner';
 
 const ChatPanel = ({ emitTyping }) => {
   const {
@@ -24,6 +25,8 @@ const ChatPanel = ({ emitTyping }) => {
     socketError,
     activeTicketId,
     sendMessage,
+    isExtendingSession,
+    extendSessionChat,
   } = useHealthChat();
 
   const [showPrescription, setShowPrescription] = useState(false);
