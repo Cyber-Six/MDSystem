@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill, Plus } from 'lucide-react';
+import { Send, Paperclip, X, Loader2, File, Image, Film, CheckCircle, XCircle, Pill, Plus, Stethoscope } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { uploadFile, unstageFile } from '../health-chat-service';
 
@@ -44,7 +44,7 @@ const resolveClipboardImageFile = (item) => {
   });
 };
 
-const MessageInput = ({ emitTyping, onOpenPrescription }) => {
+const MessageInput = ({ emitTyping, onOpenPrescription, onOpenConsultation }) => {
   const { selectedChatId, activeTicketId, selectedTicket, sendMessage, approveTicket, rejectTicket } = useHealthChat();
 
   const [inputValue, setInputValue]   = useState('');
@@ -343,6 +343,25 @@ const MessageInput = ({ emitTyping, onOpenPrescription }) => {
                     ? <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
                     : <Paperclip className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   }
+                </span>
+              </button>
+
+              <div className="mx-4 border-b border-neutral-200 dark:border-white/[0.07]" />
+
+              {/* Consultation */}
+              <button
+                type="button"
+                onClick={() => { onOpenConsultation?.(); setShowPlusMenu(false); }}
+                disabled={isSending}
+                className="w-full flex items-center justify-between px-5 py-4
+                           text-neutral-800 dark:text-white
+                           hover:bg-neutral-100 dark:hover:bg-white/[0.07]
+                           active:bg-neutral-200 dark:active:bg-white/10
+                           disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <span className="text-[15px] font-medium tracking-[-0.01em]">Consultation</span>
+                <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-blue-100 dark:bg-[rgba(59,130,246,0.25)]">
+                  <Stethoscope className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </span>
               </button>
 

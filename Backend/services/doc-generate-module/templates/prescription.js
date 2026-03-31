@@ -38,6 +38,11 @@ class PrescriptionTemplate extends BaseTemplate {
     return {
       ...super.getSampleData(),
       prescription: {
+        chiefComplaints: 'Headache, fever for 3 days',
+        peFindings: 'BP 120/80, Temp 38.2°C, throat congestion',
+        diagnosis: 'Acute Pharyngitis; Upper Respiratory Tract Infection',
+        advice: 'Drink plenty of fluids; Get adequate rest; Avoid cold beverages',
+        followUpDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
         medications: [
           {
             name: 'Amoxicillin 500mg',
@@ -75,10 +80,12 @@ class PrescriptionTemplate extends BaseTemplate {
   async build() {
     this.init();
     this._drawHeader();
-    this._drawRxDateRow();
     this._drawPatientInfo();
-    this._drawMedications();
-    this._drawNotes();
+    this._drawClinicalTable();
+    this._drawDiagnosis();
+    this._drawMedicationTable();
+    this._drawAdvice();
+    this._drawFollowUp();
     this._drawSignature();
     return this;
   }
@@ -155,48 +162,6 @@ class PrescriptionTemplate extends BaseTemplate {
     doc.y = lineY + 8;
   }
 
-  _drawRxDateRow() {
-    const { doc } = this;
-    const lm  = this._lm;
-    const uw  = this._uw;
-    const y   = doc.y;
-
-    // Large italic Rx symbol (Times-BoldItalic)
-    doc
-      .font('Times-BoldItalic')
-      .fontSize(28)
-      .fillColor('#1a1a1a')
-      .text('Rx', lm, y, { lineBreak: false });
-
-    // DATE label + value (right-aligned)
-    const dateStr    = this._formatDate(this.data.issuedDate);
-    const dateBlockW = 170;
-    const dateBlockX = lm + uw - dateBlockW;
-
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(7)
-      .fillColor('#777')
-      .text('DATE', dateBlockX, y + 4, { width: dateBlockW, align: 'right' });
-
-    doc
-      .font('Helvetica')
-      .fontSize(8.5)
-      .fillColor('#1a1a1a')
-      .text(dateStr, dateBlockX, y + 14, { width: dateBlockW, align: 'right' });
-
-    // Underline below the date value
-    const underlineY = y + 26;
-    doc
-      .strokeColor('#444')
-      .lineWidth(0.5)
-      .moveTo(dateBlockX, underlineY)
-      .lineTo(lm + uw, underlineY)
-      .stroke();
-
-    doc.y = y + 38;
-  }
-
   _drawPatientInfo() {
     const { doc } = this;
     const { patient } = this.data;
@@ -214,147 +179,283 @@ class PrescriptionTemplate extends BaseTemplate {
       : (patient?.age || '');
 
     const sex = patient?.sex || '';
+    const dateStr = this._formatDate(this.data.issuedDate);
 
     const rowH   = 18;
-    const lblW   = 30;
+    const lblW   = 32;
     const lineC  = '#555';
-    const ageColW = 80;
 
     // ── Row 1: Name ──
     const nameLineX = lm + lblW;
-    const nameLineW = uw - lblW;
 
     doc
       .font('Helvetica-Bold').fontSize(8).fillColor('#444')
       .text('Name:', lm, y + 4, { width: lblW, lineBreak: false });
     doc
       .font('Helvetica').fontSize(8.5).fillColor('#111')
-      .text(fullName, nameLineX + 2, y + 4, { width: nameLineW - 4, lineBreak: false });
+      .text(fullName, nameLineX + 2, y + 4, { width: uw - lblW - 4, lineBreak: false });
     doc
       .strokeColor(lineC).lineWidth(0.5)
       .moveTo(nameLineX, y + rowH)
       .lineTo(lm + uw, y + rowH)
       .stroke();
 
-    // ── Row 2: Age + Sex ──
+    // ── Row 2: Age | Sex | Date ──
     const row2Y = y + rowH + 6;
-    const sexLblX = lm + lblW + ageColW + 8;
+    const ageValW = 40;
+    const sexLblX = lm + lblW + ageValW + 12;
+    const sexValW = 40;
+    const dateLblX = sexLblX + lblW + sexValW + 12;
 
+    // Age
     doc
       .font('Helvetica-Bold').fontSize(8).fillColor('#444')
       .text('Age:', lm, row2Y + 4, { width: lblW, lineBreak: false });
     doc
       .font('Helvetica').fontSize(8.5).fillColor('#111')
-      .text(age, lm + lblW + 2, row2Y + 4, { width: ageColW - 4, lineBreak: false });
+      .text(age, lm + lblW + 2, row2Y + 4, { width: ageValW - 4, lineBreak: false });
     doc
       .strokeColor(lineC).lineWidth(0.5)
       .moveTo(lm + lblW, row2Y + rowH)
-      .lineTo(lm + lblW + ageColW, row2Y + rowH)
+      .lineTo(lm + lblW + ageValW, row2Y + rowH)
       .stroke();
 
+    // Sex
     doc
       .font('Helvetica-Bold').fontSize(8).fillColor('#444')
       .text('Sex:', sexLblX, row2Y + 4, { width: lblW, lineBreak: false });
     doc
       .font('Helvetica').fontSize(8.5).fillColor('#111')
-      .text(sex, sexLblX + lblW + 2, row2Y + 4, { width: 80, lineBreak: false });
+      .text(sex, sexLblX + lblW + 2, row2Y + 4, { width: sexValW - 4, lineBreak: false });
     doc
       .strokeColor(lineC).lineWidth(0.5)
       .moveTo(sexLblX + lblW, row2Y + rowH)
-      .lineTo(sexLblX + lblW + 90, row2Y + rowH)
+      .lineTo(sexLblX + lblW + sexValW, row2Y + rowH)
       .stroke();
 
-    doc.y = row2Y + rowH + 12;
+    // Date
+    doc
+      .font('Helvetica-Bold').fontSize(8).fillColor('#444')
+      .text('Date:', dateLblX, row2Y + 4, { width: lblW, lineBreak: false });
+    doc
+      .font('Helvetica').fontSize(8.5).fillColor('#111')
+      .text(dateStr, dateLblX + lblW + 2, row2Y + 4, {
+        width: lm + uw - dateLblX - lblW - 4, lineBreak: false,
+      });
+    doc
+      .strokeColor(lineC).lineWidth(0.5)
+      .moveTo(dateLblX + lblW, row2Y + rowH)
+      .lineTo(lm + uw, row2Y + rowH)
+      .stroke();
+
+    doc.y = row2Y + rowH + 10;
   }
 
-  _drawMedications() {
+  _drawClinicalTable() {
+    const { doc } = this;
+    const { prescription } = this.data;
+    const complaints = prescription?.chiefComplaints;
+    const peFindings = prescription?.peFindings;
+
+    if (!complaints && !peFindings) return;
+
+    const lm = this._lm;
+    const uw = this._uw;
+    const y = doc.y;
+    const colW = Math.floor(uw / 2);
+    const col2W = uw - colW;
+    const headerH = 15;
+    const pad = 6;
+    const borderC = '#555';
+    const headerBg = '#E8E8E8';
+
+    // Measure content heights for auto-expanding cells
+    doc.font('Helvetica').fontSize(8);
+    const leftH  = complaints ? doc.heightOfString(complaints, { width: colW - pad * 2 }) : 0;
+    const rightH = peFindings ? doc.heightOfString(peFindings, { width: col2W - pad * 2 }) : 0;
+    const contentH = Math.max(leftH, rightH, 24) + pad * 2;
+
+    // ── Header row ──
+    doc.save();
+    doc.rect(lm, y, colW, headerH).fill(headerBg);
+    doc.restore();
+    doc.rect(lm, y, colW, headerH).stroke(borderC);
+
+    doc.save();
+    doc.rect(lm + colW, y, col2W, headerH).fill(headerBg);
+    doc.restore();
+    doc.rect(lm + colW, y, col2W, headerH).stroke(borderC);
+
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#111');
+    doc.text('Chief Complaints', lm + pad, y + 3, { width: colW - pad * 2 });
+    doc.text('Clinical Findings', lm + colW + pad, y + 3, { width: col2W - pad * 2 });
+
+    // ── Content row ──
+    const cY = y + headerH;
+    doc.rect(lm, cY, colW, contentH).stroke(borderC);
+    doc.rect(lm + colW, cY, col2W, contentH).stroke(borderC);
+
+    doc.font('Helvetica').fontSize(8).fillColor('#222');
+    if (complaints) doc.text(complaints, lm + pad, cY + pad, { width: colW - pad * 2 });
+    if (peFindings) doc.text(peFindings, lm + colW + pad, cY + pad, { width: col2W - pad * 2 });
+
+    doc.y = cY + contentH + 8;
+  }
+
+  _drawDiagnosis() {
+    const diagnosis = this.data.prescription?.diagnosis;
+    if (!diagnosis) return;
+
+    const { doc } = this;
+    const lm = this._lm;
+    const uw = this._uw;
+
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#111')
+      .text('Diagnosis:', lm, doc.y);
+
+    doc.font('Helvetica').fontSize(8).fillColor('#333');
+    const items = diagnosis.split(/[;\n]/).map(s => s.trim()).filter(Boolean);
+    items.forEach(item => {
+      doc.text(`  \u2022 ${item}`, lm + 6, doc.y, { width: uw - 6 });
+    });
+
+    doc.y += 8;
+  }
+
+  _drawMedicationTable() {
     const { doc } = this;
     const { prescription } = this.data;
     const medications = prescription?.medications || [];
-    const lm      = this._lm;
-    const uw      = this._uw;
-    const startY  = doc.y;
-    const numX    = lm + 4;
-    const nameX   = lm + 22;
-    const detailX = lm + 28;
-    const minEnd  = startY + 160; // minimum content area
-
-    medications.forEach((med, i) => {
-      const medY = doc.y;
-
-      // Index number
-      doc
-        .font('Helvetica-Bold').fontSize(9).fillColor('#1a1a1a')
-        .text(`${i + 1}.`, numX, medY, { width: 16, align: 'right', lineBreak: false });
-
-      // Medication name + dosage (bold)
-      const nameLine = med.dosage
-        ? `${med.name}  ${med.dosage}`
-        : med.name;
-
-      doc
-        .font('Helvetica-Bold').fontSize(9.5).fillColor('#1a1a1a')
-        .text(nameLine, nameX, medY, { width: uw - (nameX - lm) - 4 });
-
-      // Detail row: Sig / Duration / Qty
-      const parts = [];
-      if (med.frequency) parts.push(`Sig.: ${med.frequency}`);
-      if (med.duration)  parts.push(`For ${med.duration}`);
-      if (med.quantity)  parts.push(`Qty: #${med.quantity}`);
-
-      if (parts.length) {
-        doc
-          .font('Helvetica').fontSize(8.5).fillColor('#333')
-          .text(parts.join('  ·  '), detailX, doc.y + 1, {
-            width: uw - (detailX - lm) - 4,
-          });
-      }
-
-      // Instructions (italic)
-      if (med.instructions) {
-        doc
-          .font('Helvetica-Oblique').fontSize(8).fillColor('#555')
-          .text(med.instructions, detailX, doc.y + 1, {
-            width: uw - (detailX - lm) - 4,
-          });
-      }
-
-      doc.y = doc.y + 8;
-    });
-
-    if (doc.y < minEnd) doc.y = minEnd;
-  }
-
-  _drawNotes() {
-    const notes = this.data.prescription?.specialInstructions;
-    if (!notes) return;
-
-    const { doc } = this;
     const lm  = this._lm;
     const uw  = this._uw;
-    const y   = doc.y;
 
-    // Write text first so we know the height
-    doc
-      .font('Helvetica-Bold').fontSize(8).fillColor('#222')
-      .text('Notes: ', lm + 8, y + 4, {
-        continued: true,
-        width: uw - 10,
-      })
-      .font('Helvetica').fillColor('#555')
-      .text(notes);
+    // Rx symbol
+    doc.font('Times-BoldItalic').fontSize(22).fillColor('#1a1a1a')
+      .text('Rx', lm, doc.y);
+    doc.y += 2;
 
-    const endY = doc.y + 4;
+    if (medications.length === 0) return;
 
-    // Left border (drawn after text so coordinates are known)
-    doc
-      .strokeColor('#999')
-      .lineWidth(2)
-      .moveTo(lm, y)
-      .lineTo(lm, endY)
-      .stroke();
+    // Column widths
+    const col1W = Math.round(uw * 0.50);
+    const col2W = Math.round(uw * 0.22);
+    const col3W = uw - col1W - col2W;
+    const headerH = 15;
+    const pad = 5;
+    const borderC = '#555';
+    const headerBg = '#E8E8E8';
+    let y = doc.y;
 
-    doc.y = endY + 8;
+    // ── Table header ──
+    const cols = [
+      { x: lm,                    w: col1W, text: 'Medicine Name' },
+      { x: lm + col1W,            w: col2W, text: 'Dosage' },
+      { x: lm + col1W + col2W,    w: col3W, text: 'Duration' },
+    ];
+    cols.forEach(col => {
+      doc.save();
+      doc.rect(col.x, y, col.w, headerH).fill(headerBg);
+      doc.restore();
+      doc.rect(col.x, y, col.w, headerH).stroke(borderC);
+      doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#111')
+        .text(col.text, col.x + pad, y + 3, { width: col.w - pad * 2, align: 'center' });
+    });
+    y += headerH;
+
+    // ── Table rows ──
+    medications.forEach((med, i) => {
+      // Measure name column content height
+      const nameText = `${i + 1}. ${med.name}`;
+      doc.font('Helvetica-Bold').fontSize(8);
+      let nameH = doc.heightOfString(nameText, { width: col1W - pad * 2 });
+
+      if (med.instructions) {
+        doc.font('Helvetica-Oblique').fontSize(7);
+        nameH += doc.heightOfString(med.instructions, { width: col1W - pad * 2 }) + 2;
+      }
+
+      // Measure duration column content
+      const durParts = [];
+      if (med.frequency) durParts.push(med.frequency);
+      if (med.duration)  durParts.push(med.duration);
+      if (med.quantity)  durParts.push(`Qty: #${med.quantity}`);
+      const durText = durParts.join('\n');
+
+      doc.font('Helvetica').fontSize(7.5);
+      const durH = durText ? doc.heightOfString(durText, { width: col3W - pad * 2 }) : 0;
+
+      const rowH = Math.max(nameH + pad * 2, durH + pad * 2, 24);
+
+      // Draw cell borders
+      doc.rect(lm, y, col1W, rowH).stroke(borderC);
+      doc.rect(lm + col1W, y, col2W, rowH).stroke(borderC);
+      doc.rect(lm + col1W + col2W, y, col3W, rowH).stroke(borderC);
+
+      // Medicine name (bold)
+      doc.font('Helvetica-Bold').fontSize(8).fillColor('#111')
+        .text(nameText, lm + pad, y + pad, { width: col1W - pad * 2 });
+
+      // Instructions / generic info (italic, smaller)
+      if (med.instructions) {
+        doc.font('Helvetica-Oblique').fontSize(7).fillColor('#555')
+          .text(med.instructions, lm + pad, doc.y + 1, { width: col1W - pad * 2 });
+      }
+
+      // Dosage (centered vertically in cell)
+      const dosageText = med.dosage || '';
+      doc.font('Helvetica').fontSize(8).fillColor('#111')
+        .text(dosageText, lm + col1W + pad, y + pad, {
+          width: col2W - pad * 2, align: 'center',
+        });
+
+      // Duration / frequency / qty
+      if (durText) {
+        doc.font('Helvetica').fontSize(7.5).fillColor('#111')
+          .text(durText, lm + col1W + col2W + pad, y + pad, {
+            width: col3W - pad * 2, align: 'center',
+          });
+      }
+
+      y += rowH;
+    });
+
+    doc.y = y + 8;
+  }
+
+  _drawAdvice() {
+    const advice = this.data.prescription?.advice;
+    const notes = this.data.prescription?.specialInstructions;
+    const content = advice || notes;
+    if (!content) return;
+
+    const { doc } = this;
+    const lm = this._lm;
+    const uw = this._uw;
+
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#111')
+      .text('Advice:', lm, doc.y);
+
+    doc.font('Helvetica').fontSize(8).fillColor('#333');
+    const items = content.split(/[;\n]/).map(s => s.trim()).filter(Boolean);
+    items.forEach(item => {
+      doc.text(`  \u2022 ${item}`, lm + 6, doc.y, { width: uw - 6 });
+    });
+
+    doc.y += 6;
+  }
+
+  _drawFollowUp() {
+    const followUp = this.data.prescription?.followUpDate;
+    if (!followUp) return;
+
+    const { doc } = this;
+    const lm = this._lm;
+    const uw = this._uw;
+
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#CC0000')
+      .text(`Follow Up: ${this._formatDate(followUp)}`, lm, doc.y, { width: uw });
+
+    doc.y += 6;
   }
 
   _drawSignature() {

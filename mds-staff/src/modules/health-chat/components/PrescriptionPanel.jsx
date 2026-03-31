@@ -46,9 +46,13 @@ const PrescriptionPanel = ({
   patientSex,
   activeTicketId,
   sendMessage,
+  consultationData,
 }) => {
   const [medications, setMedications] = useState([emptyMed()]);
   const [diagnosis, setDiagnosis] = useState('');
+  const [chiefComplaints, setChiefComplaints] = useState('');
+  const [peFindings, setPeFindings] = useState('');
+  const [advice, setAdvice] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [name, setName] = useState('');
@@ -60,13 +64,15 @@ const PrescriptionPanel = ({
   const [pdfUrl, setPdfUrl] = useState(null);
   const [documentId, setDocumentId] = useState(null);
 
+  const hasConsultation = !!consultationData;
+
   // Reset form when panel opens
   useEffect(() => {
     if (!isOpen) return;
     setMedications([emptyMed()]);
-    setDiagnosis('');
     setSpecialInstructions('');
     setFollowUpDate('');
+    setAdvice('');
     setName(patientName || '');
     setAge(calcAge(patientDob) || '');
     setSex(patientSex || '');
@@ -75,7 +81,18 @@ const PrescriptionPanel = ({
     setSuccess(false);
     setPdfUrl(null);
     setDocumentId(null);
-  }, [isOpen, patientName, patientDob, patientSex]);
+
+    // Auto-fill from consultation data
+    if (consultationData) {
+      setDiagnosis(consultationData.diagnosis || '');
+      setChiefComplaints(Array.isArray(consultationData.chiefComplaints) ? consultationData.chiefComplaints.join(', ') : (consultationData.chiefComplaints || ''));
+      setPeFindings(Array.isArray(consultationData.peFindings) ? consultationData.peFindings.join(', ') : (consultationData.peFindings || ''));
+    } else {
+      setDiagnosis('');
+      setChiefComplaints('');
+      setPeFindings('');
+    }
+  }, [isOpen, patientName, patientDob, patientSex, consultationData]);
 
   // Cleanup blob URL
   useEffect(() => {
@@ -114,6 +131,8 @@ const PrescriptionPanel = ({
         issuedDate: new Date().toISOString().split('T')[0],
         prescription: {
           diagnosis: diagnosis.trim() || undefined,
+          chiefComplaints: chiefComplaints.trim() || undefined,
+          peFindings: peFindings.trim() || undefined,
           medications: filled.map(m => ({
             name: m.name.trim(),
             dosage: m.dosage.trim() || undefined,
@@ -123,8 +142,10 @@ const PrescriptionPanel = ({
             instructions: m.instructions.trim() || undefined,
           })),
           specialInstructions: specialInstructions.trim() || undefined,
+          advice: advice.trim() || undefined,
           followUpDate: followUpDate || undefined,
         },
+        consultationId: consultationData?.consultationId || undefined,
       };
 
       // 1. Generate prescription PDF (saved to DB)
@@ -154,7 +175,7 @@ const PrescriptionPanel = ({
     } finally {
       setSubmitting(false);
     }
-  }, [medications, name, sex, diagnosis, specialInstructions, followUpDate, patientId, patientDob, activeTicketId, sendMessage]);
+  }, [medications, name, sex, diagnosis, chiefComplaints, peFindings, advice, specialInstructions, followUpDate, patientId, patientDob, activeTicketId, sendMessage, consultationData]);
 
   if (!isOpen) return null;
 
@@ -285,6 +306,40 @@ const PrescriptionPanel = ({
                 onChange={e => setDiagnosis(e.target.value)}
                 placeholder="e.g. Upper Respiratory Tract Infection"
                 className={inputCls}
+                readOnly={hasConsultation}
+                style={hasConsultation ? { opacity: 0.7, cursor: 'default' } : undefined}
+              />
+            </div>
+
+            {/* Chief Complaints (from consultation or manual) */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-1.5">
+                Chief Complaints
+              </p>
+              <textarea
+                value={chiefComplaints}
+                onChange={e => setChiefComplaints(e.target.value)}
+                placeholder="Chief complaints"
+                rows={2}
+                className={inputCls + ' resize-none'}
+                readOnly={hasConsultation}
+                style={hasConsultation ? { opacity: 0.7, cursor: 'default', scrollbarWidth: 'none' } : { scrollbarWidth: 'none' }}
+              />
+            </div>
+
+            {/* PE Findings (from consultation or manual) */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-1.5">
+                PE Findings
+              </p>
+              <textarea
+                value={peFindings}
+                onChange={e => setPeFindings(e.target.value)}
+                placeholder="Physical examination findings"
+                rows={2}
+                className={inputCls + ' resize-none'}
+                readOnly={hasConsultation}
+                style={hasConsultation ? { opacity: 0.7, cursor: 'default', scrollbarWidth: 'none' } : { scrollbarWidth: 'none' }}
               />
             </div>
 
@@ -372,6 +427,21 @@ const PrescriptionPanel = ({
                 value={specialInstructions}
                 onChange={e => setSpecialInstructions(e.target.value)}
                 placeholder="e.g. Complete full course of antibiotics..."
+                rows={2}
+                className={inputCls + ' resize-none'}
+                style={{ scrollbarWidth: 'none' }}
+              />
+            </div>
+
+            {/* Advice */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-1.5">
+                Advice
+              </p>
+              <textarea
+                value={advice}
+                onChange={e => setAdvice(e.target.value)}
+                placeholder="e.g. Rest, increase fluid intake..."
                 rows={2}
                 className={inputCls + ' resize-none'}
                 style={{ scrollbarWidth: 'none' }}
