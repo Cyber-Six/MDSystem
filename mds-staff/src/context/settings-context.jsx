@@ -21,8 +21,7 @@ const DEFAULT_SETTINGS = {
   showBadges: true,
   showBanners: true,
   bannerErrorsOnly: false,   // show only error/failed banners; suppress success
-  bannerCompact: false,      // cap simultaneous banners at bannerMaxVisible
-  bannerMaxVisible: 3,       // max banners shown when compact is on
+  bannerCompact: false,
   bannerAutoDismiss: true,
   bannerDismissDelay: 5,     // seconds
 
@@ -53,9 +52,11 @@ function getUserSettingsKey() {
   return `${SETTINGS_STORAGE_PREFIX}default`;
 }
 
-function loadSettings() {
+function loadSettings(userId) {
   try {
-    const key = getUserSettingsKey();
+    const key = userId
+      ? `${SETTINGS_STORAGE_PREFIX}${userId}`
+      : getUserSettingsKey();
     const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
@@ -98,6 +99,36 @@ export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(() => loadSettings());
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+
+  // Track which key we last loaded so we can detect user switches.
+  const currentKeyRef = useRef(getUserSettingsKey());
+
+  // Reload settings whenever the active user changes (login / logout in the same tab
+  // or from another tab). This is triggered by:
+  //   1. A custom 'mds:auth-changed' event dispatched by login/logout handlers.
+  //   2. The browser 'storage' event (cross-tab token changes).
+  useEffect(() => {
+    const reload = (e) => {
+      // Use userId from event detail when available — avoids any race condition
+      // where the token may not yet be written to localStorage.
+      const userId = e?.detail?.userId ?? null;
+      const newKey = userId
+        ? `${SETTINGS_STORAGE_PREFIX}${userId}`
+        : getUserSettingsKey();
+
+      if (newKey !== currentKeyRef.current) {
+        currentKeyRef.current = newKey;
+        setSettings(loadSettings(userId));
+      }
+    };
+
+    window.addEventListener('mds:auth-changed', reload);
+    window.addEventListener('storage', reload); // cross-tab
+    return () => {
+      window.removeEventListener('mds:auth-changed', reload);
+      window.removeEventListener('storage', reload);
+    };
+  }, []);
 
   // Apply font-size class to <html>
   useEffect(() => {

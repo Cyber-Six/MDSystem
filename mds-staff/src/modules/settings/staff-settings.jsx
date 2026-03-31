@@ -375,24 +375,6 @@ const StaffSettings = () => {
           />
         </SettingRow>
         <SettingRow
-          label="Max visible banners"
-          description="Maximum banners displayed simultaneously"
-          indent
-        >
-          <div className="flex items-center gap-2">
-            <select
-              value={draft.bannerMaxVisible}
-              onChange={(e) => set('bannerMaxVisible', parseInt(e.target.value, 10))}
-              disabled={!draft.showBanners || !draft.bannerCompact}
-              className="text-sm px-2 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40"
-            >
-              {[1, 2, 3, 5].map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
-        </SettingRow>
-        <SettingRow
           label="Auto-dismiss banners"
           description="Automatically dismiss banners after a delay"
           indent

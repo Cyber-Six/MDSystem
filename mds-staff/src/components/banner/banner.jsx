@@ -29,6 +29,9 @@ const Banner = () => {
   const settingsCtx = useContext(SettingsContext);
   const s = settingsCtx?.settings ?? FALLBACK_SETTINGS;
   const autoDismissTimersRef = useRef({});
+  // Tracks last-seen count per group key so we can detect new additions and restart
+  // the debounce timer only when the count increases (not on manual dismissals).
+  const groupCountsRef = useRef({});
   const [exitingIds, setExitingIds] = useState(new Set());
 
   // Always-current banners ref for reading inside timer callbacks.
@@ -94,8 +97,22 @@ const Banner = () => {
 
       const groupMap = buildGroupMap(visibleBanners);
 
-      groupMap.forEach((_, key) => {
+      groupMap.forEach((group, key) => {
         const timerKey = `group:${key}`;
+        const currentCount = group.ids.length;
+        const lastCount = groupCountsRef.current[key] ?? 0;
+
+        // A new banner was added to this group — restart the debounce timer so
+        // the group only auto-dismisses after a full quiet period with no additions.
+        if (autoDismissTimersRef.current[timerKey] && currentCount > lastCount) {
+          clearTimeout(autoDismissTimersRef.current[timerKey]);
+          delete autoDismissTimersRef.current[timerKey];
+        }
+
+        // Record count AFTER the reset check so subsequent decreases (manual dismiss)
+        // do NOT restart the timer — only new additions should.
+        groupCountsRef.current[key] = currentCount;
+
         if (!autoDismissTimersRef.current[timerKey]) {
           autoDismissTimersRef.current[timerKey] = setTimeout(() => {
             // Read current membership so late-arriving same-message banners are included.
@@ -105,6 +122,7 @@ const Banner = () => {
               triggerDismissGroup(groupBanners[0].id, groupBanners.map((b) => b.id));
             }
             delete autoDismissTimersRef.current[timerKey];
+            delete groupCountsRef.current[key];
           }, delay);
         }
       });
@@ -115,6 +133,9 @@ const Banner = () => {
           if (timerKey.startsWith('group:') && !activeTimerKeys.has(timerKey)) {
             clearTimeout(autoDismissTimersRef.current[timerKey]);
             delete autoDismissTimersRef.current[timerKey];
+            // Clean up the count tracker for groups that are fully gone.
+            const groupKey = timerKey.slice('group:'.length);
+            delete groupCountsRef.current[groupKey];
           }
         });
       };
@@ -155,6 +176,7 @@ const Banner = () => {
     return () => {
       Object.values(autoDismissTimersRef.current).forEach(clearTimeout);
       autoDismissTimersRef.current = {};
+      groupCountsRef.current = {};
     };
   }, []);
 
@@ -173,11 +195,7 @@ const Banner = () => {
   // ── Compact mode: group by type:message ──────────────────────────────────
   if (s.bannerCompact) {
     const groupMap = buildGroupMap(visibleBanners);
-    let groups = [...groupMap.values()];
-
-    // Optionally cap the number of visible groups (most-recent N).
-    const max = Math.max(1, s.bannerMaxVisible || 3);
-    if (groups.length > max) groups = groups.slice(-max);
+    const groups = [...groupMap.values()];
 
     return (
       <div className={styles.bannerContainer}>
