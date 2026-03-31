@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, Lock } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { getPatientMessages } from '../health-chat-service';
 import ChatHeader from './chat-header';
@@ -9,6 +9,7 @@ import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
 import PrescriptionPanel from './PrescriptionPanel';
+import ExpiryWarningBanner from './expiry-warning-banner';
 
 const ChatPanel = ({ emitTyping }) => {
   const {
@@ -24,6 +25,8 @@ const ChatPanel = ({ emitTyping }) => {
     socketError,
     activeTicketId,
     sendMessage,
+    isExtendingSession,
+    extendSessionChat,
   } = useHealthChat();
 
   const [showPrescription, setShowPrescription] = useState(false);
@@ -300,8 +303,24 @@ const ChatPanel = ({ emitTyping }) => {
         </div>
       </div>
 
+      {/* Expiry warning */}
+      <ExpiryWarningBanner
+        expiresAt={selectedTicket?.expiresAt}
+        isExtending={isExtendingSession}
+        onExtend={() => activeTicketId && extendSessionChat(activeTicketId)}
+      />
+
       {/* Input */}
-      <MessageInput emitTyping={emitTyping} onOpenPrescription={() => setShowPrescription(true)} />
+      {isArchived ? (
+        <div className="flex-shrink-0 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+          <div className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800">
+            <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+            {isExpired ? 'This conversation is expired' : 'This conversation is closed'}
+          </div>
+        </div>
+      ) : (
+        <MessageInput emitTyping={emitTyping} onOpenPrescription={() => setShowPrescription(true)} />
+      )}
     </div>
 
     {/* Prescription side panel */}
@@ -315,21 +334,6 @@ const ChatPanel = ({ emitTyping }) => {
       activeTicketId={activeTicketId}
       sendMessage={sendMessage}
     />
-      <ExpiryWarningBanner
-        expiresAt={selectedTicket?.expiresAt}
-        isExtending={isExtendingSession}
-        onExtend={() => activeTicketId && extendSessionChat(activeTicketId)}
-      />
-      {isArchived ? (
-        <div className="flex-shrink-0 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
-          <div className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800">
-            <Lock className="w-3.5 h-3.5 flex-shrink-0" />
-            {isExpired ? 'This conversation is expired' : 'This conversation is closed'}
-          </div>
-        </div>
-      ) : (
-        <MessageInput emitTyping={emitTyping} />
-      )}
     </div>
   );
 };
