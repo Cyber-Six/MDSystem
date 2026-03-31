@@ -43,6 +43,7 @@ const AppointmentPage = lazy(() => import('../modules/appointment/appointment.js
 const MedicineRequestPage = lazy(() => import('../modules/medicine-request/medicine-request-page.jsx'));
 const HealthChat = lazy(() => import('../modules/health-chat/health-chat.jsx'));
 const MyDocumentsPage = lazy(() => import('../modules/my-documents/my-documents-page.jsx'));
+const NotFound = lazy(() => import('./NotFound.jsx'));
 
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-[50vh]">
@@ -332,7 +333,7 @@ const Dashboard = () => {
               <Route path="/my-documents" element={<MyDocumentsPage />} />
               {/* Redirect old e-consultation path to new health-chat path */}
               <Route path="/e-consultation" element={<Navigate to="/health-chat" replace />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>

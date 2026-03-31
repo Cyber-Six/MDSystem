@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import StaffLayout from '../components/layout/StaffLayout.jsx';
 import ErrorBoundary from '../components/error-boundary.jsx';
 import { PatientTabsProvider } from '../context/patient-tabs-context.jsx';
@@ -19,6 +19,7 @@ const AnnouncementManagement = lazy(() => import('../modules/anouncement/compone
 const StaffAnalytics = lazy(() => import('../modules/analytics/staff-analytics.jsx'));
 const SendNotificationView = lazy(() => import('../modules/notification/send-notification-view.jsx'));
 const StaffSettings = lazy(() => import('../modules/settings/staff-settings.jsx'));
+const NotFound = lazy(() => import('./NotFound.jsx'));
 
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-[50vh]">
@@ -50,7 +51,7 @@ const Dashboard = () => {
                 <Route path="/notifications" element={<SendNotificationView />} />
                 <Route path="/settings/roles" element={<PermissionRoute adminOnly><RoleManagementPage /></PermissionRoute>} />
                 <Route path="/settings" element={<StaffSettings />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </ErrorBoundary>
