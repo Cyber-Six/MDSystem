@@ -18,13 +18,14 @@ const HealthChatContext = createContext(null);
 
 /**
  * Get the effective timestamp for chronological sorting based on ticket status.
- * - Pending (Open): creation time (initial message or DB creation timestamp)
- * - Active (Ongoing): last message activity time
- * - Archive (Closed/Expired): close/archive time
+ * Always returns the most recent relevant timestamp so items sort newest-first.
+ * - Pending (Open): last message time or session start
+ * - Active (Ongoing): last message activity time or session start
+ * - Archive (Closed/Expired): close/archive time or last message time
  */
 function getEffectiveSortTime(status, lastMessageAt, sessionStart, sessionEnd, archivedAt) {
-  if (status === 'Open') return lastMessageAt || archivedAt;
-  if (status === 'Closed' || status === 'Expired') return sessionEnd || archivedAt || lastMessageAt;
+  if (status === 'Open') return lastMessageAt || sessionStart || archivedAt;
+  if (status === 'Closed' || status === 'Expired') return sessionEnd || archivedAt || lastMessageAt || sessionStart;
   return lastMessageAt || sessionStart;
 }
 
@@ -84,9 +85,7 @@ export function HealthChatProvider({ children }) {
     }
   });
 
-  // Pending closed chats - tickets closed but still shown in list until staff navigates away
-  // { patientId: { chatId, closedBy, closedAt, isExiting } }
-  const [pendingClosedChats, setPendingClosedChats] = useState({});
+
 
   // Filter state
   const [filter, setFilter] = useState('active'); // 'active' | 'pending' | 'archive' (kept for backward compatibility)
@@ -374,9 +373,9 @@ export function HealthChatProvider({ children }) {
   }, []);
 
   /**
-   * Mark a closed ticket as pending removal (stays in list until staff navigates away)
+   * Mark a ticket as closed (updates status in-place, stays in list)
    */
-  const markTicketPendingClosed = useCallback((chatId, patientId, closedBy) => {
+  const markTicketClosed = useCallback((chatId, patientId, closedBy) => {
     // Update ticket status to Closed immediately
     setTickets(prev => prev.map(t => {
       if (String(t.patientId) === String(patientId) ||
@@ -396,12 +395,6 @@ export function HealthChatProvider({ children }) {
     )) {
       setSelectedTicket(prev => prev ? { ...prev, status: 'Closed', closedBy } : null);
     }
-
-    // Track as pending closed for deferred removal with animation
-    setPendingClosedChats(prev => ({
-      ...prev,
-      [patientId]: { chatId, closedBy, closedAt: new Date().toISOString(), isExiting: false }
-    }));
   }, [selectedTicket]);
 
   /**
@@ -421,26 +414,6 @@ export function HealthChatProvider({ children }) {
     // When leaving the current chat, update read timestamp so messages seen are marked as read
     if (selectedPatientId) {
       markConversationAsRead(selectedPatientId);
-
-      // Check if previous chat has a pending closed status — trigger exit animation
-      const prevPending = pendingClosedChats[selectedPatientId];
-      if (prevPending && !prevPending.isExiting) {
-        setPendingClosedChats(prev => ({
-          ...prev,
-          [selectedPatientId]: { ...prev[selectedPatientId], isExiting: true }
-        }));
-        // Remove from list after animation completes
-        const prevId = selectedPatientId;
-        setTimeout(() => {
-          setTickets(prev => prev.filter(t => String(t.patientId) !== String(prevId)));
-          setConversations(prev => prev.filter(c => String(c.patientId) !== String(prevId)));
-          setPendingClosedChats(prev => {
-            const updated = { ...prev };
-            delete updated[prevId];
-            return updated;
-          });
-        }, 400); // Match animation duration
-      }
     }
 
     setSelectedPatientId(patientId);
@@ -491,7 +464,7 @@ export function HealthChatProvider({ children }) {
     } finally {
       setMessagesLoading(false);
     }
-  }, [selectedPatientId, tickets, conversations, markConversationAsRead, pendingClosedChats]);
+  }, [selectedPatientId, tickets, conversations, markConversationAsRead]);
 
   /**
    * Add a new message to the current conversation
@@ -677,25 +650,86 @@ export function HealthChatProvider({ children }) {
     );
 
     if (existingEntry) {
-      // Status change for a known patient — update both state arrays in-place
-      setTickets(prev => prev.map(t => {
-        const isTarget =
-          String(t.patientId) === String(ticket.patientId) ||
-          t.tickets?.some(sub => String(sub.id) === String(ticket.id));
-        if (!isTarget) return t;
-        const updatedSubTickets = t.tickets?.map(sub =>
-          String(sub.id) === String(ticket.id) ? { ...sub, status: ticket.status } : sub
-        );
-        return { ...t, status: ticket.status, tickets: updatedSubTickets || t.tickets };
-      }));
+      // Check whether this is a genuinely new ticket for an existing patient
+      // (e.g. patient had a closed chat and opened a new one) vs a status-only update
+      // on a ticket we already know about.
+      const ticketAlreadyTracked = existingEntry.tickets?.some(
+        sub => String(sub.id) === String(ticket.id)
+      );
+
+      setTickets(prev => {
+        const updated = prev.map(t => {
+          const isTarget =
+            String(t.patientId) === String(ticket.patientId) ||
+            t.tickets?.some(sub => String(sub.id) === String(ticket.id));
+          if (!isTarget) return t;
+
+          let updatedSubTickets;
+          if (ticketAlreadyTracked) {
+            // Known sub-ticket — just flip its status
+            updatedSubTickets = t.tickets?.map(sub =>
+              String(sub.id) === String(ticket.id) ? { ...sub, status: ticket.status } : sub
+            );
+          } else {
+            // New ticket for an existing patient — prepend it so it becomes the latest
+            const newSub = {
+              id: ticket.id,
+              status: ticket.status,
+              purpose: ticket.purpose,
+              session_start: ticket.session_start,
+              session_end: ticket.session_end,
+              expiresAt: ticket.expiresAt,
+              closedBy: ticket.closedBy,
+            };
+            updatedSubTickets = [newSub, ...(t.tickets || [])];
+          }
+
+          return {
+            ...t,
+            status: ticket.status,
+            lastMessage: ticket.lastMessage || t.lastMessage,
+            lastMessageAt: ticket.lastMessageAt || ticket.session_start || new Date().toISOString(),
+            tickets: updatedSubTickets || t.tickets,
+          };
+        });
+
+        // Re-sort so this patient floats to the top
+        updated.sort((a, b) => {
+          const aTime = getEffectiveSortTime(a.status, a.lastMessageAt, a.session_start, a.session_end, a.archived_at);
+          const bTime = getEffectiveSortTime(b.status, b.lastMessageAt, b.session_start, b.session_end, b.archived_at);
+          return (bTime ? new Date(bTime).getTime() : 0) - (aTime ? new Date(aTime).getTime() : 0);
+        });
+
+        return updated;
+      });
+
       setConversations(prev => prev.map(c => {
         if (String(c.patientId) !== String(existingEntry.patientId)) return c;
-        const updatedSubTickets = c.tickets?.map(sub =>
-          String(sub.id) === String(ticket.id) ? { ...sub, status: ticket.status } : sub
-        );
+
+        let updatedSubTickets;
+        if (ticketAlreadyTracked) {
+          updatedSubTickets = c.tickets?.map(sub =>
+            String(sub.id) === String(ticket.id) ? { ...sub, status: ticket.status } : sub
+          );
+        } else {
+          const newSub = {
+            id: ticket.id,
+            status: ticket.status,
+            purpose: ticket.purpose,
+            session_start: ticket.session_start,
+            session_end: ticket.session_end,
+            expiresAt: ticket.expiresAt,
+            closedBy: ticket.closedBy,
+          };
+          updatedSubTickets = [newSub, ...(c.tickets || [])];
+        }
+
         const latestTicket = c.latestTicket && String(c.latestTicket.id) === String(ticket.id)
           ? { ...c.latestTicket, status: ticket.status }
-          : c.latestTicket;
+          : ticketAlreadyTracked
+            ? c.latestTicket
+            : { id: ticket.id, status: ticket.status, purpose: ticket.purpose,
+                session_start: ticket.session_start, expiresAt: ticket.expiresAt };
         return { ...c, tickets: updatedSubTickets || c.tickets, latestTicket };
       }));
       return; // No full refresh needed
@@ -874,9 +908,9 @@ export function HealthChatProvider({ children }) {
         );
         const patientId = ticket?.patientId || selectedPatientId;
 
-        // Mark as pending closed (status updates immediately, removal deferred)
+        // Mark as closed (status updates immediately, stays in list)
         if (patientId) {
-          markTicketPendingClosed(chatId, patientId, 'Staff');
+          markTicketClosed(chatId, patientId, 'Staff');
         } else {
           updateTicketStatus(chatId, 'Closed');
         }
@@ -895,7 +929,7 @@ export function HealthChatProvider({ children }) {
       console.error('[HealthChatContext] Failed to close ticket:', err);
       throw err;
     }
-  }, [updateTicketStatus, tickets, selectedPatientId, selectedChatId, markTicketPendingClosed]);
+  }, [updateTicketStatus, tickets, selectedPatientId, selectedChatId, markTicketClosed]);
 
   /**
    * Delete an archived ticket (admin only)
@@ -1009,11 +1043,10 @@ export function HealthChatProvider({ children }) {
     typingUsers,
     setUserTyping,
 
-    // Needs-reply & pending closed
+    // Needs-reply
     needsReplyChats,
     markNeedsReply,
-    pendingClosedChats,
-    markTicketPendingClosed,
+    markTicketClosed,
 
     // Actions
     addMessage,

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { logout } from '../../packages-core-adapter';
 import { useStaffNotifications } from '../../modules/notification/notification-context';
+import { useSettings } from '../../context/settings-context';
 
 function formatRelativeTime(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -28,6 +29,8 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   });
 
   const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen } = useStaffNotifications();
+  const { settings } = useSettings();
+  const displayUnreadCount = settings.showBadges ? unreadCount : 0;
 
   const handleNotifClick = (notif) => {
     markAsRead(notif.id);
@@ -64,7 +67,8 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
     if (path.includes('/appointments')) return 'Appointments';
     if (path.includes('/analytics')) return 'Analytics';
     if (path.includes('/inventory')) return 'Inventory';
-    if (path.includes('/settings')) return 'Role Management';
+    if (path.includes('/settings/roles')) return 'Role Management';
+    if (path.includes('/settings')) return 'Settings';
     return 'Staff Portal';
   };
 
@@ -146,9 +150,9 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
-            {unreadCount > 0 && (
+            {displayUnreadCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-error-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-md ring-2 ring-white dark:ring-neutral-800 leading-none">
-                {unreadCount > 99 ? '99+' : unreadCount}
+                {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
               </span>
             )}
           </button>
@@ -484,7 +488,10 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
               <button className="w-full px-3 py-2 text-left text-sm text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700">
                 Profile
               </button>
-              <button className="w-full px-3 py-2 text-left text-sm text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700">
+              <button
+                onClick={() => { setShowUserMenu(false); navigate('/settings'); }}
+                className="w-full px-3 py-2 text-left text-sm text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700"
+              >
                 Settings
               </button>
               <button

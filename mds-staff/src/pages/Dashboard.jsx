@@ -18,6 +18,7 @@ const HealthChatView = lazy(() => import('../modules/health-chat/health-chat-vie
 const AnnouncementManagement = lazy(() => import('../modules/anouncement/components/announcement-management.jsx'));
 const StaffAnalytics = lazy(() => import('../modules/analytics/staff-analytics.jsx'));
 const SendNotificationView = lazy(() => import('../modules/notification/send-notification-view.jsx'));
+const StaffSettings = lazy(() => import('../modules/settings/staff-settings.jsx'));
 
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-[50vh]">
@@ -48,6 +49,7 @@ const Dashboard = () => {
                 <Route path="/announcements" element={<AnnouncementManagement />} />
                 <Route path="/notifications" element={<SendNotificationView />} />
                 <Route path="/settings/roles" element={<PermissionRoute adminOnly><RoleManagementPage /></PermissionRoute>} />
+                <Route path="/settings" element={<StaffSettings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>

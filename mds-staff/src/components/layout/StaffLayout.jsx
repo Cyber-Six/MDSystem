@@ -1,6 +1,7 @@
 import React, { useState, createContext, useEffect } from 'react';
 import StaffSidebar from './StaffSidebar';
 import StaffTopBar from './StaffTopBar';
+import { useSettings } from '../../context/settings-context';
 
 /**
  * Context for sidebar state
@@ -14,6 +15,7 @@ export const SidebarContext = createContext({
  * Main layout wrapper for staff dashboard with sidebar and topbar
  */
 const StaffLayout = ({ children }) => {
+  const { settings } = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(() => {
     // Check localStorage, default to true on desktop, false on mobile
@@ -21,6 +23,13 @@ const StaffLayout = ({ children }) => {
     if (saved !== null) return JSON.parse(saved);
     return window.innerWidth >= 768; // Default: expanded on desktop
   });
+
+  // Sync compact sidebar setting
+  useEffect(() => {
+    if (settings.compactSidebar && sidebarExpanded && window.innerWidth >= 768) {
+      setSidebarExpanded(false);
+    }
+  }, [settings.compactSidebar]);
 
   // Persist sidebar state to localStorage
   useEffect(() => {

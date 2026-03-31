@@ -5,6 +5,7 @@ import { BannerProvider } from './context/banner-context';
 import Banner from './components/banner/banner';
 import ErrorBoundary from './components/error-boundary';
 import { StaffNotificationProvider } from './modules/notification/notification-context';
+import { SettingsProvider } from './context/settings-context';
 
 // Lazy-loaded pages for code splitting
 const Auth = lazy(() => import('./pages/Auth.jsx'));
@@ -37,9 +38,11 @@ function App() {
                 path="/*"
                 element={
                   <PrivateRoute>
-                    <StaffNotificationProvider>
-                      <Dashboard />
-                    </StaffNotificationProvider>
+                    <SettingsProvider>
+                      <StaffNotificationProvider>
+                        <Dashboard />
+                      </StaffNotificationProvider>
+                    </SettingsProvider>
                   </PrivateRoute>
                 }
               />

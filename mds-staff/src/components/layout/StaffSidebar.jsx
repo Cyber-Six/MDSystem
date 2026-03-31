@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import logo from '@core/assets/MDSystem.png';
 import { useHealthChatBadge } from '../../modules/health-chat/hooks/use-health-chat-badge';
 import { usePermissions } from '../../context/permissions-context';
+import { useSettings } from '../../context/settings-context';
 
 /**
  * Staff Sidebar Navigation Component
@@ -12,6 +13,8 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const location = useLocation();
   const pendingChatCount = useHealthChatBadge();
   const { hasPermission, isAdmin, isLoading } = usePermissions();
+  const { settings } = useSettings();
+  const showBadges = settings.showBadges;
 
   const allNavItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
@@ -154,7 +157,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
                 >
                   <span className="flex-shrink-0 relative">
                     {icons[item.icon]}
-                    {item.icon === 'healthchat' && pendingChatCount > 0 && !isExpanded && (
+                    {item.icon === 'healthchat' && showBadges && pendingChatCount > 0 && !isExpanded && (
                       <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
                         {pendingChatCount > 99 ? '99+' : pendingChatCount}
                       </span>
@@ -163,7 +166,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
                   {isExpanded && (
                     <span className="truncate flex-1">{item.label}</span>
                   )}
-                  {isExpanded && item.icon === 'healthchat' && pendingChatCount > 0 && (
+                  {isExpanded && item.icon === 'healthchat' && showBadges && pendingChatCount > 0 && (
                     <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
                       {pendingChatCount > 99 ? '99+' : pendingChatCount}
                     </span>

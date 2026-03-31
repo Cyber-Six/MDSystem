@@ -5,10 +5,9 @@ import { formatPatientName, getPatientInitials, formatRelativeTime } from '../he
 /**
  * Patient List Item - Messenger Style
  * Shows: Name, Last message preview, Time ago, Status badge
- * Highlights unread conversations
- * Shows subtle "reply" badge when patient sent last message and staff hasn't replied
+ * Selected chat gets prominent styling; unread shows bold preview + badge count
  */
-const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, onClick }) => {
+const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, onClick }) => {
   const patient = ticket.patient;
   const initials = getPatientInitials(patient);
   const hasUnread = ticket.unreadCount > 0;
@@ -54,24 +53,15 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
       onClick={onClick}
       className={`
         flex items-center gap-2.5 px-3 py-2.5 cursor-pointer
-        transition-all duration-300 ease-in-out
+        transition-all duration-200 ease-in-out
         border-l-[3px] border-b
-        ${isExiting ? 'animate-[slideOut_400ms_ease-in-out_forwards]' : ''}
         ${isSelected
-          ? 'bg-amber-50 dark:bg-amber-900/20 border-l-primary-500 border-b-neutral-100 dark:border-b-neutral-800'
-          : hasUnread
-            ? 'bg-primary-50/50 dark:bg-primary-900/10 border-l-primary-400 border-b-neutral-100 dark:border-b-neutral-800 hover:bg-primary-50 dark:hover:bg-primary-900/20'
-            : 'bg-transparent border-l-transparent border-b-neutral-100 dark:border-b-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+          ? 'bg-primary-50 dark:bg-primary-900/20 border-l-primary-500 border-b-neutral-100 dark:border-b-neutral-800'
+          : 'bg-transparent border-l-transparent border-b-neutral-100 dark:border-b-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
         }
       `}
-      style={{
-        willChange: 'transform, opacity',
-        ...(isExiting ? {
-          animation: 'slideOut 400ms ease-in-out forwards',
-        } : {})
-      }}
     >
-      {/* Avatar with unread indicator */}
+      {/* Avatar */}
       <div className="relative flex-shrink-0">
         <div
           className={`
@@ -79,18 +69,12 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
             text-xs font-bold
             ${isSelected
               ? 'bg-primary-500 text-secondary-900'
-              : hasUnread
-                ? 'bg-primary-400 text-white'
-                : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+              : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
             }
           `}
         >
           {initials}
         </div>
-        {/* Unread dot indicator */}
-        {hasUnread && !isSelected && (
-          <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-primary-500 rounded-full border-2 border-white dark:border-neutral-900" />
-        )}
       </div>
 
       {/* Text block */}
@@ -98,14 +82,14 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
         {/* Name + Time row */}
         <div className="flex items-center justify-between gap-1.5">
           <span className={`text-xs overflow-hidden text-ellipsis whitespace-nowrap ${
-            hasUnread
-              ? 'font-bold text-secondary-900 dark:text-white'
+            isSelected
+              ? 'font-bold text-primary-700 dark:text-primary-300'
               : 'font-semibold text-secondary-900 dark:text-white'
           }`}>
             {formatPatientName(patient)}
           </span>
           <span className={`text-xs flex-shrink-0 ${
-            hasUnread
+            isSelected
               ? 'text-primary-600 dark:text-primary-400 font-medium'
               : 'text-neutral-400 dark:text-neutral-500'
           }`}>
@@ -121,8 +105,8 @@ const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, isExiting, 
         {/* Last message + Status row */}
         <div className="flex items-center justify-between gap-1.5">
           <p className={`text-xs overflow-hidden text-ellipsis whitespace-nowrap m-0 flex-1 ${
-            hasUnread
-              ? 'font-medium text-secondary-700 dark:text-neutral-300'
+            hasUnread && !isSelected
+              ? 'font-semibold text-secondary-800 dark:text-neutral-200'
               : 'text-neutral-400 dark:text-neutral-500'
           }`}>
             {getLastMessagePreview()}
