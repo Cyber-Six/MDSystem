@@ -99,6 +99,17 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
 
     const patientIds = validPatients.map(p => String(p.userId));
 
+    // Get staff member's name for the notification
+    const staffNameQuery = `
+      SELECT up.first_name, up.last_name
+      FROM "UsersPersonal" up
+      WHERE up.id = $1
+    `;
+    const staffNameResult = await db.query(staffNameQuery, [staffUserId]);
+    const staffName = staffNameResult.rows[0] 
+      ? `${staffNameResult.rows[0].first_name} ${staffNameResult.rows[0].last_name}`.trim()
+      : 'Staff Member';
+
     // Use the socket notification system to notify all patients
     // If socket active, deliver immediately; else queue for next login
     const notificationData = {
@@ -107,6 +118,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
       message: message.trim(),
       timestamp: new Date().toISOString(),
       from: staffUserId,
+      fromName: staffName,
       staffBranch: staffBranch
     };
 
