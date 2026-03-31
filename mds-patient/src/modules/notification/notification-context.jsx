@@ -98,11 +98,15 @@ const EVENT_MAP = {
       }
     }
     
+    // Include sender name if available
+    const senderName = data?.fromName || 'Staff Member';
+    
     return {
       type: 'general',
       route: null, // No specific route for general notifications
       title: title,
       message: message,
+      senderName: senderName, // Include sender information
     };
   },
 };

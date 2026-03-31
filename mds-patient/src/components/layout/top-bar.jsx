@@ -244,7 +244,12 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
                             <div className="flex-1 min-w-0 gap-1">
                               <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{notif.title}</p>
                               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{notif.message}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{formatRelativeTime(notif.time)}</p>
+                              <div className="flex items-center justify-between mt-1">
+                                <p className="text-xs text-gray-500 dark:text-gray-500">{formatRelativeTime(notif.time)}</p>
+                                {notif.senderName && notif.type === 'general' && (
+                                  <p className="text-xs text-primary-600 dark:text-primary-400 font-medium">From: {notif.senderName}</p>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
