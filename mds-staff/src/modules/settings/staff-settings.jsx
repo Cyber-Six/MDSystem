@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../../context/settings-context';
 
 /**
  * Unsaved-changes guard dialog
  */
-const DiscardDialog = ({ onDiscard, onApply }) => (
+const DiscardDialog = ({ onDiscard, onApply, onCancel }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
     <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl border border-neutral-200 dark:border-neutral-700 w-full max-w-sm mx-4 p-5">
       <div className="flex items-center gap-3 mb-3">
@@ -21,8 +21,14 @@ const DiscardDialog = ({ onDiscard, onApply }) => (
       </p>
       <div className="flex items-center justify-end gap-2">
         <button
-          onClick={onDiscard}
+          onClick={onCancel}
           className="px-4 py-2 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+        >
+          Stay
+        </button>
+        <button
+          onClick={onDiscard}
+          className="px-4 py-2 text-sm font-medium rounded-lg text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 transition-colors"
         >
           Discard
         </button>
@@ -30,7 +36,7 @@ const DiscardDialog = ({ onDiscard, onApply }) => (
           onClick={onApply}
           className="px-4 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors"
         >
-          Apply Changes
+          Save &amp; Leave
         </button>
       </div>
     </div>
@@ -115,21 +121,59 @@ const FONT_SIZE_OPTIONS = [
  */
 const StaffSettings = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { settings: savedSettings, updateSettings, DEFAULT_SETTINGS } = useSettings();
 
   // Local draft state — only committed on save
   const [draft, setDraft] = useState(() => structuredClone(savedSettings));
-  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [pendingNavPath, setPendingNavPath] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  // 'back' = user hit browser back; null = user clicked Cancel in save bar
+  const pendingActionRef = useRef(null);
 
   // Sync draft when savedSettings change externally (e.g. another tab)
   useEffect(() => {
     setDraft(structuredClone(savedSettings));
   }, [savedSettings]);
 
+  // Always-current ref for cleanup purposes
+  const savedThemeModeRef = useRef(savedSettings.themeMode);
+  useEffect(() => { savedThemeModeRef.current = savedSettings.themeMode; }, [savedSettings.themeMode]);
+
+  // Live theme preview — applies draft.themeMode immediately without saving.
+  // On unmount (navigating away without saving) the DOM is restored to the saved theme.
+  useEffect(() => {
+    const applyTheme = (mode) => {
+      document.documentElement.classList.toggle(
+        'dark',
+        mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches),
+      );
+    };
+    applyTheme(draft.themeMode);
+    return () => applyTheme(savedThemeModeRef.current);
+  }, [draft.themeMode]);
+
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(savedSettings);
+  const hasChangesRef = useRef(hasChanges);
+  useEffect(() => { hasChangesRef.current = hasChanges; }, [hasChanges]);
+
+  // ── Intercept browser back button when there are unsaved changes ──
+  useEffect(() => {
+    // Push a history entry so we can catch the back gesture.
+    window.history.pushState(null, '', window.location.href);
+
+    const onPopState = () => {
+      if (hasChangesRef.current) {
+        // Re-push so the URL stays, then show the dialog.
+        window.history.pushState(null, '', window.location.href);
+        pendingActionRef.current = 'back';
+        setShowDiscardDialog(true);
+      }
+      // If no unsaved changes, let the navigation happen naturally.
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // ── Draft updaters ──
   const set = useCallback((key, value) => {
@@ -158,38 +202,40 @@ const StaffSettings = () => {
     setSaved(false);
   };
 
-  // ── Navigation guard ──
-  const handleNavigateAway = useCallback(
-    (path) => {
-      if (hasChanges) {
-        setPendingNavPath(path);
-        setShowDiscardDialog(true);
-      } else {
-        navigate(path);
-      }
-    },
-    [hasChanges, navigate],
-  );
-
+  // ── Dialog handlers ──
   const handleDiscard = () => {
     setShowDiscardDialog(false);
     setDraft(structuredClone(savedSettings));
-    if (pendingNavPath) {
-      navigate(pendingNavPath);
-      setPendingNavPath(null);
+    if (pendingActionRef.current === 'back') {
+      // Go back for real — we already pushed a state entry, so one go-back lands on the prev page.
+      window.history.go(-2);
     }
+    pendingActionRef.current = null;
   };
 
   const handleApplyAndGo = () => {
     updateSettings(structuredClone(draft));
     setShowDiscardDialog(false);
-    if (pendingNavPath) {
-      navigate(pendingNavPath);
-      setPendingNavPath(null);
+    if (pendingActionRef.current === 'back') {
+      window.history.go(-2);
+    }
+    pendingActionRef.current = null;
+  };
+
+  const handleCancelNav = () => {
+    setShowDiscardDialog(false);
+    pendingActionRef.current = null;
+  };
+
+  // Also expose a way for the Cancel button in the save bar to trigger the dialog.
+  const handleCancelBar = () => {
+    if (hasChanges) {
+      pendingActionRef.current = null;
+      setShowDiscardDialog(true);
     }
   };
 
-  // Warn on browser back/close
+  // Warn on browser tab close / hard refresh
   useEffect(() => {
     const handler = (e) => {
       if (hasChanges) {
@@ -437,7 +483,7 @@ const StaffSettings = () => {
           </div>
         </SettingRow>
         <SettingRow
-          label="Compact sidebar"
+          label="Minimized sidebar"
           description="Keep the sidebar collapsed by default"
         >
           <Toggle checked={draft.compactSidebar} onChange={(v) => set('compactSidebar', v)} />
@@ -472,7 +518,7 @@ const StaffSettings = () => {
           <div className="flex items-center gap-2">
             {hasChanges && (
               <button
-                onClick={() => setDraft(structuredClone(savedSettings))}
+                onClick={handleCancelBar}
                 className="px-4 py-2 text-sm font-medium rounded-lg text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
               >
                 Cancel
@@ -493,9 +539,13 @@ const StaffSettings = () => {
         </div>
       </div>
 
-      {/* Discard dialog */}
+      {/* Navigation guard dialog */}
       {showDiscardDialog && (
-        <DiscardDialog onDiscard={handleDiscard} onApply={handleApplyAndGo} />
+        <DiscardDialog
+          onCancel={handleCancelNav}
+          onDiscard={handleDiscard}
+          onApply={handleApplyAndGo}
+        />
       )}
     </div>
   );

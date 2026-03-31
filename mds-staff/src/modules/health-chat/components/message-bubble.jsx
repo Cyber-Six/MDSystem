@@ -52,7 +52,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
   // ── Text message ──
   return (
     <div
-      className={`flex gap-2 w-full overflow-hidden ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
+      className={`flex gap-2 w-full min-w-0 ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
       style={{ marginBottom: isLastInGroup ? '5px' : '1px' }}
     >
       {/* Avatar — patient only, last in group; hidden spacer otherwise */}
@@ -141,7 +141,7 @@ const FileMessage = ({ message, isPatient, getSenderName, formatTime, isFirstInG
   return (
     <>
       <div
-        className={`flex gap-2 w-full overflow-hidden ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
+        className={`flex gap-2 w-full min-w-0 ${isPatient ? 'flex-row' : 'flex-row-reverse'} items-end`}
         style={{ marginBottom: isLastInGroup ? '5px' : '1px' }}
       >
         {isPatient && (
