@@ -20,7 +20,14 @@ const { v4: uuidv4 } = require('uuid');
  *   }
  * }>}
  */
-async function notifyStaffs(adminUserId, message) {
+/**
+ * @param {string} adminUserId
+ * @param {string} message
+ * @param {Array<string|number>|null} [recipientIds] - Optional. If provided, notify only these staff IDs.
+ *   The IDs are validated against the Medical status — any ID not belonging to a Medical user is silently skipped.
+ *   If null/empty, all staff are notified.
+ */
+async function notifyStaffs(adminUserId, message, recipientIds = null) {
   if (!message || typeof message !== 'string' || !message.trim()) {
     throw new Error('Message is required and must be a non-empty string');
   }
@@ -28,29 +35,41 @@ async function notifyStaffs(adminUserId, message) {
   const notificationId = `notif_admin_${uuidv4()}`;
 
   try {
-    // FIXED: Validate that admin user exists
+    // Validate that the sender is an active staff member
     const adminQuery = `
-      SELECT uc.id
-      FROM "UserCredentials" uc
-      INNER JOIN "UsersPersonal" up ON uc.id = up.id
-      WHERE uc.id = $1 AND up.status = 'Medical'
+      SELECT mp.id
+      FROM "MedicalPersonnel" mp
+      WHERE mp.id = $1 AND mp.is_active = true
     `;
 
     const adminResult = await db.query(adminQuery, [adminUserId]);
     if (!adminResult.rows[0]) {
-      throw new Error(`Admin user not found or not a staff member`);
+      throw new Error(`Admin user not found or not an active staff member`);
     }
 
-    // Get all staff members (Medical role users)
-    const staffQuery = `
-      SELECT DISTINCT uc.id as "userId", up.email
-      FROM "UserCredentials" uc
-      INNER JOIN "UsersPersonal" up ON uc.id = up.id
-      WHERE up.status = 'Medical'
-    `;
-
-    const result = await db.query(staffQuery);
-    const staffMembers = result.rows;
+    // Determine which staff to notify
+    let staffMembers;
+    if (recipientIds && recipientIds.length > 0) {
+      // Notify specific staff — validate each ID belongs to an active staff member
+      const filteredQuery = `
+        SELECT DISTINCT mp.id as "userId"
+        FROM "MedicalPersonnel" mp
+        WHERE mp.is_active = true
+          AND mp.id::text = ANY($1)
+      `;
+      const filteredResult = await db.query(filteredQuery, [recipientIds.map(String)]);
+      staffMembers = filteredResult.rows;
+      logger.debug(`[NOTIFY_STAFFS] Filtered to ${staffMembers.length} valid staff from ${recipientIds.length} requested IDs`);
+    } else {
+      // Notify all active staff members
+      const staffQuery = `
+        SELECT DISTINCT mp.id as "userId"
+        FROM "MedicalPersonnel" mp
+        WHERE mp.is_active = true
+      `;
+      const result = await db.query(staffQuery);
+      staffMembers = result.rows;
+    }
 
     if (!staffMembers || staffMembers.length === 0) {
       logger.info('[NOTIFY_STAFFS] No staff members found');

@@ -157,8 +157,10 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
           {showNotifications && (() => {
             const chatNotifs = notifications.filter((n) => n.type === 'chat');
             const medicineNotifs = notifications.filter((n) => n.type === 'medicine');
+            const generalNotifs = notifications.filter((n) => n.type === 'general');
             const chatUnread = chatNotifs.filter((n) => n.unread).length;
             const medicineUnread = medicineNotifs.filter((n) => n.unread).length;
+            const generalUnread = generalNotifs.filter((n) => n.unread).length;
             const inventoryCount = inventoryAlerts.length;
 
             const tabs = [
@@ -192,6 +194,17 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                 icon: (
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                ),
+              },
+              {
+                key: 'general',
+                label: 'General',
+                count: generalUnread,
+                urgent: false,
+                icon: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                   </svg>
                 ),
               },
@@ -374,6 +387,41 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                     )
                   )}
 
+                  {/* ── General Tab ── */}
+                  {activeNotifTab === 'general' && (
+                    generalNotifs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                        <div className="p-3 rounded-full bg-neutral-100 dark:bg-neutral-700 mb-2">
+                          <svg className="w-6 h-6 text-neutral-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                          </svg>
+                        </div>
+                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">No announcements</p>
+                        <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">No general notifications yet.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-neutral-100 dark:divide-neutral-700/50">
+                        {generalNotifs.map((notif) => (
+                          <button
+                            key={notif.id}
+                            type="button"
+                            onClick={() => { markAsRead(notif.id); }}
+                            className={`w-full text-left px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                          >
+                            <div className="flex items-start gap-2.5">
+                              {notif.unread && <span className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">{notif.title}</p>
+                                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5 line-clamp-2">{notif.message}</p>
+                                <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-1">{formatRelativeTime(notif.time)}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  )}
+
                 </div>
 
                 {/* Footer */}
@@ -381,13 +429,18 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      setShowNotifications(false);
-                      if (activeNotifTab === 'chat') {
-                        navigate('/health-chat');
-                      } else if (activeNotifTab === 'medicine') {
-                        navigate('/inventory', { state: { section: 'dispense' } });
+                      if (activeNotifTab === 'general') {
+                        markAllAsRead();
+                        setShowNotifications(false);
                       } else {
-                        navigate('/inventory');
+                        setShowNotifications(false);
+                        if (activeNotifTab === 'chat') {
+                          navigate('/health-chat');
+                        } else if (activeNotifTab === 'medicine') {
+                          navigate('/inventory', { state: { section: 'dispense' } });
+                        } else {
+                          navigate('/inventory');
+                        }
                       }
                     }}
                     className="w-full text-center text-[11px] font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
@@ -396,6 +449,8 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                       ? 'Go to Health Chat →'
                       : activeNotifTab === 'medicine'
                       ? 'Go to Request Tab →'
+                      : activeNotifTab === 'general'
+                      ? 'Dismiss announcements'
                       : 'Go to Inventory →'
                     }
                   </button>

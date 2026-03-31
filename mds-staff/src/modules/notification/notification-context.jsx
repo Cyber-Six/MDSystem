@@ -78,6 +78,24 @@ const EVENT_MAP = {
     message: 'A patient submitted a record update request.',
     refId: data?.recordId ?? null,
   }),
+  'admin:notification': (data) => {
+    let title = 'Announcement';
+    let message = data?.message ?? 'You received a notification.';
+    try {
+      const parsed = JSON.parse(data?.message);
+      if (parsed?.title) { title = parsed.title; message = parsed.body ?? message; }
+    } catch (_) {}
+    return { type: 'general', route: null, title, message, refId: data?.id ?? null, from: data?.from ?? null };
+  },
+  'staff:notification': (data) => {
+    let title = 'Staff Message';
+    let message = data?.message ?? 'You received a notification.';
+    try {
+      const parsed = JSON.parse(data?.message);
+      if (parsed?.title) { title = parsed.title; message = parsed.body ?? message; }
+    } catch (_) {}
+    return { type: 'general', route: null, title, message, refId: data?.id ?? null, from: data?.from ?? null };
+  },
 };
 
 // ── Inventory alert helpers ─────────────────────────────────────────────────
