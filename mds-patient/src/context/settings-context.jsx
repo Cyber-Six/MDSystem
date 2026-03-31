@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS = {
   compactSidebar: false,
 };
 
-const SETTINGS_STORAGE_PREFIX = 'staff_settings_';
+const SETTINGS_STORAGE_PREFIX = 'patient_settings_';
 
 // SECURITY: Only allow alphanumeric, underscore, and hyphen in userId to prevent
 // key injection / namespace pollution in localStorage.
@@ -131,7 +131,7 @@ function loadSettings(userId) {
  * Standalone function: reads current user settings from localStorage.
  * Can be called outside of React (e.g. from banner component or services).
  */
-export function getStaffSettings() {
+export function getPatientSettings() {
   return loadSettings();
 }
 
