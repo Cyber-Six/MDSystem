@@ -247,17 +247,53 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
     province_address: pi.provinceAddress?.trim() || pi.address?.trim() || '',
   };
 
-  // For revisions: the personal record log is still in InProgress from the original submission.
-  // Proactively cancel it first so createPersonalRecordLog won't throw "already in progress".
+  // For revisions: cancel the existing Revision log so createInitialPersonalRecord
+  // won't be blocked by the "revision still pending" guard.
   if (isRevision) {
     await cancelPersonalRecordLog();
     console.log('[EMR Service] Revision: pre-cancelled existing personal record log');
   }
 
-  // Build a compound mutation so both ops travel in one HTTP request.
+  // For revisions, use createInitialPersonalRecord (works for Unverified users and
+  // atomically handles the branch identifier via UPSERT — safe to re-send existing values).
+  if (isRevision) {
+    const initialInput = {
+      ...personalInput,
+      identifier: identifier?.trim() || '',
+      branch: branch || 'Manila', // backend overrides for students based on email prefix
+    };
+
+    const revisionMutation = `mutation ProfileSetup($input: userProfileInitialInput!) {
+      createInitialPersonalRecord(input: $input) { first_name last_name branch identifier }
+    }`;
+
+    try {
+      const result = await sendGraphQLRequest(revisionMutation, { input: initialInput }, { endpoint: '/profile/patient' });
+      console.log('[EMR Service] Revision profile setup complete:', {
+        branch: result?.createInitialPersonalRecord?.branch,
+        identifier: result?.createInitialPersonalRecord?.identifier,
+      });
+    } catch (error) {
+      const msg = error.message?.toLowerCase() || '';
+      if (msg.includes('already in progress') || msg.includes('revision still pending')) {
+        console.warn('[EMR Service] Stale log on revision — cancelling and retrying...', error.message);
+        try { await cancelPersonalRecordLog(); } catch (_) { /* ignore */ }
+        const result = await sendGraphQLRequest(revisionMutation, { input: initialInput }, { endpoint: '/profile/patient' });
+        console.log('[EMR Service] Revision profile setup complete (after stale-log recovery):', {
+          branch: result?.createInitialPersonalRecord?.branch,
+          identifier: result?.createInitialPersonalRecord?.identifier,
+        });
+        return;
+      }
+      console.error('[EMR Service] Failed to register revision profile setup:', error);
+      throw error;
+    }
+    return;
+  }
+
+  // --- Non-revision path (legacy): batch createBranchIdentifier + createPersonalRecordLog ---
   // createBranchIdentifier is conditional — skip it if no identifier is available.
-  // For revisions, createBranchIdentifier is also skipped (already set from initial submission).
-  const mutation = hasIdentifier && !isRevision
+  const mutation = hasIdentifier
     ? `mutation ProfileSetup($branchInput: BranchIdentifierInput!, $input: userProfileInput!) {
         createBranchIdentifier(input: $branchInput) { branch identifier }
         createPersonalRecordLog(input: $input) { first_name last_name }
@@ -269,7 +305,7 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
   const branchInput = { identifier: identifier.trim() };
   if (branch) branchInput.branch = branch;
 
-  const variables = hasIdentifier && !isRevision
+  const variables = hasIdentifier
     ? { branchInput, input: personalInput }
     : { input: personalInput };
 
@@ -281,20 +317,14 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
     });
   } catch (error) {
     // If a stale record log is blocking the submission, auto-cancel it and retry.
-    // This can happen when a previous submission failed mid-way and left a stuck log,
-    // or when a compound mutation partially succeeded but one operation threw.
     const msg = error.message?.toLowerCase() || '';
     const isStaleLog = msg.includes('already in progress');
     const isPartialFailure = msg.includes('identifier') && msg.includes('branch');
 
     if (isStaleLog || isPartialFailure) {
       console.warn('[EMR Service] Stale/partial state detected — cleaning up and retrying...', error.message);
-
-      // Best-effort cancel — may fail if nothing was created, that's fine.
       try { await cancelPersonalRecordLog(); } catch (_) { /* ignore */ }
 
-      // On retry, createBranchIdentifier may already be set from the first attempt,
-      // so we issue both operations independently to avoid compound-mutation partial failures.
       if (hasIdentifier) {
         try {
           const retryBranchInput = { identifier: identifier.trim() };
@@ -304,7 +334,6 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
           }`;
           await sendGraphQLRequest(branchMutation, { branchInput: retryBranchInput }, { endpoint: '/profile/patient' });
         } catch (branchErr) {
-          // Branch may already be set from a previous attempt — non-fatal
           console.warn('[EMR Service] Branch retry warning (may already exist):', branchErr.message);
         }
       }
@@ -314,7 +343,7 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
       }`;
       await sendGraphQLRequest(retryMutation, { input: personalInput }, { endpoint: '/profile/patient' });
       console.log('[EMR Service] Profile setup complete (after stale-log recovery):', {
-        branch: null, // already set from first attempt
+        branch: null,
         identifier: identifier?.trim() || null,
       });
       return;
@@ -331,8 +360,8 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
  * branch identifier, replacing the old compound approach that called
  * createBranchIdentifier + createPersonalRecordLog separately.
  *
- * Only works for unverified users (initial submission). Revisions must still
- * use registerProfileSetup.
+ * Only works for unverified users. Used for both initial submissions and (via
+ * registerProfileSetup) revision resubmissions.
  *
  * @param {string} identifier - Student/employee number (e.g. "2022-12345")
  * @param {object} personalInfo - formData.personalInfo
@@ -400,10 +429,10 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    // For new submissions: uses the reworked createInitialPersonalRecord which atomically
+    // For new submissions: uses createInitialPersonalRecord which atomically
     // creates both the personal record log and branch identifier in a single mutation.
-    // For revisions: uses the legacy registerProfileSetup (createInitialPersonalRecord
-    // only works for unverified users).
+    // For revisions: registerProfileSetup cancels the existing Revision log then
+    // also calls createInitialPersonalRecord (Unverified users only).
     console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
     if (isRevision) {
       await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
