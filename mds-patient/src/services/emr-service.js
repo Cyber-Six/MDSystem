@@ -1767,48 +1767,68 @@ const _extractEmergencyContactNumber = (contact) => {
 export const getPatientProfile = async () => {
   if (_patientProfileCache) return _patientProfileCache;
 
-  const profileData = await sendGraphQLRequest(
-    `query GetPatientProfileData {
-      personalLog: getPersonalRecordLog {
-        id
-        first_name middle_name last_name suffix
-        contactNumber
-      }
-      personalRecord: getPersonalRecord {
-        id
-      }
-      personalLogStatus: getPersonalRecordLogStatus
-      loginEmail: getLoginEmail
-      branchId: getBranchIdentifier {
-        identifier
-      }
-    }`,
-    {},
-    { endpoint: '/profile/patient' }
-  ).catch((error) => {
-    console.warn('[EMR Service] Could not fetch patient profile data:', error.message);
-    return {};
-  });
+  const [profileResult, branchResult, emergencyResult] = await Promise.allSettled([
+    sendGraphQLRequest(
+      `query GetPatientProfileData {
+        personalLog: getPersonalRecordLog {
+          id
+          first_name middle_name last_name suffix
+          contactNumber
+        }
+        personalRecord: getPersonalRecord {
+          id
+        }
+        personalLogStatus: getPersonalRecordLogStatus
+        loginEmail: getLoginEmail
+      }`,
+      {},
+      { endpoint: '/profile/patient' }
+    ),
+    sendGraphQLRequest(
+      `query GetBranchIdentifier {
+        getBranchIdentifier {
+          identifier
+        }
+      }`,
+      {},
+      { endpoint: '/profile/patient' }
+    ),
+    sendGraphQLRequest(
+      `query GetEmergencyContact {
+        emergencyContact: getEmergencyContact(approved: true) {
+          firstContact { contactNumber }
+          secondContact { contactNumber }
+        }
+      }`,
+      {}
+    ),
+  ]);
+
+  const profileData = profileResult.status === 'fulfilled'
+    ? profileResult.value
+    : (profileResult.reason?.data || {});
+
+  if (profileResult.status === 'rejected') {
+    console.warn('[EMR Service] Could not fetch patient profile data:', profileResult.reason?.message);
+  }
+
+  const branchData = branchResult.status === 'fulfilled'
+    ? branchResult.value
+    : null;
+
+  if (branchResult.status === 'rejected') {
+    console.warn('[EMR Service] Could not fetch branch identifier:', branchResult.reason?.message);
+  }
+
+  const emergencyData = emergencyResult.status === 'fulfilled'
+    ? emergencyResult.value
+    : null;
+
+  if (emergencyResult.status === 'rejected') {
+    console.warn('[EMR Service] Active emergency contact fetch failed:', emergencyResult.reason?.message);
+  }
 
   const log = profileData?.personalLog || {};
-
-  let emergencyData = null;
-
-  // Always fetch the approved emergency contact for profile display.
-  // Using approved:true works regardless of the current update ticket status
-  // (Cancelled, Pending, etc.) and avoids "No active profile found" errors.
-  emergencyData = await sendGraphQLRequest(
-    `query GetEmergencyContact {
-      emergencyContact: getEmergencyContact(approved: true) {
-        firstContact { contactNumber }
-        secondContact { contactNumber }
-      }
-    }`,
-    {}
-  ).catch((error) => {
-    console.warn('[EMR Service] Active emergency contact fetch failed:', error.message);
-    return null;
-  });
 
   const latestEmergency = emergencyData?.emergencyContact
     || (Array.isArray(emergencyData?.emergencyContacts) ? emergencyData.emergencyContacts[0] : null)
@@ -1822,7 +1842,7 @@ export const getPatientProfile = async () => {
     contactNumber: log.contactNumber || null,
     firstEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.firstContact),
     secondEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.secondContact),
-    identifier: profileData?.branchId?.identifier || null,
+    identifier: branchData?.getBranchIdentifier?.identifier || null,
   };
 
   return _patientProfileCache;
