@@ -16,6 +16,14 @@ enum USER_CIVILSTATUS {
   Separated
 
 }
+
+enum CredentialStatus {
+  Unverified
+  Active
+  Inactive
+  Locked
+}
+
 ## User Profile Interface
 
 
@@ -729,6 +737,7 @@ type PatientSearchResult {
   year: String
   department: String
   role: String
+  credentials_status: CredentialStatus
   latest_ticket_id: ID
   latest_status: UpdateStatus
   latest_scope: UpdateScope

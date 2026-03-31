@@ -33,9 +33,9 @@ const RouteLoader = () => (
  */
 const Dashboard = () => {
   return (
-    <PermissionsProvider>
-      <StaffLayout>
-        <PatientTabsProvider>
+    <PatientTabsProvider>
+      <PermissionsProvider>
+        <StaffLayout>
           <ErrorBoundary>
             <Suspense fallback={<RouteLoader />}>
               <Routes>
@@ -55,9 +55,9 @@ const Dashboard = () => {
               </Routes>
             </Suspense>
           </ErrorBoundary>
-        </PatientTabsProvider>
-      </StaffLayout>
-    </PermissionsProvider>
+        </StaffLayout>
+      </PermissionsProvider>
+    </PatientTabsProvider>
   );
 };
 

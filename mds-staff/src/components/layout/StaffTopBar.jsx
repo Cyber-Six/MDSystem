@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { logout } from '../../packages-core-adapter';
 import { useStaffNotifications } from '../../modules/notification/notification-context';
 import { useSettings } from '../../context/settings-context';
+import { usePatientTabs } from '../../context/patient-tabs-context';
 
 function formatRelativeTime(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -27,6 +28,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
 
   const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen } = useStaffNotifications();
   const { settings, updateSettings } = useSettings();
+  const { clearTabs } = usePatientTabs();
   const { themeMode } = settings;
   const displayUnreadCount = settings.showBadges ? unreadCount : 0;
 
@@ -492,7 +494,13 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
               <div className="border-t border-neutral-200 dark:border-neutral-700 mt-1 pt-1">
                 <button 
                   onClick={async () => {
-                    try { await logout(true); } catch { window.location.href = '/auth'; }
+                    try {
+                      clearTabs();
+                      await logout(true);
+                    } catch {
+                      clearTabs();
+                      window.location.href = '/auth';
+                    }
                   }}
                   className="w-full px-3 py-2 text-left text-sm text-error-600 dark:text-error-400 hover:bg-neutral-50 dark:hover:bg-neutral-700"
                 >
