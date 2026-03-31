@@ -1,7 +1,7 @@
 /**
  * Dashboard Service
  * Fetches aggregated dashboard statistics from the staff backend.
- * Endpoint: GET /staff/dashboard/stats (JWT guard: medical)
+ * Endpoint: GET /dashboard/stats (JWT guard: medical)
  */
 
 import { axiosRequest } from '../../packages-core-adapter';

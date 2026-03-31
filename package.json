@@ -20,6 +20,7 @@
     "@rollup/rollup-linux-arm64-musl": "4.59.0"
   },
   "dependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.60.1",
     "recharts": "^3.8.1"
   }
 }
