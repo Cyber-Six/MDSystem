@@ -248,7 +248,7 @@ router.get('/patient/:patientId', jwtProtect('medical'), async (req, res) => {
  * GET /documents/:documentId  (numeric IDs only)
  * Download a saved document (staff)
  */
-router.get('/:documentId([0-9]+)', jwtProtect('medical'), async (req, res) => {
+router.get('/:documentId', jwtProtect('medical'), async (req, res) => {
   try {
     const { documentId } = req.params;
 
