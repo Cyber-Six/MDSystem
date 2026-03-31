@@ -11,7 +11,6 @@ const PatientList = () => {
     selectChat,
     typingUsers,
     needsReplyChats,
-    pendingClosedChats,
     selectedFilters
   } = useHealthChat();
 
@@ -96,22 +95,16 @@ const PatientList = () => {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {/* Inline keyframes for list animations */}
       <style>{`
         @keyframes listSlideIn {
           from { opacity: 0; transform: translateY(-12px); max-height: 0; }
           to { opacity: 1; transform: translateY(0); max-height: 80px; }
-        }
-        @keyframes slideOut {
-          from { opacity: 1; transform: translateX(0); max-height: 80px; }
-          to { opacity: 0; transform: translateX(-100%); max-height: 0; overflow: hidden; }
         }
       `}</style>
       {visibleTickets.map((ticket) => {
         const ticketId = String(ticket.id);
         const patientId = String(ticket.patientId);
         const isNew = newTicketIds.has(ticketId);
-        const isExiting = pendingClosedChats[patientId]?.isExiting;
 
         return (
           <div
@@ -125,7 +118,6 @@ const PatientList = () => {
               isSelected={String(ticket.id) === String(selectedChatId)}
               isTyping={typingUsers[ticket.id]?.isTyping}
               needsReply={!!needsReplyChats[patientId]}
-              isExiting={!!isExiting}
               onClick={() => selectChat(ticket.id)}
             />
           </div>
