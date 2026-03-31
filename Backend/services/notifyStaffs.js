@@ -40,7 +40,7 @@ async function notifyStaffs(adminUserId, message, recipientIds = null) {
       SELECT uc.id
       FROM "UserCredentials" uc
       INNER JOIN "UsersPersonal" up ON uc.id = up.id
-      WHERE uc.id = $1 AND up.status = 'Medical'
+      WHERE uc.id = $1 AND uc.identity = 'Medical'
     `;
 
     const adminResult = await db.query(adminQuery, [adminUserId]);
@@ -57,7 +57,7 @@ async function notifyStaffs(adminUserId, message, recipientIds = null) {
         SELECT DISTINCT uc.id as "userId"
         FROM "UserCredentials" uc
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE up.status = 'Medical'
+        WHERE uc.identity = 'Medical'
           AND uc.id::text = ANY($1)
       `;
       const filteredResult = await db.query(filteredQuery, [recipientIds.map(String)]);
@@ -69,7 +69,7 @@ async function notifyStaffs(adminUserId, message, recipientIds = null) {
         SELECT DISTINCT uc.id as "userId"
         FROM "UserCredentials" uc
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE up.status = 'Medical'
+        WHERE uc.identity = 'Medical'
       `;
       const result = await db.query(staffQuery);
       staffMembers = result.rows;

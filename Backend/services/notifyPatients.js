@@ -40,7 +40,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
   try {
     // Get staff member's branch and location
     const staffQuery = `
-      SELECT uc.id, up.branch, up.location, up.status
+      SELECT uc.id, up.branch, up.location, uc.identity AS status
       FROM "UserCredentials" uc
       INNER JOIN "UsersPersonal" up ON uc.id = up.id
       WHERE uc.id = $1
@@ -77,7 +77,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
         SELECT DISTINCT uc.id as "userId", up.branch
         FROM "UserCredentials" uc
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE up.status != 'Medical'
+        WHERE uc.identity != 'Medical'
           AND up.location = $1
           AND uc.id::text = ANY($2)
         ORDER BY uc.id
@@ -94,7 +94,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
         SELECT DISTINCT uc.id as "userId", up.branch
         FROM "UserCredentials" uc
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE up.status != 'Medical'
+        WHERE uc.identity != 'Medical'
           AND up.location = $1
         ORDER BY uc.id
       `;
