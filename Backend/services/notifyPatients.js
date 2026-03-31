@@ -38,67 +38,51 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
   const notificationId = `notif_staff_${uuidv4()}`;
 
   try {
-    // Get staff member's branch and location
+    // Get staff member's branch scope from MedicalPersonnel
     const staffQuery = `
-      SELECT uc.id, up.branch, up.location, uc.identity AS status
-      FROM "UserCredentials" uc
-      INNER JOIN "UsersPersonal" up ON uc.id = up.id
-      WHERE uc.id = $1
+      SELECT mp.id, mp.designation AS branch
+      FROM "MedicalPersonnel" mp
+      WHERE mp.id = $1 AND mp.is_active = true
     `;
 
     const staffResult = await db.query(staffQuery, [staffUserId]);
     const staffMember = staffResult.rows[0];
 
     if (!staffMember) {
-      throw new Error(`Staff member not found`);
-    }
-
-    // Verify the user is actually staff (Medical role)
-    if (staffMember.status !== 'Medical') {
-      throw new Error(`User is not a staff member`);
+      throw new Error(`Staff member not found or not active`);
     }
 
     const staffBranch = staffMember.branch;
-    const staffLocation = staffMember.location;
 
-    // FIXED: Validate that branch and location are not null
-    if (!staffBranch || !staffLocation) {
-      throw new Error(`Staff member branch/location not configured`);
-    }
-
-    logger.debug(`[NOTIFY_PATIENTS] Staff ${staffUserId} branch=${staffBranch}, location=${staffLocation}`);
+    logger.debug(`[NOTIFY_PATIENTS] Staff ${staffUserId} branch=${staffBranch}`);
 
     // Determine which patients to notify
     let validPatients;
     if (recipientIds && recipientIds.length > 0) {
-      // Notify specific patients — still validate they're in the staff's branch/location
-      // Cast id to text so the query is safe for both integer and UUID id columns
+      // Notify specific patients — validate they exist in the Patients table
       const filteredQuery = `
         SELECT DISTINCT uc.id as "userId", up.branch
         FROM "UserCredentials" uc
+        INNER JOIN "Patients" p ON uc.id = p.id
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE uc.identity != 'Medical'
-          AND up.location = $1
-          AND uc.id::text = ANY($2)
+        WHERE uc.id::text = ANY($1)
         ORDER BY uc.id
       `;
-      const filteredResult = await db.query(filteredQuery, [staffLocation, recipientIds.map(String)]);
+      const filteredResult = await db.query(filteredQuery, [recipientIds.map(String)]);
       validPatients = filteredResult.rows.filter(patient =>
         ValidateUserBranchbyUserBranch(staffBranch, patient.branch)
       );
       logger.debug(`[NOTIFY_PATIENTS] Filtered to ${validPatients.length} valid patients from ${recipientIds.length} requested IDs`);
     } else {
-      // Get all patients under the same location
-      // FIXED: Removed "OR up.location IS NULL" to prevent unscoped notifications
+      // Get all patients, then filter by branch in JS via ValidateUserBranchbyUserBranch
       const patientQuery = `
         SELECT DISTINCT uc.id as "userId", up.branch
         FROM "UserCredentials" uc
+        INNER JOIN "Patients" p ON uc.id = p.id
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE uc.identity != 'Medical'
-          AND up.location = $1
         ORDER BY uc.id
       `;
-      const patientResult = await db.query(patientQuery, [staffLocation]);
+      const patientResult = await db.query(patientQuery);
       validPatients = patientResult.rows.filter(patient =>
         ValidateUserBranchbyUserBranch(staffBranch, patient.branch)
       );
@@ -123,8 +107,7 @@ async function notifyPatients(staffUserId, message, recipientIds = null) {
       message: message.trim(),
       timestamp: new Date().toISOString(),
       from: staffUserId,
-      staffBranch: staffBranch,
-      staffLocation: staffLocation
+      staffBranch: staffBranch
     };
 
     logger.info(`[NOTIFY_PATIENTS] Sending notification ${notificationId} to ${patientIds.length} patients from staff:${staffUserId}`);
