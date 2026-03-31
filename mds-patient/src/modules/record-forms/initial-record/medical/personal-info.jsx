@@ -140,6 +140,12 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             placeholder="Enter middle name"
           />
           <Input
+            label="Suffix"
+            value={data.suffix || ''}
+            onChange={(e) => handleChange('suffix', e.target.value)}
+            placeholder="e.g., Jr., Sr., III"
+          />
+          <Input
             label="Birthday"
             type="date"
             required
@@ -199,7 +205,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             reserveErrorSpace
             value={data.contactNumber || ''}
             onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
-            placeholder="+63 XXX XXX XXXX"
+            placeholder="09XXXXXXXXX"
             className="mb-0"
             error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
           />
@@ -366,7 +372,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 reserveErrorSpace
                 value={data.emergencyContacts[index]?.contactNumber || ''}
                 onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', handlePhone(`ec${index}`, e.target.value))}
-                placeholder="+63 XXX XXX XXXX"
+                placeholder="09XXXXXXXXX"
                 error={phoneWarnings[`ec${index}`] ? 'Contact number cannot exceed 11 digits.' : (index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber)}
               />
             </div>

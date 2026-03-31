@@ -168,7 +168,13 @@ const Login = () => {
       
       if (response.data.ok) {
         if (response.data.accessToken && response.data.refreshToken) {
-          TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+          // MUST await — setTokens is async and stores the refresh token in the second
+          // microtask. The event must fire only after both tokens are in storage.
+          await TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+          // Pass userId in the event detail so SettingsProvider can build the settings
+          // key directly without reading from localStorage (avoids any residual race).
+          const userId = response.data.refreshToken.split(':')[0];
+          window.dispatchEvent(new CustomEvent('mds:auth-changed', { detail: { userId } }));
         }
         navigate('/');
       }

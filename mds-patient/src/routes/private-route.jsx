@@ -25,16 +25,15 @@ const PrivateRoute = ({ children }) => {
         return;
       }
 
-      // SECURITY: Validate token format
-      if (!TokenStorage.validateToken(accessToken) || !TokenStorage.validateToken(refreshToken)) {
+      // SECURITY: Validate access token JWT structure
+      if (!TokenStorage.validateToken(accessToken)) {
         TokenStorage.clearTokens();
         if (isMounted) { setIsAuthenticated(false); setIsChecking(false); }
         return;
       }
 
       // SECURITY: Validate refresh token format (userId:deviceId:rawToken)
-      const parts = refreshToken.split(':');
-      if (parts.length !== 3) {
+      if (!TokenStorage.validateRefreshToken(refreshToken)) {
         TokenStorage.clearTokens();
         if (isMounted) { setIsAuthenticated(false); setIsChecking(false); }
         return;

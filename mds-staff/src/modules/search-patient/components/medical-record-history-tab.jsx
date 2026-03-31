@@ -176,7 +176,6 @@ function SnapshotBlock({ index, isCurrent, snapshotDate, children }) {
 
 export default function PatientMedicalRecordHistoryTab({ patient }) {
   const [historyData, setHistoryData] = useState(null);
-  const [vitalsHistory, setVitalsHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -189,28 +188,13 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
     setLoading(true);
     setError(null);
 
-    // Fetch EMR history and VitalSigns history in parallel
-    const emrPromise = axiosRequest.post('/emr/medical', {
+    axiosRequest.post('/emr/medical', {
       query: GQL_MEDICAL_RECORD_HISTORY,
       variables: { userId: patient.id },
-    });
-    const vitalsPromise = axiosRequest.post('/staff/emr', {
-      query: `query GetVitalsHistory($patientId: ID!) {
-        getPatientVitalSigns(patientId: $patientId, limit: 50) {
-          id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
-        }
-      }`,
-      variables: { patientId: patient.id },
-    }).catch((err) => {
-      console.warn('[MedicalRecordHistory] VitalSigns fetch failed:', err.message);
-      return null;
-    });
-
-    Promise.all([emrPromise, vitalsPromise])
-      .then(([emrRes, vitalsRes]) => {
+    })
+      .then((emrRes) => {
         if (cancelled) return;
         setHistoryData(emrRes.data?.data || {});
-        setVitalsHistory(vitalsRes?.data?.data?.getPatientVitalSigns || []);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -264,7 +248,6 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
     );
   }
 
-  const vitalSigns          = vitalsHistory ?? [];
   const medicalHistory      = historyData?.getUserMedicalHistory      ?? [];
   const allergyProfiles     = historyData?.getUserAllergyProfile      ?? [];
   const medicationProfiles  = historyData?.getUserMedicationProfile   ?? [];
@@ -277,7 +260,7 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
   const { allergenMap, conditionMap, immunizationMap, operationMap, hospitalizationMap, medicationMap } = catalogs;
 
   const hasAnyData = [
-    vitalSigns, medicalHistory, allergyProfiles, medicationProfiles,
+    medicalHistory, allergyProfiles, medicationProfiles,
     immunizationProfiles, hospitalizationProfiles, operationProfiles,
     lifestyleProfiles, visualAcuityProfiles,
   ].some((arr) => arr.length > 0);
@@ -289,34 +272,6 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
       </PatientSectionCard>
     );
   }
-
-  /* ── Vital Signs grid (same as Medical Record tab) ──────── */
-  const renderVitalEntry = (r) => {
-    const bmi = r.height_cm && r.weight_kg
-      ? (r.weight_kg / ((r.height_cm / 100) ** 2)).toFixed(1)
-      : null;
-    const vitalItems = [
-      { label: 'Height',      value: r.height_cm   ? `${r.height_cm} cm`   : null },
-      { label: 'Weight',      value: r.weight_kg   ? `${r.weight_kg} kg`   : null },
-      { label: 'BMI',         value: bmi            || null },
-      { label: 'Blood Press', value: r.blood_pressure || null },
-      { label: 'Heart Rate',  value: r.heart_rate  ? `${r.heart_rate} bpm` : null },
-      { label: 'Temp',        value: r.temperature ? `${r.temperature} °C` : null },
-    ];
-    return (
-      <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-neutral-200 dark:divide-neutral-700 -mx-3 border-t border-neutral-100 dark:border-neutral-700/60">
-        {vitalItems.map(({ label, value }) => (
-          <div key={label} className="px-3 py-3 text-center">
-            <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none mb-1.5">{label}</p>
-            {value
-              ? <p className="text-base font-semibold text-secondary-800 dark:text-white leading-none">{value}</p>
-              : <p className="text-sm text-secondary-300 dark:text-neutral-600">—</p>
-            }
-          </div>
-        ))}
-      </div>
-    );
-  };
 
   /* ── Medical History content (same as Medical Record tab) ── */
   const renderMedHistoryEntry = (r) => {
@@ -525,7 +480,7 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
 
   /* ── Build snapshot list (grouped by index across all sections) ── */
   const allArrays = [
-    vitalSigns, medicalHistory, allergyProfiles, medicationProfiles,
+    medicalHistory, allergyProfiles, medicationProfiles,
     immunizationProfiles, hospitalizationProfiles, operationProfiles,
     lifestyleProfiles, visualAcuityProfiles,
   ];
@@ -534,7 +489,6 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
   return (
     <div className="space-y-3">
       {Array.from({ length: maxCount }, (_, i) => {
-        const vs  = vitalSigns[i]                 ?? null;
         const mh  = medicalHistory[i]             ?? null;
         const ap  = allergyProfiles[i]            ?? null;
         const mp  = medicationProfiles[i]         ?? null;
@@ -546,17 +500,10 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
 
         // Use the first non-null record's created_at as the header date
         const snapshotDate =
-          [vs, mh, ap, mp, ip, hp, op, lf, vap].find(Boolean)?.created_at ?? null;
+          [mh, ap, mp, ip, hp, op, lf, vap].find(Boolean)?.created_at ?? null;
 
         return (
           <SnapshotBlock key={i} index={i} isCurrent={i === 0} snapshotDate={snapshotDate}>
-            {/* Vital Signs — full width */}
-            {vs && (
-              <PatientSectionCard title="Vital Signs">
-                {renderVitalEntry(vs)}
-              </PatientSectionCard>
-            )}
-
             {/* Two-column grid (same layout as Medical Record tab) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
               {/* ── LEFT COLUMN ── */}

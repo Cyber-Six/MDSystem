@@ -124,7 +124,10 @@ function ReadOnlyOralFindings({ catalogs, oralFindings }) {
         <tbody>
           {catalogs.map((catalog, idx) => {
             const finding = oralFindings.find((f) => String(f.oralFindingId) === String(catalog.id));
-            const value = finding != null ? finding.status : null;
+            const raw = finding?.status;
+            const value = (raw === true || raw === 'true' || raw === 'yes') ? true
+              : (raw === false || raw === 'false' || raw === 'no') ? false
+              : null;
             return (
               <tr key={catalog.id} className={`${idx % 2 === 0 ? 'bg-white dark:bg-neutral-800' : 'bg-neutral-50 dark:bg-neutral-800/50'}`}>
                 <td className="px-3 py-2 text-xs text-secondary-700 dark:text-neutral-300 border-b border-neutral-100 dark:border-neutral-700">{catalog.name}</td>
