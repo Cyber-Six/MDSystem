@@ -773,7 +773,7 @@ export async function createMedicalHistory(formData) {
       .filter(([_, val]) => val && val.checked)
       .map(([conditionId, val]) => ({
         conditionId: parseInt(conditionId),
-        relationship: val.relationship || null
+        relationship: val.relationship || 'Family'
       }));
     
     conditions.push(...familyConditions);
