@@ -3,8 +3,7 @@
   "workspaces": [
     "packages/*",
     "mds-patient",
-    "mds-staff",
-    "mds-mobile"
+    "mds-staff"
   ],
   "scripts": {
     "postinstall": "cd Backend && npm install",
@@ -13,12 +12,12 @@
     "build:staff": "npm run build --workspace=mds-staff",
     "dev:patient": "npm run dev --workspace=mds-patient",
     "dev:staff": "npm run dev --workspace=mds-staff",
-    "dev:mobile": "npm run start --workspace=mds-mobile",
     "start:patient": "node Backend/server.js",
     "start:staff": "node Backend/staff.js"
   },
-  "devDependencies": {
-    "react-native-worklets": "^0.8.1",
-    "react-test-renderer": "^19.1.0"
+  "devDependencies": {},
+  "optionalDependencies": {
+    "@rollup/rollup-linux-arm64-gnu": "4.59.0",
+    "@rollup/rollup-linux-arm64-musl": "4.59.0"
   }
 }

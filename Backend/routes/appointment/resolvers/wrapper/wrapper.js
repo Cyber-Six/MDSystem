@@ -367,6 +367,30 @@ const Query = {
     return result.rows;
   },
 
+  _listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const result = await db.query(`
+      SELECT sde.id, sde."slotId", sde."scheduledDate",
+             sde."morningAllowed", sde."afternoonAllowed", sde."allowDuring",
+             COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "morningRegistered",
+             COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "morningPending",
+             COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "afternoonRegistered",
+             COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "afternoonPending"
+      FROM "ScheduleDateEntity" sde
+      LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
+      WHERE sde."slotId" = $1
+        AND sde."scheduledDate" >= $2
+        AND sde."scheduledDate" <= $3
+      GROUP BY sde.id
+      ORDER BY sde."scheduledDate" ASC;
+    `, [schedulerId, startDate, endDate]);
+
+    return result.rows;
+  },
+
   _listSchedulerWhitelist: async (_, { schedulerId, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

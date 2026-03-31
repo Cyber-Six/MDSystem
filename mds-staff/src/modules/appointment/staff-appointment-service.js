@@ -263,6 +263,33 @@ export const getScheduleAvailability = async (schedulerId, date) => {
 };
 
 /**
+ * Get month availability for a scheduler (batch read-only).
+ * Returns existing ScheduleDateEntity records with booking counts.
+ * @param {string} schedulerId
+ * @param {string} startDate - YYYY-MM-DD
+ * @param {string} endDate - YYYY-MM-DD
+ * @returns {Promise<Array>} ScheduleDateEntity[]
+ */
+export const getMonthAvailability = async (schedulerId, startDate, endDate) => {
+  const data = await sendGraphQL(`
+    query ListMonthAvailability($schedulerId: ID!, $startDate: Date!, $endDate: Date!) {
+      listMonthAvailability(schedulerId: $schedulerId, startDate: $startDate, endDate: $endDate) {
+        id
+        slotId
+        morningAllowed
+        morningRegistered
+        morningPending
+        afternoonAllowed
+        afternoonRegistered
+        afternoonPending
+        scheduledDate
+      }
+    }
+  `, { schedulerId, startDate, endDate });
+  return data.listMonthAvailability;
+};
+
+/**
  * List custom dates for a scheduler (with slot info).
  * @param {string} schedulerId
  * @param {number} [offset=0]
