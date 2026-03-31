@@ -72,9 +72,6 @@ function AllergyGroup({ label, items }) {
 
 const GQL_MEDICAL_RECORD_HISTORY = `
   query GetMedicalRecordHistory($userId: ID!) {
-    getUserVitalSigns(userId: $userId, limit: 50) {
-      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
-    }
     getUserMedicalHistory(userId: $userId, limit: 50) {
       id notes created_at
       conditions { id conditionId description diagnosedDate relationship }
@@ -179,6 +176,7 @@ function SnapshotBlock({ index, isCurrent, snapshotDate, children }) {
 
 export default function PatientMedicalRecordHistoryTab({ patient }) {
   const [historyData, setHistoryData] = useState(null);
+  const [vitalsHistory, setVitalsHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -191,14 +189,28 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
     setLoading(true);
     setError(null);
 
-    axiosRequest
-      .post('/emr/medical', {
-        query: GQL_MEDICAL_RECORD_HISTORY,
-        variables: { userId: patient.id },
-      })
-      .then((res) => {
+    // Fetch EMR history and VitalSigns history in parallel
+    const emrPromise = axiosRequest.post('/emr/medical', {
+      query: GQL_MEDICAL_RECORD_HISTORY,
+      variables: { userId: patient.id },
+    });
+    const vitalsPromise = axiosRequest.post('/staff/emr', {
+      query: `query GetVitalsHistory($patientId: ID!) {
+        getPatientVitalSigns(patientId: $patientId, limit: 50) {
+          id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
+        }
+      }`,
+      variables: { patientId: patient.id },
+    }).catch((err) => {
+      console.warn('[MedicalRecordHistory] VitalSigns fetch failed:', err.message);
+      return null;
+    });
+
+    Promise.all([emrPromise, vitalsPromise])
+      .then(([emrRes, vitalsRes]) => {
         if (cancelled) return;
-        setHistoryData(res.data?.data || {});
+        setHistoryData(emrRes.data?.data || {});
+        setVitalsHistory(vitalsRes?.data?.data?.getPatientVitalSigns || []);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -252,7 +264,7 @@ export default function PatientMedicalRecordHistoryTab({ patient }) {
     );
   }
 
-  const vitalSigns          = historyData?.getUserVitalSigns          ?? [];
+  const vitalSigns          = vitalsHistory ?? [];
   const medicalHistory      = historyData?.getUserMedicalHistory      ?? [];
   const allergyProfiles     = historyData?.getUserAllergyProfile      ?? [];
   const medicationProfiles  = historyData?.getUserMedicationProfile   ?? [];

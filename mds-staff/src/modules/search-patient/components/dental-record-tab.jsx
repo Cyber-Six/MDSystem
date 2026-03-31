@@ -103,7 +103,7 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
                   <input
                     type="radio"
                     name={`finding-${catalog.id}`}
-                    checked={value === true || value === 'yes'}
+                    checked={value === true || value === 'yes' || value === 'true'}
                     onChange={() => !readOnly && onFindingChange(catalog.id, true)}
                     disabled={readOnly}
                     className="w-4 h-4 text-green-600 border-neutral-300 dark:border-neutral-500 focus:ring-green-500 dark:bg-neutral-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
@@ -113,7 +113,7 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
                   <input
                     type="radio"
                     name={`finding-${catalog.id}`}
-                    checked={value === false || value === 'no'}
+                    checked={value === false || value === 'no' || value === 'false'}
                     onChange={() => !readOnly && onFindingChange(catalog.id, false)}
                     disabled={readOnly}
                     className="w-4 h-4 text-red-600 border-neutral-300 dark:border-neutral-500 focus:ring-red-500 dark:bg-neutral-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
@@ -131,8 +131,18 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
 /* ─── main component ────────────────────────────────────────── */
 
 const GQL_UPDATE_DENTAL_RECORD = `
-  mutation GradeDentalRecord($userId: ID!, $input: DentalRecordInput!) {
-    updateDentalRecord(userId: $userId, input: $input) {
+  mutation UpdateDentalRecord($id: ID!, $input: DentalRecordInput!) {
+    updateDentalRecord(id: $id, input: $input) {
+      id notes created_at
+      ToothPlacements { id toothIndex legend }
+      oralFindings { oralFindingId status }
+    }
+  }
+`;
+
+const GQL_CREATE_DENTAL_RECORD = `
+  mutation CreateDentalRecord($patientId: ID!, $input: DentalRecordInput!) {
+    createDentalRecord(patientId: $patientId, input: $input) {
       id notes created_at
       ToothPlacements { id toothIndex legend }
       oralFindings { oralFindingId status }
@@ -164,7 +174,12 @@ export default function PatientDentalRecordTab({ patient }) {
   const buildInitialFindings = () => {
     const map = {};
     oralFindingCatalogs.forEach(c => { map[c.id] = null; });
-    (dental.latestOralFindings || []).forEach(f => { map[f.oralFindingId] = f.status; });
+    (dental.latestOralFindings || []).forEach(f => {
+      const s = f.status;
+      map[f.oralFindingId] = (s === true || s === 'true' || s === 'yes') ? true
+        : (s === false || s === 'false' || s === 'no') ? false
+        : null;
+    });
     return map;
   };
 
@@ -228,21 +243,36 @@ export default function PatientDentalRecordTab({ patient }) {
       // Build oralFindings — default unset values to false
       const oralFindingsInput = oralFindingCatalogs.map(c => ({
         oralFindingId: c.id,
-        status: oralFindings[c.id] === true || oralFindings[c.id] === 'yes' ? true : false,
+        status: (oralFindings[c.id] === true || oralFindings[c.id] === 'yes') ? 'true' : 'false',
         notes: null,
       }));
 
-      await axiosRequest.post('/emr/medical', {
-        query: GQL_UPDATE_DENTAL_RECORD,
-        variables: {
-          userId: patient.id,
-          input: {
-            notes: '',
-            ToothPlacements,
-            oralFindings: oralFindingsInput,
+      const dentalRecordId = patient.dental?.dentalRecordId;
+      if (dentalRecordId) {
+        await axiosRequest.post('/staff/emr', {
+          query: GQL_UPDATE_DENTAL_RECORD,
+          variables: {
+            id: dentalRecordId,
+            input: {
+              notes: '',
+              ToothPlacements,
+              oralFindings: oralFindingsInput,
+            },
           },
-        },
-      });
+        });
+      } else {
+        await axiosRequest.post('/staff/emr', {
+          query: GQL_CREATE_DENTAL_RECORD,
+          variables: {
+            patientId: patient.id,
+            input: {
+              notes: '',
+              ToothPlacements,
+              oralFindings: oralFindingsInput,
+            },
+          },
+        });
+      }
 
       setGradeSuccess(true);
       setIsGrading(false);
