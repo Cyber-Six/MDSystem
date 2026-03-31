@@ -16,6 +16,7 @@
     "start:staff": "node Backend/staff.js"
   },
   "optionalDependencies": {
+    "@esbuild/win32-x64": "^0.27.4",
     "@rollup/rollup-linux-arm64-gnu": "4.59.0",
     "@rollup/rollup-linux-arm64-musl": "4.59.0"
   },
