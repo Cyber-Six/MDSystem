@@ -167,7 +167,7 @@ const Mutation = {
         status
         )
       VALUES (
-        $1, 
+        $1,
         $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
         $11,
@@ -194,6 +194,53 @@ const Mutation = {
       return rows[0];
     } catch (err) {
       logger.error("Error in _PersonalRecordLog:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    }
+  },
+
+  _UpdatePersonalRecordLog: async (_, { client = db.db(), userId, ticketId, input }, { user, res }) => {
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== null && value !== undefined) {
+        fields.push(`"${key}" = $${idx}`);
+        values.push(value);
+        idx++;
+      }
+    }
+
+    if (fields.length === 0) {
+      throwGraphQLError(res).message("No fields to update.").status(400).throw();
+    }
+
+    // Always set status to RevisionSubmitted on update
+    fields.push(`"status" = $${idx}`);
+    values.push("RevisionSubmitted");
+    idx++;
+
+    values.push(userId);
+    values.push(ticketId);
+
+    const query = `
+      UPDATE "UsersPersonalLog"
+      SET ${fields.join(", ")}
+      WHERE user_id = $${idx} AND id = $${idx + 1}
+      RETURNING *;
+    `;
+
+    try {
+      const { rows } = await db.queryClient(client, query, values);
+
+      if (rows.length === 0) {
+        throwGraphQLError(res).message("No record found to update").status(404).throw();
+      }
+
+      console.log("Updated personal record log with ID:", rows[0]);
+      return rows[0];
+    } catch (err) {
+      logger.error("Error in _UpdatePersonalRecordLog:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
     }
   },

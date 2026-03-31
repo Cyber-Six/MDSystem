@@ -68,7 +68,7 @@ Mutation = {
     if (latest?.status === "Pending" || latest?.status === "InProgress") {
       throwGraphQLError(res).message("An update is already in progress. Please wait for it to complete before creating a new one.").status(400).throw();
       }
-    if (latest?.status === "Revision" || latest?.status === "RevisionSubmitted"){
+    if (latest?.status === "RevisionSubmitted"){
       throwGraphQLError(res).message("Revision still pending. Please complete the revision before creating a new update.").status(400).throw();
     }
 
@@ -92,10 +92,23 @@ Mutation = {
 
     try {
       await client.query("BEGIN");
-      const personalResult = await Wrapper.Mutation._PersonalRecordLog(_, { client, userId: user.id, input }, { user, res });
+      let updateResult;
+      if (latest?.status === "Revision") {
+        // If there's a pending revision, we want to update that record instead of creating a new one
+        updateResult = await Wrapper.Mutation._UpdatePersonalRecordLog(_, { client, userId: user.id, input }, { user, res });
+        if (!updateResult) {
+          throwGraphQLError(res).message("Failed to update existing revision. Please try again later.").status(500).throw();
+        }
+      } else {
+        updateResult = await Wrapper.Mutation._PersonalRecordLog(_, { client, userId: user.id, input }, { user, res });
+        if (!updateResult) {
+          throwGraphQLError(res).message("Failed to create personal record log. Please try again later.").status(500).throw();
+        }
+      }
+      
       const identifierResult = await Wrapper.Mutation._UserBranchIdentifier(_, { client, userId: user.id, input }, { user, res });
       await client.query("COMMIT");
-      return { ...identifierResult, ...personalResult };
+      return { ...identifierResult, ...updateResult };
     } catch (error) {
       await client.query("ROLLBACK");
       logger.error("Error creating initial personal record:", error);
@@ -144,7 +157,7 @@ Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
-    if (latest?.status !== "Pending" && latest?.status !== "InProgress") {
+    if (!["Pending", "InProgress", "Revision"].includes(latest?.status)) {
       throwGraphQLError(res).message("No active update found to cancel.").status(400).throw();
       }
     return await Wrapper.Mutation._cancelPersonalRecordLog(_, { userId: user.id }, { user, res });
