@@ -58,6 +58,9 @@ mds-staff/.env.local
 mds-staff/.env.*.local
 
 ### Mobile (mds-mobile) specific ###
+# NOTE: mds-mobile is isolated from the root npm workspace.
+# Run `npm install` inside mds-mobile/ independently.
+
 # Dependencies
 mds-mobile/node_modules/
 
@@ -96,6 +99,12 @@ mds-mobile/*.pem
 
 # Local env files
 mds-mobile/.env*.local
+
+# Environment variables
+mds-mobile/.env
+
+# Dev notes (local only)
+mds-mobile/.dev/
 
 
 # ============================================

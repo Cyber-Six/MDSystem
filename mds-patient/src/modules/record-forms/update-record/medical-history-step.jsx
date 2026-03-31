@@ -3,6 +3,21 @@ import { Input, Select, Checkbox, Textarea, AccordionSection, TabGroup } from '.
 import { fetchAllMedicalCatalogs } from './medical-history-service';
 import { useBanner } from '../../../context/use-banner.js';
 
+const LIFESTYLE_FREQUENCY_OPTIONS = [
+  { value: 'Daily',      label: 'Daily' },
+  { value: 'Weekly',     label: 'Weekly' },
+  { value: 'Monthly',    label: 'Monthly' },
+  { value: 'Occasional', label: 'Occasionally' },
+  { value: 'Rare',       label: 'Rare' },
+];
+
+const VAPE_TYPE_OPTIONS = [
+  { value: 'Nicotine', label: 'Nicotine' },
+  { value: 'CBD',      label: 'CBD' },
+  { value: 'THC',      label: 'THC' },
+  { value: 'Flavored', label: 'Flavored' },
+];
+
 const MedicalHistoryStep = ({ formData, onChange }) => {
   const { clearAllBanners } = useBanner();
   const [activeTab, setActiveTab] = useState('yourself');
@@ -298,106 +313,46 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
           <div className="space-y-6">
             {/* Smoker Section */}
             <div className="border-l-4 border-warning-500 pl-4">
-              <h4 className="font-semibold text-secondary-700 mb-3">Do you smoke?</h4>
-              <div className="flex gap-4 mb-4 flex-wrap">
+              <h4 className="font-semibold text-secondary-700 mb-3">Smoker</h4>
+              <div className="flex gap-4 mb-4">
                 <label className="flex items-center">
                   <input
                     type="radio"
-                    name="smoking"
-                    value="Never"
-                    checked={formData.smoking === 'Never'}
-                    onChange={(e) => handleInputChange('smoking', e.target.value)}
+                    name="smoker"
+                    value="no"
+                    checked={formData.smoker === 'no'}
+                    onChange={(e) => handleInputChange('smoker', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">Never</span>
+                  <span className="ml-2">No</span>
                 </label>
                 <label className="flex items-center">
                   <input
                     type="radio"
-                    name="smoking"
-                    value="Former"
-                    checked={formData.smoking === 'Former'}
-                    onChange={(e) => handleInputChange('smoking', e.target.value)}
+                    name="smoker"
+                    value="yes"
+                    checked={formData.smoker === 'yes'}
+                    onChange={(e) => handleInputChange('smoker', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">Former</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="smoking"
-                    value="Current"
-                    checked={formData.smoking === 'Current'}
-                    onChange={(e) => handleInputChange('smoking', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">Current Smoker</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="smoking"
-                    value="Vape"
-                    checked={formData.smoking === 'Vape'}
-                    onChange={(e) => handleInputChange('smoking', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">Vape</span>
+                  <span className="ml-2">Yes</span>
                 </label>
               </div>
-
-              {/* Cigarette Details */}
-              {formData.smoking === 'Current' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              {formData.smoker === 'yes' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Input
-                    label="Cigarettes per day"
+                    label="Sticks per day"
                     type="number"
                     placeholder="Number of sticks"
-                    value={formData.cigarettesPerDay || ''}
-                    onChange={(e) => handleInputChange('cigarettesPerDay', e.target.value)}
+                    value={formData.smokerSticksPerDay || ''}
+                    onChange={(e) => handleInputChange('smokerSticksPerDay', e.target.value)}
                   />
                   <Input
-                    label="Years smoking"
+                    label="Number of years"
                     type="number"
                     placeholder="Years"
-                    value={formData.yearsSmoked || ''}
-                    onChange={(e) => handleInputChange('yearsSmoked', e.target.value)}
-                  />
-                </div>
-              )}
-
-              {/* Vape Details */}
-              {formData.smoking === 'Vape' && (
-                <div className="space-y-3 mt-4">
-                  <Select
-                    label="Vape Type"
-                    options={[
-                      { value: 'Nicotine', label: 'Nicotine' },
-                      { value: 'CBD', label: 'CBD' },
-                      { value: 'THC', label: 'THC' },
-                      { value: 'Flavored', label: 'Flavored' }
-                    ]}
-                    value={formData.vapeType || ''}
-                    onChange={(e) => handleInputChange('vapeType', e.target.value)}
-                  />
-                  <Select
-                    label="Vape Frequency"
-                    options={[
-                      { value: 'Daily', label: 'Daily' },
-                      { value: 'Weekly', label: 'Weekly' },
-                      { value: 'Monthly', label: 'Monthly' },
-                      { value: 'Occasional', label: 'Occasional' },
-                      { value: 'Rare', label: 'Rare' }
-                    ]}
-                    value={formData.vapeFrequency || ''}
-                    onChange={(e) => handleInputChange('vapeFrequency', e.target.value)}
-                  />
-                  <Input
-                    label="Years vaping"
-                    type="number"
-                    placeholder="Years"
-                    value={formData.yearsVaping || ''}
-                    onChange={(e) => handleInputChange('yearsVaping', e.target.value)}
+                    value={formData.smokerYears || ''}
+                    onChange={(e) => handleInputChange('smokerYears', e.target.value)}
                   />
                 </div>
               )}
@@ -405,61 +360,84 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
 
             {/* Alcohol Section */}
             <div className="border-l-4 border-accent-500 pl-4">
-              <h4 className="font-semibold text-secondary-700 mb-3">Do you drink alcohol?</h4>
-              <div className="flex gap-4 mb-4 flex-wrap">
+              <h4 className="font-semibold text-secondary-700 mb-3">Alcohol Drinker</h4>
+              <div className="flex gap-4 mb-4">
                 <label className="flex items-center">
                   <input
                     type="radio"
-                    name="alcohol"
-                    value="Never"
-                    checked={formData.alcohol === 'Never'}
-                    onChange={(e) => handleInputChange('alcohol', e.target.value)}
+                    name="alcoholDrinker"
+                    value="no"
+                    checked={formData.alcoholDrinker === 'no'}
+                    onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">Never</span>
+                  <span className="ml-2">No</span>
                 </label>
                 <label className="flex items-center">
                   <input
                     type="radio"
-                    name="alcohol"
-                    value="Occasionally"
-                    checked={formData.alcohol === 'Occasionally'}
-                    onChange={(e) => handleInputChange('alcohol', e.target.value)}
+                    name="alcoholDrinker"
+                    value="yes"
+                    checked={formData.alcoholDrinker === 'yes'}
+                    onChange={(e) => handleInputChange('alcoholDrinker', e.target.value)}
                     className="form-checkbox"
                   />
-                  <span className="ml-2">Occasionally</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="alcohol"
-                    value="Regularly"
-                    checked={formData.alcohol === 'Regularly'}
-                    onChange={(e) => handleInputChange('alcohol', e.target.value)}
-                    className="form-checkbox"
-                  />
-                  <span className="ml-2">Regularly</span>
+                  <span className="ml-2">Yes</span>
                 </label>
               </div>
-              {formData.alcohol === 'Regularly' && (
-                <Input
+              {formData.alcoholDrinker === 'yes' && (
+                <Select
                   label="Frequency"
-                  placeholder="e.g., 2 bottles per week"
+                  options={LIFESTYLE_FREQUENCY_OPTIONS}
                   value={formData.alcoholFrequency || ''}
                   onChange={(e) => handleInputChange('alcoholFrequency', e.target.value)}
-                  maxLength={30}
                 />
               )}
             </div>
 
-            {/* Lifestyle Notes */}
-            <div>
-              <Textarea
-                label="Lifestyle Notes (Optional)"
-                placeholder="Any additional information about your lifestyle, habits, or health behaviors."
-                value={formData.lifestyleNotes || ''}
-                onChange={(e) => handleInputChange('lifestyleNotes', e.target.value)}
-              />
+            {/* Vaper Section */}
+            <div className="border-l-4 border-primary-500 pl-4">
+              <h4 className="font-semibold text-secondary-700 mb-3">Vaper</h4>
+              <div className="flex gap-4 mb-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="vaper"
+                    value="no"
+                    checked={formData.vaper === 'no'}
+                    onChange={(e) => handleInputChange('vaper', e.target.value)}
+                    className="form-checkbox"
+                  />
+                  <span className="ml-2">No</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="vaper"
+                    value="yes"
+                    checked={formData.vaper === 'yes'}
+                    onChange={(e) => handleInputChange('vaper', e.target.value)}
+                    className="form-checkbox"
+                  />
+                  <span className="ml-2">Yes</span>
+                </label>
+              </div>
+              {formData.vaper === 'yes' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Select
+                    label="Vape Type"
+                    options={VAPE_TYPE_OPTIONS}
+                    value={formData.vapeType || ''}
+                    onChange={(e) => handleInputChange('vapeType', e.target.value)}
+                  />
+                  <Select
+                    label="Frequency"
+                    options={LIFESTYLE_FREQUENCY_OPTIONS}
+                    value={formData.vapeFrequency || ''}
+                    onChange={(e) => handleInputChange('vapeFrequency', e.target.value)}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </AccordionSection>

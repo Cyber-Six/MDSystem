@@ -1,7 +1,7 @@
 const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
-const { isConnectedAnywhere, emitToUserWithAck } = require("../../../../../config/sockets");
+const { isConnectedAnywhere, emitToUserWithAck, emitToRole } = require("../../../../../config/sockets");
 const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
 const { findEmailByUserId } = require("../../../../../config/query.js");
 
@@ -202,6 +202,18 @@ const Mutation = {
       }
 
       await client.query('COMMIT');
+
+      // Notify all medical staff that stock changed (units were dispensed)
+      try {
+        emitToRole('medical', 'inventory:stock-changed', {
+          action: 'dispense',
+          patientId: input.patientId,
+          totalQuantity,
+          summary: `${totalQuantity} unit${totalQuantity !== 1 ? 's' : ''} dispensed to patient #${input.patientId}`,
+        });
+      } catch (emitErr) {
+        logger.warn('[INVENTORY] Failed to emit inventory:stock-changed after dispense:', emitErr.message);
+      }
 
       // Notify patient: socket with ack, fall back to email if not acked or offline
       try {

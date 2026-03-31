@@ -14,13 +14,14 @@ router.get("/", jwtProtect(""), async (req, res) => {
         const userBranch = await getUserBranch(req.user?.id);
 
         const sql = `
-            SELECT id, title as label, content as description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, pubmat, 
+                "isActive", created_at, location
             FROM "Announcement"
             WHERE "isActive" = true AND
             (
               $1 = 'Both'
               OR location = 'Both'
-              OR ($1 = 'Manila' AND location IN ('Arlegui', 'Casal'))
+              OR ($1 = 'Manila' AND location = 'Manila')
               OR ($1 = 'QuezonCity' AND location = 'QuezonCity')
             )
             ORDER BY created_at DESC;
@@ -48,12 +49,13 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
         const userBranch = await getUserBranch(userId);
 
         const sql = `
-            SELECT id, title as label, content as description, pubmat, "isActive", created_at
+            SELECT id, title as label, content as description, 
+                pubmat, "isActive", created_at, location
             FROM "Announcement"
             WHERE (
               $1 = 'Both'
               OR location = 'Both'
-              OR ($1 = 'Manila' AND location IN ('Arlegui', 'Casal'))
+              OR ($1 = 'Manila' AND location = 'Manila')
               OR ($1 = 'QuezonCity' AND location = 'QuezonCity')
             )
             ORDER BY created_at DESC;
@@ -77,13 +79,13 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
             SELECT an.id, an.title as label, 
             an.content as description, 
             an.pubmat, "isActive", 
-            an.created_at
+            an.created_at, an.location
             FROM "Announcement" an
             WHERE id = $1 AND 
             (
               $2 = 'Both'
               OR an.location = 'Both'
-              OR ($2 = 'Manila' AND an.location IN ('Arlegui', 'Casal'))
+              OR ($2 = 'Manila' AND an.location = 'Manila')
               OR ($2 = 'QuezonCity' AND an.location = 'QuezonCity')
             );
         `;
@@ -138,7 +140,7 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
         const sql = `
         INSERT INTO "Announcement" (title, content, pubmat, "isActive", location)
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, title as label, content as description, pubmat, "isActive", created_at;
+            RETURNING id, title as label, content as description, pubmat, "isActive", created_at, location;
         `;
 
         const params = [
@@ -251,7 +253,7 @@ router.delete("/:id", jwtProtect("medical"), async (req, res) => {
             (
                 $2 = 'Both'
                 OR location = 'Both'
-                OR ($2 = 'Manila' AND location IN ('Arlegui', 'Casal'))
+                OR ($2 = 'Manila' AND location = 'Manila')
                 OR ($2 = 'QuezonCity' AND location = 'QuezonCity')
             )
             RETURNING *;

@@ -127,6 +127,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
+        '/documents': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: BACKEND_URL.startsWith('https'),
+        },
         '/rolemanagement': {
           target: BACKEND_URL,
           changeOrigin: true,
@@ -136,6 +141,18 @@ export default defineConfig(({ mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),
+        },
+        '/analytics': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: BACKEND_URL.startsWith('https'),
+          bypass: function(req) {
+            // Don't proxy GET requests to /analytics (browser navigation) - let React Router handle them
+            // Only proxy API calls (POST, or GET with /analytics/query/ or /analytics/queries path)
+            if (req.method === 'GET' && !req.url.startsWith('/analytics/query') && !req.url.startsWith('/analytics/queries')) {
+              return '/index.html';
+            }
+          },
         },
         '/announcement': {
           target: BACKEND_URL,

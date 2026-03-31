@@ -13,45 +13,45 @@ const TransactionDisplay = ({ transactions }) => {
 
   // Action configuration with icons and colors
   const ACTION_CONFIG = {
-    issue: {
-      label: 'Dispensed',
+    add: {
+      label: 'ADD',
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 10V7" />
         </svg>
       ),
-      badge: 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400 border border-accent-200 dark:border-accent-800',
-      description: 'Dispensed to patient',
+      badge: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400 border border-success-200 dark:border-success-800',
+      description: 'New supply added to stock',
     },
-    receive: {
-      label: 'Received',
+    adjust_add: {
+      label: 'ADJUST +',
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
       ),
-      badge: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400 border border-success-200 dark:border-success-800',
-      description: 'New stock received',
-    },
-    transfer: {
-      label: 'Transferred',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-        </svg>
-      ),
       badge: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border border-primary-200 dark:border-primary-800',
-      description: 'Stock transferred between locations',
+      description: 'Stock manually increased',
     },
-    adjust: {
-      label: 'Adjusted',
+    adjust_minus: {
+      label: 'ADJUST −',
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
         </svg>
       ),
       badge: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 border border-warning-200 dark:border-warning-800',
-      description: 'Stock quantity adjusted',
+      description: 'Stock manually decreased',
+    },
+    transfer: {
+      label: 'SPLIT',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+        </svg>
+      ),
+      badge: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border border-primary-200 dark:border-primary-800',
+      description: 'Stock split to another location',
     },
   };
 
@@ -100,14 +100,17 @@ const TransactionDisplay = ({ transactions }) => {
     const config = ACTION_CONFIG[transaction.action] || {};
     let description = config.description || 'Unknown action';
 
-    if (transaction.action === 'issue' && transaction.patientName) {
-      description = `Dispensed to ${transaction.patientName}`;
-    } else if (transaction.action === 'transfer' && transaction.notes) {
-      // Parse transfer notes to show FROM → TO if available
-      description = transaction.notes;
-    } else if (transaction.action === 'adjust' && transaction.quantity) {
-      const action = transaction.quantity > 0 ? 'Added' : 'Removed';
-      description = `${action} ${Math.abs(transaction.quantity)} unit${Math.abs(transaction.quantity) > 1 ? 's' : ''}`;
+    if (transaction.action === 'add') {
+      description = `Added ${transaction.quantity} unit${transaction.quantity !== 1 ? 's' : ''} to stock`;
+      if (transaction.notes) description += ` · ${transaction.notes}`;
+    } else if (transaction.action === 'adjust_add') {
+      description = `Increased by ${Math.abs(transaction.quantity)} unit${Math.abs(transaction.quantity) !== 1 ? 's' : ''}`;
+      if (transaction.notes) description += ` · ${transaction.notes}`;
+    } else if (transaction.action === 'adjust_minus') {
+      description = `Decreased by ${Math.abs(transaction.quantity)} unit${Math.abs(transaction.quantity) !== 1 ? 's' : ''}`;
+      if (transaction.notes) description += ` · ${transaction.notes}`;
+    } else if (transaction.action === 'transfer') {
+      description = transaction.notes || 'Stock split to another location';
     }
 
     return description;
@@ -146,10 +149,10 @@ const TransactionDisplay = ({ transactions }) => {
             className="px-3 py-2 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
           >
             <option value="All">All Actions</option>
-            <option value="issue">Dispensed</option>
-            <option value="transfer">Transferred</option>
-            <option value="receive">Received</option>
-            <option value="adjust">Adjusted</option>
+            <option value="add">Add Supply</option>
+            <option value="adjust_add">Adjust (Increase)</option>
+            <option value="adjust_minus">Adjust (Decrease)</option>
+            <option value="transfer">Split / Transfer</option>
           </select>
 
           {/* Sort Order */}

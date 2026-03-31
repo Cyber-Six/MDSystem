@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Spinner, BackButton } from './shared';
 import { SESSION } from '../patient-appointment-service';
 
@@ -23,8 +23,10 @@ const DateSessionPicker = ({
   loadingAvailability,
   today,
   maxDate,
+  monthAvailability = {},
   onDateChange,
   onSessionSelect,
+  onMonthChange,
   onNext,
   onBack,
 }) => {
@@ -59,18 +61,39 @@ const DateSessionPicker = ({
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
   const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
 
+  // Notify parent of month changes for data fetching
+  useEffect(() => {
+    if (onMonthChange) {
+      const startDate = fmtDate(viewYear, viewMonth, 1);
+      const endDate = fmtDate(viewYear, viewMonth, daysInMonth);
+      onMonthChange(startDate, endDate);
+    }
+  }, [viewYear, viewMonth, daysInMonth]);
+
   const schedulingDays = useMemo(() =>
     Math.round((maxDateObj - new Date(today + 'T00:00:00')) / MS_PER_DAY),
     [maxDateObj, today]
   );
+
+  // Build custom date set for quick lookup (handles both string and object formats)
+  const customDateSet = useMemo(() => {
+    const set = new Set();
+    (customDates || []).forEach(cd => {
+      if (typeof cd === 'string') {
+        set.add(cd.split('T')[0]);
+      } else if (cd?.scheduledDate) {
+        set.add(cd.scheduledDate.split('T')[0]);
+      }
+    });
+    return set;
+  }, [customDates]);
 
   const isScheduleMatch = (dateStr) => {
     if (!scheduler) return false;
     const d = new Date(dateStr + 'T00:00:00');
     const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
     if (scheduler.schedulePerWeek?.includes(dayName)) return true;
-    if (customDates.some((cd) => cd === dateStr || cd?.split('T')[0] === dateStr)) return true;
-    return false;
+    return customDateSet.has(dateStr);
   };
 
   const isDateAllowed = (dateStr) => {
@@ -78,8 +101,19 @@ const DateSessionPicker = ({
     return isScheduleMatch(dateStr);
   };
 
+  // Determine day status using real month availability data
   const getDayStatus = (dateStr) => {
     if (!isDateAllowed(dateStr)) return 'unavailable';
+
+    const apiData = monthAvailability[dateStr];
+    if (!apiData) return 'available'; // No booking data yet = open
+
+    const totalAllowed = (apiData.morningAllowed || 0) + (apiData.afternoonAllowed || 0);
+    const totalBooked = (apiData.morningRegistered || 0) + (apiData.morningPending || 0) +
+                        (apiData.afternoonRegistered || 0) + (apiData.afternoonPending || 0);
+
+    if (totalAllowed > 0 && totalBooked >= totalAllowed) return 'full';
+    if (totalAllowed > 0 && totalBooked / totalAllowed >= 0.7) return 'partial';
     return 'available';
   };
 
@@ -109,10 +143,16 @@ const DateSessionPicker = ({
 
   const cellStyle = {
     available:   'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30 cursor-pointer',
+    partial:     'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 cursor-pointer',
+    full:        'bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-500',
     unavailable: 'text-neutral-300 dark:text-neutral-600',
   };
 
-  const dotColor = { available: 'bg-green-500' };
+  const dotColor = {
+    available: 'bg-green-500',
+    partial: 'bg-amber-500',
+    full: 'bg-red-500',
+  };
 
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
@@ -156,12 +196,12 @@ const DateSessionPicker = ({
             const status = getDayStatus(cell.dateStr);
             const isSelected = cell.dateStr === selectedDate;
             const isToday = cell.dateStr === todayStr;
-            const isClickable = status === 'available';
+            const isClickable = status === 'available' || status === 'partial';
             return (
               <div
                 key={cell.dateStr}
                 onClick={() => isClickable && handleDayClick(cell.dateStr)}
-                className={`p-2 min-h-[64px] border-b border-r border-neutral-100 dark:border-neutral-700/50 transition-all relative flex flex-col items-center justify-center cursor-pointer
+                className={`p-2 min-h-[64px] border-b border-r border-neutral-100 dark:border-neutral-700/50 transition-all relative flex flex-col items-center justify-center ${status === 'full' ? 'cursor-not-allowed' : 'cursor-pointer'}
                   ${isSelected
                     ? 'ring-2 ring-primary-500 ring-inset bg-primary-50 dark:bg-primary-900/20'
                     : cellStyle[status] || cellStyle.unavailable}`}
@@ -175,6 +215,15 @@ const DateSessionPicker = ({
                 {status === 'available' && selectedDate !== cell.dateStr && (
                   <p className="text-[8px] text-green-600 dark:text-green-400 leading-tight mt-0.5">Open</p>
                 )}
+                {status === 'partial' && selectedDate !== cell.dateStr && (
+                  <p className="text-[8px] text-amber-600 dark:text-amber-400 leading-tight mt-0.5">Filling up</p>
+                )}
+                {status === 'full' && (
+                  <p className="text-[8px] text-red-500 dark:text-red-400 leading-tight mt-0.5 font-medium">Full</p>
+                )}
+                {dotColor[status] && (
+                  <span className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${dotColor[status]}`} />
+                )}
               </div>
             );
           })}
@@ -182,6 +231,8 @@ const DateSessionPicker = ({
         <div className="p-3 border-t border-neutral-200 dark:border-neutral-700 flex flex-wrap gap-4">
           {[
             { color: 'bg-green-500', label: 'Available' },
+            { color: 'bg-amber-500', label: 'Filling up' },
+            { color: 'bg-red-500', label: 'Full' },
             { color: 'bg-neutral-300 dark:bg-neutral-600', label: 'Unavailable' },
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-2">

@@ -348,9 +348,9 @@ async function createVerificationSession(email, purpose, account_type = "patient
       allow_email_2fa: user.allow_email_2fa ? "true" : "false",
       email_2fa_verified: "false",
       user_exists: "true",
-      user_id: user.id.toString(),
+      user_id: user.id.toString(),       // ✅ internal only
       email,
-      account_type,
+      account_type,                      // ✅ NEW: store role for login/register flows
       data_consent: user.data_consent ? "true" : "false",
       data_consent_version: user.data_consent_version || "",
       data_consent_agreed: user.data_consent_agreed
@@ -360,9 +360,9 @@ async function createVerificationSession(email, purpose, account_type = "patient
   } else { // account doesnt exist
     await client.hSet(key, {
       user_exists: "false",
-      user_id: "",
+      user_id: "",                       // ✅ consistent field
       email,
-      account_type,
+      account_type,                              // ✅ still store role even if user doesn't exist
       data_consent: "false",
       data_consent_version: "",
       data_consent_agreed: "",
@@ -403,17 +403,17 @@ async function updateConsentInSession(token, purpose) {
     data_consent_version: process.env.DATA_CONSENT_VERSION,
     data_consent_timestamp: Date.now().toString(),
   });
-  
+
   const userId = await getUserIdFromVerificationSession(token, purpose);
   if (userId) {
     await query.updateUserConsent(userId, {
       data_consent: true,
       data_consent_version: process.env.DATA_CONSENT_VERSION,
-      data_consent_agreed: new Date().toISOString()
-      });
-    } 
-  return true;
+      data_consent_agreed: new Date().toISOString(),
+    });
   }
+  return true;
+}
   
 async function update2FAInSession(token, email, purpose) {
   if (!client) throw new Error("Redis client not initialized");
@@ -431,7 +431,9 @@ async function update2FAInSession(token, email, purpose) {
   }
 
   // ✅ 3. Mark 2FA as verified
-  await client.hSet(key, { email_2fa_verified: "true" });
+  await client.hSet(key, {
+    email_2fa_verified: "true"
+  });
 
   return true;
 }
@@ -442,9 +444,9 @@ async function deleteVerificationSession(token, purpose) {
 
   const key = `verify:${purpose}:${token}`;
   await client.del(key);
-  
+
   return true;
-  }
+}
 
 
 async function getUserIdFromVerificationSession(token, purpose) {
@@ -519,7 +521,7 @@ async function listUserSessions(userId) {
   const sessions = [];
 
   // Use SCAN to find all matching keys
-  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+  for await (const key of client.scanIterator({ match: pattern, count: 100 })) {
     const raw = await client.get(key);
     if (raw) {
       try {
@@ -547,7 +549,7 @@ async function deleteAllUserSessions(userId) {
   const keysToDelete = [];
 
   // Collect all keys matching the pattern
-  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+  for await (const key of client.scanIterator({ match: pattern, count: 100 })) {
     keysToDelete.push(key);
   }
 
@@ -584,7 +586,7 @@ async function scanAllRefreshSessions() {
 
   let batch = [];
 
-  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: batchSize })) {
+  for await (const key of client.scanIterator({ match: pattern, count: batchSize })) {
     // Skip non-session keys (e.g., rt:fail:*, rt:lock:*)
     const parts = key.split(':');
     if (parts.length !== 3) continue;
@@ -780,7 +782,7 @@ const ADMIN_TRANSFER_EXPIRATION = 600; // 10 minutes
 async function createAdminTransferSession(oldAdminId, newAdminId, verificationToken) {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `admin:transfer:session:${verificationToken}`;
+  const key = `admin:transfer:${verificationToken}`;
 
   await client.hSet(key, {
     old_admin_id: oldAdminId.toString(),
@@ -796,7 +798,7 @@ async function createAdminTransferSession(oldAdminId, newAdminId, verificationTo
 async function getAdminTransferSession(verificationToken) {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `admin:transfer:session:${verificationToken}`;
+  const key = `admin:transfer:${verificationToken}`;
   const session = await client.hGetAll(key);
 
   if (!session || !session.old_admin_id) return null;
@@ -811,7 +813,7 @@ async function getAdminTransferSession(verificationToken) {
 async function deleteAdminTransferSession(verificationToken) {
   if (!client) throw new Error("Redis client not initialized");
 
-  const key = `admin:transfer:session:${verificationToken}`;
+  const key = `admin:transfer:${verificationToken}`;
   await client.del(key);
   return true;
 }
@@ -860,15 +862,15 @@ async function getAdminActivePendingTransfer(adminId) {
   if (!client) throw new Error("Redis client not initialized");
 
   // Scan for active transfer sessions with this admin
-  const pattern = `admin:transfer:session:*`;
+  const pattern = `admin:transfer:*`;
   let hasPending = false;
   let tokenFound = null;
 
-  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 10 })) {
+  for await (const key of client.scanIterator({ match: pattern, count: 10 })) {
     const session = await client.hGetAll(key);
     if (session && session.old_admin_id === adminId.toString()) {
       hasPending = true;
-      const token = key.replace('admin:transfer:session:', '');
+      const token = key.replace('admin:transfer:', '');
       tokenFound = token.substring(0, 8) + '...';
       break;
     }
@@ -1018,7 +1020,6 @@ async function triggerExpiredMedical(supply, batchId) {
   // Redis returns "OK" if the key was set, null if it already existed
   return result === "OK"; // true if set, false if existed
 }
-
 
 // ------------------------------------------------
 

@@ -1,5 +1,6 @@
 const db = require('../config/db.js');
 const logger = require('../utils/logger.js');
+const redis = require('../config/redis.js');
 
 /**
  * Analytics Query Module
@@ -12,6 +13,54 @@ const logger = require('../utils/logger.js');
  */
 
 // ============================================================
+// CACHE CONFIGURATION
+// ============================================================
+
+const CACHE_TTL = 300; // 5 minutes
+const CACHE_PREFIX = 'analytics:';
+
+function getCacheKey(dataType, branch, startDate, endDate) {
+  return `${CACHE_PREFIX}${dataType}:${branch}:${startDate}:${endDate}`;
+}
+
+async function getCachedResult(key) {
+  try {
+    const cached = await redis.getKey(key);
+    if (cached) {
+      logger.debug(`Analytics cache HIT: ${key}`);
+      return JSON.parse(cached);
+    }
+  } catch {
+    // Cache miss or Redis unavailable — proceed without cache
+  }
+  return null;
+}
+
+async function setCachedResult(key, data) {
+  try {
+    await redis.setKey(key, JSON.stringify(data), CACHE_TTL);
+  } catch {
+    // Redis unavailable — silently skip caching
+  }
+}
+
+// ============================================================
+// PARAMETERIZED BRANCH FILTER HELPER
+// ============================================================
+
+/**
+ * Builds a parameterized branch filter and returns the clause + params.
+ * @param {string} branch - 'Both', 'Manila', or 'QuezonCity'
+ * @param {string} alias - Table alias for UsersPersonal (default: 'up')
+ * @param {number} paramIndex - Starting $N index for the branch param
+ * @returns {{ clause: string, params: string[] }}
+ */
+function branchFilter(branch, alias = 'up', paramIndex = 3) {
+  if (branch === 'Both') return { clause: '', params: [] };
+  return { clause: `AND ${alias}."branch" = $${paramIndex}`, params: [branch] };
+}
+
+// ============================================================
 // QUERY FUNCTIONS - Add your custom queries here
 // ============================================================
 
@@ -19,27 +68,19 @@ const logger = require('../utils/logger.js');
  * Consultations by Type (Medical vs Dental)
  */
 async function consultationsByType(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      c.type,
-      COUNT(*) as count
+    SELECT c.type, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE c."createdAt" BETWEEN $1 AND $2
-    ${branchFilter}
-    GROUP BY c.type
-    ORDER BY count DESC
-  `, [startDate, endDate]);
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY c.type ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.type);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -47,27 +88,19 @@ async function consultationsByType(branch, startDate, endDate) {
  * Consultations by Status
  */
 async function consultationsByStatus(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      c.status,
-      COUNT(*) as count
+    SELECT c.status, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE c."createdAt" BETWEEN $1 AND $2
-    ${branchFilter}
-    GROUP BY c.status
-    ORDER BY count DESC
-  `, [startDate, endDate]);
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY c.status ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.status);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -75,32 +108,22 @@ async function consultationsByStatus(branch, startDate, endDate) {
  * Top 10 Diagnoses by ICD Code
  */
 async function topDiagnoses(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      COALESCE(icd.title, cd."diagnosisName") as diagnosis,
-      icd.code as icd_code,
-      COUNT(*) as count
+    SELECT COALESCE(icd.title, cd."diagnosisName") as diagnosis, icd.code as icd_code, COUNT(*) as count
     FROM "ConsultationDiagnosis" cd
     INNER JOIN "ConsultationOutcome" co ON cd."outcomeId" = co.id
     INNER JOIN "Consultation" c ON co."consultationId" = c.id
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     LEFT JOIN "ICDLookup" icd ON cd."icdId" = icd.id
-    WHERE co."recordedAt" BETWEEN $1 AND $2
-    ${branchFilter}
-    GROUP BY icd.title, cd."diagnosisName", icd.code
-    ORDER BY count DESC
-    LIMIT 10
-  `, [startDate, endDate]);
+    WHERE co."recordedAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY icd.title, cd."diagnosisName", icd.code ORDER BY count DESC LIMIT 10
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.icd_code ? `${r.diagnosis} (${r.icd_code})` : r.diagnosis);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -108,29 +131,21 @@ async function topDiagnoses(branch, startDate, endDate) {
  * Diagnoses by Type (Primary, Secondary, etc.)
  */
 async function diagnosesByType(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      cd."diagnosisType",
-      COUNT(*) as count
+    SELECT cd."diagnosisType", COUNT(*) as count
     FROM "ConsultationDiagnosis" cd
     INNER JOIN "ConsultationOutcome" co ON cd."outcomeId" = co.id
     INNER JOIN "Consultation" c ON co."consultationId" = c.id
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE co."recordedAt" BETWEEN $1 AND $2
-    ${branchFilter}
-    GROUP BY cd."diagnosisType"
-    ORDER BY count DESC
-  `, [startDate, endDate]);
+    WHERE co."recordedAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY cd."diagnosisType" ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.diagnosisType);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -138,30 +153,22 @@ async function diagnosesByType(branch, startDate, endDate) {
  * BMI Trends Over Time (Monthly)
  */
 async function bmiTrends(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      TO_CHAR(vs.recorded_at, 'YYYY-MM') as month,
+    SELECT TO_CHAR(vs.recorded_at, 'YYYY-MM') as month,
       ROUND(AVG(vs.weight_kg / POWER(vs.height_cm / 100, 2))::numeric, 2) as avg_bmi,
       COUNT(*) as sample_count
     FROM "VitalSigns" vs
     INNER JOIN "Consultation" c ON vs.id = c."vitalSignsId"
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE vs.recorded_at BETWEEN $1 AND $2
-    AND vs.height_cm > 0 AND vs.weight_kg > 0
-    ${branchFilter}
-    GROUP BY TO_CHAR(vs.recorded_at, 'YYYY-MM')
-    ORDER BY month
-  `, [startDate, endDate]);
+    WHERE vs.recorded_at BETWEEN $1 AND $2 AND vs.height_cm > 0 AND vs.weight_kg > 0 ${bf.clause}
+    GROUP BY TO_CHAR(vs.recorded_at, 'YYYY-MM') ORDER BY month
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.month);
   const values = result.rows.map(r => parseFloat(r.avg_bmi));
   const total = result.rows.reduce((sum, r) => sum + parseInt(r.sample_count), 0);
-
   return { labels, values, total };
 }
 
@@ -169,13 +176,9 @@ async function bmiTrends(branch, startDate, endDate) {
  * Blood Pressure Trends Over Time (Monthly - Average Systolic)
  */
 async function bloodPressureTrends(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      TO_CHAR(vs.recorded_at, 'YYYY-MM') as month,
+    SELECT TO_CHAR(vs.recorded_at, 'YYYY-MM') as month,
       ROUND(AVG(CAST(SPLIT_PART(vs.blood_pressure, '/', 1) AS INTEGER))::numeric, 1) as avg_systolic,
       ROUND(AVG(CAST(SPLIT_PART(vs.blood_pressure, '/', 2) AS INTEGER))::numeric, 1) as avg_diastolic,
       COUNT(*) as sample_count
@@ -183,18 +186,14 @@ async function bloodPressureTrends(branch, startDate, endDate) {
     INNER JOIN "Consultation" c ON vs.id = c."vitalSignsId"
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE vs.recorded_at BETWEEN $1 AND $2
-    AND vs.blood_pressure IS NOT NULL
-    AND vs.blood_pressure ~ '^[0-9]+/[0-9]+$'
-    ${branchFilter}
-    GROUP BY TO_CHAR(vs.recorded_at, 'YYYY-MM')
-    ORDER BY month
-  `, [startDate, endDate]);
+    WHERE vs.recorded_at BETWEEN $1 AND $2 AND vs.blood_pressure IS NOT NULL
+    AND vs.blood_pressure ~ '^[0-9]+/[0-9]+$' ${bf.clause}
+    GROUP BY TO_CHAR(vs.recorded_at, 'YYYY-MM') ORDER BY month
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.month);
   const values = result.rows.map(r => parseFloat(r.avg_systolic));
   const total = result.rows.reduce((sum, r) => sum + parseInt(r.sample_count), 0);
-
   return { labels, values, total };
 }
 
@@ -202,32 +201,21 @@ async function bloodPressureTrends(branch, startDate, endDate) {
  * Immunization Coverage Rate by Vaccine Type
  */
 async function immunizationCoverage(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      dtc.name as vaccine,
-      COUNT(DISTINCT pul."patientId") as patient_count,
-      SUM(ir."doseNumber") as total_doses
+    SELECT dtc.name as vaccine, COUNT(DISTINCT pul."patientId") as patient_count, SUM(ir."doseNumber") as total_doses
     FROM "ImmunizationRecord" ir
     INNER JOIN "Immunization" i ON ir."immunizationId" = i.id
     INNER JOIN "patientUpdateLog" pul ON i.id = pul.id
     INNER JOIN "DomainTypeCatalog" dtc ON ir."vaccineTypeId" = dtc.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE ir."immunizationDate" BETWEEN $1 AND $2
-    AND dtc.domain = 'Immunization'
-    ${branchFilter}
-    GROUP BY dtc.name
-    ORDER BY patient_count DESC
-    LIMIT 10
-  `, [startDate, endDate]);
+    WHERE ir."immunizationDate" BETWEEN $1 AND $2 AND dtc.domain = 'Immunization' ${bf.clause}
+    GROUP BY dtc.name ORDER BY patient_count DESC LIMIT 10
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.vaccine);
   const values = result.rows.map(r => parseInt(r.patient_count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -235,31 +223,21 @@ async function immunizationCoverage(branch, startDate, endDate) {
  * Top Dental Procedures
  */
 async function dentalProcedures(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      dtc.name as procedure,
-      COUNT(*) as count
+    SELECT dtc.name as procedure, COUNT(*) as count
     FROM "DentalProcedureRecord" dpr
     INNER JOIN "DentalProcedure" dp ON dpr."dentalProcedureId" = dp.id
     INNER JOIN "patientUpdateLog" pul ON dp.id = pul.id
     INNER JOIN "DomainTypeCatalog" dtc ON dpr."procedureTypeId" = dtc.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE dpr."procedureDate" BETWEEN $1 AND $2
-    AND dtc.domain = 'DentalProcedure'
-    ${branchFilter}
-    GROUP BY dtc.name
-    ORDER BY count DESC
-    LIMIT 10
-  `, [startDate, endDate]);
+    WHERE dpr."procedureDate" BETWEEN $1 AND $2 AND dtc.domain = 'DentalProcedure' ${bf.clause}
+    GROUP BY dtc.name ORDER BY count DESC LIMIT 10
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.procedure);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -267,10 +245,7 @@ async function dentalProcedures(branch, startDate, endDate) {
  * Lifestyle Risk Factors Prevalence
  */
 async function lifestyleRisks(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
     SELECT
       SUM(CASE WHEN l.smoker = true THEN 1 ELSE 0 END) as smokers,
@@ -280,10 +255,8 @@ async function lifestyleRisks(branch, startDate, endDate) {
     FROM "Lifestyle" l
     INNER JOIN "patientUpdateLog" pul ON l.id = pul.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE pul.created_at BETWEEN $1 AND $2
-    AND pul.status = 'Approved'
-    ${branchFilter}
-  `, [startDate, endDate]);
+    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause}
+  `, [startDate, endDate, ...bf.params]);
 
   if (result.rows.length === 0) {
     return { labels: [], values: [], total: 0 };
@@ -297,7 +270,6 @@ async function lifestyleRisks(branch, startDate, endDate) {
     parseInt(row.vape_users)
   ];
   const total = parseInt(row.total_records);
-
   return { labels, values, total };
 }
 
@@ -305,30 +277,21 @@ async function lifestyleRisks(branch, startDate, endDate) {
  * Allergy Prevalence by Type
  */
 async function allergyByType(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      ac.type,
-      COUNT(*) as count
+    SELECT ac.type, COUNT(*) as count
     FROM "AllergyRecord" ar
     INNER JOIN "Allergy" a ON ar."allergyId" = a.id
     INNER JOIN "patientUpdateLog" pul ON a.id = pul.id
     INNER JOIN "AllergenCatalog" ac ON ar."allergenCatalogId" = ac.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE pul.created_at BETWEEN $1 AND $2
-    AND pul.status = 'Approved'
-    ${branchFilter}
-    GROUP BY ac.type
-    ORDER BY count DESC
-  `, [startDate, endDate]);
+    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause}
+    GROUP BY ac.type ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.type);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -336,35 +299,21 @@ async function allergyByType(branch, startDate, endDate) {
  * Allergy by Severity
  */
 async function allergyBySeverity(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      ar.severity,
-      COUNT(*) as count
+    SELECT ar.severity, COUNT(*) as count
     FROM "AllergyRecord" ar
     INNER JOIN "Allergy" a ON ar."allergyId" = a.id
     INNER JOIN "patientUpdateLog" pul ON a.id = pul.id
     INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
-    WHERE pul.created_at BETWEEN $1 AND $2
-    AND pul.status = 'Approved'
-    ${branchFilter}
+    WHERE pul.created_at BETWEEN $1 AND $2 AND pul.status = 'Approved' ${bf.clause}
     GROUP BY ar.severity
-    ORDER BY
-      CASE ar.severity
-        WHEN 'Severe' THEN 1
-        WHEN 'Moderate' THEN 2
-        WHEN 'Mild' THEN 3
-        WHEN 'Unknown' THEN 4
-      END
-  `, [startDate, endDate]);
+    ORDER BY CASE ar.severity WHEN 'Severe' THEN 1 WHEN 'Moderate' THEN 2 WHEN 'Mild' THEN 3 WHEN 'Unknown' THEN 4 END
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.severity);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -372,27 +321,19 @@ async function allergyBySeverity(branch, startDate, endDate) {
  * Appointment Usage per Category (Student/Employee)
  */
 async function appointmentsByCategory(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      p.profile as category,
-      COUNT(*) as count
+    SELECT p.profile as category, COUNT(*) as count
     FROM "patientSlot" ps
     INNER JOIN "Patients" p ON ps."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE ps.created_at BETWEEN $1 AND $2
-    ${branchFilter}
-    GROUP BY p.profile
-    ORDER BY count DESC
-  `, [startDate, endDate]);
+    WHERE ps.created_at BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY p.profile ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.category);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -400,27 +341,19 @@ async function appointmentsByCategory(branch, startDate, endDate) {
  * Appointment Status Distribution
  */
 async function appointmentsByStatus(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      ps.status,
-      COUNT(*) as count
+    SELECT ps.status, COUNT(*) as count
     FROM "patientSlot" ps
     INNER JOIN "Patients" p ON ps."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE ps.created_at BETWEEN $1 AND $2
-    ${branchFilter}
-    GROUP BY ps.status
-    ORDER BY count DESC
-  `, [startDate, endDate]);
+    WHERE ps.created_at BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY ps.status ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.status);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -428,28 +361,19 @@ async function appointmentsByStatus(branch, startDate, endDate) {
  * Appointments by Session (Morning/Afternoon)
  */
 async function appointmentsBySession(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      ps.session,
-      COUNT(*) as count
+    SELECT ps.session, COUNT(*) as count
     FROM "patientSlot" ps
     INNER JOIN "Patients" p ON ps."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE ps.created_at BETWEEN $1 AND $2
-    AND ps.session IS NOT NULL
-    ${branchFilter}
-    GROUP BY ps.session
-    ORDER BY count DESC
-  `, [startDate, endDate]);
+    WHERE ps.created_at BETWEEN $1 AND $2 AND ps.session IS NOT NULL ${bf.clause}
+    GROUP BY ps.session ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.session);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -457,27 +381,19 @@ async function appointmentsBySession(branch, startDate, endDate) {
  * Monthly Consultation Trends
  */
 async function consultationTrends(branch, startDate, endDate) {
-  const branchFilter = branch === 'Both'
-    ? ''
-    : `AND up."branch" = '${branch}'`;
-
+  const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT
-      TO_CHAR(c."createdAt", 'YYYY-MM') as month,
-      COUNT(*) as count
+    SELECT TO_CHAR(c."createdAt", 'YYYY-MM') as month, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE c."createdAt" BETWEEN $1 AND $2
-    ${branchFilter}
-    GROUP BY TO_CHAR(c."createdAt", 'YYYY-MM')
-    ORDER BY month
-  `, [startDate, endDate]);
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY TO_CHAR(c."createdAt", 'YYYY-MM') ORDER BY month
+  `, [startDate, endDate, ...bf.params]);
 
   const labels = result.rows.map(r => r.month);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-
   return { labels, values, total };
 }
 
@@ -613,7 +529,7 @@ function getAvailableReports() {
 }
 
 /**
- * Execute a query by dataType
+ * Execute a query by dataType (with Redis caching)
  */
 async function executeQuery(dataType, branch, startDate, endDate) {
   const config = QUERY_HANDLERS[dataType];
@@ -621,8 +537,35 @@ async function executeQuery(dataType, branch, startDate, endDate) {
     throw new Error(`Unknown query type: ${dataType}`);
   }
 
+  // Check cache first
+  const cacheKey = getCacheKey(dataType, branch, startDate, endDate);
+  const cached = await getCachedResult(cacheKey);
+  if (cached) return cached;
+
   logger.debug(`Executing query: ${dataType}`, { branch, startDate, endDate });
-  return await config.handler(branch, startDate, endDate);
+  const result = await config.handler(branch, startDate, endDate);
+
+  // Store in cache
+  await setCachedResult(cacheKey, result);
+
+  return result;
+}
+
+/**
+ * Execute multiple queries in parallel (batch endpoint optimization)
+ */
+async function executeBatchQueries(dataTypes, branch, startDate, endDate) {
+  const results = {};
+  const promises = dataTypes.map(async (dataType) => {
+    try {
+      const data = await executeQuery(dataType, branch, startDate, endDate);
+      results[dataType] = { success: true, data };
+    } catch (err) {
+      results[dataType] = { success: false, error: err.message };
+    }
+  });
+  await Promise.all(promises);
+  return results;
 }
 
 /**
@@ -669,6 +612,7 @@ module.exports = {
 
   // Execute
   executeQuery,
+  executeBatchQueries,
   getReportData,
 
   // Utilities
