@@ -1,60 +1,95 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useBanner } from '../../context/use-banner.js';
 import { getStaffSettings } from '../../context/settings-context.jsx';
 import styles from './banner.module.css';
 
+const SLIDE_OUT_DURATION = 320; // ms — must match CSS animation duration
+
 const Banner = () => {
   const { banners, dismissBanner } = useBanner();
-  const timersRef = useRef({});
+  const autoDismissTimersRef = useRef({});
+  const [exitingIds, setExitingIds] = useState(new Set());
 
-  // Auto-dismiss banners based on user settings
+  /**
+   * Animated dismiss: plays slide-right exit animation then removes from service.
+   */
+  const triggerDismiss = useCallback((id) => {
+    // Avoid double-triggering
+    setExitingIds((prev) => {
+      if (prev.has(id)) return prev;
+      return new Set([...prev, id]);
+    });
+    setTimeout(() => {
+      dismissBanner(id);
+      setExitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, SLIDE_OUT_DURATION);
+  }, [dismissBanner]);
+
+  /**
+   * Auto-dismiss: read settings and set timers for visible banners.
+   * Re-runs whenever banners list changes.
+   */
   useEffect(() => {
-    const userSettings = getStaffSettings();
-    if (!userSettings.bannerAutoDismiss || !userSettings.showBanners) return;
+    const s = getStaffSettings();
+    if (!s.showBanners || !s.bannerAutoDismiss) return;
 
-    const delay = (userSettings.bannerDismissDelay || 5) * 1000;
+    const delay = Math.max(1, s.bannerDismissDelay || 5) * 1000;
 
     banners.forEach((banner) => {
-      if (!timersRef.current[banner.id]) {
-        timersRef.current[banner.id] = setTimeout(() => {
-          dismissBanner(banner.id);
-          delete timersRef.current[banner.id];
+      if (!autoDismissTimersRef.current[banner.id]) {
+        autoDismissTimersRef.current[banner.id] = setTimeout(() => {
+          triggerDismiss(banner.id);
+          delete autoDismissTimersRef.current[banner.id];
         }, delay);
       }
     });
 
     return () => {
-      // Clean up timers for banners that no longer exist
+      // Clear timers for banners that were removed externally (e.g. dismissed by button)
       const currentIds = new Set(banners.map((b) => b.id));
-      Object.keys(timersRef.current).forEach((id) => {
-        if (!currentIds.has(id)) {
-          clearTimeout(timersRef.current[id]);
-          delete timersRef.current[id];
+      Object.keys(autoDismissTimersRef.current).forEach((timerId) => {
+        if (!currentIds.has(timerId)) {
+          clearTimeout(autoDismissTimersRef.current[timerId]);
+          delete autoDismissTimersRef.current[timerId];
         }
       });
     };
-  }, [banners, dismissBanner]);
+  }, [banners, triggerDismiss]);
 
-  if (banners.length === 0) {
-    return null;
+  // Nothing at all to show (including exit animations)
+  if (banners.length === 0 && exitingIds.size === 0) return null;
+
+  const s = getStaffSettings();
+
+  // Apply banner visibility filters
+  let visibleBanners = banners;
+
+  if (!s.showBanners) {
+    // Banners disabled — show only critical errors
+    visibleBanners = banners.filter((b) => b.type === 'error');
+  } else if (s.bannerErrorsOnly) {
+    // Errors-only mode — suppress success/info
+    visibleBanners = visibleBanners.filter((b) => b.type === 'error');
   }
 
-  // If banners are disabled, only show error banners (critical)
-  const userSettings = getStaffSettings();
-  const visibleBanners = userSettings.showBanners
-    ? banners
-    : banners.filter((b) => b.type === 'error');
-
-  if (visibleBanners.length === 0) {
-    return null;
+  // Compact mode — cap how many show at once (keep the most recent N)
+  if (s.bannerCompact) {
+    const max = Math.max(1, s.bannerMaxVisible || 3);
+    visibleBanners = visibleBanners.slice(-max);
   }
+
+  if (visibleBanners.length === 0 && exitingIds.size === 0) return null;
 
   return (
     <div className={styles.bannerContainer}>
       {visibleBanners.map((banner) => (
         <div
           key={banner.id}
-          className={`${styles.banner} ${styles[banner.type]}`}
+          className={`${styles.banner} ${styles[banner.type]}${exitingIds.has(banner.id) ? ` ${styles.exiting}` : ''}`}
           role="alert"
         >
           <div className={styles.bannerContent}>
@@ -76,7 +111,7 @@ const Banner = () => {
             {/* Close Button */}
             <button
               className={styles.closeButton}
-              onClick={() => dismissBanner(banner.id)}
+              onClick={() => triggerDismiss(banner.id)}
               aria-label="Dismiss notification"
             >
               ×
@@ -89,3 +124,4 @@ const Banner = () => {
 };
 
 export default Banner;
+

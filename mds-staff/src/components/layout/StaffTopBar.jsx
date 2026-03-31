@@ -24,12 +24,10 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeNotifTab, setActiveNotifTab] = useState('inventory');
-  const [themeMode, setThemeMode] = useState(() => {
-    return localStorage.getItem('staff_themeMode') || 'system';
-  });
 
   const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen } = useStaffNotifications();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
+  const { themeMode } = settings;
   const displayUnreadCount = settings.showBadges ? unreadCount : 0;
 
   const handleNotifClick = (notif) => {
@@ -41,21 +39,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   const notifRef = useRef(null);
   const userMenuRef = useRef(null);
 
-  // Apply theme
-  useEffect(() => {
-    const applyTheme = (mode) => {
-      if (mode === 'system') {
-        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.classList.toggle('dark', systemPrefersDark);
-      } else if (mode === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    };
-    applyTheme(themeMode);
-    localStorage.setItem('staff_themeMode', themeMode);
-  }, [themeMode]);
+  // Apply theme — handled by SettingsProvider; nothing here
 
   // Get page title - Dashboard shows "Staff Portal", other pages show their name
   const getPageTitle = () => {
@@ -87,10 +71,10 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   }, []);
 
   const toggleTheme = () => {
-    setThemeMode((current) => {
-      if (current === 'light') return 'dark';
-      if (current === 'dark') return 'system';
-      return 'light';
+    updateSettings((prev) => {
+      const order = ['light', 'dark', 'system'];
+      const next = order[(order.indexOf(prev.themeMode) + 1) % order.length];
+      return { ...prev, themeMode: next };
     });
   };
 

@@ -20,11 +20,15 @@ const DEFAULT_SETTINGS = {
   // ── Notification Display ──
   showBadges: true,
   showBanners: true,
+  bannerErrorsOnly: false,   // show only error/failed banners; suppress success
+  bannerCompact: false,      // cap simultaneous banners at bannerMaxVisible
+  bannerMaxVisible: 3,       // max banners shown when compact is on
   bannerAutoDismiss: true,
-  bannerDismissDelay: 5, // seconds
+  bannerDismissDelay: 5,     // seconds
 
   // ── Appearance ──
-  fontSize: 'default', // 'small' | 'default' | 'large'
+  themeMode: 'system',       // 'light' | 'dark' | 'system'
+  fontSize: 'default',       // 'small' | 'default' | 'large'
 
   // ── Sidebar ──
   compactSidebar: false,
@@ -105,6 +109,24 @@ export function SettingsProvider({ children }) {
       root.classList.add('font-size-large');
     }
   }, [settings.fontSize]);
+
+  // Apply theme mode to <html>
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyTheme = (mode) => {
+      if (mode === 'system') {
+        root.classList.toggle('dark', window.matchMedia('(prefers-color-scheme: dark)').matches);
+      } else {
+        root.classList.toggle('dark', mode === 'dark');
+      }
+    };
+    applyTheme(settings.themeMode);
+    // Keep in sync when system preference changes and mode is 'system'
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => { if (settings.themeMode === 'system') applyTheme('system'); };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [settings.themeMode]);
 
   const updateSettings = useCallback((next) => {
     const updated = typeof next === 'function' ? next(settingsRef.current) : next;

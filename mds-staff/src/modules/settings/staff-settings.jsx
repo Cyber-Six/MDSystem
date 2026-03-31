@@ -298,6 +298,46 @@ const StaffSettings = () => {
           <Toggle checked={draft.showBanners} onChange={(v) => set('showBanners', v)} />
         </SettingRow>
         <SettingRow
+          label="Errors only"
+          description="Suppress success banners — only show failed requests"
+          indent
+        >
+          <Toggle
+            checked={draft.bannerErrorsOnly}
+            onChange={(v) => set('bannerErrorsOnly', v)}
+            disabled={!draft.showBanners}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Compact banners"
+          description="Cap the number of banners shown at once"
+          indent
+        >
+          <Toggle
+            checked={draft.bannerCompact}
+            onChange={(v) => set('bannerCompact', v)}
+            disabled={!draft.showBanners}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Max visible banners"
+          description="Maximum banners displayed simultaneously"
+          indent
+        >
+          <div className="flex items-center gap-2">
+            <select
+              value={draft.bannerMaxVisible}
+              onChange={(e) => set('bannerMaxVisible', parseInt(e.target.value, 10))}
+              disabled={!draft.showBanners || !draft.bannerCompact}
+              className="text-sm px-2 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40"
+            >
+              {[1, 2, 3, 5].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+        </SettingRow>
+        <SettingRow
           label="Auto-dismiss banners"
           description="Automatically dismiss banners after a delay"
           indent
@@ -338,6 +378,44 @@ const StaffSettings = () => {
         title="Appearance"
         description="Adjust the look and feel of the portal"
       >
+        {/* Theme */}
+        <SettingRow
+          label="Color theme"
+          description="Choose light, dark, or follow your system preference"
+        >
+          <div className="flex items-center rounded-lg border border-neutral-200 dark:border-neutral-600 overflow-hidden">
+            {[
+              { value: 'light', label: 'Light', icon: (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              )},
+              { value: 'dark', label: 'Dark', icon: (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )},
+              { value: 'system', label: 'System', icon: (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              )},
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => set('themeMode', opt.value)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  draft.themeMode === opt.value
+                    ? 'bg-primary-500 text-white'
+                    : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                }`}
+              >
+                {opt.icon}
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
         <SettingRow
           label="Font size"
           description="Adjust the base font size across the portal"

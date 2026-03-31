@@ -145,13 +145,30 @@
 /* Animations */
 @keyframes slideInRight {
   from {
-    transform: translateX(100%);
+    transform: translateX(calc(100% + 40px));
     opacity: 0;
   }
   to {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(calc(100% + 40px));
+    opacity: 0;
+  }
+}
+
+/* Exit animation class */
+.exiting {
+  animation: slideOutRight 0.32s ease-in forwards;
+  pointer-events: none;
 }
 
 /* Responsive Design */
@@ -176,6 +193,17 @@
     to {
       transform: translateY(0);
       opacity: 1;
+    }
+  }
+
+  @keyframes slideOutRight {
+    from {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(calc(100% + 20px));
+      opacity: 0;
     }
   }
 }

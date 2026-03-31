@@ -1,11 +1,32 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useBanner } from '../../context/use-banner.js';
 import styles from './banner.module.css';
 
+const SLIDE_OUT_DURATION = 320; // ms — must match CSS animation duration
+
 const Banner = () => {
   const { banners, dismissBanner } = useBanner();
+  const [exitingIds, setExitingIds] = useState(new Set());
 
-  if (banners.length === 0) {
+  /**
+   * Animated dismiss: plays slide-right exit animation then removes from service.
+   */
+  const triggerDismiss = useCallback((id) => {
+    setExitingIds((prev) => {
+      if (prev.has(id)) return prev;
+      return new Set([...prev, id]);
+    });
+    setTimeout(() => {
+      dismissBanner(id);
+      setExitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, SLIDE_OUT_DURATION);
+  }, [dismissBanner]);
+
+  if (banners.length === 0 && exitingIds.size === 0) {
     return null;
   }
 
@@ -14,7 +35,7 @@ const Banner = () => {
       {banners.map((banner) => (
         <div
           key={banner.id}
-          className={`${styles.banner} ${styles[banner.type]}`}
+          className={`${styles.banner} ${styles[banner.type]}${exitingIds.has(banner.id) ? ` ${styles.exiting}` : ''}`}
           role="alert"
         >
           <div className={styles.bannerContent}>
@@ -36,7 +57,7 @@ const Banner = () => {
             {/* Close Button */}
             <button
               className={styles.closeButton}
-              onClick={() => dismissBanner(banner.id)}
+              onClick={() => triggerDismiss(banner.id)}
               aria-label="Dismiss notification"
             >
               ×
@@ -49,3 +70,4 @@ const Banner = () => {
 };
 
 export default Banner;
+
