@@ -32,7 +32,7 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
                 SELECT COUNT(DISTINCT pul."patientId")::int AS count
                 FROM "patientUpdateLog" pul
                 JOIN "UsersPersonal" up ON up.id = pul."patientId"
-                WHERE pul.status IN ('Pending', 'InProgress', 'Revision', 'RevisionSubmitted')
+                WHERE pul.status::text IN ('Pending', 'InProgress', 'Revision', 'RevisionSubmitted')
                   AND ($1 = 'Both' OR up.branch::text = $1 OR up.branch = 'Both')
             `, [userBranch]),
 
@@ -40,14 +40,14 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
             db.query(`
                 SELECT COUNT(*)::int AS count
                 FROM "patientSlot" ps
-                WHERE ps.status = 'Pending'
+                WHERE ps.status::text = 'Pending'
             `),
 
             // 3. Pending medicine requests
             db.query(`
                 SELECT COUNT(*)::int AS count
                 FROM "MedicineRequestLog" mrl
-                WHERE mrl.status = 'Pending'
+                WHERE mrl.status::text = 'Pending'
                   AND ($1 = 'Both' OR mrl.location::text = $1)
             `, [userBranch]),
 
@@ -56,25 +56,43 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
                 SELECT COUNT(*)::int AS count
                 FROM "Consultation" c
                 JOIN "UsersPersonal" up ON up.id = c."patientId"
-                WHERE c.status IN ('Open', 'ReOpen', 'Created')
+                WHERE c.status::text IN ('Open', 'ReOpen', 'Created')
                   AND ($1 = 'Both' OR up.branch::text = $1 OR up.branch = 'Both')
             `, [userBranch]),
 
-            // 5. Low stock items — medicine batches with total available <= 10
+            // 5. Low stock items — any branch has <= 10 available units (matches frontend REORDER_THRESHOLD=10)
+            //    Covers both Medicine (MedicineBatch/MedicineEntity) and Supply (SupplyBatch/SupplyEntity)
             db.query(`
                 SELECT COUNT(*)::int AS count FROM (
-                    SELECT mi.id
+                    SELECT DISTINCT mi.id
                     FROM "MedicalItems" mi
-                    LEFT JOIN "MedicineBatch" mb ON mb."medicalItemId" = mi.id
-                        AND (mb."expiryDate" IS NULL OR mb."expiryDate" > NOW())
-                    LEFT JOIN LATERAL (
-                        SELECT COUNT(*)::int AS available
-                        FROM "MedicineEntity" me
-                        WHERE me."batchId" = mb.id AND me."transactionId" IS NULL
-                    ) av ON true
-                    WHERE mi.active = true AND mi.category = 'Medicine'
-                    GROUP BY mi.id
-                    HAVING COALESCE(SUM(av.available), 0) <= 10
+                    WHERE mi.active = true AND mi.category::text = 'Medicine'
+                      AND EXISTS (
+                          SELECT 1 FROM (
+                              SELECT mb.location,
+                                     COALESCE(SUM(CASE WHEN me."transactionId" IS NULL THEN 1 ELSE 0 END), 0) AS branch_stock
+                              FROM "MedicineBatch" mb
+                              LEFT JOIN "MedicineEntity" me ON me."batchId" = mb.id
+                              WHERE mb."medicalItemId" = mi.id
+                                AND (mb."expiryDate" IS NULL OR mb."expiryDate" > NOW())
+                              GROUP BY mb.location
+                          ) bs WHERE bs.branch_stock <= 10
+                      )
+                    UNION
+                    SELECT DISTINCT mi.id
+                    FROM "MedicalItems" mi
+                    WHERE mi.active = true AND mi.category::text = 'Supply'
+                      AND EXISTS (
+                          SELECT 1 FROM (
+                              SELECT sb.location,
+                                     COALESCE(SUM(CASE WHEN se."transactionId" IS NULL THEN 1 ELSE 0 END), 0) AS branch_stock
+                              FROM "SupplyBatch" sb
+                              LEFT JOIN "SupplyEntity" se ON se."batchId" = sb.id
+                              WHERE sb."supplyItemId" = mi.id
+                                AND (sb."expiryDate" IS NULL OR sb."expiryDate" > NOW())
+                              GROUP BY sb.location
+                          ) bs WHERE bs.branch_stock <= 10
+                      )
                 ) low_items
             `),
 
@@ -82,11 +100,11 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
             db.query(`
                 SELECT
                     COUNT(*)::int AS total,
-                    COUNT(*) FILTER (WHERE ps.status IN ('Scheduled') AND ps.arrived_at IS NULL)::int AS remaining
+                    COUNT(*) FILTER (WHERE ps.status::text = 'Scheduled' AND ps.arrived_at IS NULL)::int AS remaining
                 FROM "patientSlot" ps
                 JOIN "ScheduleDateEntity" sde ON ps."slotEntityId" = sde.id
                 WHERE sde."scheduledDate" = CURRENT_DATE
-                  AND ps.status IN ('Scheduled', 'InProgress', 'Completed')
+                  AND ps.status::text IN ('Scheduled', 'InProgress', 'Completed')
             `),
 
             // 7. Tomorrow's slot availability grouped by scheduler location/label
@@ -97,8 +115,8 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
                     ss.location,
                     COALESCE(sde."morningAllowed", ss."morningAllowed") AS "morningAllowed",
                     COALESCE(sde."afternoonAllowed", ss."afternoonAllowed") AS "afternoonAllowed",
-                    COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed','Pending') THEN 1 ELSE 0 END), 0)::int AS "morningBooked",
-                    COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed','Pending') THEN 1 ELSE 0 END), 0)::int AS "afternoonBooked"
+                    COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status::text IN ('Scheduled','InProgress','Completed','Pending') THEN 1 ELSE 0 END), 0)::int AS "morningBooked",
+                    COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status::text IN ('Scheduled','InProgress','Completed','Pending') THEN 1 ELSE 0 END), 0)::int AS "afternoonBooked"
                 FROM "slotScheduler" ss
                 LEFT JOIN "ScheduleDateEntity" sde ON sde."slotId" = ss.id AND sde."scheduledDate" = CURRENT_DATE + INTERVAL '1 day'
                 LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
@@ -138,7 +156,7 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
                         pul.created_at AS submitted
                     FROM "patientUpdateLog" pul
                     JOIN "UsersPersonal" up ON up.id = pul."patientId"
-                    WHERE pul.status IN ('Pending', 'Revision', 'RevisionSubmitted')
+                    WHERE pul.status::text IN ('Pending', 'Revision', 'RevisionSubmitted')
                       AND ($1 = 'Both' OR up.branch::text = $1 OR up.branch = 'Both')
                     ORDER BY pul.created_at DESC
                     LIMIT 5
@@ -153,7 +171,7 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
                         ps.created_at AS submitted
                     FROM "patientSlot" ps
                     LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
-                    WHERE ps.status = 'Pending'
+                    WHERE ps.status::text = 'Pending'
                     ORDER BY ps.created_at DESC
                     LIMIT 5
                 )
