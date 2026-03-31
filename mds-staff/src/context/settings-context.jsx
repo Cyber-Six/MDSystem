@@ -35,6 +35,20 @@ const DEFAULT_SETTINGS = {
 
 const SETTINGS_STORAGE_PREFIX = 'staff_settings_';
 
+// SECURITY: Only allow alphanumeric, underscore, and hyphen in userId to prevent
+// key injection / namespace pollution in localStorage.
+const VALID_USER_ID = /^[a-zA-Z0-9_-]{1,128}$/;
+
+// SECURITY: Hash userId with djb2 before embedding it in the localStorage key so
+// internal identifiers (e.g. sequential integers) are not exposed in DevTools.
+function hashUserId(userId) {
+  let h = 5381;
+  for (let i = 0; i < userId.length; i++) {
+    h = Math.imul(h, 33) ^ userId.charCodeAt(i);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
 /**
  * Derive a per-user storage key from the current refresh token.
  * Falls back to a generic key if no user is logged in.
@@ -44,7 +58,10 @@ function getUserSettingsKey() {
     const refreshToken = tokenService.TokenStorage.getRefreshToken();
     if (refreshToken) {
       const userId = refreshToken.split(':')[0];
-      if (userId) return `${SETTINGS_STORAGE_PREFIX}${userId}`;
+      // SECURITY: Validate format before use
+      if (userId && VALID_USER_ID.test(userId)) {
+        return `${SETTINGS_STORAGE_PREFIX}${hashUserId(userId)}`;
+      }
     }
   } catch {
     // token parsing failed
@@ -52,26 +69,60 @@ function getUserSettingsKey() {
   return `${SETTINGS_STORAGE_PREFIX}default`;
 }
 
+// Boolean settings keys — used by sanitizeSettings for strict type checking.
+const BOOL_SETTINGS_KEYS = [
+  'soundEnabled', 'showBadges', 'showBanners', 'bannerErrorsOnly',
+  'bannerCompact', 'bannerAutoDismiss', 'compactSidebar',
+];
+const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
+
+/**
+ * Strictly validate and sanitize a parsed settings object against known schema.
+ * Unknown keys and wrong types are silently dropped — only valid values are kept.
+ * SECURITY: Prevents XSS-planted localStorage values from poisoning app state.
+ */
+function sanitizeSettings(parsed) {
+  const safe = { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+
+  // Boolean keys
+  BOOL_SETTINGS_KEYS.forEach((key) => {
+    if (typeof parsed[key] === 'boolean') safe[key] = parsed[key];
+  });
+
+  // Clamped numbers
+  if (typeof parsed.soundVolume === 'number' && isFinite(parsed.soundVolume)) {
+    safe.soundVolume = Math.min(1, Math.max(0, parsed.soundVolume));
+  }
+  if (typeof parsed.bannerDismissDelay === 'number' && isFinite(parsed.bannerDismissDelay)) {
+    safe.bannerDismissDelay = Math.min(60, Math.max(1, Math.round(parsed.bannerDismissDelay)));
+  }
+
+  // Enum keys
+  if (['light', 'dark', 'system'].includes(parsed.themeMode)) safe.themeMode = parsed.themeMode;
+  if (['small', 'default', 'large'].includes(parsed.fontSize)) safe.fontSize = parsed.fontSize;
+
+  // soundByModule — only accept known boolean keys
+  if (parsed.soundByModule && typeof parsed.soundByModule === 'object') {
+    SOUND_MODULE_KEYS.forEach((k) => {
+      if (typeof parsed.soundByModule[k] === 'boolean') safe.soundByModule[k] = parsed.soundByModule[k];
+    });
+  }
+
+  return safe;
+}
+
 function loadSettings(userId) {
   try {
     const key = userId
-      ? `${SETTINGS_STORAGE_PREFIX}${userId}`
+      ? `${SETTINGS_STORAGE_PREFIX}${hashUserId(userId)}`
       : getUserSettingsKey();
     const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Merge with defaults to pick up any newly-added keys
-      return {
-        ...DEFAULT_SETTINGS,
-        ...parsed,
-        soundByModule: {
-          ...DEFAULT_SETTINGS.soundByModule,
-          ...(parsed.soundByModule || {}),
-        },
-      };
+      return sanitizeSettings(parsed);
     }
   } catch {
-    // corrupted data
+    // corrupted data — fall through to defaults
   }
   return { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
 }
@@ -109,11 +160,21 @@ export function SettingsProvider({ children }) {
   //   2. The browser 'storage' event (cross-tab token changes).
   useEffect(() => {
     const reload = (e) => {
-      // Use userId from event detail when available — avoids any race condition
-      // where the token may not yet be written to localStorage.
-      const userId = e?.detail?.userId ?? null;
+      // SECURITY (storage event): ignore writes to unrelated localStorage keys so
+      // that other modules or third-party scripts writing frequently don't cause
+      // repeated settings reloads and re-renders.
+      if (e?.type === 'storage') {
+        if (e.key !== null && !e.key.startsWith(SETTINGS_STORAGE_PREFIX)) return;
+      }
+
+      // SECURITY: validate userId from event detail before building a key from it.
+      // Any same-origin script can dispatch 'mds:auth-changed' — don't trust the
+      // payload blindly.
+      const rawUserId = e?.detail?.userId ?? null;
+      const userId = (rawUserId && VALID_USER_ID.test(rawUserId)) ? rawUserId : null;
+
       const newKey = userId
-        ? `${SETTINGS_STORAGE_PREFIX}${userId}`
+        ? `${SETTINGS_STORAGE_PREFIX}${hashUserId(userId)}`
         : getUserSettingsKey();
 
       if (newKey !== currentKeyRef.current) {
