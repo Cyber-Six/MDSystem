@@ -4,6 +4,7 @@ import { searchPatients, formatPatientName } from '../../services/patient-search
 import { usePermissions } from '../../context/permissions-context';
 
 const MAX_MESSAGE_LENGTH = 500;
+const MAX_TITLE_LENGTH = 80;
 const SEARCH_DEBOUNCE_MS = 300;
 
 /**
@@ -27,10 +28,8 @@ const SendNotificationView = () => {
   // ── Recipient type (staff | patients) ──────────────────────────────────────
   const [recipientType, setRecipientType] = useState(isAdmin ? 'staff' : 'patients');
 
-  // ── Mode: notify all or pick specific recipients ────────────────────────────
-  const [mode, setMode] = useState('all'); // 'all' | 'select'
-
   // ── Message ─────────────────────────────────────────────────────────────────
+  const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
 
   // ── Selected recipients: [{id, label}] ──────────────────────────────────────
@@ -69,18 +68,18 @@ const SendNotificationView = () => {
     }
   }, [allStaff, isLoadingStaff]);
 
-  // Trigger staff load when entering select mode on staff tab
+  // Trigger staff load when staff tab is active
   useEffect(() => {
-    if (recipientType === 'staff' && mode === 'select') {
+    if (recipientType === 'staff') {
       loadAllStaff();
     }
-  }, [recipientType, mode, loadAllStaff]);
+  }, [recipientType, loadAllStaff]);
 
   // ── Search logic ─────────────────────────────────────────────────────────────
 
   // Staff: filter loaded roster client-side
   useEffect(() => {
-    if (recipientType !== 'staff' || mode !== 'select' || !allStaff) return;
+    if (recipientType !== 'staff' || !allStaff) return;
     if (!searchTerm.trim()) {
       setSearchResults(allStaff);
       return;
@@ -93,11 +92,11 @@ const SendNotificationView = () => {
         s.role?.toLowerCase().includes(q)
       )
     );
-  }, [searchTerm, allStaff, recipientType, mode]);
+  }, [searchTerm, allStaff, recipientType]);
 
   // Patients: debounced live search
   useEffect(() => {
-    if (recipientType !== 'patients' || mode !== 'select') return;
+    if (recipientType !== 'patients') return;
 
     clearTimeout(debounceRef.current);
 
@@ -120,24 +119,16 @@ const SendNotificationView = () => {
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(debounceRef.current);
-  }, [searchTerm, recipientType, mode]);
+  }, [searchTerm, recipientType]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
   const handleRecipientType = (type) => {
     setRecipientType(type);
-    setMode('all');
     setSelected([]);
     setSearchTerm('');
     setSearchResults([]);
     setResult(null);
-  };
-
-  const handleModeChange = (newMode) => {
-    setMode(newMode);
-    setSelected([]);
-    setSearchTerm('');
-    setSearchResults([]);
   };
 
   const addRecipient = (user) => {
@@ -156,20 +147,22 @@ const SendNotificationView = () => {
 
   const handleSend = async (e) => {
     e.preventDefault();
-    const trimmed = message.trim();
-    if (!trimmed) return;
-    if (mode === 'select' && selected.length === 0) return;
+    const trimmedTitle = title.trim();
+    const trimmedMessage = message.trim();
+    if (!trimmedTitle || !trimmedMessage) return;
+    if (selected.length === 0) return;
 
     setIsSending(true);
     setResult(null);
 
     try {
-      const recipientIds = mode === 'select' ? selected.map(r => r.id) : null;
+      const recipientIds = selected.map(r => r.id);
+      const payload = JSON.stringify({ title: trimmedTitle, body: trimmedMessage });
       let data;
       if (recipientType === 'staff') {
-        data = await notifyStaffs(trimmed, recipientIds);
+        data = await notifyStaffs(payload, recipientIds);
       } else {
-        data = await notifyPatients(trimmed, recipientIds);
+        data = await notifyPatients(payload, recipientIds);
       }
 
       const label = recipientType === 'staff' ? 'staff member' : 'patient';
@@ -179,12 +172,11 @@ const SendNotificationView = () => {
         text: `Notification sent to ${data.totalRecipients} ${label}${plural}.`,
         details: data,
       });
+      setTitle('');
       setMessage('');
-      if (mode === 'select') {
-        setSelected([]);
-        setSearchTerm('');
-        setSearchResults([]);
-      }
+      setSelected([]);
+      setSearchTerm('');
+      setSearchResults([]);
     } catch (err) {
       const status = err?.response?.status;
       let text = 'Failed to send notification. Please try again.';
@@ -200,14 +192,16 @@ const SendNotificationView = () => {
   // ── Derived ──────────────────────────────────────────────────────────────────
   const charsLeft = MAX_MESSAGE_LENGTH - message.length;
   const canSend =
+    title.trim().length > 0 &&
     message.trim().length > 0 &&
     !isSending &&
-    (mode === 'all' || selected.length > 0);
+    selected.length > 0;
 
   // Results excluding already-selected recipients
   const filteredResults = searchResults.filter(
     r => !selected.find(s => s.id === String(r.id))
   );
+  const titleCharsLeft = MAX_TITLE_LENGTH - title.length;
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -254,35 +248,14 @@ const SendNotificationView = () => {
           </div>
         )}
 
-        {/* ── Mode: Notify All vs Select ─────────────────────────────────── */}
+        {/* ── Recipients ────────────────────────────────────────────────── */}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-2">
             Recipients
           </label>
-          <div className="flex gap-4 mb-4">
-            {[
-              { value: 'all', label: 'Notify All' },
-              { value: 'select', label: 'Select Recipients' },
-            ].map(opt => (
-              <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="mode"
-                  value={opt.value}
-                  checked={mode === opt.value}
-                  onChange={() => handleModeChange(opt.value)}
-                  className="accent-primary-500"
-                />
-                <span className="text-sm text-secondary-700 dark:text-neutral-300">
-                  {opt.label}
-                </span>
-              </label>
-            ))}
-          </div>
 
           {/* ── Select recipients panel ──────────────────────────────────── */}
-          {mode === 'select' && (
-            <div className="space-y-3">
+          <div className="space-y-3">
               {/* Search input */}
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
@@ -344,8 +317,7 @@ const SendNotificationView = () => {
               )}
 
               {/* Empty state */}
-              {mode === 'select' &&
-                searchTerm.trim() &&
+              {searchTerm.trim() &&
                 !isSearching &&
                 !isLoadingStaff &&
                 filteredResults.length === 0 && (
@@ -387,17 +359,35 @@ const SendNotificationView = () => {
                   Search and select at least one recipient to send.
                 </p>
               )}
-            </div>
-          )}
+          </div>
+        </div>
 
-          {/* Notify All description */}
-          {mode === 'all' && (
-            <p className="text-xs text-secondary-400 dark:text-neutral-500">
-              {recipientType === 'staff'
-                ? 'All active staff members will be notified.'
-                : 'All patients in your branch and location will be notified.'}
-            </p>
-          )}
+        {/* ── Title ─────────────────────────────────────────────────────── */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label
+              htmlFor="notification-title"
+              className="block text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400"
+            >
+              Title
+            </label>
+            <span className={`text-xs ${
+              titleCharsLeft < 20
+                ? 'text-red-500 dark:text-red-400'
+                : 'text-secondary-400 dark:text-neutral-500'
+            }`}>
+              {titleCharsLeft}/{MAX_TITLE_LENGTH}
+            </span>
+          </div>
+          <input
+            id="notification-title"
+            type="text"
+            value={title}
+            onChange={e => { if (e.target.value.length <= MAX_TITLE_LENGTH) setTitle(e.target.value); }}
+            placeholder="Short notification title…"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            autoComplete="off"
+          />
         </div>
 
         {/* ── Message ───────────────────────────────────────────────────── */}
