@@ -13,7 +13,10 @@ import { LoginActivityScreen } from '../screens/more/LoginActivityScreen';
 import { FAQsScreen } from '../screens/more/FAQsScreen';
 import { SettingsScreen } from '../screens/more/SettingsScreen';
 import { MedicineRequestScreen } from '../screens/medicine/MedicineRequestScreen';
+import { MyDocumentsScreen } from '../screens/more/MyDocumentsScreen';
 import InitialRecordFormScreen from '../screens/record-forms/InitialRecordFormScreen';
+import UpdateRecordChoiceScreen from '../screens/record-forms/UpdateRecordChoiceScreen';
+import { AnnouncementsScreen } from '../screens/more/AnnouncementsScreen';
 
 import { useTheme, colors } from '../context/ThemeContext';
 
@@ -42,6 +45,9 @@ export const MoreStackNavigator: React.FC = () => {
       <Stack.Screen name="LoginActivity" component={LoginActivityScreen} options={{ ...subScreenOptions, title: 'Login Activity' }} />
       <Stack.Screen name="FAQs" component={FAQsScreen} options={{ ...subScreenOptions, title: 'FAQs' }} />
       <Stack.Screen name="InitialRecordForm" component={InitialRecordFormScreen} options={{ ...subScreenOptions, title: 'Medical Record' }} />
+      <Stack.Screen name="UpdateRecordChoice" component={UpdateRecordChoiceScreen} options={{ ...subScreenOptions, title: 'Update Record' }} />
+      <Stack.Screen name="Announcements" component={AnnouncementsScreen} options={{ ...subScreenOptions, title: 'Announcements' }} />
+      <Stack.Screen name="MyDocuments" component={MyDocumentsScreen} options={{ ...subScreenOptions, title: 'My Documents' }} />
     </Stack.Navigator>
   );
 };

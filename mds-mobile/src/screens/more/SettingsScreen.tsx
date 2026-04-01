@@ -1,19 +1,64 @@
 /**
- * Settings Screen — Display preferences & dark mode toggle
+ * Settings Screen — Display preferences & notification settings
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   Switch,
+  Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, colors } from '../../context/ThemeContext';
+
+const SETTINGS_KEY = 'mds_mobile_settings';
+
+interface AppSettings {
+  soundEnabled: boolean;
+  showBanners: boolean;
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  soundEnabled: true,
+  showBanners: true,
+};
+
+async function loadSettings(): Promise<AppSettings> {
+  try {
+    const raw = await AsyncStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : DEFAULT_SETTINGS.soundEnabled,
+        showBanners: typeof parsed.showBanners === 'boolean' ? parsed.showBanners : DEFAULT_SETTINGS.showBanners,
+      };
+    }
+  } catch {}
+  return DEFAULT_SETTINGS;
+}
+
+async function saveSettings(settings: AppSettings) {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {}
+}
 
 export const SettingsScreen: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    loadSettings().then(setSettings);
+  }, []);
+
+  const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    const updated = { ...settings, [key]: value };
+    setSettings(updated);
+    saveSettings(updated);
+  };
 
   return (
     <View
@@ -58,6 +103,57 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Notifications */}
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+          ]}
+        >
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+            ]}
+          >
+            Notifications
+          </Text>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                🔔 In-App Banners
+              </Text>
+              <Text style={[styles.settingDesc, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
+                Show banners for appointments, medicine, and chat events
+              </Text>
+            </View>
+            <Switch
+              value={settings.showBanners}
+              onValueChange={(v) => updateSetting('showBanners', v)}
+              trackColor={{ false: colors.neutral[300], true: colors.primary[400] }}
+              thumbColor={settings.showBanners ? colors.primary[500] : colors.neutral[100]}
+            />
+          </View>
+
+          <View style={[styles.settingRow, styles.settingRowBorder, { borderTopColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                🔊 Notification Sound
+              </Text>
+              <Text style={[styles.settingDesc, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
+                Play a sound when push notifications arrive
+              </Text>
+            </View>
+            <Switch
+              value={settings.soundEnabled}
+              onValueChange={(v) => updateSetting('soundEnabled', v)}
+              trackColor={{ false: colors.neutral[300], true: colors.primary[400] }}
+              thumbColor={settings.soundEnabled ? colors.primary[500] : colors.neutral[100]}
+            />
+          </View>
+        </View>
+
         {/* About */}
         <View
           style={[
@@ -86,7 +182,7 @@ export const SettingsScreen: React.FC = () => {
               Platform
             </Text>
             <Text style={[styles.aboutValue, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-              MDSystem Mobile
+              MDSystem Mobile ({Platform.OS})
             </Text>
           </View>
         </View>
@@ -110,6 +206,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
   },
+  settingRowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
+    paddingTop: 12,
+  },
   settingInfo: { flex: 1, marginRight: 12 },
   settingLabel: { fontSize: 15, fontWeight: '500' },
   settingDesc: { fontSize: 12, marginTop: 2 },
@@ -125,3 +226,4 @@ const styles = StyleSheet.create({
 });
 
 export default SettingsScreen;
+

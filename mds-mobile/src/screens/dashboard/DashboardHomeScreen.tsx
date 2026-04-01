@@ -308,7 +308,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                   ]}
                   numberOfLines={1}
                 >
-                  {announcements[announcementIndex]?.title}
+                  {announcements[announcementIndex]?.label}
                 </Text>
                 <Text
                   style={[
