@@ -192,6 +192,18 @@ const fetchCurrentUpdateTicket = async () => {
   } catch { return null; }
 };
 
+/** Public helper — returns the current update ticket including revision notes. */
+export const getUpdateTicketStatus = async (): Promise<{
+  id: string; status: string; scope: string; notes?: string;
+} | null> => {
+  try {
+    const data = await sendGraphQLRequest(
+      `query GetUpdateTicketFull { getUpdateTicket { id status scope notes } }`, {}
+    );
+    return data.getUpdateTicket ?? null;
+  } catch { return null; }
+};
+
 const createUpdateTicket = async (scope = 'Both'): Promise<string> => {
   const mutation = `mutation CreateUpdateTicket($scope: UpdateScope!) { createUpdateTicket(scope: $scope) }`;
   try {

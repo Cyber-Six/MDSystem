@@ -8,9 +8,9 @@ import { axiosRequest } from '../core';
 
 export interface Announcement {
   id: string;
-  title: string;
+  label: string;          // backend aliases title column as 'label'
   description: string;
-  attachment_url?: string;
+  pubmat?: string;        // file UUID for announcement image; fetch via /media/record/announcement/:pubmat
   created_at: string;
   updated_at?: string;
 }

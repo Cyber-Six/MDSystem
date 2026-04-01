@@ -33,8 +33,11 @@ const menuItems: MenuItem[] = [
   { icon: '👤', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
   { icon: '💊', label: 'Medicine Request', screen: 'MedicineRequest', description: 'Request medicines from the clinic' },
   { icon: '📋', label: 'Medical Record', screen: 'InitialRecordForm', description: 'View or fill your record' },
-  { icon: '🔑', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
+  { icon: '✏️', label: 'Update Record', screen: 'UpdateRecordChoice', description: 'Update your medical or dental record' },
+  { icon: '�', label: 'My Documents', screen: 'MyDocuments', description: 'View your prescriptions & certificates' },
+  { icon: '�🔑', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
   { icon: '📜', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
+  { icon: '📢', label: 'Announcements', screen: 'Announcements', description: 'Clinic news and announcements' },
   { icon: '❓', label: 'FAQs', screen: 'FAQs', description: 'Common questions' },
   { icon: '⚙️', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
 ];
