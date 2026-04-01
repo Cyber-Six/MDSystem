@@ -4,6 +4,7 @@ export const GQL_FULL_RECORD = `
       id identifier branch sex
       first_name last_name middle_name suffix
       profile_type program year department role
+      credentials_status
       latest_ticket_id latest_status latest_scope latest_updated_at
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }

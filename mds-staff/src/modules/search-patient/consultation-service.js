@@ -717,6 +717,32 @@ export const getConsultationWithDetails = async (patientId) => {
 };
 
 /**
+ * Create vital signs for a patient (used during consultation)
+ * Calls the EMR endpoint where vital signs live.
+ */
+export const createVitalSignsForConsultation = async (patientId, input) => {
+  const mutation = `
+    mutation CreateVitalSigns($patientId: ID!, $input: VitalSignsInput!) {
+      createVitalSigns(patientId: $patientId, input: $input) {
+        id
+      }
+    }
+  `;
+
+  const response = await axiosRequest.post('/staff/emr', {
+    query: mutation,
+    variables: { patientId: String(patientId), input },
+  });
+
+  if (response.data.errors) {
+    const firstError = response.data.errors[0];
+    throw new Error(firstError?.message || 'Failed to create vital signs');
+  }
+
+  return response.data.data.createVitalSigns;
+};
+
+/**
  * Create and submit a complete consultation
  */
 export const createAndSubmitConsultation = async (consultationInput, outcomeInput, status = 'Completed') => {

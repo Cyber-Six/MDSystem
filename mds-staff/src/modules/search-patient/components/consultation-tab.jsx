@@ -10,6 +10,14 @@ const INITIAL_FORM = {
   chiefComplaints: [''],
   peFindings: [''],
   notes: '',
+  vitalSigns: {
+    height_cm: '',
+    weight_kg: '',
+    blood_pressure: '',
+    heart_rate: '',
+    temperature: '',
+    notes: '',
+  },
 };
 
 const DIAGNOSIS_TYPES = [
@@ -334,6 +342,21 @@ export default function PatientConsultationTab({ patient, consultations = [], on
             treatments: validTreatments,
             diagnoses: normalizedDiagnoses.map(mapToBackendDiagnosis),
           },
+          vitalSignsData: (() => {
+            const vs = form.vitalSigns;
+            const h = parseFloat(vs.height_cm);
+            const w = parseFloat(vs.weight_kg);
+            const bp = vs.blood_pressure.trim();
+            const hr = parseInt(vs.heart_rate, 10);
+            const temp = parseFloat(vs.temperature);
+            if (!isNaN(h) && !isNaN(w) && bp && !isNaN(hr) && !isNaN(temp)) {
+              const result = { height_cm: h, weight_kg: w, blood_pressure: bp, heart_rate: hr, temperature: temp };
+              if (vs.notes && vs.notes.trim()) result.notes = vs.notes.trim();
+              return result;
+            }
+            return null;
+          })(),
+          patientId: String(patient?.id || ''),
         },
       });
     }
@@ -353,188 +376,258 @@ export default function PatientConsultationTab({ patient, consultations = [], on
         right={<span className="text-xs text-secondary-400 dark:text-neutral-500">Patient ID: {patient?.id || 'N/A'}</span>}
       >
         <div className="space-y-4">
-          <div className="grid md:grid-cols-3 gap-3">
-            <label className="block">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Consultation Type</span>
-              <select
-                value={form.type}
-                onChange={(e) => setField('type', e.target.value)}
-                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-300"
-              >
-                <option value="Medical">Medical</option>
-                <option value="Dental">Dental</option>
-              </select>
-            </label>
+          {/* ── Full form: 70/30 split from the very top ── */}
+          <div className="flex gap-4">
+            {/* Left side (70%): all consultation fields */}
+            <div className="grow min-w-0 space-y-4">
+              <div className="grid md:grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Consultation Type</span>
+                  <select
+                    value={form.type}
+                    onChange={(e) => setField('type', e.target.value)}
+                    className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  >
+                    <option value="Medical">Medical</option>
+                    <option value="Dental">Dental</option>
+                  </select>
+                </label>
 
-            <label className="block">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Consultation Mode</span>
-              <select
-                value={form.mode}
-                onChange={(e) => setField('mode', e.target.value)}
-                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-300"
-              >
-                <option value="Onsite">Onsite</option>
-                <option value="Virtual">Virtual</option>
-              </select>
-            </label>
+                <label className="block">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Consultation Mode</span>
+                  <select
+                    value={form.mode}
+                    onChange={(e) => setField('mode', e.target.value)}
+                    className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  >
+                    <option value="Onsite">Onsite</option>
+                    <option value="Virtual">Virtual</option>
+                  </select>
+                </label>
 
-            <InputField
-              label={icdServiceUnavailable ? 'Diagnosis (Manual Fallback)' : 'Diagnosis System'}
-              value={form.diagnosis}
-              onChange={(e) => {
-                if (icdServiceUnavailable) {
-                  setField('diagnosis', e.target.value);
-                }
-              }}
-              placeholder={icdServiceUnavailable ? 'Enter diagnosis manually' : 'Primary diagnosis will appear here'}
-              disabled={!icdServiceUnavailable}
-            />
-          </div>
-
-          {!icdServiceUnavailable && (
-          <div className="space-y-2">
-            <label className="block">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Search ICD</span>
-              <input
-                type="text"
-                value={icdQuery}
-                onChange={(e) => setIcdQuery(e.target.value)}
-                placeholder="Type ICD code (e.g. CA40) or title (e.g. fever)"
-                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
-              />
-            </label>
-
-            {(icdLoading || icdError || icdResults.length > 0) && (
-              <div className="rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden">
-                {icdLoading && <p className="px-3 py-2 text-xs text-secondary-500 dark:text-neutral-400">Searching ICD entries...</p>}
-                {icdError && <p className="px-3 py-2 text-xs text-error-600 dark:text-error-400">{icdError}</p>}
-                {!icdLoading && !icdError && icdResults.length > 0 && (
-                  <ul className="max-h-52 overflow-auto divide-y divide-neutral-100 dark:divide-neutral-700/60">
-                    {icdResults.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() => addDiagnosis(item)}
-                          className="w-full text-left px-3 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-700/40 transition-colors"
-                        >
-                          <p className="text-xs font-semibold text-secondary-800 dark:text-white">{item.code}</p>
-                          <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-2">{item.title}</p>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <InputField
+                  label={icdServiceUnavailable ? 'Diagnosis (Manual Fallback)' : 'Diagnosis System'}
+                  value={form.diagnosis}
+                  onChange={(e) => {
+                    if (icdServiceUnavailable) {
+                      setField('diagnosis', e.target.value);
+                    }
+                  }}
+                  placeholder={icdServiceUnavailable ? 'Enter diagnosis manually' : 'Primary diagnosis will appear here'}
+                  disabled={!icdServiceUnavailable}
+                />
               </div>
-            )}
 
-            <div className="space-y-2">
-              {selectedDiagnoses.length === 0 ? (
-                <p className="text-xs text-secondary-400 dark:text-neutral-500">No ICD diagnosis selected yet.</p>
-              ) : (
-                selectedDiagnoses.map((entry) => (
-                  <div key={entry.id} className="rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-700/30 p-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-secondary-800 dark:text-white">{entry.code}</p>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400 break-words">{entry.title}</p>
+              {!icdServiceUnavailable && (
+              <div className="space-y-2">
+                <label className="block">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Search ICD</span>
+                  <input
+                    type="text"
+                    value={icdQuery}
+                    onChange={(e) => setIcdQuery(e.target.value)}
+                    placeholder="Type ICD code (e.g. CA40) or title (e.g. fever)"
+                    className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </label>
+
+                {(icdLoading || icdError || icdResults.length > 0) && (
+                  <div className="rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden">
+                    {icdLoading && <p className="px-3 py-2 text-xs text-secondary-500 dark:text-neutral-400">Searching ICD entries...</p>}
+                    {icdError && <p className="px-3 py-2 text-xs text-error-600 dark:text-error-400">{icdError}</p>}
+                    {!icdLoading && !icdError && icdResults.length > 0 && (
+                      <ul className="max-h-52 overflow-auto divide-y divide-neutral-100 dark:divide-neutral-700/60">
+                        {icdResults.map((item) => (
+                          <li key={item.id}>
+                            <button
+                              type="button"
+                              onClick={() => addDiagnosis(item)}
+                              className="w-full text-left px-3 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-700/40 transition-colors"
+                            >
+                              <p className="text-xs font-semibold text-secondary-800 dark:text-white">{item.code}</p>
+                              <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-2">{item.title}</p>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {selectedDiagnoses.length === 0 ? (
+                    <p className="text-xs text-secondary-400 dark:text-neutral-500">No ICD diagnosis selected yet.</p>
+                  ) : (
+                    selectedDiagnoses.map((entry) => (
+                      <div key={entry.id} className="rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-700/30 p-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-secondary-800 dark:text-white">{entry.code}</p>
+                            <p className="text-xs text-secondary-500 dark:text-neutral-400 break-words">{entry.title}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <select
+                              value={entry.diagnosisType}
+                              onChange={(e) => setDiagnosisType(entry.id, e.target.value)}
+                              className={`px-2 py-1 rounded text-[11px] font-medium border ${
+                                entry.diagnosisType === 'Primary'
+                                  ? 'bg-primary-500 text-white border-primary-600'
+                                  : 'bg-white dark:bg-neutral-600 text-secondary-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-500'
+                              } focus:outline-none focus:ring-2 focus:ring-primary-300`}
+                            >
+                              {DIAGNOSIS_TYPES.map((type) => (
+                                <option key={type.value} value={type.value}>
+                                  {type.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => removeDiagnosis(entry.id)}
+                              className="px-2 py-1 rounded text-[11px] font-medium bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                        <textarea
+                          rows={2}
+                          value={entry.notes}
+                          onChange={(e) => setDiagnosisNotes(entry.id, e.target.value)}
+                          placeholder="Optional diagnosis note"
+                          className="mt-2 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-xs text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                        />
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <select
-                          value={entry.diagnosisType}
-                          onChange={(e) => setDiagnosisType(entry.id, e.target.value)}
-                          className={`px-2 py-1 rounded text-[11px] font-medium border ${
-                            entry.diagnosisType === 'Primary'
-                              ? 'bg-primary-500 text-white border-primary-600'
-                              : 'bg-white dark:bg-neutral-600 text-secondary-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-500'
-                          } focus:outline-none focus:ring-2 focus:ring-primary-300`}
-                        >
-                          {DIAGNOSIS_TYPES.map((type) => (
-                            <option key={type.value} value={type.value}>
-                              {type.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => removeDiagnosis(entry.id)}
-                          className="px-2 py-1 rounded text-[11px] font-medium bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              )}
+
+              {icdServiceUnavailable && (
+                <div className="rounded-md border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 flex items-center justify-between gap-3">
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    Diagnosis you're looking for is unavailable. Manual diagnosis entry is enabled or retry to search for diagnosis again.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIcdServiceUnavailable(false);
+                      setIcdError('');
+                      setIcdResults([]);
+                      setField('diagnosis', '');
+                      setIcdQuery('');
+                    }}
+                    className="px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-800/50 hover:bg-amber-200 dark:hover:bg-amber-800/70 rounded border border-amber-300 dark:border-amber-600 transition-colors shrink-0"
+                  >
+                    Retry ICD Search
+                  </button>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="grid md:grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1 block">Clinical Notes</span>
                     <textarea
-                      rows={2}
-                      value={entry.notes}
-                      onChange={(e) => setDiagnosisNotes(entry.id, e.target.value)}
-                      placeholder="Optional diagnosis note"
-                      className="mt-2 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-xs text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                      rows={3}
+                      value={form.notes}
+                      onChange={(e) => setField('notes', e.target.value)}
+                      placeholder="Consultation notes"
+                      className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                  </label>
+
+                  <MultiInputField
+                    label="PE Findings"
+                    values={form.peFindings}
+                    onChange={(values) => setField('peFindings', values)}
+                    placeholder="Physical examination finding"
+                    isTextarea={true}
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-3">
+                  <MultiInputField
+                    label="Chief Complaints"
+                    values={form.chiefComplaints}
+                    onChange={(values) => setField('chiefComplaints', values)}
+                    placeholder="Main reason for consultation"
+                    isTextarea={true}
+                  />
+
+                  <MultiInputField
+                    label="Treatment / Plan"
+                    values={form.treatments}
+                    onChange={(values) => setField('treatments', values)}
+                    placeholder="Medication, advice, and follow-up plan"
+                    isTextarea={false}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Right side (30%): Vital Signs — spans from top row down */}
+            <div className="w-[30%] shrink-0">
+              <div className="rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden flex flex-col">
+                <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800/50">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400">
+                    Vital Signs
+                  </span>
+                  <span className="block text-[10px] font-normal text-secondary-400 dark:text-neutral-500 mt-0.5">
+                    Optional — fill all fields to record
+                  </span>
+                </div>
+                <div className="p-3 flex flex-col gap-3">
+                  <InputField
+                    label="Height (cm)"
+                    value={form.vitalSigns.height_cm}
+                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, height_cm: e.target.value })}
+                    placeholder="e.g. 170"
+                    type="number"
+                  />
+                  <InputField
+                    label="Weight (kg)"
+                    value={form.vitalSigns.weight_kg}
+                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, weight_kg: e.target.value })}
+                    placeholder="e.g. 65"
+                    type="number"
+                  />
+                  <InputField
+                    label="Blood Pressure"
+                    value={form.vitalSigns.blood_pressure}
+                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, blood_pressure: e.target.value })}
+                    placeholder="e.g. 120/80"
+                  />
+                  <InputField
+                    label="Heart Rate (bpm)"
+                    value={form.vitalSigns.heart_rate}
+                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, heart_rate: e.target.value })}
+                    placeholder="e.g. 72"
+                    type="number"
+                  />
+                  <InputField
+                    label="Temperature (°C)"
+                    value={form.vitalSigns.temperature}
+                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, temperature: e.target.value })}
+                    placeholder="e.g. 36.5"
+                    type="number"
+                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-secondary-400 dark:text-neutral-500">
+                      Notes
+                    </label>
+                    <textarea
+                      value={form.vitalSigns.notes}
+                      onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, notes: e.target.value })}
+                      placeholder="Additional vital sign observations..."
+                      rows={3}
+                      className="w-full rounded-sm border border-neutral-300 dark:border-neutral-600 bg-transparent px-2.5 py-1.5 text-xs text-secondary-700 dark:text-neutral-200 placeholder-secondary-300 dark:placeholder-neutral-600 outline-none focus:border-primary-400 resize-none"
                     />
                   </div>
-                ))
-              )}
+                </div>
+              </div>
             </div>
-          </div>
-          )}
-
-          {icdServiceUnavailable && (
-            <div className="rounded-md border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 flex items-center justify-between gap-3">
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Diagnosis you're looking for is unavailable. Manual diagnosis entry is enabled or retry to search for diagnosis again.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setIcdServiceUnavailable(false);
-                  setIcdError('');
-                  setIcdResults([]);
-                  setField('diagnosis', '');
-                  setIcdQuery('');
-                }}
-                className="px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-800/50 hover:bg-amber-200 dark:hover:bg-amber-800/70 rounded border border-amber-300 dark:border-amber-600 transition-colors shrink-0"
-              >
-                Retry ICD Search
-              </button>
-            </div>
-          )}
-
-          <div className="grid md:grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1 block">Clinical Notes</span>
-              <textarea
-                rows={3}
-                value={form.notes}
-                onChange={(e) => setField('notes', e.target.value)}
-                placeholder="Consultation notes"
-                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
-              />
-            </label>
-
-            <MultiInputField
-              label="PE Findings"
-              values={form.peFindings}
-              onChange={(values) => setField('peFindings', values)}
-              placeholder="Physical examination finding"
-              isTextarea={true}
-            />
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-3">
-            <MultiInputField
-              label="Chief Complaints"
-              values={form.chiefComplaints}
-              onChange={(values) => setField('chiefComplaints', values)}
-              placeholder="Main reason for consultation"
-              isTextarea={true}
-            />
-
-            <MultiInputField
-              label="Treatment / Plan"
-              values={form.treatments}
-              onChange={(values) => setField('treatments', values)}
-              placeholder="Medication, advice, and follow-up plan"
-              isTextarea={false}
-            />
           </div>
 
           <div className="mt-4 flex items-center justify-between gap-3">

@@ -40,7 +40,7 @@ export function useHealthChatSocket() {
     setUserTyping,
     refreshTickets,
     setSocketError,
-    markTicketPendingClosed,
+    markTicketClosed,
     filter,
     tickets,
     updateTicketExpiresAt
@@ -56,7 +56,7 @@ export function useHealthChatSocket() {
   const setSocketErrorRef = useRef(setSocketError);
   const refreshTicketsRef = useRef(refreshTickets);
   const removeTicketRef = useRef(removeTicket);
-  const markTicketPendingClosedRef = useRef(markTicketPendingClosed);
+  const markTicketClosedRef = useRef(markTicketClosed);
   const filterRef = useRef(filter);
   const ticketsRef = useRef(tickets);
   const updateTicketExpiresAtRef = useRef(updateTicketExpiresAt);
@@ -71,11 +71,11 @@ export function useHealthChatSocket() {
     setSocketErrorRef.current = setSocketError;
     refreshTicketsRef.current = refreshTickets;
     removeTicketRef.current = removeTicket;
-    markTicketPendingClosedRef.current = markTicketPendingClosed;
+    markTicketClosedRef.current = markTicketClosed;
     filterRef.current = filter;
     ticketsRef.current = tickets;
     updateTicketExpiresAtRef.current = updateTicketExpiresAt;
-  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, markTicketPendingClosed, filter, tickets, updateTicketExpiresAt]);
+  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, markTicketClosed, filter, tickets, updateTicketExpiresAt]);
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
@@ -182,8 +182,8 @@ export function useHealthChatSocket() {
             t.tickets?.some(sub => String(sub.id) === ticketId)
           );
           const patientId = ticket?.patientId || ticketId;
-          // Mark as pending closed (status updates immediately, removal deferred)
-          markTicketPendingClosedRef.current(data.chatId, patientId, closedBy);
+          // Mark as closed (status updates immediately, stays in list)
+          markTicketClosedRef.current(data.chatId, patientId, closedBy);
           // Clear typing indicator
           setUserTypingRef.current(String(patientId), null, false);
         }
@@ -192,13 +192,14 @@ export function useHealthChatSocket() {
       // Listen for ticket status changes by other staff (approve/reject)
       socketService.on('healthchat:ticket-status-changed', (data) => {
         if (data.chatId && data.status) {
-          // If ticket was approved (now Ongoing) and we're viewing pending, remove it
-          if (data.status === 'Ongoing' && filterRef.current === 'pending') {
-            removeTicketRef.current(data.chatId);
-          } else {
-            // Otherwise refresh to get updated data
-            refreshTicketsRef.current();
-          }
+          // Route through addTicket which handles in-place updates for known patients
+          // and only does a full refresh for genuinely new entries. This avoids the
+          // legacy refreshTickets() which overwrites read state.
+          addTicketRef.current({
+            id: data.chatId,
+            patientId: data.patientId,
+            status: data.status,
+          });
         }
       });
 

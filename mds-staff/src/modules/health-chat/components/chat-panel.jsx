@@ -9,6 +9,7 @@ import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
 import PrescriptionPanel from './PrescriptionPanel';
+import ConsultationPanel from './ConsultationPanel';
 import ExpiryWarningBanner from './expiry-warning-banner';
 
 const ChatPanel = ({ emitTyping }) => {
@@ -30,6 +31,8 @@ const ChatPanel = ({ emitTyping }) => {
   } = useHealthChat();
 
   const [showPrescription, setShowPrescription] = useState(false);
+  const [showConsultation, setShowConsultation] = useState(false);
+  const [consultationData, setConsultationData] = useState(null);
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -175,9 +178,11 @@ const ChatPanel = ({ emitTyping }) => {
     return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Close prescription panel when patient changes
+  // Close panels when patient changes
   useEffect(() => {
     setShowPrescription(false);
+    setShowConsultation(false);
+    setConsultationData(null);
   }, [selectedChatId, selectedPatientId]);
 
   const patient = selectedTicket?.patient;
@@ -205,10 +210,10 @@ const ChatPanel = ({ emitTyping }) => {
   const allItems = [...purposeSynth, ...itemsWithDividers];
 
   return (
-    <div className="flex-1 flex h-full min-h-0">
+    <div className="flex-1 flex h-full min-h-0 min-w-0 overflow-hidden">
     {/* Chat column */}
     <div
-      className="flex-1 flex flex-col h-full min-h-0 bg-white dark:bg-neutral-900"
+      className="flex-1 flex flex-col h-full min-h-0 min-w-0 overflow-hidden bg-white dark:bg-neutral-900"
     >
       {/* Header */}
       <ChatHeader />
@@ -217,9 +222,9 @@ const ChatPanel = ({ emitTyping }) => {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto bg-neutral-100 dark:bg-neutral-800"
+        className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-neutral-100 dark:bg-neutral-800"
       >
-        <div className="px-5 py-4">
+        <div className="px-5 py-4 w-full box-border">
 
           {/* Loading older messages spinner */}
           {loadingOlder && (
@@ -319,9 +324,32 @@ const ChatPanel = ({ emitTyping }) => {
           </div>
         </div>
       ) : (
-        <MessageInput emitTyping={emitTyping} onOpenPrescription={() => setShowPrescription(true)} />
+        <MessageInput
+          emitTyping={emitTyping}
+          onOpenPrescription={() => { setShowConsultation(false); setShowPrescription(true); }}
+          onOpenConsultation={() => { setShowPrescription(false); setConsultationData(null); setShowConsultation(true); }}
+        />
       )}
     </div>
+
+    {/* Consultation side panel */}
+    <ConsultationPanel
+      isOpen={showConsultation}
+      onClose={() => setShowConsultation(false)}
+      patientId={patient?.id}
+      patientName={patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}
+      onConsultationSaved={(data) => {
+        if (data?._openPrescription) {
+          // User clicked "Issue Prescription" from consultation success screen
+          const { _openPrescription, ...rest } = data;
+          setConsultationData(rest);
+          setShowConsultation(false);
+          setShowPrescription(true);
+        } else {
+          setConsultationData(data);
+        }
+      }}
+    />
 
     {/* Prescription side panel */}
     <PrescriptionPanel
@@ -333,6 +361,7 @@ const ChatPanel = ({ emitTyping }) => {
       patientSex={patient?.sex}
       activeTicketId={activeTicketId}
       sendMessage={sendMessage}
+      consultationData={consultationData}
     />
     </div>
   );

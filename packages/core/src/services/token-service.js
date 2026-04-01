@@ -112,15 +112,35 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
     },
 
     /**
-     * Validate token format
-     * 
-     * SECURITY: Basic validation before using tokens
-     * 
-     * @param {string} token - Token to validate
-     * @returns {boolean} True if token format is valid
+     * Validate access token format (JWT: three non-empty base64url segments).
+     *
+     * SECURITY: Checks structural integrity of the access token before use.
+     * Signature verification happens server-side — this prevents obviously
+     * malformed values (empty string, wrong type, non-JWT) from being stored.
+     *
+     * @param {string} token - Access token to validate
+     * @returns {boolean} True if token looks like a well-structured JWT
      */
     validateToken: (token) => {
-      return token && typeof token === 'string' && token.length > 0;
+      if (!token || typeof token !== 'string') return false;
+      const parts = token.split('.');
+      return parts.length === 3 && parts.every((p) => p.length > 0);
+    },
+
+    /**
+     * Validate refresh token format (userId:deviceId:rawToken).
+     *
+     * SECURITY: Enforces the expected three-segment colon-delimited structure
+     * for refresh tokens. Prevents malformed tokens from being sent to the
+     * refresh endpoint or used to derive storage keys.
+     *
+     * @param {string} token - Refresh token to validate
+     * @returns {boolean} True if token matches userId:deviceId:rawToken format
+     */
+    validateRefreshToken: (token) => {
+      if (!token || typeof token !== 'string') return false;
+      const parts = token.split(':');
+      return parts.length === 3 && parts.every((p) => p.length > 0);
     },
   };
 
@@ -169,15 +189,9 @@ export const createTokenService = ({ storage, navigator, getApiBaseUrl, tokenNam
 
       const { accessToken, refreshToken: newRefreshToken } = response.data;
       
-      // SECURITY: Validate tokens before storing
-      if (!TokenStorage.validateToken(accessToken) || !TokenStorage.validateToken(newRefreshToken)) {
+      // SECURITY: Validate both token structures before storing
+      if (!TokenStorage.validateToken(accessToken) || !TokenStorage.validateRefreshToken(newRefreshToken)) {
         throw new Error('Invalid tokens received from server');
-      }
-
-      // SECURITY: Validate new refresh token format
-      const newParts = newRefreshToken.split(':');
-      if (newParts.length !== 3) {
-        throw new Error('Invalid new refresh token format');
       }
       
       // Store new tokens atomically

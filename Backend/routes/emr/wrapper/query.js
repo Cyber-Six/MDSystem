@@ -857,12 +857,14 @@ const Query = {
         sp.year,
         ep.department,
         ep.role,
+        uc.credentials_status,
         latest.id           AS latest_ticket_id,
         latest.status       AS latest_status,
         latest.scope        AS latest_scope,
         latest.created_at   AS latest_updated_at
       FROM "UsersPersonal" up
       JOIN "Patients" p ON p.id = up.id
+      LEFT JOIN "UserCredentials" uc ON uc.id = up.id
       LEFT JOIN LATERAL (
         SELECT l.first_name, l.last_name, l.middle_name, l.suffix
         FROM "UsersPersonalLog" l
@@ -917,6 +919,7 @@ const Query = {
         sp.year,
         ep.department,
         ep.role,
+        uc.credentials_status,
         latest.id           AS latest_ticket_id,
         latest.status       AS latest_status,
         latest.scope        AS latest_scope,

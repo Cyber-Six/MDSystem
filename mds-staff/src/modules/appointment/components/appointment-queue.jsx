@@ -78,6 +78,24 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     }
   }, []);
 
+  /* Fetch appointments (first page or fresh load) */
+  const fetchAppointments = useCallback(async (status) => {
+    setLoading(true);
+    setOffset(0);
+    try {
+      const data = await searchByStatus(status, 0, PAGE_SIZE);
+      setAppointments(data || []);
+      setHasMore((data?.length ?? 0) === PAGE_SIZE);
+    } catch (err) {
+      console.error('Failed to fetch appointments:', err);
+      setAppointments([]);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  
   /* Expose removeAppointment so the parent can optimistically move an item
      out of the current tab after a status-changing action, and update counts.
      Expose refresh so the parent can trigger a full queue reload (e.g., via socket). */
@@ -117,23 +135,6 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     };
     loadCounts();
   }, [refreshCounts]);
-
-  /* Fetch appointments (first page or fresh load) */
-  const fetchAppointments = useCallback(async (status) => {
-    setLoading(true);
-    setOffset(0);
-    try {
-      const data = await searchByStatus(status, 0, PAGE_SIZE);
-      setAppointments(data || []);
-      setHasMore((data?.length ?? 0) === PAGE_SIZE);
-    } catch (err) {
-      console.error('Failed to fetch appointments:', err);
-      setAppointments([]);
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   /* Fetch appointments whenever the active tab changes */
   useEffect(() => {

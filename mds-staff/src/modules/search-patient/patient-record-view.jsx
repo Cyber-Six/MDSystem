@@ -46,6 +46,7 @@ const PatientDocumentsTab = lazy(() => import('./components/documents-tab'));
 const PatientObgyneTab = lazy(() => import('./components/obgyne-tab'));
 const PatientDentalGradeHistoryTab = lazy(() => import('./components/dental-grade-history-tab'));
 const PatientMedicalRecordHistoryTab = lazy(() => import('./components/medical-record-history-tab'));
+const VitalSignsTab = lazy(() => import('./components/vital-signs-tab'));
 
 function LoadingBlock({ label }) {
   return (
@@ -138,6 +139,7 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
     department: basicInfo?.department || '',
     semester: '',
     status: updateTicket?.status || basicInfo?.latest_status || '',
+    credentialStatus: basicInfo?.credentials_status || '',
     type: basicInfo?.profile_type || 'Student',
     avatar: null,
     personal: {
@@ -524,12 +526,28 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return;
       }
 
-      const { consultationInput, consultationOutcomeInput } = entry.backendPayload;
+      const { consultationInput, consultationOutcomeInput, vitalSignsData, patientId: vsPatientId } = entry.backendPayload;
+
+      // If vital signs data was provided and all required fields are valid, create them first
+      let vitalSignsId = null;
+      if (vitalSignsData) {
+        try {
+          const vs = await consultationService.createVitalSignsForConsultation(vsPatientId || patientId, vitalSignsData);
+          vitalSignsId = vs?.id || null;
+        } catch (vsErr) {
+          console.error('Failed to create vital signs during consultation (non-blocking):', vsErr);
+          // Non-blocking: consultation proceeds even if vital signs creation fails
+        }
+      }
+
+      const finalOutcomeInput = vitalSignsId
+        ? { ...consultationOutcomeInput, vitalSignsId }
+        : consultationOutcomeInput;
 
       // Use the service to create and submit consultation
       await consultationService.createAndSubmitConsultation(
         consultationInput,
-        consultationOutcomeInput,
+        finalOutcomeInput,
         'Completed'
       );
 
@@ -571,6 +589,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Record' },
     { id: 'medical-history', label: 'Medical Record History' },
+    { id: 'vital-signs', label: 'Vital Signs' },
     { id: 'dental', label: 'Dental Record' },
     { id: 'dental-grade-history', label: 'Dental Record History' },
     { id: 'consultation', label: 'Consultation' },
@@ -596,6 +615,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return <PatientMedicalRecordTab patient={patient} />;
       case 'medical-history':
         return <PatientMedicalRecordHistoryTab patient={patient} />;
+      case 'vital-signs':
+        return <VitalSignsTab patient={patient} />;
       case 'dental':
         return <PatientDentalRecordTab patient={patient} />;
       case 'dental-grade-history':
@@ -661,7 +682,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
             <div className="min-w-0">
               <h2 className="text-base font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
-                {patient.id} · {patient.program || patient.department || 'N/A'} · {patient.year || 'N/A'}
+                {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id} · {patient.program || patient.department || 'N/A'} · {patient.year || 'N/A'}
               </p>
               <div className="mt-1 flex items-center gap-1.5">
                 {['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(patient.status) && (

@@ -17,6 +17,7 @@ const SEARCH_PATIENTS_QUERY = `
       year
       department
       role
+      credentials_status
       latest_ticket_id
       latest_status
       latest_scope
