@@ -61,15 +61,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
-        '/dashboard': {
+        '/dashboard/stats': {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
-          bypass: function(req) {
-            if (req.method === 'GET') {
-              return '/index.html';
-            }
-          },
         },
         '/medical-update': {
           target: BACKEND_URL,
