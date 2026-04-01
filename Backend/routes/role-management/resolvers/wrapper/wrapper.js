@@ -39,6 +39,10 @@ const crypto = require('crypto');
 const logger = require('../../../../utils/logger.js');
 const { throwGraphQLError } = require('../../../../utils/graphql-helper.js');
 
+const path = require("path");
+const dotenv = require("dotenv");
+dotenv.config({ path: path.resolve(__dirname, "../../../../.env") });
+
 /**
  * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────
  * 
@@ -1563,25 +1567,44 @@ const Mutation = {
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 12: getUserConsentStateByEmail(oldAdminEmail)');
       const oldAdminData = await db.getUserConsentStateByEmail(oldAdminEmail);
 
-      if (!oldAdminData?.allow_email_2fa) {
-        await db.setSystemAuditLog({
-          eventType: 'ADMIN_TRANSFER_FAILED',
-          actorId: oldAdminId,
-          actorType: 'Staff',
-          targetId: newAdminUserId,
-          action: 'INITIATE_ADMIN_TRANSFER',
-          details: JSON.stringify({
-            reason: 'Current admin 2FA not enabled',
-            timestamp: new Date().toISOString(),
-          }),
-          changedBy: 'Medical',
-        });
+      const allowBootstrapAdmin = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
 
-        logger.warn(`Admin ${oldAdminId} attempted transfer without 2FA enabled`);
-        throwGraphQLError(res)
-          .message('Current admin must have 2FA enabled to transfer privileges.')
-          .status(400)
-          .throw();
+      if (!oldAdminData?.allow_email_2fa) {
+        // Allow bypass if ALLOW_BOOTSTRAP_ADMIN is enabled (for initial admin bootstrap)
+        if (allowBootstrapAdmin) {
+          logger.warn(`[BOOTSTRAP_BYPASS] Admin 2FA check bypassed for adminId=${oldAdminId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
+          await db.setSystemAuditLog({
+            eventType: 'ADMIN_TRANSFER_BOOTSTRAP_BYPASS',
+            actorId: oldAdminId,
+            actorType: 'Staff',
+            targetId: newAdminUserId,
+            action: 'INITIATE_ADMIN_TRANSFER',
+            details: JSON.stringify({
+              reason: 'Bootstrap admin 2FA check bypassed (ALLOW_BOOTSTRAP_ADMIN=true)',
+              timestamp: new Date().toISOString(),
+            }),
+            changedBy: 'Medical',
+          });
+        } else {
+          await db.setSystemAuditLog({
+            eventType: 'ADMIN_TRANSFER_FAILED',
+            actorId: oldAdminId,
+            actorType: 'Staff',
+            targetId: newAdminUserId,
+            action: 'INITIATE_ADMIN_TRANSFER',
+            details: JSON.stringify({
+              reason: 'Current admin 2FA not enabled',
+              timestamp: new Date().toISOString(),
+            }),
+            changedBy: 'Medical',
+          });
+
+          logger.warn(`Admin ${oldAdminId} attempted transfer without 2FA enabled`);
+          throwGraphQLError(res)
+            .message('Current admin must have 2FA enabled to transfer privileges.')
+            .status(400)
+            .throw();
+        }
       }
 
       // Generate verification token

@@ -5,6 +5,10 @@ const query = require("./query.js");
 const { redis: redisConfig } = require('./config');
 const logger = require("../utils/logger.js");
 
+const path = require("path");
+const dotenv = require("dotenv");
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
+
 let client;
 async function initRedis(options = {}) {
   if (client) return client; // reuse if already initialized
@@ -822,10 +826,10 @@ async function deleteAdminTransferSession(verificationToken) {
 // Admin Transfer Rate Limiting
 // ------------------------------------------------
 
-const ADMIN_TRANSFER_COOLDOWN = 300; // 5-minute cooldown between initiation attempts
-const ADMIN_TRANSFER_PASSWORD_FAIL_TTL = 3600; // 1 hour window for failures
-const ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD = 3; // 3 failures before lockout
-const ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT = 1800; // 30-minute lockout
+const ADMIN_TRANSFER_COOLDOWN = Number(process.env.ADMIN_TRANSFER_COOLDOWN) || 300; // 5-minute cooldown between initiation attempts
+const ADMIN_TRANSFER_PASSWORD_FAIL_TTL = Number(process.env.ADMIN_TRANSFER_PASSWORD_FAIL_TTL) || 3600; // 1 hour window for failures
+const ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD = Number(process.env.ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD) || 3; // 3 failures before lockout
+const ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT = Number(process.env.ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT) || 1800; // 30-minute lockout
 
 /**
  * Record admin transfer initiation attempt and check cooldown
