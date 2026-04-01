@@ -27,6 +27,7 @@ const staffRoutes = require('./routes/staff/staff.js');
 const dashboardRoutes = require('./routes/dashboard/dashboard.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentRoutes = require('./routes/documents/documents.js');
+const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
@@ -78,6 +79,7 @@ initRoleManagementGraphQL(app);
 
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
+app.use('/auth/email', emailAuthRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
 app.use('/dashboard', dashboardRoutes);
