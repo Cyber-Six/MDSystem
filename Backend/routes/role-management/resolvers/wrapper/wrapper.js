@@ -1607,21 +1607,33 @@ const Mutation = {
         }
       }
 
-      // Generate verification token
-      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 13: generateOTP');
-      const verificationToken = generateOTP(8);
+      // Generate verification token (or use bootstrap marker if enabled)
+      let verificationToken;
+      const isBootstrapMode = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
+
+      if (isBootstrapMode) {
+        logger.warn(`[BOOTSTRAP_MODE] Skipping OTP generation for adminId=${oldAdminId}, newAdminId=${newAdminUserId}`);
+        verificationToken = 'BOOTSTRAP_ADMIN_TRANSFER';
+      } else {
+        logger.warn('[ADMIN_TRANSFER_DEBUG] Step 13: generateOTP');
+        verificationToken = generateOTP(8);
+      }
 
       // Store transfer session in Redis
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 14: createAdminTransferSession');
       await createAdminTransferSession(oldAdminId, newAdminUserId, verificationToken);
 
-      // Send verification email to current admin
-      logger.warn('[ADMIN_TRANSFER_DEBUG] Step 15: enqueueAdminTransferEmail');
-      await enqueueAdminTransferEmail(oldAdminEmail, verificationToken, newAdminUser);
+      // Send verification email to current admin (skip if bootstrap mode)
+      if (!isBootstrapMode) {
+        logger.warn('[ADMIN_TRANSFER_DEBUG] Step 15: enqueueAdminTransferEmail');
+        await enqueueAdminTransferEmail(oldAdminEmail, verificationToken, newAdminUser);
+      } else {
+        logger.warn(`[BOOTSTRAP_MODE] Skipping email notification for adminId=${oldAdminId}`);
+      }
 
       // Log successful initiation
       await db.setSystemAuditLog({
-        eventType: 'ADMIN_TRANSFER_INITIATED',
+        eventType: isBootstrapMode ? 'ADMIN_TRANSFER_INITIATED_BOOTSTRAP' : 'ADMIN_TRANSFER_INITIATED',
         actorId: oldAdminId,
         actorType: 'Staff',
         targetId: newAdminUserId,
@@ -1630,17 +1642,21 @@ const Mutation = {
           oldAdminEmail,
           newAdminEmail: newAdminUser,
           tokenPrefix: verificationToken.substring(0, 8) + '...',
+          bootstrapMode: isBootstrapMode,
           timestamp: new Date().toISOString(),
         }),
         changedBy: 'Medical',
       });
 
-      logger.info(`Admin transfer initiated: oldAdminId=${oldAdminId}, newAdminId=${newAdminUserId}`);
+      logger.info(`Admin transfer initiated: oldAdminId=${oldAdminId}, newAdminId=${newAdminUserId}, bootstrapMode=${isBootstrapMode}`);
 
       return {
         ok: true,
-        message: 'Verification email sent. Please check your email and use the token to confirm the transfer.',
-        verificationRequired: true,
+        message: isBootstrapMode
+          ? 'Bootstrap mode: Admin transfer ready to confirm (no email required).'
+          : 'Verification email sent. Please check your email and use the token to confirm the transfer.',
+        verificationRequired: !isBootstrapMode,
+        bootstrapMode: isBootstrapMode,
       };
     } catch (error) {
       // 🔍 DEBUG: Full error with stack trace
@@ -1670,6 +1686,9 @@ const Mutation = {
     const pool = require('../../../../config/db.js');
     const client = await pool.connect();
 
+    const isBootstrapMode = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
+    const isBootstrapToken = verificationToken === 'BOOTSTRAP_ADMIN_TRANSFER';
+
     try {
       // Retrieve transfer session from Redis
       const transferSession = await getAdminTransferSession(verificationToken);
@@ -1697,6 +1716,10 @@ const Mutation = {
       }
 
       const { oldAdminId, newAdminId } = transferSession;
+
+      if (isBootstrapMode && isBootstrapToken) {
+        logger.warn(`[BOOTSTRAP_MODE] Admin transfer confirmation using bootstrap token for oldAdminId=${oldAdminId}, newAdminId=${newAdminId}`);
+      }
 
       // Verify that the current user is the old admin
       if (currentUserId !== parseInt(oldAdminId, 10)) {
@@ -1797,24 +1820,41 @@ const Mutation = {
       const newAdminEmail = await db.findEmailByUserId(newAdminId);
       const newAdminData = await db.getUserConsentStateByEmail(newAdminEmail);
       if (!newAdminData?.allow_email_2fa) {
-        await deleteAdminTransferSession(verificationToken);
-        await db.setSystemAuditLog({
-          eventType: 'ADMIN_TRANSFER_FAILED',
-          actorId: oldAdminId,
-          actorType: 'Staff',
-          targetId: newAdminId,
-          action: 'CONFIRM_ADMIN_TRANSFER',
-          details: JSON.stringify({
-            reason: 'Target user 2FA no longer enabled',
-            timestamp: new Date().toISOString(),
-          }),
-          changedBy: 'Medical',
-        });
+        // Allow bypass in bootstrap mode
+        if (isBootstrapMode && isBootstrapToken) {
+          logger.warn(`[BOOTSTRAP_BYPASS] Target user 2FA check bypassed for newAdminId=${newAdminId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
+          await db.setSystemAuditLog({
+            eventType: 'ADMIN_TRANSFER_BOOTSTRAP_BYPASS',
+            actorId: oldAdminId,
+            actorType: 'Staff',
+            targetId: newAdminId,
+            action: 'CONFIRM_ADMIN_TRANSFER',
+            details: JSON.stringify({
+              reason: 'Bootstrap mode: Target user 2FA check bypassed (ALLOW_BOOTSTRAP_ADMIN=true)',
+              timestamp: new Date().toISOString(),
+            }),
+            changedBy: 'Medical',
+          });
+        } else {
+          await deleteAdminTransferSession(verificationToken);
+          await db.setSystemAuditLog({
+            eventType: 'ADMIN_TRANSFER_FAILED',
+            actorId: oldAdminId,
+            actorType: 'Staff',
+            targetId: newAdminId,
+            action: 'CONFIRM_ADMIN_TRANSFER',
+            details: JSON.stringify({
+              reason: 'Target user 2FA no longer enabled',
+              timestamp: new Date().toISOString(),
+            }),
+            changedBy: 'Medical',
+          });
 
-        throwGraphQLError(res)
-          .message('Target user no longer has 2FA enabled.')
-          .status(400)
-          .throw();
+          throwGraphQLError(res)
+            .message('Target user no longer has 2FA enabled.')
+            .status(400)
+            .throw();
+        }
       }
 
       const oldAdminEmail = await db.findEmailByUserId(oldAdminId);
@@ -1845,7 +1885,7 @@ const Mutation = {
       // Log audit trail within transaction
       await db.setSystemAuditLog({
         client: client,
-        eventType: 'ADMIN_TRANSFER_SUCCESS',
+        eventType: isBootstrapMode && isBootstrapToken ? 'ADMIN_TRANSFER_SUCCESS_BOOTSTRAP' : 'ADMIN_TRANSFER_SUCCESS',
         actorId: oldAdminId,
         actorType: 'Staff',
         targetId: newAdminId,
@@ -1856,6 +1896,7 @@ const Mutation = {
           newAdminId,
           newAdminEmail,
           verificationTokenPrefix: verificationToken.substring(0, 8) + '...',
+          bootstrapMode: isBootstrapMode && isBootstrapToken,
           timestamp: new Date().toISOString(),
         }),
         changedBy: 'Medical',
@@ -1866,13 +1907,16 @@ const Mutation = {
       // Delete the transfer session
       await deleteAdminTransferSession(verificationToken);
 
-      logger.info(`Admin transfer completed successfully: oldAdminId=${oldAdminId}, newAdminId=${newAdminId}`);
+      logger.info(`Admin transfer completed successfully: oldAdminId=${oldAdminId}, newAdminId=${newAdminId}, bootstrapMode=${isBootstrapMode && isBootstrapToken}`);
 
       return {
         ok: true,
-        message: 'Admin privileges transferred successfully.',
+        message: isBootstrapMode && isBootstrapToken
+          ? 'Admin privileges transferred successfully (bootstrap mode).'
+          : 'Admin privileges transferred successfully.',
         oldAdminId: oldAdminId.toString(),
         newAdminId: newAdminId.toString(),
+        bootstrapMode: isBootstrapMode && isBootstrapToken,
       };
     } catch (error) {
       await client.query('ROLLBACK');
