@@ -526,12 +526,28 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return;
       }
 
-      const { consultationInput, consultationOutcomeInput } = entry.backendPayload;
+      const { consultationInput, consultationOutcomeInput, vitalSignsData, patientId: vsPatientId } = entry.backendPayload;
+
+      // If vital signs data was provided and all required fields are valid, create them first
+      let vitalSignsId = null;
+      if (vitalSignsData) {
+        try {
+          const vs = await consultationService.createVitalSignsForConsultation(vsPatientId || patientId, vitalSignsData);
+          vitalSignsId = vs?.id || null;
+        } catch (vsErr) {
+          console.error('Failed to create vital signs during consultation (non-blocking):', vsErr);
+          // Non-blocking: consultation proceeds even if vital signs creation fails
+        }
+      }
+
+      const finalOutcomeInput = vitalSignsId
+        ? { ...consultationOutcomeInput, vitalSignsId }
+        : consultationOutcomeInput;
 
       // Use the service to create and submit consultation
       await consultationService.createAndSubmitConsultation(
         consultationInput,
-        consultationOutcomeInput,
+        finalOutcomeInput,
         'Completed'
       );
 
