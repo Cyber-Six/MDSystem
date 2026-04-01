@@ -17,11 +17,11 @@ type VitalSigns {
 }
 
 input VitalSignsInput {
-  height_cm: Float!
-  weight_kg: Float!
+  height_cm: Float
+  weight_kg: Float
   blood_pressure: String!
   heart_rate: Int!
-  temperature: Float!
+  temperature: Float
   notes: String
 }
 
