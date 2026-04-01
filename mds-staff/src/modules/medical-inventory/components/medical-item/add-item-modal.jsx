@@ -15,7 +15,16 @@ const AddItemModal = ({ onClose, onSave }) => {
   const [submitError, setSubmitError] = useState('');
   const [touched, setTouched] = useState({});
 
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k, v) => {
+    // For item_code, only allow numeric values
+    if (k === 'item_code') {
+      // Allow only digits, reject any non-numeric input
+      const numericValue = v.replace(/[^0-9]/g, '');
+      setForm((f) => ({ ...f, [k]: numericValue }));
+    } else {
+      setForm((f) => ({ ...f, [k]: v }));
+    }
+  };
   const touch = (k) => setTouched((t) => ({ ...t, [k]: true }));
 
   const isComplete = form.item_code.trim() && form.item_name.trim();
@@ -74,8 +83,9 @@ const AddItemModal = ({ onClose, onSave }) => {
                 value={form.item_code} 
                 onChange={(e) => set('item_code', e.target.value)}
                 onBlur={() => touch('item_code')}
-                placeholder="e.g. MED-011" 
+                placeholder="e.g. 12345" 
                 required 
+                inputMode="numeric"
                 className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
                   hasError('item_code')
                     ? 'border-error-500 dark:border-error-500 focus:ring-error-500'
@@ -88,8 +98,11 @@ const AddItemModal = ({ onClose, onSave }) => {
                   <p className="text-[10px] text-error-500 font-medium">Item code is required</p>
                 </div>
               )}
-              {!hasError('item_code') && (
-                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">Must be unique (no duplicates)</p>
+              {!hasError('item_code') && form.item_code && (
+                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">Numbers only • Must be unique</p>
+              )}
+              {!hasError('item_code') && !form.item_code && (
+                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">Numeric values only (e.g., 12345)</p>
               )}
             </div>
             <div>

@@ -4,6 +4,8 @@ import PrivateRoute from './routes/private-route';
 import { BannerProvider } from './context/banner-context';
 import Banner from './components/banner/banner';
 import ErrorBoundary from './components/error-boundary';
+import { StaffNotificationProvider } from './modules/notification/notification-context';
+import { SettingsProvider } from './context/settings-context';
 
 // Lazy-loaded pages for code splitting
 const Auth = lazy(() => import('./pages/Auth.jsx'));
@@ -19,31 +21,35 @@ const PageLoader = () => (
 function App() {
   return (
     <ErrorBoundary>
-      <BannerProvider>
-        <Banner />
-        <Router>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route
-                path="/auth/password/reset-password/:verificationKey"
-                element={<ResetPassword />}
-              />
-              <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
-              <Route path="/auth/login" element={<Auth />} />
+      <SettingsProvider>
+        <BannerProvider>
+          <Banner />
+          <Router>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route
+                  path="/auth/password/reset-password/:verificationKey"
+                  element={<ResetPassword />}
+                />
+                <Route path="/auth" element={<Navigate to="/auth/login" replace />} />
+                <Route path="/auth/login" element={<Auth />} />
 
-              {/* Staff portal routes — requires auth */}
-              <Route
-                path="/*"
-                element={
-                  <PrivateRoute>
-                    <Dashboard />
-                  </PrivateRoute>
-                }
-              />
-            </Routes>
-          </Suspense>
-        </Router>
-      </BannerProvider>
+                {/* Staff portal routes — requires auth */}
+                <Route
+                  path="/*"
+                  element={
+                    <PrivateRoute>
+                      <StaffNotificationProvider>
+                        <Dashboard />
+                      </StaffNotificationProvider>
+                    </PrivateRoute>
+                  }
+                />
+              </Routes>
+            </Suspense>
+          </Router>
+        </BannerProvider>
+      </SettingsProvider>
     </ErrorBoundary>
   );
 }

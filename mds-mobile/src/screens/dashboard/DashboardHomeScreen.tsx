@@ -1,34 +1,34 @@
 /**
  * Dashboard Home Screen - Main screen after authentication
  * Mirrors mds-patient dashboard-home.jsx
+ *
+ * Fetches real data: profile name, announcements, appointment status, health chat status.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
+  Dimensions,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
-import { TokenStorage } from '../../core';
+import { getPatientProfile, clearProfileCache } from '../../services/profile-service';
+import { fetchActiveAnnouncements, Announcement } from '../../services/announcement-service';
+import { getAppointmentStatus, ACTIVE_STATUSES } from '../../services/appointment-service';
+import { getCurrentActiveTicket } from '../../services/health-chat-service';
+import { useRecordStatus } from '../../context/RecordStatusContext';
+import type { RecordStatus } from '../../services/emr-service';
+import PendingRecordGate from '../../components/PendingRecordGate';
 
 interface DashboardHomeScreenProps {
   navigation: any;
 }
-
-// Decode JWT payload (base64)
-const decodeJWT = (token: string) => {
-  try {
-    const payload = token.split('.')[1];
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-};
 
 const StatCard: React.FC<{
   icon: string;
@@ -84,29 +84,79 @@ const QuickActionButton: React.FC<{
 export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
   navigation,
 }) => {
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
+  const { recordStatus } = useRecordStatus();
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
 
-  useEffect(() => {
-    const getUserInfo = async () => {
-      try {
-        const token = await TokenStorage.getAccessToken();
-        if (token) {
-          const decoded = decodeJWT(token);
-          setUserName(decoded?.email?.split('@')[0] || null);
-        }
-      } catch {}
-    };
-    getUserInfo();
+  // Real data state
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementIndex, setAnnouncementIndex] = useState(0);
+  const [appointmentStatus, setAppointmentStatus] = useState<string | null>(null);
+  const [chatStatus, setChatStatus] = useState<string | null>(null);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+
+  // Auto-rotate announcement carousel
+  const carouselTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const [profile, annList, apptResult, chatResult] = await Promise.allSettled([
+        getPatientProfile(),
+        fetchActiveAnnouncements(),
+        getAppointmentStatus(),
+        getCurrentActiveTicket(),
+      ]);
+
+      if (profile.status === 'fulfilled' && profile.value?.firstName) {
+        setUserName(profile.value.firstName);
+      } else if (profile.status === 'fulfilled' && profile.value?.name) {
+        setUserName(profile.value.name.split(' ')[0]);
+      }
+
+      if (annList.status === 'fulfilled') {
+        setAnnouncements(annList.value || []);
+      }
+
+      if (apptResult.status === 'fulfilled' && apptResult.value) {
+        const status = apptResult.value.status;
+        setAppointmentStatus(ACTIVE_STATUSES.includes(status) ? status : null);
+      }
+
+      if (chatResult.status === 'fulfilled' && chatResult.value) {
+        setChatStatus(chatResult.value.status);
+      }
+    } catch {
+      // Silently fail — dashboard still works without data
+    } finally {
+      setIsDataLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  // Auto-rotate announcements
+  useEffect(() => {
+    if (announcements.length <= 1) return;
+    carouselTimer.current = setInterval(() => {
+      setAnnouncementIndex((prev) => (prev + 1) % announcements.length);
+    }, 5000);
+    return () => {
+      if (carouselTimer.current) clearInterval(carouselTimer.current);
+    };
+  }, [announcements.length]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    clearProfileCache();
+    await loadDashboardData();
+    setRefreshing(false);
+  }, [loadDashboardData]);
 
   return (
+    <PendingRecordGate>
     <SafeAreaView
       style={[
         styles.container,
@@ -120,7 +170,13 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary[500]]}
+            tintColor={colors.primary[500]}
+            progressBackgroundColor={colors.secondary[900]}
+          />
         }
       >
         {/* Header */}
@@ -145,45 +201,150 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               {userName || 'Patient'}
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={toggleTheme}
-            style={[
-              styles.themeToggle,
-              {
-                backgroundColor: isDark
-                  ? colors.neutral[800]
-                  : colors.neutral[200],
-              },
-            ]}
-          >
-            <Text style={styles.themeIcon}>{isDark ? '☀️' : '🌙'}</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
           <StatCard
             icon="📅"
-            label="Appointments"
-            value="0"
+            label="Appointment"
+            value={appointmentStatus || '—'}
             color={colors.accent[500]}
             isDark={isDark}
           />
           <StatCard
-            icon="💊"
-            label="Requests"
-            value="0"
-            color={colors.success[500]}
+            icon="💬"
+            label="Health Chat"
+            value={chatStatus || '—'}
+            color={colors.primary[500]}
             isDark={isDark}
           />
           <StatCard
             icon="📋"
             label="Records"
-            value="—"
-            color={colors.primary[500]}
+            value={recordStatus?.needsInitialRecord ? 'Required' : recordStatus?.status || 'Complete'}
+            color={colors.success[500]}
             isDark={isDark}
           />
         </View>
+
+        {/* Initial Record Required Banner */}
+        {recordStatus?.needsInitialRecord && (
+          <TouchableOpacity
+            style={[
+              styles.recordBanner,
+              {
+                backgroundColor: isDark ? 'rgba(245,158,11,0.12)' : '#FFFBEB',
+                borderColor: isDark ? 'rgba(245,158,11,0.3)' : '#FDE68A',
+              },
+            ]}
+            onPress={() => navigation.navigate('More', {
+              screen: 'InitialRecordForm',
+              params: { isRevision: recordStatus?.status === 'revision_requested' },
+            })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.recordBannerIcon}>📋</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.recordBannerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                {recordStatus?.status === 'revision_requested' ? 'Revision Requested' : 'Medical Record Required'}
+              </Text>
+              <Text style={[styles.recordBannerDesc, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
+                {recordStatus?.status === 'revision_requested'
+                  ? (recordStatus?.notes || 'Please revise your medical record.')
+                  : 'Complete your initial medical record to access all features.'}
+              </Text>
+            </View>
+            <Text style={{ color: colors.primary[500], fontSize: 20, fontWeight: '600' }}>›</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Announcements Carousel */}
+        {announcements.length > 0 && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+          >
+            <View style={styles.cardHeaderRow}>
+              <Text
+                style={[
+                  styles.cardTitle,
+                  { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+                ]}
+              >
+                Announcements
+              </Text>
+              <Text
+                style={[
+                  styles.carouselCounter,
+                  { color: isDark ? colors.neutral[500] : colors.neutral[400] },
+                ]}
+              >
+                {announcementIndex + 1}/{announcements.length}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.announcementCard,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(241,197,38,0.06)'
+                    : 'rgba(241,197,38,0.08)',
+                  borderColor: isDark
+                    ? 'rgba(241,197,38,0.15)'
+                    : 'rgba(241,197,38,0.2)',
+                },
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.announcementIcon}>📢</Text>
+              <View style={styles.announcementTextContainer}>
+                <Text
+                  style={[
+                    styles.announcementTitle,
+                    { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {announcements[announcementIndex]?.title}
+                </Text>
+                <Text
+                  style={[
+                    styles.announcementDesc,
+                    { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {announcements[announcementIndex]?.description}
+                </Text>
+              </View>
+            </TouchableOpacity>
+            {/* Dot indicators */}
+            {announcements.length > 1 && (
+              <View style={styles.dotRow}>
+                {announcements.map((_, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => setAnnouncementIndex(i)}
+                    style={[
+                      styles.dot,
+                      {
+                        backgroundColor:
+                          i === announcementIndex
+                            ? colors.primary[500]
+                            : isDark
+                              ? colors.neutral[700]
+                              : colors.neutral[300],
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View
@@ -212,10 +373,10 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               onPress={() => navigation.navigate('Appointments')}
             />
             <QuickActionButton
-              icon="🤖"
-              label="AI Consultation"
+              icon="💬"
+              label="Health Chat"
               color={colors.primary[500]}
-              onPress={() => navigation.navigate('Consultation')}
+              onPress={() => navigation.navigate('HealthChat')}
             />
             <QuickActionButton
               icon="💊"
@@ -234,48 +395,202 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
           </View>
         </View>
 
-        {/* Recent Activity */}
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF',
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.cardTitle,
-              {
-                color: isDark ? colors.neutral[100] : colors.secondary[900],
-              },
-            ]}
-          >
-            Recent Activity
-          </Text>
+        {/* Record Update Options — only when initial record is approved */}
+        {!recordStatus?.needsInitialRecord && (
           <View
             style={[
-              styles.emptyState,
-              {
-                backgroundColor: isDark
-                  ? colors.neutral[700]
-                  : colors.neutral[50],
-              },
+              styles.card,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
             ]}
           >
-            <Text style={styles.emptyIcon}>📭</Text>
             <Text
               style={[
-                styles.emptyText,
+                styles.cardTitle,
+                { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+              ]}
+            >
+              Update Records
+            </Text>
+            <View style={styles.updateRow}>
+              <TouchableOpacity
+                style={[styles.updateButton, { backgroundColor: '#3B82F6' }]}
+                onPress={() => navigation.navigate('More', {
+                  screen: 'InitialRecordForm',
+                  params: { isUpdate: true, recordType: 'medical' },
+                })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updateIcon}>🏥</Text>
+                <Text style={styles.updateLabel}>Medical</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.updateButton, { backgroundColor: '#22C55E' }]}
+                onPress={() => navigation.navigate('More', {
+                  screen: 'InitialRecordForm',
+                  params: { isUpdate: true, recordType: 'dental' },
+                })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updateIcon}>🦷</Text>
+                <Text style={styles.updateLabel}>Dental</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.updateButton, { backgroundColor: '#8B5CF6' }]}
+                onPress={() => navigation.navigate('More', {
+                  screen: 'InitialRecordForm',
+                  params: { isUpdate: true, recordType: 'both' },
+                })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updateIcon}>📋</Text>
+                <Text style={styles.updateLabel}>Both</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Active Status */}
+        {(appointmentStatus || chatStatus) && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+          >
+            <Text
+              style={[
+                styles.cardTitle,
+                { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+              ]}
+            >
+              Active
+            </Text>
+
+            {appointmentStatus && (
+              <TouchableOpacity
+                style={[
+                  styles.statusRow,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(59,130,246,0.08)'
+                      : 'rgba(59,130,246,0.06)',
+                    borderColor: isDark
+                      ? 'rgba(59,130,246,0.2)'
+                      : 'rgba(59,130,246,0.15)',
+                  },
+                ]}
+                onPress={() => navigation.navigate('Appointments')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.statusRowIcon}>📅</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.statusRowLabel,
+                      { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+                    ]}
+                  >
+                    Appointment
+                  </Text>
+                  <Text
+                    style={[
+                      styles.statusRowValue,
+                      { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+                    ]}
+                  >
+                    Status: {appointmentStatus}
+                  </Text>
+                </View>
+                <Text
+                  style={{ color: isDark ? colors.neutral[600] : colors.neutral[300], fontSize: 18 }}
+                >
+                  ›
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {chatStatus && (
+              <TouchableOpacity
+                style={[
+                  styles.statusRow,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(241,197,38,0.06)'
+                      : 'rgba(241,197,38,0.06)',
+                    borderColor: isDark
+                      ? 'rgba(241,197,38,0.15)'
+                      : 'rgba(241,197,38,0.12)',
+                    marginTop: appointmentStatus ? 8 : 0,
+                  },
+                ]}
+                onPress={() => navigation.navigate('HealthChat')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.statusRowIcon}>💬</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.statusRowLabel,
+                      { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+                    ]}
+                  >
+                    Health Chat
+                  </Text>
+                  <Text
+                    style={[
+                      styles.statusRowValue,
+                      { color: isDark ? colors.neutral[400] : colors.neutral[500] },
+                    ]}
+                  >
+                    Status: {chatStatus}
+                  </Text>
+                </View>
+                <Text
+                  style={{ color: isDark ? colors.neutral[600] : colors.neutral[300], fontSize: 18 }}
+                >
+                  ›
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* No activity state */}
+        {!appointmentStatus && !chatStatus && !isDataLoading && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' },
+            ]}
+          >
+            <Text
+              style={[
+                styles.cardTitle,
+                { color: isDark ? colors.neutral[100] : colors.secondary[900] },
+              ]}
+            >
+              Recent Activity
+            </Text>
+            <View
+              style={[
+                styles.emptyState,
                 {
-                  color: isDark ? colors.neutral[400] : colors.neutral[600],
+                  backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
                 },
               ]}
             >
-              No recent activity
-            </Text>
+              <Text style={styles.emptyIcon}>📭</Text>
+              <Text
+                style={[
+                  styles.emptyText,
+                  { color: isDark ? colors.neutral[400] : colors.neutral[600] },
+                ]}
+              >
+                No recent activity
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* App Info */}
         <View style={styles.footer}>
@@ -287,11 +602,12 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               },
             ]}
           >
-            MDSystem Mobile v1.0.0
+            MDSystem Mobile {process.env.EXPO_PUBLIC_APP_VERSION}
           </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
+    </PendingRecordGate>
   );
 };
 
@@ -335,7 +651,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statIconText: { fontSize: 20 },
-  statValue: { fontSize: 20, fontWeight: 'bold' },
+  statValue: { fontSize: 14, fontWeight: 'bold' },
   statLabel: { fontSize: 11, marginTop: 2 },
   card: {
     borderRadius: 16,
@@ -366,6 +682,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
   },
+  // Record update row
+  updateRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  updateButton: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  updateIcon: { fontSize: 24, marginBottom: 4 },
+  updateLabel: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 12,
+  },
   emptyState: {
     padding: 24,
     borderRadius: 12,
@@ -373,6 +706,58 @@ const styles = StyleSheet.create({
   },
   emptyIcon: { fontSize: 32, marginBottom: 8 },
   emptyText: { fontSize: 14 },
+  // Announcements
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  carouselCounter: { fontSize: 12, fontWeight: '500' },
+  announcementCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  announcementIcon: { fontSize: 22 },
+  announcementTextContainer: { flex: 1 },
+  announcementTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  announcementDesc: { fontSize: 12, lineHeight: 17 },
+  dotRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  // Status rows
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  statusRowIcon: { fontSize: 22 },
+  statusRowLabel: { fontSize: 14, fontWeight: '600' },
+  statusRowValue: { fontSize: 12, marginTop: 2 },
+  recordBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginHorizontal: 16,
+    marginTop: 12,
+    gap: 12,
+  },
+  recordBannerIcon: { fontSize: 28 },
+  recordBannerTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  recordBannerDesc: { fontSize: 12, lineHeight: 16 },
   footer: {
     alignItems: 'center',
     paddingVertical: 16,

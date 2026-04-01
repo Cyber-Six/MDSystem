@@ -347,14 +347,15 @@ const Query = {
       // 1. Batch-format the latest tickets from the main query
       const latestTickets = await formatChatRecordsBatch(result.rows);
 
-      // 2. Fetch all tickets for all patients in one query
+      // 2. Fetch ALL tickets for each patient regardless of status filter.
+      // This ensures the frontend has complete ticket history for dividers and
+      // initial-context (purposeSynth) even when archive filter is off.
       const patientIds = result.rows.map(r => r.patientId);
       const allTicketsResult = await db.query(
         `SELECT * FROM "HealthChat"
          WHERE "patientId" = ANY($1)
-         ${statuses && statuses.length > 0 ? 'AND status = ANY($2)' : ''}
          ORDER BY id DESC`,
-        statuses && statuses.length > 0 ? [patientIds, statuses] : [patientIds]
+        [patientIds]
       );
       const allTicketsFormatted = await formatChatRecordsBatch(allTicketsResult.rows);
 
@@ -991,6 +992,101 @@ const Mutation = {
       success: true,
       chat: null,
       message: "Ticket deleted successfully."
+    };
+  },
+
+  /**
+   * Extend the session by 1 day
+   * Available to both patient (owns the chat) and medical staff (assigned to chat)
+   * Guards: session must be Ongoing AND expiring within 48 hours
+   */
+  _extendSession: async (_, { chatId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const chatResult = await db.query(
+      `SELECT * FROM "HealthChat" WHERE id = $1 AND status = 'Ongoing'`,
+      [chatId]
+    );
+
+    if (chatResult.rowCount === 0) {
+      throwGraphQLError(res).message("Active chat session not found").status(404).throw();
+    }
+
+    const chat = chatResult.rows[0];
+
+    // Authorization: must be the patient or the assigned medical staff
+    const isPatient = Number(chat.patientId) === Number(user.id);
+    const isMedical = Number(chat.medicalId) === Number(user.id);
+    if (!isPatient && !isMedical) {
+      throwGraphQLError(res).message("Not authorized to extend this session").status(403).throw();
+    }
+
+    // Guard: only allow extension when session is within 48 hours of expiry
+    const expiryDate = calculateExpiryDate(chat.session_start);
+    const msUntilExpiry = new Date(expiryDate) - new Date();
+    if (msUntilExpiry > 48 * 60 * 60 * 1000) {
+      throwGraphQLError(res)
+        .message("Session is not close enough to expiry to be extended yet (must be within 48 hours).")
+        .status(400).throw();
+    }
+    if (msUntilExpiry <= 0) {
+      throwGraphQLError(res).message("Session has already expired").status(400).throw();
+    }
+
+    // Push session_start forward by 1 day — expiresAt moves forward accordingly
+    const result = await db.query(
+      `UPDATE "HealthChat"
+       SET session_start = session_start + INTERVAL '1 day'
+       WHERE id = $1 AND status = 'Ongoing'
+       RETURNING *`,
+      [chatId]
+    );
+
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to extend session").status(500).throw();
+    }
+
+    const extenderUserType = isPatient ? 'Patient' : 'Medical';
+    await db.query(
+      `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ($1, 'Chat session extended by 1 day.', 'system', $2, $3)`,
+      [chatId, user.id, extenderUserType]
+    );
+
+    const updatedChat = await formatChatRecord(result.rows[0]);
+
+    // Notify the entire chat room (real-time update for both sides)
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:session-extended', {
+      chatId,
+      expiresAt: updatedChat.expiresAt,
+      extendedBy: isPatient ? 'Patient' : 'Medical',
+      chat: updatedChat
+    });
+
+    // Also push to offline party
+    if (isPatient && updatedChat.medicalId) {
+      notifyUser(String(updatedChat.medicalId), 'healthchat:session-extended', {
+        chatId,
+        expiresAt: updatedChat.expiresAt,
+        extendedBy: 'Patient',
+        chat: updatedChat
+      });
+    } else if (!isPatient && updatedChat.patientId) {
+      notifyUser(String(updatedChat.patientId), 'healthchat:session-extended', {
+        chatId,
+        expiresAt: updatedChat.expiresAt,
+        extendedBy: 'Medical',
+        chat: updatedChat
+      });
+    }
+
+    return {
+      success: true,
+      chat: updatedChat,
+      message: "Session extended by 1 day."
     };
   },
 

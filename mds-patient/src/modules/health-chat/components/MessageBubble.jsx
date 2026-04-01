@@ -58,8 +58,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
 
       {/* Bubble + timestamp */}
       <div
-        className={`flex flex-col ${isPatient ? 'items-end' : 'items-start'}`}
-        style={{ maxWidth: '76%' }}
+        className={`flex flex-col min-w-0 max-w-[90%] sm:max-w-[82%] lg:max-w-[76%] ${isPatient ? 'items-end' : 'items-start'}`}
       >
         {/* Sender label — only on first bubble of a staff group */}
         {!isPatient && isFirstInGroup && (
@@ -72,7 +71,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
         {isPatient ? (
           // Patient bubble - keeps brand gradient (works in both modes)
           <div
-            className="px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap text-secondary-900"
+            className="px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words text-secondary-900"
             style={{
               background: 'linear-gradient(135deg, #f4c430 0%, #DDB322 100%)',
               borderRadius: isFirstInGroup && isLastInGroup ? '18px 18px 4px 18px'
@@ -87,7 +86,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
         ) : (
           // Staff bubble - needs dark mode
           <div
-            className="px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap bg-white dark:bg-neutral-800 text-secondary-800 dark:text-neutral-100 border-[1.5px] border-neutral-200 dark:border-neutral-700 shadow-sm"
+            className="px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words bg-white dark:bg-neutral-800 text-secondary-800 dark:text-neutral-100 border-[1.5px] border-neutral-200 dark:border-neutral-700 shadow-sm"
             style={{
               borderRadius: isFirstInGroup && isLastInGroup ? '18px 18px 18px 4px'
                           : isFirstInGroup                  ? '18px 18px 18px 18px'
@@ -146,8 +145,7 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
         )}
 
         <div
-          className={`flex flex-col ${isPatient ? 'items-end' : 'items-start'}`}
-          style={{ maxWidth: '76%' }}
+          className={`flex flex-col min-w-0 max-w-[90%] sm:max-w-[82%] lg:max-w-[76%] ${isPatient ? 'items-end' : 'items-start'}`}
         >
           {!isPatient && isFirstInGroup && (
             <span className="text-[10px] font-medium mb-1 px-1 text-neutral-400 dark:text-neutral-500">
@@ -163,9 +161,7 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
           ) : fileError ? (
             <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
               {getIcon()}
-              <a href={fileUrl} download={fileId} className="text-xs text-primary-500 hover:underline">
-                Download file
-              </a>
+              <span className="text-xs text-neutral-400">Unable to load file</span>
             </div>
           ) : isPatient ? (
             // Patient file container

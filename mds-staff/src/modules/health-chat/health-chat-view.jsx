@@ -96,7 +96,8 @@ const HealthChatContent = () => {
           className="bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-700"
           style={{
             width: '320px',
-            flexShrink: 0,
+            minWidth: '220px',
+            flexShrink: 1,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -107,7 +108,7 @@ const HealthChatContent = () => {
         </div>
 
         {/* Right panel */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: '280px' }}>
           <ChatPanel emitTyping={emitTyping} />
         </div>
 
@@ -134,7 +135,7 @@ const HealthChatView = () => {
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          zIndex: 10,
+          zIndex: 5,
           transition: 'left 300ms ease-in-out',
         }}
       >

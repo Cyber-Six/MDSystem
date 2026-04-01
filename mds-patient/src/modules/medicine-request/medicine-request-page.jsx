@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { sendGraphQLRequest } from '../../utils/graphql-client';
 import { getMyPersonalEmail } from '../../services/emr-service';
+import { usePatientNotifications } from '../notification/notification-context';
 import RequestNotificationModal from './components/request-notification-modal';
+import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 
 const MedicineRequestPage = () => {
+  const { subscribe } = usePatientNotifications();
   // User info
   const [userEmail, setUserEmail] = useState('');
   const [emailPrefix, setEmailPrefix] = useState('');
@@ -24,6 +27,8 @@ const MedicineRequestPage = () => {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalData, setSuccessModalData] = useState({ title: 'Success', message: '' });
 
   // Cancel-and-resubmit confirmation
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -159,12 +164,11 @@ const MedicineRequestPage = () => {
     fetchAvailableMedicines();
   }, [assignedLocation, formData.location, emailPrefix]);
 
-  // Fetch request history on mount
-  useEffect(() => {
-    const fetchRequestHistory = async () => {
-      setIsLoadingHistory(true);
-      try {
-        const query = `
+  // Fetch request history
+  const fetchRequestHistory = useCallback(async () => {
+    setIsLoadingHistory(true);
+    try {
+      const query = `
           query GetMedicineStatus {
             getMedicineStatus {
               id
@@ -183,38 +187,70 @@ const MedicineRequestPage = () => {
             }
           }
         `;
-        
-        const data = await sendGraphQLRequest(
-          query,
-          {},
-          { endpoint: '/medical-inventory/medicine-request/patient' }
-        );
-        
-        setRequests(data.getMedicineStatus || []);
-      } catch (error) {
-        console.error('Error fetching request history:', error);
-        // Don't show error for history, just log it
-      } finally {
-        setIsLoadingHistory(false);
-      }
-    };
 
-    fetchRequestHistory();
+      const data = await sendGraphQLRequest(
+        query,
+        {},
+        { endpoint: '/medical-inventory/medicine-request/patient' }
+      );
+
+      setRequests(data.getMedicineStatus || []);
+    } catch (error) {
+      console.error('Error fetching request history:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
   }, []);
+
+  // Fetch request history on mount
+  useEffect(() => {
+    fetchRequestHistory();
+  }, [fetchRequestHistory]);
+
+  // Reload history when staff updates medicine request status via socket
+  useEffect(() => {
+    const unsub1 = subscribe('medicine:request:approved', fetchRequestHistory);
+    const unsub2 = subscribe('medicine:request:rejected', fetchRequestHistory);
+    const unsub3 = subscribe('medicine:request:pending', fetchRequestHistory);
+    const unsub4 = subscribe('medicine:prescription:issued', fetchRequestHistory);
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+  }, [subscribe, fetchRequestHistory]);
 
   // Check for notification-worthy requests (approved/rejected)
   useEffect(() => {
     if (!requests || requests.length === 0) return;
 
-    // Find first approved or rejected request that hasn't been dismissed
-    const notificationReq = requests.find((r) => {
+    // Filter for approved or rejected requests
+    const notificationWorthyRequests = requests.filter((r) => {
       const status = r.status?.toLowerCase();
-      const isNotificationStatus = status === 'approved' || status === 'rejected';
-      const isNotDismissed = !dismissedNotifications.includes(r.id);
-      return isNotificationStatus && isNotDismissed;
+      return status === 'approved' || status === 'rejected';
     });
 
-    setNotificationRequest(notificationReq || null);
+    if (notificationWorthyRequests.length === 0) {
+      setNotificationRequest(null);
+      return;
+    }
+
+    // Sort by created_at (most recent first)
+    const sortedByDate = notificationWorthyRequests.sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return dateB - dateA; // Newest first
+    });
+
+    // Only show notification for the most recent approved/rejected request that hasn't been dismissed
+    const mostRecentNotifiable = sortedByDate.find(
+      (r) => !dismissedNotifications.includes(r.id)
+    );
+
+    // If there's a most recent one that hasn't been dismissed, show it
+    // Otherwise, check if ALL notifications have been dismissed (meaning user has seen the recent ones)
+    if (mostRecentNotifiable) {
+      setNotificationRequest(mostRecentNotifiable);
+    } else {
+      // All recent notifications have been dismissed, don't show any
+      setNotificationRequest(null);
+    }
   }, [requests, dismissedNotifications]);
 
   const handleDismissNotification = () => {
@@ -247,6 +283,12 @@ const MedicineRequestPage = () => {
         [itemCode]: medicineGroup
       });
     }
+  };
+
+  // Helper function to show success modal
+  const showSuccess = (title = 'Success', message = '') => {
+    setSuccessModalData({ title, message });
+    setShowSuccessModal(true);
   };
 
   const handleSubmit = async (e) => {
@@ -308,33 +350,43 @@ const MedicineRequestPage = () => {
       const pendingRequests = requests.filter(
         (r) => r.status?.toLowerCase() === 'pending'
       );
+
+      // Use the cancelMedicineRequest mutation (patient endpoint)
+      // instead of setStatusMedicineRequest (which is staff-only)
       const cancelMutation = `
-        mutation CancelMedicineRequest($requestId: ID!, $status: RequestStatus!) {
-          setStatusMedicineRequest(requestId: $requestId, status: $status) {
+        mutation CancelMedicineRequest {
+          cancelMedicineRequest {
             id
             status
           }
         }
       `;
+
+      // Call cancel for each pending request
       const cancelResults = await Promise.all(
         pendingRequests.map((r) =>
           sendGraphQLRequest(
             cancelMutation,
-            { requestId: r.id, status: 'Cancelled' },
+            {},
             { endpoint: '/medical-inventory/medicine-request/patient' }
-          )
+          ).catch((error) => {
+            console.warn(`Failed to cancel request ${r.id}:`, error);
+            return null;
+          })
         )
       );
-      // Verify the cancel actually worked (patient endpoint may not support it)
+
+      // Verify at least one cancel succeeded
       const anySucceeded = cancelResults.some(
-        (r) => r?.setStatusMedicineRequest !== null && r?.setStatusMedicineRequest !== undefined
+        (r) => r?.cancelMedicineRequest !== null && r?.cancelMedicineRequest !== undefined
       );
-      if (!anySucceeded) {
+      if (!anySucceeded && pendingRequests.length > 0) {
         setErrorMessage(
           'Your pending request cannot be cancelled online. Please contact clinic staff to cancel your existing request before submitting a new one.'
         );
         return;
       }
+
       // Update local state to reflect cancelled
       setRequests((prev) =>
         prev.map((r) =>
@@ -396,8 +448,7 @@ const MedicineRequestPage = () => {
       });
       setSelectedMedicinesByCode({});
       
-      setSuccessMessage('Medicine request submitted successfully!');
-      setTimeout(() => setSuccessMessage(''), 5000);
+      showSuccess('Request Submitted', 'Medicine request submitted successfully!');
     } catch (error) {
       console.error('Error submitting request:', error);
       setErrorMessage(error.message || 'Error submitting request. Please try again.');
@@ -581,12 +632,14 @@ const MedicineRequestPage = () => {
               </div>
             )}
 
-            {/* Success Message */}
-            {successMessage && (
-              <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                <p className="text-sm text-green-800 dark:text-green-200">{successMessage}</p>
-              </div>
-            )}
+            {/* Success Modal */}
+            <SuccessMessageModal
+              isOpen={showSuccessModal}
+              onClose={() => setShowSuccessModal(false)}
+              title={successModalData.title}
+              message={successModalData.message}
+              autoCloseDuration={3000}
+            />
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Purpose */}

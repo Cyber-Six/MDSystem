@@ -1,5 +1,5 @@
 // @refresh reset
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { formatPatientName } from '../services/patient-search-service';
 
 const SECTION_LABELS = {
@@ -13,11 +13,38 @@ const SECTION_LABELS = {
   documents:    'Documents',
 };
 
+const STORAGE_KEY = 'mds_patient_tabs';
 const PatientTabsContext = createContext(null);
 
 export function PatientTabsProvider({ children }) {
   const [tabs, setTabs] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null); // null = search view
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // ── Load tabs from localStorage on mount ────────────────────────────────────
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const { tabs: storedTabs, activeTabId: storedActiveTabId } = JSON.parse(stored);
+        setTabs(storedTabs || []);
+        setActiveTabId(storedActiveTabId || null);
+      }
+    } catch (err) {
+      console.error('Failed to load patient tabs from localStorage:', err);
+    }
+    setIsInitialized(true);
+  }, []);
+
+  // ── Save tabs to localStorage whenever they change ──────────────────────────
+  useEffect(() => {
+    if (!isInitialized) return; // Don't save until initialized
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs, activeTabId }));
+    } catch (err) {
+      console.error('Failed to save patient tabs to localStorage:', err);
+    }
+  }, [tabs, activeTabId, isInitialized]);
 
   const openTab = useCallback((patient, section) => {
     const tabId = `${patient.id}-${section}`;
@@ -70,9 +97,19 @@ export function PatientTabsProvider({ children }) {
     });
   }, []);
 
+  const clearTabs = useCallback(() => {
+    setTabs([]);
+    setActiveTabId(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      console.error('Failed to clear patient tabs from localStorage:', err);
+    }
+  }, []);
+
   return (
     <PatientTabsContext.Provider
-      value={{ tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch, reorderTabs }}
+      value={{ tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch, reorderTabs, clearTabs }}
     >
       {children}
     </PatientTabsContext.Provider>

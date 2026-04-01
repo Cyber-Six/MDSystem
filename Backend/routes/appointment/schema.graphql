@@ -170,6 +170,7 @@ type patientSlot {
   schedulerLabel: String
   requirements: [patientScheduleRequirement!]!
   approvedBy: String
+  purpose: String
   notes: String
   arrived_at: Date
   created_at: Date!
@@ -203,6 +204,7 @@ type Query {
 
   listAllOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]
   listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
+  listMonthAvailability(schedulerId: ID!, startDate: Date!, endDate: Date!): [ScheduleDateEntity!]
 
   searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]
   getAppointmentStatusCounts: [StatusCount!]
@@ -211,7 +213,7 @@ type Query {
 
 # Mutations
 type Mutation {
-  submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!): patientSlot
+  submitAppointment(schedulerId: ID!, date: Date!, session: SCHEDULE_SESSION!, requirements: [patientScheduleRequirementInput!]!, purpose: String): patientSlot
   cancelAppointment: Boolean
 
   #----------- --^ Patient and --v Medical

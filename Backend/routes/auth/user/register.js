@@ -8,7 +8,7 @@ const AuthSession = require("../../../utils/authSession.js");
 
 const router = express.Router();
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     const { email, password } = req.body;
 
     // ✅ 1. Required fields
@@ -35,8 +35,17 @@ router.post('/', (req, res) => {
     });
     }
 
+    // ✅ 4. Check if user already exists
+    const existingCount = await query.countUserByEmail(email);
+    if (existingCount > 0) {
+        return res.status(200).json({
+            ok: true,
+            userExists: true,
+            message: "Account already exists. You may now log in."
+        });
+    }
 
-    // ✅ SUCCESS — no DB checks, no reCAPTCHA, no enumeration
+    // ✅ SUCCESS
     return res.status(200).json({
         ok: true,
     });

@@ -260,6 +260,30 @@ export const getFileUrl = (fileId) => {
 };
 
 /**
+ * Extend the active session by 1 day
+ * @param {string} chatId - The ticket/chat ID
+ */
+export const extendSession = async (chatId) => {
+  const mutation = `
+    mutation ExtendSession($chatId: ID!) {
+      extendSession(chatId: $chatId) {
+        success
+        message
+        chat {
+          id
+          status
+          session_start
+          expiresAt
+        }
+      }
+    }
+  `;
+
+  const data = await sendHealthChatRequest(mutation, { chatId });
+  return data.extendSession;
+};
+
+/**
  * Get the current active ticket (if any)
  * Returns the first active (Open or Ongoing) ticket, or null
  */
@@ -296,4 +320,29 @@ export const getMostRecentTicket = async () => {
     console.error('[Health Chat Service] Error fetching recent ticket:', error);
     return null;
   }
+};
+
+// ==================== PRESCRIPTIONS ====================
+
+/**
+ * Get the patient's own prescription history
+ * Endpoint: /medical-inventory/prescription/patient
+ */
+export const getMyPrescriptions = async (offset = 0, limit = 50) => {
+  const { sendGraphQLRequest } = await import('../../utils/graphql-client');
+  const query = `
+    query GetMyPrescriptions($offset: Int, $limit: Int) {
+      getMyPrescriptions(offset: $offset, limit: $limit) {
+        id
+        action
+        quantity
+        issuedAt
+        notes
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(query, { offset, limit }, {
+    endpoint: '/medical-inventory/prescription/patient'
+  });
+  return data.getMyPrescriptions;
 };

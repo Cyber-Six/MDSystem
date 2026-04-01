@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, Lock } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { getPatientMessages } from '../health-chat-service';
 import ChatHeader from './chat-header';
@@ -8,6 +8,9 @@ import MessageInput from './message-input';
 import TypingIndicator from './typing-indicator';
 import EmptyChatState from './empty-chat-state';
 import TicketDivider from './ticket-divider';
+import PrescriptionPanel from './PrescriptionPanel';
+import ConsultationPanel from './ConsultationPanel';
+import ExpiryWarningBanner from './expiry-warning-banner';
 
 const ChatPanel = ({ emitTyping }) => {
   const {
@@ -20,14 +23,23 @@ const ChatPanel = ({ emitTyping }) => {
     setMessages,
     typingUsers,
     refreshMessages,
-    socketError
+    socketError,
+    activeTicketId,
+    sendMessage,
+    isExtendingSession,
+    extendSessionChat,
   } = useHealthChat();
+
+  const [showPrescription, setShowPrescription] = useState(false);
+  const [showConsultation, setShowConsultation] = useState(false);
+  const [consultationData, setConsultationData] = useState(null);
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const prevScrollHeightRef = useRef(0);
+  const isLoadingOlderRef = useRef(false);
 
   // Load older messages when scrolling to top
   const handleScroll = useCallback(async () => {
@@ -38,6 +50,7 @@ const ChatPanel = ({ emitTyping }) => {
     if (container.scrollTop < 80) {
       try {
         setLoadingOlder(true);
+        isLoadingOlderRef.current = true;
         prevScrollHeightRef.current = container.scrollHeight;
 
         const olderMessages = await getPatientMessages(
@@ -57,10 +70,13 @@ const ChatPanel = ({ emitTyping }) => {
 
           // Maintain scroll position after prepending
           requestAnimationFrame(() => {
-            if (scrollContainerRef.current) {
-              const newScrollHeight = scrollContainerRef.current.scrollHeight;
-              scrollContainerRef.current.scrollTop = newScrollHeight - prevScrollHeightRef.current;
-            }
+            requestAnimationFrame(() => {
+              if (scrollContainerRef.current) {
+                const newScrollHeight = scrollContainerRef.current.scrollHeight;
+                scrollContainerRef.current.scrollTop = newScrollHeight - prevScrollHeightRef.current;
+              }
+              isLoadingOlderRef.current = false;
+            });
           });
         }
       } catch (err) {
@@ -133,12 +149,28 @@ const ChatPanel = ({ emitTyping }) => {
     return result;
   }, [messages, ticketDetailsMap]);
 
-  const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
+  // Mirror the same status checks as chat-header.jsx — selectedTicket.status is the reliable source
+  // Also treat as expired if expiresAt has already passed (DB job may not have flipped status yet)
+  const isEffectivelyExpired = selectedTicket?.expiresAt && new Date(selectedTicket.expiresAt) < new Date();
+  const isExpired  = selectedTicket?.status === 'Expired' || !!isEffectivelyExpired;
+  const isClosed   = selectedTicket?.status === 'Closed';
+  const isArchived = isExpired || isClosed;
   const isPatientTyping = !isArchived && typingUsers[selectedPatientId || selectedChatId]?.isTyping;
-  const isPending = selectedTicket?.status === 'Open';
+  const isPending  = selectedTicket?.status === 'Open';
 
+  // Scroll to bottom when messages load or chat changes
+  // Skip when loading older messages (pagination) to preserve scroll position
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    if (isLoadingOlderRef.current) return;
+    const scrollToBottom = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (isLoadingOlderRef.current) return;
+          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        });
+      });
+    };
+    scrollToBottom();
   }, [messages, isPatientTyping, selectedChatId]);
 
   const formatTime = (dateStr) => {
@@ -146,11 +178,25 @@ const ChatPanel = ({ emitTyping }) => {
     return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Close panels when patient changes
+  useEffect(() => {
+    setShowPrescription(false);
+    setShowConsultation(false);
+    setConsultationData(null);
+  }, [selectedChatId, selectedPatientId]);
+
+  const patient = selectedTicket?.patient;
+
+
   if (!selectedChatId && !selectedPatientId) return <EmptyChatState />;
 
   // Build unified list: synthetic purpose entry + messages with dividers
-  // The purpose now comes from the first ticket for this patient
-  const firstTicket = selectedTicket?.tickets?.[0] || selectedConversation?.latestTicket;
+  // Use the OLDEST ticket's purpose as the initial context message so it aligns
+  // with the oldest messages rendered at the top of the chat.
+  const allSubTickets = selectedTicket?.tickets || [];
+  const firstTicket = allSubTickets.length > 0
+    ? allSubTickets[allSubTickets.length - 1]   // oldest (array is DESC)
+    : selectedConversation?.latestTicket;
   const purposeSynth = firstTicket?.purpose ? [{
     id: '__purpose__',
     text: firstTicket.purpose,
@@ -164,8 +210,10 @@ const ChatPanel = ({ emitTyping }) => {
   const allItems = [...purposeSynth, ...itemsWithDividers];
 
   return (
+    <div className="flex-1 flex h-full min-h-0 min-w-0 overflow-hidden">
+    {/* Chat column */}
     <div
-      className="flex-1 flex flex-col h-full min-h-0 bg-white dark:bg-neutral-900"
+      className="flex-1 flex flex-col h-full min-h-0 min-w-0 overflow-hidden bg-white dark:bg-neutral-900"
     >
       {/* Header */}
       <ChatHeader />
@@ -174,9 +222,9 @@ const ChatPanel = ({ emitTyping }) => {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto bg-neutral-100 dark:bg-neutral-800"
+        className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-neutral-100 dark:bg-neutral-800"
       >
-        <div className="px-5 py-4">
+        <div className="px-5 py-4 w-full box-border">
 
           {/* Loading older messages spinner */}
           {loadingOlder && (
@@ -260,8 +308,61 @@ const ChatPanel = ({ emitTyping }) => {
         </div>
       </div>
 
+      {/* Expiry warning */}
+      <ExpiryWarningBanner
+        expiresAt={selectedTicket?.expiresAt}
+        isExtending={isExtendingSession}
+        onExtend={() => activeTicketId && extendSessionChat(activeTicketId)}
+      />
+
       {/* Input */}
-      <MessageInput emitTyping={emitTyping} />
+      {isArchived ? (
+        <div className="flex-shrink-0 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
+          <div className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800">
+            <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+            {isExpired ? 'This conversation is expired' : 'This conversation is closed'}
+          </div>
+        </div>
+      ) : (
+        <MessageInput
+          emitTyping={emitTyping}
+          onOpenPrescription={() => { setShowConsultation(false); setShowPrescription(true); }}
+          onOpenConsultation={() => { setShowPrescription(false); setConsultationData(null); setShowConsultation(true); }}
+        />
+      )}
+    </div>
+
+    {/* Consultation side panel */}
+    <ConsultationPanel
+      isOpen={showConsultation}
+      onClose={() => setShowConsultation(false)}
+      patientId={patient?.id}
+      patientName={patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}
+      onConsultationSaved={(data) => {
+        if (data?._openPrescription) {
+          // User clicked "Issue Prescription" from consultation success screen
+          const { _openPrescription, ...rest } = data;
+          setConsultationData(rest);
+          setShowConsultation(false);
+          setShowPrescription(true);
+        } else {
+          setConsultationData(data);
+        }
+      }}
+    />
+
+    {/* Prescription side panel */}
+    <PrescriptionPanel
+      isOpen={showPrescription}
+      onClose={() => setShowPrescription(false)}
+      patientId={patient?.id}
+      patientName={patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : ''}
+      patientDob={patient?.dateOfBirth}
+      patientSex={patient?.sex}
+      activeTicketId={activeTicketId}
+      sendMessage={sendMessage}
+      consultationData={consultationData}
+    />
     </div>
   );
 };

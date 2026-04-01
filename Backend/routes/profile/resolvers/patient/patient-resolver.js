@@ -44,13 +44,6 @@ Query = {
     return result?.status;
   },
 
-  getBranchIdentifier: async (_, __, { user, res }) => { // getting the identifier and the branch of the logged in user
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    return await Wrapper.Query._getBranchIdentifier(_, { userId: user.id }, { user, res });
-  },
-
   getLoginEmail: async (_, __, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -62,10 +55,79 @@ Query = {
 };
 
 Mutation = {
+  createInitialPersonalRecord: async (_, { input }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const credentialStatus = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
+    if (credentialStatus !== "Unverified") {
+      throwGraphQLError(res).message("Initial profile can only be created for unverified users.").status(400).throw();
+      }
+
+    const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
+    if (latest?.status === "Pending" || latest?.status === "InProgress") {
+      throwGraphQLError(res).message("An update is already in progress. Please wait for it to complete before creating a new one.").status(400).throw();
+      }
+    if (latest?.status === "RevisionSubmitted"){
+      throwGraphQLError(res).message("Revision still pending. Please complete the revision before creating a new update.").status(400).throw();
+    }
+
+    // added the branch auto-detection based on email domain and prefix for students, employees, and medical staff
+    const getEmail = await db.findEmailByUserId(user.id);
+    if (!getEmail) {
+      throwGraphQLError(res).message("Email not found for the user.").status(400).throw();
+    }
+    
+    if (isStudentEmail(getEmail)) { // derive Manila/QuezonCity from the student email prefix
+      input.branch = getStudentBranchFromEmail(getEmail);
+      if (!input.branch) {
+        throwGraphQLError(res).message("Unable to determine branch from email. Please provide a valid student email.").status(400).throw();
+      }
+    } else {
+      // Use user-supplied branch if provided; fall back to 'Both'
+      if (!input.branch) input.branch = 'Both';
+    }
+
+    const client = await db.connect();
+
+    try {
+      await client.query("BEGIN");
+      let updateResult;
+      if (latest?.status === "Revision") {
+        // If there's a pending revision, we want to update that record instead of creating a new one
+        updateResult = await Wrapper.Mutation._UpdatePersonalRecordLog(_, { client, userId: user.id, input }, { user, res });
+        if (!updateResult) {
+          throwGraphQLError(res).message("Failed to update existing revision. Please try again later.").status(500).throw();
+        }
+      } else {
+        updateResult = await Wrapper.Mutation._PersonalRecordLog(_, { client, userId: user.id, input }, { user, res });
+        if (!updateResult) {
+          throwGraphQLError(res).message("Failed to create personal record log. Please try again later.").status(500).throw();
+        }
+      }
+      
+      const identifierResult = await Wrapper.Mutation._UserBranchIdentifier(_, { client, userId: user.id, input }, { user, res });
+      await client.query("COMMIT");
+      return { ...identifierResult, ...updateResult };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      logger.error("Error creating initial personal record:", error);
+      throwGraphQLError(res).message("Failed to create initial personal record. Please try again later.").status(500).throw();
+    } finally {
+      client.release();
+    }
+  },
+
   createPersonalRecordLog: async (_, { input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    const credential_status = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
+    if (!["Active", "Inactive"].includes(credential_status)) {
+      throwGraphQLError(res).message("Only active or inactive users can create update tickets. Please contact support.").status(403).throw();
+    }
+
     const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
     if (latest?.status === "Pending" || latest?.status === "InProgress") {
       throwGraphQLError(res).message("An update is already in progress. Please wait for it to complete before creating a new one.").status(400).throw();
@@ -89,42 +151,13 @@ Mutation = {
     }
     return await Wrapper.Mutation._PersonalRecordLog(_, { userId: user.id, input }, { user, res });
   },
-
-  createBranchIdentifier: async (_, { input }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const credentialStatus = await Wrapper.Query._getUserCredentialStatus(_, { userId: user.id }, { user, res });
-    if (credentialStatus !== "Unverified") {
-      throwGraphQLError(res).message("For patients, branch and identifier can only be set for unverified users.").status(400).throw();
-      }
-   
-    const getEmail = await db.findEmailByUserId(user.id);
-    if (!getEmail) {
-      throwGraphQLError(res).message("Email not found for the user.").status(400).throw();
-    }
-    
-    if (isStudentEmail(getEmail)) { // derive Manila/QuezonCity from the student email prefix
-      input.branch = getStudentBranchFromEmail(getEmail);
-      if (!input.branch) {
-        throwGraphQLError(res).message("Unable to determine branch from email. Please provide a valid student email.").status(400).throw();
-      }
-    } else if (isEmployeeEmail(getEmail) || isMedicalEmail(getEmail)) {
-      // Use user-supplied branch if provided; fall back to 'Both'
-      if (!input.branch) input.branch = 'Both';
-    } else {
-      throwGraphQLError(res).message("Unable to determine branch from email. Unrecognized email format.").status(400).throw();
-    }
-
-    return await Wrapper.Mutation._UserBranchIdentifier(_, { userId: user.id, input }, { user, res });
-  },
   
   cancelPersonalRecordLog: async (_, __, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     const latest = await Wrapper.Query._getUserPersonalRecordLogStatus(_, { userId: user.id }, { user, res });
-    if (latest?.status !== "Pending" && latest?.status !== "InProgress") {
+    if (!["Pending", "InProgress", "Revision"].includes(latest?.status)) {
       throwGraphQLError(res).message("No active update found to cancel.").status(400).throw();
       }
     return await Wrapper.Mutation._cancelPersonalRecordLog(_, { userId: user.id }, { user, res });

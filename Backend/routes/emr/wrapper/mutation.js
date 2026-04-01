@@ -11,11 +11,12 @@ const { generateDomainCodes } = require("../../../utils/validator.js");
 
 const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
     require("../../profile/resolvers/wrapper/wrapper.js");
+
 const { validateUpdateTicket } = require("../resolvers/record-validator.js");
 
 
 const Mutation = {
-  _StaffUpdateTicket: async (_, {args, recordId}, { user, res }) => {
+  _StaffUpdateTicket: async (_, {args, recordId, scope}, { user, res }) => {
     let newStatus = args.status;
     if (newStatus !== "Approved" && newStatus !== "Revision" && newStatus !== "Rejected") {
       throwGraphQLError(res)
@@ -25,7 +26,7 @@ const Mutation = {
       }
     
     if (newStatus === 'Approved') { // approval require check again
-      const missingRecords = await validateUpdateTicket(recordId, args.scope);
+      const missingRecords = await validateUpdateTicket(recordId, scope);
       if (missingRecords.length > 0) {
         throwGraphQLError(res)
           .status(400)
@@ -140,101 +141,148 @@ const Mutation = {
     return {...(args.input), id: recordId, archived_at: null};
   },
 
-  _VitalSigns: async (_, {args, recordId}, { user, res }) => {
-    const result = await db.query(
-      `INSERT INTO "VitalSigns" 
-        ("id", "height_cm", "weight_kg", "blood_pressure", "heart_rate", 
-        "temperature", "notes")
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (id) DO UPDATE
-         SET "height_cm" = EXCLUDED."height_cm",
-             "weight_kg" = EXCLUDED."weight_kg",
-             "blood_pressure" = EXCLUDED."blood_pressure",
-             "heart_rate" = EXCLUDED."heart_rate",
-             "temperature" = EXCLUDED."temperature",
-             "notes" = EXCLUDED."notes"
-             RETURNING *;`,
-      [
-        recordId,
-        args.input.height_cm,
-        args.input.weight_kg,
-        args.input.blood_pressure,
-        args.input.heart_rate,
-        args.input.temperature,
-        args.input.notes
-      ]
-    );
+  _VitalSigns: async (_, { args, recordId }, { user, res }) => {
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET CONSTRAINTS ALL DEFERRED');
 
-    logger.debug("Upserted Vital Signs:", result.rows[0]);
-    return {...(args.input), id: recordId, archived_at: null};
+      const result = await db.queryClient(
+        client,
+        `WITH inserted AS (
+           INSERT INTO "VitalSigns"
+             ("height_cm", "weight_kg", "blood_pressure", "heart_rate",
+              "temperature", "notes")
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id
+         )
+         UPDATE "patientUpdateLog"
+         SET "vitalSignsId" = inserted.id
+         FROM inserted
+         WHERE "patientUpdateLog".id = $7
+         RETURNING "patientUpdateLog".*, inserted.id AS vitalSignsId;`,
+        [
+          args.input.height_cm,
+          args.input.weight_kg,
+          args.input.blood_pressure,
+          args.input.heart_rate,
+          args.input.temperature,
+          args.input.notes,
+          recordId
+        ]
+      );
+
+      await client.query('COMMIT');
+      logger.debug("Inserted Vital Signs + Updated Log:", result.rows[0]);
+
+      return {
+        ...(args.input),
+        id: result.rows[0].vitalSignsId,
+        archived_at: null
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('Error inserting Vital Signs:', error);
+      throwGraphQLError(res)
+        .status(400)
+        .message(`Failed to save edits: Vital signs: ${error.message}`)
+        .throw();
+    } finally {
+      client.release();
+    }
   },
 
   _DentalRecord: async (_, { args, recordId }, { user, res }) => {
+    const client = await db.connect();
+    let dentalRecordId;
+    let toothPlacementsResult = { rows: [] };
+    let oralFindingsResult = [];
 
-    await anchor.DentalRecord(recordId, args.input.notes);
-    let result;
     try {
-      const values = [];
-      const params = [];
-      args.input.toothPlacements.forEach((tooth, i) => {
-        const baseIndex = i * 3;
-        values.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`);
-        params.push(recordId, tooth.tooth_index, tooth.legend);
-      });
+      await client.query('BEGIN');
 
-      const query = `
-        INSERT INTO "ToothPlacement" ("dentalRecordId", "toothIndex", "legend")
-        VALUES ${values.join(", ")}
-        RETURNING *;
-      `;
-      result = await db.queryControlled(query, params);
+      const dentalRecordResult = await db.queryClient(
+        client,
+        `WITH inserted AS (
+           INSERT INTO "DentalRecord" ("notes")
+           VALUES ($1)
+           RETURNING id
+         )
+         UPDATE "patientUpdateLog"
+         SET "dentalRecordId" = inserted.id
+         FROM inserted
+         WHERE "patientUpdateLog".id = $2
+         RETURNING "patientUpdateLog".*, inserted.id AS dentalRecordId;`,
+        [args.input.notes, recordId]
+      );
 
-      logger.debug("Inserted Tooth Placements:", result.rows);
-    } catch (err) {
-      logger.error("Error inserting Tooth Placements:", err);
-      throwGraphQLError(res)
-        .status(400)
-        .message(`Failed to insert DentalRecord: ${err.message}`)
-        .throw();
+      dentalRecordId = dentalRecordResult.rows[0].dentalRecordId;
+
+      // Tooth Placements
+      if (args.input.ToothPlacements?.length) {
+        const values = [];
+        const params = [];
+        args.input.ToothPlacements.forEach((tooth, i) => {
+          const baseIndex = i * 3;
+          values.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3})`);
+          params.push(dentalRecordId, tooth.toothIndex, tooth.legend);
+        });
+
+        const query = `
+          INSERT INTO "ToothPlacement" ("dentalRecordId", "toothIndex", "legend")
+          VALUES ${values.join(", ")}
+          RETURNING *;
+        `;
+        toothPlacementsResult = await db.queryControlledClient(client, query, params);
+        logger.debug("Inserted Tooth Placements:", toothPlacementsResult.rows);
       }
-    // Oral Finding
 
-    let insert = [];
-    for (const finding of args.input.oralFindings) {
-      try {
-        const resultFinder = await db.queryControlled(
-          `INSERT INTO "OralFindingRecord"
+      // Oral Findings
+      for (const finding of args.input.oralFindings || []) {
+        const resultFinder = await db.queryControlledClient(
+          client,
+          `INSERT INTO "oralFindingRecord"
             ("dentalRecordId", "oralFindingId", "status", "notes")
            VALUES ($1, $2, $3, $4)
            RETURNING *;`,
           [
-            recordId,
+            dentalRecordId,
             finding.oralFindingId,
             finding.status,
             finding.notes || null
-            ]
-          );
-        insert.push(resultFinder.rows[0]);
-        } catch (err) {
-          if (err.code === '23503') { // foreign key violation
-            throwGraphQLError(res)
-              .status(400)
-              .message(`Invalid oralFindingId: ${finding.oralFindingId}`)
-              .throw();
-            }
-          else throw err;
-        }
+          ]
+        );
+        oralFindingsResult.push(resultFinder.rows[0]);
       }
-    logger.debug("Inserted Oral Findings:", insert);
-    return {
-      ...args.input,
-      id: recordId,
-      archived_at: null,
-      toothPlacements: result.rows,
-      oralFindings: insert
-    };
 
+      await client.query('COMMIT');
+      return {
+        ...args.input,
+        id: dentalRecordId,
+        archived_at: null,
+        toothPlacements: toothPlacementsResult.rows,
+        oralFindings: oralFindingsResult
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      
+      logger.error("Error inserting Dental Record:", err);
+      if (err.code === '23503') { // foreign key violation
+        throwGraphQLError(res)
+          .status(400)
+          .message(`You've provided an invalid oralFindingId. check again.`)
+          .throw();
+      }
+
+      throwGraphQLError(res)
+        .status(400)
+        .message(`Failed to insert DentalRecord: ${err.message}`)
+        .throw();
+    } finally {
+      client.release();
+    }
   },
+
 
 
   _DentalHistory: async (_, {args, recordId}, { user, res }) => {
@@ -286,15 +334,19 @@ const Mutation = {
     const result = await db.query(
       `INSERT INTO "Lifestyle" 
         ("id", "smoker", "numberOfCigarettesPerDay", "yearsSmoked", 
-        "alcoholConsumer", "frequencyOfAlcoholConsumption", "notes")
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+        "alcoholConsumer", "frequencyOfAlcoholConsumption", 
+        "vapeUser", "vapeType", "vapeFrequency", "yearsVaping")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (id) DO UPDATE
          SET "smoker" = EXCLUDED."smoker",
              "numberOfCigarettesPerDay" = EXCLUDED."numberOfCigarettesPerDay",
              "yearsSmoked" = EXCLUDED."yearsSmoked",
              "alcoholConsumer" = EXCLUDED."alcoholConsumer",
              "frequencyOfAlcoholConsumption" = EXCLUDED."frequencyOfAlcoholConsumption",
-             "notes" = EXCLUDED."notes"
+             "vapeUser" = EXCLUDED."vapeUser",
+             "vapeType" = EXCLUDED."vapeType",
+             "vapeFrequency" = EXCLUDED."vapeFrequency",
+             "yearsVaping" = EXCLUDED."yearsVaping"
              RETURNING *;`,
       [
         recordId,
@@ -303,7 +355,10 @@ const Mutation = {
         args.input.yearsSmoked,
         args.input.alcoholConsumer,
         args.input.frequencyOfAlcoholConsumption,
-        args.input.notes
+        args.input.vapeUser,
+        args.input.vapeType,
+        args.input.vapeFrequency,
+        args.input.yearsVaping,
       ]
     );
     logger.debug("Upserted Lifestyle:", result.rows[0]);
@@ -523,7 +578,7 @@ const Mutation = {
   _HospitalizationProfile: async (_, {args, recordId}, { user, res }) => {
     console.log(args.input);
 
-    await anchor.Hospitalization(recordId, args.input.notes);
+    await anchor.Hospitalization(recordId);
     await remove.HospitalizationRecord(recordId);
 
     if (args.input.hospitalizations.length === 0) {

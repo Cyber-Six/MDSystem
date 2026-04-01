@@ -1,4 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { axiosRequest } from '../../../packages-core-adapter';
+
+/* Small authenticated image loader (media endpoints require JWT) */
+function AuthImage({ path, alt, className }) {
+  const [src, setSrc] = useState(null);
+  useEffect(() => {
+    let objectUrl = null, cancelled = false;
+    axiosRequest.get(path, { responseType: 'blob' })
+      .then((res) => { if (!cancelled) { objectUrl = URL.createObjectURL(res.data); setSrc(objectUrl); } })
+      .catch(() => {});
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [path]);
+  if (!src) return null;
+  return <img src={src} alt={alt} className={className} />;
+}
 
 /**
  * Announcement Modal Component - Patient Version (Read-only)
@@ -21,10 +36,11 @@ const AnnouncementModal = ({ announcement, onClose }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.65)' }}
       onClick={handleBackdropClick}
     >
-      <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-xl max-w-2xl w-full max-h-96 overflow-y-auto">
+      <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-neutral-800 dark:to-neutral-700 px-6 py-4 border-b border-gray-200 dark:border-neutral-700 flex items-center justify-between">
           <div>
@@ -60,23 +76,14 @@ const AnnouncementModal = ({ announcement, onClose }) => {
             )}
           </div>
 
-          {/* Attachment */}
+          {/* Pubmat Image */}
           {announcement.pubmat && (
-            <div className="mt-4 p-3 bg-gray-50 dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700">
-              <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                Attachment
-              </h4>
-              <a
-                href={`/media/record/announcement/${announcement.pubmat}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Download Material
-              </a>
+            <div className="mt-4">
+              <AuthImage
+                path={`/media/record/announcement/${announcement.pubmat}`}
+                alt={announcement.label || 'Announcement image'}
+                className="w-full max-h-[60vh] object-contain rounded border border-gray-200 dark:border-neutral-700"
+              />
             </div>
           )}
         </div>

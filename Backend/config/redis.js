@@ -1,21 +1,15 @@
 // config/redis.js
 const redis = require("redis");
-const path = require("path");
-const dotenv = require("dotenv");
 const { hashOTP, generateRandomKey, delayRandom } = require("../utils/security.js");
 const query = require("./query.js");
 const { redis: redisConfig } = require('./config');
 const logger = require("../utils/logger.js");
+
+const path = require("path");
+const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 let client;
-
-const connection = {
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: Number(process.env.REDIS_PORT) || 6379,
-  username: process.env.REDIS_USERNAME || 'mdsadmin', // ACL user
-  password: process.env.REDIS_PASSWORD,               // ACL password
-  };
 async function initRedis(options = {}) {
   if (client) return client; // reuse if already initialized
 
@@ -411,19 +405,19 @@ async function updateConsentInSession(token, purpose) {
   await client.hSet(key, {
     data_consent: "true",
     data_consent_version: process.env.DATA_CONSENT_VERSION,
-    data_consent_timestamp: Date.now().toString()
-    });
-  
+    data_consent_timestamp: Date.now().toString(),
+  });
+
   const userId = await getUserIdFromVerificationSession(token, purpose);
   if (userId) {
     await query.updateUserConsent(userId, {
       data_consent: true,
       data_consent_version: process.env.DATA_CONSENT_VERSION,
-      data_consent_agreed: new Date().toISOString()
-      });
-    } 
-  return true;
+      data_consent_agreed: new Date().toISOString(),
+    });
   }
+  return true;
+}
   
 async function update2FAInSession(token, email, purpose) {
   if (!client) throw new Error("Redis client not initialized");
@@ -454,9 +448,9 @@ async function deleteVerificationSession(token, purpose) {
 
   const key = `verify:${purpose}:${token}`;
   await client.del(key);
-  
+
   return true;
-  }
+}
 
 
 async function getUserIdFromVerificationSession(token, purpose) {
@@ -531,7 +525,7 @@ async function listUserSessions(userId) {
   const sessions = [];
 
   // Use SCAN to find all matching keys
-  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+  for await (const key of client.scanIterator({ match: pattern, count: 100 })) {
     const raw = await client.get(key);
     if (raw) {
       try {
@@ -559,7 +553,7 @@ async function deleteAllUserSessions(userId) {
   const keysToDelete = [];
 
   // Collect all keys matching the pattern
-  for await (const key of client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+  for await (const key of client.scanIterator({ match: pattern, count: 100 })) {
     keysToDelete.push(key);
   }
 
@@ -582,6 +576,62 @@ async function deleteStaffAnchor(userId) {
   const key = `staff:anchor:${userId}`;
   await client.del(key);
 }
+
+/**
+ * Scan ALL refresh sessions across all users (for system-wide queries)
+ * @returns {Promise<Array>} Array of session objects with userId and deviceId
+ */
+async function scanAllRefreshSessions() {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const pattern = `rt:*`;
+  const sessions = [];
+  const batchSize = 100; // how many keys to fetch per MGET
+
+  let batch = [];
+
+  for await (const key of client.scanIterator({ match: pattern, count: batchSize })) {
+    // Skip non-session keys (e.g., rt:fail:*, rt:lock:*)
+    const parts = key.split(':');
+    if (parts.length !== 3) continue;
+
+    batch.push(key);
+
+    // When batch is full, fetch them all at once
+    if (batch.length >= batchSize) {
+      const rawValues = await client.mGet(batch);
+      rawValues.forEach(raw => {
+        if (raw) {
+          try {
+            const session = JSON.parse(raw);
+            sessions.push(session);
+          } catch {
+            // Skip invalid JSON
+          }
+        }
+      });
+      batch = [];
+    }
+  }
+
+  // Handle leftover keys in the last batch
+  if (batch.length > 0) {
+    const rawValues = await client.mGet(batch);
+    rawValues.forEach(raw => {
+      if (raw) {
+        try {
+          const session = JSON.parse(raw);
+          sessions.push(session);
+        } catch {
+          // Skip invalid JSON
+        }
+      }
+    });
+  }
+
+  return sessions;
+}
+
 
 // New: load refresh session
 async function getRefreshSession(userId, deviceId) {
@@ -727,6 +777,206 @@ async function decrementMediaStagingCount(userId) {
   return newCount;
 }
 
+// ------------------------------------------------
+// Admin Transfer Token Management
+// ------------------------------------------------
+
+const ADMIN_TRANSFER_EXPIRATION = 600; // 10 minutes
+
+async function createAdminTransferSession(oldAdminId, newAdminId, verificationToken) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `admin:transfer:${verificationToken}`;
+
+  await client.hSet(key, {
+    old_admin_id: oldAdminId.toString(),
+    new_admin_id: newAdminId.toString(),
+    created_at: Date.now().toString(),
+  });
+
+  await client.expire(key, ADMIN_TRANSFER_EXPIRATION);
+
+  return verificationToken;
+}
+
+async function getAdminTransferSession(verificationToken) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `admin:transfer:${verificationToken}`;
+  const session = await client.hGetAll(key);
+
+  if (!session || !session.old_admin_id) return null;
+
+  return {
+    oldAdminId: session.old_admin_id,
+    newAdminId: session.new_admin_id,
+    createdAt: parseInt(session.created_at, 10),
+  };
+}
+
+async function deleteAdminTransferSession(verificationToken) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `admin:transfer:${verificationToken}`;
+  await client.del(key);
+  return true;
+}
+
+// ------------------------------------------------
+// Admin Transfer Rate Limiting
+// ------------------------------------------------
+
+const ADMIN_TRANSFER_COOLDOWN = Number(process.env.ADMIN_TRANSFER_COOLDOWN) || 300; // 5-minute cooldown between initiation attempts
+const ADMIN_TRANSFER_PASSWORD_FAIL_TTL = Number(process.env.ADMIN_TRANSFER_PASSWORD_FAIL_TTL) || 3600; // 1 hour window for failures
+const ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD = Number(process.env.ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD) || 3; // 3 failures before lockout
+const ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT = Number(process.env.ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT) || 1800; // 30-minute lockout
+
+/**
+ * Record admin transfer initiation attempt and check cooldown
+ * @param {number} adminId
+ * @returns {Promise<{allowed: boolean, retryAfterSeconds: number}>}
+ */
+async function recordAdminTransferAttempt(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `admin:transfer:attempt:${adminId}`;
+  const lastAttempt = await client.get(key);
+
+  if (lastAttempt) {
+    // Still in cooldown
+    const ttl = await client.ttl(key);
+    return {
+      allowed: false,
+      retryAfterSeconds: ttl > 0 ? ttl : ADMIN_TRANSFER_COOLDOWN,
+    };
+  }
+
+  // Set cooldown for next attempt
+  await client.set(key, Date.now().toString(), { EX: ADMIN_TRANSFER_COOLDOWN });
+
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+/**
+ * Check if admin has an active pending transfer
+ * Since the system enforces only ONE admin at a time, we only need to check
+ * if ANY pending transfer exists (there can be at most one)
+ * @param {number} adminId
+ * @returns {Promise<{hasPending: boolean, tokenPrefix: string | null}>}
+ */
+async function getAdminActivePendingTransfer(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  // Use KEYS for simple pattern match (safe here - max 1 key expected)
+  // Since there's only ONE admin in the system, there can only be ONE pending transfer
+  const pattern = `admin:transfer:*`;
+  const keys = await client.keys(pattern);
+
+  if (keys.length === 0) {
+    return { hasPending: false, tokenPrefix: null };
+  }
+
+  // Find the transfer session hash (not attempt/pw keys)
+  // Transfer sessions don't have colons after "admin:transfer:", but attempt/pw keys do
+  for (const key of keys) {
+    // Skip attempt and password-related keys
+    if (key.includes(':attempt') || key.includes(':pw:')) {
+      continue;
+    }
+
+    const session = await client.hGetAll(key);
+
+    // Verify it belongs to this admin
+    if (session && session.old_admin_id === adminId.toString()) {
+      const token = key.replace('admin:transfer:', '');
+      const tokenPrefix = token.substring(0, 8) + '...';
+      return { hasPending: true, tokenPrefix };
+    }
+  }
+
+  return { hasPending: false, tokenPrefix: null };
+}
+
+/**
+ * Record admin transfer password failure attempt
+ * @param {number} adminId
+ * @returns {Promise<{failures: number, locked: boolean, lockoutTTL: number}>}
+ */
+async function recordAdminTransferPasswordFailure(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const failKey = `admin:transfer:pw:fail:${adminId}`;
+  const lockKey = `admin:transfer:pw:lock:${adminId}`;
+
+  // Check if already locked out
+  const locked = await client.exists(lockKey);
+  if (locked) {
+    const ttl = await client.ttl(lockKey);
+    return {
+      failures: ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD,
+      locked: true,
+      lockoutTTL: ttl > 0 ? ttl : ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT,
+    };
+  }
+
+  // Increment failure count
+  const failures = await client.incr(failKey);
+
+  if (failures === 1) {
+    // Set TTL on first failure
+    await client.expire(failKey, ADMIN_TRANSFER_PASSWORD_FAIL_TTL);
+  }
+
+  // Lock if threshold reached
+  if (failures >= ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD) {
+    await client.set(lockKey, '1', { EX: ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT });
+    return {
+      failures,
+      locked: true,
+      lockoutTTL: ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT,
+    };
+  }
+
+  return {
+    failures,
+    locked: false,
+    lockoutTTL: 0,
+  };
+}
+
+/**
+ * Check if admin is locked out from transfer password attempts
+ * @param {number} adminId
+ * @returns {Promise<{locked: boolean, ttl: number}>}
+ */
+async function isAdminTransferPasswordLocked(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const lockKey = `admin:transfer:pw:lock:${adminId}`;
+  const exists = await client.exists(lockKey);
+
+  if (!exists) {
+    return { locked: false, ttl: 0 };
+  }
+
+  const ttl = await client.ttl(lockKey);
+  return { locked: true, ttl: ttl > 0 ? ttl : ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT };
+}
+
+/**
+ * Clear admin transfer password failures (after successful completion)
+ * @param {number} adminId
+ */
+async function clearAdminTransferPasswordFailures(adminId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const failKey = `admin:transfer:pw:fail:${adminId}`;
+  const lockKey = `admin:transfer:pw:lock:${adminId}`;
+
+  await client.del(failKey);
+  await client.del(lockKey);
+}
+
 const LoginFailureMatrix = {
   patient: {
     prefix: "login:patient",
@@ -777,6 +1027,18 @@ async function isLoginLocked(email, portal) {
   return ttl > 0 ? ttl : 0; // return remaining lockout time in seconds
 }
 
+async function triggerExpiredMedical(supply, batchId) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `medical:exp:${supply}:${batchId}`;
+
+  // Try to set the key only if it doesn't exist, with 60s expiration
+  const result = await client.set(key, "1", { NX: true, EX: 60 });
+
+  // Redis returns "OK" if the key was set, null if it already existed
+  return result === "OK"; // true if set, false if existed
+}
+
 // ------------------------------------------------
 
 /**
@@ -793,7 +1055,6 @@ function getClient() {
 }
 
 module.exports = {
-  connection,
   redisConfig,
   initRedis,
   getClient,
@@ -834,6 +1095,7 @@ module.exports = {
   saveStaffAnchor,
   getStaffAnchor,
   listUserSessions,
+  scanAllRefreshSessions,
   deleteAllUserSessions,
   deleteStaffAnchor,
 
@@ -846,7 +1108,17 @@ module.exports = {
   getRefreshTokenFailures,
   isRefreshTokenLocked,
   clearRefreshTokenFailures,
-  
+
   incrementMediaStagingCount,
   decrementMediaStagingCount,
+
+  createAdminTransferSession,
+  getAdminTransferSession,
+  deleteAdminTransferSession,
+
+  recordAdminTransferAttempt,
+  getAdminActivePendingTransfer,
+  recordAdminTransferPasswordFailure,
+  isAdminTransferPasswordLocked,
+  clearAdminTransferPasswordFailures,
 };

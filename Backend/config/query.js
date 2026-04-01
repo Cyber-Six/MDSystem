@@ -15,9 +15,18 @@ async function connect() {
     }
 }
 
+// to be used on dbClient
+function db(){
+  return pool;
+}
+
 async function query(text, params) {
+  return await queryClient(pool, text, params);
+}
+
+async function queryClient(db, text, params) {
     try {
-        const result = await pool.query(text, params);
+        const result = await db.query(text, params);
         return result;
     } catch (err) {
         logger.error("DB QUERY ERROR:", err);
@@ -26,8 +35,12 @@ async function query(text, params) {
 }
 
 async function queryControlled(text, params) {
+  return await queryControlledClient(pool, text, params);
+}
+
+async function queryControlledClient(db, text, params) {
   try {
-    const result = await pool.query(text, params);
+    const result = await db.query(text, params);
     return { success: true, rows: result.rows };
   } catch (err) {
     if (err.code === '23503') {
@@ -267,7 +280,7 @@ async function isUserValidated(userId) {
       return false; // patient not found
     }
 
-    const status = result.rows[0].status?.toLowerCase();
+    const status = result.rows[0].status;
     return status !== "Unverified"; // true if verified or other
   } catch (err) {
     logger.error(`Error fetching credential status for userId=${userId}:`, err);
@@ -308,10 +321,9 @@ async function getUserBranch(userId) {
   try {
     const result = await query(sql, [userId]);
     if (result.rows.length === 0) {
-      console.log(`No branch found for userId=${userId}`);
+      logger.debug(`No branch found for userId=${userId}`);
       return null; // patient not found
     }
-    console.log(result.rows[0]);
     return result.rows[0].branch; 
   } catch (err) {
     logger.error(`Error fetching branch for userId=${userId}:`, err);
@@ -386,10 +398,24 @@ async function isActiveMedicalPersonnel(userId) {
   }
 }
 
+async function setSystemAuditLog({client=pool, eventType, actorId, actorType, targetId, action, details, changedBy}) {
+  const result = await client.query(
+    `INSERT INTO "SystemAuditLog"
+     ("event_type", "actorId", "actorType", "targetId", "action", "details", "changedBy")
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id;`,
+    [eventType, actorId, actorType, targetId, action, details, changedBy]
+  );
+  return result.rows[0].id;
+}
+
 module.exports = {
+    db,
     connect,
     query,
+    queryClient,
     queryControlled,
+    queryControlledClient,
     countUserByEmail,
     findUserByEmail,
     findEmailByUserId,
@@ -407,5 +433,6 @@ module.exports = {
     getUserBranch,
     recordLoginAttempt,
     getUserPatientType,
-    isActiveMedicalPersonnel
+    isActiveMedicalPersonnel,
+    setSystemAuditLog
 };

@@ -1,7 +1,7 @@
 const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
-
+const { ValidateBranchbyUserBranch } = require("../../../../../utils/validator.js");
 // Enhanced aggregation: includes medicine name by joining with MedicalItems
 // Note: mre."medicineId" stores the MedicalItems.id (the medicine item, not the batch)
 const getItemsWithNames = async (requestId) => {
@@ -158,6 +158,14 @@ const Mutation = {
     if (!Array.isArray(input.items) || input.items.length === 0) {
       throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
     }
+
+    const userBranch = await db.getUserBranch(patientId);
+    const valid = ValidateBranchbyUserBranch(userBranch, input.location);
+
+    if (!valid) {
+      throwGraphQLError(res).message(`Invalid location outside your scope "${input.location}".`).status(400).throw();
+    }
+
 
     const query = `
       INSERT INTO "MedicineRequestLog" ("patientId", status, location, purpose, notes)

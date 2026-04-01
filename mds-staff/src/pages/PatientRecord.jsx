@@ -21,9 +21,9 @@ const GQL_UPDATE_TICKET = `
 `;
 
 const GQL_VITAL_SIGNS = `
-  query GetVitals($userId: ID!) {
-    getUserVitalSigns(userId: $userId, limit: 1) {
-      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at status
+  query GetVitals($patientId: ID!) {
+    getPatientVitalSigns(patientId: $patientId, limit: 1) {
+      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
     }
   }
 `;
@@ -59,7 +59,9 @@ const GQL_LIFESTYLE = `
   query GetLifestyle($userId: ID!) {
     getUserLifestyle(userId: $userId, limit: 1) {
       id smoker numberOfCigarettesPerDay yearsSmoked
-      alcoholConsumer frequencyOfAlcoholConsumption notes status created_at
+      alcoholConsumer frequencyOfAlcoholConsumption
+      vapeUser vapeType vapeFrequency yearsVaping
+      notes status created_at
     }
   }
 `;
@@ -136,9 +138,6 @@ const GQL_FULL_RECORD = `
       latest_ticket_id latest_status latest_scope latest_updated_at
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
-    getUserVitalSigns(userId: $userId, limit: 1) {
-      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at status
-    }
     getUserMedicalHistory(userId: $userId, limit: 1) {
       id notes status created_at
       conditions { id conditionId description diagnosedDate relationship }
@@ -153,7 +152,9 @@ const GQL_FULL_RECORD = `
     }
     getUserLifestyle(userId: $userId, limit: 1) {
       id smoker numberOfCigarettesPerDay yearsSmoked
-      alcoholConsumer frequencyOfAlcoholConsumption notes status created_at
+      alcoholConsumer frequencyOfAlcoholConsumption
+      vapeUser vapeType vapeFrequency yearsVaping
+      notes status created_at
     }
     getUserObgynHistory(userId: $userId, limit: 1) {
       id lastMenstrualPeriod hasDysmenorrhea notes status created_at
@@ -233,17 +234,21 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
     setIsLoading(true);
     setLoadError(null);
 
-    axiosRequest
-      .post('/emr/medical', { query: GQL_FULL_RECORD, variables: { userId: patientId } })
-      .then(({ data }) => {
+    // Fetch EMR data and VitalSigns in parallel (VitalSigns moved to /staff/emr)
+    const emrPromise = axiosRequest.post('/emr/medical', { query: GQL_FULL_RECORD, variables: { userId: patientId } });
+    const vitalsPromise = axiosRequest.post('/staff/emr', { query: GQL_VITAL_SIGNS, variables: { patientId } })
+      .catch(err => { console.warn('[PatientRecord] VitalSigns fetch failed:', err.message); return null; });
+
+    Promise.all([emrPromise, vitalsPromise])
+      .then(([emrRes, vitalsRes]) => {
         if (cancelled) return;
-        const d = data.data;
+        const d = emrRes.data.data;
         if (!d?.getPatientBasicInfo) {
-          throw new Error(data.errors?.[0]?.message || 'Patient not found');
+          throw new Error(emrRes.data.errors?.[0]?.message || 'Patient not found');
         }
         setBasicInfo(d.getPatientBasicInfo);
         setUpdateTicket(d.getUserUpdateTicket || null);
-        setVitalSigns(d.getUserVitalSigns?.[0] || null);
+        setVitalSigns(vitalsRes?.data?.data?.getPatientVitalSigns?.[0] || null);
         setMedicalHistory(d.getUserMedicalHistory?.[0] || null);
         setAllergyData(d.getUserAllergyProfile?.[0] || null);
         setImmunizationData(d.getUserImmunizationProfile?.[0] || null);
@@ -343,6 +348,7 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
       lifestyle: {
         smoker:        lifestyleData?.smoker ? `Yes (${lifestyleData.numberOfCigarettesPerDay || '?'} sticks/day, ${lifestyleData.yearsSmoked || '?'} yrs)` : 'No',
         alcoholDrinker:lifestyleData?.alcoholConsumer ? `Yes (${lifestyleData.frequencyOfAlcoholConsumption || 'occasional'})` : 'No',
+        vaper:         lifestyleData?.vapeUser ? `Yes (${lifestyleData.vapeType || 'Not specified'}, ${lifestyleData.vapeFrequency || 'Not specified'})` : 'No',
         tattoo:        lifestyleData?.notes || '',
         piercing:      '',
       },
@@ -663,6 +669,7 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
                 {Object.entries({
                   'Smoker': patient.medical.lifestyle.smoker,
                   'Alcohol Drinker': patient.medical.lifestyle.alcoholDrinker,
+                  'Vaper': patient.medical.lifestyle.vaper,
                   'Tattoo': patient.medical.lifestyle.tattoo,
                   'Piercing': patient.medical.lifestyle.piercing,
                 }).map(([label, value]) => (

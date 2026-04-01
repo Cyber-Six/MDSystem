@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const logger = require("../../utils/logger.js");
 const { getStaffAnchor } = require("../redis.js");
-const { getUserIdentity } = require("../query.js");
+const { isActiveMedicalPersonnel } = require("../query.js");
 const { convertIdentity } = require("../../utils/converter.js");
 const { required } = require("joi");
 
@@ -54,11 +54,10 @@ function jwtProtect(requiredRole = "patient") {
 
       // 🩺 Extra validation for medical role only
       if (role === "medical") {
-        const rawUser = await getUserIdentity(decoded.id);
         // rawUser = ['Student', 'Employee', 'Superior', 'Medical']
-        const identity = convertIdentity(rawUser);
+        const identity = await isActiveMedicalPersonnel( decoded.id );
 
-        if (!identity || identity !== "medical") {
+        if (!identity) {
           logger.warn(`[AUTH] Medical role validation failed userId=${decoded.id}, route=${req.path}, ip=${req.ip}`);
           return res.status(403).json({
             error: "FORBIDDEN",

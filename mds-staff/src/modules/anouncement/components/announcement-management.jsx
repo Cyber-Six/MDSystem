@@ -4,6 +4,7 @@ import {
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
+  uploadPubmat,
 } from '../announcement-service';
 
 /**
@@ -17,12 +18,16 @@ const AnnouncementManagement = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [stagedFileId, setStagedFileId] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [existingPubmat, setExistingPubmat] = useState(null);
 
   const [formData, setFormData] = useState({
     label: '',
     description: '',
-    pubmat: null,
     isActive: true,
+    location: 'Both',
   });
 
   // Fetch announcements on mount
@@ -30,14 +35,21 @@ const AnnouncementManagement = () => {
     loadAnnouncements();
   }, []);
 
+  const [isPermissionDenied, setIsPermissionDenied] = useState(false);
+
   const loadAnnouncements = async () => {
     try {
       setIsLoading(true);
       const data = await fetchAllAnnouncementsAdmin();
       setAnnouncements(data);
       setError(null);
+      setIsPermissionDenied(false);
     } catch (err) {
-      setError('Failed to load announcements');
+      if (err?.response?.status === 403) {
+        setIsPermissionDenied(true);
+      } else {
+        setError('Failed to load announcements');
+      }
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -52,32 +64,54 @@ const AnnouncementManagement = () => {
     }));
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
-    setFormData((prev) => ({
-      ...prev,
-      pubmat: file ? file.name : null,
-    }));
+    if (!file) return;
+
+    // Show local preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => setImagePreview(ev.target.result);
+    reader.readAsDataURL(file);
+
+    // Upload to staging
+    try {
+      setIsUploadingFile(true);
+      setError(null);
+      const fileId = await uploadPubmat(file);
+      setStagedFileId(fileId);
+    } catch (err) {
+      setError('Failed to upload image. Please try again.');
+      setImagePreview(null);
+      e.target.value = '';
+    } finally {
+      setIsUploadingFile(false);
+    }
   };
 
   const resetForm = () => {
     setFormData({
       label: '',
       description: '',
-      pubmat: null,
       isActive: true,
+      location: 'Both',
     });
     setEditingId(null);
+    setStagedFileId(null);
+    setImagePreview(null);
+    setExistingPubmat(null);
   };
 
   const handleEdit = (announcement) => {
     setFormData({
       label: announcement.label || '',
       description: announcement.description || '',
-      pubmat: announcement.pubmat || null,
       isActive: announcement.isActive !== false,
+      location: announcement.location || 'Both',
     });
     setEditingId(announcement.id);
+    setStagedFileId(null);
+    setImagePreview(null);
+    setExistingPubmat(announcement.pubmat || null);
     setIsFormOpen(true);
   };
 
@@ -86,10 +120,15 @@ const AnnouncementManagement = () => {
     try {
       setIsSaving(true);
 
+      const payload = {
+        ...formData,
+        pubmat: stagedFileId || existingPubmat || null,
+      };
+
       if (editingId) {
-        await updateAnnouncement(editingId, formData);
+        await updateAnnouncement(editingId, payload);
       } else {
-        await createAnnouncement(formData);
+        await createAnnouncement(payload);
       }
 
       resetForm();
@@ -130,6 +169,18 @@ const AnnouncementManagement = () => {
             <div className="h-12 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (isPermissionDenied) {
+    return (
+      <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-8 text-center">
+        <svg className="w-12 h-12 mx-auto mb-3 text-neutral-400 dark:text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+        </svg>
+        <p className="text-secondary-700 dark:text-neutral-300 font-medium">Access Denied</p>
+        <p className="text-secondary-500 dark:text-neutral-400 text-sm mt-1">You do not have permission to manage announcements.</p>
       </div>
     );
   }
@@ -197,18 +248,56 @@ const AnnouncementManagement = () => {
             {/* File Upload */}
             <div>
               <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
-                Attachment (Optional)
+                Image / Pubmat (Optional)
               </label>
               <input
                 type="file"
+                accept="image/jpeg,image/png"
                 onChange={handleFileChange}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={isUploadingFile}
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
               />
-              {formData.pubmat && (
-                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                  File: {formData.pubmat}
+              {isUploadingFile && (
+                <p className="text-xs text-primary-500 mt-1 flex items-center gap-1">
+                  <span className="animate-spin inline-block w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full"></span>
+                  Uploading image...
                 </p>
               )}
+              {imagePreview && !isUploadingFile && (
+                <div className="mt-2">
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="max-h-40 rounded border border-neutral-200 dark:border-neutral-600 object-contain"
+                  />
+                  <p className="text-xs text-success-600 dark:text-success-400 mt-1">Image ready</p>
+                </div>
+              )}
+              {!imagePreview && existingPubmat && (
+                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                  Current image: {existingPubmat} — upload a new file to replace it
+                </p>
+              )}
+            </div>
+
+            {/* Branch / Location */}
+            <div>
+              <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
+                Branch Visibility
+              </label>
+              <select
+                name="location"
+                value={formData.location}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="Both">All Branches</option>
+                <option value="Manila">Manila (Arlegui &amp; Casal)</option>
+                <option value="QuezonCity">Quezon City</option>
+              </select>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                Controls which branch patients can see this announcement.
+              </p>
             </div>
 
             {/* Active Status */}
@@ -240,7 +329,7 @@ const AnnouncementManagement = () => {
               </button>
               <button
                 type="submit"
-                disabled={isSaving}
+                disabled={isSaving || isUploadingFile}
                 className="px-3 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 text-white text-sm font-medium rounded transition-colors"
               >
                 {isSaving ? 'Saving...' : editingId ? 'Update' : 'Create'}
@@ -265,7 +354,7 @@ const AnnouncementManagement = () => {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
                         {announcement.label}
                       </h3>
@@ -277,6 +366,21 @@ const AnnouncementManagement = () => {
                         }`}
                       >
                         {announcement.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 text-xs font-medium rounded ${
+                          announcement.location === 'Manila'
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                            : announcement.location === 'QuezonCity'
+                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                            : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400'
+                        }`}
+                      >
+                        {announcement.location === 'Manila'
+                          ? 'Manila'
+                          : announcement.location === 'QuezonCity'
+                          ? 'Quezon City'
+                          : 'All Branches'}
                       </span>
                     </div>
                     <p className="text-xs text-secondary-600 dark:text-neutral-400 line-clamp-2 mb-1">

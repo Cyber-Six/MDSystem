@@ -247,17 +247,53 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
     province_address: pi.provinceAddress?.trim() || pi.address?.trim() || '',
   };
 
-  // For revisions: the personal record log is still in InProgress from the original submission.
-  // Proactively cancel it first so createPersonalRecordLog won't throw "already in progress".
+  // For revisions: cancel the existing Revision log so createInitialPersonalRecord
+  // won't be blocked by the "revision still pending" guard.
   if (isRevision) {
     await cancelPersonalRecordLog();
     console.log('[EMR Service] Revision: pre-cancelled existing personal record log');
   }
 
-  // Build a compound mutation so both ops travel in one HTTP request.
+  // For revisions, use createInitialPersonalRecord (works for Unverified users and
+  // atomically handles the branch identifier via UPSERT — safe to re-send existing values).
+  if (isRevision) {
+    const initialInput = {
+      ...personalInput,
+      identifier: identifier?.trim() || '',
+      branch: branch || 'Manila', // backend overrides for students based on email prefix
+    };
+
+    const revisionMutation = `mutation ProfileSetup($input: userProfileInitialInput!) {
+      createInitialPersonalRecord(input: $input) { first_name last_name branch identifier }
+    }`;
+
+    try {
+      const result = await sendGraphQLRequest(revisionMutation, { input: initialInput }, { endpoint: '/profile/patient' });
+      console.log('[EMR Service] Revision profile setup complete:', {
+        branch: result?.createInitialPersonalRecord?.branch,
+        identifier: result?.createInitialPersonalRecord?.identifier,
+      });
+    } catch (error) {
+      const msg = error.message?.toLowerCase() || '';
+      if (msg.includes('already in progress') || msg.includes('revision still pending')) {
+        console.warn('[EMR Service] Stale log on revision — cancelling and retrying...', error.message);
+        try { await cancelPersonalRecordLog(); } catch (_) { /* ignore */ }
+        const result = await sendGraphQLRequest(revisionMutation, { input: initialInput }, { endpoint: '/profile/patient' });
+        console.log('[EMR Service] Revision profile setup complete (after stale-log recovery):', {
+          branch: result?.createInitialPersonalRecord?.branch,
+          identifier: result?.createInitialPersonalRecord?.identifier,
+        });
+        return;
+      }
+      console.error('[EMR Service] Failed to register revision profile setup:', error);
+      throw error;
+    }
+    return;
+  }
+
+  // --- Non-revision path (legacy): batch createBranchIdentifier + createPersonalRecordLog ---
   // createBranchIdentifier is conditional — skip it if no identifier is available.
-  // For revisions, createBranchIdentifier is also skipped (already set from initial submission).
-  const mutation = hasIdentifier && !isRevision
+  const mutation = hasIdentifier
     ? `mutation ProfileSetup($branchInput: BranchIdentifierInput!, $input: userProfileInput!) {
         createBranchIdentifier(input: $branchInput) { branch identifier }
         createPersonalRecordLog(input: $input) { first_name last_name }
@@ -269,7 +305,7 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
   const branchInput = { identifier: identifier.trim() };
   if (branch) branchInput.branch = branch;
 
-  const variables = hasIdentifier && !isRevision
+  const variables = hasIdentifier
     ? { branchInput, input: personalInput }
     : { input: personalInput };
 
@@ -281,20 +317,14 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
     });
   } catch (error) {
     // If a stale record log is blocking the submission, auto-cancel it and retry.
-    // This can happen when a previous submission failed mid-way and left a stuck log,
-    // or when a compound mutation partially succeeded but one operation threw.
     const msg = error.message?.toLowerCase() || '';
     const isStaleLog = msg.includes('already in progress');
     const isPartialFailure = msg.includes('identifier') && msg.includes('branch');
 
     if (isStaleLog || isPartialFailure) {
       console.warn('[EMR Service] Stale/partial state detected — cleaning up and retrying...', error.message);
-
-      // Best-effort cancel — may fail if nothing was created, that's fine.
       try { await cancelPersonalRecordLog(); } catch (_) { /* ignore */ }
 
-      // On retry, createBranchIdentifier may already be set from the first attempt,
-      // so we issue both operations independently to avoid compound-mutation partial failures.
       if (hasIdentifier) {
         try {
           const retryBranchInput = { identifier: identifier.trim() };
@@ -304,7 +334,6 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
           }`;
           await sendGraphQLRequest(branchMutation, { branchInput: retryBranchInput }, { endpoint: '/profile/patient' });
         } catch (branchErr) {
-          // Branch may already be set from a previous attempt — non-fatal
           console.warn('[EMR Service] Branch retry warning (may already exist):', branchErr.message);
         }
       }
@@ -314,13 +343,72 @@ const registerProfileSetup = async (identifier, personalInfo, isRevision = false
       }`;
       await sendGraphQLRequest(retryMutation, { input: personalInput }, { endpoint: '/profile/patient' });
       console.log('[EMR Service] Profile setup complete (after stale-log recovery):', {
-        branch: null, // already set from first attempt
+        branch: null,
         identifier: identifier?.trim() || null,
       });
       return;
     }
 
     console.error('[EMR Service] Failed to register profile setup:', error);
+    throw error;
+  }
+};
+
+/**
+ * Register initial profile using the reworked createInitialPersonalRecord mutation.
+ * This single mutation atomically creates the personal record log AND sets the
+ * branch identifier, replacing the old compound approach that called
+ * createBranchIdentifier + createPersonalRecordLog separately.
+ *
+ * Only works for unverified users. Used for both initial submissions and (via
+ * registerProfileSetup) revision resubmissions.
+ *
+ * @param {string} identifier - Student/employee number (e.g. "2022-12345")
+ * @param {object} personalInfo - formData.personalInfo
+ * @param {object} [options]
+ * @param {string} [options.branch] - Explicit branch for employees; students have it auto-detected by backend
+ */
+const registerInitialProfile = async (identifier, personalInfo, { branch } = {}) => {
+  const pi = personalInfo || {};
+
+  const input = {
+    first_name:       pi.firstName?.trim()        || '',
+    middle_name:      pi.middleName?.trim()       || '',
+    last_name:        pi.surname?.trim()          || '',
+    suffix:           pi.suffix?.trim()           || null,
+    date_of_birth:    pi.birthday                 || null,
+    sex:              pi.gender                   || null,
+    civil_status:     pi.civilStatus              || null,
+    nationality:      pi.nationality?.trim()      || '',
+    religion:         pi.religion?.trim()         || '',
+    contactNumber:    pi.contactNumber?.trim()    || '',
+    present_address:  pi.address?.trim()          || '',
+    province_address: pi.provinceAddress?.trim()  || pi.address?.trim() || '',
+    branch:           branch                      || 'Manila', // Backend overrides for students based on email
+    identifier:       identifier?.trim()          || '',
+  };
+
+  const mutation = `
+    mutation CreateInitialPersonalRecord($input: userProfileInitialInput!) {
+      createInitialPersonalRecord(input: $input) {
+        first_name
+        last_name
+        branch
+        identifier
+      }
+    }
+  `;
+
+  try {
+    const result = await sendGraphQLRequest(mutation, { input }, { endpoint: '/profile/patient' });
+    console.log('[EMR Service] Initial profile created:', {
+      name: `${result?.createInitialPersonalRecord?.first_name} ${result?.createInitialPersonalRecord?.last_name}`,
+      branch: result?.createInitialPersonalRecord?.branch,
+      identifier: result?.createInitialPersonalRecord?.identifier,
+    });
+    return result;
+  } catch (error) {
+    console.error('[EMR Service] Failed to create initial profile:', error);
     throw error;
   }
 };
@@ -341,11 +429,16 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    // Both mutations go to /profile/patient — batched into ONE request.
-    // Must complete before ticket creation so the branch is already set.
-    // For revisions: uses updatePatientPersonalRecordLog directly (no create → no 400).
-    console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
-    await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
+    // For new submissions: uses createInitialPersonalRecord which atomically
+    // creates both the personal record log and branch identifier in a single mutation.
+    // For revisions: registerProfileSetup cancels the existing Revision log then
+    // also calls createInitialPersonalRecord (Unverified users only).
+    console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
+    if (isRevision) {
+      await registerProfileSetup(formData.personalInfo?.studentNumber, formData.personalInfo, isRevision);
+    } else {
+      await registerInitialProfile(formData.personalInfo?.studentNumber, formData.personalInfo);
+    }
     profileLogCreated = !isRevision; // only mark for cleanup if a new log was created
 
     // ======== REQUEST 2 (parallel): Resolve ticket + upload dental photos ========
@@ -450,8 +543,10 @@ export const createInitialEmployeeRecord = async (formData) => {
     const results = {};
 
     // ======== REQUEST 1: Profile setup (branch identifier + personal info) ========
-    console.log('[EMR Service] [1/3] Registering branch identifier + personal info (batched)...');
-    await registerProfileSetup(formData.personalInfo?.employeeId, formData.personalInfo, false, { branch: formData.personalInfo?.branch });
+    // Uses the reworked createInitialPersonalRecord which atomically creates both
+    // the personal record log and branch identifier in a single mutation.
+    console.log('[EMR Service] [1/3] Registering profile + branch identifier...');
+    await registerInitialProfile(formData.personalInfo?.employeeId, formData.personalInfo, { branch: formData.personalInfo?.branch });
     profileLogCreated = true;
 
     // ======== REQUEST 2 (parallel): Create ticket + upload dental photos ========
@@ -664,12 +759,14 @@ const buildAllergyRecords = (medicalBackground) => {
 const buildHospitalizationRecords = (medicalBackground) => {
   if (medicalBackground?.hasHospitalization !== 'Yes') return { hospitalizations: [], notes: null };
   const today = new Date().toISOString().split('T')[0];
-  const admissionDate = medicalBackground.hospitalizationDate
-    ? new Date(medicalBackground.hospitalizationDate).toISOString().split('T')[0]
-    : today;
   const hospitalizations = Object.entries(medicalBackground.hospitalizationConditions || {})
     .filter(([, checked]) => checked)
-    .map(([id]) => ({ conditionId: id, admissionDate, dischargeDate: null, notes: medicalBackground.hospitalizationNotes || null }));
+    .map(([id]) => ({
+      conditionId: id,
+      admissionDate: medicalBackground.hospitalizationDates?.[id]?.admissionDate || today,
+      dischargeDate: medicalBackground.hospitalizationDates?.[id]?.dischargeDate || null,
+      notes: medicalBackground.hospitalizationNotes || null
+    }));
   return { hospitalizations, notes: medicalBackground.hospitalizationNotes || null };
 };
 
@@ -680,12 +777,13 @@ const buildHospitalizationRecords = (medicalBackground) => {
 const buildOperationRecords = (medicalBackground) => {
   if (medicalBackground?.hasOperation !== 'Yes') return { operations: [], notes: null };
   const today = new Date().toISOString().split('T')[0];
-  const operationDate = medicalBackground.operationDate
-    ? new Date(medicalBackground.operationDate).toISOString().split('T')[0]
-    : today;
   const operations = Object.entries(medicalBackground.operationConditions || {})
     .filter(([, checked]) => checked)
-    .map(([id]) => ({ procedureId: id, operationDate, notes: medicalBackground.operationNotes || null }));
+    .map(([id]) => ({
+      procedureId: id,
+      operationDate: medicalBackground.operationDates?.[id] || today,
+      notes: medicalBackground.operationNotes || null
+    }));
   return { operations, notes: medicalBackground.operationNotes || null };
 };
 
@@ -714,7 +812,8 @@ const buildImmunizationRecords = (medicalBackground, catalog) => {
     .filter(([, checked]) => checked)
     .flatMap(([id]) => {
       if (!validIds.has(id)) { noteParts.push(id); return []; }
-      return [{ vaccineTypeId: id, immunizationDate: today, doseNumber: 1 }];
+      const date = medicalBackground?.immunizationDates?.[id] || today;
+      return [{ vaccineTypeId: id, immunizationDate: date, doseNumber: 1 }];
     });
   if (medicalBackground?.immunizationOther?.trim()) {
     noteParts.push(`Other: ${medicalBackground.immunizationOther.trim()}`);
@@ -840,6 +939,13 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   // Lifestyle
   inputs.lifestyle = {
     smoker: formData.medicalBackground.smoker === 'yes',
+    vapeUser: formData.medicalBackground.smoker === 'vape',
+    vapeType: formData.medicalBackground.smoker === 'vape' 
+      ? formData.medicalBackground.vapeType || null : null,
+    vapeFrequency: formData.medicalBackground.smoker === 'vape'
+      ? formData.medicalBackground.vapeFrequency || null : null,
+    yearsVaping: formData.medicalBackground.smoker === 'vape'
+      ? (formData.medicalBackground.yearsVaping ? parseInt(formData.medicalBackground.yearsVaping) : null) : null,
     numberOfCigarettesPerDay: formData.medicalBackground.smoker === 'yes'
       ? parseInt(formData.medicalBackground.smokerSticksPerDay) || null : null,
     yearsSmoked: formData.medicalBackground.smoker === 'yes'
@@ -847,6 +953,11 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
     alcoholConsumer: formData.medicalBackground.alcoholDrinker === 'yes',
     frequencyOfAlcoholConsumption: formData.medicalBackground.alcoholDrinker === 'yes'
       ? formData.medicalBackground.alcoholFrequency || null : null,
+    vapeUser: formData.medicalBackground.vaper === 'yes',
+    vapeType: formData.medicalBackground.vaper === 'yes'
+      ? formData.medicalBackground.vapeType || null : null,
+    vapeFrequency: formData.medicalBackground.vaper === 'yes'
+      ? formData.medicalBackground.vapeFrequency || null : null,
     notes: null
   };
 
@@ -1421,30 +1532,37 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const ls           = emr?.lifestyle                        || {};
   const va           = emr?.visualAcuity                     || {};
 
-  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, true]));
-  const hospMap     = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
-  const opsMap      = Object.fromEntries(ops.map(o => [o.procedureId, true]));
-  const medsMap     = Object.fromEntries(meds.map(m => [m.medicineId, true]));
-  const immunMap    = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, true]));
+  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, { checked: true, severity: a.severity || 'Unknown' }]));
+  const hospMap         = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
+  const hospDatesMap    = Object.fromEntries(hosps.map(h => [h.conditionId, {
+    admissionDate: h.admissionDate ? new Date(h.admissionDate).toISOString().split('T')[0] : '',
+    dischargeDate: h.dischargeDate ? new Date(h.dischargeDate).toISOString().split('T')[0] : '',
+  }]));
+  const opsMap          = Object.fromEntries(ops.map(o => [o.procedureId, true]));
+  const opsDatesMap     = Object.fromEntries(ops.map(o => [o.procedureId,
+    o.operationDate ? new Date(o.operationDate).toISOString().split('T')[0] : ''
+  ]));
+  const medsMap         = Object.fromEntries(meds.map(m => [m.medicineId, true]));
+  const immunMap        = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, true]));
+  const immunDatesMap   = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId,
+    i.immunizationDate ? new Date(i.immunizationDate).toISOString().split('T')[0] : ''
+  ]));
 
   const vaNotesStr = va.notes || '';
   const medicalBackground = {
     immunizations:             immunMap,
+    immunizationDates:         immunDatesMap,
     immunizationOther:         '',
     hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
     allergies:                 allergyMap,
     allergyOther:              '',
     hasHospitalization:        hosps.length > 0        ? 'Yes' : 'No',
     hospitalizationConditions: hospMap,
-    hospitalizationDate:       hosps[0]?.admissionDate
-                                 ? new Date(hosps[0].admissionDate).toISOString().split('T')[0]
-                                 : '',
+    hospitalizationDates:      hospDatesMap,
     hospitalizationNotes:      emr?.hospitalizationProfile?.notes || '',
     hasOperation:              ops.length > 0          ? 'Yes' : 'No',
     operationConditions:       opsMap,
-    operationDate:             ops[0]?.operationDate
-                                 ? new Date(ops[0].operationDate).toISOString().split('T')[0]
-                                 : '',
+    operationDates:            opsDatesMap,
     operationNotes:            emr?.operationProfile?.notes || '',
     hasMedications:            meds.length > 0         ? 'Yes' : 'No',
     selectedMedications:       medsMap,
@@ -1457,7 +1575,10 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
                                  ? String(ls.yearsSmoked) : '',
     alcoholDrinker:            ls.alcoholConsumer ? 'yes' : 'no',
     alcoholFrequency:          ls.frequencyOfAlcoholConsumption || '',
-    eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes'),
+    vaper:                     ls.vapeUser ? 'yes' : 'no',
+    vapeType:                  ls.vapeType || '',
+    vapeFrequency:             ls.vapeFrequency || '',
+    eyeglasses:                vaNotesStr.includes('Eyeglasses: Yes') || !!(va.acuity?.right_eye || va.acuity?.left_eye),
     contactLenses:             vaNotesStr.includes('Contact Lenses: Yes'),
     gradeOD:                   va.acuity?.right_eye    || '',
     gradeOS:                   va.acuity?.left_eye     || '',
@@ -1470,7 +1591,10 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const dh        = emr?.dentalHistory || {};
   const oaProfile = emr?.oralAppliance || {};
   const appliances = oaProfile.appliances || [];
-  const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, true]));
+  const applianceMap = Object.fromEntries(appliances.map(a => [a.tagId, { checked: true, arch: a.arch || '' }]));
+
+  const dpProcedures = emr?.dentalProcedureProfile?.procedures || [];
+  const selectedDentalProcedures = Object.fromEntries(dpProcedures.map(p => [p.procedureTypeId, true]));
 
   const dentalHistory = {
     // seenByDentist=true means patient has been seen before → firstTimeDentist='no'
@@ -1484,6 +1608,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     hasIntraOralAppliance: appliances.length > 0 ? 'yes' : 'no',
     intraOralAppliances:   applianceMap,
     applianceLocation:     appliances[0]?.arch || '',
+    selectedDentalProcedures,
     toothExtraction:       '',   // never persisted to backend
     dentalFilling:         '',   // never persisted to backend
     upperTeethPhoto:       null, // files must be re-uploaded
@@ -1534,7 +1659,8 @@ export const fetchRevisionPrefill = async () => {
           date_of_birth sex civil_status nationality religion
           contactNumber present_address province_address
         }
-        branchId: getBranchIdentifier {
+        branchId: getPersonalRecord {
+          branch
           identifier
         }
       }`,
@@ -1558,11 +1684,11 @@ export const fetchRevisionPrefill = async () => {
           notes
         }
         allergyProfile: getAllergyProfile {
-          allergies { allergenCatalogId status }
+          allergies { allergenCatalogId status severity }
           notes
         }
         hospitalizationProfile: getHospitalizationProfile {
-          hospitalizations { conditionId admissionDate notes }
+          hospitalizations { conditionId admissionDate dischargeDate notes }
           notes
         }
         operationProfile: getOperationProfile {
@@ -1574,12 +1700,13 @@ export const fetchRevisionPrefill = async () => {
           notes
         }
         immunizationProfile: getImmunizationProfile {
-          immunizations { vaccineTypeId }
+          immunizations { vaccineTypeId immunizationDate }
           notes
         }
         lifestyle: getLifestyle {
           smoker numberOfCigarettesPerDay yearsSmoked
           alcoholConsumer frequencyOfAlcoholConsumption
+          vapeUser vapeType vapeFrequency
         }
         visualAcuity: getVisualAcuityProfile {
           notes
@@ -1587,6 +1714,12 @@ export const fetchRevisionPrefill = async () => {
         }
         dentalHistory: getDentalHistory {
           seenByDentist lastDentalCleaning lastVisitDate
+        }
+        dentalProcedureProfile: getDentalProcedureProfile {
+          procedures { procedureTypeId }
+        }
+        dentalPhotoRecord: getDentalPhotoRecord {
+          upperTeeth lowerTeeth
         }
         oralAppliance: getOralApplianceProfile {
           appliances { tagId arch }
@@ -1621,14 +1754,77 @@ export const fetchRevisionPrefill = async () => {
   }
 
   const mapped = mapRevisionDataToFormData(profileData, emrData);
+
+  // Fetch previously submitted dental photos.
+  // Store them as { file, preview } so uploadMediaFile() can re-stage the photo
+  // via the normal flow — passing a permanent UUID directly to createDentalPhotoRecord
+  // would fail because the backend expects a staged file UUID.
+  const dentalPhotoRecord = emrData?.dentalPhotoRecord;
+  if (dentalPhotoRecord?.upperTeeth) {
+    try {
+      const result = await fetchDentalPhotoAsBlob(dentalPhotoRecord.upperTeeth, 'upper-teeth');
+      if (result) {
+        mapped.dentalHistory.upperTeethPhoto = {
+          file: result.file,
+          preview: result.preview,
+          name: 'Upper Teeth (previous submission)',
+        };
+      }
+    } catch (err) {
+      console.warn('[EMR Service] Could not fetch upper teeth photo preview:', err.message);
+    }
+  }
+  if (dentalPhotoRecord?.lowerTeeth) {
+    try {
+      const result = await fetchDentalPhotoAsBlob(dentalPhotoRecord.lowerTeeth, 'lower-teeth');
+      if (result) {
+        mapped.dentalHistory.lowerTeethPhoto = {
+          file: result.file,
+          preview: result.preview,
+          name: 'Lower Teeth (previous submission)',
+        };
+      }
+    } catch (err) {
+      console.warn('[EMR Service] Could not fetch lower teeth photo preview:', err.message);
+    }
+  }
+
   console.log('[EMR Service] Revision pre-fill data mapped successfully');
   return mapped;
 };
 
+/**
+ * Fetch a dental photo from the backend and return a File + preview URL.
+ * The File is used by uploadMediaFile() to re-stage the photo so the normal
+ * stage → createDentalPhotoRecord flow works correctly on revision submission.
+ *
+ * @param {string} fileId - UUID from DentalPhotoRecord.upperTeeth / lowerTeeth
+ * @param {string} label  - Human-readable label used as the file name
+ * @returns {Promise<{file: File, preview: string}|null>}
+ */
+const fetchDentalPhotoAsBlob = async (fileId, label = 'teeth') => {
+  if (!fileId) return null;
+  try {
+    const response = await axiosRequest({
+      method: 'GET',
+      url: `/media/record/dentalPhoto/${fileId}`,
+      responseType: 'blob',
+    });
+    const blob = response.data;
+    const ext = blob.type?.split('/')[1] || 'jpg';
+    const file = new File([blob], `${label}.${ext}`, { type: blob.type || 'image/jpeg' });
+    const preview = URL.createObjectURL(blob);
+    return { file, preview };
+  } catch (err) {
+    console.warn('[EMR Service] fetchDentalPhotoAsBlob failed:', err.message);
+    return null;
+  }
+};
+
 export const getMyBranchIdentifier = async () => {
   const query = `
-    query GetBranchIdentifier {
-      getBranchIdentifier {
+    query GetMyBranchIdentifier {
+      getPersonalRecord {
         branch
         identifier
       }
@@ -1636,7 +1832,9 @@ export const getMyBranchIdentifier = async () => {
   `;
   try {
     const data = await sendGraphQLRequest(query, {}, { endpoint: '/profile/patient' });
-    return data?.getBranchIdentifier || null;
+    const record = data?.getPersonalRecord;
+    if (!record) return null;
+    return { branch: record.branch ?? null, identifier: record.identifier ?? null };
   } catch (error) {
     console.warn('[EMR Service] Could not fetch branch identifier:', error.message);
     return null;
@@ -1674,70 +1872,52 @@ const _extractEmergencyContactNumber = (contact) => {
 export const getPatientProfile = async () => {
   if (_patientProfileCache) return _patientProfileCache;
 
-  const profileData = await sendGraphQLRequest(
-    `query GetPatientProfileData {
-      personalLog: getPersonalRecordLog {
-        id
-        first_name middle_name last_name suffix
-        contactNumber
-      }
-      personalRecord: getPersonalRecord {
-        id
-      }
-      personalLogStatus: getPersonalRecordLogStatus
-      loginEmail: getLoginEmail
-      branchId: getBranchIdentifier {
-        identifier
-      }
-    }`,
-    {},
-    { endpoint: '/profile/patient' }
-  ).catch((error) => {
-    console.warn('[EMR Service] Could not fetch patient profile data:', error.message);
-    return {};
-  });
-
-  const log = profileData?.personalLog || {};
-  const activeStatuses = new Set(['InProgress', 'Pending', 'Revision', 'Approved']);
-  const hasActiveProfile = activeStatuses.has(profileData?.personalLogStatus);
-
-  let emergencyData = null;
-
-  if (hasActiveProfile) {
-    emergencyData = await sendGraphQLRequest(
+  const [profileResult, emergencyResult] = await Promise.allSettled([
+    sendGraphQLRequest(
+      `query GetPatientProfileData {
+        personalLog: getPersonalRecordLog {
+          id
+          first_name middle_name last_name suffix
+          contactNumber
+        }
+        personalRecord: getPersonalRecord {
+          id
+          identifier
+        }
+        personalLogStatus: getPersonalRecordLogStatus
+        loginEmail: getLoginEmail
+      }`,
+      {},
+      { endpoint: '/profile/patient' }
+    ),
+    sendGraphQLRequest(
       `query GetEmergencyContact {
-        emergencyContact: getEmergencyContact {
+        emergencyContact: getEmergencyContact(approved: true) {
           firstContact { contactNumber }
           secondContact { contactNumber }
         }
       }`,
       {}
-    ).catch((error) => {
-      console.warn('[EMR Service] Active emergency contact fetch failed:', error.message);
-      return null;
-    });
+    ),
+  ]);
+
+  const profileData = profileResult.status === 'fulfilled'
+    ? profileResult.value
+    : (profileResult.reason?.data || {});
+
+  if (profileResult.status === 'rejected') {
+    console.warn('[EMR Service] Could not fetch patient profile data:', profileResult.reason?.message);
   }
 
-  // Fallback path for users without an active profile: request latest available
-  // emergency contact by user ID when available.
-  if (!emergencyData) {
-    const userId = profileData?.personalRecord?.id || profileData?.personalLog?.id || null;
+  const emergencyData = emergencyResult.status === 'fulfilled'
+    ? emergencyResult.value
+    : null;
 
-    if (userId) {
-      emergencyData = await sendGraphQLRequest(
-        `query GetLatestEmergencyContact($userId: ID!, $offset: Int, $limit: Int) {
-          emergencyContacts: getUserEmergencyContact(userId: $userId, offset: $offset, limit: $limit) {
-            firstContact { contactNumber }
-            secondContact { contactNumber }
-          }
-        }`,
-        { userId, offset: 0, limit: 1 }
-      ).catch((error) => {
-        console.warn('[EMR Service] Fallback emergency contact fetch failed:', error.message);
-        return null;
-      });
-    }
+  if (emergencyResult.status === 'rejected') {
+    console.warn('[EMR Service] Active emergency contact fetch failed:', emergencyResult.reason?.message);
   }
+
+  const log = profileData?.personalLog || {};
 
   const latestEmergency = emergencyData?.emergencyContact
     || (Array.isArray(emergencyData?.emergencyContacts) ? emergencyData.emergencyContacts[0] : null)
@@ -1751,7 +1931,7 @@ export const getPatientProfile = async () => {
     contactNumber: log.contactNumber || null,
     firstEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.firstContact),
     secondEmergencyContactNumber: _extractEmergencyContactNumber(latestEmergency?.secondContact),
-    identifier: profileData?.branchId?.identifier || null,
+    identifier: profileData?.personalRecord?.identifier || null,
   };
 
   return _patientProfileCache;

@@ -1,9 +1,158 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { Paperclip, X, File, Image, Film, Loader2 } from 'lucide-react';
 import { uploadFile, unstageFile, getFileUrl } from '../health-chat-service';
 
-const ACCEPTED_TYPES = 'image/jpeg,image/png,application/pdf,video/mp4,video/quicktime';
+const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime';
+const ACCEPTED_MIME_LIST = ACCEPTED_TYPES.split(',');
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+/**
+ * Stage a raw File object — shared by file picker and clipboard paste.
+ */
+const stageFileObject = async (file, onFileStaged, setIsUploading) => {
+  if (!ACCEPTED_MIME_LIST.includes(file.type)) {
+    alert('Unsupported file type.');
+    return;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    alert('File too large. Maximum size is 10MB.');
+    return;
+  }
+  try {
+    setIsUploading(true);
+    const fileId = await uploadFile(file);
+    onFileStaged?.({ fileId, fileName: file.name, fileType: file.type, fileSize: file.size });
+  } catch (error) {
+    console.error('[FileAttachment] Upload failed:', error);
+    alert('Failed to upload file. Please try again.');
+  } finally {
+    setIsUploading(false);
+  }
+};
+
+// Maps common image file extensions to MIME types.
+// Used to resolve files copied from Windows File Explorer where item.type is often empty.
+const EXT_TO_MIME = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp',
+};
+
+/** Detect image MIME type from magic bytes (first 12 bytes of the file). */
+const detectMimeFromBytes = (bytes) => {
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'image/jpeg';
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image/png';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif';
+  if (bytes[0] === 0x42 && bytes[1] === 0x4D) return 'image/bmp';
+  // WebP: RIFF????WEBP
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+  return null;
+};
+
+/**
+ * Resolve a DataTransferItem to a typed image File.
+ * Strategy: item.type → filename extension → magic bytes (async).
+ * Returns a Promise<File|null>.
+ */
+const resolveClipboardImageFile = (item) => {
+  if (item.kind !== 'file') return Promise.resolve(null);
+  const raw = item.getAsFile();
+  if (!raw) return Promise.resolve(null);
+
+  // Already typed
+  if (raw.type.startsWith('image/')) return Promise.resolve(raw);
+
+  // Extension fallback (Windows File Explorer)
+  const ext = raw.name.split('.').pop()?.toLowerCase();
+  const mimeFromExt = EXT_TO_MIME[ext];
+  if (mimeFromExt) return Promise.resolve(new File([raw], raw.name || `paste.${ext}`, { type: mimeFromExt }));
+
+  // Magic bytes fallback (screenshots / web-copy where name is '')
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const bytes = new Uint8Array(ev.target.result);
+      const mime = detectMimeFromBytes(bytes);
+      if (mime) {
+        const detectedExt = mime.split('/')[1];
+        resolve(new File([raw], `paste.${detectedExt}`, { type: mime }));
+      } else {
+        resolve(null);
+      }
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsArrayBuffer(raw.slice(0, 12));
+  });
+};
+
+/**
+ * Hook: attach to a textarea/input onPaste to intercept clipboard images.
+ * Returns an onPaste handler that uploads pasted images as staged files.
+ */
+export const useClipboardPaste = ({ onFileStaged, disabled }) => {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handlePaste = useCallback((e) => {
+    if (disabled || isUploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    // First pass: look for a direct image file blob in the clipboard.
+    // resolveClipboardImageFile handles typed items, extension fallback, and magic-bytes detection.
+    for (const item of items) {
+      if (item.kind !== 'file') continue;
+      e.preventDefault(); // Prevent text insertion eagerly before async resolution
+      resolveClipboardImageFile(item).then((file) => {
+        if (!file) return;
+        const ext = file.type.split('/')[1] || 'png';
+        const named = new File([file], `paste-${Date.now()}.${ext}`, { type: file.type });
+        stageFileObject(named, onFileStaged, setIsUploading);
+      });
+      return;
+    }
+
+    // Second pass: extract image from HTML clipboard content (e.g. copy from browser page)
+    const html = e.clipboardData.getData('text/html');
+    if (html) {
+      const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+      if (match) {
+        const src = match[1];
+        if (src.startsWith('data:image/')) {
+          e.preventDefault();
+          const [header, base64] = src.split(',');
+          const mimeMatch = header.match(/data:([^;]+);/);
+          const mime = mimeMatch?.[1] || 'image/png';
+          if (ACCEPTED_MIME_LIST.includes(mime)) {
+            const byteString = atob(base64);
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+            const ext = mime.split('/')[1] || 'png';
+            const file = new File([new Blob([ab], { type: mime })], `paste-${Date.now()}.${ext}`, { type: mime });
+            stageFileObject(file, onFileStaged, setIsUploading);
+          }
+        } else if (src.startsWith('https://') || src.startsWith('http://')) {
+          e.preventDefault();
+          (async () => {
+            try {
+              const resp = await fetch(src);
+              const blob = await resp.blob();
+              if (blob.type.startsWith('image/') && ACCEPTED_MIME_LIST.includes(blob.type)) {
+                const ext = blob.type.split('/')[1] || 'png';
+                const file = new File([blob], `paste-${Date.now()}.${ext}`, { type: blob.type });
+                stageFileObject(file, onFileStaged, setIsUploading);
+              }
+            } catch {
+              // CORS or network error — silently ignore
+            }
+          })();
+        }
+      }
+    }
+  }, [disabled, isUploading, onFileStaged]);
+
+  return { handlePaste, isUploadingFromClipboard: isUploading };
+};
 
 /**
  * File attachment button with upload functionality
@@ -15,31 +164,8 @@ export const FileAttachButton = ({ onFileStaged, disabled }) => {
   const handleChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    // Reset input
     e.target.value = '';
-
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      alert('File too large. Maximum size is 10MB.');
-      return;
-    }
-
-    try {
-      setIsUploading(true);
-      const fileId = await uploadFile(file);
-      onFileStaged?.({
-        fileId,
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size
-      });
-    } catch (error) {
-      console.error('[FileAttachment] Upload failed:', error);
-      alert('Failed to upload file. Please try again.');
-    } finally {
-      setIsUploading(false);
-    }
+    await stageFileObject(file, onFileStaged, setIsUploading);
   };
 
   return (
@@ -184,15 +310,12 @@ export const FileMessageBubble = ({ fileId, fileName, isPatient, timestamp, form
       )}
 
       {!isImage && !isPdf && !isVideo && (
-        <a
-          href={fileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <div
           className={`flex items-center gap-2 p-3 ${isPatient ? 'text-white' : 'text-neutral-700 dark:text-neutral-300'}`}
         >
           <File className="w-6 h-6" />
-          <span className="text-sm">Download Attachment</span>
-        </a>
+          <span className="text-sm">View Attachment</span>
+        </div>
       )}
 
       {timestamp && (

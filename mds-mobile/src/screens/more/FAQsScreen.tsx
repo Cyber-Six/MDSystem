@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useTheme, colors } from '../../context/ThemeContext';
 
 const FAQ_DATA = [
@@ -20,8 +20,8 @@ const FAQ_DATA = [
     a: 'Navigate to the Appointments tab, select an appointment type, choose your preferred date and session, then submit your request.',
   },
   {
-    q: 'How does the AI Consultation work?',
-    a: 'The AI Consultation provides general health information through a chat interface. It does not replace professional medical advice. Type your health question and the AI will respond in real-time.',
+    q: 'How does Health Chat work?',
+    a: 'Health Chat connects you directly with our medical team. Create a consultation ticket describing your concern, and a staff member will join the chat to assist you.',
   },
   {
     q: 'How do I request medicine?',
@@ -54,9 +54,8 @@ export const FAQsScreen: React.FC = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <SafeAreaView
+    <View
       style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
-      edges={['top']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={[styles.headerBanner, { backgroundColor: colors.accent[500] }]}>
@@ -120,7 +119,7 @@ export const FAQsScreen: React.FC = () => {
           );
         })}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 

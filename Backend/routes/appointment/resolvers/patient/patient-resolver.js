@@ -25,6 +25,10 @@ const Query = {
     return await Wrapper.Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
   },
 
+  listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
+    return await Wrapper.Query._listMonthAvailability(_, { schedulerId, startDate, endDate }, { user, res });
+  },
+
   listAppointmentRequirements: async (_, { schedulerId, offset, limit }, { user, res }) => {
     return await Wrapper.Query._listAllAppointmentRequirements(_, { schedulerId, offset, limit, isActive: true }, { user, res });
   },
@@ -36,14 +40,14 @@ const Query = {
 };
 
 const Mutation = {
-  submitAppointment: async (_, { schedulerId, date, session, requirements }, { user, res }) => {
+  submitAppointment: async (_, { schedulerId, date, session, requirements, purpose }, { user, res }) => {
     const userStatus = await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res });
 
     if (userStatus && ["Pending", "Scheduled", "InProgress"].includes(userStatus)) {
       throwGraphQLError(res).message("User already has an active appointment").status(400).throw();
     }
 
-    const result = await Wrapper.Mutation._submitAppointment(_, { schedulerId, date, session, requirements }, { user, res });
+    const result = await Wrapper.Mutation._submitAppointment(_, { schedulerId, date, session, requirements, purpose }, { user, res });
 
     // Notify medical staff in the target branch room for real-time queue visibility.
     try {

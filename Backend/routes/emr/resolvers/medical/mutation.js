@@ -29,7 +29,7 @@ const Mutation = {
     // Update the ticket
     const updateResult = await Wrapper._StaffUpdateTicket(
       _,
-      { args, recordId: record.id },
+      { args, recordId: record.id, scope: record.scope },
       { user, res }
     );
 
@@ -294,7 +294,11 @@ const Mutation = {
     return result;
   },
 
+  // MOVED TO /staff/emr
+  // These mutations are now handled by the staff EMR endpoint at /staff/emr
+  // See Backend/routes/staff/emr/mutation.js
 
+  /*
   updateDentalRecord: async (_, args, { user, res }) => { // only available for medical scope
     const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_set_dental_record, args.userId);
     if (!isPermitted) {
@@ -303,7 +307,30 @@ const Mutation = {
       }
 
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
-    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+
+    if (record.scope === "Medical") {
+      logger.warn(`User ${user.id} attempted to update DentalRecord on a Medical-scoped ticket ${record.id}`);
+      throwGraphQLError(res)
+        .status(403)
+        .message("Forbidden: This update ticket is for Medical records. DentalRecord updates are not allowed.")
+        .throw();
+    }
+
+    if (record.status !== "Approved") {
+      throwGraphQLError(res)
+        .status(403)
+        .message("Forbidden: This update ticket is not yet approved.")
+        .throw();
+    }
+
+    if (record.dentalRecordId) {
+      logger.warn(`User ${user.id} attempted to update DentalRecord on ticket ${record.id} which already has a DentalRecord (ID: ${record.dentalRecordId})`);
+      throwGraphQLError(res)
+        .status(403)
+        .message("Forbidden: A DentalRecord has already been created for this update ticket.")
+        .throw();
+    }
+
     console.log(args.input);
 
     const result = await Wrapper._DentalRecord(_, {args, recordId: record.id}, { user, res });
@@ -318,15 +345,25 @@ const Mutation = {
       }
 
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
+
+    if (record.vitalSignsId) {
+      logger.warn(`User ${user.id} attempted to update VitalSigns on ticket ${record.id} which already has VitalSigns (ID: ${record.vitalSignsId})`);
+      throwGraphQLError(res)
+        .status(403)
+        .message("Forbidden: VitalSigns have already been created for this update ticket.")
+        .throw();
+    }
+
     assertActiveUpdateTicket(record, res, allowedScope="Medical");
     console.log(args.input);
 
     const result = await Wrapper._VitalSigns(_, {args, recordId: record.id}, { user, res });
     return result;
   },
+  */
 
   // Catalog mutations
-  
+
   createDomainCatalogs: async (_, args, { user, res }) => {
     const record = await Query.getUserUpdateTicket(_, args, { user, res });
     assertActiveUpdateTicket(record, res, allowedScope="Both");
@@ -397,6 +434,100 @@ const Mutation = {
 
     const result = await Wrapper._UpdateOralApplianceCatalog(_, args, { user, res });
     return result;
+  },
+
+  // Link existing VitalSigns to update ticket
+  linkVitalSignsToTicket: async (_, { userId, vitalSignsId }, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit, userId);
+    if (!isPermitted) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to link VitalSigns to ticket`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Get the active update ticket for the user
+    const record = await Query.getUserUpdateTicket(_, { userId }, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Medical");
+
+    // Verify VitalSigns exists and belongs to this user
+    const vsCheck = await db.query(
+      `SELECT id, "userId" FROM "VitalSigns" WHERE id = $1;`,
+      [vitalSignsId]
+    );
+
+    if (vsCheck.rows.length === 0) {
+      throwGraphQLError(res).status(404).message("VitalSigns not found.").throw();
+    }
+
+    if (vsCheck.rows[0].userId !== parseInt(userId)) {
+      throwGraphQLError(res)
+        .status(403)
+        .message("VitalSigns does not belong to this patient.")
+        .throw();
+    }
+
+    // Check if ticket already has VitalSigns linked
+    if (record.vitalSignsId) {
+      throwGraphQLError(res)
+        .status(403)
+        .message("This update ticket already has VitalSigns linked.")
+        .throw();
+    }
+
+    // Link VitalSigns to the ticket
+    await db.query(
+      `UPDATE "patientUpdateLog" SET "vitalSignsId" = $1 WHERE id = $2;`,
+      [vitalSignsId, record.id]
+    );
+
+    logger.info(`Staff ${user.id} linked VitalSigns ${vitalSignsId} to ticket ${record.id}`);
+    return true;
+  },
+
+  // Link existing DentalRecord to update ticket
+  linkDentalRecordToTicket: async (_, { userId, dentalRecordId }, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit, userId);
+    if (!isPermitted) {
+      logger.warn(`Unauthorized access attempt by staff ${user.id} to link DentalRecord to ticket`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Get the active update ticket for the user
+    const record = await Query.getUserUpdateTicket(_, { userId }, { user, res });
+    assertActiveUpdateTicket(record, res, allowedScope="Dental");
+
+    // Verify DentalRecord exists and belongs to this user
+    const drCheck = await db.query(
+      `SELECT id, "userId" FROM "DentalRecord" WHERE id = $1;`,
+      [dentalRecordId]
+    );
+
+    if (drCheck.rows.length === 0) {
+      throwGraphQLError(res).status(404).message("DentalRecord not found.").throw();
+    }
+
+    if (drCheck.rows[0].userId !== parseInt(userId)) {
+      throwGraphQLError(res)
+        .status(403)
+        .message("DentalRecord does not belong to this patient.")
+        .throw();
+    }
+
+    // Check if ticket already has DentalRecord linked
+    if (record.dentalRecordId) {
+      throwGraphQLError(res)
+        .status(403)
+        .message("This update ticket already has a DentalRecord linked.")
+        .throw();
+    }
+
+    // Link DentalRecord to the ticket
+    await db.query(
+      `UPDATE "patientUpdateLog" SET "dentalRecordId" = $1 WHERE id = $2;`,
+      [dentalRecordId, record.id]
+    );
+
+    logger.info(`Staff ${user.id} linked DentalRecord ${dentalRecordId} to ticket ${record.id}`);
+    return true;
   },
 };
 

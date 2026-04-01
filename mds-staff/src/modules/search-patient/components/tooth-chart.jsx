@@ -110,7 +110,7 @@ function LegendPalette({ selectedLegend, onSelectLegend, compact = false }) {
 
 /* ─── Chart Stats Component ────────────────────────────────────── */
 function ChartStats({ toothStates }) {
-  const markedCount = Object.keys(toothStates).length;
+  const markedCount = Object.values(toothStates).filter(s => s !== '✓').length;
   const getCategoryCount = (code) => Object.values(toothStates).filter(s => s === code).length;
 
   const stats = [
@@ -159,72 +159,59 @@ function initializeDefaultStates(initialStates) {
 /* ─── Main ToothChart Component ────────────────────────────────── */
 export default function ToothChart({
   initialStates = {},
-  onSave,
-  patientId,
-  readOnly = false
+  isEditing = false,
+  onStateChange,
 }) {
   const [toothStates, setToothStates] = useState(() => initializeDefaultStates(initialStates));
   const [selectedLegend, setSelectedLegend] = useState(null);
   const [hoveredTooth, setHoveredTooth] = useState(null);
   const [previousState, setPreviousState] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [showLegendPanel, setShowLegendPanel] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setToothStates(initializeDefaultStates(initialStates));
   }, [initialStates]);
+
+  // Reset palette selection when editing stops
+  useEffect(() => {
+    if (!isEditing) {
+      setSelectedLegend(null);
+      setPreviousState(null);
+    }
+  }, [isEditing]);
+
+  const updateStates = (newStates) => {
+    setToothStates(newStates);
+    if (onStateChange) onStateChange(newStates);
+  };
 
   const handleToothClick = (toothNumber) => {
     if (!selectedLegend || !isEditing) return;
 
     setPreviousState({ ...toothStates });
 
-    // Toggle off if same legend is already applied
+    // Toggle off (same legend) → revert to Caries-free (default)
     if (toothStates[toothNumber] === selectedLegend) {
-      const newStates = { ...toothStates };
-      delete newStates[toothNumber];
-      setToothStates(newStates);
+      updateStates({ ...toothStates, [toothNumber]: '✓' });
     } else {
-      setToothStates({ ...toothStates, [toothNumber]: selectedLegend });
+      updateStates({ ...toothStates, [toothNumber]: selectedLegend });
     }
   };
 
   const handleUndo = () => {
     if (previousState) {
-      setToothStates(previousState);
+      updateStates(previousState);
       setPreviousState(null);
     }
   };
 
   const handleReset = () => {
-    if (Object.keys(toothStates).length === 0) return;
+    const hasConditions = Object.values(toothStates).some(s => s !== '✓');
+    if (!hasConditions) return;
     if (confirm('Reset all teeth to Caries-free?')) {
       setPreviousState({ ...toothStates });
-      setToothStates(initializeDefaultStates({}));
+      updateStates(initializeDefaultStates({}));
     }
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      if (onSave) {
-        await onSave(toothStates);
-      }
-      setIsEditing(false);
-      setPreviousState(null);
-    } catch (error) {
-      console.error('Failed to save tooth chart:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setToothStates(initializeDefaultStates(initialStates));
-    setIsEditing(false);
-    setSelectedLegend(null);
-    setPreviousState(null);
   };
 
   const renderJaw = (jawData, label) => (
@@ -270,77 +257,42 @@ export default function ToothChart({
 
   return (
     <div className="space-y-4">
-      {/* Header with controls */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          {isEditing && selectedLegend && (
-            <div className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getLegend(selectedLegend)?.color} ${getLegend(selectedLegend)?.textColor}`}>
-              {selectedLegend} - {getLegend(selectedLegend)?.label}
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {!readOnly && !isEditing && (
+      {/* Header with selected legend indicator + undo/reset when editing */}
+      {isEditing && (
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            {selectedLegend && (
+              <div className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getLegend(selectedLegend)?.color} ${getLegend(selectedLegend)?.textColor}`}>
+                {selectedLegend} — {getLegend(selectedLegend)?.label}
+              </div>
+            )}
+            {!selectedLegend && (
+              <span className="text-xs text-neutral-400 dark:text-neutral-500 italic">Select a legend to mark teeth</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => setIsEditing(true)}
-              className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md transition-colors flex items-center gap-1.5"
+              onClick={handleUndo}
+              disabled={!previousState}
+              className="p-1.5 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded disabled:opacity-40"
+              title="Undo last change"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
               </svg>
-              Edit Chart
             </button>
-          )}
-
-          {isEditing && (
-            <>
-              <button
-                onClick={handleUndo}
-                disabled={!previousState}
-                className="p-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded disabled:opacity-40"
-                title="Undo"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                </svg>
-              </button>
-              <button
-                onClick={handleReset}
-                className="p-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded"
-                title="Reset"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-              <button
-                onClick={handleCancel}
-                className="px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="px-3 py-1.5 text-xs font-medium bg-success-500 hover:bg-success-600 text-white rounded-md transition-colors disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {isSaving ? (
-                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-                Save
-              </button>
-            </>
-          )}
+            <button
+              onClick={handleReset}
+              className="p-1.5 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded"
+              title="Reset all to Caries-free"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Legend Palette (when editing) */}
       {isEditing && (
@@ -374,11 +326,9 @@ export default function ToothChart({
       </div>
 
       {/* Stats */}
-      {Object.keys(toothStates).length > 0 && (
-        <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
-          <ChartStats toothStates={toothStates} />
-        </div>
-      )}
+      <div className="pt-4 border-t border-neutral-200 dark:border-neutral-700">
+        <ChartStats toothStates={toothStates} />
+      </div>
     </div>
   );
 }

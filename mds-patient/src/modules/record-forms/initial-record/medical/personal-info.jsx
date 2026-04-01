@@ -8,8 +8,28 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
     onChange({ ...data, [field]: value });
   };
 
-  // Strip any character that is not a digit, +, -, space, or parenthesis
-  const filterPhone = (val) => val.replace(/[^\d+\-\s()]/g, '');
+  const [phoneWarnings, setPhoneWarnings] = React.useState({});
+
+  // Strip non-phone chars and enforce a maximum of 11 digits
+  const handlePhone = (fieldKey, rawVal) => {
+    const filtered = rawVal.replace(/[^\d+\-\s()]/g, '');
+    const digits = filtered.replace(/\D/g, '');
+    if (digits.length > 11) {
+      let digitCount = 0;
+      let result = '';
+      for (const char of filtered) {
+        if (/\d/.test(char)) {
+          if (digitCount >= 11) break;
+          digitCount++;
+        }
+        result += char;
+      }
+      setPhoneWarnings(prev => ({ ...prev, [fieldKey]: true }));
+      return result;
+    }
+    setPhoneWarnings(prev => ({ ...prev, [fieldKey]: false }));
+    return filtered;
+  };
   // Strip any character that is not alphanumeric or a dash
   const filterStudentNumber = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
 
@@ -120,6 +140,12 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             placeholder="Enter middle name"
           />
           <Input
+            label="Suffix"
+            value={data.suffix || ''}
+            onChange={(e) => handleChange('suffix', e.target.value)}
+            placeholder="e.g., Jr., Sr., III"
+          />
+          <Input
             label="Birthday"
             type="date"
             required
@@ -176,10 +202,12 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             label="Personal Contact Number"
             type="tel"
             required
+            reserveErrorSpace
             value={data.contactNumber || ''}
-            onChange={(e) => handleChange('contactNumber', filterPhone(e.target.value))}
-            placeholder="+63 XXX XXX XXXX"
-            error={fieldErrors.contactNumber}
+            onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
+            placeholder="09XXXXXXXXX"
+            className="mb-0"
+            error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
           />
         </div>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -305,7 +333,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
 
       {/* ── Emergency Contacts Card ── */}
       <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex flex-wrap items-center gap-2">
+        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-3 flex flex-wrap items-center gap-2">
           <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-error-100 text-error-600 shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -316,11 +344,11 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
         </h3>
         {[0, 1].map((index) => (
           <div key={index} className={`${index === 0 ? 'mb-6 pb-6 border-b border-neutral-200' : ''}`}>
-            <h4 className="text-sm font-semibold text-secondary-600 mb-4 flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-secondary-600 mb-2 flex items-center gap-2">
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-secondary-200 text-secondary-700 text-xs font-bold">{index + 1}</span>
               Contact Person {index + 1}
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <Input
                 label="Name"
                 required
@@ -341,13 +369,14 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
                 label="Contact Number"
                 type="tel"
                 required
+                reserveErrorSpace
                 value={data.emergencyContacts[index]?.contactNumber || ''}
-                onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', filterPhone(e.target.value))}
-                placeholder="+63 XXX XXX XXXX"
-                error={index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber}
+                onChange={(e) => handleEmergencyContactChange(index, 'contactNumber', handlePhone(`ec${index}`, e.target.value))}
+                placeholder="09XXXXXXXXX"
+                error={phoneWarnings[`ec${index}`] ? 'Contact number cannot exceed 11 digits.' : (index === 0 ? fieldErrors.emergencyContact1ContactNumber : fieldErrors.emergencyContact2ContactNumber)}
               />
             </div>
-            <div className="mt-4">
+            <div className="mt-2">
               <Input
                 label="Address"
                 required

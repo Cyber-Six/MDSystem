@@ -1,34 +1,83 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { AnnouncementCarousel } from '../anouncement';
+import { fetchDashboardStats } from './dashboard-service';
+
+const DEFAULT_STATS = {
+  pendingRequests: 0,
+  pendingBreakdown: { emr: 0, appointments: 0, medicine: 0 },
+  todayAppointments: 0,
+  todayRemaining: 0,
+  activeConsultations: 0,
+  lowStockItems: 0,
+};
+
+const normalizeStats = (incoming) => {
+  const source = incoming && typeof incoming === 'object' ? incoming : {};
+  const breakdown = source.pendingBreakdown && typeof source.pendingBreakdown === 'object'
+    ? source.pendingBreakdown
+    : {};
+
+  return {
+    pendingRequests: Number(source.pendingRequests) || 0,
+    pendingBreakdown: {
+      emr: Number(breakdown.emr) || 0,
+      appointments: Number(breakdown.appointments) || 0,
+      medicine: Number(breakdown.medicine) || 0,
+    },
+    todayAppointments: Number(source.todayAppointments) || 0,
+    todayRemaining: Number(source.todayRemaining) || 0,
+    activeConsultations: Number(source.activeConsultations) || 0,
+    lowStockItems: Number(source.lowStockItems) || 0,
+  };
+};
 
 /**
  * Staff Dashboard Home Page
- * Overview of key metrics and quick actions
+ * Dynamically fetches and displays key metrics, recent patients, and pending requests.
  */
 const StaffDashboard = () => {
-  // TODO: Load all stats from API
-  const stats = [
-    { label: 'Pending Requests', value: 0, change: '—', color: 'warning', icon: 'pending' },
-    { label: "Today's Appointments", value: 0, change: '0 remaining', color: 'accent', icon: 'calendar', link: '/appointments' },
-    { label: 'Active Consultations', value: 0, change: '—', color: 'success', icon: 'chat' },
-    { label: 'Low Stock Items', value: 0, change: '—', color: 'error', icon: 'alert' },
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [stats, setStats] = useState(DEFAULT_STATS);
+  const [tomorrowAvailability, setTomorrowAvailability] = useState({});
+  const [recentPatients, setRecentPatients] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await fetchDashboardStats();
+      setStats(normalizeStats(data?.stats));
+      setTomorrowAvailability(data?.tomorrowAvailability && typeof data.tomorrowAvailability === 'object' ? data.tomorrowAvailability : {});
+      setRecentPatients(Array.isArray(data?.recentPatients) ? data.recentPatients : []);
+      setPendingRequests(Array.isArray(data?.pendingRequests) ? data.pendingRequests : []);
+    } catch (err) {
+      console.error('Failed to load dashboard stats:', err);
+      setStats(DEFAULT_STATS);
+      setTomorrowAvailability({});
+      setRecentPatients([]);
+      setPendingRequests([]);
+      setError('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDashboard();
+    // Refresh dashboard stats every 60 seconds
+    const interval = setInterval(loadDashboard, 60_000);
+    return () => clearInterval(interval);
+  }, [loadDashboard]);
+
+  const statCards = [
+    { label: 'Pending Requests', value: stats.pendingRequests, change: stats.pendingRequests > 0 ? `${stats.pendingBreakdown.emr} EMR · ${stats.pendingBreakdown.appointments} Appt · ${stats.pendingBreakdown.medicine} Rx` : '—', color: 'warning', icon: 'pending', link: '/pending' },
+    { label: "Today's Appointments", value: stats.todayAppointments, change: `${stats.todayRemaining} remaining`, color: 'accent', icon: 'calendar', link: '/appointments' },
+    { label: 'Active Consultations', value: stats.activeConsultations, change: stats.activeConsultations > 0 ? 'In progress' : '—', color: 'success', icon: 'chat' },
+    { label: 'Low Stock Items', value: stats.lowStockItems, change: stats.lowStockItems > 0 ? 'Needs attention' : '—', color: 'error', icon: 'alert', link: '/inventory' },
   ];
-
-  // TODO: Load from patientSlot (today's date) + ScheduleDateEntity (tomorrow)
-  const appointmentStats = {
-    todayTotal: 0,
-    todayRemaining: 0,
-    ojtMissingDocs: 0,
-    tomorrowMedical: { open: 0, total: 0 },
-    tomorrowDental: { open: 0, total: 0 },
-  };
-
-  // TODO: Load recent patients from ClinicVisitation joined to UsersPersonal
-  const recentPatients = [];
-
-  // TODO: Load from patientUpdateLog + patientSlot (Pending status)
-  const pendingRequests = [];
 
   const icons = {
     pending: (
@@ -62,20 +111,34 @@ const StaffDashboard = () => {
 
   return (
     <div className="space-y-4">
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg p-3 flex items-center justify-between">
+          <span className="text-sm text-error-700 dark:text-error-400">{error}</span>
+          <button onClick={loadDashboard} className="text-xs text-error-600 hover:text-error-800 dark:text-error-400 dark:hover:text-error-300 underline">
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {stats.map((stat, idx) => (
-          <div key={idx} className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className={`p-1.5 rounded-md ${colorClasses[stat.color]}`}>
-                {icons[stat.icon]}
-              </span>
-              <span className="text-xs text-secondary-500 dark:text-neutral-400">{stat.change}</span>
-            </div>
-            <p className="text-2xl font-bold text-secondary-800 dark:text-white">{stat.value}</p>
-            <p className="text-xs text-secondary-500 dark:text-neutral-400">{stat.label}</p>
-          </div>
-        ))}
+        {statCards.map((stat, idx) => {
+          const Card = stat.link ? Link : 'div';
+          const cardProps = stat.link ? { to: stat.link } : {};
+          return (
+            <Card key={idx} {...cardProps} className={`bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3 ${stat.link ? 'hover:border-primary-300 dark:hover:border-primary-600 transition-colors' : ''} ${loading ? 'animate-pulse' : ''}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`p-1.5 rounded-md ${colorClasses[stat.color]}`}>
+                  {icons[stat.icon]}
+                </span>
+                <span className="text-xs text-secondary-500 dark:text-neutral-400">{stat.change}</span>
+              </div>
+              <p className="text-2xl font-bold text-secondary-800 dark:text-white">{loading ? '—' : stat.value}</p>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400">{stat.label}</p>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Announcements Section */}
@@ -121,51 +184,43 @@ const StaffDashboard = () => {
             <Link to="/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">View Queue</Link>
           </div>
           <div className="flex items-baseline gap-1 mb-1">
-            <span className="text-2xl font-bold text-secondary-800 dark:text-white">{appointmentStats.todayTotal}</span>
+            <span className="text-2xl font-bold text-secondary-800 dark:text-white">{loading ? '—' : stats.todayAppointments}</span>
             <span className="text-xs text-secondary-500 dark:text-neutral-400">total</span>
-            <span className="text-xs text-accent-600 dark:text-accent-400 ml-2">{appointmentStats.todayRemaining} remaining</span>
+            <span className="text-xs text-accent-600 dark:text-accent-400 ml-2">{loading ? '—' : stats.todayRemaining} remaining</span>
           </div>
-          {appointmentStats.ojtMissingDocs > 0 && (
-            <div className="flex items-center gap-1.5 mt-2 p-1.5 bg-warning-50 dark:bg-warning-900/20 rounded text-xs text-warning-700 dark:text-warning-400">
-              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              {appointmentStats.ojtMissingDocs} OJT appointment{appointmentStats.ojtMissingDocs > 1 ? 's' : ''} missing documents
-            </div>
-          )}
         </div>
 
         {/* Tomorrow's Availability Widget */}
         <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Tomorrow's Availability</h3>
-            <Link to="/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline" onClick={() => {}}>Manage Slots</Link>
+            <Link to="/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">Manage Slots</Link>
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-secondary-500 dark:text-neutral-400">Medical</span>
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-accent-500 rounded-full" 
-                    style={{ width: `${appointmentStats.tomorrowMedical.total > 0 ? ((appointmentStats.tomorrowMedical.total - appointmentStats.tomorrowMedical.open) / appointmentStats.tomorrowMedical.total) * 100 : 0}%` }}
-                  />
-                </div>
-                <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{appointmentStats.tomorrowMedical.open}/{appointmentStats.tomorrowMedical.total}</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-secondary-500 dark:text-neutral-400">Dental</span>
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-purple-500 rounded-full" 
-                    style={{ width: `${appointmentStats.tomorrowDental.total > 0 ? ((appointmentStats.tomorrowDental.total - appointmentStats.tomorrowDental.open) / appointmentStats.tomorrowDental.total) * 100 : 0}%` }}
-                  />
-                </div>
-                <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">{appointmentStats.tomorrowDental.open}/{appointmentStats.tomorrowDental.total}</span>
-              </div>
-            </div>
+            {Object.keys(tomorrowAvailability).length === 0 && !loading ? (
+              <p className="text-xs text-secondary-400 dark:text-neutral-500">No schedulers configured</p>
+            ) : (
+              Object.entries(tomorrowAvailability).map(([label, data], idx) => {
+                const booked = data.total - data.open;
+                const pct = data.total > 0 ? (booked / data.total) * 100 : 0;
+                return (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span className="text-xs text-secondary-500 dark:text-neutral-400 truncate max-w-[100px]">{label}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full ${idx % 2 === 0 ? 'bg-accent-500' : 'bg-purple-500'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
+                        {loading ? '—' : `${data.open}/${data.total}`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
@@ -181,24 +236,32 @@ const StaffDashboard = () => {
             </Link>
           </div>
           <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-            {recentPatients.map((patient) => (
-              <Link
-                key={patient.id}
-                to={`/patient/${patient.id}`}
-                className="flex items-center justify-between p-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-xs font-medium text-secondary-600 dark:text-neutral-300">
-                    {patient.name.split(' ').map(n => n[0]).join('')}
+            {loading ? (
+              <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
+            ) : recentPatients.length === 0 ? (
+              <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No recent patients</div>
+            ) : (
+              recentPatients.map((patient) => (
+                <Link
+                  key={patient.id}
+                  to={`/patient/${patient.id}`}
+                  className="flex items-center justify-between p-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-xs font-medium text-secondary-600 dark:text-neutral-300">
+                      {patient.name?.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-secondary-800 dark:text-white">{patient.name}</p>
+                      <p className="text-xs text-secondary-500 dark:text-neutral-400">{patient.identifier || '—'} • {patient.program}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-secondary-800 dark:text-white">{patient.name}</p>
-                    <p className="text-xs text-secondary-500 dark:text-neutral-400">{patient.id} • {patient.program}</p>
-                  </div>
-                </div>
-                <span className="text-xs text-secondary-400 dark:text-neutral-500">{patient.lastVisit}</span>
-              </Link>
-            ))}
+                  <span className="text-xs text-secondary-400 dark:text-neutral-500">
+                    {patient.lastVisit ? new Date(patient.lastVisit).toLocaleDateString() : '—'}
+                  </span>
+                </Link>
+              ))
+            )}
           </div>
         </div>
 
@@ -211,24 +274,35 @@ const StaffDashboard = () => {
             </Link>
           </div>
           <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-            {pendingRequests.map((request) => (
-              <div key={request.id} className="flex items-center justify-between p-3">
-                <div>
-                  <p className="text-sm font-medium text-secondary-800 dark:text-white">{request.name}</p>
-                  <p className="text-xs text-secondary-500 dark:text-neutral-400">{request.type} • {request.submitted}</p>
+            {loading ? (
+              <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
+            ) : pendingRequests.length === 0 ? (
+              <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No pending requests</div>
+            ) : (
+              pendingRequests.map((request) => (
+                <div key={request.id} className="flex items-center justify-between p-3">
+                  <div>
+                    <p className="text-sm font-medium text-secondary-800 dark:text-white">{request.name}</p>
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                      {request.type} • {request.submitted ? new Date(request.submitted).toLocaleDateString() : '—'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 text-xs font-medium rounded">
+                      {request.status}
+                    </span>
+                    <Link
+                      to={request.type === 'Appointment' ? '/appointments' : '/pending'}
+                      className="p-1 text-secondary-400 hover:text-secondary-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 text-xs font-medium rounded">
-                    {request.status}
-                  </span>
-                  <button className="p-1 text-secondary-400 hover:text-secondary-600 dark:text-neutral-500 dark:hover:text-neutral-300">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

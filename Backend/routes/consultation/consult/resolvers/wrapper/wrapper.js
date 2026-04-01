@@ -157,7 +157,7 @@ const Mutation = {
 
     // Validate consultation status before proceeding
     const queryResult = await db.query(`
-      SELECT status
+      SELECT status, "patientId"
       FROM "Consultation"
       WHERE id = $1
       LIMIT 1;
@@ -171,6 +171,48 @@ const Mutation = {
       throwGraphQLError(res).message("Outcome cannot be created in its consultation status").status(400).throw();
     } // protect against creating consultation outcome when consultation is not yet submitted, as consultation outcome should only be created when consultation is submitted
 
+    const patientId = queryResult.rows[0].patientId;
+
+    // Validate vitalSignsId if provided
+    let vitalSignsId = null;
+    if (input.vitalSignsId) {
+      const vsResult = await db.query(`
+        SELECT id, "patientId"
+        FROM "VitalSigns"
+        WHERE id = $1
+        LIMIT 1;
+      `, [input.vitalSignsId]);
+
+      if (vsResult.rows.length === 0) {
+        throwGraphQLError(res).message("VitalSigns not found").status(404).throw();
+      }
+
+      if (vsResult.rows[0].patientId !== patientId) {
+        throwGraphQLError(res).message("VitalSigns does not belong to this patient").status(403).throw();
+      }
+      vitalSignsId = input.vitalSignsId;
+    }
+
+    // Validate dentalRecordId if provided
+    let dentalRecordId = null;
+    if (input.dentalRecordId) {
+      const drResult = await db.query(`
+        SELECT id, "patientId"
+        FROM "DentalRecord"
+        WHERE id = $1
+        LIMIT 1;
+      `, [input.dentalRecordId]);
+
+      if (drResult.rows.length === 0) {
+        throwGraphQLError(res).message("DentalRecord not found").status(404).throw();
+      }
+
+      if (drResult.rows[0].patientId !== patientId) {
+        throwGraphQLError(res).message("DentalRecord does not belong to this patient").status(403).throw();
+      }
+      dentalRecordId = input.dentalRecordId;
+    }
+
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -183,11 +225,13 @@ const Mutation = {
       // protect against creating multiple consultation outcomes for the same consultation by setting consultation status to Open when creating the consultation outcome, as consultation with status Open should not have an outcome, and only consultation with status Completed, Referred or Monitored can have an outcome
 
       const outcomeResult = await client.query(`
-        INSERT INTO "ConsultationOutcome" ("consultationId", "recordedBy", "remarks")
-        VALUES ($1, $2, $3)
+        INSERT INTO "ConsultationOutcome" ("consultationId", "vitalSignsId", "dentalRecordId", "recordedBy", "remarks")
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *;
       `, [
         input.consultationId,
+        vitalSignsId,
+        dentalRecordId,
         user.id,
         input.remarks || null
       ]);

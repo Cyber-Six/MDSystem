@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { DEFAULT_ROLE_TEMPLATES, ROLE_COLORS, allActions, clonePermissions } from '../role-permissions';
+import React, { useState, useEffect, useCallback } from 'react';
+import { DEFAULT_ROLE_TEMPLATES, ROLE_COLORS, allModules, clonePermissions } from '../role-permissions';
+import { fetchTemplates, createTemplate, updateTemplate, deleteTemplate } from '../staff-service';
 import PermissionMatrix from './permission-matrix';
 
 /**
@@ -10,11 +11,50 @@ import PermissionMatrix from './permission-matrix';
 const RoleTemplates = () => {
   const [roles, setRoles] = useState(DEFAULT_ROLE_TEMPLATES);
   const [selectedRoleId, setSelectedRoleId] = useState(roles[0]?.id || null);
-  const [editingPermissions, setEditingPermissions] = useState(null);
+  const [workingPermissions, setWorkingPermissions] = useState(() => clonePermissions(roles[0]?.permissions || {}));
   const [hasChanges, setHasChanges] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState(null); // { type: 'success'|'error', message }
+
+  // Load templates from API on mount
+  const loadTemplates = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const apiTemplates = await fetchTemplates();
+      // Merge: keep default locked templates + add API templates
+      const merged = [...DEFAULT_ROLE_TEMPLATES.filter(t => t.locked)];
+      for (const t of apiTemplates) {
+        // Skip if it matches a locked default
+        if (merged.find(m => m.id === t.id)) continue;
+        const defaultMatch = DEFAULT_ROLE_TEMPLATES.find(d => d.label === t.label || d.id === t.id);
+        merged.push({
+          id: t.id,
+          name: t.label,
+          description: defaultMatch?.description || 'Custom role — configure permissions below',
+          color: defaultMatch?.color || ROLE_COLORS[merged.length % ROLE_COLORS.length],
+          locked: false,
+          permissions: t.permissions,
+          _backendId: t.id,
+        });
+      }
+      setRoles(merged);
+      const sel = merged[0];
+      setSelectedRoleId(sel?.id || null);
+      setWorkingPermissions(clonePermissions(sel?.permissions || {}));
+    } catch {
+      // Fallback to defaults on error
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId);
 
@@ -39,72 +79,116 @@ const RoleTemplates = () => {
     if (hasChanges) {
       if (!window.confirm('You have unsaved changes. Discard?')) return;
     }
+    const role = roles.find((r) => r.id === roleId);
     setSelectedRoleId(roleId);
-    setEditingPermissions(null);
+    setWorkingPermissions(clonePermissions(role?.permissions || {}));
     setHasChanges(false);
     setConfirmDeleteId(null);
   };
 
-  const handleStartEdit = () => {
-    setEditingPermissions(clonePermissions(selectedRole.permissions));
-  };
-
   const handlePermissionChange = (updated) => {
-    setEditingPermissions(updated);
+    setWorkingPermissions(updated);
     setHasChanges(true);
   };
 
-  const handleSave = () => {
-    setRoles((prev) =>
-      prev.map((r) =>
-        r.id === selectedRoleId ? { ...r, permissions: clonePermissions(editingPermissions) } : r
-      )
-    );
-    setEditingPermissions(null);
-    setHasChanges(false);
-    // TODO: API call to save role template
+  const handleSave = async () => {
+    const role = roles.find((r) => r.id === selectedRoleId);
+    if (!role || role.locked) return;
+    setIsSaving(true);
+    setSaveFeedback(null);
+    try {
+      if (role._backendId) {
+        const result = await updateTemplate(role._backendId, undefined, workingPermissions);
+        if (result.message) {
+          setSaveFeedback({ type: 'success', message: result.message });
+        }
+      } else {
+        const result = await createTemplate(role.name, workingPermissions);
+        if (result) {
+          setRoles((prev) =>
+            prev.map((r) => r.id === selectedRoleId ? { ...r, _backendId: result.id, permissions: clonePermissions(workingPermissions) } : r)
+          );
+        }
+        setSaveFeedback({ type: 'success', message: 'Template created successfully.' });
+      }
+      setRoles((prev) =>
+        prev.map((r) =>
+          r.id === selectedRoleId ? { ...r, permissions: clonePermissions(workingPermissions) } : r
+        )
+      );
+      setHasChanges(false);
+      // Auto-dismiss feedback after 5 seconds
+      setTimeout(() => setSaveFeedback(null), 5000);
+    } catch (err) {
+      console.error('Failed to save template:', err.message);
+      setSaveFeedback({ type: 'error', message: err.message || 'Failed to save template.' });
+      setTimeout(() => setSaveFeedback(null), 5000);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
-    setEditingPermissions(null);
+    setWorkingPermissions(clonePermissions(selectedRole.permissions));
     setHasChanges(false);
   };
 
   // ── Add Role ──
-  const handleAddRole = () => {
+  const handleAddRole = async () => {
     if (!newRoleName.trim()) return;
     const id = newRoleName.trim().toLowerCase().replace(/\s+/g, '-');
     if (roles.find((r) => r.id === id)) return;
     const usedColors = roles.map((r) => r.color);
     const color = ROLE_COLORS.find((c) => !usedColors.includes(c)) || ROLE_COLORS[roles.length % ROLE_COLORS.length];
-    const newRole = {
-      id,
-      name: newRoleName.trim(),
-      description: 'Custom role — configure permissions below',
-      color,
-      locked: false,
-      permissions: allActions(false),
-    };
-    setRoles((prev) => [...prev, newRole]);
-    setSelectedRoleId(id);
-    setEditingPermissions(clonePermissions(newRole.permissions));
-    setShowAddForm(false);
-    setNewRoleName('');
-    setHasChanges(true);
-    // TODO: API call to create role
+    const perms = allModules(false);
+    setIsSaving(true);
+    try {
+      const created = await createTemplate(newRoleName.trim(), perms);
+      const newRole = {
+        id: created?.id || id,
+        name: newRoleName.trim(),
+        description: 'Custom role — configure permissions below',
+        color,
+        locked: false,
+        permissions: created?.permissions || perms,
+        _backendId: created?.id || null,
+      };
+      setRoles((prev) => [...prev, newRole]);
+      setSelectedRoleId(newRole.id);
+      setWorkingPermissions(clonePermissions(newRole.permissions));
+      setShowAddForm(false);
+      setNewRoleName('');
+      setHasChanges(false);
+    } catch (err) {
+      console.error('Failed to create template:', err.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // ── Delete Role ──
-  const handleDeleteRole = (roleId) => {
-    const updated = roles.filter((r) => r.id !== roleId);
-    setRoles(updated);
-    if (selectedRoleId === roleId) {
-      setSelectedRoleId(updated[0]?.id || null);
-      setEditingPermissions(null);
-      setHasChanges(false);
+  const handleDeleteRole = async (roleId) => {
+    const role = roles.find((r) => r.id === roleId);
+    if (!role || role.locked) return;
+    setIsSaving(true);
+    try {
+      if (role._backendId) {
+        await deleteTemplate(role._backendId);
+      }
+      const updated = roles.filter((r) => r.id !== roleId);
+      setRoles(updated);
+      if (selectedRoleId === roleId) {
+        const fallback = updated[0];
+        setSelectedRoleId(fallback?.id || null);
+        setWorkingPermissions(clonePermissions(fallback?.permissions || {}));
+        setHasChanges(false);
+      }
+    } catch (err) {
+      console.error('Failed to delete template:', err.message);
+    } finally {
+      setIsSaving(false);
+      setConfirmDeleteId(null);
     }
-    setConfirmDeleteId(null);
-    // TODO: API call to delete role
   };
 
   return (
@@ -218,19 +302,12 @@ const RoleTemplates = () => {
               <div className="flex items-center gap-2">
                 <h4 className="text-lg font-semibold text-secondary-900 dark:text-white leading-none">{selectedRole.name}</h4>
                 <span className={`text-xs px-2 py-0.5 rounded-full border leading-none ${colorMap[selectedRole.color] || colorMap.primary}`}>
-                  {selectedRole.id}
+                  {selectedRole.locked ? 'System' : 'Custom'}
                 </span>
               </div>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">{selectedRole.description}</p>
             </div>
-            {!editingPermissions && !selectedRole.locked && (
-              <button
-                onClick={handleStartEdit}
-                className="px-3 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-              >
-                Edit Permissions
-              </button>
-            )}
+
           </div>
 
           {/* Admin lock notice */}
@@ -248,27 +325,50 @@ const RoleTemplates = () => {
           {/* Permission Matrix */}
           <div className="max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
             <PermissionMatrix
-              permissions={editingPermissions || selectedRole.permissions}
+              permissions={workingPermissions}
               onChange={handlePermissionChange}
-              readOnly={!editingPermissions}
+              readOnly={selectedRole.locked}
             />
           </div>
 
+          {/* Save feedback banner */}
+          {saveFeedback && (
+            <div className={`flex items-center gap-2 px-3 py-2 mt-2 rounded-lg text-xs font-medium ${
+              saveFeedback.type === 'success'
+                ? 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-400 border border-success-200 dark:border-success-800'
+                : 'bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400 border border-error-200 dark:border-error-800'
+            }`}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {saveFeedback.type === 'success' ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                )}
+              </svg>
+              <span>{saveFeedback.message}</span>
+              <button onClick={() => setSaveFeedback(null)} className="ml-auto opacity-60 hover:opacity-100">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           {/* Save / Cancel */}
-          {editingPermissions && (
+          {hasChanges && (
             <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700">
               <button
                 onClick={handleCancel}
                 className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors"
               >
-                Cancel
+                Discard
               </button>
               <button
                 onClick={handleSave}
-                disabled={!hasChanges}
-                className="px-4 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                disabled={isSaving}
+                className="px-4 py-1.5 text-xs font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 transition-colors"
               >
-                Save Template
+                {isSaving ? 'Saving…' : 'Save Template'}
               </button>
             </div>
           )}

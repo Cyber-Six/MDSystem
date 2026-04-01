@@ -180,15 +180,13 @@ const MEDICINE_BATCH_FIELDS = `
 const SUPPLY_BATCH_FIELDS = `
         id
         supplyItemId
-        batch_number
-        initialQuantity
+        batchNumber
         currentQuantity
         unit
-        expiry_date
+        expiryDate
         location
-        received_at
         receivedBy
-        supplier_name
+        supplierName
         notes
         created_at`;
 
@@ -246,4 +244,74 @@ export const fetchSupplyBatches = async (supplyItemId) => {
     { supplyItemId },
   );
   return data.getSupplyBatches ?? [];
+};
+
+// ── Split Mutations ──────────────────────────────────────────────────────────
+
+/**
+ * Split a medicine batch (move units to a new batch at target location).
+ * @param {string|number} batchId - ID of the batch to split
+ * @param {{ quantity: number, targetLocation: string, notes?: string }} input
+ * @returns {Promise<Object>} New MedicineBatch
+ */
+export const splitMedicineSupply = async (batchId, input) => {
+  const data = await sendGraphQL(
+    `mutation SplitMedicineSupply($batchId: ID!, $input: SplitMedicalSupplyInput!) {
+      splitMedicineSupply(batchId: $batchId, input: $input) {${MEDICINE_BATCH_FIELDS}
+      }
+    }`,
+    { batchId, input },
+  );
+  return data.splitMedicineSupply;
+};
+
+/**
+ * Split a supply batch (move units to a new batch at target location).
+ * @param {string|number} batchId - ID of the batch to split
+ * @param {{ quantity: number, targetLocation: string, notes?: string }} input
+ * @returns {Promise<Object>} New SupplyBatch
+ */
+export const splitMedicalSupply = async (batchId, input) => {
+  const data = await sendGraphQL(
+    `mutation SplitMedicalSupply($batchId: ID!, $input: SplitMedicalSupplyInput!) {
+      splitMedicalSupply(batchId: $batchId, input: $input) {${SUPPLY_BATCH_FIELDS}
+      }
+    }`,
+    { batchId, input },
+  );
+  return data.splitMedicalSupply;
+};
+
+/**
+ * Update a supply batch (currentQuantity, expiryDate, notes).
+ * @param {string|number} batchId - ID of the batch to update
+ * @param {{ currentQuantity?: number, expiryDate?: string, notes?: string }} input
+ * @returns {Promise<Object>} Updated SupplyBatch
+ */
+export const updateSupplyBatch = async (batchId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateSupplyBatch($batchId: ID!, $input: SupplyBatchUpdateInput!) {
+      updateSupplyBatch(batchId: $batchId, input: $input) {${SUPPLY_BATCH_FIELDS}
+      }
+    }`,
+    { batchId, input },
+  );
+  return data.updateSupplyBatch;
+};
+
+/**
+ * Update a medicine batch (availableQuantity, expiryDate, notes).
+ * @param {string|number} batchId - ID of the batch to update
+ * @param {{ currentQuantity?: number, expiryDate?: string, notes?: string }} input
+ * @returns {Promise<Object>} Updated MedicineBatch
+ */
+export const updateMedicineBatch = async (batchId, input) => {
+  const data = await sendGraphQL(
+    `mutation UpdateMedicalSupply($batchId: ID!, $input: MedicalSupplyUpdateInput!) {
+      updateMedicalSupply(batchId: $batchId, input: $input) {${MEDICINE_BATCH_FIELDS}
+      }
+    }`,
+    { batchId, input },
+  );
+  return data.updateMedicalSupply;
 };

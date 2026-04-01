@@ -107,6 +107,12 @@ export const sanitizeFormData = (formData) => {
     sanitized.medicalBackground.alcoholDrinker = 'no';
   }
 
+  if (sanitized.medicalBackground.vaper === 'yes' || sanitized.medicalBackground.vaper === true) {
+    sanitized.medicalBackground.vaper = 'yes';
+  } else {
+    sanitized.medicalBackground.vaper = 'no';
+  }
+
   console.log('[Data Transformer] Sanitized data:', sanitized);
   
   return sanitized;

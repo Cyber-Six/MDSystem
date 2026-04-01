@@ -2,13 +2,6 @@
 ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
 
 -- Role management: insert new permission labels (idempotent)
-INSERT INTO "rolesTable" (label) VALUES
-  ('ALLOW_TO_VIEW_INVENTORY'),
-  ('ALLOW_TO_ADD_INVENTORY'),
-  ('ALLOW_TO_DISPENSE_MEDICINE'),
-  ('ALLOW_TO_APPROVE_MEDICINE_REQUEST')
-ON CONFLICT (label) DO NOTHING;
-
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);
 CREATE INDEX ON "patientUpdateLog"(status);
@@ -24,6 +17,9 @@ CREATE INDEX idx_medicalpersonnel_designation
 
 CREATE INDEX idx_medicalpersonnel_is_active
   ON "MedicalPersonnel"(is_active);
+
+CREATE INDEX IF NOT EXISTS idx_medicine_batch_updated_at ON "MedicineBatch"("updated_at" DESC);
+CREATE INDEX IF NOT EXISTS idx_supply_batch_updated_at ON "SupplyBatch"("updated_at" DESC);
 
 
 ALTER TABLE "ScheduleDateEntity"
@@ -257,13 +253,13 @@ VALUES
 
 INSERT INTO "rolesTable" (label, data)
 VALUES
-('IS_ADMIN', 'Grants full administrative privileges'),
 ('IS_STAFF', 'Marks user as an active staff member'),
 ('PRIVILEGED_TO_PERFORM_ON_SUPERIOR', 'Allows actions on superior accounts'),
 
 ('ALLOW_TO_APPROVE_EMR', 'Permission to approve electronic medical records'),
 ('ALLOW_TO_EDIT_EMR', 'Permission to edit electronic medical records'),
 ('ALLOW_TO_VIEW_EMR', 'Permission to view electronic medical records'),
+('ALLOW_TO_SET_VITAL_SIGN', 'Permission to set vital signs'),
 ('ALLOW_TO_SET_DENTAL_RECORD', 'Permission to set dental records'),
 ('ALLOW_TO_EDIT_CATALOGS', 'Permission to edit EMR catalogs'),
 
@@ -284,5 +280,16 @@ VALUES
 
 ('ALLOW_TO_VIEW_INVENTORY', 'Permission to view inventory'),
 ('ALLOW_TO_EDIT_INVENTORY', 'Permission to edit inventory'),
+('ALLOW_TO_DISPENSE_MEDICINE', 'Permission to dispense medicine'),
 ('ALLOW_TO_MANAGE_MEDICINE_REQUESTS', 'Permission to manage medicine requests'),
-('ALLOW_TO_PRESCRIBE', 'Permission to prescribe medicines');
+('ALLOW_TO_PRESCRIBE', 'Permission to prescribe medicines'),
+('ALLOW_TO_APPROVE_MEDICINE_REQUEST', 'Permission to approve medicine requests'),
+
+('ALLOW_TO_ACCESS_HEALTH_CHAT', 'Permission to access health chat features'),
+('ALLOW_TO_MANAGE_HEALTH_CHAT', 'Permission to manage health chat sessions'),
+
+('ALLOW_TO_VIEW_ANALYTICS', 'Permission to view analytics and reports'),
+('ALLOW_TO_EXPORT_ANALYTICS', 'Permission to export analytics data'),
+
+('ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'Permission to access role management panel'),
+('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates');

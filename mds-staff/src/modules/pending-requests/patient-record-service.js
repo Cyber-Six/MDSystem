@@ -19,6 +19,15 @@ const sendGraphQL = async (query, variables = {}) => {
   return response.data.data;
 };
 
+// Helper for staff EMR endpoint (VitalSigns, DentalRecord)
+const sendStaffEMRGraphQL = async (query, variables = {}) => {
+  const response = await axiosRequest.post('/staff/emr', { query, variables });
+  if (response.data?.errors) {
+    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+  }
+  return response.data.data;
+};
+
 // ── Patient Basic Info ───────────────────────────────────────────────────────
 
 export const getPatientBasicInfo = async (userId) => {
@@ -142,6 +151,9 @@ export const getUserLifestyle = async (userId) => {
          yearsSmoked
          alcoholConsumer
          frequencyOfAlcoholConsumption
+         vapeUser
+         vapeType
+         vapeFrequency
          notes
          created_at
        }
@@ -290,9 +302,9 @@ export const getUserVisualAcuityProfile = async (userId) => {
 // ── Vital Signs ──────────────────────────────────────────────────────────────
 
 export const getUserVitalSigns = async (userId) => {
-  const data = await sendGraphQL(
-    `query GetUserVitalSigns($userId: ID!) {
-       getUserVitalSigns(userId: $userId) {
+  const data = await sendStaffEMRGraphQL(
+    `query GetPatientVitalSigns($patientId: ID!) {
+       getPatientVitalSigns(patientId: $patientId, limit: 10) {
          id
          height_cm
          weight_kg
@@ -303,9 +315,9 @@ export const getUserVitalSigns = async (userId) => {
          created_at
        }
      }`,
-    { userId },
+    { patientId: userId },
   );
-  return data.getUserVitalSigns ?? [];
+  return data.getPatientVitalSigns ?? [];
 };
 
 // ── OB-GYNE History ─────────────────────────────────────────────────────────
@@ -654,15 +666,15 @@ export const staffUpdateVisualAcuityProfile = async (userId, input) => {
 // ── Vital Signs (Physical Measurements) ──────────────────────────────────────
 
 export const staffUpdateVitalSigns = async (userId, input) => {
-  const data = await sendGraphQL(
-    `mutation UpdateVitalSigns($userId: ID!, $input: VitalSignsUpdateInput!) {
-       updateVitalSigns(userId: $userId, input: $input) {
+  const data = await sendStaffEMRGraphQL(
+    `mutation CreateVitalSigns($patientId: ID!, $input: VitalSignsInput!) {
+       createVitalSigns(patientId: $patientId, input: $input) {
          id height_cm weight_kg blood_pressure heart_rate temperature
        }
      }`,
-    { userId, input },
+    { patientId: userId, input },
   );
-  return data.updateVitalSigns;
+  return data.createVitalSigns;
 };
 
 // ── OB-GYNE History ─────────────────────────────────────────────────────────
@@ -904,15 +916,17 @@ export const submitStaffEdits = async (userId, editedFields, recordData) => {
       );
     }
 
-    // — Vital Signs —
+    // — Vital Signs (creates a new standalone record via /staff/emr) —
     const vitalKeys = ['height_cm', 'weight_kg', 'blood_pressure', 'heart_rate', 'temperature'];
     if (vitalKeys.some((k) => mb[k] !== undefined)) {
-      const input = {};
-      if (mb.height_cm !== undefined) input.height_cm = parseFloat(mb.height_cm) || null;
-      if (mb.weight_kg !== undefined) input.weight_kg = parseFloat(mb.weight_kg) || null;
-      if (mb.blood_pressure !== undefined) input.blood_pressure = mb.blood_pressure || null;
-      if (mb.heart_rate !== undefined) input.heart_rate = parseInt(mb.heart_rate, 10) || null;
-      if (mb.temperature !== undefined) input.temperature = parseFloat(mb.temperature) || null;
+      const orig = recordData?.vitalSigns || {};
+      const input = {
+        height_cm:      parseFloat(mb.height_cm ?? orig.height_cm) || 0,
+        weight_kg:      parseFloat(mb.weight_kg ?? orig.weight_kg) || 0,
+        blood_pressure: mb.blood_pressure ?? orig.blood_pressure ?? '',
+        heart_rate:     parseInt(mb.heart_rate ?? orig.heart_rate, 10) || 0,
+        temperature:    parseFloat(mb.temperature ?? orig.temperature) || 0,
+      };
 
       mutations.push(
         staffUpdateVitalSigns(userId, input)

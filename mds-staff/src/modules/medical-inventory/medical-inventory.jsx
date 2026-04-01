@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import InventoryDashboard from './components/inventory-dashboard/inventory-dashboard';
 import MedicalItemList from './components/medical-item/medical-item-list';
 import MedicalItemDetail from './components/medical-item/medical-item-detail';
@@ -12,21 +13,29 @@ import AdjustStockModal from './components/adjust-stock/adjust-stock-modal';
 import DispenseModal from './components/dispense-queue/dispense-modal';
 import DispenseMedicineModal from './components/dispense-medicine/dispense-medicine-modal';
 import RequestActionModal from './components/dispense-queue/request-action-modal';
-import TransactionHistory from './components/transaction-history/transaction-history';
-import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches } from './medical-inventory-service';
+import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
+import { useStaffNotifications } from '../notification/notification-context';
+import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
+import { getPatientBasicInfo } from '../../modules/pending-requests/patient-record-service';
+import { formatPatientName } from '../../services/patient-search-service';
 import {
   SEED_BATCHES, SEED_TRANSACTIONS,
   computeItemStats, LOCATIONS,
 } from './inventory-seed-data';
+
 
 /**
  * Medical Inventory Page
  * Consistent with staff-appointment.jsx pattern: section tabs + sub-components.
  */
 const MedicalInventory = () => {
-  const [activeSection, setActiveSection] = useState('dashboard');
+  const routerLocation = useLocation();
+  const { subscribe, refreshInventoryAlerts } = useStaffNotifications();
+  const [activeSection, setActiveSection] = useState(
+    routerLocation.state?.section ?? 'dashboard'
+  );
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [itemsError, setItemsError] = useState('');
@@ -34,12 +43,29 @@ const MedicalInventory = () => {
   const [batches, setBatches] = useState([]);
   const [requests, setRequests] = useState([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
-  const [transactions, setTransactions] = useState(SEED_TRANSACTIONS);
+  const [transactions, setTransactions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('mds_inventory_transactions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const recordTransaction = useCallback((tx) => {
+    setTransactions((prev) => {
+      const txId = Math.max(...prev.map((t) => t.id), 0) + 1;
+      const next = [{ ...tx, id: txId, issuedAt: new Date().toISOString() }, ...prev].slice(0, 200);
+      try { localStorage.setItem('mds_inventory_transactions', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
 
   // Patient medicine request lookup
   const [patientLookupId, setPatientLookupId] = useState('');
   const [isFetchingPatientReqs, setIsFetchingPatientReqs] = useState(false);
   const [patientReqsMsg, setPatientReqsMsg] = useState('');
+  const [loadedPatientId, setLoadedPatientId] = useState(null); // tracks which patient is focused in the queue
 
   // Selected item for detail view
   const [selectedItem, setSelectedItem] = useState(null);
@@ -69,7 +95,60 @@ const MedicalInventory = () => {
   // Feedback
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalData, setSuccessModalData] = useState({ title: 'Success', message: '' });
   const hasLoadedRequestsRef = useRef(false);
+  const patientNameCacheRef = useRef({}); // Cache for patient names to avoid redundant API calls
+
+  // Helper function to get patient name with caching
+  const getPatientNameCached = useCallback(async (patientId) => {
+    if (!patientId) return `Patient #${patientId}`;
+    
+    // Check cache first
+    if (patientNameCacheRef.current[patientId]) {
+      return patientNameCacheRef.current[patientId];
+    }
+    
+    try {
+      const patient = await getPatientBasicInfo(patientId);
+      if (patient) {
+        const name = formatPatientName(patient);
+        patientNameCacheRef.current[patientId] = name;
+        return name;
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch patient info for ID ${patientId}:`, err);
+    }
+    
+    // Fallback to ID if fetch fails
+    const fallback = `Patient #${patientId}`;
+    patientNameCacheRef.current[patientId] = fallback;
+    return fallback;
+  }, []);
+
+  // Helper function to enrich multiple requests with patient names
+  const enrichRequestsWithPatientNames = useCallback(async (requests) => {
+    const uniquePatientIds = [...new Set(requests.map(r => r.patientId))];
+    
+    // Fetch all patient names in parallel
+    const patientNames = await Promise.all(
+      uniquePatientIds.map(id => getPatientNameCached(id))
+    );
+    
+    // Create a map of patientId -> patientName
+    const patientNameMap = {};
+    uniquePatientIds.forEach((id, index) => {
+      patientNameMap[id] = patientNames[index];
+    });
+    
+    // Enrich requests with patient names
+    return requests.map(req => ({
+      ...req,
+      patientName: patientNameMap[req.patientId] || `Patient #${req.patientId}`,
+      patientType: 'Self-Request',
+      _isRealRequest: true,
+    }));
+  }, [getPatientNameCached]);
 
   // ── Fetch items from API ───────────────────────────────────────────────
   const loadItems = useCallback(async () => {
@@ -86,11 +165,12 @@ const MedicalInventory = () => {
             return fetchMedicineBatches(Number(item.id)).then((bs) =>
               bs.map((b) => ({
                 id: b.id,
-                medicalItemId: b.medicalItemId,
+                medicalItemId: Number(b.medicalItemId),  // Ensure number type for linking
                 batchNumber: b.batchNumber,
-                currentQuantity: b.dosageValue,
+                currentQuantity: Number(b.availableQuantity ?? 0),
                 availableQuantity: Number(b.availableQuantity ?? 0),
-                initialQuantity: b.dosageValue,
+                initialQuantity: Number(b.availableQuantity ?? 0),
+                dosageValue: Number(b.dosageValue ?? 0),
                 dosageUnit: b.dosageUnit,
                 expiryDate: b.expiryDate,
                 location: b.location,
@@ -102,21 +182,22 @@ const MedicalInventory = () => {
             return fetchSupplyBatches(Number(item.id)).then((bs) =>
               bs.map((b) => ({
                 id: b.id,
-                medicalItemId: b.supplyItemId,
-                batchNumber: b.batch_number,
-                currentQuantity: b.currentQuantity,
-                initialQuantity: b.initialQuantity,
+                medicalItemId: Number(b.supplyItemId),  // Ensure number type for linking
+                batchNumber: b.batchNumber,
+                currentQuantity: Number(b.currentQuantity ?? 0),
+                availableQuantity: Number(b.currentQuantity ?? 0),  // Map both fields for consistency
                 unit: b.unit,
-                expiryDate: b.expiry_date,
+                expiryDate: b.expiryDate,
                 location: b.location,
-                supplierName: b.supplier_name,
+                supplierName: b.supplierName,
                 notes: b.notes,
               }))
             );
           }
         })
       );
-      setBatches(batchResults.flat());
+      const flatBatches = batchResults.flat();
+      setBatches(flatBatches);
     } catch (err) {
       setItemsError(err.message || 'Failed to load medical items.');
     } finally {
@@ -128,12 +209,19 @@ const MedicalInventory = () => {
     loadItems();
   }, [loadItems]);
 
+  // Helper function to show success modal
+  const showSuccess = useCallback((title = 'Success', message = '', details = null) => {
+    setSuccessMsg(message); // Keep backward compatibility if needed
+    setSuccessModalData({ title, message, details });
+    setShowSuccessModal(true);
+  }, []);
+
   useEffect(() => {
-    if (error || successMsg) {
-      const t = setTimeout(() => { setError(''); setSuccessMsg(''); }, 4000);
+    if (error) {
+      const t = setTimeout(() => { setError(''); }, 4000);
       return () => clearTimeout(t);
     }
-  }, [error, successMsg]);
+  }, [error]);
 
   // Compute enriched items
   const enrichedItems = useMemo(() => computeItemStats(items, batches), [items, batches]);
@@ -209,7 +297,7 @@ const MedicalInventory = () => {
     });
     setItems((prev) => [...prev, created]);
     setShowAddItem(false);
-    setSuccessMsg(`${created.item_name} added to inventory.`);
+    showSuccess('Item Added', `${created.item_name} added to inventory.`);
   };
 
   const handleEditItem = (item) => {
@@ -230,7 +318,7 @@ const MedicalInventory = () => {
     }
     setShowEditItem(false);
     setEditingItem(null);
-    setSuccessMsg(`${updated.item_name} updated successfully.`);
+    showSuccess('Item Updated', `${updated.item_name} updated successfully.`);
   };
 
   const handleDeleteItem = (item) => {
@@ -247,7 +335,7 @@ const MedicalInventory = () => {
     }
     setShowDeleteConfirm(false);
     setDeletingItem(null);
-    setSuccessMsg('Item deleted successfully.');
+    showSuccess('Item Deleted', 'Item deleted successfully.');
   };
 
   const handleAddSupply = async (batch) => {
@@ -268,13 +356,13 @@ const MedicalInventory = () => {
     } else {
       created = await addSupplyBatch({
         supplyItemId: batch.medicalItemId,
-        batch_number: batch.batchNumber,
+        batchNumber: batch.batchNumber,
         initialQuantity: batch.quantity,
         unit: batch.unit,
-        expiry_date: batch.expiryDate,
+        expiryDate: batch.expiryDate,
         location: batch.location,
-        received_at: batch.receivedAt,
-        supplier_name: batch.supplierName || null,
+        receivedBy: batch.receivedBy,
+        supplierName: batch.supplierName || null,
         notes: batch.notes || null,
       });
     }
@@ -297,48 +385,98 @@ const MedicalInventory = () => {
       : {
           id: created.id,
           medicalItemId: created.supplyItemId,
-          batchNumber: created.batch_number,
+          batchNumber: created.batchNumber,
           currentQuantity: created.currentQuantity,
-          initialQuantity: created.initialQuantity,
-          expiryDate: created.expiry_date,
+          expiryDate: created.expiryDate,
           location: created.location,
-          supplierName: created.supplier_name,
+          supplierName: created.supplierName,
           notes: created.notes,
         };
     setBatches([...batches, normalized]);
+
+    // Record ADD transaction for per-item history
+    const addQty = Number(batch.quantity ?? 0);
+    recordTransaction({
+      patientId: null, patientName: null,
+      action: 'add',
+      quantity: addQty,
+      issuedBy: 101, issuedByName: 'Current User',
+      notes: batch.notes || '',
+      itemId: batch.medicalItemId,
+      batchNumber: batch.batchNumber,
+    });
+
     setShowAddSupply(false);
-    setSuccessMsg(`Batch ${batch.batchNumber} received (${batch.quantity} units).`);
+    showSuccess('Batch Received', `Batch ${batch.batchNumber} received (${batch.quantity} units).`);
   };
 
-  const handleSplit = ({ sourceBatchId, quantity, toClinic, notes }) => {
-    const source = batches.find((b) => b.id === sourceBatchId);
-    if (!source || quantity > source.currentQuantity) {
-      setError('Invalid split: insufficient quantity.');
-      return;
+  const handleSplit = async ({ sourceBatchId, quantity, toClinic, notes }) => {
+    try {
+      const source = batches.find((b) => b.id === sourceBatchId);
+      if (!source) {
+        setError('Source batch not found.');
+        return;
+      }
+
+      const isMedicine = source.dosageUnit !== undefined;
+
+      // Collect all raw batch records sharing the same batchNumber+location+item.
+      // computeItemStats merges these into one UI row, but each DB record has its
+      // own entity count. Sort largest-first so we drain the fullest batches first.
+      const siblings = batches
+        .filter((b) =>
+          b.batchNumber === source.batchNumber &&
+          b.location === source.location &&
+          String(b.medicalItemId) === String(source.medicalItemId)
+        )
+        .sort((a, b) =>
+          (b.availableQuantity ?? b.currentQuantity ?? 0) - (a.availableQuantity ?? a.currentQuantity ?? 0)
+        );
+
+      const available = siblings.reduce((sum, b) => sum + (b.availableQuantity ?? b.currentQuantity ?? 0), 0);
+
+      if (quantity > available) {
+        setError(`Insufficient quantity. Available: ${available}, requested: ${quantity}`);
+        return;
+      }
+
+      // Distribute the requested quantity across sibling batches one API call each.
+      // This is necessary because the backend operates on individual batch IDs.
+      let remaining = quantity;
+      for (const sibling of siblings) {
+        if (remaining <= 0) break;
+        const siblingQty = sibling.availableQuantity ?? sibling.currentQuantity ?? 0;
+        const take = Math.min(siblingQty, remaining);
+        if (take <= 0) continue;
+
+        if (isMedicine) {
+          await splitMedicineSupply(sibling.id, { quantity: take, targetLocation: toClinic, notes: notes || undefined });
+        } else {
+          await splitMedicalSupply(sibling.id, { quantity: take, targetLocation: toClinic, notes: notes || undefined });
+        }
+        remaining -= take;
+      }
+
+      // Record a single transaction for the total move
+      recordTransaction({
+        patientId: null, patientName: null,
+        action: 'transfer',
+        quantity,
+        issuedBy: 101, issuedByName: 'Current User',
+        notes: `Moved ${quantity} units from ${source.location} to ${toClinic}. ${notes || ''}`.trim(),
+        itemId: source.medicalItemId,
+        batchNumber: source.batchNumber,
+      });
+
+      // Reload from backend so batch counts reflect all the moves
+      await loadItems();
+      refreshInventoryAlerts();
+
+      setShowSplitSupply(false);
+      showSuccess('Supply Transferred', `Successfully moved ${quantity} units to ${toClinic}.`);
+    } catch (err) {
+      setError(err.message || 'Failed to split supply. Please try again.');
     }
-    const newId = Math.max(...batches.map((b) => b.id)) + 1;
-    const newBatch = {
-      ...source,
-      id: newId,
-      batchNumber: `${toClinic.substring(0, 3).toUpperCase()}-SPLIT-${newId}`,
-      location: toClinic,
-      initialQuantity: quantity,
-      currentQuantity: quantity,
-      notes: `Split from ${source.batchNumber}. ${notes || ''}`.trim(),
-    };
-    setBatches(batches.map((b) => b.id === sourceBatchId ? { ...b, currentQuantity: b.currentQuantity - quantity } : b).concat(newBatch));
-    // Record transactions
-    const txId = Math.max(...transactions.map((t) => t.id)) + 1;
-    const item = items.find((i) => i.id === source.medicalItemId);
-    setTransactions([{
-      id: txId, patientId: null, patientName: null, action: 'transfer',
-      quantity, issuedBy: 101, issuedByName: 'Current User',
-      issuedAt: new Date().toISOString(),
-      notes: `Split from ${source.batchNumber} → ${toClinic}`,
-      itemName: item?.item_name || '', batchNumber: newBatch.batchNumber,
-    }, ...transactions]);
-    setShowSplitSupply(false);
-    setSuccessMsg(`Split ${quantity} units to ${toClinic}.`);
   };
 
   // Auto-load all medicine requests on mount (all statuses)
@@ -346,11 +484,9 @@ const MedicalInventory = () => {
     setIsLoadingRequests(true);
     try {
       const rawRequests = await fetchAllMedicineRequests(null);
-      const enriched = rawRequests.map((req) => ({
+      const enrichedWithNames = await enrichRequestsWithPatientNames(rawRequests);
+      const enriched = enrichedWithNames.map(req => ({
         ...req,
-        patientName: `Patient #${req.patientId}`,
-        patientType: 'Self-Request',
-        _isRealRequest: true,
         items: enrichRequestItems(req.items || []),
       }));
       setRequests(enriched);
@@ -359,13 +495,19 @@ const MedicalInventory = () => {
     } finally {
       setIsLoadingRequests(false);
     }
-  }, [enrichRequestItems]);
+  }, [enrichRequestItems, enrichRequestsWithPatientNames]);
 
   useEffect(() => {
     if (itemsLoading || hasLoadedRequestsRef.current) return;
     hasLoadedRequestsRef.current = true;
     loadAllMedicineRequests();
   }, [itemsLoading, loadAllMedicineRequests]);
+
+  // Reload dispense queue when a patient submits a new medicine request via socket
+  useEffect(() => {
+    const unsub = subscribe('medicine:request:new', loadAllMedicineRequests);
+    return unsub;
+  }, [subscribe, loadAllMedicineRequests]);
 
   // Load real patient medicine requests into the dispense queue
   const loadPatientMedicineRequests = async (patientId) => {
@@ -375,12 +517,10 @@ const MedicalInventory = () => {
     try {
       const rawRequests = await fetchPatientMedicineRequests(String(patientId));
 
-      // Enrich with itemName by cross-referencing batches → items
-      const enriched = rawRequests.map((req) => ({
+      // Enrich with patient names and itemName by cross-referencing batches → items
+      const enrichedWithNames = await enrichRequestsWithPatientNames(rawRequests);
+      const enriched = enrichedWithNames.map(req => ({
         ...req,
-        patientName: `Patient #${req.patientId}`,
-        patientType: 'Self-Request',
-        _isRealRequest: true,
         items: enrichRequestItems(req.items || []),
       }));
 
@@ -395,31 +535,90 @@ const MedicalInventory = () => {
         return [...newOnes, ...updated];
       });
 
-      setPatientReqsMsg(
-        enriched.length === 0
-          ? `No requests found for Patient #${patientId}`
-          : `Loaded ${enriched.length} request(s) for Patient #${patientId}`,
-      );
+      if (enriched.length > 0) {
+        setLoadedPatientId(String(patientId));
+        setPatientReqsMsg(`Loaded ${enriched.length} request(s) for Patient #${patientId}`);
+      } else {
+        setLoadedPatientId(null);
+        setPatientReqsMsg(`No requests found for Patient #${patientId}`);
+      }
     } catch (err) {
+      setLoadedPatientId(null);
       setPatientReqsMsg(err.message || 'Failed to load patient requests. Check that the backend staff endpoint is registered.');
     } finally {
       setIsFetchingPatientReqs(false);
     }
   };
 
-  const handleAdjust = ({ batchId, delta, reason }) => {
-    setBatches(batches.map((b) => b.id === batchId ? { ...b, currentQuantity: Math.max(0, b.currentQuantity + delta) } : b));
-    const batch = batches.find((b) => b.id === batchId);
-    const item = items.find((i) => i.id === batch?.medicalItemId);
-    const txId = Math.max(...transactions.map((t) => t.id)) + 1;
-    setTransactions([{
-      id: txId, patientId: null, patientName: null, action: 'adjust',
-      quantity: delta, issuedBy: 101, issuedByName: 'Current User',
-      issuedAt: new Date().toISOString(), notes: reason,
-      itemName: item?.item_name || '', batchNumber: batch?.batchNumber || '',
-    }, ...transactions]);
-    setShowAdjustStock(false);
-    setSuccessMsg(`Stock adjusted by ${delta > 0 ? '+' : ''}${delta} units.`);
+  const handleAdjust = async ({ batchId, type, quantity, reason }) => {
+    try {
+      const source = batches.find((b) => b.id === batchId);
+      const isMedicine = source?.dosageUnit !== undefined;
+
+      if (type === 'add') {
+        // ADD: apply the full increase to the source record directly.
+        // Even when computeItemStats has merged multiple DB records into one UI row,
+        // adding `quantity` to the individual record's actual value correctly raises
+        // the visible total by exactly `quantity`.
+        const rawCurrentQty = source?.currentQuantity ?? source?.availableQuantity ?? 0;
+        const computedNewQuantity = rawCurrentQty + quantity;
+        if (isMedicine) {
+          await updateMedicineBatch(batchId, { currentQuantity: computedNewQuantity, notes: reason });
+        } else {
+          await updateSupplyBatch(batchId, { currentQuantity: computedNewQuantity, notes: reason });
+        }
+      } else {
+        // SUBTRACT: a single merged UI row may represent multiple DB records sharing the
+        // same batchNumber+location. Draining only the first record can underflow when it
+        // holds fewer units than the requested quantity, leaving sibling records untouched
+        // and making only a partial subtraction. Distribute the removal across all siblings
+        // (largest-first) until the full requested quantity is consumed — mirroring the
+        // split transfer logic in handleSplit.
+        const siblings = batches
+          .filter((b) =>
+            b.batchNumber === source.batchNumber &&
+            b.location === source.location &&
+            String(b.medicalItemId) === String(source.medicalItemId)
+          )
+          .sort((a, b) =>
+            (b.availableQuantity ?? b.currentQuantity ?? 0) - (a.availableQuantity ?? a.currentQuantity ?? 0)
+          );
+
+        let remaining = quantity;
+        for (const sibling of siblings) {
+          if (remaining <= 0) break;
+          const siblingQty = sibling.availableQuantity ?? sibling.currentQuantity ?? 0;
+          const take = Math.min(siblingQty, remaining);
+          if (take <= 0) continue;
+          const newSiblingQty = siblingQty - take;
+          if (isMedicine) {
+            await updateMedicineBatch(sibling.id, { currentQuantity: newSiblingQty, notes: reason });
+          } else {
+            await updateSupplyBatch(sibling.id, { currentQuantity: newSiblingQty, notes: reason });
+          }
+          remaining -= take;
+        }
+      }
+
+      // Reload all batches from the backend so merged totals are accurate.
+      // A local-only update is unreliable when there are multiple split records
+      // for the same batch+location in the database.
+      const delta = type === 'add' ? quantity : -quantity;
+      recordTransaction({
+        patientId: null, patientName: null,
+        action: type === 'add' ? 'adjust_add' : 'adjust_minus',
+        quantity: delta, issuedBy: 101, issuedByName: 'Current User',
+        notes: reason,
+        itemId: source?.medicalItemId, batchNumber: source?.batchNumber || '',
+      });
+      await loadItems();
+      refreshInventoryAlerts();
+      setShowAdjustStock(false);
+      setAdjustContext(null);
+      showSuccess('Stock Adjusted', `Stock ${type === 'add' ? 'increased' : 'decreased'} by ${quantity} units.`);
+    } catch (err) {
+      setError(err.message || 'Failed to adjust stock');
+    }
   };
 
   const handleDispense = async ({ request, quantity, allocation, notes }) => {
@@ -468,9 +667,25 @@ const MedicalInventory = () => {
       }));
 
       // Keep local queue row aligned with successful dispense transaction
+      // Also update request items with the actual dispensed quantity
+      const dispensedByItemIdx = {};
+      allocation.forEach((a) => {
+        if (a.itemIdx !== undefined) {
+          dispensedByItemIdx[a.itemIdx] = (dispensedByItemIdx[a.itemIdx] || 0) + a.allocate;
+        }
+      });
+      
       setRequests(requests.map((r) =>
         r.id === requestId
-          ? { ...r, status: 'Completed', notes: notes || r.notes }
+          ? {
+              ...r,
+              status: 'Completed',
+              notes: notes || r.notes,
+              items: (r.items || []).map((item, idx) => ({
+                ...item,
+                quantity: dispensedByItemIdx[idx] || item.quantity,
+              })),
+            }
           : r
       ));
 
@@ -491,7 +706,7 @@ const MedicalInventory = () => {
       }, ...transactions]);
 
       setShowDispense(false);
-      setSuccessMsg(`Dispensed ${totalQty} units to ${req?.patientName || 'patient'}. Transaction #${txId}`);
+      showSuccess('Medicine Dispensed', `Dispensed ${totalQty} units to ${req?.patientName || 'patient'}.`, `Transaction #${txId}`);
     } catch (err) {
       console.error('❌ Dispense mutation failed:', err);
       setError(err.message || 'Failed to dispense medicine. Please try again.');
@@ -528,7 +743,7 @@ const MedicalInventory = () => {
         r.id === requestId ? { ...r, status, notes: notes || null } : r
       ));
       
-      setSuccessMsg(`Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
+      showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
       setShowActionModal(false);
       setSelectedActionRequest(null);
       setActionType(null);
@@ -540,8 +755,17 @@ const MedicalInventory = () => {
 
   // Open modals with context
   const openAddSupply = (itemId) => { setSupplyContext({ itemId }); setShowAddSupply(true); };
-  const openSplit = (batch) => { setSplitContext({ batch }); setShowSplitSupply(true); };
-  const openAdjust = (batch) => { setAdjustContext({ batch }); setShowAdjustStock(true); };
+  const openSplit = (batch) => { setSplitContext({ batch, allBatches: batches }); setShowSplitSupply(true); };
+  const openAdjust = (batch) => {
+    // Medicine batches use `availableQuantity`; supply batches use `currentQuantity`.
+    // Normalise to `currentQuantity` so the modal always has a valid number.
+    const normalised = {
+      ...batch,
+      currentQuantity: batch.currentQuantity ?? batch.availableQuantity ?? 0,
+    };
+    setAdjustContext({ batch: normalised });
+    setShowAdjustStock(true);
+  };
   const openDispense = async (request) => {
     if (!request?.id) {
       setError('Invalid request. Please refresh and try again.');
@@ -594,10 +818,6 @@ const MedicalInventory = () => {
       icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
       badge: requests.filter((r) => r.status === 'Pending' || r.status === 'InProgress').length,
     },
-    {
-      key: 'history', label: 'History',
-      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-    },
   ];
 
   return (
@@ -608,11 +828,16 @@ const MedicalInventory = () => {
           {error}
         </div>
       )}
-      {successMsg && (
-        <div className="px-3 py-2 bg-success-50 dark:bg-success-900/30 border border-success-200 dark:border-success-800 text-success-700 dark:text-success-400 text-xs rounded-lg">
-          {successMsg}
-        </div>
-      )}
+
+      {/* Success Modal */}
+      <SuccessMessageModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        title={successModalData.title}
+        message={successModalData.message}
+        details={successModalData.details}
+        autoCloseDuration={3000}
+      />
 
       {/* Header + Section Tabs */}
       <div className="flex items-center justify-between">
@@ -620,24 +845,26 @@ const MedicalInventory = () => {
           <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Medical Inventory</h1>
           <p className="text-[11px] text-secondary-500 dark:text-neutral-400">Manage medicines, supplies, batches, and dispense requests</p>
         </div>
-        <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
-          {sections.map((s) => (
-            <button
-              key={s.key}
-              onClick={() => { setActiveSection(s.key); if (s.key !== 'detail') setSelectedItem(null); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                activeSection === s.key || (s.key === 'items' && activeSection === 'detail')
-                  ? 'bg-primary-500 text-white shadow-sm'
-                  : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
-              }`}
-            >
-              {s.icon}
-              {s.label}
-              {s.badge > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-error-500 text-white rounded-full">{s.badge}</span>
-              )}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
+            {sections.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => { setActiveSection(s.key); if (s.key !== 'detail') setSelectedItem(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  activeSection === s.key || (s.key === 'items' && activeSection === 'detail')
+                    ? 'bg-primary-500 text-white shadow-sm'
+                    : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                {s.icon}
+                {s.label}
+                {s.badge > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-error-500 text-white rounded-full">{s.badge}</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -671,7 +898,7 @@ const MedicalInventory = () => {
         <MedicalItemDetail
           item={selectedEnriched}
           loading={selectedItemLoading}
-          transactions={transactions.filter((t) => t.itemName === selectedEnriched.item_name)}
+          transactions={transactions.filter((t) => String(t.itemId) === String(selectedEnriched.id) && ['add', 'adjust_add', 'adjust_minus', 'transfer'].includes(t.action))}
           onBack={handleBackToList}
           onAddSupply={() => openAddSupply(selectedEnriched.id)}
           onSplit={openSplit}
@@ -683,71 +910,20 @@ const MedicalInventory = () => {
 
         {activeSection === 'dispense' && (
         <div className="space-y-3">
-          {/* Medicine Dispensing Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Patient Request Loader */}
-            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-4">
-              <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-2">Patient Requests</p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={patientLookupId}
-                  onChange={(e) => setPatientLookupId(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && loadPatientMedicineRequests(patientLookupId)}
-                  placeholder="Enter Patient ID…"
-                  className="flex-1 px-3 py-1.5 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                />
-                <button
-                  onClick={() => loadPatientMedicineRequests(patientLookupId)}
-                  disabled={!patientLookupId.trim() || isFetchingPatientReqs}
-                  className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md disabled:opacity-50 transition-colors"
-                >
-                  {isFetchingPatientReqs ? 'Loading…' : 'Load'}
-                </button>
-              </div>
-              {patientReqsMsg && (
-                <p className={`text-[11px] mt-1.5 ${patientReqsMsg.startsWith('No') || patientReqsMsg.includes('Failed') ? 'text-error-600 dark:text-error-400' : 'text-success-600 dark:text-success-400'}`}>
-                  {patientReqsMsg}
-                </p>
-              )}
-            </div>
-
-            {/* Direct Prescription Issuing */}
-            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-sm border border-stone-200 dark:border-neutral-700 p-4">
-              <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-2">Issue Medicine Directly</p>
-              <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mb-2">Dispense available medicines to any patient</p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Patient ID…"
-                  id="directPatientId"
-                  className="flex-1 px-3 py-1.5 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 text-secondary-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                />
-                <button
-                  onClick={() => {
-                    const input = document.getElementById('directPatientId');
-                    const patientId = input?.value.trim();
-                    if (patientId) {
-                      openDispenseMedicine(Number(patientId), `Patient #${patientId}`);
-                      input.value = '';
-                    }
-                  }}
-                  className="px-3 py-1.5 text-xs font-medium bg-success-500 hover:bg-success-600 text-white rounded-md transition-colors flex items-center gap-1"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                  Dispense
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <DispenseQueue requests={requests} items={items} batches={batches} onDispense={openDispense} onApprove={handleApprove} onReject={handleReject} />
+          <DispenseQueue
+            requests={requests}
+            items={items}
+            batches={batches}
+            onDispense={openDispense}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            focusPatientId={loadedPatientId}
+            onClearFocus={() => { setLoadedPatientId(null); setPatientReqsMsg(''); setPatientLookupId(''); }}
+          />
         </div>
       )}
 
-      {activeSection === 'history' && (
-        <TransactionHistory transactions={transactions} items={items} />
-      )}
+
 
       {/* Modals */}
       {showAddItem && (
@@ -785,6 +961,7 @@ const MedicalInventory = () => {
       {showSplitSupply && splitContext?.batch && (
         <SplitSupplyModal
           batch={splitContext.batch}
+          allBatches={splitContext.allBatches}
           onClose={() => setShowSplitSupply(false)}
           onSplit={handleSplit}
         />
@@ -794,7 +971,10 @@ const MedicalInventory = () => {
         <AdjustStockModal
           batch={adjustContext.batch}
           itemName={items.find((i) => i.id === adjustContext.batch.medicalItemId)?.item_name || ''}
-          onClose={() => setShowAdjustStock(false)}
+          onClose={() => {
+            setShowAdjustStock(false);
+            setAdjustContext(null);
+          }}
           onAdjust={handleAdjust}
         />
       )}
@@ -815,7 +995,7 @@ const MedicalInventory = () => {
           patientName={dispenseMedicineContext.patientName}
           onClose={() => setShowDispenseMedicine(false)}
           onSuccess={(result) => {
-            setSuccessMsg(`Dispensed medicine to ${dispenseMedicineContext.patientName}. Transaction ID: ${result.id}`);
+            showSuccess('Medicine Dispensed', `Dispensed medicine to ${dispenseMedicineContext.patientName}.`, `Transaction ID: ${result.id}`);
             setShowDispenseMedicine(false);
           }}
         />

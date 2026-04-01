@@ -139,6 +139,12 @@ input SplitMedicalSupplyInput {
 }
 ```
 
+#### `splitMedicineSupply`
+```graphql
+splitMedicineSupply(batchId: ID!, input: SplitMedicalSupplyInput!): MedicineBatch
+```
+Moves `quantity` entities from an existing `MedicineBatch` to a new batch at `targetLocation`. Creates a new batch with the same medicine properties (supplier, batch number, dosage, expiry) but at the new location. Both batches remain linked to the same parent item. Returns `400` if insufficient available quantity (unassigned entities) or target location equals source. Uses row-level locking (`FOR UPDATE`) to prevent concurrent split race conditions.
+
 #### `updateMedicalSupply`
 ```graphql
 updateMedicalSupply(batchId: ID!, input: MedicalSupplyUpdateInput!): MedicineBatch

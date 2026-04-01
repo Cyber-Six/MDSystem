@@ -2,6 +2,8 @@ scalar Date
 scalar UUID
 scalar JSON
 
+### ====================== CONSULTATION ==================== ###
+
 enum CONSULTATION_MODE{
   Onsite
   Virtual
@@ -61,6 +63,8 @@ input ConsultationInput{
 type ConsultationOutcome{
   id: ID!
   consultationId: ID!
+  vitalSignsId: ID
+  dentalRecordId: ID
   remarks: String
   
   complaints: [ConsultationComplaints!]!
@@ -75,6 +79,8 @@ type ConsultationOutcome{
 input ConsultationOutcomeInput{
   consultationId: ID!
   remarks: String
+  vitalSignsId: ID
+  dentalRecordId: ID
   complaints: [String!]!
   peFindings: [String!]!
   treatments: [String!]!

@@ -95,4 +95,55 @@ async function getPendingCount(userId) {
   }
 }
 
-module.exports = { pushPending, flushPending, getPendingCount };
+module.exports = { pushPending, flushPending, getPendingCount, savePushToken, getPushToken, deletePushToken };
+
+// ── Expo Push Token Store ─────────────────────────────────────────────────────
+// Tokens are stored in Redis with a 30-day TTL.
+// Key format: push-token:{userId}
+
+const PUSH_TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days in seconds
+
+/**
+ * Persist an Expo push token for a user.
+ * Overwrites any previously stored token.
+ *
+ * @param {string} userId
+ * @param {string} token  - ExponentPushToken[...]
+ */
+async function savePushToken(userId, token) {
+  try {
+    await redis.getClient().set(`push-token:${userId}`, token, { EX: PUSH_TOKEN_TTL });
+    logger.debug(`[PUSH_TOKEN] Saved token for user:${userId}`);
+  } catch (err) {
+    logger.error(`[PUSH_TOKEN] Failed to save token for user:${userId}: ${err.message}`);
+  }
+}
+
+/**
+ * Retrieve the stored Expo push token for a user.
+ *
+ * @param {string} userId
+ * @returns {Promise<string|null>}
+ */
+async function getPushToken(userId) {
+  try {
+    return await redis.getClient().get(`push-token:${userId}`);
+  } catch (err) {
+    logger.error(`[PUSH_TOKEN] Failed to get token for user:${userId}: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Remove the stored Expo push token for a user (called on logout).
+ *
+ * @param {string} userId
+ */
+async function deletePushToken(userId) {
+  try {
+    await redis.getClient().del(`push-token:${userId}`);
+    logger.debug(`[PUSH_TOKEN] Deleted token for user:${userId}`);
+  } catch (err) {
+    logger.error(`[PUSH_TOKEN] Failed to delete token for user:${userId}: ${err.message}`);
+  }
+}

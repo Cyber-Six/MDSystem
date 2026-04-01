@@ -8,8 +8,28 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
     onChange({ ...data, [field]: value });
   };
 
-  // Strip any character that is not a digit, +, -, space, or parenthesis
-  const filterPhone = (val) => val.replace(/[^\d+\-\s()]/g, '');
+  const [phoneWarnings, setPhoneWarnings] = React.useState({});
+
+  // Strip non-phone chars and enforce a maximum of 11 digits
+  const handlePhone = (fieldKey, rawVal) => {
+    const filtered = rawVal.replace(/[^\d+\-\s()]/g, '');
+    const digits = filtered.replace(/\D/g, '');
+    if (digits.length > 11) {
+      let digitCount = 0;
+      let result = '';
+      for (const char of filtered) {
+        if (/\d/.test(char)) {
+          if (digitCount >= 11) break;
+          digitCount++;
+        }
+        result += char;
+      }
+      setPhoneWarnings(prev => ({ ...prev, [fieldKey]: true }));
+      return result;
+    }
+    setPhoneWarnings(prev => ({ ...prev, [fieldKey]: false }));
+    return filtered;
+  };
   // Strip any character that is not alphanumeric or a dash
   const filterEmployeeId = (val) => val.replace(/[^a-zA-Z0-9\-]/g, '');
 
@@ -93,6 +113,12 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             placeholder="Enter middle name"
           />
           <Input
+            label="Suffix"
+            value={data.suffix || ''}
+            onChange={(e) => handleChange('suffix', e.target.value)}
+            placeholder="e.g., Jr., Sr., III"
+          />
+          <Input
             label="Employee ID Number"
             required
             value={data.employeeId || ''}
@@ -157,10 +183,12 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             label="Contact Number (Mobile / Landline)"
             type="tel"
             required
+            reserveErrorSpace
             value={data.contactNumber || ''}
-            onChange={(e) => handleChange('contactNumber', filterPhone(e.target.value))}
-            placeholder="+63 XXX XXX XXXX"
-            error={fieldErrors.contactNumber}
+            onChange={(e) => handleChange('contactNumber', handlePhone('contactNumber', e.target.value))}
+            placeholder="09XXXXXXXXX"
+            className="mb-0"
+            error={phoneWarnings.contactNumber ? 'Contact number cannot exceed 11 digits.' : fieldErrors.contactNumber}
           />
           <Input
             label="Active Email Address"
@@ -249,7 +277,7 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
 
       {/* ── Emergency Contacts Card ── */}
       <div className="form-section">
-        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-5 flex flex-wrap items-center gap-2">
+        <h3 className="text-lg font-heading font-semibold text-secondary-900 mb-3 flex flex-wrap items-center gap-2">
           <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-error-100 text-error-600 shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -259,8 +287,8 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
         </h3>
 
         {/* --- Contact 1 (Required) --- */}
-        <div className="mb-6 pb-6 border-b border-neutral-200">
-          <div className="space-y-4">
+        <div className="mb-3 pb-3 border-b border-neutral-200">
+          <div className="space-y-2">
             <Input
               label="Person/s to be Contacted in Case of Emergency"
               required
@@ -289,21 +317,22 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
               label="Contact Number of the Person During Emergency"
               type="tel"
               required
+              reserveErrorSpace
               value={data.emergencyContacts[0]?.contactNumber || ''}
-              onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', filterPhone(e.target.value))}
-              placeholder="+63 XXX XXX XXXX"
-              error={fieldErrors.emergencyContact1ContactNumber}
+              onChange={(e) => handleEmergencyContactChange(0, 'contactNumber', handlePhone('ec0', e.target.value))}
+              placeholder="09XXXXXXXXX"
+              error={phoneWarnings.ec0 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact1ContactNumber}
             />
           </div>
         </div>
 
         {/* --- Contact 2 (Optional) --- */}
         <div>
-          <p className="text-sm font-semibold text-secondary-500 mb-4">
+          <p className="text-sm font-semibold text-secondary-500 mb-2">
             Additional Emergency Contact
             <span className="ml-2 text-xs font-normal bg-secondary-100 text-secondary-500 px-2 py-0.5 rounded-full">Optional</span>
           </p>
-          <div className="space-y-4">
+          <div className="space-y-2">
             <Input
               label="Person/s to be Contacted in Case of Emergency"
               value={data.emergencyContacts[1]?.name || ''}
@@ -328,10 +357,11 @@ const EmployeePersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFie
             <Input
               label="Contact Number of the Person During Emergency"
               type="tel"
+              reserveErrorSpace
               value={data.emergencyContacts[1]?.contactNumber || ''}
-              onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', filterPhone(e.target.value))}
-              placeholder="+63 XXX XXX XXXX"
-              error={fieldErrors.emergencyContact2ContactNumber}
+              onChange={(e) => handleEmergencyContactChange(1, 'contactNumber', handlePhone('ec1', e.target.value))}
+              placeholder="09XXXXXXXXX"
+              error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : fieldErrors.emergencyContact2ContactNumber}
             />
           </div>
         </div>

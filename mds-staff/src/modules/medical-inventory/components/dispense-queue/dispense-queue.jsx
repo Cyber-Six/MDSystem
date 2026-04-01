@@ -5,7 +5,7 @@ import { STATUS_BADGES } from '../../inventory-seed-data';
  * Dispense Queue — shows pending doctor / student medicine requests.
  * Key feature: "QTY PENDING" badge when quantity is null (student self-request).
  */
-const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject }) => {
+const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject, focusPatientId, onClearFocus }) => {
   const [search, setSearch] = useState('');
   const [filterLocation, setFilterLocation] = useState('Casal');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -53,6 +53,11 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
 
   const filtered = useMemo(() => {
     return (requests || []).filter((r) => {
+      // When a specific patient is focused, show all their requests across all locations/statuses
+      if (focusPatientId) {
+        return String(r.patientId) === String(focusPatientId);
+      }
+
       if (filterStatus !== 'All' && r.status !== filterStatus) return false;
 
       // Use the request's location field directly from the backend
@@ -83,8 +88,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
       }
       return true;
     });
-  }, [requests, search, filterLocation, filterStatus, itemMap]);
-
+  }, [requests, search, filterLocation, filterStatus, itemMap, focusPatientId]);
   const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
   const locations = ['Casal', 'Arlegui', 'QuezonCity'];
 
@@ -95,8 +99,24 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
 
   return (
     <div className="space-y-2">
+      {/* Focused patient banner */}
+      {focusPatientId && (
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 text-xs">
+          <span className="text-primary-700 dark:text-primary-300 font-medium">
+            Showing all requests for Patient ID: <span className="font-bold">{focusPatientId}</span>
+            {' '}({filtered.length} found across all locations)
+          </span>
+          <button
+            onClick={onClearFocus}
+            className="ml-3 flex-shrink-0 px-2 py-1 rounded text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors"
+          >
+            ✕ Clear
+          </button>
+        </div>
+      )}
+
       {/* Location Tabs */}
-      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-700">
+      <div className={`flex gap-1 border-b border-neutral-200 dark:border-neutral-700 ${focusPatientId ? 'opacity-40 pointer-events-none' : ''}`}>
         {locations.map((loc) => (
           <button
             key={loc}
@@ -141,10 +161,9 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
               <tr className="bg-neutral-50 dark:bg-neutral-700/50">
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">ID</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Patient</th>
-                <th className="px-3 py-1.5 text[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item</th>
+                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Qty</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Purpose</th>
-                <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Type</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Date</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
                 <th className="px-3 py-1.5 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Notes</th>
@@ -155,7 +174,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
             <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center">
+                  <td colSpan={10} className="px-4 py-10 text-center">
                     <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                     <p className="text-sm text-secondary-400 dark:text-neutral-500">No requests match your filters</p>
                   </td>
@@ -185,7 +204,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                             itemName = itemData.item_name;
                           }
                           return (
-                            <div key={idx} className="text-xs">{itemName}{reqItem.quantity && ` (qty: ${reqItem.quantity})`}</div>
+                            <div key={idx} className="text-xs">{itemName}</div>
                           );
                         }) || '—'}
                       </td>
@@ -209,9 +228,6 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                           <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.purpose || '—'}</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5">
-                        <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">{req.patientType}</span>
-                      </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">
                         {formatDate(req.created_at ?? req.createdAt ?? req.requestDate)}
                       </td>
@@ -219,16 +235,20 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                         <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded ${badge}`}>{req.status}</span>
                       </td>
                       <td className="px-3 py-1.5">
-                        {req.notes && req.notes.length > 30 && (req.status === 'Approved' || req.status === 'Rejected') ? (
-                          <button
-                            onClick={() => setSelectedNotes(req.notes)}
-                            className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 truncate max-w-[120px] hover:underline"
-                            title={req.notes}
-                          >
-                            {req.notes.substring(0, 30)}...
-                          </button>
+                        {req.notes && req.notes.length > 0 ? (
+                          req.notes.length > 20 ? (
+                            <button
+                              onClick={() => setSelectedNotes(req.notes)}
+                              className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 hover:underline truncate max-w-[120px] text-left transition-colors"
+                              title={req.notes}
+                            >
+                              {req.notes.substring(0, 20)}...
+                            </button>
+                          ) : (
+                            <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.notes}</span>
+                          )
                         ) : (
-                          <span className="text-xs text-secondary-600 dark:text-neutral-400">{req.notes || '—'}</span>
+                          <span className="text-xs text-secondary-400 dark:text-neutral-500">—</span>
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-400">{req.approved_by ? `Staff #${req.approved_by}` : '—'}</td>

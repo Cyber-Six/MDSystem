@@ -38,7 +38,7 @@ export const axiosRequest = createAxiosRequestHandler({
   getDevSubdomain: apiBaseUrlProvider.getDevSubdomain,
   tokenService,
   bannerConfig,
-  onShowBanner: (banner) => bannerService.showBanner(banner)
+  onShowBanner: (banner) => bannerService.showBanner({ ...banner, duration: 0 })
 });
 
 // Export convenience methods

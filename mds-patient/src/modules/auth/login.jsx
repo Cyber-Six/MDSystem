@@ -169,7 +169,13 @@ const Login = () => {
       
       if (response.data.ok) {
         if (response.data.accessToken && response.data.refreshToken) {
-          TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+          // MUST await — setTokens is async and stores both tokens in separate microtasks.
+          // Navigation must happen only after both tokens are written to localStorage.
+          await TokenStorage.setTokens(response.data.accessToken, response.data.refreshToken);
+          // Pass userId in the event detail so SettingsProvider can build the settings
+          // key directly without reading from localStorage (avoids any residual race).
+          const userId = response.data.refreshToken.split(':')[0];
+          window.dispatchEvent(new CustomEvent('mds:auth-changed', { detail: { userId } }));
           // Store detected role for routing (employee vs student) — avoids exposing email
           if (email) {
             const role = detectRoleFromEmail(email.toLowerCase().trim()) || 'Student';

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../../packages-core-adapter';
 import { GQL_FULL_RECORD, GQL_PERSONAL_PROFILE, MOCK_PATIENT_RECORDS, STATUS_BANNER } from './patient-record-data';
 import * as consultationService from './consultation-service';
+import { ENUM_TO_CODE } from './components/tooth-chart-constants';
 
 const GQL_BASIC_RECORD_FALLBACK = `
   query GetPatientBasicRecordFallback($userId: ID!) {
@@ -43,6 +44,9 @@ const PatientAppointmentsTab = lazy(() => import('./components/appointments-tab'
 const PatientMedicineRequestsTab = lazy(() => import('./components/medicine-requests-tab'));
 const PatientDocumentsTab = lazy(() => import('./components/documents-tab'));
 const PatientObgyneTab = lazy(() => import('./components/obgyne-tab'));
+const PatientDentalGradeHistoryTab = lazy(() => import('./components/dental-grade-history-tab'));
+const PatientMedicalRecordHistoryTab = lazy(() => import('./components/medical-record-history-tab'));
+const VitalSignsTab = lazy(() => import('./components/vital-signs-tab'));
 
 function LoadingBlock({ label }) {
   return (
@@ -56,12 +60,12 @@ function LoadingBlock({ label }) {
   );
 }
 
-function toDisplayPatient(patientId, data, mockPatient, profileData) {
+function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData) {
   if (mockPatient) return mockPatient;
 
   const basicInfo = data?.getPatientBasicInfo;
   const updateTicket = data?.getUserUpdateTicket || null;
-  const vitalSigns = data?.getUserVitalSigns?.[0] || null;
+  const vitalSigns = vitalsData?.[0] || null;
   const medicalHistory = data?.getUserMedicalHistory?.[0] || null;
   const allergyData = data?.getUserAllergyProfile?.[0] || null;
   const immunizationData = data?.getUserImmunizationProfile?.[0] || null;
@@ -105,6 +109,8 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
   const applianceTagMap = {};
   (data?.oralApplianceCatalogs || []).forEach((c) => { applianceTagMap[c.id] = c.name; });
 
+  const oralFindingCatalogs = data?.oralFindingCatalogs || [];
+
   // Resolve allergies by type
   const allergyList = allergyData?.allergies || [];
   const drugAllergies  = allergyList.filter((a) => allergenMap[a.allergenCatalogId]?.type === 'Drug').map((a) => allergenMap[a.allergenCatalogId]?.allergen || `#${a.allergenCatalogId}`);
@@ -133,6 +139,7 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
     department: basicInfo?.department || '',
     semester: '',
     status: updateTicket?.status || basicInfo?.latest_status || '',
+    credentialStatus: basicInfo?.credentials_status || '',
     type: basicInfo?.profile_type || 'Student',
     avatar: null,
     personal: {
@@ -232,6 +239,9 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
         yearsSmoked: lifestyleData?.yearsSmoked ?? '',
         alcoholConsumer: lifestyleData?.alcoholConsumer ? 'Yes' : lifestyleData?.alcoholConsumer === false ? 'No' : '',
         alcoholFrequency: lifestyleData?.frequencyOfAlcoholConsumption ?? '',
+        vaper: lifestyleData?.vapeUser ? 'Yes' : lifestyleData?.vapeUser === false ? 'No' : '',
+        vapeType: lifestyleData?.vapeType ?? '',
+        vapeFrequency: lifestyleData?.vapeFrequency ?? '',
         notes: lifestyleData?.notes || '',
       },
       vision: {
@@ -244,7 +254,7 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
       const procedureRecords = procedureData?.procedures || [];
       const allAppliances = applianceData?.appliances || [];
       const toothStates = {};
-      (dentalRecord?.ToothPlacements || []).forEach((tp) => { toothStates[tp.toothIndex] = tp.legend; });
+      (dentalRecord?.ToothPlacements || []).forEach((tp) => { toothStates[tp.toothIndex] = ENUM_TO_CODE[tp.legend] ?? tp.legend; });
       return {
         seenByDentist: dentalHistory?.seenByDentist ? 'No' : dentalHistory?.seenByDentist === false ? 'Yes' : '',
         firstTimeDentist: dentalHistory?.seenByDentist === false ? 'Yes (first time)' : dentalHistory?.seenByDentist ? 'No' : '',
@@ -269,6 +279,9 @@ function toDisplayPatient(patientId, data, mockPatient, profileData) {
         oralFindings: [],
         treatments: [],
         toothChart: { missing: [], filled: [], decayed: [], notes: dentalRecord?.notes || '', states: toothStates },
+        oralFindingCatalogs,
+        latestOralFindings: (dentalRecord?.oralFindings || []).map((f) => ({ oralFindingId: f.oralFindingId, status: f.status })),
+        dentalRecordId: dentalRecord?.id || null,
       };
     })(),
     obgyne: {
@@ -294,6 +307,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
   const [profileData, setProfileData] = useState(null);
+  const [vitalsData, setVitalsData] = useState(null);
   const [consultations, setConsultations] = useState([]);
 
   const isMockPatient = String(patientId || '').startsWith('mock-');
@@ -321,8 +335,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
     const loadRecord = async () => {
       try {
-        // Fetch EMR data and personal profile in parallel
-        const [emrResult, profileResult] = await Promise.allSettled([
+        // Fetch EMR data, personal profile, VitalSigns, and dental data in parallel
+        const [emrResult, profileResult, vitalsResult, staffDentalResult] = await Promise.allSettled([
           axiosRequest.post('/emr/medical', {
             query: GQL_FULL_RECORD,
             variables: { userId: patientId },
@@ -330,6 +344,25 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           axiosRequest.post('/profile/medical', {
             query: GQL_PERSONAL_PROFILE,
             variables: { userId: patientId },
+          }),
+          axiosRequest.post('/staff/emr', {
+            query: `query GetVitals($patientId: ID!) {
+              getPatientVitalSigns(patientId: $patientId, limit: 1) {
+                id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
+              }
+            }`,
+            variables: { patientId },
+          }),
+          axiosRequest.post('/staff/emr', {
+            query: `query GetStaffDentalData($patientId: ID!) {
+              getPatientDentalRecord(patientId: $patientId, limit: 1) {
+                id notes created_at
+                ToothPlacements { id toothIndex legend }
+                oralFindings { oralFindingId status }
+              }
+              getOralFindingCatalogs { id name }
+            }`,
+            variables: { patientId },
           }),
         ]);
 
@@ -345,6 +378,17 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           throw new Error(emrResponse?.errors?.[0]?.message || 'Patient not found');
         }
 
+        // Merge dental record and oral finding catalogs from /staff/emr into the payload
+        if (staffDentalResult.status === 'fulfilled') {
+          const staffDentalData = staffDentalResult.value.data?.data;
+          if (staffDentalData?.getPatientDentalRecord) {
+            payload.getUserDentalRecord = staffDentalData.getPatientDentalRecord;
+          }
+          if (staffDentalData?.getOralFindingCatalogs) {
+            payload.oralFindingCatalogs = staffDentalData.getOralFindingCatalogs;
+          }
+        }
+
         setRecordData(payload);
 
         // Personal profile is optional — set if available
@@ -353,6 +397,14 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         } else {
           const profilePartial = profileResult.reason?.response?.data?.data;
           setProfileData(profilePartial || null);
+        }
+
+        // VitalSigns is optional — set if available (fetched from /staff/emr)
+        if (vitalsResult.status === 'fulfilled') {
+          setVitalsData(vitalsResult.value.data?.data?.getPatientVitalSigns || null);
+        } else {
+          console.warn('[PatientRecordView] VitalSigns fetch failed:', vitalsResult.reason?.message);
+          setVitalsData(null);
         }
       } catch (err) {
         if (cancelled) return;
@@ -396,7 +448,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     };
   }, [patientId, isMockPatient, mockPatient]);
 
-  const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient, profileData), [patientId, recordData, mockPatient, profileData]);
+  const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient, profileData, vitalsData), [patientId, recordData, mockPatient, profileData, vitalsData]);
 
   // Fetch consultations from backend on page load
   useEffect(() => {
@@ -474,12 +526,28 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return;
       }
 
-      const { consultationInput, consultationOutcomeInput } = entry.backendPayload;
+      const { consultationInput, consultationOutcomeInput, vitalSignsData, patientId: vsPatientId } = entry.backendPayload;
+
+      // If vital signs data was provided and all required fields are valid, create them first
+      let vitalSignsId = null;
+      if (vitalSignsData) {
+        try {
+          const vs = await consultationService.createVitalSignsForConsultation(vsPatientId || patientId, vitalSignsData);
+          vitalSignsId = vs?.id || null;
+        } catch (vsErr) {
+          console.error('Failed to create vital signs during consultation (non-blocking):', vsErr);
+          // Non-blocking: consultation proceeds even if vital signs creation fails
+        }
+      }
+
+      const finalOutcomeInput = vitalSignsId
+        ? { ...consultationOutcomeInput, vitalSignsId }
+        : consultationOutcomeInput;
 
       // Use the service to create and submit consultation
       await consultationService.createAndSubmitConsultation(
         consultationInput,
-        consultationOutcomeInput,
+        finalOutcomeInput,
         'Completed'
       );
 
@@ -520,7 +588,10 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const tabs = [
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Record' },
+    { id: 'medical-history', label: 'Medical Record History' },
+    { id: 'vital-signs', label: 'Vital Signs' },
     { id: 'dental', label: 'Dental Record' },
+    { id: 'dental-grade-history', label: 'Dental Record History' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
@@ -542,8 +613,14 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return <PatientPersonalInfoTab patient={patient} />;
       case 'medical':
         return <PatientMedicalRecordTab patient={patient} />;
+      case 'medical-history':
+        return <PatientMedicalRecordHistoryTab patient={patient} />;
+      case 'vital-signs':
+        return <VitalSignsTab patient={patient} />;
       case 'dental':
         return <PatientDentalRecordTab patient={patient} />;
+      case 'dental-grade-history':
+        return <PatientDentalGradeHistoryTab patient={patient} />;
       case 'consultation':
         return (
           <PatientConsultationTab
@@ -605,10 +682,12 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
             <div className="min-w-0">
               <h2 className="text-base font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
-                {patient.id} · {patient.program || patient.department || 'N/A'} · {patient.year || 'N/A'}
+                {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id} · {patient.program || patient.department || 'N/A'} · {patient.year || 'N/A'}
               </p>
               <div className="mt-1 flex items-center gap-1.5">
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status || 'N/A'}</span>
+                {['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(patient.status) && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status}</span>
+                )}
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">{patient.type}</span>
                 {isMockPatient && (
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">Mock Mode</span>

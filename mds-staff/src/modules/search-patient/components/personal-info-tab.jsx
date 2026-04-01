@@ -11,8 +11,32 @@ function Field({ label, value }) {
 }
 
 export default function PatientPersonalInfoTab({ patient }) {
+  const getCredentialStatusColor = (status) => {
+    switch (status) {
+      case 'Active':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+      case 'Inactive':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700/30 dark:text-gray-300';
+      case 'Locked':
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+      case 'Unverified':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+      default:
+        return 'bg-neutral-100 text-neutral-800 dark:bg-neutral-700/30 dark:text-neutral-300';
+    }
+  };
+
   return (
     <div className="space-y-3">
+      <PatientSectionCard title="Account Status">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-secondary-500 dark:text-neutral-400">Credential Status:</span>
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getCredentialStatusColor(patient.credentialStatus)}`}>
+            {patient.credentialStatus || 'Unknown'}
+          </span>
+        </div>
+      </PatientSectionCard>
+
       <PatientSectionCard title="Basic Information">
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           <Field label="First Name" value={patient.personal.firstName} />

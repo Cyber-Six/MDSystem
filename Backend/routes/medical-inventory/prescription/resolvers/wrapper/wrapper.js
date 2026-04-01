@@ -1,7 +1,7 @@
 const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
-const { isConnectedAnywhere, emitToUserWithAck } = require("../../../../../config/sockets");
+const { isConnectedAnywhere, emitToUserWithAck, emitToRole } = require("../../../../../config/sockets");
 const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
 const { findEmailByUserId } = require("../../../../../config/query.js");
 
@@ -163,6 +163,35 @@ const Mutation = {
 
       transaction.items = items;
 
+      if (!linkedRequest) {
+        // Health-chat direct prescription — mirror into MedicineRequestLog so it appears in the dispense queue
+        const batchIds = mergedItems.map(i => i.batchId);
+        const batchInfoResult = await client.query(
+          `SELECT id, "medicalItemId", location FROM "MedicineBatch" WHERE id = ANY($1::int[])`,
+          [batchIds],
+        );
+        const batchInfo = new Map(batchInfoResult.rows.map(r => [r.id, r]));
+        const prescLocation = batchInfo.get(mergedItems[0].batchId)?.location ?? null;
+
+        const reqInsertResult = await client.query(
+          `INSERT INTO "MedicineRequestLog" ("patientId", status, location, purpose, notes, approved_by)
+           VALUES ($1, 'Completed', $2, 'Health Chat Prescription', $3, $4)
+           RETURNING id`,
+          [input.patientId, prescLocation, input.notes || null, issuedBy],
+        );
+        const newRequestId = reqInsertResult.rows[0].id;
+
+        for (const item of mergedItems) {
+          const medItemId = batchInfo.get(item.batchId)?.medicalItemId;
+          if (medItemId) {
+            await client.query(
+              `INSERT INTO "MedicineRequestEntity" ("requestId", "medicineId", quantity) VALUES ($1, $2, $3)`,
+              [newRequestId, medItemId, item.quantity],
+            );
+          }
+        }
+      }
+
       if (linkedRequest) {
         await client.query(
           `UPDATE "MedicineRequestLog"
@@ -173,6 +202,18 @@ const Mutation = {
       }
 
       await client.query('COMMIT');
+
+      // Notify all medical staff that stock changed (units were dispensed)
+      try {
+        emitToRole('medical', 'inventory:stock-changed', {
+          action: 'dispense',
+          patientId: input.patientId,
+          totalQuantity,
+          summary: `${totalQuantity} unit${totalQuantity !== 1 ? 's' : ''} dispensed to patient #${input.patientId}`,
+        });
+      } catch (emitErr) {
+        logger.warn('[INVENTORY] Failed to emit inventory:stock-changed after dispense:', emitErr.message);
+      }
 
       // Notify patient: socket with ack, fall back to email if not acked or offline
       try {

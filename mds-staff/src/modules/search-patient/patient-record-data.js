@@ -4,12 +4,10 @@ export const GQL_FULL_RECORD = `
       id identifier branch sex
       first_name last_name middle_name suffix
       profile_type program year department role
+      credentials_status
       latest_ticket_id latest_status latest_scope latest_updated_at
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
-    getUserVitalSigns(userId: $userId, limit: 1) {
-      id height_cm weight_kg blood_pressure heart_rate temperature notes created_at
-    }
     getUserMedicalHistory(userId: $userId, limit: 1) {
       id notes created_at
       conditions { id conditionId description diagnosedDate relationship }
@@ -24,7 +22,9 @@ export const GQL_FULL_RECORD = `
     }
     getUserLifestyle(userId: $userId, limit: 1) {
       id smoker numberOfCigarettesPerDay yearsSmoked
-      alcoholConsumer frequencyOfAlcoholConsumption notes created_at
+      alcoholConsumer frequencyOfAlcoholConsumption
+      vapeUser vapeType vapeFrequency
+      notes created_at
     }
     getUserObgynHistory(userId: $userId, limit: 1) {
       id lastMenstrualPeriod hasDysmenorrhea notes created_at
@@ -40,10 +40,6 @@ export const GQL_FULL_RECORD = `
     }
     getUserDentalHistory(userId: $userId, limit: 1) {
       id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at
-    }
-    getUserDentalRecord(userId: $userId, limit: 1) {
-      id notes created_at
-      ToothPlacements { id toothIndex legend }
     }
     getUserOralApplianceProfile(userId: $userId, limit: 1) {
       id notes created_at

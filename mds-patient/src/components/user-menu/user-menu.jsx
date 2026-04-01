@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { User, Settings, Moon, Sun, Monitor, HelpCircle, LogOut, ChevronRight, ChevronLeft, Lock, ShieldCheck, Activity, MessageSquare, Send } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Settings, Moon, Sun, Monitor, HelpCircle, LogOut, ChevronRight, ChevronLeft, Lock, ShieldCheck, Activity, MessageSquare, Send, Sliders } from 'lucide-react';
 import ProfileModal from '@core/components/profile/profile-modal';
 import { getPatientProfile } from '@core/services/emr-service';
 import ChangePasswordModal from '@core/components/settings/change-password-modal';
@@ -10,6 +11,7 @@ import ContactSupportModal from '@core/components/help-support/contact-support-m
 import FeedbackModal from '@core/components/help-support/feedback-modal';
 
 const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [currentPanel, setCurrentPanel] = useState('main'); // 'main', 'settings', 'help'
   const [activeModal, setActiveModal] = useState(null);
@@ -87,6 +89,12 @@ const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
     setCurrentPanel('main');
   };
 
+  const handleNavigateToSettings = () => {
+    setIsOpen(false);
+    setCurrentPanel('main');
+    navigate('/settings');
+  };
+
   const mainMenuItems = [
     {
       id: 'profile',
@@ -118,6 +126,12 @@ const UserMenu = ({ themeMode, toggleTheme, onLogout }) => {
   ];
 
   const settingsMenuItems = [
+    {
+      id: 'preferences',
+      icon: Sliders,
+      label: 'Portal Preferences',
+      onClick: handleNavigateToSettings
+    },
     {
       id: 'change-password',
       icon: Lock,

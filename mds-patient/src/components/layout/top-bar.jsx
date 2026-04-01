@@ -2,11 +2,30 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import UserMenu from '@core/components/user-menu/user-menu';
 import { logout } from '../../packages-core-adapter';
+import { usePatientNotifications } from '../../modules/notification/notification-context';
+
+function formatRelativeTime(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [activeNotifTab, setActiveNotifTab] = useState('general');
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = usePatientNotifications();
+
+  const handleNotifClick = (notif) => {
+    markAsRead(notif.id);
+    setShowNotifications(false);
+    if (notif.route) navigate(notif.route);
+  };
   const [themeMode, setThemeMode] = useState(() => {
     // Initialize from localStorage or default to 'system'
     return localStorage.getItem('patient_themeMode') || 'system';
@@ -47,17 +66,10 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
     if (path.includes('/appointments')) return 'Appointment';
     if (path.includes('/medicine-request')) return 'Medicine Request';
     if (path.includes('/health-chat')) return 'Health Chat';
+    if (path.includes('/my-documents')) return 'My Documents';
     if (path.includes('/dashboard') || path === '/') return 'Dashboard';
     return 'MDSystem';
   };
-
-  const notifications = [
-    { id: 1, title: 'Appointment Confirmed', message: 'Your appointment for Dec 25 has been confirmed', time: '2h ago', unread: true },
-    { id: 2, title: 'Medicine Request Approved', message: 'Your medicine request has been approved', time: '5h ago', unread: true },
-    { id: 3, title: 'Record Update Pending', message: 'Please verify your updated information', time: '1d ago', unread: false },
-  ];
-
-  const unreadCount = notifications.filter(n => n.unread).length;
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -160,35 +172,90 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
 
             {/* Notifications Dropdown */}
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-neutral-900 rounded-lg shadow-lg border border-gray-200 dark:border-neutral-700 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200 dark:border-neutral-700">
+              <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-neutral-900 rounded-lg shadow-lg border border-gray-200 dark:border-neutral-700 overflow-hidden z-50 flex flex-col">
+                {/* Header */}
+                <div className="px-4 py-3 border-b border-gray-200 dark:border-neutral-700 flex items-center justify-between bg-gray-50 dark:bg-neutral-800/80 shrink-0">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
-                </div>
-                <div className="max-h-96 overflow-y-auto">
-                  {notifications.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={`px-4 py-3 border-b border-gray-100 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800 cursor-pointer ${
-                        notif.unread ? 'bg-primary-50 dark:bg-primary-500/10' : ''
-                      }`}
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllAsRead}
+                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
                     >
-                      <div className="flex items-start">
-                        {notif.unread && (
-                          <span className="w-2 h-2 bg-primary-500 rounded-full mt-2 mr-2"></span>
-                        )}
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{notif.title}</p>
-                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{notif.message}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">{notif.time}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      Mark all read
+                    </button>
+                  )}
                 </div>
-                <div className="px-4 py-3 text-center border-t border-gray-200 dark:border-neutral-700">
-                  <button className="text-sm text-primary-600 dark:text-primary-500 hover:text-primary-700 dark:hover:text-primary-400 font-medium">
-                    View all notifications
+
+                {/* Tabs */}
+                <div className="flex border-b border-gray-200 dark:border-neutral-700 shrink-0 bg-white dark:bg-neutral-900">
+                  <button
+                    onClick={() => setActiveNotifTab('general')}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                      activeNotifTab === 'general'
+                        ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-500/10'
+                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-neutral-800/50'
+                    }`}
+                  >
+                    <svg
+                      className={`w-4 h-4 ${
+                        activeNotifTab === 'general' ? 'text-primary-500 dark:text-primary-400' : ''
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                    </svg>
+                    General
+                    {unreadCount > 0 && (
+                      <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-primary-500 text-white leading-none">
+                        {unreadCount}
+                      </span>
+                    )}
                   </button>
+                </div>
+
+                {/* Tab Content */}
+                <div className="max-h-96 overflow-y-auto flex-1">
+                  {notifications.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                      <div className="p-3 rounded-full bg-gray-100 dark:bg-neutral-800 mb-2">
+                        <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">No notifications</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">You're all caught up!</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 dark:divide-neutral-700/50">
+                      {notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => handleNotifClick(notif)}
+                          className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-neutral-800/60 cursor-pointer transition-colors ${
+                            notif.unread ? 'bg-primary-50/40 dark:bg-primary-500/10' : ''
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            {notif.unread && (
+                              <span className="w-2 h-2 bg-primary-500 rounded-full mt-2 flex-shrink-0"></span>
+                            )}
+                            <div className="flex-1 min-w-0 gap-1">
+                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{notif.title}</p>
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{notif.message}</p>
+                              <div className="flex items-center justify-between mt-1">
+                                <p className="text-xs text-gray-500 dark:text-gray-500">{formatRelativeTime(notif.time)}</p>
+                                {notif.senderName && notif.type === 'general' && (
+                                  <p className="text-xs text-primary-600 dark:text-primary-400 font-medium">From: {notif.senderName}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

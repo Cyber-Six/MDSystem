@@ -52,22 +52,22 @@ type MedicineBatch {
   receivedBy: Int
   notes: String
   created_at: Date
+  updated_at: Date
 }
 
 type SupplyBatch {
   id: ID!
   supplyItemId: Int!
-  batch_number: String
-  initialQuantity: Int
-  currentQuantity: Int
+  batchNumber: String
   unit: SupplyUnit
-  expiry_date: Date
+  currentQuantity: Int
+  expiryDate: Date
   location: LocationDesignation
-  received_at: Date
   receivedBy: Int
-  supplier_name: String
+  supplierName: String
   notes: String
   created_at: Date
+  updated_at: Date
 }
 
 input MedicalItemInput {
@@ -99,17 +99,23 @@ input MedicineBatchInput {
 
 input SupplyBatchInput {
   supplyItemId: Int!
-  batch_number: String!
+  batchNumber: String!
   initialQuantity: Int!
   unit: SupplyUnit!
-  expiry_date: Date
+  expiryDate: Date
   location: LocationDesignation!
-  received_at: Date
-  supplier_name: String
+  supplierName: String
   notes: String
 }
 
 input MedicalSupplyUpdateInput {
+  currentQuantity: Int
+  expiryDate: Date
+  notes: String
+}
+
+input SupplyBatchUpdateInput {
+  currentQuantity: Int
   expiryDate: Date
   notes: String
 }
@@ -136,6 +142,7 @@ type Mutation {
   addSupplyBatch(input: SupplyBatchInput!): SupplyBatch
 
   splitMedicalSupply(batchId: ID!, input: SplitMedicalSupplyInput!): SupplyBatch
+  splitMedicineSupply(batchId: ID!, input: SplitMedicalSupplyInput!): MedicineBatch
   updateMedicalSupply(batchId: ID!, input: MedicalSupplyUpdateInput!): MedicineBatch
-  updateSupplyBatch(batchId: ID!, input: MedicalSupplyUpdateInput!): SupplyBatch
+  updateSupplyBatch(batchId: ID!, input: SupplyBatchUpdateInput!): SupplyBatch
 }

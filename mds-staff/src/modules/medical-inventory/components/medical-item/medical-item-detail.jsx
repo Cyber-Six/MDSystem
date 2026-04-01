@@ -1,6 +1,19 @@
 import React, { useState } from 'react';
 import { getExpiryStatus, CATEGORY_COLORS } from '../../inventory-seed-data';
 import { getDisplayLocation } from '../../medical-inventory-service';
+import TransactionDisplay from './transaction-display';
+
+// Helper to format date for display (remove time portion)
+const formatDateDisplay = (dateValue) => {
+  if (!dateValue) return '—';
+  try {
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch (err) {
+    return '—';
+  }
+};
 
 /**
  * Medical Item Detail — batch table (FEFO sorted) + transaction history.
@@ -16,13 +29,6 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
     if (!b.expiryDate) return -1;
     return new Date(a.expiryDate) - new Date(b.expiryDate);
   });
-
-  const actionMap = {
-    issue: 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400',
-    receive: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
-    adjust: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
-    transfer: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400',
-  };
 
   return (
     <div className="space-y-2">
@@ -122,7 +128,10 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Location</th>
                   <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
                   {item.category?.toLowerCase() === 'medicine' ? (
-                    <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Dosage</th>
+                    <>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Dosage</th>
+                      <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Quantity</th>
+                    </>
                   ) : (
                     <>
                       <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Initial</th>
@@ -137,7 +146,7 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
               </thead>
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
                 {sortedBatches.length === 0 && (
-                  <tr><td colSpan={item.category?.toLowerCase() === 'medicine' ? 8 : 10} className="px-4 py-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No batches for this item. Add supply to get started.</td></tr>
+                  <tr><td colSpan={item.category?.toLowerCase() === 'medicine' ? 9 : 10} className="px-4 py-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No batches for this item. Add supply to get started.</td></tr>
                 )}
                 {sortedBatches.map((batch, idx) => {
                   const st = getExpiryStatus(batch.expiryDate);
@@ -156,14 +165,17 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
                       </td>
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-secondary-700 dark:text-neutral-300">{batch.expiryDate || '—'}</span>
+                          <span className="text-xs text-secondary-700 dark:text-neutral-300">{formatDateDisplay(batch.expiryDate)}</span>
                           <span className={`inline-flex px-1 py-0.5 text-[10px] font-medium rounded ${st.color}`}>{st.label}</span>
                         </div>
                       </td>
                       {isMedicineBatch ? (
-                        <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">
-                          {batch.dosageValue != null ? `${batch.dosageValue} ${batch.dosageUnit || ''}` : '—'}
-                        </td>
+                        <>
+                          <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">
+                            {batch.dosageValue != null ? `${batch.dosageValue} ${batch.dosageUnit || ''}` : '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-center text-xs font-bold text-secondary-800 dark:text-white">{batch.currentQuantity ?? '0'} units</td>
+                        </>
                       ) : (
                         <>
                           <td className="px-3 py-1.5 text-center text-xs text-secondary-500 dark:text-neutral-400">{batch.initialQuantity ?? '—'}</td>
@@ -198,39 +210,7 @@ const MedicalItemDetail = ({ item, loading, transactions, onBack, onAddSupply, o
 
       {/* Transaction History Tab */}
       {tab === 'transactions' && (
-        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-neutral-50 dark:bg-neutral-700/50 border-b-2 border-neutral-200 dark:border-neutral-600">
-                <tr>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Action</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Batch</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Qty</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Patient</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">By</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Notes</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                {transactions.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No transactions recorded yet</td></tr>
-                )}
-                {transactions.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50">
-                    <td className="px-3 py-1.5"><span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded capitalize ${actionMap[tx.action] || ''}`}>{tx.action}</span></td>
-                    <td className="px-3 py-1.5 text-xs font-mono text-secondary-500 dark:text-neutral-400">{tx.batchNumber}</td>
-                    <td className="px-3 py-1.5 text-xs font-medium text-secondary-800 dark:text-white">{tx.quantity > 0 ? `+${tx.quantity}` : tx.quantity}</td>
-                    <td className="px-3 py-1.5 text-xs text-secondary-600 dark:text-neutral-300">{tx.patientName || '—'}</td>
-                    <td className="px-3 py-1.5 text-xs text-secondary-500 dark:text-neutral-400">{tx.issuedByName}</td>
-                    <td className="px-3 py-1.5 text-xs text-secondary-400 dark:text-neutral-500 max-w-[200px] truncate">{tx.notes}</td>
-                    <td className="px-3 py-1.5 text-xs text-secondary-400 dark:text-neutral-500">{new Date(tx.issuedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <TransactionDisplay transactions={transactions} />
       )}
     </div>
   );

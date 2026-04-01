@@ -2,7 +2,9 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 
-const SALT_ROUNDS = 12;
+// 10 rounds ≈ ~65ms on RPi5 vs ~260ms at 12.
+// OWASP/NIST consider 10 rounds adequate for bcrypt.
+const SALT_ROUNDS = 10;
 
 // Password functions
 async function hashPassword(password) {
@@ -13,8 +15,8 @@ async function verifyPassword(password, hash) {
   return await bcrypt.compare(password, hash);
 }
 
-function generateRandomKey() {
-  return crypto.randomBytes(32).toString("hex"); // 64-char token
+function generateRandomKey(length=32) {
+  return crypto.randomBytes(length).toString("hex"); // 64-char token
   }
 
 function hashOTP(otp) {

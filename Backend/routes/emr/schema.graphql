@@ -16,6 +16,14 @@ enum USER_CIVILSTATUS {
   Separated
 
 }
+
+enum CredentialStatus {
+  Unverified
+  Active
+  Inactive
+  Locked
+}
+
 ## User Profile Interface
 
 
@@ -138,13 +146,32 @@ input ObgynHistoryUpdateInput {
 
 # Lifestyle
 
+enum LifeStyleFrequency {
+  Daily
+  Weekly
+  Monthly
+  Occasional
+  Rare
+}
+
+enum VapeType {
+  Nicotine
+  CBD
+  THC
+  Flavored
+}
+
 type Lifestyle {
     id: ID!
     smoker: Boolean!
     numberOfCigarettesPerDay: Int
     yearsSmoked: Int
     alcoholConsumer: Boolean!
-    frequencyOfAlcoholConsumption: String
+    frequencyOfAlcoholConsumption: LifeStyleFrequency
+    vapeUser: Boolean!
+    vapeType: VapeType
+    vapeFrequency: LifeStyleFrequency
+    yearsVaping: Int
     notes: String
     archived_at: Date
     created_at: Date
@@ -156,6 +183,10 @@ input LifestyleInput {
     yearsSmoked: Int
     alcoholConsumer: Boolean!
     frequencyOfAlcoholConsumption: String
+    vapeUser: Boolean!
+    vapeType: VapeType
+    vapeFrequency: LifeStyleFrequency
+    yearsVaping: Int
     notes: String
 }
 
@@ -165,6 +196,10 @@ input LifestyleUpdateInput {
     yearsSmoked: Int
     alcoholConsumer: Boolean
     frequencyOfAlcoholConsumption: String
+    vapeUser: Boolean
+    vapeType: VapeType
+    vapeFrequency: LifeStyleFrequency
+    yearsVaping: Int
     notes: String
 }
 ## -------- Dental Photo Record -------- ##
@@ -189,99 +224,20 @@ input DentalPhotoRecordUpdateInput{
     isValid: Boolean
 }
 
-## -------- For the Staff-------- ##
+## -------- VitalSigns and DentalRecord moved to /staff/emr -------- ##
+# All VitalSigns and DentalRecord operations (create, update, get) are now handled at /staff/emr
+# This EMR endpoint only handles linking existing records by ID to update tickets
 
-type VitalSigns {
-    id: ID!
-    height_cm: Float!
-    weight_kg: Float!
-    blood_pressure: String!
-    heart_rate: Int!
-    temperature: Float!
-    notes: String
-    created_at: Date
-    archived_at: Date
-}
-
-input VitalSignsInput {
-    height_cm: Float!
-    weight_kg: Float!
-    blood_pressure: String!
-    heart_rate: Int!
-    temperature: Float!
-    notes: String
-}
-
-input PatientDefinedVitalSignsInput {
-    height_cm: Float!
-    weight_kg: Float!
-}
-
-input VitalSignsUpdateInput {
-    height_cm: Float
-    weight_kg: Float
-    blood_pressure: String
-    heart_rate: Int
-    temperature: Float
-    notes: String
-}
-
-## -------- Dental Record-------- ##
-
-
-type ToothPlacement{ # singular tooth info
-  id: ID!
-  toothIndex: Int!
-  legend: String!
-}
-
-input ToothPlacementInput{
-  toothIndex: Int!
-  legend: String!
-}
-
-
-# Oral Finding
-type OralFindingCatalog{
-  name: String! # Calculus
-  isActive: Boolean!
-  description: String
-}
-
-input OralFindingCatalogInput{
-  name: String! # Calculus
-  isActive: Boolean
-  description: String
-}
-
-type OralFindingRecord{
-  oralFindingId: ID!
-  status: Boolean!
-  notes: String
-  created_at: Date
-}
-
-input OralFindingRecordInput{
-  oralFindingId: ID!
-  status: Boolean!
-  notes: String
-}
-
-type DentalRecord{
-    id: ID!
-    notes: String
-
-    oralFindings: [OralFindingRecord!]!
-    ToothPlacements: [ToothPlacement!]!
-    created_at: Date
-}
-
-input DentalRecordInput{
-    notes: String
-    oralFindings: [OralFindingRecordInput!]!
-    ToothPlacements: [ToothPlacementInput!]!
-}
-
+# type VitalSigns { ... } - moved to /staff/emr/schema.graphql
+# input VitalSignsInput { ... } - moved to /staff/emr/schema.graphql
+# input VitalSignsUpdateInput { ... } - moved to /staff/emr/schema.graphql
+# type DentalRecord { ... } - moved to /staff/emr/schema.graphql
+# input DentalRecordInput { ... } - moved to /staff/emr/schema.graphql
+# enum DentalLegend { ... } - moved to /staff/emr/schema.graphql
+# type ToothPlacement { ... } - moved to /staff/emr/schema.graphql
+# input ToothPlacementInput { ... } - moved to /staff/emr/schema.graphql
+# type OralFindingRecord { ... } - moved to /staff/emr/schema.graphql
+# input OralFindingRecordInput { ... } - moved to /staff/emr/schema.graphql
 
 
 # Intra Oral Appliance
@@ -744,6 +700,27 @@ type UpdateTicket {
   created_at: Date
 }
 
+type TicketVitalSignsId {
+  id: ID!
+  vitalSignsId: ID
+  created_at: Date
+}
+
+type TicketDentalRecordId {
+  id: ID!
+  dentalRecordId: ID
+  created_at: Date
+}
+
+type UserTicketIds {
+  id: ID!
+  vitalSignsId: ID
+  dentalRecordId: ID
+  status: UpdateStatus!
+  scope: UpdateScope
+  created_at: Date
+}
+
 ## -------- Patient Search -------- ##
 
 type PatientSearchResult {
@@ -760,6 +737,7 @@ type PatientSearchResult {
   year: String
   department: String
   role: String
+  credentials_status: CredentialStatus
   latest_ticket_id: ID
   latest_status: UpdateStatus
   latest_scope: UpdateScope
@@ -814,16 +792,17 @@ type Query {
   getDentalHistory: DentalHistory
   getUserDentalHistory(userId: ID!, from: Date, offset: Int, limit: Int): [DentalHistory!]
 
-  getDentalRecord: DentalRecord
-  getUserDentalRecord(userId: ID!, from: Date, offset: Int, limit: Int): [DentalRecord!]
-
-  getVitalSigns: VitalSigns
-  getUserVitalSigns(userId: ID!, from: Date, offset: Int, limit: Int): [VitalSigns!]
+  # VitalSigns and DentalRecord queries moved to /staff/emr
+  # Use /staff/emr queries: getPatientVitalSigns, getPatientDentalRecord, getVitalSignsById, getDentalRecordById
+  # getDentalRecord: DentalRecord
+  # getUserDentalRecord(userId: ID!, from: Date, offset: Int, limit: Int): [DentalRecord!]
+  # getVitalSigns: VitalSigns
+  # getUserVitalSigns(userId: ID!, from: Date, offset: Int, limit: Int): [VitalSigns!]
 
   getOralApplianceProfile: OralApplianceProfile
   getUserOralApplianceProfile(userId: ID!, from: Date, offset: Int, limit: Int): [OralApplianceProfile!]
 
-  getEmergencyContact: EmergencyContact
+  getEmergencyContact(approved: Boolean): EmergencyContact
   getUserEmergencyContact(userId: ID!, from: Date, offset: Int, limit: Int): [EmergencyContact!]
 
   getAllergyProfile: AllergyProfile
@@ -850,6 +829,12 @@ type Query {
   getVisualAcuityProfile: VisualAcuityProfile
   getUserVisualAcuityProfile(userId: ID!, from: Date, offset: Int, limit: Int): [VisualAcuityProfile!]
   
+
+  # Ticket IDs queries
+  getTicketVitalSignsId(ticketId: ID!): TicketVitalSignsId
+  getTicketDentalRecordId(ticketId: ID!): TicketDentalRecordId
+  getUserTicketIds(userId: ID!, from: Date, offset: Int, limit: Int): [UserTicketIds!]!
+  
   # miscellaneous
 
   getProcedureDomain: [DomainType!]
@@ -858,7 +843,6 @@ type Query {
   getDomainCatalogs(domain: DomainType, filterIsValid: Boolean, offset: Int, limit: Int): [DomainCatalog!]
   getAllergenCatalogs(type: ALLERGEN_TYPE, filterIsValid: Boolean, offset: Int, limit: Int): [AllergenCatalog!]
   getOralApplianceCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralApplianceTag!]
-  getOralFindingCatalogs(filterIsValid: Boolean, offset: Int, limit: Int): [OralFindingCatalog!]
   # render the list of options per catalog
 
 
@@ -900,8 +884,16 @@ type Mutation {
   createDentalHistory(input: DentalHistoryInput!): DentalHistory
   updateDentalHistory(userId: ID!, input: DentalHistoryUpdateInput!): DentalHistory
 
-  updateDentalRecord(userId: ID!, input: DentalRecordInput!): DentalRecord
-  updateVitalSigns(userId: ID!, input: VitalSignsUpdateInput!): VitalSigns
+  # MOVED TO /staff/emr - updateDentalRecord and updateVitalSigns are now handled by staff EMR endpoint
+  # Staff creates these records at /staff/emr, then links them here by ID
+  # updateDentalRecord(userId: ID!, input: DentalRecordInput!): DentalRecord
+  # updateVitalSigns(userId: ID!, input: VitalSignsUpdateInput!): VitalSigns
+
+  # Link existing VitalSigns to update ticket
+  linkVitalSignsToTicket(userId: ID!, vitalSignsId: ID!): Boolean!
+
+  # Link existing DentalRecord to update ticket
+  linkDentalRecordToTicket(userId: ID!, dentalRecordId: ID!): Boolean!
 
   createOralApplianceProfile(input: OralApplianceProfileInput!): OralApplianceProfile
   updateOralApplianceProfile(userId: ID!, input: OralApplianceProfileInput!): OralApplianceProfile

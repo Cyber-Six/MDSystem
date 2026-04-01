@@ -65,8 +65,10 @@ const ReviewStep = ({ formData, onEdit, recordType, revisionNotes = null, isRevi
     'Family Conditions': familyConditionsList,
     'Allergies': formData.hasAllergies,
     'Allergy Notes': formData.allergiesNotes,
-    'Smoking': formData.smoking,
-    'Alcohol': formData.alcohol,
+    'Smoker': formData.smoker,
+    'Alcohol Drinker': formData.alcoholDrinker,
+    'Alcohol Frequency': formData.alcoholDrinker === 'yes' ? (formData.alcoholFrequency || null) : null,
+    'Vaper': formData.vaper,
     'Visual Acuity': formData.visualAcuity,
     ...(formData.sex === 'Female' && {
       'Last Menstrual Period': formData.lastMenstrualPeriod,

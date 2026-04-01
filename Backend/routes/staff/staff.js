@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../../config/query.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect');
 const logger = require('../../utils/logger');
+const notificationsRouter = require('./notifications');
 
 // Helper function to get user ID via identifier
 async function getUserIDViaIdentifier(identifier, branch) {
@@ -26,19 +27,18 @@ async function getUserIdViaName(name, branch) {
     if (!tags.length) return [];
 
     const scoreClauses = [];
-    const searchClauses = [];
+    const searchConditions = [];
     const params = [];
 
     tags.forEach((tag, i) => {
-        const paramIndex = params.length + 1;
+        const paramIndex = i + 1;
         params.push(`%${tag}%`);
         // Score weighting: first=3, middle=1, last=2
         scoreClauses.push(`(CASE WHEN up.first_name ILIKE $${paramIndex} THEN 3 ELSE 0 END +
                            CASE WHEN up.middle_name ILIKE $${paramIndex} THEN 1 ELSE 0 END +
                            CASE WHEN up.last_name ILIKE $${paramIndex} THEN 2 ELSE 0 END)`);
-        searchClauses.push(`up.first_name ILIKE $${paramIndex}`);
-        searchClauses.push(`up.middle_name ILIKE $${paramIndex}`);
-        searchClauses.push(`up.last_name ILIKE $${paramIndex}`);
+        // Each word must match at least one name field
+        searchConditions.push(`(up.first_name ILIKE $${paramIndex} OR up.middle_name ILIKE $${paramIndex} OR up.last_name ILIKE $${paramIndex})`);
     });
 
     const branchIndex = params.length + 1;
@@ -49,7 +49,7 @@ async function getUserIdViaName(name, branch) {
                (${scoreClauses.join(' + ')}) AS score
         FROM "UserCredentials" uc
         JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE (${searchClauses.join(' OR ')})
+        WHERE (${searchConditions.join(' AND ')})
           AND (up.branch = $${branchIndex} OR up.branch = 'Both' OR $${branchIndex} = 'Both')
         ORDER BY score DESC
         LIMIT 50
@@ -71,6 +71,23 @@ async function getUserIdViaEmail(email, branch) {
     const result = await db.query(query, [email, branch]);
     return result.rows;
 }
+
+// Route: Get current user's module permissions
+router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
+    try {
+        const { getStaffModulePermissions, isMedicalPermitted, permissions: permKeys } = require('../../services/permit.js');
+        const modulePerms = await getStaffModulePermissions(req.user.id);
+        const isAdmin = await isMedicalPermitted(req.user.id, permKeys.is_admin, null);
+
+        res.json({
+            modules: modulePerms.modules,
+            isAdmin: !!isAdmin,
+        });
+    } catch (error) {
+        logger.error('Error fetching own permissions:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 // Route: Get user ID by identifier
 router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (req, res) => {
@@ -142,6 +159,9 @@ router.get('/id/email/:email/:branch', jwtProtect("patient"), async (req, res) =
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+// Register notification routes
+router.use('/', notificationsRouter);
 
 module.exports = router;
 

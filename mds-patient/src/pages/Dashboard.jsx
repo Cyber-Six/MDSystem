@@ -42,6 +42,9 @@ const RecordUpdateForm = lazy(() => import('../modules/record-forms/update-recor
 const AppointmentPage = lazy(() => import('../modules/appointment/appointment.jsx'));
 const MedicineRequestPage = lazy(() => import('../modules/medicine-request/medicine-request-page.jsx'));
 const HealthChat = lazy(() => import('../modules/health-chat/health-chat.jsx'));
+const MyDocumentsPage = lazy(() => import('../modules/my-documents/my-documents-page.jsx'));
+const PatientSettings = lazy(() => import('../modules/settings/patient-settings.jsx'));
+const NotFound = lazy(() => import('./NotFound.jsx'));
 
 const RouteLoader = () => (
   <div className="flex items-center justify-center min-h-[50vh]">
@@ -53,6 +56,7 @@ const Dashboard = () => {
   const [showInitialRecordModal, setShowInitialRecordModal] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [recordStatus, setRecordStatus] = useState(null);
+  const [isVerified, setIsVerified] = useState(null); // null=checking, true=verified, false=unverified
   const [revisionData, setRevisionData] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [revisionNote, setRevisionNote] = useState(null);
@@ -80,12 +84,17 @@ const Dashboard = () => {
 
         console.log('[Dashboard] Checking initial record status...');
         console.log('[Dashboard] User role detected:', detectedRole);
+        
         const [{ needsInitialRecord, status, notes: ticketNotes }, branchInfo] = await Promise.all([
           checkInitialRecordStatus(),
           getMyBranchIdentifier(),
         ]);
+
+        // Patient is verified when checkInitialRecordStatus confirms they no longer need the initial record form.
+        // needsInitialRecord === true means credential is still 'Unverified' (not yet approved by staff).
+        setIsVerified(!needsInitialRecord);
         
-        console.log('[Dashboard] Initial record check result:', { needsInitialRecord, status });
+        console.log('[Dashboard] Initial record check result:', { needsInitialRecord, status, isVerified: !needsInitialRecord });
         console.log('[Dashboard] Patient branch:', branchInfo?.branch ?? 'not set', '| identifier:', branchInfo?.identifier ?? 'not set');
         
         setRecordStatus(status);
@@ -147,8 +156,9 @@ const Dashboard = () => {
     );
   }
 
-  // Show revision-submitted screen when patient has resubmitted after a revision request
-  if (recordStatus === 'RevisionSubmitted') {
+  // Show revision-submitted screen ONLY for unverified patients waiting for initial record approval
+  // Verified patients with pending revisions should still access dashboard normally
+  if (recordStatus === 'RevisionSubmitted' && isVerified === false) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -215,8 +225,9 @@ const Dashboard = () => {
     );
   }
 
-  // Show pending approval screen when initial record is awaiting staff verification
-  if (recordStatus === 'Pending') {
+  // Show pending approval screen ONLY for unverified patients waiting for initial record approval
+  // Verified patients with pending updates should still access dashboard normally
+  if (recordStatus === 'Pending' && isVerified === false) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -320,9 +331,11 @@ const Dashboard = () => {
               <Route path="/appointments" element={<AppointmentPage />} />
               <Route path="/medicine-request" element={<MedicineRequestPage />} />
               <Route path="/health-chat" element={<HealthChat />} />
+              <Route path="/my-documents" element={<MyDocumentsPage />} />
+              <Route path="/settings" element={<PatientSettings />} />
               {/* Redirect old e-consultation path to new health-chat path */}
               <Route path="/e-consultation" element={<Navigate to="/health-chat" replace />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>

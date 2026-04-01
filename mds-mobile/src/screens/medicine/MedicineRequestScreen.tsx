@@ -1,6 +1,9 @@
 /**
  * Medicine Request Screen
  * Mirrors mds-patient medicine-request module
+ * 
+ * Uses backend queries: getAvailableMedicine, getMedicineStatus, createMedicineRequest
+ * Branches: Casal, Arlegui, Quezon City (LocationDesignation enum)
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -16,69 +19,94 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { useBanner } from '../../context/BannerContext';
 import {
-  listMedicines,
-  submitMedicineRequest,
-  getMedicineRequestStatus,
+  BRANCHES,
+  getAvailableMedicine,
+  getMedicineStatus,
+  createMedicineRequest,
+  cancelMedicineRequest,
+  type AvailableMedicine,
+  type MedicineRequest,
+  type LocationDesignation,
 } from '../../services/medicine-service';
 
-interface Medicine {
-  id: string;
-  name: string;
-  dosage: string;
-  unit: string;
-  quantity: number;
+interface GroupedMedicine {
+  item_code: string;
+  item_name: string;
+  category: string;
+  batches: AvailableMedicine[];
 }
-
-interface SelectedMedicine {
-  medicineId: string;
-  name: string;
-  dosage: string;
-  quantity: number;
-}
-
-const BRANCHES = ['Main Campus', 'QC Campus', 'Manila Campus'];
 
 const statusColors: Record<string, { bg: string; text: string }> = {
   Pending: { bg: colors.primary[100], text: colors.primary[800] },
   Approved: { bg: colors.success[100], text: colors.success[600] },
   Rejected: { bg: colors.error[100], text: colors.error[600] },
   Completed: { bg: colors.success[100], text: colors.success[600] },
+  Cancelled: { bg: colors.neutral[200], text: colors.neutral[600] },
+  Expired: { bg: colors.neutral[200], text: colors.neutral[600] },
+  InProgress: { bg: colors.accent[100], text: colors.accent[600] },
+  Revision: { bg: colors.primary[100], text: colors.primary[700] },
 };
 
 export const MedicineRequestScreen: React.FC = () => {
   const { isDark } = useTheme();
+  const { showBanner } = useBanner();
 
   // Views
   const [view, setView] = useState<'form' | 'status'>('form');
 
   // Form state
-  const [chiefComplaint, setChiefComplaint] = useState('');
-  const [branch, setBranch] = useState('');
-  const [medicines, setMedicines] = useState<Medicine[]>([]);
-  const [selected, setSelected] = useState<SelectedMedicine[]>([]);
+  const [purpose, setPurpose] = useState('');
+  const [location, setLocation] = useState<LocationDesignation | ''>('');
+  const [medicines, setMedicines] = useState<AvailableMedicine[]>([]);
+  const [grouped, setGrouped] = useState<GroupedMedicine[]>([]);
+  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [loadingMeds, setLoadingMeds] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   // Status state
-  const [statusData, setStatusData] = useState<any>(null);
+  const [requests, setRequests] = useState<MedicineRequest[]>([]);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
-  // Load medicines when branch changes
+  // Load status on mount so we can check pending before submit
   useEffect(() => {
-    if (!branch) {
+    getMedicineStatus()
+      .then(setRequests)
+      .catch(() => {});
+  }, []);
+
+  // Load medicines when location changes
+  useEffect(() => {
+    if (!location) {
       setMedicines([]);
+      setGrouped([]);
       return;
     }
     const load = async () => {
       setLoadingMeds(true);
       setError(null);
       try {
-        const meds = await listMedicines(branch);
-        setMedicines(meds || []);
+        const meds = await getAvailableMedicine(location);
+        setMedicines(meds);
+        // Group by item_code (same as web)
+        const groupMap: Record<string, GroupedMedicine> = {};
+        meds.forEach((m) => {
+          if (!groupMap[m.item_code]) {
+            groupMap[m.item_code] = {
+              item_code: m.item_code,
+              item_name: m.item_name,
+              category: m.category,
+              batches: [],
+            };
+          }
+          groupMap[m.item_code].batches.push(m);
+        });
+        setGrouped(Object.values(groupMap));
       } catch (err: any) {
         setError('Failed to load medicines: ' + err.message);
       } finally {
@@ -86,16 +114,16 @@ export const MedicineRequestScreen: React.FC = () => {
       }
     };
     load();
-  }, [branch]);
+  }, [location]);
 
-  // Load request status
-  const loadStatus = useCallback(async () => {
+  // Load request history
+  const loadHistory = useCallback(async () => {
     setLoadingStatus(true);
     try {
-      const data = await getMedicineRequestStatus();
-      setStatusData(data);
+      const data = await getMedicineStatus();
+      setRequests(data);
     } catch {
-      setStatusData(null);
+      setRequests([]);
     } finally {
       setLoadingStatus(false);
       setRefreshing(false);
@@ -103,48 +131,78 @@ export const MedicineRequestScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (view === 'status') loadStatus();
-  }, [view, loadStatus]);
+    if (view === 'status') loadHistory();
+  }, [view, loadHistory]);
 
-  // Toggle medicine selection
-  const toggleMedicine = (med: Medicine) => {
-    setSelected((prev) => {
-      const exists = prev.find((s) => s.medicineId === med.id);
-      if (exists) return prev.filter((s) => s.medicineId !== med.id);
-      return [...prev, { medicineId: med.id, name: med.name, dosage: med.dosage, quantity: 1 }];
+  // Toggle medicine by item_code
+  const toggleMedicine = (code: string) => {
+    setSelectedCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) {
+        next.delete(code);
+      } else {
+        if (next.size >= 2) {
+          setError('You can select a maximum of 2 medicines per request.');
+          return prev;
+        }
+        next.add(code);
+      }
+      return next;
     });
-  };
-
-  const updateQuantity = (medicineId: string, qty: number) => {
-    if (qty < 1) return;
-    setSelected((prev) =>
-      prev.map((s) => (s.medicineId === medicineId ? { ...s, quantity: qty } : s))
-    );
   };
 
   // Submit
   const handleSubmit = async () => {
     setError(null);
-    if (!chiefComplaint.trim()) { setError('Please enter your chief complaint.'); return; }
-    if (!branch) { setError('Please select a branch.'); return; }
-    if (selected.length === 0) { setError('Please select at least one medicine.'); return; }
+    if (!purpose.trim()) { setError('Please enter the purpose of your request.'); return; }
+    if (!location) { setError('Please select a branch.'); return; }
+    if (selectedCodes.size === 0) { setError('Please select at least one medicine.'); return; }
+
+    // Build items from first batch of each selected code (like the web app)
+    const items: Array<{ batchId: number; quantity: number }> = [];
+    for (const code of selectedCodes) {
+      const group = grouped.find((g) => g.item_code === code);
+      if (!group || group.batches.length === 0) {
+        setError(`No available batch for ${group?.item_name || code}`);
+        return;
+      }
+      items.push({ batchId: parseInt(group.batches[0].id, 10), quantity: 1 });
+    }
+
+    // Check for pending request
+    const hasPending = requests.some((r) => r.status?.toLowerCase() === 'pending');
+    if (hasPending) {
+      setError('You already have a pending request. Please cancel it first or wait for it to be processed.');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      await submitMedicineRequest(
-        chiefComplaint.trim(),
-        branch,
-        selected.map((s) => ({ medicineId: s.medicineId, quantity: s.quantity }))
-      );
-      setSuccess('Medicine request submitted successfully!');
-      setChiefComplaint('');
-      setBranch('');
-      setSelected([]);
+      const result = await createMedicineRequest(purpose.trim(), location, items);
+      setRequests((prev) => [result, ...prev]);
+      showBanner({ type: 'success', message: 'Medicine request submitted successfully!' });
+      setPurpose('');
+      setLocation('');
+      setSelectedCodes(new Set());
       setMedicines([]);
+      setGrouped([]);
     } catch (err: any) {
       setError(err.message || 'Failed to submit request.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      await cancelMedicineRequest();
+      showBanner({ type: 'success', message: 'Medicine request cancelled.' });
+      await loadHistory();
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel request.');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -175,7 +233,34 @@ export const MedicineRequestScreen: React.FC = () => {
 
       {/* ── Form View ──────────────────────────────────────────────────── */}
       {view === 'form' ? (
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true);
+                if (location) {
+                  try {
+                    const meds = await getAvailableMedicine(location);
+                    setMedicines(meds);
+                    const groupMap: Record<string, GroupedMedicine> = {};
+                    meds.forEach((m) => {
+                      if (!groupMap[m.item_code]) {
+                        groupMap[m.item_code] = { item_code: m.item_code, item_name: m.item_name, category: m.category, batches: [] };
+                      }
+                      groupMap[m.item_code].batches.push(m);
+                    });
+                    setGrouped(Object.values(groupMap));
+                  } catch {}
+                }
+                setRefreshing(false);
+              }}
+              colors={[colors.primary[500]]}
+              tintColor={colors.primary[500]}
+              progressBackgroundColor={colors.secondary[900]}
+            />
+          }
+        >
           {/* Header */}
           <View style={[styles.headerBanner, { backgroundColor: colors.success[500] }]}>
             <Text style={styles.headerIcon}>💊</Text>
@@ -203,10 +288,10 @@ export const MedicineRequestScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Chief Complaint */}
+          {/* Purpose (Chief Complaint) */}
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
             <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-              Chief Complaint <Text style={{ color: colors.error[500] }}>*</Text>
+              Purpose <Text style={{ color: colors.error[500] }}>*</Text>
             </Text>
             <TextInput
               style={[
@@ -219,8 +304,8 @@ export const MedicineRequestScreen: React.FC = () => {
               ]}
               placeholder="Describe your symptoms or reason for request..."
               placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
-              value={chiefComplaint}
-              onChangeText={setChiefComplaint}
+              value={purpose}
+              onChangeText={setPurpose}
               multiline
               numberOfLines={3}
               textAlignVertical="top"
@@ -235,29 +320,29 @@ export const MedicineRequestScreen: React.FC = () => {
             <View style={styles.branchRow}>
               {BRANCHES.map((b) => (
                 <TouchableOpacity
-                  key={b}
+                  key={b.value}
                   style={[
                     styles.branchChip,
                     {
-                      backgroundColor: branch === b
+                      backgroundColor: location === b.value
                         ? (isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50])
                         : (isDark ? colors.neutral[700] : colors.neutral[100]),
-                      borderColor: branch === b ? colors.primary[500] : (isDark ? colors.neutral[600] : colors.neutral[200]),
+                      borderColor: location === b.value ? colors.primary[500] : (isDark ? colors.neutral[600] : colors.neutral[200]),
                     },
                   ]}
-                  onPress={() => setBranch(b)}
+                  onPress={() => setLocation(b.value)}
                 >
                   <Text
                     style={[
                       styles.branchText,
                       {
-                        color: branch === b
+                        color: location === b.value
                           ? (isDark ? colors.primary[300] : colors.primary[700])
                           : (isDark ? colors.neutral[300] : colors.neutral[600]),
                       },
                     ]}
                   >
-                    {b}
+                    {b.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -265,15 +350,15 @@ export const MedicineRequestScreen: React.FC = () => {
           </View>
 
           {/* Medicines */}
-          {branch !== '' && (
+          {location !== '' && (
             <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
               <View style={styles.cardHeaderRow}>
                 <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900], marginBottom: 0 }]}>
-                  Select Medicines <Text style={{ color: colors.error[500] }}>*</Text>
+                  Select Medicines (max 2) <Text style={{ color: colors.error[500] }}>*</Text>
                 </Text>
-                {selected.length > 0 && (
+                {selectedCodes.size > 0 && (
                   <View style={[styles.countBadge, { backgroundColor: colors.primary[500] }]}>
-                    <Text style={styles.countText}>{selected.length}</Text>
+                    <Text style={styles.countText}>{selectedCodes.size}</Text>
                   </View>
                 )}
               </View>
@@ -285,7 +370,7 @@ export const MedicineRequestScreen: React.FC = () => {
                     Loading medicines...
                   </Text>
                 </View>
-              ) : medicines.length === 0 ? (
+              ) : grouped.length === 0 ? (
                 <View style={[styles.emptyState, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
                   <Text style={styles.emptyIcon}>💊</Text>
                   <Text style={[styles.emptyText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
@@ -293,12 +378,11 @@ export const MedicineRequestScreen: React.FC = () => {
                   </Text>
                 </View>
               ) : (
-                medicines.map((med) => {
-                  const isSelected = selected.some((s) => s.medicineId === med.id);
-                  const sel = selected.find((s) => s.medicineId === med.id);
+                grouped.map((group) => {
+                  const isSelected = selectedCodes.has(group.item_code);
                   return (
                     <TouchableOpacity
-                      key={med.id}
+                      key={group.item_code}
                       style={[
                         styles.medItem,
                         {
@@ -308,7 +392,7 @@ export const MedicineRequestScreen: React.FC = () => {
                             : 'transparent',
                         },
                       ]}
-                      onPress={() => toggleMedicine(med)}
+                      onPress={() => toggleMedicine(group.item_code)}
                       activeOpacity={0.7}
                     >
                       <View style={[styles.checkbox, { borderColor: isSelected ? colors.primary[500] : (isDark ? colors.neutral[500] : colors.neutral[300]) }]}>
@@ -316,27 +400,15 @@ export const MedicineRequestScreen: React.FC = () => {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.medName, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                          {med.name}
+                          {group.item_name}
                         </Text>
                         <Text style={[styles.medDosage, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
-                          {med.dosage} · {med.unit} · {med.quantity} available
+                          {group.category} · {group.batches.length} batch{group.batches.length !== 1 ? 'es' : ''} available
                         </Text>
                       </View>
-                      {isSelected && sel && (
-                        <View style={styles.qtyControl}>
-                          <TouchableOpacity
-                            style={[styles.qtyBtn, { backgroundColor: isDark ? colors.neutral[600] : colors.neutral[200] }]}
-                            onPress={() => updateQuantity(med.id, sel.quantity - 1)}
-                          >
-                            <Text style={[styles.qtyBtnText, { color: isDark ? colors.neutral[200] : colors.neutral[700] }]}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={[styles.qtyValue, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{sel.quantity}</Text>
-                          <TouchableOpacity
-                            style={[styles.qtyBtn, { backgroundColor: isDark ? colors.neutral[600] : colors.neutral[200] }]}
-                            onPress={() => updateQuantity(med.id, sel.quantity + 1)}
-                          >
-                            <Text style={[styles.qtyBtnText, { color: isDark ? colors.neutral[200] : colors.neutral[700] }]}>+</Text>
-                          </TouchableOpacity>
+                      {isSelected && (
+                        <View style={[styles.selectedBadge, { backgroundColor: colors.primary[500] }]}>
+                          <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '600' }}>✓</Text>
                         </View>
                       )}
                     </TouchableOpacity>
@@ -361,23 +433,31 @@ export const MedicineRequestScreen: React.FC = () => {
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadStatus(); }} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); loadHistory(); }}
+              colors={[colors.primary[500]]}
+              tintColor={colors.primary[500]}
+              progressBackgroundColor={colors.secondary[900]}
+            />
+          }
         >
-          {loadingStatus ? (
+          {loadingStatus && !refreshing ? (
             <View style={styles.centeredLoader}>
               <ActivityIndicator size="large" color={colors.primary[500]} />
               <Text style={[styles.loadingText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
-                Loading status...
+                Loading requests...
               </Text>
             </View>
-          ) : !statusData ? (
+          ) : requests.length === 0 ? (
             <View style={[styles.emptyState, styles.emptyStateCenter, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
               <Text style={styles.emptyIcon}>📋</Text>
               <Text style={[styles.emptyTitle, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-                No Active Request
+                No Requests Yet
               </Text>
               <Text style={[styles.emptyText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
-                You don't have any pending medicine requests.
+                You haven't made any medicine requests.
               </Text>
               <TouchableOpacity
                 style={[styles.primaryButton, { marginTop: 16 }]}
@@ -387,47 +467,69 @@ export const MedicineRequestScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
-              <View style={styles.statusHeader}>
-                <Text style={[styles.cardTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                  Request Details
-                </Text>
-                <View style={[styles.statusBadge, { backgroundColor: (statusColors[statusData.status] || statusColors.Pending).bg }]}>
-                  <Text style={{ color: (statusColors[statusData.status] || statusColors.Pending).text, fontWeight: '600', fontSize: 12 }}>
-                    {statusData.status}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>Chief Complaint</Text>
-                <Text style={[styles.detailValue, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{statusData.chiefComplaint}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>Branch</Text>
-                <Text style={[styles.detailValue, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{statusData.branch}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>Date</Text>
-                <Text style={[styles.detailValue, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                  {new Date(statusData.created_at).toLocaleDateString()}
-                </Text>
-              </View>
-
-              {statusData.medicines?.length > 0 && (
-                <View style={{ marginTop: 16 }}>
-                  <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>Medicines</Text>
-                  {statusData.medicines.map((med: any, i: number) => (
-                    <View key={i} style={[styles.statusMedItem, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-                      <Text style={[styles.medName, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{med.name}</Text>
-                      <Text style={[styles.medDosage, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
-                        {med.dosage} × {med.quantity}
+            requests.map((req) => {
+              const sc = statusColors[req.status] || statusColors.Pending;
+              return (
+                <View key={req.id} style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
+                  <View style={styles.statusHeader}>
+                    <Text style={[styles.cardTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900], fontSize: 16 }]}>
+                      Request #{req.id}
+                    </Text>
+                    <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                      <Text style={{ color: sc.text, fontWeight: '600', fontSize: 12 }}>
+                        {req.status}
                       </Text>
                     </View>
-                  ))}
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>Purpose</Text>
+                    <Text style={[styles.detailValue, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{req.purpose}</Text>
+                  </View>
+                  {req.notes && (
+                    <View style={styles.detailRow}>
+                      <Text style={[styles.detailLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>Staff Notes</Text>
+                      <Text style={[styles.detailValue, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{req.notes}</Text>
+                    </View>
+                  )}
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>Date</Text>
+                    <Text style={[styles.detailValue, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </Text>
+                  </View>
+
+                  {req.items?.length > 0 && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={[styles.detailLabel, { color: isDark ? colors.neutral[400] : colors.neutral[500], marginBottom: 6 }]}>
+                        Items ({req.items.length})
+                      </Text>
+                      {req.items.map((item, i) => (
+                        <View key={item.id || i} style={[styles.statusMedItem, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+                          <Text style={[styles.medDosage, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>
+                            {item.itemName || `Medicine #${item.medicineId}`} × {item.quantity}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {req.status === 'Pending' && (
+                    <TouchableOpacity
+                      style={[styles.cancelButton, { opacity: cancelling ? 0.5 : 1 }]}
+                      onPress={handleCancel}
+                      disabled={cancelling}
+                      activeOpacity={0.7}
+                    >
+                      {cancelling && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />}
+                      <Text style={styles.cancelButtonText}>
+                        {cancelling ? 'Cancelling...' : 'Cancel Request'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              )}
-            </View>
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -519,11 +621,8 @@ const styles = StyleSheet.create({
   medName: { fontSize: 14, fontWeight: '500' },
   medDosage: { fontSize: 12, marginTop: 2 },
 
-  // Quantity
-  qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  qtyBtn: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  qtyBtnText: { fontSize: 16, fontWeight: '600' },
-  qtyValue: { fontSize: 14, fontWeight: '600', minWidth: 20, textAlign: 'center' },
+  // Selected badge
+  selectedBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 
   countBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   countText: { color: '#FFFFFF', fontWeight: '600', fontSize: 12 },
@@ -564,6 +663,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   primaryButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+  cancelButton: {
+    backgroundColor: colors.error[500],
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  cancelButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
 });
 
 export default MedicineRequestScreen;

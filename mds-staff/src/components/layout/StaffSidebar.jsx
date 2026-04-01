@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '@core/assets/MDSystem.png';
 import { useHealthChatBadge } from '../../modules/health-chat/hooks/use-health-chat-badge';
+import { usePermissions } from '../../context/permissions-context';
+import { useSettings } from '../../context/settings-context';
 
 /**
  * Staff Sidebar Navigation Component
@@ -10,17 +12,31 @@ import { useHealthChatBadge } from '../../modules/health-chat/hooks/use-health-c
 const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const location = useLocation();
   const pendingChatCount = useHealthChatBadge();
+  const { hasPermission, isAdmin, isLoading } = usePermissions();
+  const { settings } = useSettings();
+  const showBadges = settings.showBadges;
 
-  const navItems = [
+  const allNavItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
-    { path: '/search', icon: 'search', label: 'Search Patient' },
-    { path: '/pending', icon: 'pending', label: 'Pending Requests' },
-    { path: '/appointments', icon: 'calendar', label: 'Appointments' },
-    { path: '/analytics', icon: 'analytics', label: 'Analytics' },
-    { path: '/inventory', icon: 'inventory', label: 'Inventory' },
-    { path: '/health-chat', icon: 'healthchat', label: 'Health Chat' },
-    { path: '/settings/roles', icon: 'roles', label: 'Role Management' },
+    { path: '/search', icon: 'search', label: 'Search Patient', moduleId: 'patientSearch' },
+    { path: '/pending', icon: 'pending', label: 'Pending Requests', moduleId: 'pendingRequests' },
+    { path: '/appointments', icon: 'calendar', label: 'Appointments', moduleId: 'appointments' },
+    { path: '/inventory', icon: 'inventory', label: 'Inventory', moduleId: 'inventory' },
+    { path: '/announcements', icon: 'announcements', label: 'Announcements' },
+    { path: '/health-chat', icon: 'healthchat', label: 'Health Chat', moduleId: 'healthChat' },
+    { path: '/notifications', icon: 'notifications', label: 'Send Notification' },
+    { path: '/analytics', icon: 'analytics', label: 'Analytics', moduleId: 'analytics' },
+    { path: '/settings/roles', icon: 'roles', label: 'Role Management', adminOnly: true },
   ];
+
+  const navItems = useMemo(() => {
+    if (isLoading) return allNavItems.filter((item) => !item.moduleId && !item.adminOnly);
+    return allNavItems.filter((item) => {
+      if (item.adminOnly) return isAdmin;
+      if (item.moduleId) return hasPermission(item.moduleId);
+      return true; // Dashboard always visible
+    });
+  }, [isLoading, isAdmin, hasPermission]);
 
   const icons = {
     dashboard: (
@@ -61,6 +77,16 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
     roles: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+    ),
+    announcements: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+      </svg>
+    ),
+    notifications: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
       </svg>
     ),
   };
@@ -131,7 +157,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
                 >
                   <span className="flex-shrink-0 relative">
                     {icons[item.icon]}
-                    {item.icon === 'healthchat' && pendingChatCount > 0 && !isExpanded && (
+                    {item.icon === 'healthchat' && showBadges && pendingChatCount > 0 && !isExpanded && (
                       <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
                         {pendingChatCount > 99 ? '99+' : pendingChatCount}
                       </span>
@@ -140,7 +166,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
                   {isExpanded && (
                     <span className="truncate flex-1">{item.label}</span>
                   )}
-                  {isExpanded && item.icon === 'healthchat' && pendingChatCount > 0 && (
+                  {isExpanded && item.icon === 'healthchat' && showBadges && pendingChatCount > 0 && (
                     <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
                       {pendingChatCount > 99 ? '99+' : pendingChatCount}
                     </span>

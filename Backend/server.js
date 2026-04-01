@@ -1,18 +1,20 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const fs = require('fs');
+const compression = require('compression');
 const db = require('./config/db.js');
 const redis = require('./config/redis.js');
 const logger = require('./utils/logger.js');
 
 const registerRoutes = require('./routes/auth/user/register.js');
 const loginRoutes = require('./routes/auth/user/login.js');
+const userPasswordRoutes = require('./routes/auth/user/user-password.js');
 
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
+const pushTokenRoutes = require('./routes/auth/push-token.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 
@@ -20,12 +22,16 @@ const mediaRoutes = require('./routes/media/media.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
 
 const { initPatientEMRGraphQL, initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
+const { initStaffEMRGraphQL } = require('./routes/staff/emr/graphql.js');
 const { initPatientProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initPatientAppointmentGraphQL, initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { initSocket, getIO } = require('./config/sockets');
 require('./config/sockets/health-chat-events'); // Register health chat socket handlers
+require('./config/sockets/notification-events'); // Register notification socket handlers
+require('./config/sockets/acknowledgement-events'); // Register notification acknowledgement socket handlers
 const { initPatientMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
+const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initPatientHealthChatGraphQL, initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 
 //const registerGraphQLRoutes = require('./testinggsql/index.js');
@@ -36,7 +42,8 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(compression());
+app.use(express.json({ limit: '1mb' }));
 app.set("trust proxy", true);
 
 // ✅ Ensure req.body is always an object (prevents destructuring crashes)
@@ -62,10 +69,12 @@ app.use((err, req, res, next) => {
 //registerGraphQLRoutes(app);
 initPatientEMRGraphQL(app);
 initMedicalEMRGraphQL(app);
+initStaffEMRGraphQL(app);
 initPatientProfileGraphQL(app);
 initPatientAppointmentGraphQL(app);
 initMedicalAppointmentGraphQL(app);
 initPatientMedicineRequestGraphQL(app);
+initPrescriptionGraphQL(app);
 initPatientHealthChatGraphQL(app);
 initMedicalHealthChatGraphQL(app);
 
@@ -76,9 +85,11 @@ logger.info(`✅ Chatbot proxy registered at /econsultation/chat → ${process.e
 
 app.use('/auth/register', registerRoutes);
 app.use('/auth/login', loginRoutes);
+app.use('/auth/user', userPasswordRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/auth/email', emailAuthRoutes);
 app.use('/auth/refresh', refreshAuthRoutes);
+app.use('/auth/push-token', pushTokenRoutes);
 
 app.use('/info/consent', consentRoutes);
 app.use('/media', mediaRoutes);

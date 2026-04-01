@@ -40,8 +40,10 @@ export function useHealthChatSocket() {
     setUserTyping,
     refreshTickets,
     setSocketError,
+    markTicketClosed,
     filter,
-    tickets
+    tickets,
+    updateTicketExpiresAt
   } = useHealthChat();
 
   // Use refs for ALL callbacks to avoid socket reconnection on dependency changes
@@ -54,8 +56,10 @@ export function useHealthChatSocket() {
   const setSocketErrorRef = useRef(setSocketError);
   const refreshTicketsRef = useRef(refreshTickets);
   const removeTicketRef = useRef(removeTicket);
+  const markTicketClosedRef = useRef(markTicketClosed);
   const filterRef = useRef(filter);
   const ticketsRef = useRef(tickets);
+  const updateTicketExpiresAtRef = useRef(updateTicketExpiresAt);
 
   // Keep refs up to date
   useEffect(() => {
@@ -67,9 +71,11 @@ export function useHealthChatSocket() {
     setSocketErrorRef.current = setSocketError;
     refreshTicketsRef.current = refreshTickets;
     removeTicketRef.current = removeTicket;
+    markTicketClosedRef.current = markTicketClosed;
     filterRef.current = filter;
     ticketsRef.current = tickets;
-  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, filter, tickets]);
+    updateTicketExpiresAtRef.current = updateTicketExpiresAt;
+  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, markTicketClosed, filter, tickets, updateTicketExpiresAt]);
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
@@ -163,39 +169,44 @@ export function useHealthChatSocket() {
       });
 
       // Listen for ticket closed by patient
-      // Also handles notifications sent via emitToRole('medical', ...) for non-room events
+      // Updates status immediately but defers removal from list until staff navigates away
       socketService.on('healthchat:ticket-closed', (data) => {
-        if (data.chatId && data.closedBy === 'Patient') {
+        if (data.chatId) {
+          const closedBy = data.closedBy || 'Patient';
           // Track this chat as closed to ignore future typing events
           closedChatIds.current.add(String(data.chatId));
-          // Find the patient for this ticket and update accordingly
+          // Find the patient for this ticket
           const ticketId = String(data.chatId);
           const ticket = ticketsRef.current?.find(t =>
             String(t.id) === ticketId ||
             t.tickets?.some(sub => String(sub.id) === ticketId)
           );
-          if (ticket) {
-            // Refresh to get updated status from server
-            refreshTicketsRef.current();
-          } else {
-            updateTicketStatusRef.current(data.chatId, 'Closed');
-          }
+          const patientId = ticket?.patientId || ticketId;
+          // Mark as closed (status updates immediately, stays in list)
+          markTicketClosedRef.current(data.chatId, patientId, closedBy);
           // Clear typing indicator
-          const patientKey = ticket?.patientId ? String(ticket.patientId) : ticketId;
-          setUserTypingRef.current(patientKey, null, false);
+          setUserTypingRef.current(String(patientId), null, false);
         }
       });
 
       // Listen for ticket status changes by other staff (approve/reject)
       socketService.on('healthchat:ticket-status-changed', (data) => {
         if (data.chatId && data.status) {
-          // If ticket was approved (now Ongoing) and we're viewing pending, remove it
-          if (data.status === 'Ongoing' && filterRef.current === 'pending') {
-            removeTicketRef.current(data.chatId);
-          } else {
-            // Otherwise refresh to get updated data
-            refreshTicketsRef.current();
-          }
+          // Route through addTicket which handles in-place updates for known patients
+          // and only does a full refresh for genuinely new entries. This avoids the
+          // legacy refreshTickets() which overwrites read state.
+          addTicketRef.current({
+            id: data.chatId,
+            patientId: data.patientId,
+            status: data.status,
+          });
+        }
+      });
+
+      // Listen for session extended (patient or other staff extended the session)
+      socketService.on('healthchat:session-extended', (data) => {
+        if (data.chatId && data.expiresAt) {
+          updateTicketExpiresAtRef.current(data.chatId, data.expiresAt);
         }
       });
     }).catch((err) => {
@@ -341,13 +352,14 @@ export function useHealthChatSocket() {
    * Uses patientMessages endpoint since selectedChatId is actually patientId
    */
   useEffect(() => {
+    // Always clear previous interval first
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+
     if (!selectedChatId || isArchived) {
-      // Clear polling if no chat selected or chat is archived
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-      return;
+      return; // Nothing to poll
     }
 
     const POLLING_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
@@ -359,7 +371,7 @@ export function useHealthChatSocket() {
         const { getPatientMessages } = await import('../health-chat-service');
 
         // Fetch recent messages (last 10)
-        const messages = await getPatientMessages(Number(selectedChatId), 0, 10);
+        const messages = await getPatientMessages(Number(selectedChatId), { limit: 10 });
 
         // Check if any messages are new (not in processedMessageIds)
         const newMessages = messages.filter(msg => {

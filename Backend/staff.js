@@ -1,12 +1,13 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const fs = require('fs');
+const compression = require('compression');
 const db = require('./config/db.js');
 const redis = require('./config/redis.js');
 const logger = require('./utils/logger.js');
 
 const { initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
+const { initStaffEMRGraphQL } = require('./routes/staff/emr/graphql.js');
 const { initMedicalProfileGraphQL } = require('./routes/profile/graphql.js');
 const { initMedicalAppointmentGraphQL } = require('./routes/appointment/graphql.js');
 const { initMedicalConsultationGraphQL } = require('./routes/consultation/consult/graphql.js');
@@ -14,20 +15,25 @@ const { initMedicalInventoryGraphQL } = require('./routes/medical-inventory/inve
 const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
 const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
-const { initRoleManagementGraphQL } = require('./routes/rolemanagement/graphql.js');
+const { initRoleManagementGraphQL } = require('./routes/role-management/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
+const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
+const analyticsRoutes = require('./routes/documents/analytics.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 const staffRoutes = require('./routes/staff/staff.js');
+const dashboardRoutes = require('./routes/dashboard/dashboard.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentRoutes = require('./routes/documents/documents.js');
+const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
 const { initSocket, getIO } = require('./config/sockets');
 require('./config/sockets/health-chat-events'); // Register health chat socket handlers
+require('./config/sockets/notification-events'); // Register notification socket handlers
 
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -36,7 +42,8 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(compression());
+app.use(express.json({ limit: '1mb' }));
 app.set("trust proxy", true);
 
 // ✅ Ensure req.body is always an object (prevents destructuring crashes)
@@ -59,6 +66,7 @@ app.use((err, req, res, next) => {
 });
 
 initMedicalEMRGraphQL(app);
+initStaffEMRGraphQL(app);
 initMedicalProfileGraphQL(app);
 initMedicalAppointmentGraphQL(app);
 initMedicalConsultationGraphQL(app);
@@ -71,9 +79,13 @@ initRoleManagementGraphQL(app);
 
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
+app.use('/auth/email', emailAuthRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
+app.use('/dashboard', dashboardRoutes);
 app.use('/media', mediaRoutes);
+app.use('/announcement', AnnouncementRoutes);
+app.use('/analytics', analyticsRoutes);
 app.use('/documents', documentRoutes);
 
 // ======================================

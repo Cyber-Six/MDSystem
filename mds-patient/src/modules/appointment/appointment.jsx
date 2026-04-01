@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePatientNotifications } from '../notification/notification-context';
 import {
   STATUS,
   getAppointmentStatus,
@@ -6,6 +7,7 @@ import {
   listRequirements,
   listCustomDates,
   getScheduleAvailability,
+  getMonthAvailability,
   submitAppointment,
   cancelAppointment,
   ACTIVE_STATUSES,
@@ -23,6 +25,8 @@ import InfoCard from './components/InfoCard';
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const PatientAppointment = () => {
+  const { subscribe } = usePatientNotifications();
+
   // Top-level state
   const [currentAppointment, setCurrentAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +43,7 @@ const PatientAppointment = () => {
   const [availability, setAvailability] = useState(null);
   const [selectedSession, setSelectedSession] = useState('');
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [monthAvailability, setMonthAvailability] = useState({});
 
   // Step 2 — requirements
   const [requirements, setRequirements] = useState([]);
@@ -98,6 +103,13 @@ const PatientAppointment = () => {
     loadStatus();
   }, [loadStatus]);
 
+  // Reload appointment status when staff responds or records attendance via socket
+  useEffect(() => {
+    const unsub1 = subscribe('appointment:responded', loadStatus);
+    const unsub2 = subscribe('appointment:attendance-recorded', loadStatus);
+    return () => { unsub1(); unsub2(); };
+  }, [subscribe, loadStatus]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleSelectScheduler = async (scheduler) => {
@@ -119,6 +131,24 @@ const PatientAppointment = () => {
 
     setStep(1);
   };
+
+  // Load month availability for the calendar view
+  const handleMonthChange = useCallback(async (startDate, endDate) => {
+    if (!selectedScheduler?.id) return;
+    try {
+      const data = await getMonthAvailability(selectedScheduler.id, startDate, endDate);
+      const lookup = {};
+      for (const entry of (data || [])) {
+        const dateStr = typeof entry.scheduledDate === 'string'
+          ? entry.scheduledDate.split('T')[0]
+          : entry.scheduledDate;
+        lookup[dateStr] = entry;
+      }
+      setMonthAvailability(lookup);
+    } catch (err) {
+      console.error('Failed to load month availability:', err);
+    }
+  }, [selectedScheduler?.id]);
 
   const handleDateChange = async (dateStr) => {
     setSelectedDate(dateStr);
@@ -287,8 +317,10 @@ const PatientAppointment = () => {
               loadingAvailability={loadingAvailability}
               today={today}
               maxDate={maxDate}
+              monthAvailability={monthAvailability}
               onDateChange={handleDateChange}
               onSessionSelect={setSelectedSession}
+              onMonthChange={handleMonthChange}
               onNext={handleAdvanceToRequirements}
               onBack={handleBack}
             />

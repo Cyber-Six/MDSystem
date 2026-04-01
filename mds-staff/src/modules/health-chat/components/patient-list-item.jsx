@@ -5,12 +5,18 @@ import { formatPatientName, getPatientInitials, formatRelativeTime } from '../he
 /**
  * Patient List Item - Messenger Style
  * Shows: Name, Last message preview, Time ago, Status badge
- * Highlights unread conversations
+ * Selected chat gets prominent styling; unread shows bold preview + badge count
  */
-const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
+const PatientListItem = ({ ticket, isSelected, isTyping, needsReply, onClick }) => {
   const patient = ticket.patient;
   const initials = getPatientInitials(patient);
   const hasUnread = ticket.unreadCount > 0;
+
+  // If expiresAt has passed but DB status hasn't been flipped yet, treat as Expired
+  const effectiveStatus =
+    ticket.status === 'Ongoing' && ticket.expiresAt && new Date(ticket.expiresAt) < new Date()
+      ? 'Expired'
+      : ticket.status;
 
   // Get last message preview text
   const getLastMessagePreview = () => {
@@ -47,18 +53,15 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
       onClick={onClick}
       className={`
         flex items-center gap-2.5 px-3 py-2.5 cursor-pointer
-        transition-all duration-300 ease-in-out
+        transition-all duration-200 ease-in-out
         border-l-[3px] border-b
         ${isSelected
-          ? 'bg-amber-50 dark:bg-amber-900/20 border-l-primary-500 border-b-neutral-100 dark:border-b-neutral-800'
-          : hasUnread
-            ? 'bg-primary-50/50 dark:bg-primary-900/10 border-l-primary-400 border-b-neutral-100 dark:border-b-neutral-800 hover:bg-primary-50 dark:hover:bg-primary-900/20'
-            : 'bg-transparent border-l-transparent border-b-neutral-100 dark:border-b-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+          ? 'bg-primary-50 dark:bg-primary-900/20 border-l-primary-500 border-b-neutral-100 dark:border-b-neutral-800'
+          : 'bg-transparent border-l-transparent border-b-neutral-100 dark:border-b-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
         }
       `}
-      style={{ willChange: 'transform, opacity' }}
     >
-      {/* Avatar with unread indicator */}
+      {/* Avatar */}
       <div className="relative flex-shrink-0">
         <div
           className={`
@@ -66,18 +69,12 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
             text-xs font-bold
             ${isSelected
               ? 'bg-primary-500 text-secondary-900'
-              : hasUnread
-                ? 'bg-primary-400 text-white'
-                : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+              : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
             }
           `}
         >
           {initials}
         </div>
-        {/* Unread dot indicator */}
-        {hasUnread && !isSelected && (
-          <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-primary-500 rounded-full border-2 border-white dark:border-neutral-900" />
-        )}
       </div>
 
       {/* Text block */}
@@ -85,26 +82,31 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
         {/* Name + Time row */}
         <div className="flex items-center justify-between gap-1.5">
           <span className={`text-xs overflow-hidden text-ellipsis whitespace-nowrap ${
-            hasUnread
-              ? 'font-bold text-secondary-900 dark:text-white'
+            isSelected
+              ? 'font-bold text-primary-700 dark:text-primary-300'
               : 'font-semibold text-secondary-900 dark:text-white'
           }`}>
             {formatPatientName(patient)}
           </span>
-          <span className={`text-[10px] flex-shrink-0 ${
-            hasUnread
+          <span className={`text-xs flex-shrink-0 ${
+            isSelected
               ? 'text-primary-600 dark:text-primary-400 font-medium'
               : 'text-neutral-400 dark:text-neutral-500'
           }`}>
-            {formatRelativeTime(ticket.lastMessageAt || ticket.session_start || ticket.archived_at)}
+            {/* Pending: creation time; Active: last message time; Archive: close time */}
+            {ticket.status === 'Open'
+              ? formatRelativeTime(ticket.lastMessageAt || ticket.archived_at)
+              : ['Closed', 'Expired'].includes(effectiveStatus)
+                ? formatRelativeTime(ticket.session_end || ticket.archived_at || ticket.lastMessageAt || ticket.session_start)
+                : formatRelativeTime(ticket.lastMessageAt || ticket.session_start)}
           </span>
         </div>
 
         {/* Last message + Status row */}
         <div className="flex items-center justify-between gap-1.5">
           <p className={`text-xs overflow-hidden text-ellipsis whitespace-nowrap m-0 flex-1 ${
-            hasUnread
-              ? 'font-medium text-secondary-700 dark:text-neutral-300'
+            hasUnread && !isSelected
+              ? 'font-semibold text-secondary-800 dark:text-neutral-200'
               : 'text-neutral-400 dark:text-neutral-500'
           }`}>
             {getLastMessagePreview()}
@@ -115,7 +117,12 @@ const PatientListItem = ({ ticket, isSelected, isTyping, onClick }) => {
                 {ticket.unreadCount > 99 ? '99+' : ticket.unreadCount}
               </span>
             )}
-            <TicketStatusBadge status={ticket.status} />
+            {needsReply && !hasUnread && !isSelected && !['Closed', 'Expired'].includes(effectiveStatus) && (
+              <span className="text-[12px] text-neutral-400 dark:text-neutral-500 italic">
+                respond?
+              </span>
+            )}
+            <TicketStatusBadge status={effectiveStatus} />
           </div>
         </div>
       </div>

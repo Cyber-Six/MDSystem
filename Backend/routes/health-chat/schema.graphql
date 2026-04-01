@@ -68,6 +68,8 @@ type ChatParticipant {
   email: String
   identifier: Int
   branch: String
+  dateOfBirth: String
+  sex: String
 }
 
 type HealthChatList {
@@ -152,6 +154,9 @@ type Mutation {
   createTicket(input: CreateTicketInput!): TicketResult!
   sendPatientMessage(input: SendMessageInput!): MessageResult!
   closeMyTicket(chatId: ID!): TicketResult!
+
+  # Session extension (available to both patient and medical)
+  extendSession(chatId: ID!): TicketResult!
 
   # Medical mutations
   approveTicket(input: ApproveTicketInput!): TicketResult!
