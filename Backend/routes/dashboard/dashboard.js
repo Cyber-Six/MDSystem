@@ -127,12 +127,12 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
 
             // 8. Recent patients (last 5 clinic visits via appointments completed/arrived today or recent consultations)
             db.query(`
-                (
+                SELECT * FROM (
                     SELECT DISTINCT ON (up.id)
                         up.id,
                         CONCAT(up.first_name, ' ', up.last_name) AS name,
                         up.identifier,
-                        p.program,
+                        p.profile,
                         ps.arrived_at AS "lastVisit"
                     FROM "patientSlot" ps
                     JOIN "UsersPersonal" up ON up.id = ps."patientId"
@@ -140,7 +140,7 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
                     WHERE ps.arrived_at IS NOT NULL
                       AND ($1 = 'Both' OR up.branch::text = $1 OR up.branch = 'Both')
                     ORDER BY up.id, ps.arrived_at DESC
-                )
+                ) recent
                 ORDER BY "lastVisit" DESC
                 LIMIT 5
             `, [userBranch]),
@@ -227,7 +227,7 @@ router.get('/stats', jwtProtect("medical"), async (req, res) => {
                 id: r.id,
                 name: r.name?.trim(),
                 identifier: r.identifier,
-                program: r.program || '—',
+                program: r.profile || '—',
                 lastVisit: r.lastVisit,
             })),
             pendingRequests: pendingRequestsResult.rows.map(r => ({
