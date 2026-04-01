@@ -872,15 +872,22 @@ async function getAdminActivePendingTransfer(adminId) {
     return { hasPending: false, tokenPrefix: null };
   }
 
-  // Get the first (and only) transfer session
-  const key = keys[0];
-  const session = await client.hGetAll(key);
+  // Find the transfer session hash (not attempt/pw keys)
+  // Transfer sessions don't have colons after "admin:transfer:", but attempt/pw keys do
+  for (const key of keys) {
+    // Skip attempt and password-related keys
+    if (key.includes(':attempt') || key.includes(':pw:')) {
+      continue;
+    }
 
-  // Verify it belongs to this admin
-  if (session && session.old_admin_id === adminId.toString()) {
-    const token = key.replace('admin:transfer:', '');
-    const tokenPrefix = token.substring(0, 8) + '...';
-    return { hasPending: true, tokenPrefix };
+    const session = await client.hGetAll(key);
+
+    // Verify it belongs to this admin
+    if (session && session.old_admin_id === adminId.toString()) {
+      const token = key.replace('admin:transfer:', '');
+      const tokenPrefix = token.substring(0, 8) + '...';
+      return { hasPending: true, tokenPrefix };
+    }
   }
 
   return { hasPending: false, tokenPrefix: null };
