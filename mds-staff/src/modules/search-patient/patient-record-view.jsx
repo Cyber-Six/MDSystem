@@ -47,6 +47,7 @@ const PatientObgyneTab = lazy(() => import('./components/obgyne-tab'));
 const PatientDentalGradeHistoryTab = lazy(() => import('./components/dental-grade-history-tab'));
 const PatientMedicalRecordHistoryTab = lazy(() => import('./components/medical-record-history-tab'));
 const VitalSignsTab = lazy(() => import('./components/vital-signs-tab'));
+const DentalGradingTab = lazy(() => import('./components/dental-grading-tab'));
 
 function LoadingBlock({ label }) {
   return (
@@ -592,6 +593,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     { id: 'vital-signs', label: 'Vital Signs' },
     { id: 'dental', label: 'Dental Record' },
     { id: 'dental-grade-history', label: 'Dental Record History' },
+    { id: 'dental-grading', label: 'Dental Grading' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
@@ -621,6 +623,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return <PatientDentalRecordTab patient={patient} />;
       case 'dental-grade-history':
         return <PatientDentalGradeHistoryTab patient={patient} />;
+      case 'dental-grading':
+        return <DentalGradingTab patient={patient} />;
       case 'consultation':
         return (
           <PatientConsultationTab

@@ -172,19 +172,23 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
   const conditionCount = Object.values(toothStates).filter((s) => s !== '✓').length;
   const positiveCount  = oralFindings.filter((f) => f.status === true).length;
 
-  // Use first available created_at as the header date anchor
-  const anchorDate =
-    record?.created_at ||
+  // Prefer actual clinical dates (procedure date, appliance issue date) over
+  // system creation timestamps so the grading date doesn't override real record dates.
+  const clinicalDate = procedures[0]?.procedureDate || appliances[0]?.dateIssued || null;
+  const systemTimestamp =
     procedureProfile?.created_at ||
     applianceProfile?.created_at ||
     photoRecord?.created_at ||
+    record?.created_at ||
     null;
+  const anchorDate = clinicalDate || systemTimestamp;
 
   const dateLabel = anchorDate
     ? new Date(anchorDate).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' })
     : 'Unknown date';
-  const timeLabel = anchorDate
-    ? new Date(anchorDate).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
+  // Only show the time portion for system timestamps – clinical date strings lack a meaningful time component
+  const timeLabel = !clinicalDate && systemTimestamp
+    ? new Date(systemTimestamp).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
     : '';
 
   const hasAny = record || dentalHistoryRecord || procedureProfile || applianceProfile || photoRecord;
@@ -472,13 +476,20 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
   const applianceProfiles = historyData?.getUserOralApplianceProfile   ?? [];
   const photoRecords      = historyData?.getUserDentalPhotoRecord      ?? [];
 
+  // Number of visit-based cards is driven solely by visit data (histories, procedures,
+  // appliances, photos). Standalone dental grades created from the Dental Grading tab
+  // must NOT inflate this count or shift the index-based pairing.
   const maxCount = Math.max(
-    dentalRecords.length,
     dentalHistories.length,
     procedureProfiles.length,
     applianceProfiles.length,
     photoRecords.length,
   );
+
+  // If there are more dental records than visit cards, the excess newer records are
+  // standalone grades (created from the Dental Grading tab). Offset into the array so
+  // each visit card still receives its original consultation-linked dental record.
+  const dentalOffset = Math.max(0, dentalRecords.length - maxCount);
 
   if (maxCount === 0) {
     return (
@@ -502,7 +513,7 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
           <RecordEntry
             key={i}
             index={i}
-            record={dentalRecords[i] ?? null}
+            record={dentalRecords[i + dentalOffset] ?? null}
             dentalHistoryRecord={dentalHistories[i] ?? null}
             procedureProfile={procedureProfiles[i] ?? null}
             applianceProfile={applianceProfiles[i] ?? null}
