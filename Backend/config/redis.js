@@ -855,28 +855,35 @@ async function recordAdminTransferAttempt(adminId) {
 
 /**
  * Check if admin has an active pending transfer
+ * Since the system enforces only ONE admin at a time, we only need to check
+ * if ANY pending transfer exists (there can be at most one)
  * @param {number} adminId
  * @returns {Promise<{hasPending: boolean, tokenPrefix: string | null}>}
  */
 async function getAdminActivePendingTransfer(adminId) {
   if (!client) throw new Error("Redis client not initialized");
 
-  // Scan for active transfer sessions with this admin
+  // Use KEYS for simple pattern match (safe here - max 1 key expected)
+  // Since there's only ONE admin in the system, there can only be ONE pending transfer
   const pattern = `admin:transfer:*`;
-  let hasPending = false;
-  let tokenFound = null;
+  const keys = await client.keys(pattern);
 
-  for await (const key of client.scanIterator({ match: pattern, count: 10 })) {
-    const session = await client.hGetAll(key);
-    if (session && session.old_admin_id === adminId.toString()) {
-      hasPending = true;
-      const token = key.replace('admin:transfer:', '');
-      tokenFound = token.substring(0, 8) + '...';
-      break;
-    }
+  if (keys.length === 0) {
+    return { hasPending: false, tokenPrefix: null };
   }
 
-  return { hasPending, tokenPrefix: tokenFound };
+  // Get the first (and only) transfer session
+  const key = keys[0];
+  const session = await client.hGetAll(key);
+
+  // Verify it belongs to this admin
+  if (session && session.old_admin_id === adminId.toString()) {
+    const token = key.replace('admin:transfer:', '');
+    const tokenPrefix = token.substring(0, 8) + '...';
+    return { hasPending: true, tokenPrefix };
+  }
+
+  return { hasPending: false, tokenPrefix: null };
 }
 
 /**
