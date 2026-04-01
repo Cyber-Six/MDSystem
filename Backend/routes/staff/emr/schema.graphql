@@ -6,11 +6,11 @@ scalar UUID
 type VitalSigns {
   id: ID!
   patientId: ID
-  height_cm: Float!
-  weight_kg: Float!
+  height_cm: Float
+  weight_kg: Float
   blood_pressure: String!
   heart_rate: Int!
-  temperature: Float!
+  temperature: Float
   notes: String
   created_at: Date
   archived_at: Date
