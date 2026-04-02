@@ -142,7 +142,7 @@ async function checkFileByUuid(type, uuid) {
 }
 
 // Delete file from MEDIA_PATH[type] by UUID
-async function deleteFile(type, uuid) {
+async function deleteFile(type, uuid, throwNotFound = false) {
   // Validate type
   if (!MEDIA_PATH[type]) {
     throw new Error("INVALID_TYPE");
@@ -151,7 +151,7 @@ async function deleteFile(type, uuid) {
   const typeDir = MEDIA_PATH[type];
   const filename = await checkFileByUuid(type, uuid);
 
-  if (!filename) {
+  if (!filename && throwNotFound) {
     throw new Error("FILE_NOT_FOUND");
   }
 

@@ -354,6 +354,35 @@ async function isMedicalPermitted(userId, label, patientId) {
   return true;
 }
 
+async function isMedicalPermittedLocationBased(userId, label, location) {
+  const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
+  if (isAdmin) {
+    logger.info(`Admin bypass granted for userId=${userId} on permission ${label} with location context ${location}`);
+    return true;
+  } // Admin bypass
+
+  let result = await db.query(
+    `SELECT 1
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1
+       AND rt.label = $2 
+       AND (rm.branch = 'Both' OR rm.branch = $3)
+     LIMIT 1;`,
+    [userId, label, location]
+  );
+
+  if (result.rows.length === 0) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without ${label} permission with location context ${location}`
+    );
+    return false;
+  }
+  return true;
+}
+
+
+
 // ─── TEMPLATE PERMISSION FUNCTIONS ───────────────────────────────────────────
 
 /**
@@ -973,6 +1002,7 @@ module.exports = {
   setMedicalPermit,
   unsetMedicalPermit,
   isMedicalPermitted,
+  isMedicalPermittedLocationBased,
   clearMedicalPermits,
   getMedicalpermits,
   getStaffBranch,
