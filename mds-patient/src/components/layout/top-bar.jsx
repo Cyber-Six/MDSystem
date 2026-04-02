@@ -231,31 +231,111 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
                       </div>
                     ) : (
                       <div className="divide-y divide-gray-100 dark:divide-neutral-700/50">
-                        {notifications.map((notif) => (
-                          <div
-                            key={notif.id}
-                            onClick={() => handleNotifClick(notif)}
-                            className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-neutral-800/60 cursor-pointer transition-colors ${
-                              notif.unread ? 'bg-primary-50/40 dark:bg-primary-500/10' : ''
-                            }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              {notif.unread && (
-                                <span className="w-2 h-2 bg-primary-500 rounded-full mt-2 flex-shrink-0" />
-                              )}
-                              <div className="flex-1 min-w-0 gap-1">
-                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{notif.title}</p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{notif.message}</p>
-                                <div className="flex items-center justify-between mt-1">
-                                  <p className="text-xs text-gray-500 dark:text-gray-500">{formatRelativeTime(notif.time)}</p>
-                                  {notif.senderName && notif.type === 'general' && (
-                                    <p className="text-xs text-primary-600 dark:text-primary-400 font-medium">From: {notif.senderName}</p>
+                        {notifications.map((notif) => {
+                          const isStaff = notif.type === 'general';
+
+                          // Icon + colour per notification type
+                          const typeConfig = {
+                            appointment: {
+                              icon: (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              ),
+                              iconBg: 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400',
+                              badge: 'System',
+                              badgeCls: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
+                              from: 'MDS System',
+                              fromCls: 'text-blue-600 dark:text-blue-400',
+                            },
+                            medicine: {
+                              icon: (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                              ),
+                              iconBg: 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400',
+                              badge: 'System',
+                              badgeCls: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
+                              from: 'MDS System',
+                              fromCls: 'text-green-600 dark:text-green-400',
+                            },
+                            chat: {
+                              icon: (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                </svg>
+                              ),
+                              iconBg: 'bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400',
+                              badge: 'System',
+                              badgeCls: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300',
+                              from: 'MDS System',
+                              fromCls: 'text-purple-600 dark:text-purple-400',
+                            },
+                            record: {
+                              icon: (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                              ),
+                              iconBg: 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400',
+                              badge: 'System',
+                              badgeCls: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300',
+                              from: 'MDS System',
+                              fromCls: 'text-orange-600 dark:text-orange-400',
+                            },
+                            general: {
+                              icon: (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                              ),
+                              iconBg: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-600 dark:text-yellow-400',
+                              badge: 'Staff',
+                              badgeCls: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300',
+                              from: notif.from != null ? 'MDS Admin' : 'MDS Staff',
+                              fromCls: notif.from != null ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400',
+                            },
+                          };
+
+                          const cfg = typeConfig[notif.type] || typeConfig.general;
+
+                          return (
+                            <div
+                              key={notif.id}
+                              onClick={() => handleNotifClick(notif)}
+                              className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-neutral-800/60 cursor-pointer transition-colors ${
+                                notif.unread ? 'bg-primary-50/40 dark:bg-primary-500/10' : ''
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                {/* Type icon */}
+                                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 ${cfg.iconBg}`}>
+                                  {cfg.icon}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  {/* Source badge + unread dot */}
+                                  <div className="flex items-center gap-1.5 mb-0.5">
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded leading-none ${cfg.badgeCls}`}>
+                                      {cfg.badge}
+                                    </span>
+                                    {notif.unread && (
+                                      <span className="w-1.5 h-1.5 bg-primary-500 rounded-full flex-shrink-0" />
+                                    )}
+                                  </div>
+                                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{notif.title}</p>
+                                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{notif.message}</p>
+                                  {isStaff && (
+                                    <p className={`text-[11px] font-medium mt-0.5 ${cfg.fromCls}`}>From: {notif.senderName || cfg.from}</p>
                                   )}
+                                  <div className="flex items-center justify-between mt-1">
+                                    <p className="text-xs text-gray-500 dark:text-gray-500">{formatRelativeTime(notif.time)}</p>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )
                   )}
