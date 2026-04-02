@@ -528,19 +528,15 @@ const MedicalInventory = () => {
           return [enriched[0], ...prev];
         });
         
-        // Show success notification
-        showSuccess(
-          'New Medicine Request',
-          `Patient has submitted a new medicine request (#${data.requestId}) at ${data.location}`,
-          null
-        );
+        // Notification will be handled by the notification context which listens
+        // to the 'medicine:request:new' event socket directly, so no need for modal here
       }
     } catch (err) {
       console.error('Failed to load new request details:', err);
       // Still reload all requests as fallback
       loadAllMedicineRequests();
     }
-  }, [enrichRequestItems, enrichRequestsWithPatientNames, showSuccess, loadAllMedicineRequests]);
+  }, [enrichRequestItems, enrichRequestsWithPatientNames, loadAllMedicineRequests]);
 
   // Connect to socket for real-time updates
   const { isConnected: isSocketConnected } = useMedicineRequestSocket(
