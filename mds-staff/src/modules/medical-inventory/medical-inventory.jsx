@@ -531,8 +531,8 @@ const MedicalInventory = () => {
         // Show success notification
         showSuccess(
           'New Medicine Request',
-          `Patient has submitted a new medicine request (#${data.requestId})`,
-          { requestId: data.requestId, location: data.location }
+          `Patient has submitted a new medicine request (#${data.requestId}) at ${data.location}`,
+          null
         );
       }
     } catch (err) {
