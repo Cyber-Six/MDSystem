@@ -4,6 +4,7 @@ import InventoryDashboard from './components/inventory-dashboard/inventory-dashb
 import MedicalItemList from './components/medical-item/medical-item-list';
 import MedicalItemDetail from './components/medical-item/medical-item-detail';
 import DispenseQueue from './components/dispense-queue/dispense-queue';
+import DirectRelease from './components/direct-release/direct-release';
 import AddItemModal from './components/medical-item/add-item-modal';
 import EditItemModal from './components/medical-item/edit-item-modal';
 import DeleteItemConfirmation from './components/medical-item/delete-item-confirmation';
@@ -37,6 +38,7 @@ const MedicalInventory = () => {
   const [activeSection, setActiveSection] = useState(
     routerLocation.state?.section ?? 'dashboard'
   );
+  const [directReleaseLocation, setDirectReleaseLocation] = useState('Casal');
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [itemsError, setItemsError] = useState('');
@@ -860,6 +862,10 @@ const MedicalInventory = () => {
       icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
       badge: requests.filter((r) => r.status === 'Pending' || r.status === 'InProgress').length,
     },
+    {
+      key: 'direct-release', label: 'Direct Release',
+      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8m0 8l-6-2m6 2l6-2" /></svg>,
+    },
   ];
 
   return (
@@ -965,6 +971,52 @@ const MedicalInventory = () => {
         </div>
       )}
 
+      {activeSection === 'direct-release' && (
+        <div className="space-y-3">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
+                <select
+                  value={directReleaseLocation}
+                  onChange={(e) => setDirectReleaseLocation(e.target.value)}
+                  className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
+                >
+                  <option value="Casal">Casal</option>
+                  <option value="Arlegui">Arlegui</option>
+                  <option value="QuezonCity">Quezon City</option>
+                </select>
+              </div>
+            </div>
+
+            <DirectRelease
+              location={directReleaseLocation}
+              onRelease={(result) => {
+                loadAllMedicineRequests();
+                recordTransaction({
+                  action: 'direct_release',
+                  itemId: null,
+                  patientId: result.patientId,
+                  quantity: result.quantity,
+                  notes: result.notes,
+                });
+              }}
+              onShowSuccess={(title, message, details) => {
+                setSuccessModalData({ title, message, details });
+                setShowSuccessModal(true);
+              }}
+              onShowError={(errorMsg) => {
+                setError(errorMsg);
+                setTimeout(() => setError(''), 5000);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
 
       {/* Modals */}
