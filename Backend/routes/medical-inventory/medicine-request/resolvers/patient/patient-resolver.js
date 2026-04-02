@@ -56,6 +56,7 @@ const Query = {
 
 const Mutation = {
   createMedicineRequest: async (_, { input }, { user, res }) => {
+    console.log('[MEDICINE_REQUEST] 🔥 createMedicineRequest called by user:', user?.id);
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
 
     const hasPending = await hasActiveRequest(user.id, res);
@@ -98,10 +99,19 @@ const Mutation = {
 
     // Notify medical staff on the branch channel for the location of the first batch
     try {
+      console.log('[MEDICINE_REQUEST] 🔍 Attempting to find location for first item:', input.items[0]);
+      
+      const itemId = input.items[0].batchId ?? input.items[0].medicineId;
+      console.log('[MEDICINE_REQUEST] Looking up location for itemId:', itemId);
+      
+      //Try to get location from any batch for this medicine
       const batch = await db.query(
-        `SELECT location FROM "MedicineBatch" WHERE id = $1 LIMIT 1`,
-        [input.items[0].batchId ?? input.items[0].medicineId],
+        `SELECT location FROM "MedicineBatch" WHERE "medicalItemId" = $1 OR id = $1 LIMIT 1`,
+        [itemId],
       );
+      
+      console.log('[MEDICINE_REQUEST] Query result:', batch.rows);
+      
       if (batch.rows.length > 0) {
         const { location } = batch.rows[0];
         logger.info(`[MEDICINE_REQUEST] Emitting medicine:request:new to branch:${location}`, {
@@ -116,10 +126,12 @@ const Mutation = {
         });
         logger.info(`[MEDICINE_REQUEST] Event emitted successfully`);
       } else {
-        logger.warn(`[MEDICINE_REQUEST] No batch found for batchId/medicineId: ${input.items[0].batchId ?? input.items[0].medicineId}`);
+        logger.warn(`[MEDICINE_REQUEST] No batch found for batchId/medicineId: ${itemId}`);
+        console.log('[MEDICINE_REQUEST] ❌ No location found - event NOT emitted');
       }
     } catch (notifErr) {
       logger.error("Failed to emit new medicine request to branch channel:", notifErr);
+      console.error('[MEDICINE_REQUEST] ❌ Error:', notifErr);
     }
 
     return result;
