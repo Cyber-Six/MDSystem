@@ -5,6 +5,7 @@ const logger = require('../../utils/logger');
 const { notifyStaffs } = require('../../services/notifyStaffs');
 const { notifyPatients } = require('../../services/notifyPatients');
 const permit = require('../../services/permit');
+const { verifyUserIdentities, getUserIdentitiesDetailed } = require('../../config/query');
 const {
   acknowledgeNotification,
   getNotificationStatus,
@@ -52,7 +53,7 @@ router.post('/notify-staffs', jwtProtect('medical'), async (req, res) => {
     }
 
     // FIXED: Add admin permission check
-    const isAdmin = await permit.isMedicalPermitted(adminUserId, permit.permissions.is_admin, null);
+    const isAdmin = await permit.isMedicalPermitted(adminUserId, permit.permissions.is_admin);
     if (!isAdmin) {
       logger.warn(`[NOTIFY_STAFFS_ROUTE] Non-admin user ${adminUserId} attempted to broadcast to all staff`);
       return res.status(403).json({
@@ -78,10 +79,23 @@ router.post('/notify-staffs', jwtProtect('medical'), async (req, res) => {
           message: 'recipientIds must be an array of IDs'
         });
       }
+
+      // Verify all recipient IDs exist and are valid
+      const identityCheck = await verifyUserIdentities(recipientIds);
+      if (identityCheck.invalid.length > 0) {
+        logger.warn(`[NOTIFY_STAFFS_ROUTE] Invalid recipient IDs: ${identityCheck.invalid.join(',')}`);
+        return res.status(400).json({
+          error: 'INVALID_RECIPIENTS',
+          message: `Some recipient IDs are invalid: ${identityCheck.invalid.join(', ')}`,
+          invalidCount: identityCheck.totalInvalid
+        });
+      }
     }
 
     const targetCount = recipientIds?.length;
     logger.info(`[NOTIFY_STAFFS_ROUTE] Admin ${adminUserId} sending notification to ${targetCount ? targetCount + ' specific staff' : 'all staff'}`);
+
+    // FIXED: Add admin permission check
 
     const results = await notifyStaffs(adminUserId, message, recipientIds?.length ? recipientIds : null);
 
@@ -152,10 +166,40 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
           message: 'recipientIds must be an array of IDs'
         });
       }
+
+      // Verify all recipient IDs exist and get their details
+      const identityCheck = await getUserIdentitiesDetailed(recipientIds);
+      if (identityCheck.length === 0) {
+        logger.warn(`[NOTIFY_PATIENTS_ROUTE] No valid recipient IDs found`);
+        return res.status(400).json({
+          error: 'INVALID_RECIPIENTS',
+          message: 'No valid recipient IDs provided',
+          invalidCount: recipientIds.length
+        });
+      }
+
+      // Check if any invalid IDs were provided
+      const foundIds = new Set(identityCheck.map(u => String(u.id)));
+      const invalidIds = recipientIds.filter(id => !foundIds.has(String(id)));
+      if (invalidIds.length > 0) {
+        logger.warn(`[NOTIFY_PATIENTS_ROUTE] Some invalid recipient IDs: ${invalidIds.join(',')}`);
+        // Log warning but allow sending to valid recipients
+        logger.info(`[NOTIFY_PATIENTS_ROUTE] Proceeding with ${identityCheck.length} valid recipients`);
+      }
     }
 
     const targetCount = recipientIds?.length;
     logger.info(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} sending notification to ${targetCount ? targetCount + ' specific patients' : 'all patients in branch'}`);
+
+    // Add permission check for sending patient notifications
+    const isPermitted = await permit.isMedicalPermittedPatientBased(staffUserId, permit.permissions.notification_allow_send_to_patients);
+    if (!isPermitted) {
+      logger.warn(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} attempted to send patient notifications without permission`);
+      return res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'Permission required to send patient notifications'
+      });
+    }
 
     const results = await notifyPatients(staffUserId, message, recipientIds?.length ? recipientIds : null);
 

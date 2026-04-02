@@ -429,6 +429,149 @@ async function setSystemAuditLog({client=pool, eventType, actorId, actorType, ta
   return result.rows[0].id;
 }
 
+/**
+ * Verify multiple user IDs and return their identity information
+ * Checks if each ID exists, their role/identity, and status
+ * @param {Array<string|number>} userIds - Array of user IDs to verify
+ * @returns {Promise<Object>} { valid: [{id, identity, status}], invalid: [id] }
+ */
+async function verifyUserIdentities(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return { valid: [], invalid: [] };
+  }
+
+  const sql = `
+    SELECT
+      uc.id,
+      uc.identity,
+      uc.credentials_status AS status
+    FROM "UserCredentials" uc
+    WHERE uc.id = ANY($1)
+    ORDER BY uc.id;
+  `;
+
+  try {
+    const result = await query(sql, [userIds]);
+    const foundIds = new Set(result.rows.map(row => String(row.id)));
+
+    // Separate valid from invalid IDs
+    const valid = result.rows.map(row => ({
+      id: String(row.id),
+      identity: row.identity,
+      status: row.status
+    }));
+
+    const invalid = userIds.filter(id => !foundIds.has(String(id)));
+
+    logger.info(`[VERIFY_IDENTITIES] Valid: ${valid.length}, Invalid: ${invalid.length}`);
+
+    return {
+      valid,
+      invalid,
+      totalRequested: userIds.length,
+      totalValid: valid.length,
+      totalInvalid: invalid.length
+    };
+  } catch (err) {
+    logger.error(`Error verifying user identities:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Get detailed identity info for multiple user IDs
+ * Includes identity type, account status, and whether they're active staff
+ * @param {Array<string|number>} userIds - Array of user IDs
+ * @returns {Promise<Array>} Array of {id, identity, status, isMedicalPersonnel, isActive}
+ */
+async function getUserIdentitiesDetailed(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return [];
+  }
+
+  const sql = `
+    SELECT
+      uc.id,
+      uc.identity,
+      uc.credentials_status AS status,
+      CASE WHEN mp.id IS NOT NULL THEN true ELSE false END AS is_medical_personnel,
+      CASE WHEN mp.is_active = true THEN true ELSE false END AS is_active,
+      mp.designation AS branch
+    FROM "UserCredentials" uc
+    LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+    WHERE uc.id = ANY($1)
+    ORDER BY uc.id;
+  `;
+
+  try {
+    const result = await query(sql, [userIds]);
+    return result.rows.map(row => ({
+      id: String(row.id),
+      identity: row.identity,
+      status: row.status,
+      isMedicalPersonnel: row.is_medical_personnel,
+      isActive: row.is_active,
+      branch: row.branch
+    }));
+  } catch (err) {
+    logger.error(`Error fetching detailed identities:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Get branches for multiple patient user IDs
+ * @param {Array<string|number>} userIds - Array of user IDs
+ * @returns {Promise<Array>} Array of {userId, branch}
+ */
+async function getPatientBranches(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return [];
+  }
+
+  const sql = `
+    SELECT id AS "userId", branch
+    FROM "UsersPersonal"
+    WHERE id = ANY($1)
+    ORDER BY id;
+  `;
+
+  try {
+    const result = await query(sql, [userIds]);
+    return result.rows.map(row => ({
+      userId: String(row.userId),
+      branch: row.branch
+    }));
+  } catch (err) {
+    logger.error(`Error fetching patient branches:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Resolve union branch for multiple patients
+ * If all patients have the same branch, return that branch
+ * If branches differ, return 'Both' to indicate multi-branch scope
+ * @param {Array<{userId: string, branch: string}>} patientBranches - Array from getPatientBranches()
+ * @returns {string} Single branch name or 'Both'
+ */
+function resolveUnionBranch(patientBranches) {
+  if (!Array.isArray(patientBranches) || patientBranches.length === 0) {
+    return 'Both';
+  }
+
+  // Get unique branches
+  const branches = [...new Set(patientBranches.map(p => p.branch).filter(b => b))];
+
+  // If all patients have same branch, return it
+  if (branches.length === 1) {
+    return branches[0];
+  }
+
+  // If multiple different branches, return 'Both'
+  return 'Both';
+}
+
 module.exports = {
     db,
     connect,
@@ -455,5 +598,9 @@ module.exports = {
     getUserPatientType,
     isActiveMedicalPersonnel,
     getMedicalPersonnelStatus,
-    setSystemAuditLog
+    setSystemAuditLog,
+    verifyUserIdentities,
+    getUserIdentitiesDetailed,
+    getPatientBranches,
+    resolveUnionBranch
 };
