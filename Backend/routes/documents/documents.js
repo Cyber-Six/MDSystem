@@ -3,6 +3,7 @@ const logger = require('../../utils/logger.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
 const db = require('../../config/db.js');
 const docGen = require('../../services/doc-generate-module/index.js');
+const { notifyUser } = require('../../config/sockets/socket-emitter.js');
 
 const router = express.Router();
 
@@ -182,6 +183,26 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
         patientId: actualPatientId,
         issuedBy: req.user.id,
       });
+
+      // Notify patient about the new document
+      try {
+        const physicianName = enrichedData.physician?.firstName
+          ? `${enrichedData.physician.firstName} ${enrichedData.physician.lastName}`.trim()
+          : 'your healthcare provider';
+
+        await notifyUser(
+          String(actualPatientId),
+          'document:new',
+          {
+            documentId,
+            templateType: docType,
+            issuedBy: physicianName,
+            message: `A new ${template.displayName.toLowerCase()} has been issued for you by ${physicianName}.`,
+          }
+        );
+      } catch (notifErr) {
+        logger.warn('Document notification failed', { error: notifErr.message, documentId });
+      }
 
       res.json({ success: true, documentId, filename, metadata });
     } else {
