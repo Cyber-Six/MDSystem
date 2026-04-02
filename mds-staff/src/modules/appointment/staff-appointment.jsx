@@ -50,7 +50,15 @@ const StaffAppointment = () => {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [socketToast, setSocketToast] = useState(null);
   const queueRef = useRef(null);
+  const toastTimerRef = useRef(null);
+
+  const showToast = useCallback((toast) => {
+    setSocketToast(toast);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setSocketToast(null), 5000);
+  }, []);
 
   // Auto-dismiss feedback messages
   useEffect(() => {
@@ -60,13 +68,18 @@ const StaffAppointment = () => {
     }
   }, [error, successMsg]);
 
-  // Refresh the queue when a patient submits a new appointment via socket
+  // Refresh the queue and show a toast when a patient submits a new appointment
   useEffect(() => {
-    const unsub = subscribe('appointment:submitted', () => {
+    const unsub = subscribe('appointment:submitted', (data) => {
       queueRef.current?.refresh();
+      showToast({
+        type: 'info',
+        title: 'New Appointment Request',
+        message: `A patient submitted an appointment request${data?.date ? ` for ${data.date}` : ''}.`,
+      });
     });
     return unsub;
-  }, [subscribe]);
+  }, [subscribe, showToast]);
 
   /* ── Handlers mapped to real service ─────────────────────────────────── */
 
@@ -166,6 +179,30 @@ const StaffAppointment = () => {
       {successMsg && (
         <div className="px-3 py-2 bg-success-50 dark:bg-success-900/30 border border-success-200 dark:border-success-800 text-success-700 dark:text-success-400 text-xs rounded-lg">
           {successMsg}
+        </div>
+      )}
+
+      {/* Socket live notification toast */}
+      {socketToast && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border bg-white dark:bg-neutral-800 border-primary-200 dark:border-primary-700 max-w-sm animate-fade-in">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center mt-0.5">
+            <svg className="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-neutral-900 dark:text-white">{socketToast.title}</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 leading-snug">{socketToast.message}</p>
+          </div>
+          <button
+            onClick={() => setSocketToast(null)}
+            className="flex-shrink-0 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
+            aria-label="Dismiss"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 

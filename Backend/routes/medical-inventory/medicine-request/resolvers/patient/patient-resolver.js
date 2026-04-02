@@ -97,41 +97,26 @@ const Mutation = {
 
     const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
 
-    // Notify medical staff on the branch channel for the location of the first batch
+    console.log('[MEDICINE_REQUEST] ✅ Request created, ID:', result.id);
+
+    // Notify medical staff on ALL branches for testing (temporary)
+    const BRANCHES = ['Casal', 'Arlegui', 'QuezonCity'];
+    
     try {
-      console.log('[MEDICINE_REQUEST] 🔍 Attempting to find location for first item:', input.items[0]);
+      console.log('[MEDICINE_REQUEST] 🔍 Broadcasting to all branches for testing...');
       
-      const itemId = input.items[0].batchId ?? input.items[0].medicineId;
-      console.log('[MEDICINE_REQUEST] Looking up location for itemId:', itemId);
-      
-      //Try to get location from any batch for this medicine
-      const batch = await db.query(
-        `SELECT location FROM "MedicineBatch" WHERE "medicalItemId" = $1 OR id = $1 LIMIT 1`,
-        [itemId],
-      );
-      
-      console.log('[MEDICINE_REQUEST] Query result:', batch.rows);
-      
-      if (batch.rows.length > 0) {
-        const { location } = batch.rows[0];
-        logger.info(`[MEDICINE_REQUEST] Emitting medicine:request:new to branch:${location}`, {
-          requestId: result.id,
-          patientId: user.id,
-          location,
-        });
+      BRANCHES.forEach(location => {
+        console.log(`[MEDICINE_REQUEST] Emitting to branch:${location}`);
         emitToRoom(`branch:${location}`, 'medicine:request:new', {
           requestId: result.id,
           patientId: user.id,
           location,
         });
-        logger.info(`[MEDICINE_REQUEST] Event emitted successfully`);
-      } else {
-        logger.warn(`[MEDICINE_REQUEST] No batch found for batchId/medicineId: ${itemId}`);
-        console.log('[MEDICINE_REQUEST] ❌ No location found - event NOT emitted');
-      }
+      });
+      
+      console.log('[MEDICINE_REQUEST] ✅ Broadcast complete');
     } catch (notifErr) {
-      logger.error("Failed to emit new medicine request to branch channel:", notifErr);
-      console.error('[MEDICINE_REQUEST] ❌ Error:', notifErr);
+      console.error('[MEDICINE_REQUEST] ❌ Broadcast failed:', notifErr);
     }
 
     return result;

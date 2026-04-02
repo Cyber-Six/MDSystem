@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePatientNotifications } from '../notification/notification-context';
 import {
   STATUS,
@@ -31,6 +31,14 @@ const PatientAppointment = () => {
   const [currentAppointment, setCurrentAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [socketToast, setSocketToast] = useState(null);
+  const toastTimerRef = useRef(null);
+
+  const showToast = useCallback((toast) => {
+    setSocketToast(toast);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setSocketToast(null), 6000);
+  }, []);
 
   // Wizard state
   const [step, setStep] = useState(0);
@@ -103,12 +111,31 @@ const PatientAppointment = () => {
     loadStatus();
   }, [loadStatus]);
 
-  // Reload appointment status when staff responds or records attendance via socket
+  // Reload appointment status and show toast when staff responds or records attendance
   useEffect(() => {
-    const unsub1 = subscribe('appointment:responded', loadStatus);
-    const unsub2 = subscribe('appointment:attendance-recorded', loadStatus);
+    const unsub1 = subscribe('appointment:responded', (data) => {
+      loadStatus();
+      const status = data?.status ?? 'Updated';
+      const isApproved = status === 'Approved' || status === 'Scheduled';
+      const isRejected = status === 'Rejected' || status === 'Cancelled';
+      showToast({
+        type: isApproved ? 'success' : isRejected ? 'error' : 'info',
+        title: `Appointment ${isApproved ? 'Confirmed' : isRejected ? 'Declined' : status}`,
+        message: data?.notes
+          ? `Your appointment has been ${status.toLowerCase()}. Note: ${data.notes}`
+          : `Your appointment has been ${status.toLowerCase()}.`,
+      });
+    });
+    const unsub2 = subscribe('appointment:attendance-recorded', () => {
+      loadStatus();
+      showToast({
+        type: 'success',
+        title: 'Attendance Recorded',
+        message: 'Your visit attendance has been recorded.',
+      });
+    });
     return () => { unsub1(); unsub2(); };
-  }, [subscribe, loadStatus]);
+  }, [subscribe, loadStatus, showToast]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -228,6 +255,52 @@ const PatientAppointment = () => {
 
   return (
     <div className="max-w-5xl mx-auto px-4">
+      {/* Socket live notification toast */}
+      {socketToast && (
+        <div className={`fixed bottom-5 right-5 z-50 flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border max-w-sm bg-white dark:bg-neutral-800 ${
+          socketToast.type === 'success'
+            ? 'border-green-200 dark:border-green-700'
+            : socketToast.type === 'error'
+            ? 'border-red-200 dark:border-red-700'
+            : 'border-primary-200 dark:border-primary-700'
+        }`}>
+          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5 ${
+            socketToast.type === 'success'
+              ? 'bg-green-100 dark:bg-green-900/40'
+              : socketToast.type === 'error'
+              ? 'bg-red-100 dark:bg-red-900/40'
+              : 'bg-primary-100 dark:bg-primary-900/40'
+          }`}>
+            {socketToast.type === 'success' ? (
+              <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : socketToast.type === 'error' ? (
+              <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-neutral-900 dark:text-white">{socketToast.title}</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 leading-snug">{socketToast.message}</p>
+          </div>
+          <button
+            onClick={() => setSocketToast(null)}
+            className="flex-shrink-0 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors"
+            aria-label="Dismiss"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="rounded-2xl p-6 mb-6 bg-primary-500">
         <div className="flex items-center gap-4">
