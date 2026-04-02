@@ -14,7 +14,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 const Query = {
   getUserAppointmentStatus: async (_, { userId }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, userId);
+    const permitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_view_records, userId, false);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -22,7 +22,7 @@ const Query = {
   },
 
   getUserAppointmentRecords: async (_, { userId, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, userId);
+    const permitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_view_records, userId, false);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -30,23 +30,23 @@ const Query = {
   },
 
   resolvePatientByIdentifier: async (_, { identifier }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
+    } // unreliable
     return await Wrapper.Query._resolvePatientByIdentifier(_, { identifier }, { user, res });
   },
 
-  listAllOpenAppointments: async (_, { offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
+  listAllOpenAppointments: async (_, { location='Both', offset, limit }, { user, res }) => {
+    const permitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, location);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._listAllOpenAppointments(_, { offset, limit }, { user, res });
+    return await Wrapper.Query._listAllOpenAppointments(_, { location, offset, limit }, { user, res });
   },
 
   listCustomDates: async (_, { schedulerId, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -54,7 +54,7 @@ const Query = {
   },
 
   listAllAppointmentRequirements: async (_, { schedulerId, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -62,7 +62,7 @@ const Query = {
   },
 
   searchAppointmentStatuses: async (_, { status, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -70,7 +70,7 @@ const Query = {
   },
 
   getAppointmentStatusCounts: async (_, _args, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -78,7 +78,7 @@ const Query = {
   },
 
   listAppointmentSchedule: async (_, { schedulerId, date }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -86,7 +86,7 @@ const Query = {
   },
 
   listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -94,7 +94,7 @@ const Query = {
   },
 
   listSchedulerWhitelist: async (_, { schedulerId, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -104,7 +104,7 @@ const Query = {
 
 const Mutation = {
   respondAppointment: async (_, { userId, slotId, status, notes }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -140,7 +140,7 @@ const Mutation = {
   },
 
   recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -163,7 +163,7 @@ const Mutation = {
   },
 
   createScheduler: async (_, { input }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, input.location);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -172,7 +172,7 @@ const Mutation = {
   },
 
   updateScheduler: async (_, { schedulerId, input }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -181,7 +181,7 @@ const Mutation = {
   },
 
   deleteScheduler: async (_, { schedulerId }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -190,7 +190,7 @@ const Mutation = {
   },
 
   updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -199,7 +199,7 @@ const Mutation = {
   },
 
   deleteSchedulerRequirement: async (_, { schedulerId, label }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -208,7 +208,7 @@ const Mutation = {
   },
 
   setCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -217,7 +217,7 @@ const Mutation = {
   },
 
   unsetCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -226,7 +226,7 @@ const Mutation = {
   },
 
   addEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -235,7 +235,7 @@ const Mutation = {
   },
 
   removeEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -244,7 +244,7 @@ const Mutation = {
   },
 
   updateDateIdentity: async (_, { schedulerId, date, input }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
+    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }

@@ -286,49 +286,62 @@ async function setStaffPermissionsStandard({ personnelId, permissionsList, assig
   });
 }
 
-async function isMedicalPermitted(userId, label, patientId) {
+async function isMedicalPermitted(userId, label) {
+  const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
+  if (isAdmin) {
+    logger.info(`Admin bypass granted for userId=${userId} on permission ${label}`);
+    return true;
+  } // Admin bypass
+
+  // Case: patientId null → skip patient join, only check if role exists
+  const result = await db.query(
+    `SELECT 1
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1
+       AND rt.label = $2
+     LIMIT 1;`,
+    [userId, label]
+  );
+  
+
+  if (result.rows.length === 0) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without ${label} permission.`
+    );
+    return false;
+  }
+
+
+  return true;
+}
+
+
+async function isMedicalPermittedPatientBased(userId, label, patientId, strictSuperiority = true) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
   if (isAdmin) {
     logger.info(`Admin bypass granted for userId=${userId} on permission ${label}${patientId ? ` with patient context ${patientId}` : ""}`);
     return true;
   } // Admin bypass
 
-  let result;
-
-  if (patientId) {
-    // Case: patientId provided → join against patient branch using staff designation
-    // Branch matching uses MedicalPersonnel.designation (the admin-assigned branch)
-    // rather than per-permission branch for consistent, staff-level filtering.
-    result = await db.query(
-      `SELECT uc.identity
-       FROM "rolesMap" rm
-       JOIN "rolesTable" rt ON rm."rolesId" = rt.id
-       JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
-       JOIN "UsersPersonal" up ON up.id = $3
-       JOIN "UserCredentials" uc ON uc.id = up.id
-       WHERE rm."personnelId" = $1
-         AND rt.label = $2
-         AND (
-           mp.designation = 'Both'
-           OR up.branch = mp.designation
-           OR up.branch = 'Both'
-         )
-       LIMIT 1;`,
-      [userId, label, patientId]
-    );
-  } else {
-    // Case: patientId null → skip patient join, only check if role exists
-    result = await db.query(
-      `SELECT 1
-       FROM "rolesMap" rm
-       JOIN "rolesTable" rt ON rm."rolesId" = rt.id
-       WHERE rm."personnelId" = $1
-         AND rt.label = $2
-       LIMIT 1;`,
-      [userId, label]
-    );
-  }
-
+  const result = await db.query(
+    `SELECT uc.identity
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
+     JOIN "UsersPersonal" up ON up.id = $3
+     JOIN "UserCredentials" uc ON uc.id = up.id
+     WHERE rm."personnelId" = $1
+       AND rt.label = $2
+       AND (
+         rm.branch = 'Both' OR
+         up.branch = 'Both' OR
+         up.branch = rm.branch
+       )
+     LIMIT 1;`,
+    [userId, label, patientId]
+  );
+  
   if (result.rows.length === 0) {
     logger.warn(
       `Unauthorized access attempt by staff ${userId} without ${label} permission${patientId ? ` on patient ${patientId}` : ""}`
@@ -337,10 +350,9 @@ async function isMedicalPermitted(userId, label, patientId) {
   }
 
   // If patient is Superior, staff must have privileged permit
-  const { identity } = result.rows[0];
-  if (identity === "Superior" && patientId) {
-    const permitted = await findMedicalPermit(
-      userId,
+  const identity = result.rows[0].identity;
+  if (identity === "Superior" && strictSuperiority) {
+    const permitted = await findMedicalPermit(userId,
       permissions.privileged_to_perform_on_superior
     );
     if (!permitted) {
@@ -353,6 +365,7 @@ async function isMedicalPermitted(userId, label, patientId) {
 
   return true;
 }
+
 
 async function isMedicalPermittedLocationBased(userId, label, location) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
@@ -381,7 +394,35 @@ async function isMedicalPermittedLocationBased(userId, label, location) {
   return true;
 }
 
+async function isMedicalPermittedBranchBased(userId, label, branch) {
+  const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
+  if (isAdmin) {
+    logger.info(`Admin bypass granted for userId=${userId} on permission ${label} with branch context ${branch}`);
+    return true;
+  } // Admin bypass
 
+  let result = await db.query(
+    `SELECT 1
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1 AND
+       rt.label = $2 AND (
+        rm.branch = 'Both' OR 
+        (rm.branch = 'Manila' AND $3::"LocationDesignation" IN ('Arlegui', 'Casal')) OR
+        (rm.branch = 'QuezonCity' AND $3::"LocationDesignation" = 'QuezonCity')
+       )
+     LIMIT 1;`,
+    [userId, label, branch]
+  );
+
+  if (result.rows.length === 0) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without ${label} permission with branch context ${branch}`
+    );
+    return false;
+  }
+  return true;
+}
 
 // ─── TEMPLATE PERMISSION FUNCTIONS ───────────────────────────────────────────
 
@@ -1002,7 +1043,9 @@ module.exports = {
   setMedicalPermit,
   unsetMedicalPermit,
   isMedicalPermitted,
+  isMedicalPermittedPatientBased,
   isMedicalPermittedLocationBased,
+  isMedicalPermittedBranchBased,
   clearMedicalPermits,
   getMedicalpermits,
   getStaffBranch,

@@ -10,7 +10,7 @@ async function requireAdmin(user, res) {
   }
 
   // Role management is strictly admin-only — only is_admin grants access
-  const isAdmin = await permit.isMedicalPermitted(user.id, permit.permissions.is_admin, null);
+  const isAdmin = await permit.isMedicalPermitted(user.id, permit.permissions.is_admin);
   if (!isAdmin) {
     throwGraphQLError(res).message('Admin access required.').status(403).throw();
   }

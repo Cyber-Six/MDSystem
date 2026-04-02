@@ -3,6 +3,8 @@ const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const permit = require("../../../../../services/permit.js");
 const logger = require("../../../../../utils/logger.js");
 
+const { batchIdToBranch } = require("./../wrapper/helper.js");
+
 const Query = {
   getMedicalItems: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -26,7 +28,7 @@ const Query = {
 
   getMedicalSupply: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_view);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_view, args.branch);
     if (!isPermitted) {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -36,7 +38,7 @@ const Query = {
 
   getSupplyBatches: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_view);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_view, args.branch);
     if (!isPermitted) {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -78,7 +80,7 @@ const Mutation = {
 
   addMedicalSupply: async (_, { input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_edit, input.location);
     if (!isPermitted) {
       logger.warn("Unauthorized supply add attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -88,7 +90,7 @@ const Mutation = {
 
   addSupplyBatch: async (_, { input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_edit, input.location);
     if (!isPermitted) {
       logger.warn("Unauthorized supply add attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -98,7 +100,20 @@ const Mutation = {
 
   splitMedicalSupply: async (_, { batchId, input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+    
+    let branch;
+    try { // fetch branch for permission check
+      branch = await batchIdToBranch("SupplyBatch", batchId);
+      if (!branch) {
+        logger.warn("Batch ID not found for supply batch", { batchId });
+        throwGraphQLError(res).message("Invalid batch ID").status(400).throw();
+      }
+    } catch (err) {
+      logger.error("Failed to retrieve branch for supply batch", { batchId, error: err.message });
+      throwGraphQLError(res).message("Internal error retrieving batch information").status(500).throw();
+    }
+    
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_edit, branch);
     if (!isPermitted) {
       logger.warn("Unauthorized supply split attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -108,7 +123,20 @@ const Mutation = {
 
   splitMedicineSupply: async (_, { batchId, input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+
+    let branch;
+    try { // fetch branch for permission check
+      branch = await batchIdToBranch("MedicineBatch", batchId);
+      if (!branch) {
+        logger.warn("Batch ID not found for medicine batch", { batchId });
+        throwGraphQLError(res).message("Invalid batch ID").status(400).throw();
+      }
+    } catch (err) {
+      logger.error("Failed to retrieve branch for medicine batch", { batchId, error: err.message });
+      throwGraphQLError(res).message("Internal error retrieving batch information").status(500).throw();
+    }
+
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_edit, branch);
     if (!isPermitted) {
       logger.warn("Unauthorized medicine split attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -118,9 +146,22 @@ const Mutation = {
 
   updateMedicalSupply: async (_, { batchId, input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+
+    let branch;
+    try { // fetch branch for permission check
+      branch = await batchIdToBranch("MedicineBatch", batchId);
+      if (!branch) {
+        logger.warn("Batch ID not found for medicine batch", { batchId });
+        throwGraphQLError(res).message("Invalid batch ID").status(400).throw();
+      }
+    } catch (err) {
+      logger.error("Failed to retrieve branch for medicine batch", { batchId, error: err.message });
+      throwGraphQLError(res).message("Internal error retrieving batch information").status(500).throw();
+    }
+
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_edit, branch);
     if (!isPermitted) {
-      logger.warn("Unauthorized supply update attempt by staff " + user.id);
+      logger.warn("Unauthorized medicine update attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Mutation._updateMedicalSupply(_, { batchId, input }, { res });
@@ -128,7 +169,20 @@ const Mutation = {
 
   updateSupplyBatch: async (_, { batchId, input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+
+    let branch;
+    try { // fetch branch for permission check
+      branch = await batchIdToBranch("SupplyBatch", batchId);
+      if (!branch) {
+        logger.warn("Batch ID not found for supply batch", { batchId });
+        throwGraphQLError(res).message("Invalid batch ID").status(400).throw();
+      }
+    } catch (err) {
+      logger.error("Failed to retrieve branch for supply batch", { batchId, error: err.message });
+      throwGraphQLError(res).message("Internal error retrieving batch information").status(500).throw();
+    }
+
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_edit, branch);
     if (!isPermitted) {
       logger.warn("Unauthorized supply update attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

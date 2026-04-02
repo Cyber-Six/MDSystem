@@ -202,7 +202,7 @@ type Query {
   getUserAppointmentRecords(userId: ID!, offset: Int, limit: Int): [patientSlot!]
   resolvePatientByIdentifier(identifier: Int!): ID
 
-  listAllOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]
+  listAllOpenAppointments(location: LOCATION_DESIGNATION, offset: Int, limit: Int): [SlotScheduler!]
   listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
   listMonthAvailability(schedulerId: ID!, startDate: Date!, endDate: Date!): [ScheduleDateEntity!]
 

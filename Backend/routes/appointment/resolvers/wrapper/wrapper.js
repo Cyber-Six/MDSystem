@@ -64,7 +64,7 @@ const Query = {
     return result.rows;
   },
 
-  _listAllOpenAppointments: async (_, { offset, limit }, { user, res }) => {
+  _listAllOpenAppointments: async (_, { location, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -72,11 +72,13 @@ const Query = {
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
+      WHERE location = COALESCE($1::"LocationDesignation", ss.location)
       ORDER BY ss.created_at ASC
-      LIMIT $1 OFFSET $2;
+      LIMIT $2 OFFSET $3;
     `;
 
     const result = await db.query(query, [
+      location,
       limit || 10,
       offset || 0
     ]);
