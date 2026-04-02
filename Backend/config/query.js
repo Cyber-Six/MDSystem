@@ -398,6 +398,26 @@ async function isActiveMedicalPersonnel(userId) {
   }
 }
 
+async function getMedicalPersonnelStatus(userId) {
+  const sql = `
+    SELECT mp.is_active
+    FROM "MedicalPersonnel" mp
+    JOIN "UserCredentials" uc ON uc.id = mp.id
+    WHERE mp.id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+    if (result.rows.length === 0) return null; // not found
+
+    return result.rows[0].is_active; 
+  } catch (err) {
+    logger.error(`Error fetching medical status for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
 async function setSystemAuditLog({client=pool, eventType, actorId, actorType, targetId, action, details, changedBy}) {
   const result = await client.query(
     `INSERT INTO "SystemAuditLog"
@@ -434,5 +454,6 @@ module.exports = {
     recordLoginAttempt,
     getUserPatientType,
     isActiveMedicalPersonnel,
+    getMedicalPersonnelStatus,
     setSystemAuditLog
 };

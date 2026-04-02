@@ -66,14 +66,23 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 
   // ✅ Check if account type matches portal
   if (account_type === "medical") {
+    const count = await incrementLoginFailure(email, account_type);
     const isMedical = await query.isActiveMedicalPersonnel(user.id);
+
     if (!isMedical) {
-      const count = await incrementLoginFailure(email, account_type);
-      return res.status(400).json({
-        error: "INVALID_CREDENTIALS",
-        message: `Email or password is incorrect. ${count} failed attempts.`
-      });
+      const isActive = await query.getMedicalPersonnelStatus(user.id);
+      if (isActive === false) {
+        return res.status(403).json({
+          error: "STAFF_ACCOUNT_SUSPENDED",
+          message: "Your staff account has been suspended.",
+        });
       }
+    }
+    
+    return res.status(400).json({
+      error: "INVALID_CREDENTIALS",
+      message: `Email or password is incorrect. ${count} failed attempts.`
+    });
   }
 
   // ✅ Check password
