@@ -67,19 +67,34 @@ export function useMedicineRequestSocket(onNewRequest, onRequestUpdate, onReques
       socketRef.current = socketService;
       setIsConnected(true);
 
+      // Join the staff member's branch room to receive branch-scoped events
+      console.log('[MedicineRequestSocket] Emitting notification:join-branch...');
+      socketService.emit('notification:join-branch', {});
+      console.log('[MedicineRequestSocket] Join branch request sent');
+
       // Listen for new medicine requests (from patients)
       socketService.on('medicine:request:new', (data) => {
-        if (!data || !data.requestId) return;
+        console.log('[MedicineRequestSocket] 🎯 Received medicine:request:new event!', data);
+        if (!data || !data.requestId) {
+          console.warn('[MedicineRequestSocket] Invalid data received:', data);
+          return;
+        }
         
         const requestId = String(data.requestId);
         
         // Prevent duplicate processing
-        if (processedRequestIds.current.has(requestId)) return;
+        if (processedRequestIds.current.has(requestId)) {
+          console.log('[MedicineRequestSocket] Duplicate request ignored:', requestId);
+          return;
+        }
         processedRequestIds.current.add(requestId);
         
         // Call callback if provided
         if (onNewRequestRef.current) {
+          console.log('[MedicineRequestSocket] Calling onNewRequest callback...');
           onNewRequestRef.current(data);
+        } else {
+          console.warn('[MedicineRequestSocket] No callback registered for onNewRequest');
         }
       });
 

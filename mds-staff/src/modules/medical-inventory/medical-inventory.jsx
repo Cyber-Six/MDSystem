@@ -549,7 +549,7 @@ const MedicalInventory = () => {
     null                          // onRequestStatusChange (not used yet)
   );
 
-  // Fallback: Also subscribe via notification context (for redundancy)
+  // Reload dispense queue when a patient submits a new medicine request via socket
   useEffect(() => {
     const unsub = subscribe('medicine:request:new', loadAllMedicineRequests);
     return unsub;

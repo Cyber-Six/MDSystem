@@ -104,11 +104,19 @@ const Mutation = {
       );
       if (batch.rows.length > 0) {
         const { location } = batch.rows[0];
+        logger.info(`[MEDICINE_REQUEST] Emitting medicine:request:new to branch:${location}`, {
+          requestId: result.id,
+          patientId: user.id,
+          location,
+        });
         emitToRoom(`branch:${location}`, 'medicine:request:new', {
           requestId: result.id,
           patientId: user.id,
           location,
         });
+        logger.info(`[MEDICINE_REQUEST] Event emitted successfully`);
+      } else {
+        logger.warn(`[MEDICINE_REQUEST] No batch found for batchId/medicineId: ${input.items[0].batchId ?? input.items[0].medicineId}`);
       }
     } catch (notifErr) {
       logger.error("Failed to emit new medicine request to branch channel:", notifErr);
