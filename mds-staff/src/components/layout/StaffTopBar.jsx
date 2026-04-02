@@ -148,9 +148,11 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
             const chatNotifs = notifications.filter((n) => n.type === 'chat');
             const medicineNotifs = notifications.filter((n) => n.type === 'medicine');
             const generalNotifs = notifications.filter((n) => n.type === 'general');
+            const appointmentNotifs = notifications.filter((n) => n.type === 'appointment');
             const chatUnread = chatNotifs.filter((n) => n.unread).length;
             const medicineUnread = medicineNotifs.filter((n) => n.unread).length;
             const generalUnread = generalNotifs.filter((n) => n.unread).length;
+            const appointmentUnread = appointmentNotifs.filter((n) => n.unread).length;
             const inventoryCount = inventoryAlerts.length;
 
             const tabs = [
@@ -162,6 +164,17 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                 icon: (
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                ),
+              },
+              {
+                key: 'appointment',
+                label: 'Appointments',
+                count: appointmentUnread,
+                urgent: false,
+                icon: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 ),
               },
@@ -213,7 +226,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-neutral-200 dark:border-neutral-700 shrink-0 bg-white dark:bg-neutral-800">
+                <div className="flex border-b border-neutral-200 dark:border-neutral-700 shrink-0 bg-white dark:bg-neutral-800 overflow-x-auto scrollbar-none">
                   {tabs.map((tab) => (
                     <button
                       key={tab.key}
@@ -221,7 +234,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                         setActiveNotifTab(tab.key);
                         if (tab.key === 'inventory') markInventoryAlertsAsSeen();
                       }}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-[11px] font-semibold transition-colors border-b-2 ${
+                      className={`flex-shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold transition-colors border-b-2 whitespace-nowrap ${
                         activeNotifTab === tab.key
                           ? 'border-primary-500 text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-900/10'
                           : 'border-transparent text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700/50'
@@ -295,6 +308,41 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                             </button>
                           );
                         })}
+                      </div>
+                    )
+                  )}
+
+                  {/* ── Appointments Tab ── */}
+                  {activeNotifTab === 'appointment' && (
+                    appointmentNotifs.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                        <div className="p-3 rounded-full bg-neutral-100 dark:bg-neutral-700 mb-2">
+                          <svg className="w-6 h-6 text-neutral-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300">No new appointments</p>
+                        <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">New patient bookings will appear here.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-neutral-100 dark:divide-neutral-700/50">
+                        {appointmentNotifs.map((notif) => (
+                          <button
+                            key={notif.id}
+                            type="button"
+                            onClick={() => handleNotifClick(notif)}
+                            className={`w-full text-left px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                          >
+                            <div className="flex items-start gap-2.5">
+                              {notif.unread && <span className="mt-1.5 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">{notif.title}</p>
+                                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5 line-clamp-2">{notif.message}</p>
+                                <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-1">{formatRelativeTime(notif.time)}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
                       </div>
                     )
                   )}
@@ -419,18 +467,17 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                   <button
                     type="button"
                     onClick={() => {
+                      setShowNotifications(false);
                       if (activeNotifTab === 'general') {
                         markAllAsRead();
-                        setShowNotifications(false);
+                      } else if (activeNotifTab === 'chat') {
+                        navigate('/health-chat');
+                      } else if (activeNotifTab === 'medicine') {
+                        navigate('/inventory', { state: { section: 'dispense' } });
+                      } else if (activeNotifTab === 'appointment') {
+                        navigate('/appointments');
                       } else {
-                        setShowNotifications(false);
-                        if (activeNotifTab === 'chat') {
-                          navigate('/health-chat');
-                        } else if (activeNotifTab === 'medicine') {
-                          navigate('/inventory', { state: { section: 'dispense' } });
-                        } else {
-                          navigate('/inventory');
-                        }
+                        navigate('/inventory');
                       }
                     }}
                     className="w-full text-center text-[11px] font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
@@ -439,6 +486,8 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                       ? 'Go to Health Chat →'
                       : activeNotifTab === 'medicine'
                       ? 'Go to Request Tab →'
+                      : activeNotifTab === 'appointment'
+                      ? 'Go to Appointments →'
                       : activeNotifTab === 'general'
                       ? 'Dismiss announcements'
                       : 'Go to Inventory →'
