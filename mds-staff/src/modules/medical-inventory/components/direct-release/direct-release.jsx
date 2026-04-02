@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { fetchAvailableMedicine } from '../../prescription-service';
+import { fetchAvailableMedicineWithQuantities } from '../../prescription-service';
 import { issuePrescription } from '../../prescription-service';
 import { searchPatients } from '../../../../services/patient-search-service';
 import { getProfileLabel } from '../../../../services/patient-search-service';
+import BatchSelectionModal from './batch-selection-modal';
 
 /**
  * Direct Release Component
@@ -44,6 +45,13 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
   const [historyPage, setHistoryPage] = useState(1);
   const historyPerPage = 10;
 
+  // Batch selection modal state
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchModalData, setBatchModalData] = useState(null); // { medicine, batches, medicineItem }
+
+  // Notes viewing modal state
+  const [viewNotesData, setViewNotesData] = useState(null); // { notes, medicineName, patientName }
+
   // Patient search function
   const handlePatientSearch = useCallback(async (query) => {
     if (!query || query.length < 2) {
@@ -82,7 +90,7 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
 
       setLoadingMedicines(true);
       try {
-        const availableMedicines = await fetchAvailableMedicine(location, 0, 100);
+        const availableMedicines = await fetchAvailableMedicineWithQuantities(location, 0, 100);
         setMedicines(availableMedicines || []);
       } catch (err) {
         console.error('Failed to load medicines:', err);
@@ -106,32 +114,65 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
 
   // Handle adding medicine to release
   const handleAddMedicine = (medicine) => {
-    // Check if already added
-    const exists = releaseItems.some((item) => item.batchId === medicine.batchId);
-    if (exists) {
-      onShowError('This medicine batch is already in the list');
+    // Check if already added (any batch of this medicine)
+    const existingItem = releaseItems.find((item) => item.itemName === medicine.item_name);
+    if (existingItem) {
+      onShowError('This medicine is already in the list');
       return;
     }
 
+    // If multiple batches exist, show batch selection modal
+    if (medicine.totalBatches > 1) {
+      setBatchModalData({
+        medicine: medicine,
+        batches: medicine.allBatches, // Use the grouped batches
+      });
+      setShowBatchModal(true);
+    } else {
+      // Single batch - add directly
+      addMedicineToRelease(medicine);
+    }
+  };
+
+  // Helper function to add medicine to release items
+  const addMedicineToRelease = (selectedBatch) => {
     setReleaseItems([
       ...releaseItems,
       {
-        batchId: medicine.batchId,
-        medicineId: medicine.id,
-        itemName: medicine.item_name,
+        batchId: selectedBatch.batchId,
+        medicineId: selectedBatch.id,
+        itemName: selectedBatch.item_name,
         quantity: 1,
-        dosageUnit: medicine.dosageUnit,
-        dosageValue: medicine.dosageValue,
-        batchNumber: medicine.batchNumber,
-        category: medicine.category,
+        dosageUnit: selectedBatch.dosageUnit,
+        dosageValue: selectedBatch.dosageValue,
+        batchNumber: selectedBatch.batchNumber,
+        category: selectedBatch.category,
+        expiryDate: selectedBatch.expiryDate,
+        availableQuantity: selectedBatch.availableQuantity || 0,
       },
     ]);
   };
 
-  // Handle quantity update
+  // Handle batch selection from modal
+  const handleBatchSelected = (batch) => {
+    addMedicineToRelease(batch);
+    setShowBatchModal(false);
+    setBatchModalData(null);
+  };
+
+  // Handle quantity update - with validation against available quantity
   const handleUpdateQuantity = (batchId, quantity) => {
     const numQuantity = parseInt(quantity, 10) || 0;
     if (numQuantity < 0) return;
+
+    // Find the item to check available quantity
+    const item = releaseItems.find((i) => i.batchId === batchId);
+    if (item && numQuantity > item.availableQuantity) {
+      onShowError(
+        `Only ${item.availableQuantity} units available for ${item.itemName}`
+      );
+      return;
+    }
 
     setReleaseItems((prev) =>
       prev.map((item) =>
@@ -161,6 +202,15 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
     const hasInvalidQuantity = releaseItems.some((item) => item.quantity <= 0);
     if (hasInvalidQuantity) {
       onShowError('All medicines must have a quantity greater than 0');
+      return;
+    }
+
+    // Validate that quantities don't exceed available quantity
+    const hasExceededQuantity = releaseItems.some(
+      (item) => item.quantity > (item.availableQuantity || 0)
+    );
+    if (hasExceededQuantity) {
+      onShowError('One or more medicines exceed available quantity');
       return;
     }
 
@@ -199,9 +249,11 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
         quantity: item.quantity,
         dosageUnit: item.dosageUnit,
         dosageValue: item.dosageValue,
+        batchNumber: item.batchNumber,
+        expiryDate: item.expiryDate,
         branch: location,
         timestamp: new Date().toISOString(),
-        notes: notes || 'Direct release by staff',
+        notes: notes || 'Direct release by staff (FEFO)',
       }));
 
       setHistory((prev) => {
@@ -232,10 +284,33 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
     }
   };
 
-  // Filter available medicines (exclude already selected ones)
+  // Filter and group medicines by item_name (consolidate batches into single row)
   const availableMedicines = useMemo(() => {
     const selectedBatchIds = new Set(releaseItems.map((item) => item.batchId));
-    return medicines.filter((m) => !selectedBatchIds.has(m.batchId));
+    const unselectedMedicines = medicines.filter((m) => !selectedBatchIds.has(m.batchId));
+    
+    // Group by item_name
+    const medicinesMap = new Map();
+    unselectedMedicines.forEach((medicine) => {
+      const key = medicine.item_name;
+      if (!medicinesMap.has(key)) {
+        medicinesMap.set(key, []);
+      }
+      medicinesMap.get(key).push(medicine);
+    });
+    
+    // Convert to array: one entry per medicine name with reference to first batch
+    // (handleAddMedicine will check for multiple batches and show modal)
+    return Array.from(medicinesMap.values()).map((batches) => {
+      // Sort by expiry date (FEFO - earliest first)
+      const sorted = batches.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+      const fefoFirst = sorted[0]; // Earliest expiry batch
+      return {
+        ...fefoFirst,
+        totalBatches: batches.length,
+        allBatches: batches,
+      };
+    });
   }, [medicines, releaseItems]);
 
   // Calculate pagination for history
@@ -256,6 +331,63 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
 
   return (
     <div className="space-y-3">
+      {/* Batch Selection Modal */}
+      {showBatchModal && batchModalData && (
+        <BatchSelectionModal
+          medicine={batchModalData.medicine}
+          batches={batchModalData.batches}
+          onSelect={handleBatchSelected}
+          onCancel={() => {
+            setShowBatchModal(false);
+            setBatchModalData(null);
+          }}
+        />
+      )}
+
+      {/* Notes Viewing Modal */}
+      {viewNotesData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl max-w-md w-full">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-700 dark:to-neutral-700 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-secondary-900 dark:text-white">Release Notes</h2>
+                <p className="text-[11px] text-secondary-500 dark:text-neutral-400 leading-none mt-0.5">
+                  {viewNotesData.medicineName} • {viewNotesData.patientName}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewNotesData(null)}
+                className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-neutral-600 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4">
+              <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-3 border border-neutral-200 dark:border-neutral-600">
+                <p className="text-sm text-secondary-800 dark:text-neutral-300 whitespace-pre-wrap break-words">
+                  {viewNotesData.notes}
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-3 bg-neutral-50 dark:bg-neutral-700/30 border-t border-neutral-200 dark:border-neutral-700 flex justify-end">
+              <button
+                onClick={() => setViewNotesData(null)}
+                className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Step 1: Patient Selection */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
         {/* Card Header */}
@@ -391,7 +523,7 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
               <div className="space-y-2 max-h-72 overflow-y-auto">
                 {availableMedicines.map((medicine) => (
                   <div
-                    key={medicine.batchId}
+                    key={`${medicine.item_name}-${medicine.batchId}`}
                     className="flex items-center justify-between px-3 py-2.5 bg-neutral-50 dark:bg-neutral-700/30 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:border-primary-300 dark:hover:border-primary-700 transition-colors group"
                   >
                     <div className="flex-1 min-w-0">
@@ -399,9 +531,21 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
                         {medicine.item_name}
                       </p>
                       <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                        <span className="inline-block">Batch: {medicine.batchNumber}</span>
-                        <span className="mx-1.5">•</span>
                         <span className="inline-block">{medicine.dosageValue} {medicine.dosageUnit}</span>
+                        {medicine.totalBatches > 1 && (
+                          <>
+                            <span className="mx-1.5">•</span>
+                            <span className="inline-block bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                              {medicine.totalBatches} batches (FEFO)
+                            </span>
+                          </>
+                        )}
+                        {medicine.totalBatches === 1 && (
+                          <>
+                            <span className="mx-1.5">•</span>
+                            <span className="inline-block text-[10px]">Batch: {medicine.batchNumber}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <button
@@ -454,36 +598,62 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
                 <div className="col-span-4 text-right">Action</div>
               </div>
               <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                {releaseItems.map((item) => (
-                  <div
-                    key={item.batchId}
-                    className="px-3 py-2.5 grid grid-cols-12 gap-2 items-center hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors"
-                  >
-                    <div className="col-span-5">
-                      <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">
-                        {item.itemName}
-                      </p>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                        {item.dosageValue} {item.dosageUnit}
-                      </p>
-                    </div>
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.quantity}
-                      onChange={(e) => handleUpdateQuantity(item.batchId, e.target.value)}
-                      className="col-span-3 px-2 py-1 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-sm text-center focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                    />
-                    <button
-                      onClick={() => handleRemoveMedicine(item.batchId)}
-                      className="col-span-4 justify-self-end px-2.5 py-1 text-xs font-medium text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors"
+                {releaseItems.map((item) => {
+                  const maxQuantity = item.availableQuantity || 0;
+                  const isOverLimit = item.quantity > maxQuantity;
+
+                  return (
+                    <div
+                      key={item.batchId}
+                      className="px-3 py-2.5 grid grid-cols-12 gap-2 items-center hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors"
                     >
-                      <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
+                      <div className="col-span-5">
+                        <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">
+                          {item.itemName}
+                        </p>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                          {item.dosageValue} {item.dosageUnit}
+                        </p>
+                        <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                          Batch: {item.batchNumber}
+                          {item.expiryDate && (
+                            <>
+                              {' '}
+                              • Exp: {new Date(item.expiryDate).toLocaleDateString()}
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      <div className="col-span-3 flex items-center justify-center">
+                        <div className="flex flex-col items-center">
+                          <input
+                            type="number"
+                            min="1"
+                            max={maxQuantity}
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateQuantity(item.batchId, e.target.value)}
+                            className={`w-12 px-2 py-1 border rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-sm text-center focus:ring-2 focus:border-primary-500 transition-colors ${
+                              isOverLimit
+                                ? 'border-error-500 dark:border-error-500 focus:ring-error-500'
+                                : 'border-neutral-300 dark:border-neutral-600 focus:ring-primary-500'
+                            }`}
+                          />
+                          <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                            Max: {maxQuantity}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveMedicine(item.batchId)}
+                        className="col-span-4 justify-self-end px-2.5 py-1 text-xs font-medium text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -558,7 +728,9 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
                   <th className="px-3 py-2 text-left text-[10px] font-bold text-secondary-600 dark:text-neutral-400 uppercase tracking-wider">Patient</th>
                   <th className="px-3 py-2 text-left text-[10px] font-bold text-secondary-600 dark:text-neutral-400 uppercase tracking-wider">Medicine</th>
                   <th className="px-3 py-2 text-center text-[10px] font-bold text-secondary-600 dark:text-neutral-400 uppercase tracking-wider">Qty</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-bold text-secondary-600 dark:text-neutral-400 uppercase tracking-wider">Batch / Expiry</th>
                   <th className="px-3 py-2 text-left text-[10px] font-bold text-secondary-600 dark:text-neutral-400 uppercase tracking-wider">Branch</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-bold text-secondary-600 dark:text-neutral-400 uppercase tracking-wider">Notes</th>
                   <th className="px-3 py-2 text-left text-[10px] font-bold text-secondary-600 dark:text-neutral-400 uppercase tracking-wider">Date/Time</th>
                 </tr>
               </thead>
@@ -568,6 +740,8 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
                   const dateStr = date.toLocaleDateString();
                   const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                   const displayLocation = record.branch === 'QuezonCity' ? 'Quezon City' : record.branch;
+                  const expirySoon = record.expiryDate && new Date(record.expiryDate) - new Date() < 30 * 24 * 60 * 60 * 1000;
+                  const isExpired = record.expiryDate && new Date(record.expiryDate) < new Date();
 
                   return (
                     <tr
@@ -586,7 +760,44 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
                       <td className="px-3 py-2.5 text-xs font-bold text-center text-secondary-800 dark:text-white bg-neutral-50 dark:bg-neutral-700/30">
                         {record.quantity}
                       </td>
+                      <td className="px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400">
+                        <div className="font-medium">{record.batchNumber}</div>
+                        {record.expiryDate && (
+                          <div className={`text-[10px] ${
+                            isExpired 
+                              ? 'text-error-600 dark:text-error-400' 
+                              : expirySoon 
+                              ? 'text-warning-600 dark:text-warning-400' 
+                              : 'text-neutral-500 dark:text-neutral-500'
+                          }`}>
+                            {new Date(record.expiryDate).toLocaleDateString()}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-xs text-secondary-700 dark:text-neutral-300">{displayLocation}</td>
+                      <td className="px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400 max-w-xs">
+                        {record.notes ? (
+                          record.notes.length > 35 ? (
+                            <button
+                              onClick={() =>
+                                setViewNotesData({
+                                  notes: record.notes,
+                                  medicineName: record.medicineName,
+                                  patientName: record.patientName,
+                                })
+                              }
+                              className="text-primary-600 dark:text-primary-400 hover:underline cursor-pointer truncate block"
+                              title="Click to view full notes"
+                            >
+                              {record.notes.substring(0, 35)}...
+                            </button>
+                          ) : (
+                            <span className="truncate block">{record.notes}</span>
+                          )
+                        ) : (
+                          <span className="text-neutral-400 dark:text-neutral-500 italic">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400">
                         <div className="font-medium">{dateStr}</div>
                         <div className="text-[10px] text-neutral-500 dark:text-neutral-500">{timeStr}</div>

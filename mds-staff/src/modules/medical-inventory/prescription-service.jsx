@@ -21,6 +21,19 @@ const sendGraphQL = async (query, variables = {}) => {
   return response.data.data;
 };
 
+const sendInventoryGraphQL = async (query, variables = {}) => {
+  const response = await axiosRequest.post('/medical-inventory/medical', {
+    query,
+    variables,
+  });
+
+  if (response.data.errors) {
+    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+  }
+
+  return response.data.data;
+};
+
 // ── Queries ──────────────────────────────────────────────────────────────────
 
 /**
@@ -80,6 +93,80 @@ export const fetchPatientPrescriptions = async (patientId, offset = 0, limit = 2
     { patientId, offset, limit },
   );
   return data.getPatientPrescriptions ?? [];
+};
+
+/**
+ * Get available medicines with exact quantities from inventory.
+ * Enriches prescription medicines with batch quantity details.
+ * @param {string|null} [location] - LocationDesignation: 'Arlegui' | 'Casal' | 'QuezonCity'
+ * @param {number} [offset=0]
+ * @param {number} [limit=50]
+ * @returns {Promise<Array>} AvailableMedicine[] with availableQuantity
+ */
+export const fetchAvailableMedicineWithQuantities = async (location = null, offset = 0, limit = 50) => {
+  try {
+    // Fetch available medicines from prescription endpoint
+    const medicines = await fetchAvailableMedicine(location, offset, limit);
+    
+    // Group by medicalItemId (the id field)
+    const medicinsByItemId = {};
+    medicines.forEach((med) => {
+      if (!medicinsByItemId[med.id]) {
+        medicinsByItemId[med.id] = [];
+      }
+      medicinsByItemId[med.id].push(med);
+    });
+    
+    // Fetch batch details for each item to get exact quantities
+    const enrichedMedicines = [];
+    for (const itemId of Object.keys(medicinsByItemId)) {
+      try {
+        const batches = await sendInventoryGraphQL(
+          `query GetMedicalSupply($medicalItemId: Int!) {
+            getMedicalSupply(medicalItemId: $medicalItemId) {
+              id
+              availableQuantity
+              expiryDate
+              batchNumber
+            }
+          }`,
+          { medicalItemId: parseInt(itemId, 10) },
+        );
+        
+        // Map availability data to medicines
+        const batchMap = {};
+        if (batches.getMedicalSupply) {
+          batches.getMedicalSupply.forEach((batch) => {
+            batchMap[batch.id] = {
+              availableQuantity: batch.availableQuantity,
+            };
+          });
+        }
+        
+        // Add quantity info to each medicine
+        medicinsByItemId[itemId].forEach((med) => {
+          enrichedMedicines.push({
+            ...med,
+            availableQuantity: batchMap[med.batchId]?.availableQuantity || 0,
+          });
+        });
+      } catch (err) {
+        // If batch fetch fails, add medicines without quantities
+        medicinsByItemId[itemId].forEach((med) => {
+          enrichedMedicines.push({
+            ...med,
+            availableQuantity: 0,
+          });
+        });
+      }
+    }
+    
+    return enrichedMedicines;
+  } catch (err) {
+    console.error('Error fetching medicines with quantities:', err);
+    // Fallback to medicines without quantities
+    return await fetchAvailableMedicine(location, offset, limit);
+  }
 };
 
 // ── Mutations ────────────────────────────────────────────────────────────────
