@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import AnalyticsFilterBar from './components/analytics-filter-bar';
 import AnalyticsChartCard from './components/analytics-chart-card';
 import AnalyticsSummaryCards from './components/analytics-summary-cards';
+import AnalyticsExportModal from './components/analytics-export-modal';
 import {
   fetchMultipleQueries,
   fetchAvailableQueries,
@@ -57,6 +58,7 @@ const StaffAnalytics = () => {
   const [results, setResults] = useState(new Map());
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [exportOpen, setExportOpen] = useState(false);
   const abortRef = useRef(0);
 
   // Detect dark mode via class on <html>
@@ -105,11 +107,22 @@ const StaffAnalytics = () => {
   return (
     <div className="space-y-3">
       {/* Page Header */}
-      <div>
-        <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Analytics</h1>
-        <p className="text-[11px] text-secondary-500 dark:text-neutral-400">
-          View clinic performance metrics and health data insights
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Analytics</h1>
+          <p className="text-[11px] text-secondary-500 dark:text-neutral-400">
+            View clinic performance metrics and health data insights
+          </p>
+        </div>
+        <button
+          onClick={() => setExportOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary-700 hover:bg-secondary-800 dark:bg-neutral-600 dark:hover:bg-neutral-500 text-white text-xs font-medium rounded-md transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Export
+        </button>
       </div>
 
       {/* Filters */}
@@ -150,6 +163,9 @@ const StaffAnalytics = () => {
               loading={loading && !results.has(queryKey)}
               error={results.get(queryKey)?.error}
               dark={dark}
+              branch={branch}
+              startDate={startDate}
+              endDate={endDate}
             />
           ))}
         </div>
@@ -161,6 +177,15 @@ const StaffAnalytics = () => {
           <p className="text-sm text-secondary-500 dark:text-neutral-400">No analytics queries available for this category.</p>
         </div>
       )}
+
+      {/* Export Modal */}
+      <AnalyticsExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        branch={branch}
+        startDate={startDate}
+        endDate={endDate}
+      />
     </div>
   );
 };
