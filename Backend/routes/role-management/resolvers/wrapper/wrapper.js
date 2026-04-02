@@ -999,6 +999,7 @@ const Mutation = {
           `UPDATE "MedicalPersonnel" SET is_active = false WHERE id = $1`,
           [userId]
         );
+        await  Mutation._rotateStaffAnchor(_, { userId }, { user, res }); // Invalidate sessions on suspension
         logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
       }
     }
