@@ -39,4 +39,11 @@ function delayRandom(minMs = 1000, maxMs = 1500) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = { hashPassword, verifyPassword, hashOTP, generateOTP, generateRandomKey, delayRandom };
+function generateUUID() {
+  return crypto.randomUUID();
+}
+
+module.exports = { 
+  hashPassword, verifyPassword, hashOTP, generateOTP, 
+  generateRandomKey, delayRandom, generateUUID 
+};

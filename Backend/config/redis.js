@@ -41,12 +41,15 @@ async function initRedis(options = {}) {
 async function setKey(key, value, expireSeconds) {
   if (!client) throw new Error("Redis client not initialized");
 
+  const safeValue = String(value);
+
   if (expireSeconds) {
-    await client.set(key, value, { EX: expireSeconds });
+    await client.set(key, safeValue, { EX: expireSeconds });
   } else {
-    await client.set(key, value);
+    await client.set(key, safeValue);
   }
 }
+
 
 async function getKey(key) {
   if (!client) throw new Error("Redis client not initialized");
@@ -494,21 +497,19 @@ async function saveStaffAnchor(userId, sessionId, ttlSeconds) {
     throw new Error("saveStaffAnchor: userId and sessionId are required");
   }
 
-  const key = `staff:anchor:${userId}`;
+  const key = `staff:anchor:${String(userId)}`;
+  const value = String(sessionId);
 
-  await setKey(
-    key,
-    sessionId,
-    ttlSeconds
-  );
+  await setKey(key, value, ttlSeconds);
 
   return key;
 }
 
+
 async function getStaffAnchor(userId) {
   if (!userId) throw new Error("getStaffAnchor: userId is required");
 
-  const key = `staff:anchor:${userId}`;
+  const key = `staff:anchor:${String(userId)}`;
   return await getKey(key); // string or null
 }
 
@@ -549,7 +550,7 @@ async function deleteAllUserSessions(userId) {
   if (!client) throw new Error("Redis client not initialized");
   if (!userId) throw new Error("deleteAllUserSessions: userId is required");
 
-  const pattern = `rt:${userId}:*`;
+  const pattern = `rt:${String(userId)}:*`;
   const keysToDelete = [];
 
   // Collect all keys matching the pattern
@@ -573,7 +574,7 @@ async function deleteStaffAnchor(userId) {
   if (!client) throw new Error("Redis client not initialized");
   if (!userId) throw new Error("deleteStaffAnchor: userId is required");
 
-  const key = `staff:anchor:${userId}`;
+  const key = `staff:anchor:${String(userId)}`;
   await client.del(key);
 }
 

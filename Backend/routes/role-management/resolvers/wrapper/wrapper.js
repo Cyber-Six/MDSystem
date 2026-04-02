@@ -34,7 +34,8 @@ const {
   clearAdminTransferPasswordFailures,
 } = require('../../../../config/redis.js');
 const { enqueueAdminTransferEmail } = require('../../../../services/emailservice.js');
-const { generateOTP, verifyPassword, delayRandom } = require('../../../../utils/security.js');
+const { generateOTP, verifyPassword, 
+  delayRandom, generateUUID } = require('../../../../utils/security.js');
 const crypto = require('crypto');
 const logger = require('../../../../utils/logger.js');
 const { throwGraphQLError } = require('../../../../utils/graphql-helper.js');
@@ -999,7 +1000,7 @@ const Mutation = {
           `UPDATE "MedicalPersonnel" SET is_active = false WHERE id = $1`,
           [userId]
         );
-        await  Mutation._rotateStaffAnchor(_, { userId }, { user, res }); // Invalidate sessions on suspension
+        await Mutation._rotateStaffAnchor(_, { userId }, { user, res }); // Invalidate sessions on suspension
         logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
       }
     }
@@ -1063,8 +1064,7 @@ const Mutation = {
 
     // Generate new anchor and save it
     const REFRESH_EXP = parseInt(process.env.JWT_REFRESH_EXPIRATION, 10) || 604800;
-    const newAnchor = crypto.randomUUID();
-    await saveStaffAnchor(userId, newAnchor, REFRESH_EXP);
+    await saveStaffAnchor(userId, generateUUID(), REFRESH_EXP);
 
     // Delete all refresh sessions for this user
     await deleteAllUserSessions(userId);
