@@ -64,6 +64,17 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
+  // ✅ Check password
+  const passwordValid = await verifyPassword(password, user.password_hash);
+  if (!passwordValid) {
+    const count = await incrementLoginFailure(email, account_type);
+    await query.recordLoginAttempt(email, false); // record failed attempt
+    return res.status(400).json({
+      error: "INVALID_CREDENTIALS",
+      message: `Email or password is incorrect. ${count} failed attempts.`
+    });
+  }
+
   // ✅ Check if account type matches portal
   if (account_type === "medical") {
     const count = await incrementLoginFailure(email, account_type);
@@ -77,23 +88,11 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
           message: "Your staff account has been suspended.",
         });
       }
+      return res.status(400).json({
+        error: "INVALID_CREDENTIALS",
+        message: `Email or password is incorrect. ${count} failed attempts.`
+      });
     }
-    
-    return res.status(400).json({
-      error: "INVALID_CREDENTIALS",
-      message: `Email or password is incorrect. ${count} failed attempts.`
-    });
-  }
-
-  // ✅ Check password
-  const passwordValid = await verifyPassword(password, user.password_hash);
-  if (!passwordValid) {
-    const count = await incrementLoginFailure(email, account_type);
-    await query.recordLoginAttempt(email, false); // record failed attempt
-    return res.status(400).json({
-      error: "INVALID_CREDENTIALS",
-      message: `Email or password is incorrect. ${count} failed attempts.`
-    });
   }
 
   // ✅ Create login verification session (always the same purpose)
