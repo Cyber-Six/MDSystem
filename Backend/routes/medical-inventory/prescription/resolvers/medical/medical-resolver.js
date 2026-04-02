@@ -17,7 +17,7 @@ const Query = {
 
   getPatientPrescriptions: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_prescribe, args.patientId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.inventory_allow_prescribe, args.patientId);
     if (!isPermitted) {
       logger.warn("Unauthorized prescription view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -29,7 +29,7 @@ const Query = {
 const Mutation = {
   issuePrescription: async (_, { input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_prescribe, input.patientId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased (user.id, permit.permissions.inventory_allow_prescribe, input.patientId);
     if (!isPermitted) {
       logger.warn("Unauthorized prescription issue attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

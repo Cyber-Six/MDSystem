@@ -30,7 +30,7 @@ const Query = {
 
   getMedicineRequests: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests, args.patientId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.inventory_allow_manage_requests, args.patientId);
     if (!isPermitted) {
       logger.warn("Unauthorized medicine request view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

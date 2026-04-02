@@ -921,7 +921,7 @@ const Mutation = {
     // Handle role change
     if (role) {
       // Admin accounts cannot have their role changed (only via admin transfer)
-      const adminCheck = await isMedicalPermitted(userId, permissions.is_admin, null);
+      const adminCheck = await isMedicalPermitted(userId, permissions.is_admin);
       if (adminCheck) {
         throwGraphQLError(res)
           .message('Admin role cannot be changed directly. Use Admin Transfer instead.')
@@ -972,7 +972,7 @@ const Mutation = {
     // Handle status change (Active ↔ Suspended)
     if (status) {
       // Admin accounts cannot be deactivated — only admin transfer can change admin control
-      const adminStatusCheck = await isMedicalPermitted(userId, permissions.is_admin, null);
+      const adminStatusCheck = await isMedicalPermitted(userId, permissions.is_admin);
       if (adminStatusCheck && status === 'Suspended') {
         throwGraphQLError(res)
           .message('Admin account cannot be deactivated. Use Admin Transfer to change admin control.')
@@ -1747,8 +1747,7 @@ const Mutation = {
       // Verify that the old admin still has admin privileges
       const isCurrentlyAdmin = await isMedicalPermitted(
         oldAdminId,
-        permissions.is_admin,
-        null
+        permissions.is_admin
       );
 
       if (!isCurrentlyAdmin) {

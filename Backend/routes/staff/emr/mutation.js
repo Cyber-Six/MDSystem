@@ -14,7 +14,7 @@ const UPDATE_LOCK_MS = UPDATE_LOCK_HOURS * 60 * 60 * 1000;
 const Mutation = {
   // Create standalone VitalSigns
   createVitalSigns: async (_, { patientId, input }, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(
+    const isPermitted = await permit.isMedicalPermittedPatientBased(
       user.id,
       permit.permissions.emr_allow_set_vital_sign,
       patientId
@@ -56,7 +56,7 @@ const Mutation = {
 
   // Create standalone DentalRecord
   createDentalRecord: async (_, { patientId, input }, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(
+    const isPermitted = await permit.isMedicalPermittedPatientBased(
       user.id,
       permit.permissions.emr_allow_set_dental_record,
       patientId
@@ -167,7 +167,7 @@ const Mutation = {
 
     const record = existing.rows[0];
 
-    const isPermitted = await permit.isMedicalPermitted(
+    const isPermitted = await permit.isMedicalPermittedPatientBased(
       user.id,
       permit.permissions.emr_allow_set_vital_sign,
       record.patientId
@@ -271,7 +271,7 @@ const Mutation = {
         .throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(
+    const isPermitted = await permit.isMedicalPermittedPatientBased(
       user.id,
       permit.permissions.emr_allow_set_dental_record,
       record.patientId
