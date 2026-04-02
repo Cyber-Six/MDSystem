@@ -137,7 +137,7 @@ router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => 
 });
 
 // Route: Get user ID by email
-router.get('/id/email/:email/:branch', jwtProtect("patient"), async (req, res) => {
+router.get('/id/email/:email/:branch', jwtProtect("medical"), async (req, res) => {
     try {
         const { email, branch } = req.params;
 
