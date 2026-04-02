@@ -131,9 +131,13 @@ const Dashboard = () => {
   // Handle successful completion of initial record
   const handleInitialRecordComplete = async (result) => {
     console.log('[Dashboard] Initial record completed:', result);
+    // Set pending status optimistically so the approval screen shows immediately
+    // without waiting for the API round-trip
+    setRecordStatus('Pending');
+    setIsVerified(false);
     setShowInitialRecordModal(false);
     
-    // Refresh the status to show pending approval screen
+    // Refresh the status in the background to confirm the actual value
     try {
       const { status } = await checkInitialRecordStatus();
       setRecordStatus(status);
