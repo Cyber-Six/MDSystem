@@ -492,7 +492,8 @@ async function saveRefreshSession(userId, deviceId, data, ttlSeconds) {
   return key;
 }
 
-async function saveStaffAnchor(userId, sessionId, ttlSeconds) {
+const REFRESH_EXP = parseInt(process.env.JWT_REFRESH_EXPIRATION, 10) || 604800;
+async function saveStaffAnchor(userId, sessionId, ttlSeconds=REFRESH_EXP) {
   if (!userId || !sessionId) {
     throw new Error("saveStaffAnchor: userId and sessionId are required");
   }

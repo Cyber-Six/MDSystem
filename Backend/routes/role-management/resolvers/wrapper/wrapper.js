@@ -1001,8 +1001,7 @@ const Mutation = {
           [userId]
         );
 
-        const REFRESH_EXP = parseInt(process.env.JWT_REFRESH_EXPIRATION, 10) || 604800;
-        await saveStaffAnchor(userId, generateUUID(), REFRESH_EXP);
+        await saveStaffAnchor(userId, generateUUID());
         logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
       }
     }
@@ -1065,8 +1064,7 @@ const Mutation = {
     const sessionCount = sessions.length;
 
     // Generate new anchor and save it
-    const REFRESH_EXP = parseInt(process.env.JWT_REFRESH_EXPIRATION, 10) || 604800;
-    await saveStaffAnchor(userId, generateUUID(), REFRESH_EXP);
+    await saveStaffAnchor(userId, generateUUID());
 
     // Delete all refresh sessions for this user
     await deleteAllUserSessions(userId);
