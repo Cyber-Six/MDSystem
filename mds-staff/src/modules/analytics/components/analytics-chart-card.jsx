@@ -1,13 +1,26 @@
-import React, { memo } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import { AnalyticsBarChart, AnalyticsLineChart, AnalyticsPieChart } from './analytics-charts';
-import { CHART_TYPE_MAP } from '../analytics-service';
+import { CHART_TYPE_MAP, exportSingleMetric } from '../analytics-service';
 
 /**
  * Analytics Chart Card
  * Consistent card wrapper for each analytics chart with title, total, and loading states.
  */
-const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark }) => {
+const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, branch, startDate, endDate }) => {
   const chartType = CHART_TYPE_MAP[dataType] || 'bar';
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    if (!branch || !startDate || !endDate) return;
+    setExporting(true);
+    try {
+      await exportSingleMetric(dataType, { branch, startDate, endDate });
+    } catch {
+      // silent — user will see no file downloaded
+    } finally {
+      setExporting(false);
+    }
+  }, [dataType, branch, startDate, endDate]);
 
   // Transform {labels, values} -> [{name, value}]
   const chartData = data?.data
@@ -31,13 +44,32 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark }
             </p>
           )}
         </div>
-        <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full uppercase tracking-wide ${
+        <div className="flex items-center gap-1.5">
+          {/* Per-card export (single metric PDF) */}
+          {!loading && !error && data?.data && (
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              title="Export as PDF"
+              className="p-1 text-secondary-400 hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400 rounded transition-colors disabled:opacity-50"
+            >
+              {exporting ? (
+                <span className="animate-spin block h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" />
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              )}
+            </button>
+          )}
+          <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full uppercase tracking-wide ${
           chartType === 'bar' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' :
           chartType === 'line' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' :
           'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
         }`}>
           {chartType === 'doughnut' ? 'pie' : chartType}
         </span>
+        </div>
       </div>
 
       {/* Card Body */}

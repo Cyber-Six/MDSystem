@@ -143,3 +143,71 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
 
   return results;
 }
+
+// ── Export Functions ──────────────────────────────────────────────────────────
+
+/** Export presets mirror – used to populate presets in the UI without an API call */
+export const EXPORT_PRESETS = {
+  'full-report':    { label: 'Full Analytics Report',       description: 'All 15 analytics metrics combined' },
+  'consultations':  { label: 'Consultations Report',        description: 'Consultation metrics: type, status, trends' },
+  'diagnoses':      { label: 'Diagnoses Report',            description: 'Diagnosis metrics: top ICD-10, type distribution' },
+  'vitals':         { label: 'Vital Signs Report',          description: 'BMI and blood pressure trend analysis' },
+  'appointments':   { label: 'Appointments Report',         description: 'Appointment category, status, and session data' },
+  'clinical':       { label: 'Clinical Data Report',        description: 'Immunization coverage and dental procedures' },
+  'lifestyle':      { label: 'Lifestyle & Allergies Report', description: 'Lifestyle risk factors and allergy data' },
+};
+
+/**
+ * Download analytics data as CSV / Excel / PDF.
+ * The response is a Blob (binary file) that gets saved by the browser.
+ *
+ * @param {'csv'|'excel'|'pdf'} format
+ * @param {Object} opts - { branch, startDate, endDate, dataTypes?, preset? }
+ */
+export async function exportAnalytics(format, opts) {
+  const { branch, startDate, endDate, dataTypes, preset } = opts;
+  const response = await axiosRequest.post(
+    '/analytics/export',
+    { format, branch, startDate, endDate, dataTypes, preset },
+    { responseType: 'blob' },
+  );
+
+  triggerDownload(response);
+}
+
+/**
+ * Download a focused single-metric PDF report.
+ * @param {string} dataType
+ * @param {Object} opts - { branch, startDate, endDate }
+ */
+export async function exportSingleMetric(dataType, opts) {
+  const { branch, startDate, endDate } = opts;
+  const response = await axiosRequest.post(
+    '/analytics/export/single',
+    { dataType, branch, startDate, endDate },
+    { responseType: 'blob' },
+  );
+
+  triggerDownload(response);
+}
+
+/**
+ * Trigger browser file download from an Axios blob response.
+ * Extracts filename from Content-Disposition header or falls back.
+ */
+function triggerDownload(response) {
+  const disposition = response.headers?.['content-disposition'] || '';
+  let filename = 'analytics_export';
+
+  const match = disposition.match(/filename="?([^";\n]+)"?/i);
+  if (match) filename = match[1];
+
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}

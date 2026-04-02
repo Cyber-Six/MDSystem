@@ -21,6 +21,7 @@
     "compression": "^1.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
     "expo-server-sdk": "^6.1.0",
     "express": "^5.2.1",
     "express-graphql": "^0.12.0",
