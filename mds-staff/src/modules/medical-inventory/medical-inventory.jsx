@@ -15,6 +15,7 @@ import DispenseMedicineModal from './components/dispense-medicine/dispense-medic
 import RequestActionModal from './components/dispense-queue/request-action-modal';
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 import { useStaffNotifications } from '../notification/notification-context';
+import { useMedicineRequestSocket } from './hooks/useMedicineRequestSocket';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
@@ -502,6 +503,47 @@ const MedicalInventory = () => {
     hasLoadedRequestsRef.current = true;
     loadAllMedicineRequests();
   }, [itemsLoading, loadAllMedicineRequests]);
+
+  // Handle new medicine request from patient (real-time via socket)
+  const handleNewMedicineRequest = useCallback(async (data) => {
+    console.log('🔔 New medicine request received:', data);
+    
+    try {
+      // Fetch the full request details
+      const newRequest = await fetchMedicineRequestById(data.requestId);
+      
+      if (newRequest) {
+        // Enrich with patient name and item details
+        const enrichedWithNames = await enrichRequestsWithPatientNames([newRequest]);
+        const enriched = enrichedWithNames.map(req => ({
+          ...req,
+          items: enrichRequestItems(req.items || []),
+        }));
+        
+        // Add to the beginning of the requests list
+        setRequests(prev => {
+          // Check if already exists (prevent duplicates)
+          const exists = prev.some(r => String(r.id) === String(data.requestId));
+          if (exists) return prev;
+          return [enriched[0], ...prev];
+        });
+        
+        // Notification will be handled by the notification context which listens
+        // to the 'medicine:request:new' event socket directly, so no need for modal here
+      }
+    } catch (err) {
+      console.error('Failed to load new request details:', err);
+      // Still reload all requests as fallback
+      loadAllMedicineRequests();
+    }
+  }, [enrichRequestItems, enrichRequestsWithPatientNames, loadAllMedicineRequests]);
+
+  // Connect to socket for real-time updates
+  const { isConnected: isSocketConnected } = useMedicineRequestSocket(
+    handleNewMedicineRequest,    // onNewRequest
+    null,                         // onRequestUpdate (not used yet)
+    null                          // onRequestStatusChange (not used yet)
+  );
 
   // Reload dispense queue when a patient submits a new medicine request via socket
   useEffect(() => {

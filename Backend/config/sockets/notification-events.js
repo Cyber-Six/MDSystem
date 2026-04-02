@@ -3,6 +3,20 @@ const { registerHandlers } = require('./socket-events');
 const db = require('../query');
 
 /**
+ * Maps a UsersPersonal.branch value to the slotScheduler.location values
+ * that belong to that branch. This bridges the branch/location naming gap:
+ *   UsersPersonal.branch  →  slotScheduler.location
+ *   'Manila'              →  ['Arlegui', 'Casal']
+ *   'QuezonCity'          →  ['QuezonCity']
+ *   'Both'                →  ['Arlegui', 'Casal', 'QuezonCity']
+ */
+const BRANCH_TO_LOCATIONS = {
+  Manila: ['Arlegui', 'Casal'],
+  QuezonCity: ['QuezonCity'],
+  Both: ['Arlegui', 'Casal', 'QuezonCity'],
+};
+
+/**
  * Notification Socket Events
  *
  * Client -> Server:
@@ -47,15 +61,21 @@ const notificationHandlers = {
         return;
       }
 
-      // Join standard branch room (used by patients and branch-level broadcasts)
-      socket.join(`branch:${branch}`);
+      // Join location-based rooms that match this staff member's branch.
+      // slotScheduler.location uses city names ('Arlegui', 'Casal', 'QuezonCity')
+      // while UsersPersonal.branch uses region names ('Manila', 'QuezonCity', 'Both').
+      // Appointments are emitted to branch:${location}, so staff must join those rooms.
+      const locations = BRANCH_TO_LOCATIONS[branch] || [branch];
+      for (const loc of locations) {
+        socket.join(`branch:${loc}`);
+      }
 
       // Medical staff also need the role-prefixed branch room used by EMR mutations
       if (socket.userRole === 'medical') {
         socket.join(`${branch}::staff`);
       }
 
-      logger.debug(`[NOTIF-EVENTS] user:${socket.userId} joined branch:${branch}`);
+      logger.debug(`[NOTIF-EVENTS] user:${socket.userId} joined branch:${branch} → rooms: ${locations.map(l => `branch:${l}`).join(', ')}`);
       if (typeof ack === 'function') ack({ success: true, branch });
     } catch (err) {
       logger.error(`[NOTIF-EVENTS] join-branch error for user:${socket.userId}:`, err.message);

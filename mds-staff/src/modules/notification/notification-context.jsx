@@ -264,6 +264,22 @@ export function StaffNotificationProvider({ children }) {
     sessionStorage.removeItem(STORAGE_KEY);
   }, []);
 
+  const clearNotificationsByType = useCallback((type) => {
+    setNotifications((prev) => {
+      const next = prev.filter((n) => n.type !== type);
+      persistNotifications(next);
+      return next;
+    });
+  }, []);
+
+  const removeNotificationByRefId = useCallback((type, refId) => {
+    setNotifications((prev) => {
+      const next = prev.filter((n) => !(n.type === type && String(n.refId) === String(refId)));
+      persistNotifications(next);
+      return next;
+    });
+  }, []);
+
   // Connect socket and subscribe to all staff notification events
   useEffect(() => {
     let isMounted = true;
@@ -308,6 +324,17 @@ export function StaffNotificationProvider({ children }) {
           addNotification(event, data);
           const subs = subscribersRef.current[event];
           if (subs) subs.forEach((cb) => cb(data));
+        });
+      });
+
+      // Auto-remove medicine request notifications when requests are completed
+      ['medicine:request:dispensed', 'medicine:request:approved', 'medicine:request:rejected'].forEach((event) => {
+        service.on(event, (data) => {
+          if (!isMounted) return;
+          console.log(`[NOTIFICATION] Medicine request completed: ${event}`, data);
+          if (data?.requestId) {
+            removeNotificationByRefId('medicine', data.requestId);
+          }
         });
       });
 
@@ -426,7 +453,7 @@ export function StaffNotificationProvider({ children }) {
   const unreadCount = notifications.filter((n) => n.unread).length + unseenInventoryCount;
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll, subscribe, inventoryAlerts, markInventoryAlertsAsSeen, refreshInventoryAlerts }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll, clearNotificationsByType, removeNotificationByRefId, subscribe, inventoryAlerts, markInventoryAlertsAsSeen, refreshInventoryAlerts }}>
       {children}
     </NotificationContext.Provider>
   );

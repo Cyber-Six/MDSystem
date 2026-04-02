@@ -68,11 +68,16 @@ const Mutation = {
     try {
       const patientId = result.patientId;
       const approved = status === 'Approved';
+      
+      console.log(`[MEDICINE_REQUEST] 📤 Attempting to notify patient ${patientId} about ${status}`);
 
       const acked = (await isConnectedAnywhere(patientId))
         && await emitToUserWithAck(patientId, `medicine:request:${status.toLowerCase()}`, { requestId, status, notes });
 
+      console.log(`[MEDICINE_REQUEST] Acknowledgement received: ${acked}`);
+
       if (!acked) {
+        console.log(`[MEDICINE_REQUEST] Patient not online or didn't acknowledge, sending email...`);
         const patientEmail = await findEmailByUserId(patientId);
         if (patientEmail) {
           await enqueueNotificationEmail(
@@ -83,10 +88,16 @@ const Mutation = {
               : `Your medicine request <strong>#${requestId}</strong> has been <span style="color:red;font-weight:bold;">rejected</span> by the medical staff. Please contact the clinic if you believe this is an error or to submit a new request.`,
             notes ?? null,
           );
+          console.log(`[MEDICINE_REQUEST] ✅ Email queued for ${patientEmail}`);
+        } else {
+          console.log(`[MEDICINE_REQUEST] ❌ No email found for patient ${patientId}`);
         }
+      } else {
+        console.log(`[MEDICINE_REQUEST] ✅ Real-time notification delivered successfully`);
       }
     } catch (notifErr) {
       logger.error("Failed to send medicine request notification:", notifErr);
+      console.error('[MEDICINE_REQUEST] ❌ Notification error:', notifErr);
     }
     
     return result;
