@@ -72,7 +72,7 @@ const Query = {
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
-      WHERE location = COALESCE($1::"LocationDesignation", ss.location)
+      WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
       ORDER BY ss.created_at ASC
       LIMIT $2 OFFSET $3;
     `;
