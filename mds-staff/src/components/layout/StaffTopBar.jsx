@@ -26,7 +26,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeNotifTab, setActiveNotifTab] = useState('inventory');
 
-  const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen } = useStaffNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen, clearNotificationsByType } = useStaffNotifications();
   const { settings, updateSettings } = useSettings();
   const { clearTabs } = usePatientTabs();
   const { themeMode } = settings;
@@ -463,7 +463,16 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                 </div>
 
                 {/* Footer */}
-                <div className="px-4 py-2 border-t border-neutral-200 dark:border-neutral-700 shrink-0 bg-neutral-50 dark:bg-neutral-800/80">
+                <div className="px-4 py-2 border-t border-neutral-200 dark:border-neutral-700 shrink-0 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-2">
+                  {activeNotifTab === 'medicine' && medicineNotifs.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => clearNotificationsByType('medicine')}
+                      className="flex-1 text-center text-[11px] font-medium text-error-600 dark:text-error-400 hover:text-error-700 dark:hover:text-error-300 transition-colors"
+                    >
+                      Clear All
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -480,7 +489,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                         navigate('/inventory');
                       }
                     }}
-                    className="w-full text-center text-[11px] font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                    className={`flex-1 text-center text-[11px] font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors`}
                   >
                     {activeNotifTab === 'chat'
                       ? 'Go to Health Chat →'

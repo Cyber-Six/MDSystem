@@ -99,13 +99,27 @@ const Mutation = {
 
     console.log('[MEDICINE_REQUEST] ✅ Request created, ID:', result.id);
 
-    // Notify medical staff on ALL branches for testing (temporary)
-    const BRANCHES = ['Casal', 'Arlegui', 'QuezonCity'];
-    
+    // Notify medical staff at the patient's assigned branch only
     try {
-      console.log('[MEDICINE_REQUEST] 🔍 Broadcasting to all branches for testing...');
+      const patientBranch = await db.getUserBranch(user.id);
       
-      BRANCHES.forEach(location => {
+      if (!patientBranch) {
+        console.warn('[MEDICINE_REQUEST] ⚠️  No branch assigned to patient:', user.id);
+        return result;
+      }
+
+      // Map branch to its locations
+      const BRANCH_TO_LOCATIONS = {
+        Manila: ['Arlegui', 'Casal'],
+        QuezonCity: ['QuezonCity'],
+        Both: ['Arlegui', 'Casal', 'QuezonCity'],
+      };
+
+      const locations = BRANCH_TO_LOCATIONS[patientBranch] || [patientBranch];
+      
+      console.log(`[MEDICINE_REQUEST] 🔍 Broadcasting to patient's branch (${patientBranch}): ${locations.join(', ')}`);
+      
+      locations.forEach(location => {
         console.log(`[MEDICINE_REQUEST] Emitting to branch:${location}`);
         emitToRoom(`branch:${location}`, 'medicine:request:new', {
           requestId: result.id,
