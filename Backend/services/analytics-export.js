@@ -15,7 +15,7 @@ const docGen = require('./doc-generate-module/index.js');
  */
 const EXPORT_META = {
   'consultations-by-type':    { label: 'Consultations by Type',       xAxis: 'Type',          yAxis: 'Count',   chartType: 'pie' },
-  'consultations-by-status':  { label: 'Consultations by Status',     xAxis: 'Status',        yAxis: 'Count',   chartType: 'doughnut' },
+  'consultations-by-mode':    { label: 'Consultations by Mode',       xAxis: 'Mode',          yAxis: 'Count',   chartType: 'doughnut' },
   'consultation-trends':      { label: 'Monthly Consultation Trends', xAxis: 'Month',         yAxis: 'Count',   chartType: 'line' },
   'top-diagnoses':            { label: 'Top 10 Diagnoses',            xAxis: 'Diagnosis',     yAxis: 'Count',   chartType: 'bar' },
   'diagnoses-by-type':        { label: 'Diagnoses by Type',           xAxis: 'Type',          yAxis: 'Count',   chartType: 'pie' },
@@ -42,8 +42,8 @@ const EXPORT_PRESETS = {
   },
   'consultations': {
     label: 'Consultations Report',
-    description: 'Consultation metrics: type, status, trends',
-    dataTypes: ['consultations-by-type', 'consultations-by-status', 'consultation-trends'],
+    description: 'Consultation metrics: type, mode, trends',
+    dataTypes: ['consultations-by-type', 'consultations-by-mode', 'consultation-trends'],
   },
   'diagnoses': {
     label: 'Diagnoses Report',

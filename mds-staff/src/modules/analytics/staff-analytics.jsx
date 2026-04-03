@@ -14,7 +14,7 @@ import {
 
 const QUERY_LABELS = {
   'consultations-by-type': 'Consultations by Type',
-  'consultations-by-status': 'Consultations by Status',
+  'consultations-by-mode': 'Consultations by Mode',
   'consultation-trends': 'Monthly Consultation Trends',
   'top-diagnoses': 'Top 10 Diagnoses',
   'diagnoses-by-type': 'Diagnoses by Type',

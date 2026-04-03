@@ -85,20 +85,20 @@ async function consultationsByType(branch, startDate, endDate) {
 }
 
 /**
- * Consultations by Status
+ * Consultations by Mode (Onsite vs Virtual)
  */
-async function consultationsByStatus(branch, startDate, endDate) {
+async function consultationsByMode(branch, startDate, endDate) {
   const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT c.status, COUNT(*) as count
+    SELECT c.mode, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
-    GROUP BY c.status ORDER BY count DESC
+    GROUP BY c.mode ORDER BY count DESC
   `, [startDate, endDate, ...bf.params]);
 
-  const labels = result.rows.map(r => r.status);
+  const labels = result.rows.map(r => r.mode);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
   return { labels, values, total };
@@ -410,9 +410,9 @@ const QUERY_HANDLERS = {
     handler: consultationsByType,
     description: 'Consultations grouped by Medical/Dental type',
   },
-  'consultations-by-status': {
-    handler: consultationsByStatus,
-    description: 'Consultations grouped by status (Open, Completed, etc.)',
+  'consultations-by-mode': {
+    handler: consultationsByMode,
+    description: 'Consultations grouped by mode (Onsite, Virtual)',
   },
   'consultation-trends': {
     handler: consultationTrends,

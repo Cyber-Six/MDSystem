@@ -11,7 +11,7 @@ import { axiosRequest } from '../../packages-core-adapter';
 export const QUERY_CATEGORIES = {
   consultations: {
     label: 'Consultations',
-    queries: ['consultations-by-type', 'consultations-by-status', 'consultation-trends'],
+    queries: ['consultations-by-type', 'consultations-by-mode', 'consultation-trends'],
   },
   diagnoses: {
     label: 'Diagnoses',
@@ -39,7 +39,7 @@ export const QUERY_CATEGORIES = {
 
 export const CHART_TYPE_MAP = {
   'consultations-by-type': 'pie',
-  'consultations-by-status': 'doughnut',
+  'consultations-by-mode': 'doughnut',
   'consultation-trends': 'line',
   'top-diagnoses': 'bar',
   'diagnoses-by-type': 'pie',
