@@ -2,7 +2,7 @@ import React from 'react';
 import { Spinner, BackButton } from './shared';
 import { SESSION } from '../patient-appointment-service';
 
-const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, uploadedFiles, submitting, onSubmit, onBack }) => (
+const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, uploadedFiles, purpose, onPurposeChange, submitting, onSubmit, onBack }) => (
   <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
     <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-6">Review &amp; Submit</h2>
     <div className="space-y-3 mb-6">
@@ -37,6 +37,21 @@ const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, 
           </ul>
         </div>
       )}
+    </div>
+
+    {/* Purpose / Reason for Visit */}
+    <div className="mb-6 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+        Purpose / Reason for Visit <span className="text-neutral-400 text-xs">({(purpose || '').length}/250)</span>
+      </label>
+      <textarea
+        maxLength={250}
+        rows={3}
+        value={purpose || ''}
+        onChange={(e) => onPurposeChange(e.target.value.slice(0, 250))}
+        placeholder="Briefly describe the reason for your appointment (optional)"
+        className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+      />
     </div>
 
     {/* Navigation */}

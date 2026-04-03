@@ -92,6 +92,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
     approvedBy,
     arrived_at,
     created_at,
+    purpose,
     notes,
     requirements = [],
   } = appointment;
@@ -253,6 +254,18 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                   <p className="text-sm font-medium text-secondary-800 dark:text-white">{value}</p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Patient Purpose / Reason for Visit */}
+          <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+            <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
+              <h3 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Patient Purpose / Reason for Visit</h3>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap">
+                {purpose || <span className="italic text-neutral-400 dark:text-neutral-500">No purpose provided</span>}
+              </p>
             </div>
           </div>
 
