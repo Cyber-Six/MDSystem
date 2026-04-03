@@ -62,7 +62,7 @@ const Mutation = {
       throwGraphQLError(res).message("Invalid status. Must be Approved or Rejected").status(400).throw();
     }
 
-    const result = await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId, status, approvedBy: user.id, notes }, { res });
+    const result = await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId, status, approvedBy: user.id, notes }, { user, res });
     
     // Notify patient: socket with ack, fall back to email if not acked or offline
     try {

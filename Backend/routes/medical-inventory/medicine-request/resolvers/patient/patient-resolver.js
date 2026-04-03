@@ -20,7 +20,7 @@ const Query = {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
     try {
       logger.info("Fetching available medicines for location:", args.location);
-      const result = await Wrapper.Query._getAvailableMedicine(_, args, { res });
+      const result = await Wrapper.Query._getAvailableMedicine(_, args, { user, res });
       logger.info("Medicines fetched:", result?.length || 0);
       return result;
     } catch (error) {
@@ -31,12 +31,12 @@ const Query = {
 
   getMedicineStatus: async (_, __, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return await Wrapper.Query._getMedicineStatus(_, { patientId: user.id }, { res });
+    return await Wrapper.Query._getMedicineStatus(_, { patientId: user.id }, { user, res });
   },
 
   getMedicineRequestById: async (_, { requestId }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return await Wrapper.Query._getMedicineRequestById(_, { requestId }, { res });
+    return await Wrapper.Query._getMedicineRequestById(_, { requestId }, { user, res });
   },
 
   getMedicineRequests: async (_, { patientId, offset, limit }, { user, res }) => {
@@ -45,7 +45,7 @@ const Query = {
     if (user.id !== Number(patientId)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getMedicineRequests(_, { patientId, offset, limit }, { res });
+    return await Wrapper.Query._getMedicineRequests(_, { patientId, offset, limit }, { user, res });
   },
 
   getAllMedicineRequests: async (_, __, { user, res }) => {
@@ -95,7 +95,7 @@ const Mutation = {
     await validateBatchesWithQuantity(mergedItems, res);
     */
 
-    const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
+    const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { user, res });
 
     console.log('[MEDICINE_REQUEST] ✅ Request created, ID:', result.id);
 
@@ -156,7 +156,7 @@ const Mutation = {
     return await Wrapper.Mutation._setStatusMedicineRequest(
       _,
       { requestId: pendingResult.rows[0].id, status: 'Cancelled', approvedBy: null, notes: null },
-      { res },
+      { user, res },
     );
   },
 

@@ -12,7 +12,7 @@ const Query = {
       logger.warn("Unauthorized prescription view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getAvailableMedicine(_, args, { res });
+    return await Wrapper.Query._getAvailableMedicine(_, args, { user, res });
   },
 
   getPatientPrescriptions: async (_, args, { user, res }) => {
@@ -22,7 +22,7 @@ const Query = {
       logger.warn("Unauthorized prescription view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getPatientPrescriptions(_, args, { res });
+    return await Wrapper.Query._getPatientPrescriptions(_, args, { user, res });
   },
 };
 
@@ -47,7 +47,7 @@ const Mutation = {
 
     await validateBatchesWithQuantity(mergedItems, res);
 
-    return await Wrapper.Mutation._issuePrescription(_, { input, issuedBy: user.id }, { res });
+    return await Wrapper.Mutation._issuePrescription(_, { input, issuedBy: user.id }, { user, res });
   },
 };
 

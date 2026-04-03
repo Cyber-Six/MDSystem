@@ -28,6 +28,7 @@ const dashboardRoutes = require('./routes/dashboard/dashboard.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentRoutes = require('./routes/documents/documents.js');
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
+const settingsRoutes = require('./routes/settings/settings.js');
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
@@ -87,6 +88,7 @@ app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/documents', documentRoutes);
+app.use('/settings', settingsRoutes);
 
 // ======================================
 // AI Medical Chatbot — proxied to MDS-Chatbot microservice

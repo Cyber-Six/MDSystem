@@ -13,7 +13,7 @@ const Query = {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getMedicalItems(_, { active: true, ...args }, { res });
+    return await Wrapper.Query._getMedicalItems(_, { active: true, ...args }, { user, res });
   },
 
   getMedicalItem: async (_, args, { user, res }) => {
@@ -23,7 +23,7 @@ const Query = {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getMedicalItem(_, args, { res });
+    return await Wrapper.Query._getMedicalItem(_, args, { user, res });
   },
 
   getMedicalSupply: async (_, args, { user, res }) => {
@@ -33,7 +33,7 @@ const Query = {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getMedicalSupply(_, { availableOnly: true, ...args }, { res });
+    return await Wrapper.Query._getMedicalSupply(_, { availableOnly: true, ...args }, { user, res });
   },
 
   getSupplyBatches: async (_, args, { user, res }) => {
@@ -43,7 +43,7 @@ const Query = {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getSupplyBatches(_, { availableOnly: true, ...args }, { res });
+    return await Wrapper.Query._getSupplyBatches(_, { availableOnly: true, ...args }, { user, res });
   },
 };
 
@@ -55,7 +55,7 @@ const Mutation = {
       logger.warn("Unauthorized inventory edit attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._createMedicalItems(_, { input }, { res });
+    return await Wrapper.Mutation._createMedicalItems(_, { input }, { user, res });
   },
 
   updateMedicalItems: async (_, { id, input }, { user, res }) => {
@@ -65,7 +65,7 @@ const Mutation = {
       logger.warn("Unauthorized inventory edit attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._updateMedicalItems(_, { id, input }, { res });
+    return await Wrapper.Mutation._updateMedicalItems(_, { id, input }, { user, res });
   },
 
   deleteMedicalItems: async (_, { id }, { user, res }) => {
@@ -75,7 +75,7 @@ const Mutation = {
       logger.warn("Unauthorized inventory delete attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._deleteMedicalItems(_, { id }, { res });
+    return await Wrapper.Mutation._deleteMedicalItems(_, { id }, { user, res });
   },
 
   addMedicalSupply: async (_, { input }, { user, res }) => {
@@ -85,7 +85,7 @@ const Mutation = {
       logger.warn("Unauthorized supply add attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._addMedicalSupply(_, { input, receivedBy: user.id }, { res });
+    return await Wrapper.Mutation._addMedicalSupply(_, { input, receivedBy: user.id }, { user, res });
   },
 
   addSupplyBatch: async (_, { input }, { user, res }) => {
@@ -95,7 +95,7 @@ const Mutation = {
       logger.warn("Unauthorized supply add attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._addSupplyBatch(_, { input, receivedBy: user.id }, { res });
+    return await Wrapper.Mutation._addSupplyBatch(_, { input, receivedBy: user.id }, { user, res });
   },
 
   splitMedicalSupply: async (_, { batchId, input }, { user, res }) => {
@@ -118,7 +118,7 @@ const Mutation = {
       logger.warn("Unauthorized supply split attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._splitMedicalSupply(_, { batchId, input }, { res });
+    return await Wrapper.Mutation._splitMedicalSupply(_, { batchId, input }, { user, res });
   },
 
   splitMedicineSupply: async (_, { batchId, input }, { user, res }) => {
@@ -141,7 +141,7 @@ const Mutation = {
       logger.warn("Unauthorized medicine split attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._splitMedicineSupply(_, { batchId, input }, { res });
+    return await Wrapper.Mutation._splitMedicineSupply(_, { batchId, input }, { user, res });
   },
 
   updateMedicalSupply: async (_, { batchId, input }, { user, res }) => {
@@ -164,7 +164,7 @@ const Mutation = {
       logger.warn("Unauthorized medicine update attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._updateMedicalSupply(_, { batchId, input }, { res });
+    return await Wrapper.Mutation._updateMedicalSupply(_, { batchId, input }, { user, res });
   },
 
   updateSupplyBatch: async (_, { batchId, input }, { user, res }) => {
@@ -187,7 +187,7 @@ const Mutation = {
       logger.warn("Unauthorized supply update attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Mutation._updateSupplyBatch(_, { batchId, input }, { res });
+    return await Wrapper.Mutation._updateSupplyBatch(_, { batchId, input }, { user, res });
   },
 };
 
