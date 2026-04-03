@@ -262,7 +262,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-neutral-50/60 dark:bg-neutral-700/30">
-                {['Patient', 'Scheduled', 'Session', 'Status', 'Notes'].map((h) => (
+                {['Patient', 'Scheduled', 'Session', 'Status', 'Purpose'].map((h) => (
                   <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider whitespace-nowrap" style={{ width: '20%' }}>
                     {h}
                   </th>
@@ -309,7 +309,9 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-sm text-secondary-800 dark:text-neutral-200 truncate" style={{ width: '20%' }}>
-                    {apt.notes || '—'}
+                    {apt.purpose ? (
+                      <span title={apt.purpose}>{apt.purpose.length > 40 ? apt.purpose.slice(0, 40) + '…' : apt.purpose}</span>
+                    ) : '—'}
                   </td>
                 </tr>
               )) : (

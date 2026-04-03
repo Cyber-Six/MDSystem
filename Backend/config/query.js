@@ -572,6 +572,72 @@ function resolveUnionBranch(patientBranches) {
   return 'Both';
 }
 
+/**
+ * Get user preferences (appearance, notification settings)
+ * @param {string|number} userId
+ * @returns {Promise<{appearance: object, notification: object} | null>}
+ */
+async function getUserPreferences(userId) {
+  const sql = `
+    SELECT appearance, notification
+    FROM "UsersPreferences"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      appearance: row.appearance || {},
+      notification: row.notification || {}
+    };
+  } catch (err) {
+    logger.error(`Error fetching preferences for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Create or update user preferences
+ * @param {string|number} userId
+ * @param {{appearance?: object, notification?: object}} updates
+ * @returns {Promise<{appearance: object, notification: object}>}
+ */
+async function setUserPreferences(userId, updates) {
+  const sql = `
+    INSERT INTO "UsersPreferences" (id, appearance, notification)
+    VALUES ($1, $2, $3)
+    ON CONFLICT(id) DO UPDATE SET
+      appearance = COALESCE($2, "UsersPreferences".appearance),
+      notification = COALESCE($3, "UsersPreferences".notification),
+      updated_at = NOW()
+    RETURNING appearance, notification;
+  `;
+
+  try {
+    const appearance = updates.appearance ? JSON.stringify(updates.appearance) : null;
+    const notification = updates.notification ? JSON.stringify(updates.notification) : null;
+
+    const result = await query(sql, [userId, appearance, notification]);
+
+    if (result.rows.length === 0) {
+      throw new Error("Failed to set preferences");
+    }
+
+    const row = result.rows[0];
+    return {
+      appearance: row.appearance || {},
+      notification: row.notification || {}
+    };
+  } catch (err) {
+    logger.error(`Error setting preferences for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
 module.exports = {
     db,
     connect,
@@ -602,5 +668,7 @@ module.exports = {
     verifyUserIdentities,
     getUserIdentitiesDetailed,
     getPatientBranches,
-    resolveUnionBranch
+    resolveUnionBranch,
+    getUserPreferences,
+    setUserPreferences
 };

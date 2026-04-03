@@ -28,6 +28,9 @@ const dashboardRoutes = require('./routes/dashboard/dashboard.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentRoutes = require('./routes/documents/documents.js');
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
+const settingsRoutes = require('./routes/settings/settings.js');
+const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
+
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
@@ -80,6 +83,8 @@ initRoleManagementGraphQL(app);
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/auth/email', emailAuthRoutes);
+app.use('/auth/refresh', refreshAuthRoutes);
+
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
 app.use('/dashboard', dashboardRoutes);
@@ -87,6 +92,7 @@ app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/documents', documentRoutes);
+app.use('/settings', settingsRoutes);
 
 // ======================================
 // AI Medical Chatbot — proxied to MDS-Chatbot microservice

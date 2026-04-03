@@ -82,10 +82,14 @@ const HealthChat = () => {
       if (data?.chat) {
         return { ...prev, ...data.chat };
       }
+      const closedBy = data?.closedBy || prev.closedBy || null;
+      const isExpired =
+        closedBy === 'System' ||
+        (prev.expiresAt && new Date(prev.expiresAt) < new Date());
       return {
         ...prev,
-        status: 'Closed',
-        closedBy: data?.closedBy || prev.closedBy || null,
+        status: isExpired ? 'Expired' : 'Closed',
+        closedBy,
         session_end: prev.session_end || new Date().toISOString(),
       };
     });
@@ -511,7 +515,7 @@ const HealthChat = () => {
                   <div ref={previousConversationEndRef} />
                 </div>
                 <TicketDivider
-                  closedAt={ticket.session_end}
+                  closedAt={ticket.session_end || ticket.archived_at || ticket.expiresAt}
                   closedBy={ticket.closedBy || (ticket.status === 'Expired' ? 'System' : 'Unknown')}
                 />
               </div>
