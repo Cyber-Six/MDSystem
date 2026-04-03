@@ -19,7 +19,7 @@ const { initRoleManagementGraphQL } = require('./routes/role-management/graphql.
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
-const analyticsRoutes = require('./routes/documents/analytics.js');
+const analyticsRoutes = require('./routes/documents/analytics/analytics.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
@@ -89,7 +89,7 @@ app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/media', mediaRoutes);
-app.use('/announcement', AnnouncementRoutes);
+app.use('/announcement', AnnouncementRoutes);s
 app.use('/analytics', analyticsRoutes);
 app.use('/documents', documentRoutes);
 app.use('/settings', settingsRoutes);

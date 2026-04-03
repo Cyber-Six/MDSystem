@@ -1,0 +1,580 @@
+const express = require('express');
+const logger = require('../../../utils/logger.js');
+const { jwtProtect } = require('../../../config/middleware/jwtProtect.js');
+const db = require('../../../config/db.js');
+const { connect } = require('../../../config/query.js');
+const { promoteFile, deleteFile } = require('../../../config/multer.js');
+const docGen = require('../../../services/doc-generate-module/index.js');
+const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
+
+const router = express.Router();
+
+// ============================================================
+// NON-GENERATED DOCUMENTS (REQUIRED/RAW)
+// ============================================================
+
+/**
+ * GET /documents/required/
+ * List all required document tags with patient's submission status
+ * Query: patientId (required)
+ */
+router.get('/required', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { patientId } = req.query;
+
+    if (!patientId) {
+      return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const result = await db.query(
+      `SELECT rdt.id, rdt.label, rdt."isActive",
+              prd.id as "submissionId", prd.file, prd.status,
+              prd."recordedBy", prd."archived_at", prd."created_at" as "submittedAt"
+       FROM "rawDocumentTag" rdt
+       LEFT JOIN "patientRawDocument" prd ON prd."documentTagId" = rdt.id
+         AND prd."patientId" = $1
+       WHERE rdt."isActive" = true
+       ORDER BY rdt.id`,
+      [patientId]
+    );
+
+    const documents = result.rows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      isActive: row.isActive,
+      submission: row.submissionId
+        ? {
+            id: row.submissionId,
+            file: row.file,
+            status: row.status,
+            recordedBy: row.recordedBy,
+            archivedAt: row.archived_at,
+            submittedAt: row.submittedAt,
+          }
+        : null,
+    }));
+
+    res.json({ success: true, documents });
+  } catch (err) {
+    logger.error('Error fetching required documents', { error: err.message });
+    res.status(500).json({ error: 'FETCH_FAILED', message: err.message });
+  }
+});
+
+/**
+ * GET /documents/required/:documentId
+ * Get specific required document details for a patient
+ * Query: patientId (required)
+ */
+router.get('/required/:documentId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const { patientId } = req.query;
+
+    if (!patientId) {
+      return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const result = await db.query(
+      `SELECT rdt.id, rdt.label, rdt."isActive",
+              prd.id as "submissionId", prd.file, prd.status,
+              prd."recordedBy", prd."archived_at", prd."created_at" as "submittedAt",
+              up.first_name as "recordedByFirstName", up.last_name as "recordedByLastName"
+       FROM "rawDocumentTag" rdt
+       LEFT JOIN "patientRawDocument" prd ON prd."documentTagId" = rdt.id
+         AND prd."patientId" = $1
+       LEFT JOIN "UsersPersonal" up ON prd."recordedBy" = up.id
+       WHERE rdt.id = $2`,
+      [patientId, documentId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_TAG_NOT_FOUND' });
+    }
+
+    const row = result.rows[0];
+    const document = {
+      id: row.id,
+      label: row.label,
+      isActive: row.isActive,
+      submission: row.submissionId
+        ? {
+            id: row.submissionId,
+            file: row.file,
+            status: row.status,
+            recordedBy: row.recordedBy
+              ? {
+                  id: row.recordedBy,
+                  name: `${row.recordedByFirstName || ''} ${row.recordedByLastName || ''}`.trim() || 'Unknown',
+                }
+              : null,
+            archivedAt: row.archived_at,
+            submittedAt: row.submittedAt,
+          }
+        : null,
+    };
+
+    res.json({ success: true, document });
+  } catch (err) {
+    logger.error('Error fetching required document', { error: err.message });
+    res.status(500).json({ error: 'FETCH_FAILED', message: err.message });
+  }
+});
+
+/**
+ * POST /documents/required/:documentId
+ * Record a required document (update status to 'Recorded')
+ * Body: patientId (required), file (optional - UUID of uploaded file)
+ */
+router.post('/required/:documentId', jwtProtect('medical'), async (req, res) => {
+  const client = await connect();
+  let promotedFile = null;
+  try {
+    await client.query('BEGIN');
+
+    const { documentId } = req.params;
+    const { patientId, file } = req.body;
+
+    if (!patientId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    // Check if the document tag exists
+    const tagResult = await client.query(
+      `SELECT id, label FROM "rawDocumentTag" WHERE id = $1`,
+      [documentId]
+    );
+
+    if (tagResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'DOCUMENT_TAG_NOT_FOUND' });
+    }
+
+    // Check if submission exists
+    const existingResult = await client.query(
+      `SELECT id, status, file FROM "patientRawDocument"
+       WHERE "documentTagId" = $1 AND "patientId" = $2`,
+      [documentId, patientId]
+    );
+
+    const oldFile = existingResult.rows[0]?.file;
+
+    // Promote file if provided
+    if (file) {
+      try {
+        promotedFile = await promoteFile(req.user.id, file, 'documents');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        logger.warn('Failed to promote document file', { error: err.message });
+        return res.status(400).json({ error: 'INVALID_FILE', message: 'Failed to process document file' });
+      }
+    }
+
+    let submissionId;
+
+    if (existingResult.rows.length > 0) {
+      // Update existing submission
+      const updateResult = await client.query(
+        `UPDATE "patientRawDocument"
+         SET status = 'Recorded', "recordedBy" = $1, file = COALESCE($2, file)
+         WHERE "documentTagId" = $3 AND "patientId" = $4
+         RETURNING id`,
+        [req.user.id, promotedFile || null, documentId, patientId]
+      );
+      submissionId = updateResult.rows[0].id;
+    } else {
+      // Create new submission with 'Recorded' status
+      const insertResult = await client.query(
+        `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", status, "recordedBy", file)
+         VALUES ($1, $2, 'Recorded', $3, $4)
+         RETURNING id`,
+        [documentId, patientId, req.user.id, promotedFile || null]
+      );
+      submissionId = insertResult.rows[0].id;
+    }
+
+    // Delete old file only after SQL succeeds
+    if (oldFile && promotedFile && promotedFile !== oldFile) {
+      try {
+        await deleteFile('documents', oldFile);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        logger.error('Failed to delete old document file', { error: err.message });
+        // Cleanup new promoted file
+        if (promotedFile) {
+          await deleteFile('documents', promotedFile);
+        }
+        return res.status(500).json({ error: 'FILE_DELETE_ERROR', message: 'Failed to delete old document file' });
+      }
+    }
+
+    await client.query('COMMIT');
+
+    logger.info('Required document recorded', {
+      documentId,
+      patientId,
+      submissionId,
+      recordedBy: req.user.id,
+    });
+
+    res.json({ success: true, submissionId });
+  } catch (err) {
+    // Cleanup promoted file on error
+    if (promotedFile) {
+      try {
+        await deleteFile('documents', promotedFile);
+      } catch (cleanupErr) {
+        logger.error('Failed to cleanup promoted file after error', { error: cleanupErr.message });
+      }
+    }
+
+    await client.query('ROLLBACK');
+    logger.error('Error recording required document', { error: err.message });
+    res.status(500).json({ error: 'RECORD_FAILED', message: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// GENERATED DOCUMENTS - TEMPLATE INFO
+// ============================================================
+
+/**
+ * GET /documents/templates
+ * List available document templates
+ */
+router.get('/templates', jwtProtect('medical'), async (req, res) => {
+  try {
+    const templates = docGen.getTemplateMetadata();
+    res.json({ success: true, templates });
+  } catch (err) {
+    logger.error('Error fetching templates', { error: err.message });
+    res.status(500).json({ error: 'TEMPLATE_FETCH_FAILED' });
+  }
+});
+
+/**
+ * GET /documents/templates/:docType/sample
+ * Get sample data for a template
+ */
+router.get('/templates/:docType/sample', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { docType } = req.params;
+    const sampleData = docGen.getSampleData(docType);
+
+    if (!sampleData) {
+      return res.status(404).json({ error: 'TEMPLATE_NOT_FOUND' });
+    }
+
+    res.json({ success: true, data: sampleData });
+  } catch (err) {
+    logger.error('Error fetching sample data', { error: err.message });
+    res.status(500).json({ error: 'SAMPLE_FETCH_FAILED' });
+  }
+});
+
+// ============================================================
+// GENERATED DOCUMENTS - DOCUMENT GENERATION
+// ============================================================
+
+/**
+ * POST /documents/:docType/preview
+ * Preview a document (stream PDF without saving)
+ */
+router.post('/:docType/preview', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { docType } = req.params;
+    const { data } = req.body;
+
+    const template = docGen.getTemplate(docType);
+    if (!template) {
+      return res.status(404).json({ error: 'TEMPLATE_NOT_FOUND' });
+    }
+
+    const enrichedData = {
+      ...data,
+      physician: data?.physician || { id: req.user.id },
+    };
+
+    logger.info('Document preview requested', {
+      docType,
+      userId: req.user.id,
+      patientId: data?.patient?.id,
+    });
+
+    await docGen.previewDocument(docType, enrichedData, res);
+  } catch (err) {
+    logger.error('Document preview failed', { error: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'PREVIEW_FAILED', message: err.message });
+    }
+  }
+});
+
+/**
+ * POST /documents/:docType/generate
+ * Generate a document (save to DB for patient documents)
+ */
+router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { docType } = req.params;
+    const { patientId, data } = req.body;
+
+    const template = docGen.getTemplate(docType);
+    if (!template) {
+      return res.status(404).json({ error: 'TEMPLATE_NOT_FOUND' });
+    }
+
+    const shouldPersist = docGen.shouldPersist(docType);
+
+    const enrichedData = {
+      ...data,
+      patient: { ...data?.patient, id: patientId || data?.patient?.id },
+      physician: data?.physician || { id: req.user.id },
+    };
+
+    // Auto-fill physician details from DB when not provided
+    if (!enrichedData.physician?.firstName) {
+      try {
+        const physicianResult = await db.query(
+          `SELECT up.first_name, up.last_name,
+                  mp.title, mp.designation
+           FROM "UsersPersonal" up
+           LEFT JOIN "MedicalPersonnel" mp ON mp.id = up.id
+           WHERE up.id = $1`,
+          [req.user.id]
+        );
+        if (physicianResult.rows.length > 0) {
+          const row = physicianResult.rows[0];
+          enrichedData.physician = {
+            id: req.user.id,
+            ...enrichedData.physician,
+            firstName: row.first_name || '',
+            lastName: row.last_name || '',
+            title: row.title || enrichedData.physician?.title || 'MD',
+            licenseNo: enrichedData.physician?.licenseNo || '',
+            specialization: row.designation || '',
+          };
+        }
+      } catch (err) {
+        logger.warn('Physician auto-fill lookup failed', { error: err.message });
+      }
+    }
+
+    if (shouldPersist) {
+      if (!patientId && !data?.patient?.id) {
+        return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+      }
+
+      const { buffer, filename, metadata } = await docGen.generateDocumentBuffer(
+        docType,
+        enrichedData
+      );
+
+      let templateRecord = await db.query(
+        `SELECT id FROM "documentTemplate" WHERE template = $1`,
+        [docType]
+      );
+
+      if (templateRecord.rows.length === 0) {
+        templateRecord = await db.query(
+          `INSERT INTO "documentTemplate" (template, description, "revisedDate", "createdBy")
+           VALUES ($1, $2, $3, $4) RETURNING id`,
+          [
+            docType,
+            template.displayName,
+            new Date().toISOString().slice(0, 7),
+            req.user.id,
+          ]
+        );
+      }
+
+      const templateId = templateRecord.rows[0].id;
+      const actualPatientId = patientId || data?.patient?.id;
+
+      const docResult = await db.query(
+        `INSERT INTO "PatientDocuments" ("patientId", "templateId", "issuedBy", "expired_at")
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [actualPatientId, templateId, req.user.id, data?.expiredAt || null]
+      );
+
+      const documentId = docResult.rows[0].id;
+
+      await db.query(
+        `INSERT INTO "documentData" ("documentId", "data") VALUES ($1, $2)`,
+        [documentId, buffer.toString('base64')]
+      );
+
+      logger.info('Document generated and saved', {
+        documentId,
+        docType,
+        patientId: actualPatientId,
+        issuedBy: req.user.id,
+      });
+
+      // Notify patient about the new document
+      try {
+        const physicianName = enrichedData.physician?.firstName
+          ? `${enrichedData.physician.firstName} ${enrichedData.physician.lastName}`.trim()
+          : 'your healthcare provider';
+
+        await notifyUser(
+          String(actualPatientId),
+          'document:new',
+          {
+            documentId,
+            templateType: docType,
+            issuedBy: physicianName,
+            message: `A new ${template.displayName.toLowerCase()} has been issued for you by ${physicianName}.`,
+          }
+        );
+      } catch (notifErr) {
+        logger.warn('Document notification failed', { error: notifErr.message, documentId });
+      }
+
+      res.json({ success: true, documentId, filename, metadata });
+    } else {
+      logger.info('Document generated (stream only)', {
+        docType,
+        userId: req.user.id,
+        patientId: enrichedData.patient?.id,
+      });
+
+      await docGen.downloadDocument(docType, enrichedData, res);
+    }
+  } catch (err) {
+    logger.error('Document generation failed', { error: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'GENERATION_FAILED', message: err.message });
+    }
+  }
+});
+
+// ============================================================
+// GENERATED DOCUMENTS - DOCUMENT ACCESS
+// ============================================================
+
+/**
+ * GET /documents/:docType/patient/:patientId
+ * List documents of a specific type for a patient
+ */
+router.get('/:docType/patient/:patientId', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { docType, patientId } = req.params;
+
+    const result = await db.query(
+      `SELECT pd.id, pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
+              dt.template as "templateType", dt.description,
+              up.first_name as "issuedByFirstName", up.last_name as "issuedByLastName"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       LEFT JOIN "UsersPersonal" up ON pd."issuedBy" = up.id
+       WHERE pd."patientId" = $1 AND dt.template = $2
+       ORDER BY pd."created_at" DESC`,
+      [patientId, docType]
+    );
+
+    const documents = result.rows.map((row) => ({
+      id: row.id,
+      templateType: row.templateType,
+      description: row.description,
+      issuedBy: {
+        id: row.issuedBy,
+        name: `${row.issuedByFirstName || ''} ${row.issuedByLastName || ''}`.trim() || 'Unknown',
+      },
+      expiredAt: row.expired_at,
+      createdAt: row.created_at,
+    }));
+
+    res.json({ success: true, documents });
+  } catch (err) {
+    logger.error('Document list by type failed', { error: err.message });
+    res.status(500).json({ error: 'LIST_FAILED', message: err.message });
+  }
+});
+
+/**
+ * GET /documents/:docType/patients
+ * List all patients who have documents of a specific type
+ */
+router.get('/:docType/patients', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { docType } = req.params;
+
+    const result = await db.query(
+      `SELECT DISTINCT pd."patientId",
+              up.first_name, up.last_name,
+              COUNT(pd.id) as "documentCount",
+              MAX(pd."created_at") as "lastDocumentAt"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       LEFT JOIN "UsersPersonal" up ON pd."patientId" = up.id
+       WHERE dt.template = $1
+       GROUP BY pd."patientId", up.first_name, up.last_name
+       ORDER BY "lastDocumentAt" DESC`,
+      [docType]
+    );
+
+    const patients = result.rows.map((row) => ({
+      id: row.patientId,
+      name: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Unknown',
+      documentCount: parseInt(row.documentCount, 10),
+      lastDocumentAt: row.lastDocumentAt,
+    }));
+
+    res.json({ success: true, patients });
+  } catch (err) {
+    logger.error('Patient list by document type failed', { error: err.message });
+    res.status(500).json({ error: 'LIST_FAILED', message: err.message });
+  }
+});
+
+/**
+ * GET /documents/:docType
+ * List all documents of a specific type
+ */
+router.get('/:docType', jwtProtect('medical'), async (req, res) => {
+  try {
+    const { docType } = req.params;
+
+    const result = await db.query(
+      `SELECT pd.id, pd."patientId", pd."templateId", pd."issuedBy",
+              pd."expired_at", pd."created_at",
+              dt.template as "templateType", dt.description,
+              up_patient.first_name as "patientFirstName", up_patient.last_name as "patientLastName",
+              up_issuer.first_name as "issuedByFirstName", up_issuer.last_name as "issuedByLastName"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       LEFT JOIN "UsersPersonal" up_patient ON pd."patientId" = up_patient.id
+       LEFT JOIN "UsersPersonal" up_issuer ON pd."issuedBy" = up_issuer.id
+       WHERE dt.template = $1
+       ORDER BY pd."created_at" DESC`,
+      [docType]
+    );
+
+    const documents = result.rows.map((row) => ({
+      id: row.id,
+      patient: {
+        id: row.patientId,
+        name: `${row.patientFirstName || ''} ${row.patientLastName || ''}`.trim() || 'Unknown',
+      },
+      templateType: row.templateType,
+      description: row.description,
+      issuedBy: {
+        id: row.issuedBy,
+        name: `${row.issuedByFirstName || ''} ${row.issuedByLastName || ''}`.trim() || 'Unknown',
+      },
+      expiredAt: row.expired_at,
+      createdAt: row.created_at,
+    }));
+
+    res.json({ success: true, documents });
+  } catch (err) {
+    logger.error('Document list by type failed', { error: err.message });
+    res.status(500).json({ error: 'LIST_FAILED', message: err.message });
+  }
+});
+
+module.exports = router;
