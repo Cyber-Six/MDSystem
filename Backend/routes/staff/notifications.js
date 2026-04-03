@@ -5,7 +5,7 @@ const logger = require('../../utils/logger');
 const { notifyStaffs } = require('../../services/notifyStaffs');
 const { notifyPatients } = require('../../services/notifyPatients');
 const permit = require('../../services/permit');
-const { verifyUserIdentities, getUserIdentitiesDetailed } = require('../../config/query');
+const { verifyUserIdentities, getUserIdentitiesDetailed, getPatientBranches, resolveUnionBranch } = require('../../config/query');
 const {
   acknowledgeNotification,
   getNotificationStatus,
@@ -191,13 +191,25 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
     const targetCount = recipientIds?.length;
     logger.info(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} sending notification to ${targetCount ? targetCount + ' specific patients' : 'all patients in branch'}`);
 
-    // Add permission check for sending patient notifications
-    const isPermitted = await permit.isMedicalPermittedPatientBased(staffUserId, permit.permissions.notification_allow_send_to_patients);
+    // Get union branch for permission check
+    let checkBranch = null;
+    if (recipientIds && recipientIds.length > 0) {
+      const patientBranches = await getPatientBranches(recipientIds);
+      checkBranch = resolveUnionBranch(patientBranches);
+      logger.info(`[NOTIFY_PATIENTS_ROUTE] Resolved union branch: ${checkBranch} for patients [${recipientIds.join(',')}]`);
+    } else {
+      // If no specific patients, get staff's own branch
+      checkBranch = await permit.getStaffBranch(staffUserId);
+      logger.info(`[NOTIFY_PATIENTS_ROUTE] Using staff branch for all patients: ${checkBranch}`);
+    }
+
+    // Check permission with resolved branch
+    const isPermitted = await permit.isMedicalPermittedBranchBased(staffUserId, permit.permissions.notification_allow_send_to_patients, checkBranch);
     if (!isPermitted) {
-      logger.warn(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} attempted to send patient notifications without permission`);
+      logger.warn(`[NOTIFY_PATIENTS_ROUTE] Staff ${staffUserId} attempted to send patient notifications without permission for branch: ${checkBranch}`);
       return res.status(403).json({
         error: 'FORBIDDEN',
-        message: 'Permission required to send patient notifications'
+        message: `Permission required to send patient notifications for branch: ${checkBranch}`
       });
     }
 

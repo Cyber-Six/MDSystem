@@ -27,6 +27,8 @@ const permissions = {
   consultation_allow_view: "ALLOW_TO_VIEW_CONSULTATION",
   consultation_allow_edit: "ALLOW_TO_EDIT_CONSULTATION",
 
+  notification_allow_send_to_patients: "ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS",
+
   inventory_allow_view: "ALLOW_TO_VIEW_INVENTORY",
   inventory_allow_dispense: "ALLOW_TO_DISPENSE_MEDICINE",
 
