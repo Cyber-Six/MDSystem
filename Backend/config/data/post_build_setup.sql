@@ -1,6 +1,9 @@
 -- Medicine request rejection reason column (added post-initial build)
 ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
 
+-- Appointment purpose column (added post-initial build)
+ALTER TABLE "patientSlot" ADD COLUMN IF NOT EXISTS "purpose" text;
+
 -- Role management: insert new permission labels (idempotent)
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);

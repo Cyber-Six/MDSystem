@@ -223,6 +223,50 @@ router.post('/:docType/generate', jwtProtect('medical'), async (req, res) => {
 });
 
 // ============================================================
+// PATIENT DOCUMENT ACCESS
+// ============================================================
+
+/**
+ * GET /documents/my
+ * List documents for the authenticated patient
+ */
+router.get('/my', jwtProtect('patient'), async (req, res) => {
+  try {
+    const patientId = req.user.id;
+
+    const result = await db.query(
+      `SELECT pd.id, pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
+              dt.template as "templateType", dt.description,
+              up.first_name as "issuedByFirstName", up.last_name as "issuedByLastName"
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       LEFT JOIN "UsersPersonal" up ON pd."issuedBy" = up.id
+       WHERE pd."patientId" = $1
+       ORDER BY pd."created_at" DESC`,
+      [patientId]
+    );
+
+    const documents = result.rows.map((row) => ({
+      id: row.id,
+      templateType: row.templateType,
+      description: row.description,
+      issuedBy: {
+        id: row.issuedBy,
+        name: `${row.issuedByFirstName || ''} ${row.issuedByLastName || ''}`.trim() || 'Unknown',
+      },
+      expiredAt: row.expired_at,
+      createdAt: row.created_at,
+    }));
+
+    logger.info('Patient documents listed', { patientId, count: documents.length });
+    res.json({ success: true, documents });
+  } catch (err) {
+    logger.error('Patient document list failed', { error: err.message });
+    res.status(500).json({ error: 'LIST_FAILED', message: err.message });
+  }
+});
+
+// ============================================================
 // DOCUMENT ACCESS (STAFF)
 // ============================================================
 
@@ -321,48 +365,8 @@ router.get('/:documentId', jwtProtect('medical'), async (req, res) => {
 });
 
 // ============================================================
-// PATIENT DOCUMENT ACCESS
+// PATIENT DOCUMENT ACCESS (continued)
 // ============================================================
-
-/**
- * GET /documents/my
- * List documents for the authenticated patient
- */
-router.get('/my', jwtProtect('patient'), async (req, res) => {
-  try {
-    const patientId = req.user.id;
-
-    const result = await db.query(
-      `SELECT pd.id, pd."templateId", pd."issuedBy", pd."expired_at", pd."created_at",
-              dt.template as "templateType", dt.description,
-              up.first_name as "issuedByFirstName", up.last_name as "issuedByLastName"
-       FROM "PatientDocuments" pd
-       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
-       LEFT JOIN "UsersPersonal" up ON pd."issuedBy" = up.id
-       WHERE pd."patientId" = $1
-       ORDER BY pd."created_at" DESC`,
-      [patientId]
-    );
-
-    const documents = result.rows.map((row) => ({
-      id: row.id,
-      templateType: row.templateType,
-      description: row.description,
-      issuedBy: {
-        id: row.issuedBy,
-        name: `${row.issuedByFirstName || ''} ${row.issuedByLastName || ''}`.trim() || 'Unknown',
-      },
-      expiredAt: row.expired_at,
-      createdAt: row.created_at,
-    }));
-
-    logger.info('Patient documents listed', { patientId, count: documents.length });
-    res.json({ success: true, documents });
-  } catch (err) {
-    logger.error('Patient document list failed', { error: err.message });
-    res.status(500).json({ error: 'LIST_FAILED', message: err.message });
-  }
-});
 
 /**
  * GET /documents/my/:documentId

@@ -48,6 +48,7 @@ export const getAppointmentStatus = async () => {
         id
         status
         session
+        purpose
         notes
         created_at
         schedulerLabel
@@ -189,32 +190,36 @@ export const getMonthAvailability = async (schedulerId, startDate, endDate) => {
  * @param {string} date - ISO date (YYYY-MM-DD)
  * @param {'Morning'|'Afternoon'} session
  * @param {Array<{scheduleRequirementId: string, filename: string}>} requirements
+ * @param {string} [purpose]
  * @returns {Promise<object>} patientSlot
  */
-export const submitAppointment = async (schedulerId, date, session, requirements = []) => {
+export const submitAppointment = async (schedulerId, date, session, requirements = [], purpose) => {
   const data = await sendGraphQL(`
     mutation SubmitAppointment(
       $schedulerId: ID!,
       $date: Date!,
       $session: SCHEDULE_SESSION!,
-      $requirements: [patientScheduleRequirementInput!]!
+      $requirements: [patientScheduleRequirementInput!]!,
+      $purpose: String
     ) {
       submitAppointment(
         schedulerId: $schedulerId,
         date: $date,
         session: $session,
-        requirements: $requirements
+        requirements: $requirements,
+        purpose: $purpose
       ) {
         id
         patientId
         slotEntityId
         status
         session
+        purpose
         notes
         created_at
       }
     }
-  `, { schedulerId, date, session, requirements });
+  `, { schedulerId, date, session, requirements, purpose: purpose || null });
   return data.submitAppointment;
 };
 

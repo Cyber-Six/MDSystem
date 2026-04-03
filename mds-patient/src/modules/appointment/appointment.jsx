@@ -57,6 +57,9 @@ const PatientAppointment = () => {
   const [requirements, setRequirements] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState({});
 
+  // Step 3 — purpose
+  const [purpose, setPurpose] = useState('');
+
   // Submission
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -213,10 +216,11 @@ const PatientAppointment = () => {
         scheduleRequirementId: r.id,
         filename: uploadedFiles[r.id]?.fileId || '',
       }));
-      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqPayload);
+      await submitAppointment(selectedScheduler.id, selectedDate, selectedSession, reqPayload, purpose);
       setSuccessMessage('Your appointment has been submitted successfully!');
       await loadStatus();
       setStep(0);
+      setPurpose('');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -416,6 +420,8 @@ const PatientAppointment = () => {
               selectedSession={selectedSession}
               requirements={requirements}
               uploadedFiles={uploadedFiles}
+              purpose={purpose}
+              onPurposeChange={setPurpose}
               submitting={submitting}
               onSubmit={handleSubmit}
               onBack={handleBack}

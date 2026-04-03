@@ -88,6 +88,7 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
         scheduledDate
         schedulerLabel
         approvedBy
+        purpose
         notes
         arrived_at
         created_at
@@ -170,6 +171,7 @@ export const getPatientRecords = async (userId, offset = 0, limit = 20) => {
         status
         session
         approvedBy
+        purpose
         notes
         arrived_at
         created_at
