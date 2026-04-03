@@ -71,6 +71,12 @@ const EVENT_MAP = {
     title: 'Prescription Ready',
     message: 'A new prescription has been issued for you.',
   }),
+  'document:new': (data) => ({
+    type: 'document',
+    route: '/my-documents',
+    title: 'New Document Available',
+    message: data?.message || `A new ${data?.templateType || 'document'} has been issued for you.`,
+  }),
   'updateTicket:statusChanged': (data) => ({
     type: 'record',
     route: '/record-update',
