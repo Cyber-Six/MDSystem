@@ -284,7 +284,7 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
           </div>
         )}
 
-        <div className={`bg-white p-4 rounded-xl mb-4 ${fieldErrors.verified ? 'border-2 border-error-500' : 'border border-primary-200'}`}>
+        <div className={`bg-white p-4 rounded-xl ${fieldErrors.verified ? 'border-2 border-error-500' : 'border border-primary-200'}`}>
           <Checkbox
             label={
               <span className="text-sm text-secondary-700">
@@ -293,30 +293,6 @@ const EmployeeReviewForm = ({ formData, onEdit, certification, onCertificationCh
             }
             checked={certification.verified || false}
             onChange={(e) => handleCertificationChange('verified', e.target.checked)}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Full Name"
-            value={certification.fullName || `${formData.personalInfo?.surname || ''}${formData.personalInfo?.surname ? ', ' : ''}${formData.personalInfo?.firstName || ''} ${formData.personalInfo?.middleName || ''}`.trim()}
-            onChange={(e) => handleCertificationChange('fullName', e.target.value)}
-            placeholder="Enter your full name"
-          />
-          <Input
-            label="Date"
-            type="date"
-            value={certification.date || new Date().toISOString().split('T')[0]}
-            onChange={(e) => handleCertificationChange('date', e.target.value)}
-          />
-        </div>
-
-        <div className="mt-4">
-          <Input
-            label="Signature (Type your full name)"
-            value={certification.signature || ''}
-            onChange={(e) => handleCertificationChange('signature', e.target.value)}
-            placeholder="Type your full name as signature"
           />
         </div>
       </div>

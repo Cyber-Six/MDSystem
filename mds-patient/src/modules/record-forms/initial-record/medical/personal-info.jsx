@@ -43,44 +43,45 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
   };
 
   const programOptions = [
-    { value: 'AB ENGLISH (COA)', label: 'AB ENGLISH (COA)' },
-    { value: 'AB POLITICAL SCIENCE (COA)', label: 'AB POLITICAL SCIENCE (COA)' },
-    { value: 'ACT', label: 'ACT' },
-    { value: 'ACCOUNTANCY (BSA)', label: 'ACCOUNTANCY (BSA)' },
-    { value: 'BS BA ACCOUNTING INFORMATION SYSTEM (AIS) - (CBE)', label: 'BS BA ACCOUNTING INFORMATION SYSTEM (AIS) - (CBE)' },
-    { value: 'ARCHITECTURE (CEA)', label: 'ARCHITECTURE (CEA)' },
-    { value: 'BS MATHEMATICS', label: 'BS MATHEMATICS' },
-    { value: 'BS ACCOUNTANCY (CBE)', label: 'BS ACCOUNTANCY (CBE)' },
-    { value: 'BS BUSINESS ADMINISTRATION - FINANCIAL MANAGEMENT (CBE)', label: 'BS BUSINESS ADMINISTRATION - FINANCIAL MANAGEMENT (CBE)' },
-    { value: 'BS BUSINESS ADMINISTRATION - HRM (CBE)', label: 'BS BUSINESS ADMINISTRATION - HRM (CBE)' },
-    { value: 'BS BUSINESS ADMINISTRATION - LSCM (CBE)', label: 'BS BUSINESS ADMINISTRATION - LSCM (CBE)' },
-    { value: 'BS BUSINESS ADMINISTRATION - MARKETING MANAGEMENT (CBE)', label: 'BS BUSINESS ADMINISTRATION - MARKETING MANAGEMENT (CBE)' },
-    { value: 'CIVIL ENGINEERING (CEA)', label: 'CIVIL ENGINEERING (CEA)' },
-    { value: 'CHEMICAL ENGINEERING (CEA)', label: 'CHEMICAL ENGINEERING (CEA)' },
-    { value: 'COMPUTER ENGINEERING (CEA)', label: 'COMPUTER ENGINEERING (CEA)' },
-    { value: 'COMPUTER SCIENCE (CCS)', label: 'COMPUTER SCIENCE (CCS)' },
-    { value: 'DATA SCIENCE (CCS)', label: 'DATA SCIENCE (CCS)' },
-    { value: 'ELECTRICAL ENGINEERING (CEA)', label: 'ELECTRICAL ENGINEERING (CEA)' },
-    { value: 'ELECTRONICS AND COMMUNICATION ENGINEERING (CEA)', label: 'ELECTRONICS AND COMMUNICATION ENGINEERING (CEA)' },
-    { value: 'EMC-DAT (CCS)', label: 'EMC-DAT (CCS)' },
-    { value: 'EMC-GD (CCS)', label: 'EMC-GD (CCS)' },
-    { value: 'GRADUATE PROGRAM', label: 'GRADUATE PROGRAM' },
-    { value: 'INDUSTRIAL ENGINEERING (CEA)', label: 'INDUSTRIAL ENGINEERING (CEA)' },
-    { value: 'INFORMATION SYSTEM (CCS)', label: 'INFORMATION SYSTEM (CCS)' },
-    { value: 'INFORMATION TECHNOLOGY (CCS)', label: 'INFORMATION TECHNOLOGY (CCS)' },
-    { value: 'MARINE TRANSPORTATION (MARINE)', label: 'MARINE TRANSPORTATION (MARINE)' },
-    { value: 'MECHANICAL ENGINEERING (CEA)', label: 'MECHANICAL ENGINEERING (CEA)' },
+    { value: 'BS Architecture', label: 'BS Architecture' },
+    { value: 'BS Chemical Engineering', label: 'BS Chemical Engineering' },
+    { value: 'BS Civil Engineering', label: 'BS Civil Engineering' },
+    { value: 'BS Computer Engineering', label: 'BS Computer Engineering' },
+    { value: 'BS Electrical Engineering', label: 'BS Electrical Engineering' },
+    { value: 'BS Electronics Engineering', label: 'BS Electronics Engineering' },
+    { value: 'BS Industrial Engineering', label: 'BS Industrial Engineering' },
+    { value: 'BS Mechanical Engineering', label: 'BS Mechanical Engineering' },
+    { value: 'BS Environmental and Sanitary Engineering', label: 'BS Environmental and Sanitary Engineering' },
+    { value: 'BS Computer Science', label: 'BS Computer Science' },
+    { value: 'BS Data Science and Analytics', label: 'BS Data Science and Analytics' },
+    { value: 'BS Entertainment and Multimedia Computing', label: 'BS Entertainment and Multimedia Computing' },
+    { value: 'BS Information Technology', label: 'BS Information Technology' },
+    { value: 'BS Information Systems', label: 'BS Information Systems' },
+    { value: 'BS Accountancy', label: 'BS Accountancy' },
+    { value: 'BS Accounting Information Systems', label: 'BS Accounting Information Systems' },
+    { value: 'BSBA Financial Management', label: 'BSBA Financial Management' },
+    { value: 'BSBA Human Resource Management', label: 'BSBA Human Resource Management' },
+    { value: 'BSBA Logistics and Supply Chain Management', label: 'BSBA Logistics and Supply Chain Management' },
+    { value: 'BSBA Marketing Management', label: 'BSBA Marketing Management' },
+    { value: 'Bachelor of Arts in English Language', label: 'Bachelor of Arts in English Language' },
+    { value: 'Bachelor of Arts in Political Science', label: 'Bachelor of Arts in Political Science' },
+    { value: 'Bachelor of Secondary Education Major in English', label: 'Bachelor of Secondary Education Major in English' },
+    { value: 'Bachelor of Secondary Education Major in Mathematics', label: 'Bachelor of Secondary Education Major in Mathematics' },
+    { value: 'Bachelor of Secondary Education Major in Sciences', label: 'Bachelor of Secondary Education Major in Sciences' },
+    { value: 'Bachelor of Special Needs Education', label: 'Bachelor of Special Needs Education' },
+    { value: 'Teaching Certificate Program', label: 'Teaching Certificate Program' },
     { value: 'Other', label: 'Other' },
   ];
 
   const studentCategoryOptions = [
-    { value: 'Freshmen', label: 'Freshmen' },
-    { value: 'Freshmen - New student', label: 'Freshmen - New student' },
-    { value: 'Transferee', label: 'Transferee' },
-    { value: 'Graduate studies (New student)', label: 'Graduate studies (New student)' },
-    { value: 'Returnee', label: 'Returnee' },
-    { value: 'Old Student', label: 'Old Student' },
-    { value: 'Graduate studies (Old student)', label: 'Graduate studies (Old student)' },
+    { value: 'Grade11', label: 'Grade 11' },
+    { value: 'Grade12', label: 'Grade 12' },
+    { value: 'Freshman', label: 'Freshman' },
+    { value: 'Sophomore', label: 'Sophomore' },
+    { value: 'Junior', label: 'Junior' },
+    { value: 'Senior', label: 'Senior' },
+    { value: 'Masteral', label: 'Masteral' },
+    { value: 'Doctorate', label: 'Doctorate' },
   ];
 
   const calculateAge = (birthday) => {
@@ -293,41 +294,7 @@ const PersonalInfoForm = ({ data, onChange, fieldErrors = {}, onClearFieldError 
             options={studentCategoryOptions}
             error={fieldErrors.studentCategory}
           />
-          <Input
-            label="Last School Attended"
-            value={data.lastSchoolAttended || ''}
-            onChange={(e) => handleChange('lastSchoolAttended', e.target.value)}
-            placeholder="Enter last school attended"
-          />
-          <div>
-            <label className="form-label">
-              Are you done with your Drug Test?
-            </label>
-            <div className="flex gap-6 mt-2">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="drugTest"
-                  value="Yes"
-                  checked={data.drugTestDone === 'Yes'}
-                  onChange={(e) => handleChange('drugTestDone', e.target.value)}
-                  className="form-checkbox"
-                />
-                <span className="ml-2 text-secondary-700">Yes</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="drugTest"
-                  value="No"
-                  checked={data.drugTestDone === 'No'}
-                  onChange={(e) => handleChange('drugTestDone', e.target.value)}
-                  className="form-checkbox"
-                />
-                <span className="ml-2 text-secondary-700">No</span>
-              </label>
-            </div>
-          </div>
+
         </div>
       </div>
 

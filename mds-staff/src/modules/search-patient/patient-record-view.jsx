@@ -75,9 +75,21 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
   const emergencyData = data?.getUserEmergencyContact?.[0] || null;
   const medicationData = data?.getUserMedicationProfile?.[0] || null;
   const dentalHistory = data?.getUserDentalHistory?.[0] || null;
-  const dentalRecord = data?.getUserDentalRecord?.[0] || null;
   const applianceData = data?.getUserOralApplianceProfile?.[0] || null;
   const procedureData = data?.getUserDentalProcedureProfile?.[0] || null;
+
+  // Use the same offset logic as the Dental Record History sub-tab: skip standalone
+  // grades (created from the Dental Grading tab) so the Dental Record tab always
+  // displays the most recent visit-linked dental record, not a standalone grade.
+  const _allDentalRecords = data?.getUserDentalRecord || [];
+  const _dentalVisitMaxCount = Math.max(
+    (data?.getUserDentalHistory || []).length,
+    (data?.getUserDentalProcedureProfile || []).length,
+    (data?.getUserOralApplianceProfile || []).length,
+    (data?.getUserDentalPhotoRecord || []).length,
+  );
+  const _dentalOffset = Math.max(0, _allDentalRecords.length - _dentalVisitMaxCount);
+  const dentalRecord = _allDentalRecords[_dentalOffset] || _allDentalRecords[0] || null;
   const visionData = data?.getUserVisualAcuityProfile?.[0] || null;
   const hospData = data?.getUserHospitalizationProfile?.[0] || null;
   const opData = data?.getUserOperationProfile?.[0] || null;
@@ -304,6 +316,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [searchParams] = useSearchParams();
   const initialTab = initialTabProp || searchParams.get('tab') || 'personal';
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [dentalSubTab, setDentalSubTab] = useState('dental-grade-history');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
@@ -356,7 +369,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           }),
           axiosRequest.post('/staff/emr', {
             query: `query GetStaffDentalData($patientId: ID!) {
-              getPatientDentalRecord(patientId: $patientId, limit: 1) {
+              getPatientDentalRecord(patientId: $patientId, limit: 50) {
                 id notes created_at
                 ToothPlacements { id toothIndex legend }
                 oralFindings { oralFindingId status }
@@ -593,7 +606,6 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     { id: 'vital-signs', label: 'Vital Signs' },
     { id: 'dental', label: 'Dental Record' },
     { id: 'dental-grade-history', label: 'Dental Record History' },
-    { id: 'dental-grading', label: 'Dental Grading' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
@@ -622,9 +634,33 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       case 'dental':
         return <PatientDentalRecordTab patient={patient} />;
       case 'dental-grade-history':
-        return <PatientDentalGradeHistoryTab patient={patient} />;
-      case 'dental-grading':
-        return <DentalGradingTab patient={patient} />;
+        return (
+          <div>
+            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
+              {[
+                { id: 'dental-grade-history', label: 'Dental Record History' },
+                { id: 'dental-grading', label: 'Dental Grading' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setDentalSubTab(sub.id)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    dentalSubTab === sub.id
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+            <Suspense fallback={<LoadingBlock label="Loading..." />}>
+              {dentalSubTab === 'dental-grade-history'
+                ? <PatientDentalGradeHistoryTab patient={patient} />
+                : <DentalGradingTab patient={patient} />}
+            </Suspense>
+          </div>
+        );
       case 'consultation':
         return (
           <PatientConsultationTab

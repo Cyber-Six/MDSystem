@@ -77,9 +77,6 @@ export default function PatientPersonalInfoTab({ patient }) {
               <Field label="Student Number" value={patient.personal.studentNumber || patient.id} />
               <Field label="Program" value={patient.program} />
               <Field label="Year Level" value={patient.year} />
-              <Field label="Student Category" value={patient.personal.studentCategory} />
-              <Field label="Last School Attended" value={patient.personal.lastSchoolAttended} />
-              <Field label="Drug Test Done" value={patient.personal.drugTestDone} />
             </>
           )}
         </div>
