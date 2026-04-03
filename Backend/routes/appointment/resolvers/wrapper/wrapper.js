@@ -380,68 +380,114 @@ const Mutation = {
   _submitAppointment: async (_, { schedulerId, date, session, requirements }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
+    }
 
     let allowedScheduler;
-    let scheduleData;
 
-    try {  // validation block with detailed error handling
+    try {
       allowedScheduler = await Query._listOpenAppointments(_, { offset: 0, limit: 1, schedulerId }, { user, res });
       if (allowedScheduler.length === 0) {
         throwGraphQLError(res).message("Scheduler not found or not allowed.").status(404).throw();
       }
 
-      // 1. Validate scheduler/date and session availability
-      scheduleData = await Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
-      if (session === "Morning" && scheduleData.morningAllowed <= (scheduleData.morningRegistered + scheduleData.morningPending)) {
-        throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
-      } else if (session === "Afternoon" && scheduleData.afternoonAllowed <= (scheduleData.afternoonRegistered + scheduleData.afternoonPending)) {
-        throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
+      // Validate scheduler/date
+      const isValidDate = await validateSchedulerDate(schedulerId, date);
+      if (!isValidDate) {
+        throwGraphQLError(res).message("Invalid date for scheduler").status(400).throw();
       }
 
-      // 2. Ensure requirements are satisfied
+      // Ensure requirements are satisfied
       await validateSatisfiedAllRequirements(schedulerId, requirements, res);
-    } catch (err) { 
+    } catch (err) {
       logger.error("Error validating appointment submission:", err);
       throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();
     }
 
-    try { // main logic block with cleanup on failure
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Get or create schedule within transaction with lock
+      let scheduleData = await client.query(
+        `SELECT sde.* FROM "ScheduleDateEntity" sde
+         WHERE sde."slotId" = $1 AND sde."scheduledDate" = $2
+         LIMIT 1 FOR UPDATE;`,
+        [schedulerId, date]
+      );
+
+      if (scheduleData.rowCount === 0) {
+        // Fetch defaults to create new schedule
+        const schedulerResult = await client.query(
+          `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+          [schedulerId]
+        );
+
+        if (schedulerResult.rowCount === 0) {
+          await client.query('ROLLBACK');
+          throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+        }
+
+        const { morningAllowed, afternoonAllowed } = schedulerResult.rows[0];
+
+        scheduleData = await client.query(
+          `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+           VALUES ($1, $2, $3, $4)
+           RETURNING *;`,
+          [schedulerId, date, morningAllowed, afternoonAllowed]
+        );
+      }
+
+      const schedule = scheduleData.rows[0];
+
+      // Check availability (atomic within transaction)
+      const countResult = await client.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE "session" = 'Morning' AND "status" != 'CancelledByPatient' AND "status" != 'CancelledByMedical') AS "morningUsed",
+           COUNT(*) FILTER (WHERE "session" = 'Afternoon' AND "status" != 'CancelledByPatient' AND "status" != 'CancelledByMedical') AS "afternoonUsed"
+         FROM "patientSlot" WHERE "slotEntityId" = $1;`,
+        [schedule.id]
+      );
+
+      const { morningUsed, afternoonUsed } = countResult.rows[0];
+
+      if (session === "Morning" && schedule.morningAllowed <= morningUsed) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
+      } else if (session === "Afternoon" && schedule.afternoonAllowed <= afternoonUsed) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
+      }
+
+      // Promote files before we commit
       for (const requirement of requirements) {
         if (requirement.filename) {
           requirement.filename = await promoteFile(user.id, requirement.filename, "appointmentRequirement");
         }
       }
-      // 3. Create patientSlot row
-      const psResult = await db.query(
+
+      // Create patientSlot row
+      const psResult = await client.query(
         `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session")
          VALUES ($1, $2, 'Pending', $3)
          RETURNING *;`,
-        [user.id, scheduleData.id, session]
+        [user.id, schedule.id, session]
       );
-
-      if (psResult.rowCount === 0) {
-        throwGraphQLError(res).message("Failed to create appointment").status(500).throw();
-      }
 
       const patientSlotId = psResult.rows[0].id;
 
-      // 4. Insert patientScheduleRequirement rows (one per requirement)
+      // Insert patientScheduleRequirement rows
       if (requirements && requirements.length > 0) {
         const values = [];
         const placeholders = requirements.map((req, i) => {
           if (!req.scheduleRequirementId) {
-            throwGraphQLError(res)
-              .message(`Requirement at index ${i} missing scheduleRequirementId`)
-              .status(400)
-              .throw();
+            throw new Error(`Requirement at index ${i} missing scheduleRequirementId`);
           }
           const offset = i * 3;
           values.push(patientSlotId, req.scheduleRequirementId, req.filename || null);
           return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
         });
 
-        await db.query(
+        await client.query(
           `INSERT INTO "patientScheduleRequirement" ("patientSlotId", "scheduleRequirementId", "filename")
            VALUES ${placeholders.join(", ")}
            RETURNING *;`,
@@ -449,7 +495,9 @@ const Mutation = {
         );
       }
 
-      // 5. Fetch inserted requirements to attach to the slot
+      await client.query('COMMIT');
+
+      // Fetch inserted requirements to attach to the slot
       const reqResult = await db.query(
         `SELECT psr.* FROM "patientScheduleRequirement" psr WHERE psr."patientSlotId" = $1;`,
         [patientSlotId]
@@ -457,16 +505,23 @@ const Mutation = {
 
       return { ...psResult.rows[0], requirements: reqResult.rows, location: allowedScheduler[0].location };
     } catch (err) {
-      // On any error, attempt to clean up any promoted files for this request
+      await client.query('ROLLBACK');
+      // Attempt to clean up promoted files
       if (requirements && requirements.length > 0) {
         for (const requirement of requirements) {
           if (requirement.filename) {
-            await deleteFile("appointmentRequirement", requirement.filename);
+            try {
+              await deleteFile("appointmentRequirement", requirement.filename);
+            } catch (cleanupErr) {
+              logger.warn("Failed to cleanup file:", cleanupErr.message);
+            }
           }
         }
       }
       logger.error("Error submitting appointment:", err);
-      throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();  
+      throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -474,20 +529,53 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    // 1. Decide cancellation status
-    const newStatus = patientId === cancelledBy ? "CancelledByPatient" : "CancelledByMedical";
 
-    // 2. Get the latest appointment record for this patient
-    const updateResult = await db.query(
-      `UPDATE "patientSlot" SET status = $1 WHERE id = $2;`,
-      [newStatus, slotId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (updateResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to cancel appointment").status(500).throw();
+      // Verify the appointment exists and belongs to the patient
+      const slotResult = await client.query(
+        `SELECT "patientId", status FROM "patientSlot" WHERE id = $1 FOR UPDATE;`,
+        [slotId]
+      );
+
+      if (slotResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Appointment not found").status(404).throw();
+      }
+
+      const appointment = slotResult.rows[0];
+
+      // Verify patient matches (authorization check)
+      if (appointment.patientId !== parseInt(patientId)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Unauthorized: appointment does not belong to this patient").status(403).throw();
+      }
+
+      // Decide cancellation status based on who is cancelling
+      const newStatus = parseInt(cancelledBy) === parseInt(patientId) ? "CancelledByPatient" : "CancelledByMedical";
+
+      // Update the appointment
+      const updateResult = await client.query(
+        `UPDATE "patientSlot" SET status = $1 WHERE id = $2;`,
+        [newStatus, slotId]
+      );
+
+      await client.query('COMMIT');
+
+      if (updateResult.rowCount === 0) {
+        throwGraphQLError(res).message("Failed to cancel appointment").status(500).throw();
+      }
+
+      return { success: true };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _cancelAppointment:", err);
+      throwGraphQLError(res).message(err.message || "Failed to cancel appointment").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
-
-    return { success: true };
   },
 
   _respondAppointment: async (_, { slotId, status, notes }, { user, res }) => {
@@ -496,52 +584,63 @@ const Mutation = {
     }
 
     // Valid state transitions per appointment state machine
-    // NoShow is system-only (not a manual staff action)
     const validTransitions = {
       Pending: ["Scheduled", "Rejected"],
       Scheduled: ["CancelledByMedical"],
       InProgress: ["Completed", "CancelledByMedical"],
     };
 
-    // Step 1: Check current slot status
-    const { rows } = await db.query(
-      `SELECT status FROM "patientSlot" WHERE id = $1;`,
-      [slotId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (rows.length === 0) {
-      throwGraphQLError(res).message("Slot not found").status(404).throw();
+      // Lock the slot row to prevent concurrent status changes
+      const { rows } = await client.query(
+        `SELECT status FROM "patientSlot" WHERE id = $1 FOR UPDATE;`,
+        [slotId]
+      );
+
+      if (rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Slot not found").status(404).throw();
+      }
+
+      const currentStatus = rows[0].status;
+      const allowed = validTransitions[currentStatus];
+
+      if (!allowed || !allowed.includes(status)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message(`Cannot transition from "${currentStatus}" to "${status}". Allowed: ${(allowed || []).join(", ") || "none"}`)
+          .status(400)
+          .throw();
+      }
+
+      // Perform update within transaction
+      const updateResult = await client.query(
+        `UPDATE "patientSlot" SET status = $1, notes = $2, "approvedBy" = $3 WHERE id = $4 RETURNING *;`,
+        [status, notes || null, user.id, slotId]
+      );
+
+      await client.query('COMMIT');
+
+      // Resolve approver name (outside transaction)
+      const staffResult = await db.query(
+        `SELECT CONCAT(first_name, ' ', last_name) AS name FROM "UsersPersonal" WHERE id = $1 LIMIT 1;`,
+        [user.id]
+      );
+
+      const row = updateResult.rows[0];
+      row.approvedBy = staffResult.rows[0]?.name || String(user.id);
+
+      return { ...row, requirements: [] };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _respondAppointment:", err);
+      throwGraphQLError(res).message(err.message || "Failed to update slot status").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
-
-    const currentStatus = rows[0].status;
-    const allowed = validTransitions[currentStatus];
-
-    if (!allowed || !allowed.includes(status)) {
-      throwGraphQLError(res)
-        .message(`Cannot transition from "${currentStatus}" to "${status}". Allowed: ${(allowed || []).join(", ") || "none"}`)
-        .status(400)
-        .throw();
-    }
-
-    // Step 2: Perform update and resolve the approver name
-    const updateResult = await db.query(
-      `UPDATE "patientSlot" SET status = $1, notes = $2, "approvedBy" = $3 WHERE id = $4 RETURNING *;`,
-      [status, notes || null, user.id, slotId]
-    );
-
-    if (updateResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to update slot status").status(500).throw();
-    }
-
-    // Resolve approver name
-    const staffResult = await db.query(
-      `SELECT CONCAT(first_name, ' ', last_name) AS name FROM "UsersPersonal" WHERE id = $1 LIMIT 1;`,
-      [user.id]
-    );
-    const row = updateResult.rows[0];
-    row.approvedBy = staffResult.rows[0]?.name || String(user.id);
-
-    return { ...row, requirements: [] };
   },
 
   _recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
@@ -549,34 +648,45 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Step 1: Check current slot status
-    const { rows } = await db.query(
-      `SELECT status FROM "patientSlot" WHERE id = $1;`,
-      [slotId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (rows.length === 0) {
-      throwGraphQLError(res).message("Slot not found").status(404).throw();
+      // Lock the slot row to prevent concurrent status changes
+      const { rows } = await client.query(
+        `SELECT status FROM "patientSlot" WHERE id = $1 FOR UPDATE;`,
+        [slotId]
+      );
+
+      if (rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Slot not found").status(404).throw();
+      }
+
+      if (rows[0].status !== "Scheduled") {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message("Slot status must be Scheduled to record attendance")
+          .status(400)
+          .throw();
+      }
+
+      // Perform update within transaction
+      const updateResult = await client.query(
+        `UPDATE "patientSlot" SET status = 'InProgress', arrived_at = $1 WHERE id = $2 RETURNING *;`,
+        [arrived_at, slotId]
+      );
+
+      await client.query('COMMIT');
+
+      return { ...updateResult.rows[0], requirements: [] };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _recordAppointmentAttendance:", err);
+      throwGraphQLError(res).message(err.message || "Failed to record attendance").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
-
-    if (rows[0].status !== "Scheduled") {
-      throwGraphQLError(res)
-        .message("Slot status must be Scheduled to record attendance")
-        .status(400)
-        .throw();
-    }
-    
-    // Step 2: Perform update
-    const updateResult = await db.query(
-      `UPDATE "patientSlot" SET status = 'InProgress', arrived_at = $1 WHERE id = $2 RETURNING *;`,
-      [arrived_at, slotId]
-    );
-
-    if (updateResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to record attendance").status(500).throw();
-    }
-
-    return { ...updateResult.rows[0], requirements: [] };
   },
 
   _createScheduler: async (_, { input }, { user, res }) => {
@@ -728,34 +838,59 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Refuse deletion if any appointment records reference this scheduler's date entities
-    const slotCheck = await db.query(
-      `SELECT 1 FROM "patientSlot" ps
-       INNER JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
-       WHERE sde."slotId" = $1
-       LIMIT 1;`,
-      [schedulerId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (slotCheck.rowCount > 0) {
-      throwGraphQLError(res)
-        .message("Cannot delete scheduler: it has associated appointment records. Deactivate it instead.")
-        .status(400)
-        .throw();
+      // Lock the scheduler row to prevent concurrent deletes and appointments
+      const schedulerCheck = await client.query(
+        `SELECT id FROM "slotScheduler" WHERE id = $1 FOR UPDATE;`,
+        [schedulerId]
+      );
+
+      if (schedulerCheck.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+      }
+
+      // Check if any appointment records reference this scheduler's date entities
+      const slotCheck = await client.query(
+        `SELECT 1 FROM "patientSlot" ps
+         INNER JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+         WHERE sde."slotId" = $1
+         LIMIT 1;`,
+        [schedulerId]
+      );
+
+      if (slotCheck.rowCount > 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message("Cannot delete scheduler: it has associated appointment records. Deactivate it instead.")
+          .status(400)
+          .throw();
+      }
+
+      // Cascade delete child records in FK-safe order (all within transaction)
+      await client.query(`DELETE FROM "schedulerWhitelist" WHERE "slotSchedulerId" = $1;`, [schedulerId]);
+      await client.query(`DELETE FROM "scheduleRequirement" WHERE "slotId" = $1;`, [schedulerId]);
+      await client.query(`DELETE FROM "SlotCustomDate" WHERE "slotScheduleId" = $1;`, [schedulerId]);
+      await client.query(`DELETE FROM "ScheduleDateEntity" WHERE "slotId" = $1;`, [schedulerId]);
+
+      const result = await client.query(
+        `DELETE FROM "slotScheduler" WHERE id = $1;`,
+        [schedulerId]
+      );
+
+      await client.query('COMMIT');
+
+      return result.rowCount > 0;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _deleteScheduler:", err);
+      throwGraphQLError(res).message(err.message || "Failed to delete scheduler").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
-
-    // Cascade delete child records in FK-safe order before deleting the scheduler
-    await db.query(`DELETE FROM "schedulerWhitelist" WHERE "slotSchedulerId" = $1;`, [schedulerId]);
-    await db.query(`DELETE FROM "scheduleRequirement" WHERE "slotId" = $1;`, [schedulerId]);
-    await db.query(`DELETE FROM "SlotCustomDate" WHERE "slotScheduleId" = $1;`, [schedulerId]);
-    await db.query(`DELETE FROM "ScheduleDateEntity" WHERE "slotId" = $1;`, [schedulerId]);
-
-    const result = await db.query(
-      `DELETE FROM "slotScheduler" WHERE id = $1;`,
-      [schedulerId]
-    );
-
-    return result.rowCount > 0;
   },
 
   _updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
@@ -865,35 +1000,44 @@ const Mutation = {
         .throw();
     }
 
-    // Build placeholders and values for batch insert
-    const values = [];
-    const placeholders = dates.map((date, i) => {
-      const offset = i * 2;
-      values.push(schedulerId, date);
-      return `($${offset + 1}, $${offset + 2})`;
-    });
-
-    const query = `
-      INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
-      VALUES ${placeholders.join(", ")}
-      RETURNING "scheduledDate";
-    `;
-
+    const client = await db.connect();
     try {
-      const result = await db.query(query, values);
+      await client.query('BEGIN');
 
-      // Keep containsCustomDates flag in sync
-      await db.query(
+      // Build placeholders and values for batch insert
+      const values = [];
+      const placeholders = dates.map((date, i) => {
+        const offset = i * 2;
+        values.push(schedulerId, date);
+        return `($${offset + 1}, $${offset + 2})`;
+      });
+
+      const query = `
+        INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
+        VALUES ${placeholders.join(", ")}
+        RETURNING "scheduledDate";
+      `;
+
+      const result = await client.query(query, values);
+
+      // Keep containsCustomDates flag in sync (atomic within transaction)
+      await client.query(
         `UPDATE "slotScheduler" SET "containsCustomDates" = true WHERE id = $1;`,
         [schedulerId]
       );
 
+      await client.query('COMMIT');
+
       return result.rows.map(r => r.scheduledDate);
     } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _setCustomDates:", err);
       throwGraphQLError(res)
         .message(`Failed to set custom dates: ${err.message}`)
         .status(500)
         .throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -909,8 +1053,11 @@ const Mutation = {
         .throw();
     }
 
+    const client = await db.connect();
     try {
-      const result = await db.query(
+      await client.query('BEGIN');
+
+      const result = await client.query(
         `DELETE FROM "SlotCustomDate"
          WHERE "slotScheduleId" = $1
          AND "scheduledDate" = ANY($2)
@@ -919,29 +1066,36 @@ const Mutation = {
       );
 
       if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
         throwGraphQLError(res)
           .message("No matching custom dates found to unset")
           .status(404)
           .throw();
       }
 
-      // Keep containsCustomDates flag in sync
-      const remaining = await db.query(
+      // Keep containsCustomDates flag in sync (atomic within transaction)
+      const remaining = await client.query(
         `SELECT 1 FROM "SlotCustomDate" WHERE "slotScheduleId" = $1 LIMIT 1;`,
         [schedulerId]
       );
-      await db.query(
+      await client.query(
         `UPDATE "slotScheduler" SET "containsCustomDates" = $1 WHERE id = $2;`,
         [remaining.rowCount > 0, schedulerId]
       );
 
+      await client.query('COMMIT');
+
       // Return the list of dates that were actually deleted
       return result.rows.map(r => r.scheduledDate);
     } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _unsetCustomDates:", err);
       throwGraphQLError(res)
         .message(`Failed to unset custom dates: ${err.message}`)
         .status(500)
         .throw();
+    } finally {
+      client.release();
     }
   },
 

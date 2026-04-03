@@ -81,7 +81,11 @@ const Query = {
 };
 
 const Mutation = {
-  _createMedicalItems: async (_, { input }, { res }) => {
+  _createMedicalItems: async (_, { input }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     const sql = `
       INSERT INTO "MedicalItems" (item_code, item_name, category, description)
       VALUES ($1, $2, $3, $4)
@@ -102,7 +106,11 @@ const Mutation = {
     }
   },
 
-  _updateMedicalItems: async (_, { id, input }, { res }) => {
+  _updateMedicalItems: async (_, { id, input }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     const allowed = ['item_code', 'item_name', 'category', 'description', 'active'];
     const params = [];
 
@@ -139,7 +147,11 @@ const Mutation = {
     }
   },
 
-  _deleteMedicalItems: async (_, { id }, { res }) => {
+  _deleteMedicalItems: async (_, { id }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     const sql = `
       UPDATE "MedicalItems"
       SET active = false, updated_at = current_timestamp
@@ -154,7 +166,11 @@ const Mutation = {
     return true;
   },
 
-  _addMedicalSupply: async (_, { input, receivedBy }, { res }) => {
+  _addMedicalSupply: async (_, { input, receivedBy }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     await validateItemActive(input.medicalItemId, res);
 
     const sql = `
@@ -206,7 +222,11 @@ const Mutation = {
     }
   },
 
-  _addSupplyBatch: async (_, { input, receivedBy }, { res }) => {
+  _addSupplyBatch: async (_, { input, receivedBy }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     await validateItemActive(input.supplyItemId, res);
 
     const sql = `
@@ -258,7 +278,11 @@ const Mutation = {
     }
   },
 
-  _splitMedicalSupply: async (_, { batchId, input }, { res }) => {
+  _splitMedicalSupply: async (_, { batchId, input }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     if (input.quantity <= 0) {
       throwGraphQLError(res).message("Quantity to split must be positive").status(400).throw();
     }
@@ -338,7 +362,11 @@ const Mutation = {
     }
   },
 
-  _splitMedicineSupply: async (_, { batchId, input }, { res }) => {
+  _splitMedicineSupply: async (_, { batchId, input }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     if (input.quantity <= 0) {
       throwGraphQLError(res).message("Quantity to split must be positive").status(400).throw();
     }
@@ -421,69 +449,75 @@ const Mutation = {
   },
 
   _updateMedicalSupply: async (_, { batchId, input }, { res, user }) => {
-    const params = [];
-    const sets = [];
-
-    // Fetch old values for audit trail
-    const oldBatchResult = await db.query(
-      `SELECT "expiryDate", notes FROM "MedicineBatch" WHERE id = $1`,
-      [batchId]
-    );
-
-    if (oldBatchResult.rows.length === 0) {
-      throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
-    }
-
-    const oldValues = oldBatchResult.rows[0];
-
-    // Get old quantity count
-    const oldQtyResult = await db.query(
-      `SELECT COUNT(*)::int AS count FROM "MedicineEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL`,
-      [batchId]
-    );
-    const oldQuantity = oldQtyResult.rows[0].count;
-
-    if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
-    if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
-
-    if (sets.length === 0 && input.currentQuantity === undefined) {
-      throwGraphQLError(res).message("No fields to update").status(400).throw();
-    }
-
-    sets.push(`"updated_at" = current_timestamp`);
-    params.push(batchId);
-
-    const sql = `
-      UPDATE "MedicineBatch"
-      SET ${sets.join(', ')}
-      WHERE id = $${params.length}
-      RETURNING *
-    `;
-
+    const client = await db.connect();
     try {
-      const result = await db.query(sql, params);
+      await client.query('BEGIN');
+
+      // Lock the batch row to prevent concurrent updates
+      const batchResult = await client.query(
+        `SELECT "expiryDate", notes FROM "MedicineBatch" WHERE id = $1 FOR UPDATE`,
+        [batchId]
+      );
+
+      if (batchResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
+      }
+
+      const oldValues = batchResult.rows[0];
+
+      // Get old quantity count with lock
+      const oldQtyResult = await client.query(
+        `SELECT COUNT(*)::int AS count FROM "MedicineEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL FOR UPDATE`,
+        [batchId]
+      );
+      const oldQuantity = oldQtyResult.rows[0]?.count || 0;
+
+      const params = [];
+      const sets = [];
+
+      if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
+      if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
+
+      if (sets.length === 0 && input.currentQuantity === undefined) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("No fields to update").status(400).throw();
+      }
+
+      sets.push(`"updated_at" = current_timestamp`);
+      params.push(batchId);
+
+      const sql = `
+        UPDATE "MedicineBatch"
+        SET ${sets.join(', ')}
+        WHERE id = $${params.length}
+        RETURNING *
+      `;
+
+      const result = await client.query(sql, params);
       if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Medicine batch not found").status(404).throw();
       }
 
       const newValues = result.rows[0];
       let newQuantity = oldQuantity;
 
-      // Handle quantity changes (add or remove MedicineEntity records)
+      // Handle quantity changes (add or remove MedicineEntity records) - atomic within transaction
       if (input.currentQuantity !== undefined) {
         const quantityDiff = input.currentQuantity - oldQuantity;
 
         if (quantityDiff > 0) {
           // Add new MedicineEntity records
           const placeholders = Array(quantityDiff).fill('($1)').join(', ');
-          await db.query(
+          await client.query(
             `INSERT INTO "MedicineEntity" ("batchId") VALUES ${placeholders}`,
             [batchId]
           );
         } else if (quantityDiff < 0) {
           // Remove unused MedicineEntity records
           const toDelete = Math.abs(quantityDiff);
-          await db.query(
+          await client.query(
             `DELETE FROM "MedicineEntity"
              WHERE ctid IN (
                SELECT ctid
@@ -517,6 +551,8 @@ const Mutation = {
         });
       }
 
+      await client.query('COMMIT');
+
       if (input.currentQuantity !== undefined) {
         try {
           emitToRole('medical', 'inventory:stock-changed', {
@@ -533,74 +569,82 @@ const Mutation = {
 
       return newValues;
     } catch (err) {
+      await client.query('ROLLBACK');
       logger.error("Error in _updateMedicalSupply:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 
   _updateSupplyBatch: async (_, { batchId, input }, { res, user }) => {
-    const params = [];
-    const sets = [];
-
-    // Fetch old batch row — currentQuantity is NOT a real column; it is a computed
-    // alias derived from counting SupplyEntity rows, so we must NOT select it here.
-    const oldBatchResult = await db.query(
-      `SELECT "expiryDate", notes FROM "SupplyBatch" WHERE id = $1`,
-      [batchId]
-    );
-
-    if (oldBatchResult.rows.length === 0) {
-      throwGraphQLError(res).message("Supply batch not found").status(404).throw();
-    }
-
-    const oldValues = oldBatchResult.rows[0];
-
-    // Fetch real current quantity from entity count (mirrors _getSupplyBatches)
-    const oldQtyResult = await db.query(
-      `SELECT COUNT(*)::int AS count FROM "SupplyEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL`,
-      [batchId]
-    );
-    const oldQuantity = oldQtyResult.rows[0].count;
-
-    if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
-    if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
-
-    if (sets.length === 0 && input.currentQuantity === undefined) {
-      throwGraphQLError(res).message("No fields to update").status(400).throw();
-    }
-
-    sets.push(`"updated_at" = current_timestamp`);
-    params.push(batchId);
-
-    const sql = `
-      UPDATE "SupplyBatch"
-      SET ${sets.join(', ')}
-      WHERE id = $${params.length}
-      RETURNING *
-    `;
-
+    const client = await db.connect();
     try {
-      const result = await db.query(sql, params);
+      await client.query('BEGIN');
+
+      // Lock the batch row to prevent concurrent updates
+      const batchResult = await client.query(
+        `SELECT "expiryDate", notes FROM "SupplyBatch" WHERE id = $1 FOR UPDATE`,
+        [batchId]
+      );
+
+      if (batchResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Supply batch not found").status(404).throw();
+      }
+
+      const oldValues = batchResult.rows[0];
+
+      // Fetch real current quantity from entity count with lock
+      const oldQtyResult = await client.query(
+        `SELECT COUNT(*)::int AS count FROM "SupplyEntity" WHERE "batchId" = $1 AND "transactionId" IS NULL FOR UPDATE`,
+        [batchId]
+      );
+      const oldQuantity = oldQtyResult.rows[0]?.count || 0;
+
+      const params = [];
+      const sets = [];
+
+      if (input.expiryDate !== undefined) sets.push(`"expiryDate" = $${params.push(input.expiryDate)}`);
+      if (input.notes !== undefined) sets.push(`notes = $${params.push(input.notes)}`);
+
+      if (sets.length === 0 && input.currentQuantity === undefined) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("No fields to update").status(400).throw();
+      }
+
+      sets.push(`"updated_at" = current_timestamp`);
+      params.push(batchId);
+
+      const sql = `
+        UPDATE "SupplyBatch"
+        SET ${sets.join(', ')}
+        WHERE id = $${params.length}
+        RETURNING *
+      `;
+
+      const result = await client.query(sql, params);
       if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Supply batch not found").status(404).throw();
       }
 
       const newValues = result.rows[0];
       let newQuantity = oldQuantity;
 
-      // Adjust quantity by inserting or deleting SupplyEntity rows (mirrors _updateMedicalSupply)
+      // Adjust quantity by inserting or deleting SupplyEntity rows (atomic within transaction)
       if (input.currentQuantity !== undefined) {
         const quantityDiff = input.currentQuantity - oldQuantity;
 
         if (quantityDiff > 0) {
           const placeholders = Array(quantityDiff).fill('($1)').join(', ');
-          await db.query(
+          await client.query(
             `INSERT INTO "SupplyEntity" ("batchId") VALUES ${placeholders}`,
             [batchId]
           );
         } else if (quantityDiff < 0) {
           const toDelete = Math.abs(quantityDiff);
-          await db.query(
+          await client.query(
             `DELETE FROM "SupplyEntity"
              WHERE ctid IN (
                SELECT ctid FROM "SupplyEntity"
@@ -633,6 +677,8 @@ const Mutation = {
         });
       }
 
+      await client.query('COMMIT');
+
       if (input.currentQuantity !== undefined) {
         try {
           emitToRole('medical', 'inventory:stock-changed', {
@@ -649,8 +695,11 @@ const Mutation = {
 
       return { ...newValues, currentQuantity: newQuantity };
     } catch (err) {
+      await client.query('ROLLBACK');
       logger.error("Error in _updateSupplyBatch:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 };
