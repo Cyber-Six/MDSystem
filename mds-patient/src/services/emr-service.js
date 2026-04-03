@@ -1374,7 +1374,11 @@ const createObgynHistory = async (input) => {
 
 // Utility function to map student category to year level
 const mapYearLevel = (category) => {
-  const mapping = {
+  // New dropdown values already match backend STUDENT_YEAR enum values
+  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate']);
+  if (validEnumValues.has(category)) return category;
+  // Legacy mappings for backward compatibility with old stored data
+  const legacyMapping = {
     'Freshmen': 'Freshman',
     'Freshmen - New student': 'Freshman',
     'Transferee': 'Sophomore',
@@ -1383,8 +1387,7 @@ const mapYearLevel = (category) => {
     'Returnee': 'Sophomore',
     'Old Student': 'Junior'
   };
-  
-  return mapping[category] || 'Freshman';
+  return legacyMapping[category] || 'Freshman';
 };
 
 // Utility function to map dental cleaning range to backend enum
@@ -1422,33 +1425,41 @@ const reverseMapDentalCleaningRange = (backendValue) => {
 
 /** Reverse mapping: backend year level → form student category */
 const reverseMapYearLevel = (backendYear) => {
-  const mapping = {
-    'Freshman':  'Freshmen',
-    'Sophomore': 'Transferee',
-    'Junior':    'Old Student',
-    'Senior':    'Old Student',
-    'Masteral':  'Graduate studies (New student)',
-  };
-  return mapping[backendYear] || '';
+  // Backend STUDENT_YEAR enum values match the form dropdown values directly
+  const validEnumValues = new Set(['Grade11', 'Grade12', 'Freshman', 'Sophomore', 'Junior', 'Senior', 'Masteral', 'Doctorate']);
+  if (validEnumValues.has(backendYear)) return backendYear;
+  return '';
 };
 
 /** Known program values (matches the form's programOptions list) */
 const KNOWN_PROGRAMS = new Set([
-  'AB ENGLISH (COA)', 'AB POLITICAL SCIENCE (COA)', 'ACT',
-  'ACCOUNTANCY (BSA)', 'BS BA ACCOUNTING INFORMATION SYSTEM (AIS) - (CBE)',
-  'ARCHITECTURE (CEA)', 'BS MATHEMATICS', 'BS ACCOUNTANCY (CBE)',
-  'BS BUSINESS ADMINISTRATION - FINANCIAL MANAGEMENT (CBE)',
-  'BS BUSINESS ADMINISTRATION - HRM (CBE)',
-  'BS BUSINESS ADMINISTRATION - LSCM (CBE)',
-  'BS BUSINESS ADMINISTRATION - MARKETING MANAGEMENT (CBE)',
-  'CIVIL ENGINEERING (CEA)', 'CHEMICAL ENGINEERING (CEA)',
-  'COMPUTER ENGINEERING (CEA)', 'COMPUTER SCIENCE (CCS)',
-  'DATA SCIENCE (CCS)', 'ELECTRICAL ENGINEERING (CEA)',
-  'ELECTRONICS AND COMMUNICATION ENGINEERING (CEA)',
-  'EMC-DAT (CCS)', 'EMC-GD (CCS)', 'GRADUATE PROGRAM',
-  'INDUSTRIAL ENGINEERING (CEA)', 'INFORMATION SYSTEM (CCS)',
-  'INFORMATION TECHNOLOGY (CCS)', 'MARINE TRANSPORTATION (MARINE)',
-  'MECHANICAL ENGINEERING (CEA)',
+  'BS Architecture',
+  'BS Chemical Engineering',
+  'BS Civil Engineering',
+  'BS Computer Engineering',
+  'BS Electrical Engineering',
+  'BS Electronics Engineering',
+  'BS Industrial Engineering',
+  'BS Mechanical Engineering',
+  'BS Environmental and Sanitary Engineering',
+  'BS Computer Science',
+  'BS Data Science and Analytics',
+  'BS Entertainment and Multimedia Computing',
+  'BS Information Technology',
+  'BS Information Systems',
+  'BS Accountancy',
+  'BS Accounting Information Systems',
+  'BSBA Financial Management',
+  'BSBA Human Resource Management',
+  'BSBA Logistics and Supply Chain Management',
+  'BSBA Marketing Management',
+  'Bachelor of Arts in English Language',
+  'Bachelor of Arts in Political Science',
+  'Bachelor of Secondary Education Major in English',
+  'Bachelor of Secondary Education Major in Mathematics',
+  'Bachelor of Secondary Education Major in Sciences',
+  'Bachelor of Special Needs Education',
+  'Teaching Certificate Program',
 ]);
 
 /**

@@ -100,24 +100,38 @@ function OralFindingsTable({ catalogs, findings, onFindingChange, readOnly = fal
                   {catalog.name}
                 </td>
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
-                  <input
-                    type="radio"
-                    name={`finding-${catalog.id}`}
-                    checked={value === true || value === 'yes' || value === 'true'}
-                    onChange={() => !readOnly && onFindingChange(catalog.id, true)}
-                    disabled={readOnly}
-                    className="w-4 h-4 text-green-600 border-neutral-300 dark:border-neutral-500 focus:ring-green-500 dark:bg-neutral-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-                  />
+                  {readOnly ? (
+                    <div className="flex justify-center items-center">
+                      <span className={`inline-flex w-4 h-4 rounded-full border-2 items-center justify-center ${value === true || value === 'true' || value === 'yes' ? 'border-green-500 bg-green-500 dark:border-green-400 dark:bg-green-400' : 'border-neutral-300 dark:border-neutral-500 bg-transparent'}`}>
+                        {(value === true || value === 'true' || value === 'yes') && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                      </span>
+                    </div>
+                  ) : (
+                    <input
+                      type="radio"
+                      name={`finding-${catalog.id}`}
+                      checked={value === true || value === 'yes' || value === 'true'}
+                      onChange={() => onFindingChange(catalog.id, true)}
+                      className="w-4 h-4 text-green-600 border-neutral-300 dark:border-neutral-500 focus:ring-green-500 dark:bg-neutral-700 cursor-pointer"
+                    />
+                  )}
                 </td>
                 <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
-                  <input
-                    type="radio"
-                    name={`finding-${catalog.id}`}
-                    checked={value === false || value === 'no' || value === 'false'}
-                    onChange={() => !readOnly && onFindingChange(catalog.id, false)}
-                    disabled={readOnly}
-                    className="w-4 h-4 text-red-600 border-neutral-300 dark:border-neutral-500 focus:ring-red-500 dark:bg-neutral-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-                  />
+                  {readOnly ? (
+                    <div className="flex justify-center items-center">
+                      <span className={`inline-flex w-4 h-4 rounded-full border-2 items-center justify-center ${value === false || value === 'false' || value === 'no' ? 'border-red-500 bg-red-500 dark:border-red-400 dark:bg-red-400' : 'border-neutral-300 dark:border-neutral-500 bg-transparent'}`}>
+                        {(value === false || value === 'false' || value === 'no') && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                      </span>
+                    </div>
+                  ) : (
+                    <input
+                      type="radio"
+                      name={`finding-${catalog.id}`}
+                      checked={value === false || value === 'no' || value === 'false'}
+                      onChange={() => onFindingChange(catalog.id, false)}
+                      className="w-4 h-4 text-red-600 border-neutral-300 dark:border-neutral-500 focus:ring-red-500 dark:bg-neutral-700 cursor-pointer"
+                    />
+                  )}
                 </td>
               </tr>
             );

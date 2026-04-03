@@ -38,14 +38,14 @@ export const GQL_FULL_RECORD = `
       id notes created_at
       medications { id medicineId description }
     }
-    getUserDentalHistory(userId: $userId, limit: 1) {
+    getUserDentalHistory(userId: $userId, limit: 50) {
       id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at
     }
-    getUserOralApplianceProfile(userId: $userId, limit: 1) {
+    getUserOralApplianceProfile(userId: $userId, limit: 50) {
       id notes created_at
       appliances { id tagId status dateIssued arch }
     }
-    getUserDentalProcedureProfile(userId: $userId, limit: 1) {
+    getUserDentalProcedureProfile(userId: $userId, limit: 50) {
       id notes created_at
       procedures { id procedureTypeId procedureDate }
     }
@@ -69,7 +69,7 @@ export const GQL_FULL_RECORD = `
     dentalProcedureCatalogs: getDomainCatalogs(domain: DentalProcedure) { id name }
     medicationCatalogs: getDomainCatalogs(domain: Medication) { id name }
     oralApplianceCatalogs: getOralApplianceCatalogs { id name }
-    getUserDentalPhotoRecord(userId: $userId, limit: 1) {
+    getUserDentalPhotoRecord(userId: $userId, limit: 50) {
       id upperTeeth lowerTeeth isValid created_at
     }
   }

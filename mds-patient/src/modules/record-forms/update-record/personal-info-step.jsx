@@ -3,37 +3,33 @@ import { Input, Select } from './form-elements';
 
 const PersonalInfoStep = ({ formData, onChange }) => {
   const programs = [
-    { value: 'AB Communication', label: 'AB Communication' },
-    { value: 'AB English Language', label: 'AB English Language' },
-    { value: 'AB Literature', label: 'AB Literature' },
-    { value: 'AB Philosophy', label: 'AB Philosophy' },
-    { value: 'AB Political Science', label: 'AB Political Science' },
-    { value: 'AB Psychology', label: 'AB Psychology' },
-    { value: 'BS Accountancy', label: 'BS Accountancy' },
-    { value: 'BS Accounting Information System', label: 'BS Accounting Information System' },
-    { value: 'BS Accounting Technology', label: 'BS Accounting Technology' },
-    { value: 'BS Applied Mathematics', label: 'BS Applied Mathematics' },
     { value: 'BS Architecture', label: 'BS Architecture' },
-    { value: 'BS Biology', label: 'BS Biology' },
-    { value: 'BS Chemistry', label: 'BS Chemistry' },
+    { value: 'BS Chemical Engineering', label: 'BS Chemical Engineering' },
     { value: 'BS Civil Engineering', label: 'BS Civil Engineering' },
     { value: 'BS Computer Engineering', label: 'BS Computer Engineering' },
-    { value: 'BS Computer Science', label: 'BS Computer Science' },
     { value: 'BS Electrical Engineering', label: 'BS Electrical Engineering' },
     { value: 'BS Electronics Engineering', label: 'BS Electronics Engineering' },
-    { value: 'BS Entrepreneurship', label: 'BS Entrepreneurship' },
     { value: 'BS Industrial Engineering', label: 'BS Industrial Engineering' },
-    { value: 'BS Information Technology', label: 'BS Information Technology' },
-    { value: 'BS Management Accounting', label: 'BS Management Accounting' },
-    { value: 'BS Mathematics', label: 'BS Mathematics' },
     { value: 'BS Mechanical Engineering', label: 'BS Mechanical Engineering' },
-    { value: 'BS Medical Technology', label: 'BS Medical Technology' },
-    { value: 'BS Nursing', label: 'BS Nursing' },
-    { value: 'BS Pharmacy', label: 'BS Pharmacy' },
-    { value: 'BS Physics', label: 'BS Physics' },
-    { value: 'BS Psychology', label: 'BS Psychology' },
-    { value: 'BS Secondary Education', label: 'BS Secondary Education' },
-    { value: 'DVM (Doctor of Veterinary Medicine)', label: 'DVM (Doctor of Veterinary Medicine)' }
+    { value: 'BS Environmental and Sanitary Engineering', label: 'BS Environmental and Sanitary Engineering' },
+    { value: 'BS Computer Science', label: 'BS Computer Science' },
+    { value: 'BS Data Science and Analytics', label: 'BS Data Science and Analytics' },
+    { value: 'BS Entertainment and Multimedia Computing', label: 'BS Entertainment and Multimedia Computing' },
+    { value: 'BS Information Technology', label: 'BS Information Technology' },
+    { value: 'BS Information Systems', label: 'BS Information Systems' },
+    { value: 'BS Accountancy', label: 'BS Accountancy' },
+    { value: 'BS Accounting Information Systems', label: 'BS Accounting Information Systems' },
+    { value: 'BSBA Financial Management', label: 'BSBA Financial Management' },
+    { value: 'BSBA Human Resource Management', label: 'BSBA Human Resource Management' },
+    { value: 'BSBA Logistics and Supply Chain Management', label: 'BSBA Logistics and Supply Chain Management' },
+    { value: 'BSBA Marketing Management', label: 'BSBA Marketing Management' },
+    { value: 'Bachelor of Arts in English Language', label: 'Bachelor of Arts in English Language' },
+    { value: 'Bachelor of Arts in Political Science', label: 'Bachelor of Arts in Political Science' },
+    { value: 'Bachelor of Secondary Education Major in English', label: 'Bachelor of Secondary Education Major in English' },
+    { value: 'Bachelor of Secondary Education Major in Mathematics', label: 'Bachelor of Secondary Education Major in Mathematics' },
+    { value: 'Bachelor of Secondary Education Major in Sciences', label: 'Bachelor of Secondary Education Major in Sciences' },
+    { value: 'Bachelor of Special Needs Education', label: 'Bachelor of Special Needs Education' },
+    { value: 'Teaching Certificate Program', label: 'Teaching Certificate Program' }
   ];
 
   const handleInputChange = (field, value) => {
@@ -89,7 +85,7 @@ const PersonalInfoStep = ({ formData, onChange }) => {
         </div>
 
         <Select
-          label="Student Year"
+          label="Student Category"
           required
           options={[
             { value: 'Grade11', label: 'Grade 11' },
