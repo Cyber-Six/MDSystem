@@ -12,7 +12,7 @@ const ActiveAppointmentCard = ({ appointment, onCancel, cancelling }) => {
 
   if (!appointment) return null;
 
-  const { status, session, created_at, notes, schedulerLabel } = appointment;
+  const { status, session, created_at, notes, schedulerLabel, purpose } = appointment;
 
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
@@ -41,6 +41,13 @@ const ActiveAppointmentCard = ({ appointment, onCancel, cancelling }) => {
             <span className="text-sm font-medium text-neutral-900 dark:text-white">
               {session === SESSION.MORNING ? 'Morning (8:00 AM - 12:00 PM)' : 'Afternoon (1:00 PM - 5:00 PM)'}
             </span>
+          </div>
+        )}
+
+        {purpose && (
+          <div className="pt-3 border-t border-neutral-200 dark:border-neutral-700">
+            <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Purpose / Reason:</p>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">{purpose}</p>
           </div>
         )}
 

@@ -470,7 +470,7 @@ const Mutation = {
         `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session", "purpose")
          VALUES ($1, $2, 'Pending', $3, $4)
          RETURNING *;`,
-        [user.id, schedule.id, session, purpose]
+        [user.id, schedule.id, session, purpose || null]
       );
 
       const patientSlotId = psResult.rows[0].id;
