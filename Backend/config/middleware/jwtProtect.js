@@ -67,8 +67,8 @@ function jwtProtect(requiredRole = "patient") {
 
         if (!decoded.sid) {
           logger.warn(`[AUTH] Missing session anchor (sid) userId=${decoded.id}, route=${req.path}, ip=${req.ip}`);
-          return res.status(403).json({
-            error: "FORBIDDEN",
+          return res.status(401).json({
+            error: "INVALID_SESSION",
             message: "Medical role requires a session anchor"
           });
         }
@@ -76,9 +76,9 @@ function jwtProtect(requiredRole = "patient") {
         const activeSession = await getStaffAnchor(decoded.id);
         if (!activeSession || activeSession !== decoded.sid) {
           logger.warn(`[AUTH] Invalid/expired session userId=${decoded.id}, expectedSid=${activeSession}, providedSid=${decoded.sid}, route=${req.path}, ip=${req.ip}`);
-          return res.status(403).json({
-            error: "FORBIDDEN",
-            message: "Session invalid or expired"
+          return res.status(401).json({
+            error: "INVALID_SESSION",
+            message: "Session invalid or expired — please re‑login"
           });
         }
       }
