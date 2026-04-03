@@ -367,8 +367,9 @@ async function autoExpireTickets(patientId = null) {
   }
   if (!patientId) _lastAutoExpireRun = now;
 
-  // Find tickets where the last message was more than CHAT_EXPIRY_DAYS ago
-  // Use parameterized interval to avoid SQL injection
+  // --- 1. Expire Ongoing tickets whose session time has elapsed ---
+  // expiresAt = session_start + CHAT_EXPIRY_DAYS (matches calculateExpiryDate on the frontend).
+  // Also catches tickets with no messages (where MAX(stamp) IS NULL and can never be compared).
   const params = [`${CHAT_EXPIRY_DAYS} days`];
   let query = `
     UPDATE "HealthChat"
@@ -376,10 +377,7 @@ async function autoExpireTickets(patientId = null) {
         session_end = NOW(),
         closed_by_type = 'System'
     WHERE status = 'Ongoing'
-    AND (
-      SELECT MAX(stamp) FROM "HealthChatPrompt"
-      WHERE "consultationVirtualId" = "HealthChat".id
-    ) < NOW() - CAST($1 AS INTERVAL)
+    AND session_start + CAST($1 AS INTERVAL) <= NOW()
   `;
 
   if (patientId) {
@@ -391,17 +389,119 @@ async function autoExpireTickets(patientId = null) {
 
   const result = await db.query(query, params);
 
-  // Add system message to each expired chat
   for (const row of result.rows) {
     await db.query(
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
        VALUES ($1, $2, 'system', NULL, 'Medical')`,
-      [row.id, `This ticket has been automatically closed after ${CHAT_EXPIRY_DAYS} days of inactivity.`]
+      [row.id, `This ticket has been automatically closed after ${CHAT_EXPIRY_DAYS} days.`]
     );
   }
 
-  return result.rowCount;
+  // --- 2. Expire Open tickets for patients whose account has expired ---
+  // Open tickets have no session_start so step 1 never catches them.
+  let openExpiredQuery = `
+    UPDATE "HealthChat" hc
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    FROM "UserCredentials" uc
+    WHERE hc."patientId" = uc.id
+    AND hc.status = 'Open'
+    AND uc.credentials_status = 'Expired'
+  `;
+  const openExpiredParams = [];
+
+  if (patientId) {
+    openExpiredQuery += ` AND hc."patientId" = $1`;
+    openExpiredParams.push(patientId);
+  }
+
+  openExpiredQuery += ` RETURNING hc.id`;
+
+  const openExpiredResult = await db.query(openExpiredQuery, openExpiredParams);
+
+  for (const row of openExpiredResult.rows) {
+    await db.query(
+      `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ($1, $2, 'system', NULL, 'Medical')`,
+      [row.id, 'This ticket has been automatically closed because the patient account has expired.']
+    );
+  }
+
+  // --- 3. Expire stale Open tickets by inactivity (no staff action for CHAT_EXPIRY_DAYS) ---
+  // Uses the last HealthChatPrompt stamp as the activity anchor.
+  // _createTicket inserts a creation system message, so every new Open ticket has at least
+  // one stamp. Tickets with no messages (legacy rows before the anchor fix) are NOT matched
+  // here because MAX(stamp) IS NULL makes the comparison false in SQL — handled by step 4.
+  const staleOpenParams = [`${CHAT_EXPIRY_DAYS} days`];
+  let staleOpenQuery = `
+    UPDATE "HealthChat"
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    WHERE status = 'Open'
+    AND (
+      SELECT MAX(stamp) FROM "HealthChatPrompt"
+      WHERE "consultationVirtualId" = "HealthChat".id
+    ) < NOW() - CAST($1 AS INTERVAL)
+  `;
+
+  if (patientId) {
+    staleOpenQuery += ` AND "HealthChat"."patientId" = $2`;
+    staleOpenParams.push(patientId);
+  }
+
+  staleOpenQuery += ` RETURNING id`;
+
+  const staleOpenResult = await db.query(staleOpenQuery, staleOpenParams);
+
+  for (const row of staleOpenResult.rows) {
+    await db.query(
+      `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ($1, $2, 'system', NULL, 'Medical')`,
+      [row.id, `This ticket has been automatically closed after ${CHAT_EXPIRY_DAYS} days with no staff response.`]
+    );
+  }
+
+  // --- 4. Expire legacy Open tickets with zero messages ---
+  // MAX(stamp) IS NULL means PostgreSQL's < comparison is always false, so step 3 skips them.
+  // Any Open ticket with zero HealthChatPrompt rows is stale by definition — new tickets
+  // always have at least the creation system message from _createTicket.
+  const noMsgParams = [];
+  let noMsgQuery = `
+    UPDATE "HealthChat"
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    WHERE status = 'Open'
+    AND NOT EXISTS (
+      SELECT 1 FROM "HealthChatPrompt"
+      WHERE "consultationVirtualId" = "HealthChat".id
+    )
+  `;
+
+  if (patientId) {
+    noMsgQuery += ` AND "HealthChat"."patientId" = $1`;
+    noMsgParams.push(patientId);
+  }
+
+  noMsgQuery += ` RETURNING id`;
+
+  const noMsgResult = await db.query(noMsgQuery, noMsgParams);
+
+  for (const row of noMsgResult.rows) {
+    await db.query(
+      `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ($1, $2, 'system', NULL, 'Medical')`,
+      [row.id, 'This ticket has been automatically closed (no activity recorded).']
+    );
+  }
+
+  return result.rowCount + openExpiredResult.rowCount + staleOpenResult.rowCount + noMsgResult.rowCount;
 }
 
 /**
