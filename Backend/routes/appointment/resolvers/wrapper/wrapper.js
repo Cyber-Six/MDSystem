@@ -1051,19 +1051,25 @@ const Mutation = {
       }
       const defaults = schedulerResult.rows[0];
 
-      // Insert date markers into SlotCustomDate (2-column: slotScheduleId + scheduledDate only)
+      // Insert date markers into SlotCustomDate — skip any that already exist
+      // (can't use ON CONFLICT without a unique constraint; use WHERE NOT EXISTS instead)
       const values = [];
-      const placeholders = dates.map((dateEntry, i) => {
-        const offset = i * 2;
+      const selectParts = dates.map((dateEntry, i) => {
         const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
+        const offset = i * 2;
         values.push(schedulerId, scheduledDate);
-        return `($${offset + 1}, $${offset + 2})`;
+        return `($${offset + 1}::integer, $${offset + 2}::date)`;
       });
 
       await client.query(
         `INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
-         VALUES ${placeholders.join(", ")}
-         ON CONFLICT ("slotScheduleId", "scheduledDate") DO NOTHING;`,
+         SELECT v."slotScheduleId", v."scheduledDate"
+         FROM (VALUES ${selectParts.join(", ")}) AS v("slotScheduleId", "scheduledDate")
+         WHERE NOT EXISTS (
+           SELECT 1 FROM "SlotCustomDate" scd
+           WHERE scd."slotScheduleId" = v."slotScheduleId"
+             AND scd."scheduledDate" = v."scheduledDate"
+         );`,
         values
       );
 
