@@ -2,10 +2,11 @@ const Wrapper = require("../wrapper/wrapper.js");
 const path = require("path");
 const dotenv = require("dotenv");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
-const { getStudentBranchFromEmail } = require("../../../../utils/validator.js");
+const { getStudentBranchFromEmail, ValidateBranchbyUserBranch } = require("../../../../utils/validator.js");
 const { emitToRoom } = require("../../../../config/sockets");
 const logger = require("../../../../utils/logger.js");
 const db = require("../../../../config/query.js");
+const { getBranchFromShedulerId } = require("../wrapper/helper.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 // creating of updateTicket
@@ -18,18 +19,26 @@ const Query = {
   },
 
   listCustomDates: async (_, { schedulerId, offset, limit }, { user, res }) => {
+    await validateUserBranchAccess({ schedulerId, userId: user.id, res });
+
     return await Wrapper.Query._listCustomDates(_, { schedulerId, offset, limit }, { user, res });
   },
 
   listAppointmentSchedule: async (_, { schedulerId, date }, { user, res }) => {
+    await validateUserBranchAccess({ schedulerId, userId: user.id, res });
+
     return await Wrapper.Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
   },
 
   listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
+    await validateUserBranchAccess({ schedulerId, userId: user.id, res });
+
     return await Wrapper.Query._listMonthAvailability(_, { schedulerId, startDate, endDate }, { user, res });
   },
 
   listAppointmentRequirements: async (_, { schedulerId, offset, limit }, { user, res }) => {
+    await validateUserBranchAccess({ schedulerId, userId: user.id, res });
+    
     return await Wrapper.Query._listAllAppointmentRequirements(_, { schedulerId, offset, limit, isActive: true }, { user, res });
   },
 
@@ -41,6 +50,8 @@ const Query = {
 
 const Mutation = {
   submitAppointment: async (_, { schedulerId, date, session, requirements, purpose }, { user, res }) => {
+    await validateUserBranchAccess({ schedulerId, userId: user.id, res });
+
     const userStatus = await Wrapper.Query._getUserAppointmentStatus(_, { userId: user.id }, { user, res });
 
     if (userStatus && ["Pending", "Scheduled", "InProgress"].includes(userStatus)) {
@@ -81,7 +92,20 @@ const Mutation = {
   },
 };
 
+async function validateUserBranchAccess({ schedulerId, userId, res }) {
+  // Run both queries concurrently
+  const [scheduleBranch, userBranch] = await Promise.all([
+    getBranchFromShedulerId(schedulerId),
+    db.getUserBranch(userId)
+  ]);
 
+  // Branch validation logic
+  if (!ValidateBranchbyUserBranch(userBranch, scheduleBranch)) {
+    throwGraphQLError(res).message("Unauthorized").status(401).throw();
+  }
 
+  // Return both branches if downstream logic needs them
+  return { scheduleBranch, userBranch };
+}
 
 module.exports = { Query, Mutation };

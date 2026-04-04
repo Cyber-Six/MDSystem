@@ -202,7 +202,8 @@ const Query = {
       schedulerId,
       limit || 10,
       offset || 0,
-      isActive // can be true, false, or null
+      isActive, // can be true, false, or null
+      branchSafeguard
     ]);
     return result.rows;
   },
@@ -284,7 +285,7 @@ const Query = {
     return result.rows[0].status;
   },
 
-  _searchAppointmentStatuses: async (_, { status, offset, limit }, { user, res }) => {
+  _searchAppointmentStatuses: async (_, { status, location, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -304,11 +305,15 @@ const Query = {
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
 
       WHERE ps.status = $1
+      AND ss.location = COALESCE($4::"LocationDesignation", ss.location)
       ORDER BY ps.id DESC
       LIMIT $2 OFFSET $3;
     `;
 
-    const result = await db.query(query, [status, limit || 10, offset || 0]);
+    const result = await db.query(query, 
+      [status, limit || 10, 
+       offset || 0, location]
+      );
     const slots = result.rows;
 
     if (slots.length === 0) return slots;
@@ -328,16 +333,19 @@ const Query = {
     return slots.map(s => ({ ...s, requirements: reqBySlot[s.id] || [] }));
   },
 
-  _getAppointmentStatusCounts: async (_, _args, { user, res }) => {
+  _getAppointmentStatusCounts: async (_, { location }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
     const result = await db.query(`
       SELECT status, COUNT(*)::int AS count
-      FROM "patientSlot"
+      FROM "patientSlot"ps
+      JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+      JOIN "SlotScheduler" ss ON ss.id = sde."slotId"
+      WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
       GROUP BY status;
-    `);
+    `, [location]);
 
     return result.rows;
   },

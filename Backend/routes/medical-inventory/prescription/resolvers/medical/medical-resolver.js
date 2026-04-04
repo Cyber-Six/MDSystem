@@ -7,8 +7,8 @@ const logger = require("../../../../../utils/logger.js");
 const Query = {
   getAvailableMedicine: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_prescribe);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_prescribe);
+    if (!permitted) {
       logger.warn("Unauthorized prescription view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }

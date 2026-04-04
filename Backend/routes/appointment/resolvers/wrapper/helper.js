@@ -228,7 +228,34 @@ async function insertSchedulerWhitelist(slotSchedulerId, patientIds, db) {
   return result.rows;
 }
 
+async function getBranchFromShedulerId(schedulerId) {
+  const query = `
+    SELECT location
+    FROM "slotScheduler"
+    WHERE id = $1;
+  `;
 
+  const result = await db.query(query, [schedulerId]);
+  if (result.rowCount === 0) {
+    throw new Error("Scheduler not found");
+  }
+  return result.rows[0].location;
+}
+
+async function getPatientIdFromSlotId(slotId) {
+  const query = `
+    SELECT ps."patientId"
+    FROM "patientSlot" ps
+    WHERE ps."slotEntityId" = $1
+    LIMIT 1;
+  `;
+
+  const result = await db.query(query, [slotId]);
+  if (result.rowCount === 0) {
+    throw new Error("Slot not found");
+  }
+  return result.rows[0].patientId;
+}
 
 module.exports = {
   decodeSchedulingFlags,
@@ -238,5 +265,7 @@ module.exports = {
   isWithinFutureTimeframe,
   validateSatisfiedAllRequirements,
   insertSlotCustomDates,
-  insertSchedulerWhitelist
+  insertSchedulerWhitelist,
+  getBranchFromShedulerId,
+  getPatientIdFromSlotId
 };

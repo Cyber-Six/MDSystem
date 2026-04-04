@@ -208,8 +208,8 @@ const Query = {
 
   // staff queries for specific records by ID (with permission checks)
   getTicketVitalSignsId: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getTicketVitalSignsId`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -217,8 +217,8 @@ const Query = {
   },
 
   getTicketDentalRecordId: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getTicketDentalRecordId`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -272,8 +272,8 @@ const Query = {
   },
 
   getStatusUpdateTickets: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getStatusUpdateTickets`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -292,8 +292,8 @@ const Query = {
   },
 
   searchPatients: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
+    if (!permitted) {
       logger.warn(`Unauthorized search attempt by user ID ${user.id}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }

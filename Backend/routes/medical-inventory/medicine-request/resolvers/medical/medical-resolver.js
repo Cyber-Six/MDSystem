@@ -10,8 +10,8 @@ const { findEmailByUserId } = require("../../../../../config/query.js");
 const Query = {
   getAvailableMedicine: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
+    if (!permitted) {
       logger.warn("Unauthorized medicine request view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -20,8 +20,8 @@ const Query = {
 
   getMedicineRequestById: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
+    if (!permitted) {
       logger.warn("Unauthorized medicine request view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -40,8 +40,8 @@ const Query = {
 
   getAllMedicineRequests: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
+    if (!permitted) {
       logger.warn("Unauthorized medicine request list attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -52,8 +52,8 @@ const Query = {
 const Mutation = {
   setStatusMedicineRequest: async (_, { requestId, status, notes }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
+    if (!permitted) {
       logger.warn("Unauthorized medicine request status change attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }

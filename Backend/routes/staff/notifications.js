@@ -53,7 +53,7 @@ router.post('/notify-staffs', jwtProtect('medical'), async (req, res) => {
     }
 
     // FIXED: Add admin permission check
-    const isAdmin = await permit.isMedicalPermitted(adminUserId, permit.permissions.is_admin);
+    const {permitted: isAdmin} = await permit.isMedicalPermitted(adminUserId, permit.permissions.is_admin);
     if (!isAdmin) {
       logger.warn(`[NOTIFY_STAFFS_ROUTE] Non-admin user ${adminUserId} attempted to broadcast to all staff`);
       return res.status(403).json({

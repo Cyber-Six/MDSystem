@@ -208,8 +208,8 @@ type Query {
   listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
   listMonthAvailability(schedulerId: ID!, startDate: Date!, endDate: Date!): [ScheduleDateEntity!]
 
-  searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]
-  getAppointmentStatusCounts: [StatusCount!]
+  searchAppointmentStatuses(status: SCHEDULING_STATUS!, location: LOCATION_DESIGNATION, offset: Int, limit: Int): [patientSlot!]
+  getAppointmentStatusCounts(location: LOCATION_DESIGNATION): [StatusCount!]
   listSchedulerWhitelist(schedulerId: ID!, offset: Int, limit: Int): [WhitelistEntry!]
 }
 

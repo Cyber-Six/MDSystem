@@ -297,8 +297,8 @@ const Mutation = {
   // Catalog mutations
 
   createDomainCatalogs: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update DomainCatalogs`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -312,8 +312,8 @@ const Mutation = {
   },
 
   createAllergenCatalogs: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update DomainCatalogs`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -327,8 +327,8 @@ const Mutation = {
   },
 
   createOralApplianceCatalogs: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update DomainCatalogs`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -342,8 +342,8 @@ const Mutation = {
   },
 
   updateDomainCatalogs: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update DomainCatalogs`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -357,8 +357,8 @@ const Mutation = {
   },
 
   updateAllergenCatalogs: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update AllergenCatalogs`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }
@@ -372,8 +372,8 @@ const Mutation = {
   },
 
   updateOralApplianceCatalogs: async (_, args, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_edit_catalogs);
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update OralApplianceCatalogs`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
       }

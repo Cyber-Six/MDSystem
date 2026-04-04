@@ -956,8 +956,8 @@ const Mutation = {
     const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
 
     // Check if user is admin
-    const isAdmin = await isMedicalPermitted(user.id, medPermissions.is_admin);
-    if (!isAdmin) {
+    const { permitted } = await isMedicalPermitted(user.id, medPermissions.is_admin);
+    if (!permitted) {
       throwGraphQLError(res).message("Only administrators can delete archived tickets").status(403).throw();
     }
 

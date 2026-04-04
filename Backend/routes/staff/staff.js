@@ -77,7 +77,7 @@ router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
     try {
         const { getStaffModulePermissions, isMedicalPermitted, permissions: permKeys } = require('../../services/permit.js');
         const modulePerms = await getStaffModulePermissions(req.user.id);
-        const isAdmin = await isMedicalPermitted(req.user.id, permKeys.is_admin);
+        const {permitted: isAdmin} = await isMedicalPermitted(req.user.id, permKeys.is_admin);
 
         res.json({
             modules: modulePerms.modules,
