@@ -267,7 +267,7 @@ const Query = {
     const medicalId = rows[0].medicalId;
 
     // Ownership / admin check
-    if (medicalId && medicalId !== user.id) {
+    if (medicalId && Number(medicalId) !== Number(user.id)) {
       const isAdmin = await isMedicalAdmin(user.id); // ensure async if it hits DB
       if (!isAdmin) {
         throwGraphQLError(res)
@@ -477,11 +477,20 @@ const Query = {
            FROM "HealthChatPrompt" p
            JOIN "HealthChat" hc ON hc.id = p."consultationVirtualId"
            WHERE hc."patientId" = $1 AND p.stamp < $2
+            AND (
+              hc."medicalId" = $3
+              OR EXISTS (
+                SELECT 1 FROM "rolesMap" rm
+                JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+                WHERE rm."personnelId" = $3 AND rt.label = 'IS_ADMIN'
+                LIMIT 1
+              )
+            )
            ORDER BY p.stamp DESC
-           LIMIT $3
+           LIMIT $4
          ) sub
          ORDER BY stamp ASC`,
-        [patientId, before, pageSize]
+        [patientId, before, user.id, pageSize]
       );
     } else {
       // Initial load: return the LATEST pageSize messages in ASC order.
@@ -497,11 +506,20 @@ const Query = {
            FROM "HealthChatPrompt" p
            JOIN "HealthChat" hc ON hc.id = p."consultationVirtualId"
            WHERE hc."patientId" = $1
+            AND (
+              hc."medicalId" = $2
+              OR EXISTS (
+                SELECT 1 FROM "rolesMap" rm
+                JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+                WHERE rm."personnelId" = $2 AND rt.label = 'IS_ADMIN'
+                LIMIT 1
+              )
+            )
            ORDER BY p.stamp DESC
-           LIMIT $2
+           LIMIT $3
          ) sub
          ORDER BY stamp ASC`,
-        [patientId, pageSize]
+        [patientId, user.id, pageSize]
       );
     }
 
@@ -957,7 +975,7 @@ const Mutation = {
 
     const { medicalId, patientId } = chatResult.rows[0];
 
-    if (medicalId && medicalId !== user.id) {
+    if (medicalId && Number(medicalId) !== Number(user.id)) {
       throwGraphQLError(res).message("Unauthorized to send message in this chat").status(403).throw();
     }
 
