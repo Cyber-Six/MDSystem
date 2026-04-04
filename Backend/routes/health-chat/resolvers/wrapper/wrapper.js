@@ -303,9 +303,13 @@ const Query = {
     // Auto-expire any expired ongoing tickets
     await autoExpireTickets();
 
+    // Determine if the current user is an admin (admins see all conversations)
+    const isAdmin = await isMedicalAdmin(user.id);
+
     // Build status filter
     let statusFilter = '';
     let locationFilter = '';
+    let medicalFilter = '';
     const params = [];
     if (statuses && statuses.length > 0) {
         statusFilter = `WHERE status = ANY($1)`;
@@ -322,6 +326,18 @@ const Query = {
         locationFilter = `WHERE ${locationCondition}`;
       }
       params.push(location);
+    }
+
+    // Non-admin staff: only see their assigned tickets + pending (Open) tickets
+    if (!isAdmin) {
+      const medicalParamIndex = params.length + 1;
+      const medicalCondition = `(hc."medicalId" = $${medicalParamIndex} OR hc.status = 'Open')`;
+      if (statusFilter || locationFilter) {
+        medicalFilter = `AND ${medicalCondition}`;
+      } else {
+        medicalFilter = `WHERE ${medicalCondition}`;
+      }
+      params.push(user.id);
     }
 
     // Get unique patients with their latest ticket
@@ -345,6 +361,7 @@ const Query = {
         JOIN "UsersPersonal" up ON up.id = hc."patientId"
         ${statusFilter}
         ${locationFilter}
+        ${medicalFilter}
       ),
       LatestTickets AS (
         SELECT * FROM RankedTickets WHERE rn = 1
@@ -358,6 +375,7 @@ const Query = {
         JOIN "UsersPersonal" up ON up.id = hc."patientId"
         ${statusFilter}
         ${locationFilter}
+        ${medicalFilter}
         GROUP BY "patientId"
       )
       SELECT
@@ -389,6 +407,7 @@ const Query = {
         JOIN "UsersPersonal" up ON up.id = hc."patientId"
         ${statusFilter}
         ${locationFilter}
+        ${medicalFilter}
       `;
       const countParams = [];
       if (statuses && statuses.length > 0) {
@@ -396,6 +415,9 @@ const Query = {
       }
       if (location) {
         countParams.push(location);
+      }
+      if (!isAdmin) {
+        countParams.push(user.id);
       }
       const countResult = await db.query(countQuery, countParams);
 

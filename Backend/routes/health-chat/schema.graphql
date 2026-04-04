@@ -76,6 +76,7 @@ type ChatParticipant {
   branch: String
   dateOfBirth: String
   sex: String
+  role: String
 }
 
 type HealthChatList {
