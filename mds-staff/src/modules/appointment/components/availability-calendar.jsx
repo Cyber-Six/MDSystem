@@ -94,7 +94,10 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     const checkDayAvailable = (dayOfWeek, dateStr) => {
       const dayName = dayIndexToName[dayOfWeek];
       if (currentSchedulePerWeek.includes(dayName)) return true;
-      return customDateSet.has(dateStr);
+      if (customDateSet.has(dateStr)) return true;
+      // Also consider dates that have API data (ScheduleDateEntity exists)
+      if (monthAvailability[dateStr]) return true;
+      return false;
     };
 
     const checkIsCustomDate = (dayOfWeek, dateStr) => {
@@ -120,12 +123,13 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         continue;
       }
 
-      // Resolve slot data: defaults first > custom date overrides > use API data for booked counts only
+      // Resolve slot data: API (ScheduleDateEntity) > custom date overrides > scheduler defaults
       const apiData = monthAvailability[dateStr];
       const customEntry = customDateMap[dateStr];
 
-      const morningAllowed = customEntry?.morningAllowed ?? slotDefaults?.morning ?? 0;
-      const afternoonAllowed = customEntry?.afternoonAllowed ?? slotDefaults?.afternoon ?? 0;
+      // Priority: API data (has real DB values) > custom date entry > scheduler defaults
+      const morningAllowed = apiData?.morningAllowed ?? customEntry?.morningAllowed ?? slotDefaults?.morning ?? 0;
+      const afternoonAllowed = apiData?.afternoonAllowed ?? customEntry?.afternoonAllowed ?? slotDefaults?.afternoon ?? 0;
       const morningRegistered = apiData?.morningRegistered ?? 0;
       const morningPending = apiData?.morningPending ?? 0;
       const afternoonRegistered = apiData?.afternoonRegistered ?? 0;
@@ -158,6 +162,9 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     const totalCapacity = (info.morningAllowed || 0) + (info.afternoonAllowed || 0);
     const totalBooked = (info.morningBooked || 0) + (info.afternoonBooked || 0);
 
+    // Staff explicitly disabled this date (set both to 0)
+    if (totalCapacity === 0) return 'disabled';
+
     // Custom date indicator takes priority if no bookings yet
     if (info.isCustomDate && totalBooked === 0) return 'custom';
 
@@ -176,6 +183,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     suspended: 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-200',
     event: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/30',
     custom: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/30',
+    disabled: 'bg-neutral-100 dark:bg-neutral-700/40 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700/60',
     closed: 'bg-neutral-50 dark:bg-neutral-700/50 text-neutral-400 dark:text-neutral-500',
     none: 'bg-transparent text-neutral-300 dark:text-neutral-600',
   };
@@ -187,6 +195,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     suspended: 'bg-rose-500',
     event: 'bg-sky-500',
     custom: 'bg-violet-500',
+    disabled: 'bg-neutral-400',
     closed: '',
     none: '',
   };
@@ -316,13 +325,14 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
           const isSelected = cell.dateStr === selectedDate;
           const isToday = cell.dateStr === todayStr;
           const isAvailable = status !== 'closed' && status !== 'none';
+          const isInteractive = status !== 'none'; // Staff can interact with all non-empty dates
           const slotInfo = bookedSlots[cell.dateStr];
           const fillRatio = getFillRatio(cell.dateStr);
 
           return (
             <div
               key={cell.dateStr}
-              onClick={() => onSelectDate(cell.dateStr, isAvailable)}
+              onClick={() => onSelectDate(cell.dateStr, isInteractive)}
               className={`p-1 sm:p-1.5 min-h-[80px] sm:min-h-[100px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative group ${
                 isSelected
                   ? 'ring-2 ring-primary-500 ring-inset bg-primary-50/80 dark:bg-primary-900/20'
