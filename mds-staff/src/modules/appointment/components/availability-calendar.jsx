@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Sun, Moon, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sun, Clock, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Availability Calendar Component
@@ -120,12 +120,12 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         continue;
       }
 
-      // Resolve slot data: monthAvailability (real API data) > customDate overrides > scheduler defaults
+      // Resolve slot data: defaults first > custom date overrides > use API data for booked counts only
       const apiData = monthAvailability[dateStr];
       const customEntry = customDateMap[dateStr];
 
-      const morningAllowed = apiData?.morningAllowed ?? customEntry?.morningAllowed ?? slotDefaults?.morning ?? 0;
-      const afternoonAllowed = apiData?.afternoonAllowed ?? customEntry?.afternoonAllowed ?? slotDefaults?.afternoon ?? 0;
+      const morningAllowed = customEntry?.morningAllowed ?? slotDefaults?.morning ?? 0;
+      const afternoonAllowed = customEntry?.afternoonAllowed ?? slotDefaults?.afternoon ?? 0;
       const morningRegistered = apiData?.morningRegistered ?? 0;
       const morningPending = apiData?.morningPending ?? 0;
       const afternoonRegistered = apiData?.afternoonRegistered ?? 0;
@@ -292,9 +292,9 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       </div>
 
       {/* Day labels */}
-      <div className="grid grid-cols-7 bg-neutral-50 dark:bg-neutral-750 border-b border-neutral-200 dark:border-neutral-700">
+      <div className="grid grid-cols-7 bg-neutral-50 dark:bg-neutral-900/30 border-b border-neutral-200 dark:border-neutral-700">
         {dayLabels.map((label) => (
-          <div key={label} className="text-center py-2 text-xs sm:text-sm font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">
+          <div key={label} className="text-center py-2 text-xs sm:text-sm font-semibold text-secondary-600 dark:text-neutral-300 uppercase tracking-wider">
             <span className="sm:hidden">{label.charAt(0)}</span>
             <span className="hidden sm:inline">{label}</span>
           </div>
@@ -306,7 +306,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         {calendarCells.map((cell, idx) => {
           if (cell.isOtherMonth) {
             return (
-              <div key={`other-${idx}`} className="p-1 sm:p-1.5 min-h-[60px] sm:min-h-[80px] border-b border-r border-neutral-100 dark:border-neutral-700/50 bg-neutral-25 dark:bg-neutral-800/50">
+              <div key={`other-${idx}`} className="p-1 sm:p-1.5 min-h-[80px] sm:min-h-[100px] border-b border-r border-neutral-100 dark:border-neutral-700/50 bg-neutral-25 dark:bg-neutral-800/50">
                 <span className="text-xs sm:text-sm text-neutral-300 dark:text-neutral-600">{cell.day}</span>
               </div>
             );
@@ -323,7 +323,7 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
             <div
               key={cell.dateStr}
               onClick={() => onSelectDate(cell.dateStr, isAvailable)}
-              className={`p-1 sm:p-1.5 min-h-[60px] sm:min-h-[80px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative group ${
+              className={`p-1 sm:p-1.5 min-h-[80px] sm:min-h-[100px] border-b border-r border-neutral-100 dark:border-neutral-700/50 cursor-pointer transition-all relative group ${
                 isSelected
                   ? 'ring-2 ring-primary-500 ring-inset bg-primary-50/80 dark:bg-primary-900/20'
                   : statusColors[status]
@@ -352,26 +352,26 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
 
               {/* Morning/Afternoon counts - compact chips */}
               {status !== 'closed' && status !== 'none' && slotInfo && !slotInfo.isSuspended && (
-                <div className="flex items-center gap-0.5 sm:gap-1 mt-0.5">
+                <div className="flex items-center gap-1 mt-1">
                   {/* Morning chip */}
                   <button
                     onClick={(e) => handleSessionClick(e, cell.dateStr, 'morning')}
-                    className="flex-1 flex items-center justify-center gap-0.5 px-0.5 py-0.5 sm:py-1 rounded-md bg-white/60 dark:bg-neutral-700/60 border border-amber-200/80 dark:border-amber-800/50 hover:border-amber-400 dark:hover:border-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-all group/btn"
+                    className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 sm:py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/25 border border-amber-300 dark:border-amber-700/50 hover:border-amber-400 dark:hover:border-amber-600 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 transition-all group/btn shadow-xs"
                     title="Click to edit morning limit"
                   >
-                    <Sun className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-500 dark:text-amber-400 flex-shrink-0" />
-                    <span className="text-xs sm:text-xs font-bold text-secondary-700 dark:text-neutral-200 group-hover/btn:text-amber-600 dark:group-hover/btn:text-amber-400 tabular-nums">
+                    <Sun className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-bold text-amber-900 dark:text-amber-300 group-hover/btn:text-amber-700 dark:group-hover/btn:text-amber-200 tabular-nums">
                       {slotInfo.morningBooked}/{slotInfo.morningAllowed}
                     </span>
                   </button>
                   {/* Afternoon chip */}
                   <button
                     onClick={(e) => handleSessionClick(e, cell.dateStr, 'afternoon')}
-                    className="flex-1 flex items-center justify-center gap-0.5 px-0.5 py-0.5 sm:py-1 rounded-md bg-white/60 dark:bg-neutral-700/60 border border-indigo-200/80 dark:border-indigo-800/50 hover:border-indigo-400 dark:hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all group/btn"
+                    className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 sm:py-1.5 rounded-lg bg-sky-50 dark:bg-sky-900/25 border border-sky-300 dark:border-sky-700/50 hover:border-sky-400 dark:hover:border-sky-600 hover:bg-sky-100/60 dark:hover:bg-sky-900/40 transition-all group/btn shadow-xs"
                     title="Click to edit afternoon limit"
                   >
-                    <Moon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
-                    <span className="text-xs sm:text-xs font-bold text-secondary-700 dark:text-neutral-200 group-hover/btn:text-indigo-600 dark:group-hover/btn:text-indigo-400 tabular-nums">
+                    <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-sky-600 dark:text-sky-400 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm font-bold text-sky-900 dark:text-sky-300 group-hover/btn:text-sky-700 dark:group-hover/btn:text-sky-200 tabular-nums">
                       {slotInfo.afternoonBooked}/{slotInfo.afternoonAllowed}
                     </span>
                   </button>
@@ -413,15 +413,15 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
           >
             <div className="flex items-center justify-between mb-2.5">
               <div className="flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                   editPopup.session === 'morning'
-                    ? 'bg-amber-100 dark:bg-amber-900/30'
-                    : 'bg-indigo-100 dark:bg-indigo-900/30'
+                    ? 'bg-amber-100 dark:bg-amber-900/40'
+                    : 'bg-sky-100 dark:bg-sky-900/40'
                 }`}>
                   {editPopup.session === 'morning' ? (
-                    <Sun className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <Sun className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                   ) : (
-                    <Moon className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                    <Clock className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                   )}
                 </div>
                 <div>

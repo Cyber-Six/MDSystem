@@ -92,9 +92,18 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+    // LEFT JOIN ScheduleDateEntity so morningAllowed/afternoonAllowed overrides are visible
     const query = `
-      SELECT scd."scheduledDate"
+      SELECT
+        scd.id,
+        scd."slotScheduleId",
+        scd."scheduledDate",
+        scd.created_at,
+        sde."morningAllowed",
+        sde."afternoonAllowed"
       FROM "SlotCustomDate" scd
+      LEFT JOIN "ScheduleDateEntity" sde
+        ON sde."slotId" = $1 AND sde."scheduledDate" = scd."scheduledDate"
       WHERE scd."slotScheduleId" = $1
       ORDER BY scd."scheduledDate" ASC
       LIMIT $2 OFFSET $3;
@@ -102,11 +111,11 @@ const Query = {
 
     const result = await db.query(query, [
       schedulerId,
-      limit || 10,
+      limit || 500,
       offset || 0
     ]);
-    
-    return result.rows.map(row => row.scheduledDate);
+
+    return result.rows;
   },
 
   _listAppointmentSchedule: async (_, { schedulerId, date, skipTimeframe }, { user, res }) => {
@@ -1031,21 +1040,62 @@ const Mutation = {
     try {
       await client.query('BEGIN');
 
-      // Build placeholders and values for batch insert
+      // Fetch scheduler defaults for slot count fallback
+      const schedulerResult = await client.query(
+        `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+        [schedulerId]
+      );
+      if (schedulerResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+      }
+      const defaults = schedulerResult.rows[0];
+
+      // Insert date markers into SlotCustomDate (2-column: slotScheduleId + scheduledDate only)
       const values = [];
-      const placeholders = dates.map((date, i) => {
+      const placeholders = dates.map((dateEntry, i) => {
         const offset = i * 2;
-        values.push(schedulerId, date);
+        const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
+        values.push(schedulerId, scheduledDate);
         return `($${offset + 1}, $${offset + 2})`;
       });
 
-      const query = `
-        INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
-        VALUES ${placeholders.join(", ")}
-        RETURNING "scheduledDate";
-      `;
+      await client.query(
+        `INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
+         VALUES ${placeholders.join(", ")}
+         ON CONFLICT ("slotScheduleId", "scheduledDate") DO NOTHING;`,
+        values
+      );
 
-      const result = await client.query(query, values);
+      // If custom slot counts were provided, upsert into ScheduleDateEntity
+      for (const dateEntry of dates) {
+        if (typeof dateEntry === 'object' &&
+            (dateEntry.morningAllowed != null || dateEntry.afternoonAllowed != null)) {
+          const scheduledDate = dateEntry.scheduledDate;
+          const morning = dateEntry.morningAllowed ?? defaults.morningAllowed;
+          const afternoon = dateEntry.afternoonAllowed ?? defaults.afternoonAllowed;
+
+          const existing = await client.query(
+            `SELECT id FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2 LIMIT 1;`,
+            [schedulerId, scheduledDate]
+          );
+
+          if (existing.rowCount > 0) {
+            await client.query(
+              `UPDATE "ScheduleDateEntity"
+               SET "morningAllowed" = $1, "afternoonAllowed" = $2
+               WHERE "slotId" = $3 AND "scheduledDate" = $4;`,
+              [morning, afternoon, schedulerId, scheduledDate]
+            );
+          } else {
+            await client.query(
+              `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+               VALUES ($1, $2, $3, $4);`,
+              [schedulerId, scheduledDate, morning, afternoon]
+            );
+          }
+        }
+      }
 
       // Keep containsCustomDates flag in sync (atomic within transaction)
       await client.query(
@@ -1055,7 +1105,25 @@ const Mutation = {
 
       await client.query('COMMIT');
 
-      return result.rows.map(r => r.scheduledDate);
+      // Return full SlotCustomDateEntry objects (with slot counts from ScheduleDateEntity)
+      const scheduledDates = dates.map(d => (typeof d === 'string' ? d : d.scheduledDate));
+      const finalResult = await db.query(
+        `SELECT
+           scd.id,
+           scd."slotScheduleId",
+           scd."scheduledDate",
+           scd.created_at,
+           sde."morningAllowed",
+           sde."afternoonAllowed"
+         FROM "SlotCustomDate" scd
+         LEFT JOIN "ScheduleDateEntity" sde
+           ON sde."slotId" = $1 AND sde."scheduledDate" = scd."scheduledDate"
+         WHERE scd."slotScheduleId" = $1
+           AND scd."scheduledDate" = ANY($2)
+         ORDER BY scd."scheduledDate" ASC;`,
+        [schedulerId, scheduledDates]
+      );
+      return finalResult.rows;
     } catch (err) {
       await client.query('ROLLBACK');
       logger.error("Error in _setCustomDates:", err);
