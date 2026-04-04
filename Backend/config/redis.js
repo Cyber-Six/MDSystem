@@ -147,6 +147,12 @@ async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
   return current > limit;
 }
 
+async function rateLimitIPCount(ip, route = "") {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `rl:${route}:ip:${ip}`;
+  return await client.get(key);
+}
+
 async function getIPRateLimitTTL(ip, route = "") {
   if (!client) throw new Error("Redis client not initialized");
   const key = `rl:${route}:ip:${ip}`;
@@ -1092,6 +1098,7 @@ module.exports = {
   verifyOTP,
   deleteOTP,
   rateLimitIP,
+  rateLimitIPCount,
   getIPRateLimitTTL,
   rateLimitEmailCooldown,
   rateLimitEmailCooldownTTL,
