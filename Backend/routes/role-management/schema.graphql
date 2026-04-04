@@ -191,6 +191,7 @@ type InitiateAdminTransferResult {
   ok: Boolean!
   message: String!
   verificationRequired: Boolean!
+  bootstrapMode: Boolean!
 }
 
 type ConfirmAdminTransferResult {

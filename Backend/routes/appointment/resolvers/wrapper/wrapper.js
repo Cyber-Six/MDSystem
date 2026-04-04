@@ -285,7 +285,7 @@ const Query = {
     return result.rows[0].status;
   },
 
-  _searchAppointmentStatuses: async (_, { status, location, offset, limit }, { user, res }) => {
+  _searchAppointmentStatuses: async (_, { status, location, date, schedulerId, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -306,14 +306,15 @@ const Query = {
 
       WHERE ps.status = $1
       AND ss.location = COALESCE($4::"LocationDesignation", ss.location)
-      ORDER BY ps.id DESC
+      AND ($5::date IS NULL OR sde."scheduledDate"::date = $5::date)
+      AND ($6::integer IS NULL OR ss.id = $6::integer)
+      ORDER BY sde."scheduledDate" ASC, ps.id DESC
       LIMIT $2 OFFSET $3;
     `;
 
-    const result = await db.query(query, 
-      [status, limit || 10, 
-       offset || 0, location]
-      );
+    const result = await db.query(query,
+      [status, limit || 10,
+       offset || 0, location, date || null, schedulerId ? parseInt(schedulerId, 10) : null]);
     const slots = result.rows;
 
     if (slots.length === 0) return slots;
@@ -342,7 +343,7 @@ const Query = {
       SELECT status, COUNT(*)::int AS count
       FROM "patientSlot"ps
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
-      JOIN "SlotScheduler" ss ON ss.id = sde."slotId"
+      JOIN "slotScheduler" ss ON ss.id = sde."slotId"
       WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
       GROUP BY status;
     `, [location]);

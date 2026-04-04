@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
-import { searchByStatus, getStatusCounts } from '../staff-appointment-service';
+import { searchByStatus, getStatusCounts, listAllSchedulers } from '../staff-appointment-service';
 
 /* ── constants ─────────────────────────────────────── */
 
@@ -51,6 +51,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [tabCounts,    setTabCounts]    = useState({});
   const [loadingCounts, setLoadingCounts] = useState(true);
 
+  // Filter state
+  const [filterDate,        setFilterDate]        = useState('');
+  const [filterSchedulerId, setFilterSchedulerId] = useState('');
+  const [schedulers,        setSchedulers]        = useState([]);
+
   // Pagination state
   const [offset,      setOffset]      = useState(0);
   const [hasMore,     setHasMore]     = useState(false);
@@ -79,11 +84,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   }, []);
 
   /* Fetch appointments (first page or fresh load) */
-  const fetchAppointments = useCallback(async (status) => {
+  const fetchAppointments = useCallback(async (status, date, schedulerId) => {
     setLoading(true);
     setOffset(0);
     try {
-      const data = await searchByStatus(status, 0, PAGE_SIZE);
+      const data = await searchByStatus(status, 0, PAGE_SIZE, { date: date || null, schedulerId: schedulerId || null });
       setAppointments(data || []);
       setHasMore((data?.length ?? 0) === PAGE_SIZE);
     } catch (err) {
@@ -118,10 +123,15 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       refreshCounts();
     },
     refresh: () => {
-      fetchAppointments(activeTab);
+      fetchAppointments(activeTab, filterDate, filterSchedulerId);
       refreshCounts();
     },
-  }), [activeTab, fetchAppointments, refreshCounts]);
+  }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId]);
+
+  /* Load schedulers once on mount for the filter dropdown */
+  useEffect(() => {
+    listAllSchedulers().then(setSchedulers).catch(() => {});
+  }, []);
 
   /* Load status counts once on mount */
   useEffect(() => {
@@ -136,17 +146,17 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     loadCounts();
   }, [refreshCounts]);
 
-  /* Fetch appointments whenever the active tab changes */
+  /* Fetch appointments whenever the active tab or active filters change */
   useEffect(() => {
-    fetchAppointments(activeTab);
-  }, [activeTab, fetchAppointments]);
+    fetchAppointments(activeTab, filterDate, filterSchedulerId);
+  }, [activeTab, filterDate, filterSchedulerId, fetchAppointments]);
 
   /* Load more (pagination) */
   const handleLoadMore = useCallback(async () => {
     const nextOffset = offset + PAGE_SIZE;
     setLoadingMore(true);
     try {
-      const data = await searchByStatus(activeTab, nextOffset, PAGE_SIZE);
+      const data = await searchByStatus(activeTab, nextOffset, PAGE_SIZE, { date: filterDate || null, schedulerId: filterSchedulerId || null });
       setAppointments((prev) => [...prev, ...(data || [])]);
       setHasMore((data?.length ?? 0) === PAGE_SIZE);
       setOffset(nextOffset);
@@ -155,7 +165,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     } finally {
       setLoadingMore(false);
     }
-  }, [activeTab, offset]);
+  }, [activeTab, offset, filterDate, filterSchedulerId]);
 
   /* Client-side search filter on patientIdentifier / name / email */
   const rows = useMemo(() => {
@@ -174,7 +184,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const handleTabChange = (key) => {
     if (key === activeTab) {
       // Same tab clicked — force refresh
-      fetchAppointments(key);
+      fetchAppointments(key, filterDate, filterSchedulerId);
       refreshCounts();
     } else {
       setActiveTab(key);
@@ -238,9 +248,63 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
+
+        {/* Date filter */}
+        <div className="flex items-center gap-1">
+          <div className="relative">
+            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-secondary-400 dark:text-neutral-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="pl-8 pr-3 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
+          {filterDate && (
+            <button
+              onClick={() => setFilterDate('')}
+              title="Clear date filter"
+              className="p-1 rounded text-secondary-400 dark:text-neutral-500 hover:text-secondary-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Scheduler filter */}
+        <div className="relative">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-secondary-400 dark:text-neutral-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+          <select
+            value={filterSchedulerId}
+            onChange={(e) => setFilterSchedulerId(e.target.value)}
+            className="pl-8 pr-6 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none max-w-[180px]"
+          >
+            <option value="">All Schedulers</option>
+            {schedulers.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Clear filters button — only when any filter active */}
+        {(filterDate || filterSchedulerId) && (
+          <button
+            onClick={() => { setFilterDate(''); setFilterSchedulerId(''); }}
+            className="px-2.5 py-1.5 text-xs bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-md text-error-600 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/40 transition-colors whitespace-nowrap"
+          >
+            Clear Filters
+          </button>
+        )}
+
         {/* Result count + refresh */}
         <button
-          onClick={() => { fetchAppointments(activeTab); refreshCounts(); }}
+          onClick={() => { fetchAppointments(activeTab, filterDate, filterSchedulerId); refreshCounts(); }}
           className="px-2.5 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-600 transition-colors"
         >
           Refresh
@@ -321,7 +385,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                     <p className="text-sm font-medium text-secondary-500 dark:text-neutral-400">No appointments found</p>
-                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">No {activeTab} appointments at the moment</p>
+                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">
+                      {filterDate || filterSchedulerId
+                        ? 'Try adjusting or clearing the active filters'
+                        : `No ${activeTab} appointments at the moment`}
+                    </p>
                   </td>
                 </tr>
               )}

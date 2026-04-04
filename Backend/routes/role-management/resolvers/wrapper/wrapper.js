@@ -1542,33 +1542,50 @@ const Mutation = {
           .throw();
       }
 
+      const allowBootstrapAdmin = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
+
+      // Check if new admin has 2FA enabled (bypass in bootstrap mode)
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 11: getUserConsentStateByEmail(newAdminUser)');
       const newAdminData = await db.getUserConsentStateByEmail(newAdminUser);
       if (!newAdminData?.allow_email_2fa) {
-        await db.setSystemAuditLog({
-          eventType: 'ADMIN_TRANSFER_FAILED',
-          actorId: oldAdminId,
-          actorType: 'Staff',
-          targetId: newAdminUserId,
-          action: 'INITIATE_ADMIN_TRANSFER',
-          details: JSON.stringify({
-            reason: 'Target user 2FA not enabled',
-            timestamp: new Date().toISOString(),
-          }),
-          changedBy: 'Medical',
-        });
+        if (allowBootstrapAdmin) {
+          logger.warn(`[BOOTSTRAP_BYPASS] Target user 2FA check bypassed for newAdminId=${newAdminUserId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
+          await db.setSystemAuditLog({
+            eventType: 'ADMIN_TRANSFER_BOOTSTRAP_BYPASS',
+            actorId: oldAdminId,
+            actorType: 'Staff',
+            targetId: newAdminUserId,
+            action: 'INITIATE_ADMIN_TRANSFER',
+            details: JSON.stringify({
+              reason: 'Bootstrap mode: Target user 2FA check bypassed (ALLOW_BOOTSTRAP_ADMIN=true)',
+              timestamp: new Date().toISOString(),
+            }),
+            changedBy: 'Medical',
+          });
+        } else {
+          await db.setSystemAuditLog({
+            eventType: 'ADMIN_TRANSFER_FAILED',
+            actorId: oldAdminId,
+            actorType: 'Staff',
+            targetId: newAdminUserId,
+            action: 'INITIATE_ADMIN_TRANSFER',
+            details: JSON.stringify({
+              reason: 'Target user 2FA not enabled',
+              timestamp: new Date().toISOString(),
+            }),
+            changedBy: 'Medical',
+          });
 
-        throwGraphQLError(res)
-          .message('Target user must have 2FA enabled before becoming admin.')
-          .status(400)
-          .throw();
+          throwGraphQLError(res)
+            .message('Target user must have 2FA enabled before becoming admin.')
+            .status(400)
+            .throw();
+        }
       }
 
-      // Check if current admin has 2FA enabled
+      // Check if current admin has 2FA enabled (bypass in bootstrap mode)
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 12: getUserConsentStateByEmail(oldAdminEmail)');
       const oldAdminData = await db.getUserConsentStateByEmail(oldAdminEmail);
-
-      const allowBootstrapAdmin = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
 
       if (!oldAdminData?.allow_email_2fa) {
         // Allow bypass if ALLOW_BOOTSTRAP_ADMIN is enabled (for initial admin bootstrap)

@@ -3,10 +3,11 @@ import { fetchStaffAccounts, initiateAdminTransfer, confirmAdminTransfer } from 
 
 /**
  * Admin Transfer Component
- * Two-step flow: initiate (select target + password) → confirm (verification token from email)
+ * Normal flow:    initiate (select target + password) → verify (email OTP) → success
+ * Bootstrap flow: initiate (select target + password) → bootstrap (direct confirm) → success
  */
 const AdminTransfer = () => {
-  const [step, setStep] = useState('initiate'); // 'initiate' | 'verify' | 'success'
+  const [step, setStep] = useState('initiate'); // 'initiate' | 'verify' | 'bootstrap' | 'success'
   const [staffList, setStaffList] = useState([]);
   const [isLoadingStaff, setIsLoadingStaff] = useState(true);
 
@@ -48,14 +49,36 @@ const AdminTransfer = () => {
     setIsInitiating(true);
     try {
       const result = await initiateAdminTransfer(selectedUserId, password);
-      if (result.ok && result.verificationRequired) {
+      if (result.ok && result.bootstrapMode) {
+        setPassword('');
+        setStep('bootstrap');
+      } else if (result.ok && result.verificationRequired) {
         setPassword('');
         setStep('verify');
+      } else if (result.ok) {
+        // Unexpected response shape — surface the server message
+        setInitiateError(result.message || 'Unexpected response from server.');
       }
     } catch (err) {
       setInitiateError(err.message || 'Failed to initiate transfer.');
     } finally {
       setIsInitiating(false);
+    }
+  };
+
+  const handleBootstrapConfirm = async () => {
+    setConfirmError(null);
+    setIsConfirming(true);
+    try {
+      const result = await confirmAdminTransfer('BOOTSTRAP_ADMIN_TRANSFER');
+      if (result.ok) {
+        setTransferResult(result);
+        setStep('success');
+      }
+    } catch (err) {
+      setConfirmError(err.message || 'Failed to confirm transfer.');
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -101,7 +124,7 @@ const AdminTransfer = () => {
             <p className="text-xs font-semibold text-error-700 dark:text-error-400">Irreversible Action</p>
             <p className="text-[11px] text-error-600 dark:text-error-300 mt-0.5">
               Transferring admin privileges cannot be undone. You will lose admin access permanently.
-              A verification code will be sent to your email.
+              A verification code will be sent to your email unless the system is in bootstrap mode.
             </p>
           </div>
         </div>
@@ -182,7 +205,70 @@ const AdminTransfer = () => {
         </form>
       )}
 
-      {/* ── Step 2: Verify ── */}
+      {/* ── Step 2 (Bootstrap): Direct confirm ── */}
+      {step === 'bootstrap' && (
+        <div className="space-y-4">
+          {/* Bootstrap mode banner */}
+          <div className="px-3.5 py-3 bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 rounded-lg">
+            <div className="flex items-start gap-2">
+              <svg className="w-4 h-4 text-warning-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="text-xs font-semibold text-warning-700 dark:text-warning-400">Bootstrap Mode Active</p>
+                <p className="text-[11px] text-warning-600 dark:text-warning-300 mt-0.5">
+                  The system is running in bootstrap mode. 2FA verification and email confirmation are bypassed.
+                  The transfer will complete immediately upon confirmation.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Target staff preview */}
+          {selectedStaff && (
+            <div className="px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700 rounded-lg">
+              <p className="text-[10px] font-medium text-secondary-400 dark:text-neutral-500 uppercase tracking-wide mb-1.5">Transferring to</p>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">
+                  {selectedStaff.name.split(' ').map((n) => n[0]).join('').substring(0, 2)}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-secondary-800 dark:text-white">{selectedStaff.name}</p>
+                  <p className="text-[10px] text-secondary-400 dark:text-neutral-500">{selectedStaff.email} · {selectedStaff.branch}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {confirmError && (
+            <div className="px-3 py-2 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
+              <p className="text-xs text-error-600 dark:text-error-400">{confirmError}</p>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={isConfirming}
+              className="px-4 py-2 text-sm font-medium text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-white transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleBootstrapConfirm}
+              disabled={isConfirming}
+              className="flex-1 px-4 py-2 text-sm font-medium bg-warning-500 text-white rounded-lg hover:bg-warning-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {isConfirming && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {isConfirming ? 'Confirming...' : 'Confirm Transfer'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 3: Verify (normal flow) ── */}
       {step === 'verify' && (
         <form onSubmit={handleConfirm} className="space-y-4">
           <div className="px-3.5 py-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg">
@@ -241,7 +327,7 @@ const AdminTransfer = () => {
         </form>
       )}
 
-      {/* ── Step 3: Success ── */}
+      {/* ── Step 4: Success ── */}
       {step === 'success' && (
         <div className="text-center py-6">
           <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center">
@@ -254,7 +340,7 @@ const AdminTransfer = () => {
             {transferResult?.message || 'Admin privileges have been transferred successfully.'}
           </p>
           <p className="text-[11px] text-secondary-400 dark:text-neutral-500">
-            You no longer have admin access. The page will redirect shortly.
+            You no longer have admin access. Please refresh the page.
           </p>
         </div>
       )}
