@@ -20,7 +20,7 @@ function ipRateLimiter(profileName="genericLimiter", route = "r") {
     if (ipBlocked) {
       
       const ttl = await getIPRateLimitTTL(ip, route);
-      delayRandom((ttl / 5 + 1 * 1000), ttl * 500); // add random delay based on remaining TTL to mitigate brute-force
+      delayRandom((ttl / 5 + 1) * 1000, ttl * 500);
       return res.status(429).json({
         error: "RATE_LIMITED",
         message: `Too many requests. Please try again in ${ttl} seconds.`,

@@ -70,7 +70,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
     const cooldownActive = await rateLimitEmailCooldown(email, portal, purpose, profile.emailCooldown_resetpw);
     if (cooldownActive) {
       const ttl = await rateLimitEmailCooldownTTL(email, portal, purpose);
-      delayRandom((ttl / 5 + 1 * 1000), ttl * 500); 
+      delayRandom((ttl / 5 + 1) * 1000, ttl * 500);
       return res.status(429).json({
         error: "EMAIL_COOLDOWN_ACTIVE",
         message: `Too many attempts. Please try again in ${ttl} seconds.`,
