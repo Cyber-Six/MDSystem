@@ -29,14 +29,6 @@ const Query = {
     return await Wrapper.Query._getUserAppointmentRecords(_, { userId, offset, limit }, { user, res });
   },
 
-  resolvePatientByIdentifier: async (_, { identifier, location }, { user, res }) => {
-    const permitted = await permit.isMedicalPermittedLocationBased(user.id, permit.permissions.appointment_allow_view_records, location);
-    if (!permitted) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    } // unreliable
-    return await Wrapper.Query._resolvePatientByIdentifier(_, { identifier }, { user, res });
-  },
-
   listAllOpenAppointments: async (_, { location, offset, limit }, { user, res }) => {
     const permitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, location);
     if (!permitted) {
