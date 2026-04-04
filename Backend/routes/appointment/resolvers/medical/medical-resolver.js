@@ -29,8 +29,8 @@ const Query = {
     return await Wrapper.Query._getUserAppointmentRecords(_, { userId, offset, limit }, { user, res });
   },
 
-  resolvePatientByIdentifier: async (_, { identifier }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records);
+  resolvePatientByIdentifier: async (_, { identifier, location }, { user, res }) => {
+    const permitted = await permit.isMedicalPermittedLocationBased(user.id, permit.permissions.appointment_allow_view_records, location);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     } // unreliable

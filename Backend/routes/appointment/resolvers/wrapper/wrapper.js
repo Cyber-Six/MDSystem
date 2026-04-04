@@ -284,18 +284,6 @@ const Query = {
     return result.rows[0].status;
   },
 
-  _resolvePatientByIdentifier: async (_, { identifier }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const result = await db.query(
-      `SELECT id FROM "UsersPersonal" WHERE identifier = $1 LIMIT 1;`,
-      [identifier]
-    );
-    if (result.rowCount === 0) return null;
-    return String(result.rows[0].id);
-  },
-
   _searchAppointmentStatuses: async (_, { status, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -705,8 +693,8 @@ const Mutation = {
 
       const result = await client.query(
         `INSERT INTO "slotScheduler"
-          (label, location, "patientType", "scheduleFlags", "morningAllowed", "afternoonAllowed", "whitelistOnly", "containsCustomDates", notes)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          (label, location, "patientType", "scheduleFlags", "morningAllowed", "afternoonAllowed", "whitelistOnly", "containsCustomDates", "purposeRequired", notes)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           RETURNING *;`,
         [
           input.label,
@@ -717,6 +705,7 @@ const Mutation = {
           input.afternoonAllowed,
           input.whitelistOnly || false,
           input.slotCustomDates.length > 0,
+          input.purposeRequired || false,
           input.notes || null,
         ]
       );
@@ -802,6 +791,11 @@ const Mutation = {
     if (input.isActive !== undefined && input.isActive !== null) {
       fields.push(`"isActive" = $${idx++}`);
       values.push(input.isActive);
+    }
+
+    if (input.purposeRequired !== undefined && input.purposeRequired !== null) {
+      fields.push(`"purposeRequired" = $${idx++}`);
+      values.push(input.purposeRequired);
     }
 
     if (input.notes !== undefined) {

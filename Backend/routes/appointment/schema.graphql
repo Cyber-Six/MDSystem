@@ -39,6 +39,7 @@ type SlotScheduler {
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
+  purposeRequired: Boolean
   isActive: Boolean!
   containsCustomDates: Boolean!
   whitelistOnly: Boolean
@@ -68,6 +69,7 @@ input SlotSchedulerInput {
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
+  purposeRequired: Boolean
   slotCustomDates: [Date!]!
   whiteLists: [ID!]!
   whitelistOnly: Boolean!
@@ -81,6 +83,7 @@ input SlotSchedulerUpdateInput {
   morningAllowed: Int
   afternoonAllowed: Int
   notes: String
+  purposeRequired: Boolean
   isActive: Boolean
   whitelistOnly: Boolean
 }
@@ -200,7 +203,6 @@ type Query {
   getUserAppointmentStatus(userId: ID!): SCHEDULING_STATUS
 
   getUserAppointmentRecords(userId: ID!, offset: Int, limit: Int): [patientSlot!]
-  resolvePatientByIdentifier(identifier: Int!): ID
 
   listAllOpenAppointments(location: LOCATION_DESIGNATION, offset: Int, limit: Int): [SlotScheduler!]
   listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
