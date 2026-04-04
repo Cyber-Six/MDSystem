@@ -174,21 +174,21 @@ const PatientLookup = () => {
     <div className="space-y-3">
       {/* ── Search bar ──────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
-        <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-3">
+        <h3 className="text-base font-semibold text-secondary-800 dark:text-white mb-3">
           Patient Appointment Lookup
         </h3>
 
         {selectedPatient ? (
           /* Selected patient chip */
           <div className="flex items-center gap-3 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-md">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
               {selectedPatient.first_name?.[0] || '?'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-secondary-900 dark:text-white truncate">
+              <p className="text-base font-semibold text-secondary-900 dark:text-white truncate">
                 {formatPatientName(selectedPatient)}
               </p>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">
+              <p className="text-sm text-secondary-500 dark:text-neutral-400">
                 {selectedPatient.identifier ? `ID: ${selectedPatient.identifier}` : ''}
                 {selectedPatient.identifier && selectedPatient.profile_type ? ' · ' : ''}
                 {selectedPatient.profile_type || ''}
@@ -222,7 +222,7 @@ const PatientLookup = () => {
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search by name, student/employee ID, or email…"
                 autoComplete="off"
-                className="flex-1 bg-transparent text-sm text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none"
+                className="flex-1 bg-transparent text-base text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none"
               />
               {searchInput && (
                 <button
@@ -238,39 +238,39 @@ const PatientLookup = () => {
 
             {/* Hint */}
             {searchInput.trim().length > 0 && searchInput.trim().length < 2 && (
-              <p className="mt-1.5 text-xs text-secondary-400 dark:text-neutral-500">
+              <p className="mt-1.5 text-sm text-secondary-400 dark:text-neutral-500">
                 Type at least 2 characters to search…
               </p>
             )}
 
             {/* Search error */}
             {searchError && (
-              <p className="mt-1.5 text-xs text-error-600 dark:text-error-400">{searchError}</p>
+              <p className="mt-1.5 text-sm text-error-600 dark:text-error-400">{searchError}</p>
             )}
 
             {/* Results picker */}
             {searchFired && !isSearching && searchResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg z-10 max-h-96 overflow-y-auto">
                 {searchResults.map((patient) => (
                   <button
                     key={patient.id}
                     onClick={() => handleSelectPatient(patient)}
                     className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors text-left border-b border-neutral-100 dark:border-neutral-700/60 last:border-b-0"
                   >
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                       {patient.first_name?.[0] || '?'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">
+                      <p className="text-base font-medium text-secondary-800 dark:text-white truncate">
                         {formatPatientName(patient)}
                       </p>
-                      <p className="text-xs text-secondary-400 dark:text-neutral-500 truncate">
+                      <p className="text-sm text-secondary-400 dark:text-neutral-500 truncate">
                         {patient.identifier ? `ID: ${patient.identifier}` : 'No ID'}
                         {' · '}
                         {getProfileLabel(patient)}
                       </p>
                     </div>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
                       patient.profile_type === 'Student'
                         ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                         : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
@@ -284,7 +284,7 @@ const PatientLookup = () => {
 
             {/* No results */}
             {searchFired && !isSearching && searchResults.length === 0 && !searchError && searchInput.trim().length >= 2 && (
-              <p className="mt-1.5 text-xs text-secondary-400 dark:text-neutral-500">
+              <p className="mt-1.5 text-sm text-secondary-400 dark:text-neutral-500">
                 No patients found for "{searchInput.trim()}"
               </p>
             )}
@@ -292,7 +292,7 @@ const PatientLookup = () => {
         )}
 
         {recordsError && (
-          <p className="mt-2 text-xs text-error-600 dark:text-error-400">{recordsError}</p>
+          <p className="mt-2 text-sm text-error-600 dark:text-error-400">{recordsError}</p>
         )}
       </div>
 
@@ -308,8 +308,8 @@ const PatientLookup = () => {
           {/* Patient summary header */}
           <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
             <div>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">Patient</p>
-              <p className="text-sm font-semibold text-secondary-800 dark:text-white">
+              <p className="text-sm text-secondary-500 dark:text-neutral-400">Patient</p>
+              <p className="text-base font-semibold text-secondary-800 dark:text-white">
                 {formatPatientName(selectedPatient)}
                 {selectedPatient.identifier ? (
                   <span className="ml-2 font-normal text-secondary-500 dark:text-neutral-400 font-mono">
@@ -319,13 +319,13 @@ const PatientLookup = () => {
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-0.5">Latest Status</p>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-0.5">Latest Status</p>
               {currentStatus ? (
-                <span className={`px-2.5 py-1 text-xs font-medium rounded-md ${STATUS_COLORS[currentStatus] || 'bg-neutral-100 text-neutral-600'}`}>
+                <span className={`px-2.5 py-1 text-sm font-medium rounded-md ${STATUS_COLORS[currentStatus] || 'bg-neutral-100 text-neutral-600'}`}>
                   {currentStatus}
                 </span>
               ) : (
-                <span className="text-xs text-secondary-400 dark:text-neutral-500">No appointments</span>
+                <span className="text-sm text-secondary-400 dark:text-neutral-500">No appointments</span>
               )}
             </div>
           </div>
@@ -333,7 +333,7 @@ const PatientLookup = () => {
           {/* Records list */}
           <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60">
             {records.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-secondary-400 dark:text-neutral-500">
+              <div className="px-4 py-6 text-center text-base text-secondary-400 dark:text-neutral-500">
                 No appointment records found for this patient.
               </div>
             ) : (
@@ -343,30 +343,30 @@ const PatientLookup = () => {
                   onClick={() => setSelectedRecord(rec)}
                   className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-neutral-50 dark:hover:bg-neutral-700/40 transition-colors group"
                 >
-                  <div className="mt-0.5 w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-700 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/30 text-[10px] font-bold text-secondary-500 dark:text-neutral-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                  <div className="mt-0.5 w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-700 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/30 text-xs font-bold text-secondary-500 dark:text-neutral-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                     {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-secondary-800 dark:text-white">Appointment #{rec.id}</span>
-                      <span className="text-[10px] text-secondary-400 dark:text-neutral-500">{rec.session} session</span>
+                      <span className="text-base font-medium text-secondary-800 dark:text-white">Appointment #{rec.id}</span>
+                      <span className="text-xs text-secondary-400 dark:text-neutral-500">{rec.session} session</span>
                       {rec.created_at && (
-                        <span className="text-[10px] text-secondary-400 dark:text-neutral-500">
+                        <span className="text-xs text-secondary-400 dark:text-neutral-500">
                           {new Date(rec.created_at).toLocaleDateString()}
                         </span>
                       )}
                     </div>
                     {rec.notes && (
-                      <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5 truncate">{rec.notes}</p>
+                      <p className="text-sm text-secondary-500 dark:text-neutral-400 mt-0.5 truncate">{rec.notes}</p>
                     )}
                     {rec.requirements?.length > 0 && (
-                      <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-0.5">
+                      <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">
                         {rec.requirements.length} requirement{rec.requirements.length !== 1 ? 's' : ''} submitted
                       </p>
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`px-2 py-0.5 text-[10px] font-medium rounded whitespace-nowrap ${STATUS_COLORS[rec.status] || 'bg-neutral-100 text-neutral-600'}`}>
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${STATUS_COLORS[rec.status] || 'bg-neutral-100 text-neutral-600'}`}>
                       {rec.status}
                     </span>
                     <svg className="w-3.5 h-3.5 text-neutral-300 dark:text-neutral-600 group-hover:text-primary-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -384,7 +384,7 @@ const PatientLookup = () => {
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="px-4 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors disabled:opacity-50"
+                className="px-4 py-1.5 text-sm font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors disabled:opacity-50"
               >
                 {loadingMore ? 'Loading…' : 'Load more'}
               </button>

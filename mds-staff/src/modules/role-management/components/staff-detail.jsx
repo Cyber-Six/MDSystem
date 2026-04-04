@@ -91,7 +91,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-secondary-500 dark:text-neutral-400 truncate">
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
                 {isPending ? 'No role assigned yet' : (role || 'No role')} · {staff.email}
               </p>
             </div>
@@ -131,26 +131,26 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
               {/* Account Details */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
                 <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-                  <h4 className="text-[10px] font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Details</h4>
+                  <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Details</h4>
                 </div>
                 <div className="p-3 grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Full Name</p>
+                    <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Full Name</p>
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.name}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Email</p>
+                    <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Email</p>
                     <p className="text-xs font-medium text-secondary-900 dark:text-white break-all">{staff.email}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Staff ID</p>
+                    <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Staff ID</p>
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.id}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Branch</p>
+                    <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Branch</p>
                     {isAdmin ? (
                       <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-medium text-secondary-900 dark:text-white">{branch === 'QuezonCity' ? 'Quezon City' : branch}</p>
+                        <p className="text-xs font-medium text-secondary-900 dark:text-white">{branch === 'QuezonCity' ? 'Quezon City' : branch === 'Both' ? 'MLA & QC (Both)' : branch}</p>
                         <span className="text-[8px] px-1 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 rounded font-medium leading-none">Locked</span>
                       </div>
                     ) : (
@@ -161,12 +161,12 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                       >
                         <option value="Manila">Manila</option>
                         <option value="QuezonCity">Quezon City</option>
-                        <option value="Both">Both</option>
+                        <option value="Both">MLA & QC (Both)</option>
                       </select>
                     )}
                   </div>
                   <div>
-                    <p className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Last Login</p>
+                    <p className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">Last Login</p>
                     <p className="text-xs font-medium text-secondary-900 dark:text-white">{staff.lastLogin || 'Never'}</p>
                   </div>
                 </div>
@@ -175,10 +175,10 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
               {/* Role Assignment */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
                 <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-                  <h4 className="text-[10px] font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Role Assignment</h4>
+                  <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Role Assignment</h4>
                 </div>
                 <div className="p-3">
-                  <label className="text-[9px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1 block">Assigned Role</label>
+                  <label className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1 block">Assigned Role</label>
                   <select
                     value={role}
                     onChange={(e) => handleRoleChange(e.target.value)}
@@ -191,11 +191,11 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                     ))}
                   </select>
                   {isAdmin ? (
-                    <p className="text-[10px] text-warning-600 dark:text-warning-400 mt-1">
+                    <p className="text-xs text-warning-600 dark:text-warning-400 mt-1">
                       Admin role cannot be changed directly. Use Admin Transfer instead.
                     </p>
                   ) : currentTemplate ? (
-                    <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">
+                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">
                       Template with {currentTemplate.permissionCount} permissions
                     </p>
                   ) : templates.length === 0 ? (
@@ -209,7 +209,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
               {/* Account Status */}
               <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
                 <div className="bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700">
-                  <h4 className="text-[10px] font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Status</h4>
+                  <h4 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Account Status</h4>
                 </div>
                 <div className="p-3">
                   {isPending ? (
@@ -221,14 +221,14 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
                       <div className="w-2 h-2 rounded-full bg-success-500 flex-shrink-0" />
                       <div>
                         <p className="text-xs font-medium text-secondary-800 dark:text-white">Admin Account — Always Active</p>
-                        <p className="text-[10px] text-secondary-400 dark:text-neutral-500">Admin account cannot be deactivated. Use Admin Transfer to change admin control.</p>
+                        <p className="text-xs text-secondary-400 dark:text-neutral-500">Admin account cannot be deactivated. Use Admin Transfer to change admin control.</p>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-secondary-800 dark:text-white">Account Active</p>
-                        <p className="text-[10px] text-secondary-400 dark:text-neutral-500">Suspended accounts cannot access the staff portal</p>
+                        <p className="text-xs text-secondary-400 dark:text-neutral-500">Suspended accounts cannot access the staff portal</p>
                       </div>
                       <button
                         onClick={() => { setStatus(status === 'Active' ? 'Suspended' : 'Active'); setHasChanges(true); }}
@@ -258,7 +258,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
           <div className="px-5 py-2.5 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800/50 rounded-b-xl">
             <div className="flex-1 min-w-0">
               {saveError && (
-                <p className="text-[10px] text-error-600 dark:text-error-400 truncate">{saveError}</p>
+                <p className="text-xs text-error-600 dark:text-error-400 truncate">{saveError}</p>
               )}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">

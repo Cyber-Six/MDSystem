@@ -117,10 +117,10 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
         {/* Header */}
         <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-secondary-900 dark:text-white">
+            <h2 className="text-xl font-bold text-secondary-900 dark:text-white">
               {isEditing ? 'Edit Scheduler' : 'New Scheduler'}
             </h2>
-            <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
+            <p className="text-sm text-secondary-500 dark:text-neutral-400 mt-0.5">
               {isEditing ? 'Modify scheduler settings and requirements' : 'Create a new appointment scheduler'}
             </p>
           </div>
@@ -134,7 +134,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* Inline error */}
           {modalError && (
-            <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-xs rounded-lg flex justify-between items-center">
+            <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-sm rounded-lg flex justify-between items-center">
               <span>{modalError}</span>
               <button type="button" onClick={() => setModalError('')} className="ml-2 font-bold">&times;</button>
             </div>
@@ -142,27 +142,27 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
 
           {/* Label */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Label</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Label</label>
             <input
               type="text"
               value={formData.label}
               onChange={handleChange('label')}
               placeholder="e.g., Medical Consultation"
               required
-              className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3 py-2 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
 
           {/* Location */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Location</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Location</label>
             <div className="flex gap-2">
               {LOCATIONS.map((loc) => (
                 <button
                   key={loc}
                   type="button"
                   onClick={() => setFormData((prev) => ({ ...prev, location: loc }))}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     formData.location === loc
                       ? 'bg-primary-500 text-white'
                       : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
@@ -176,7 +176,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
 
           {/* Visible To */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Visible To</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Visible To</label>
             <div className="flex gap-2">
               {[
                 { label: 'Both', value: null },
@@ -187,7 +187,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
                   key={label}
                   type="button"
                   onClick={() => setFormData((prev) => ({ ...prev, patientType: value }))}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     formData.patientType === value
                       ? 'bg-accent-500 text-white'
                       : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
@@ -201,14 +201,14 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
 
           {/* Schedule Days */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Schedule Days</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Schedule Days</label>
             <div className="flex flex-wrap gap-1.5">
               {DAYS.map((day) => (
                 <button
                   key={day}
                   type="button"
                   onClick={() => toggleDay(day)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-2.5 py-1 text-sm font-medium rounded-md transition-colors ${
                     formData.schedulePerWeek.includes(day)
                       ? 'bg-accent-500 text-white'
                       : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600'
@@ -223,36 +223,36 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
           {/* Slot Counts */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Morning Slots</label>
+              <label className="text-xs text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Morning Slots</label>
               <input
                 type="text"
                 inputMode="numeric"
                 value={formData.morningAllowed}
                 onChange={handleChange('morningAllowed')}
-                className="w-full px-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="w-full px-3 py-1.5 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
             <div>
-              <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Afternoon Slots</label>
+              <label className="text-xs text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Afternoon Slots</label>
               <input
                 type="text"
                 inputMode="numeric"
                 value={formData.afternoonAllowed}
                 onChange={handleChange('afternoonAllowed')}
-                className="w-full px-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="w-full px-3 py-1.5 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
             </div>
           </div>
 
           {/* Notes */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Notes (Optional)</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Notes (Optional)</label>
             <textarea
               value={formData.notes}
               onChange={handleChange('notes')}
               rows={2}
               placeholder="Additional details..."
-              className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
+              className="w-full px-3 py-2 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
             />
           </div>
 
@@ -265,21 +265,21 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
                 onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
                 className="w-4 h-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500"
               />
-              <span className="text-sm text-secondary-700 dark:text-neutral-300">Active</span>
+              <span className="text-base text-secondary-700 dark:text-neutral-300">Active</span>
             </label>
           )}
 
           {/* ── Requirements ───────────────────────────────────────────── */}
           <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
             <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Requirements</h3>
-              <span className="text-[10px] text-secondary-400 dark:text-neutral-500">{requirements.length} items</span>
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Requirements</h3>
+              <span className="text-xs text-secondary-400 dark:text-neutral-500">{requirements.length} items</span>
             </div>
 
             {/* List */}
             <div className="divide-y divide-neutral-100 dark:divide-neutral-700">
               {loadingReqs ? (
-                <div className="px-4 py-3 text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
+                <div className="px-4 py-3 text-sm text-secondary-400 dark:text-neutral-500">Loading...</div>
               ) : requirements.length > 0 ? (
                 requirements.map((req) => (
                   <div key={req.id} className="px-4 py-2 flex items-center justify-between gap-2">
@@ -287,7 +287,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
                       <svg className="w-4 h-4 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      <span className="text-sm text-secondary-700 dark:text-neutral-300 truncate">{req.label}</span>
+                      <span className="text-base text-secondary-700 dark:text-neutral-300 truncate">{req.label}</span>
                     </div>
                     <button
                       type="button"
@@ -302,7 +302,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
                   </div>
                 ))
               ) : (
-                <div className="px-4 py-3 text-xs text-secondary-400 dark:text-neutral-500">No requirements yet</div>
+                <div className="px-4 py-3 text-sm text-secondary-400 dark:text-neutral-500">No requirements yet</div>
               )}
             </div>
 
@@ -314,13 +314,13 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
                 onChange={(e) => setNewReqLabel(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddRequirement(); } }}
                 placeholder="e.g., Certificate of Employment"
-                className="flex-1 px-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="flex-1 px-3 py-1.5 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
               <button
                 type="button"
                 onClick={handleAddRequirement}
                 disabled={!newReqLabel.trim()}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -333,13 +333,13 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
           {/* Delete Confirmation Panel */}
           {showDeleteConfirm && (
             <div className="rounded-lg border border-error-200 dark:border-error-800 bg-error-50 dark:bg-error-900/20 p-4">
-              <p className="text-sm font-semibold text-error-700 dark:text-error-400 mb-1">Delete this scheduler?</p>
-              <p className="text-xs text-error-600 dark:text-error-500 mb-3">This action cannot be undone. Any active appointments under this scheduler will be affected.</p>
+              <p className="text-base font-semibold text-error-700 dark:text-error-400 mb-1">Delete this scheduler?</p>
+              <p className="text-sm text-error-600 dark:text-error-500 mb-3">This action cannot be undone. Any active appointments under this scheduler will be affected.</p>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
                 >
                   Cancel
                 </button>
@@ -355,7 +355,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
                       setShowDeleteConfirm(false);
                     }
                   }}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded-md transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium text-white bg-error-500 hover:bg-error-600 rounded-md transition-colors"
                 >
                   Confirm Delete
                 </button>
@@ -369,7 +369,7 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
-                className="px-4 py-2 text-sm font-medium text-error-600 dark:text-error-400 bg-error-50 dark:bg-error-900/20 hover:bg-error-100 dark:hover:bg-error-900/30 rounded-md transition-colors"
+                className="px-4 py-2 text-base font-medium text-error-600 dark:text-error-400 bg-error-50 dark:bg-error-900/20 hover:bg-error-100 dark:hover:bg-error-900/30 rounded-md transition-colors"
               >
                 Delete
               </button>
@@ -378,14 +378,14 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
+              className="px-4 py-2 text-base font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-base font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors disabled:opacity-50"
             >
               {saving ? 'Saving...' : isEditing ? 'Update' : 'Create'}
             </button>

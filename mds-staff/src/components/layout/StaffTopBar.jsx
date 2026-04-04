@@ -5,6 +5,7 @@ import { useStaffNotifications } from '../../modules/notification/notification-c
 import { useSettings } from '../../context/settings-context';
 import { usePatientTabs } from '../../context/patient-tabs-context';
 import { useStaffProfile, clearStaffProfileCache } from '../../hooks/use-staff-profile';
+import { usePermissions } from '../../context/permissions-context';
 
 function formatRelativeTime(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -30,6 +31,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
   const { notifications, unreadCount, markAsRead, markAllAsRead, inventoryAlerts, markInventoryAlertsAsSeen, clearNotificationsByType } = useStaffNotifications();
   const { settings, updateSettings } = useSettings();
   const { profile } = useStaffProfile();
+  const { isAdmin } = usePermissions();
   const { clearTabs } = usePatientTabs();
   const { themeMode } = settings;
   const displayUnreadCount = settings.showBadges ? unreadCount : 0;
@@ -527,27 +529,25 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
           {/* User Dropdown */}
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700 py-1 z-50">
-              <div className="px-3 py-3 border-b border-neutral-200 dark:border-neutral-700 space-y-0.5">
+              <div className="px-3 py-3 border-b border-neutral-200 dark:border-neutral-700 space-y-0.5 min-w-0">
                 {profile?.name && (
-                  <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate" title={profile.name}>
+                  <p className="text-xs font-semibold text-secondary-800 dark:text-white break-all" title={profile.name}>
                     {profile.name}
                   </p>
                 )}
                 {profile?.email && (
-                  <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate" title={profile.email}>
+                  <p className="text-[11px] text-secondary-500 dark:text-neutral-400 break-all" title={profile.email}>
                     {profile.email}
                   </p>
                 )}
-                {(profile?.role || profile?.branch) && (
+                {(isAdmin || profile?.role || profile?.branch) && (
                   <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    {profile?.role && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
-                        {profile.role}
-                      </span>
-                    )}
+                    <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 max-w-[10rem] truncate" title={isAdmin ? 'Admin' : (profile?.role ?? '')}>
+                      {isAdmin ? 'Admin' : (profile?.role ?? '—')}
+                    </span>
                     {profile?.branch && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">
-                        {profile.branch}
+                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">
+                        {profile.branch === 'Both' ? 'MLA & QC Branch' : profile.branch + ' Branch'}
                       </span>
                     )}
                   </div>

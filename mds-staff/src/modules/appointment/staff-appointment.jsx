@@ -172,12 +172,12 @@ const StaffAppointment = () => {
     <div className="space-y-1">
       {/* Feedback banners */}
       {error && (
-        <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-xs rounded-lg">
+        <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-sm rounded-lg">
           {error}
         </div>
       )}
       {successMsg && (
-        <div className="px-3 py-2 bg-success-50 dark:bg-success-900/30 border border-success-200 dark:border-success-800 text-success-700 dark:text-success-400 text-xs rounded-lg">
+        <div className="px-3 py-2 bg-success-50 dark:bg-success-900/30 border border-success-200 dark:border-success-800 text-success-700 dark:text-success-400 text-sm rounded-lg">
           {successMsg}
         </div>
       )}
@@ -191,8 +191,8 @@ const StaffAppointment = () => {
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-neutral-900 dark:text-white">{socketToast.title}</p>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 leading-snug">{socketToast.message}</p>
+            <p className="text-sm font-semibold text-neutral-900 dark:text-white">{socketToast.title}</p>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5 leading-snug">{socketToast.message}</p>
           </div>
           <button
             onClick={() => setSocketToast(null)}
@@ -209,15 +209,15 @@ const StaffAppointment = () => {
       {/* Page Header + Section Switcher */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Appointments</h1>
-          <p className="text-[11px] text-secondary-500 dark:text-neutral-400">Manage appointment queue and slot availability</p>
+          <h1 className="text-xl font-bold text-secondary-800 dark:text-white leading-none m-0">Appointments</h1>
+          <p className="text-xs text-secondary-500 dark:text-neutral-400">Manage appointment queue and slot availability</p>
         </div>
         <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
         {sections.map((section) => (
           <button
             key={section.key}
             onClick={() => setActiveSection(section.key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
               activeSection === section.key
                 ? 'bg-primary-500 text-white shadow-sm'
                 : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
