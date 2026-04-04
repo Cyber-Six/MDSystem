@@ -208,10 +208,9 @@ function notificationTemplate({ title, message, notes, ctaText, ctaLink }) {
 
 function passwordResetTemplate(sessionToken, portal) {
   const resetLink = `https://${portal}.${RESET_PASSWORD_DOMAIN_ROUTE}/${sessionToken}`;
-  logger.debug(`Generated password reset link for portal ${portal}: ${resetLink}`);
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-      <h2 style="color:#2F4F4F;">MDSystem Password Nigger</h2>
+      <h2 style="color:#2F4F4F;">MDSystem Password Reset</h2>
       <p>You requested to reset your MDSystem account password.</p>
       <p>Click the button below to reset your password:</p>
 
