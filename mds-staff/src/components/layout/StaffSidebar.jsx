@@ -4,6 +4,7 @@ import logo from '@core/assets/MDSystem.png';
 import { useHealthChatBadge } from '../../modules/health-chat/hooks/use-health-chat-badge';
 import { usePermissions } from '../../context/permissions-context';
 import { useSettings } from '../../context/settings-context';
+import { useStaffProfile } from '../../hooks/use-staff-profile';
 
 /**
  * Staff Sidebar Navigation Component
@@ -15,6 +16,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const { hasPermission, isAdmin, isLoading } = usePermissions();
   const { settings } = useSettings();
   const showBadges = settings.showBadges;
+  const { profile } = useStaffProfile();
 
   const allNavItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
@@ -183,15 +185,15 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
             isExpanded ? '' : 'justify-center'
           }`}>
             <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
-              DR
+              {profile?.firstName?.[0] ?? profile?.email?.[0]?.toUpperCase() ?? 'S'}
             </div>
             {isExpanded && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-secondary-800 dark:text-white truncate">
-                  Dr. Staff
+                <p className="text-xs font-medium text-secondary-800 dark:text-white truncate" title={profile?.email ?? ''}>
+                  {profile?.email ?? '—'}
                 </p>
                 <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
-                  Medical Doctor
+                  {profile?.role ?? '—'}
                 </p>
               </div>
             )}
