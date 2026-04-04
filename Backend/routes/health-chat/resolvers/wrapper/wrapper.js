@@ -1032,6 +1032,20 @@ const Mutation = {
 
     const { chatId, notes } = input;
 
+    const chatResult = await db.query(
+      `SELECT "medicalId", "patientId" FROM "HealthChat" WHERE id = $1`,
+      [chatId]
+    );
+
+    if (chatResult.rowCount === 0) {
+      throwGraphQLError(res).message("Chat not found").status(404).throw();
+    }
+    
+    const { medicalId, patientId } = chatResult.rows[0];
+    if (medicalId && Number(medicalId) !== Number(user.id)) {
+      throwGraphQLError(res).message("Unauthorized to close this ticket").status(403).throw();
+    }
+
     const client = await pool.connect();
     let chat;
     try {
@@ -1105,7 +1119,7 @@ const Mutation = {
 
     // Verify ticket exists and is archived (Closed or Expired)
     const ticketCheck = await db.query(
-      `SELECT status FROM "HealthChat" WHERE id = $1`,
+      `SELECT status, "medicalId" FROM "HealthChat" WHERE id = $1`,
       [chatId]
     );
 
@@ -1113,10 +1127,17 @@ const Mutation = {
       throwGraphQLError(res).message("Ticket not found").status(404).throw();
     }
 
-    const { status } = ticketCheck.rows[0];
+    const { status, medicalId } = ticketCheck.rows[0];
     if (!['Closed', 'Expired'].includes(status)) {
       throwGraphQLError(res).message("Only archived tickets (Closed or Expired) can be deleted").status(400).throw();
     }
+
+    if (medicalId && Number(medicalId) !== Number(user.id)) {
+      const isAdmin = await isMedicalAdmin(user.id);
+      if (!isAdmin) {
+        throwGraphQLError(res).message("Unauthorized to delete this ticket").status(403).throw();
+      }
+    } // MAKE SURE ONLY THE ASSIGNED STAFF OR ADMINS CAN DELETE
 
     const client = await pool.connect();
     try {
