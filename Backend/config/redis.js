@@ -150,7 +150,8 @@ async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
 async function rateLimitIPCount(ip, route = "") {
   if (!client) throw new Error("Redis client not initialized");
   const key = `rl:${route}:ip:${ip}`;
-  return await client.get(key);
+  const val = await client.get(key);
+  return val ? parseInt(val, 10) : 0;
 }
 
 async function getIPRateLimitTTL(ip, route = "") {
