@@ -246,6 +246,9 @@ const AvailabilityManager = () => {
         afternoonAllowed: afternoon,
       }]);
       await loadCustomDates(activeScheduler.id);
+      // Sync containsCustomDates flag locally
+      setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: true } : prev);
+      setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: true } : s));
       // Now load the day data
       const data = await getScheduleAvailability(activeScheduler.id, dateStr);
       setDayOverrideData(data);
@@ -264,7 +267,11 @@ const AvailabilityManager = () => {
     try {
       const normalized = normalizeDate(dateStr);
       await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
-      await loadCustomDates(activeScheduler.id);
+      const remaining = await listCustomDates(activeScheduler.id, 0, 1);
+      const stillHas = (remaining?.length || 0) > 0;
+      setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
+      setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: stillHas } : prev);
+      setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: stillHas } : s));
       setDayOverrideData(null);
       // Refresh month availability
       if (currentMonthRange) {
@@ -386,6 +393,9 @@ const AvailabilityManager = () => {
         setSaving(true);
         await setCustomDatesAPI(activeScheduler.id, [dateEntry]);
         await loadCustomDates(activeScheduler.id);
+        // Sync containsCustomDates flag locally
+        setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: true } : prev);
+        setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: true } : s));
       } catch (err) {
         setError(err.message || 'Failed to add custom date');
       } finally {
@@ -414,7 +424,11 @@ const AvailabilityManager = () => {
       try {
         setSaving(true);
         await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
-        await loadCustomDates(activeScheduler.id);
+        const remaining = await listCustomDates(activeScheduler.id, 0, 1);
+        const stillHas = (remaining?.length || 0) > 0;
+        setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
+        setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: stillHas } : prev);
+        setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: stillHas } : s));
       } catch (err) {
         setError(err.message || 'Failed to remove custom date');
       } finally {
@@ -1083,7 +1097,7 @@ const AvailabilityManager = () => {
                       />
                       <div>
                         <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Active</p>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Accepting appointments</p>
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Open and accepting appointments</p>
                       </div>
                     </label>
                     <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
@@ -1095,7 +1109,7 @@ const AvailabilityManager = () => {
                       />
                       <div>
                         <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Whitelist Only</p>
-                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Only whitelisted patients</p>
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Only whitelisted can see this scheduler</p>
                       </div>
                     </label>
                     {/* Manage Whitelist Button */}
