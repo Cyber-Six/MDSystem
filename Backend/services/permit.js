@@ -36,6 +36,7 @@ const permissions = {
   inventory_allow_edit: "ALLOW_TO_EDIT_INVENTORY",
   inventory_allow_manage_requests: "ALLOW_TO_MANAGE_MEDICINE_REQUESTS",
   inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",
+  inventory_allow_configure: "ALLOW_TO_CONFIGURE_INVENTORY",
 
   health_chat_allow_access: "ALLOW_TO_ACCESS_HEALTH_CHAT",
 

@@ -5,31 +5,31 @@ const permit = require("../../../../../services/permit.js");
 const logger = require("../../../../../utils/logger.js");
 
 const Query = {
-  getAvailableMedicine: async (_, args, { user, res }) => {
+  getAvailableMedicine: async (_, { location, offset, limit }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
     const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_prescribe);
     if (!permitted) {
       logger.warn("Unauthorized prescription view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getAvailableMedicine(_, args, { user, res });
+    return await Wrapper.Query._getAvailableMedicine(_, { location, offset, limit }, { user, res });
   },
 
-  getPatientPrescriptions: async (_, args, { user, res }) => {
+  getPatientPrescriptions: async (_, { patientId, offset, limit }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.inventory_allow_prescribe, args.patientId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.inventory_allow_prescribe, patientId, false);
     if (!isPermitted) {
       logger.warn("Unauthorized prescription view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getPatientPrescriptions(_, args, { user, res });
+    return await Wrapper.Query._getPatientPrescriptions(_, { patientId, offset, limit }, { user, res });
   },
 };
 
 const Mutation = {
   issuePrescription: async (_, { input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermittedPatientBased (user.id, permit.permissions.inventory_allow_prescribe, input.patientId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased (user.id, permit.permissions.inventory_allow_prescribe, input.patientId, false);
     if (!isPermitted) {
       logger.warn("Unauthorized prescription issue attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

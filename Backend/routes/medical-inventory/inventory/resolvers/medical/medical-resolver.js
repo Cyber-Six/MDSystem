@@ -50,9 +50,9 @@ const Query = {
 const Mutation = {
   createMedicalItems: async (_, { input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_configure);
     if (!permitted) {
-      logger.warn("Unauthorized inventory edit attempt by staff " + user.id);
+      logger.warn("Unauthorized inventory configure attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Mutation._createMedicalItems(_, { input }, { user, res });
@@ -60,9 +60,9 @@ const Mutation = {
 
   updateMedicalItems: async (_, { id, input }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_configure);
     if (!permitted) {
-      logger.warn("Unauthorized inventory edit attempt by staff " + user.id);
+      logger.warn("Unauthorized inventory configure attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Mutation._updateMedicalItems(_, { id, input }, { user, res });
@@ -70,9 +70,9 @@ const Mutation = {
 
   deleteMedicalItems: async (_, { id }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_edit);
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_configure);
     if (!permitted) {
-      logger.warn("Unauthorized inventory delete attempt by staff " + user.id);
+      logger.warn("Unauthorized inventory configure attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Mutation._deleteMedicalItems(_, { id }, { user, res });

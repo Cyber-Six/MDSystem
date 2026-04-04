@@ -97,4 +97,14 @@ async function validateBatchesWithQuantity(items, location, res) {
   }
 }
 
-module.exports = { hasActiveRequest, validateBatchAvailable, validateBatchesAvailable, validateBatchesWithQuantity };
+async function getPatientIdByRequestId(requestId) {
+  const result = await db.query(
+    'SELECT "patientId" FROM "MedicineRequestLog" WHERE id = $1',
+    [requestId]
+  );
+  return result.rows[0]?.patientId ?? null;
+}
+
+module.exports = { hasActiveRequest, validateBatchAvailable,
+   validateBatchesAvailable, validateBatchesWithQuantity, getPatientIdByRequestId };
+

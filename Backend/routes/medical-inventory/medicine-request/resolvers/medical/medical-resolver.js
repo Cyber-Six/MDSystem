@@ -6,12 +6,13 @@ const logger = require("../../../../../utils/logger.js");
 const { isConnectedAnywhere, emitToUserWithAck } = require("../../../../../config/sockets");
 const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
 const { findEmailByUserId } = require("../../../../../config/query.js");
+const { getPatientIdByRequestId } = require("../wrapper/helper.js");
 
 const Query = {
   getAvailableMedicine: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
-    if (!permitted) {
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_manage_requests, args.location);
+    if (!isPermitted) {
       logger.warn("Unauthorized medicine request view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -20,8 +21,9 @@ const Query = {
 
   getMedicineRequestById: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
-    if (!permitted) {
+    const patientId = await getPatientIdByRequestId(args.requestId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.inventory_allow_manage_requests, patientId, false);
+    if (!isPermitted) {
       logger.warn("Unauthorized medicine request view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -30,7 +32,7 @@ const Query = {
 
   getMedicineRequests: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.inventory_allow_manage_requests, args.patientId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.inventory_allow_manage_requests, args.patientId, false);
     if (!isPermitted) {
       logger.warn("Unauthorized medicine request view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -40,8 +42,8 @@ const Query = {
 
   getAllMedicineRequests: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
-    if (!permitted) {
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_manage_requests, args.location);
+    if (!isPermitted) {
       logger.warn("Unauthorized medicine request list attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -52,8 +54,9 @@ const Query = {
 const Mutation = {
   setStatusMedicineRequest: async (_, { requestId, status, notes }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.inventory_allow_manage_requests);
-    if (!permitted) {
+    const patientId = await getPatientIdByRequestId(requestId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.inventory_allow_manage_requests, patientId, false);
+    if (!isPermitted) {
       logger.warn("Unauthorized medicine request status change attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }

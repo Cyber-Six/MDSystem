@@ -287,6 +287,7 @@ VALUES
 ('ALLOW_TO_MANAGE_MEDICINE_REQUESTS', 'Permission to manage medicine requests'),
 ('ALLOW_TO_PRESCRIBE', 'Permission to prescribe medicines'),
 ('ALLOW_TO_APPROVE_MEDICINE_REQUEST', 'Permission to approve medicine requests'),
+('ALLOW_TO_CONFIGURE_INVENTORY', 'Permission to configure inventory settings and thresholds'),
 
 ('ALLOW_TO_ACCESS_HEALTH_CHAT', 'Permission to access health chat features'),
 
