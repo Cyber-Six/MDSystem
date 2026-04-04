@@ -135,9 +135,9 @@ const Query = {
        FROM "HealthChat" hc
        JOIN "UsersPersonal" up ON up.id = hc."patientId"
        WHERE hc.status = 'Open' AND (
-        up.branch = 'Both' OR 
-        $3 = 'Both' OR 
-        up.branch = $3 
+        up.branch = 'Both'::"UserDesignation" OR
+        $3::"UserDesignation" = 'Both'::"UserDesignation" OR
+        up.branch = $3::"UserDesignation"
        )
        ORDER BY id ASC
        LIMIT $1 OFFSET $2`,
@@ -168,9 +168,9 @@ const Query = {
        FROM "HealthChat" hc
        JOIN "UsersPersonal" up ON up.id = hc."patientId"
        WHERE hc.status = 'Ongoing' AND (
-         up.branch = 'Both' OR 
-         $3 = 'Both' OR 
-         up.branch = $3
+         up.branch = 'Both'::"UserDesignation" OR
+         $3::"UserDesignation" = 'Both'::"UserDesignation" OR
+         up.branch = $3::"UserDesignation"
        )
        ORDER BY hc.session_start DESC
        LIMIT $1 OFFSET $2`,
@@ -207,7 +207,7 @@ const Query = {
       `SELECT hc.*, COUNT(*) OVER()::int AS total
        FROM "HealthChat" hc
        JOIN "UsersPersonal" up ON up.id = hc."patientId"
-       WHERE (up.branch = 'Both' OR $3 = 'Both' OR up.branch = $3)
+       WHERE (up.branch = 'Both'::"UserDesignation" OR $3::"UserDesignation" = 'Both'::"UserDesignation" OR up.branch = $3::"UserDesignation")
        ${statusFilter}
        ORDER BY hc.id DESC
        LIMIT $1 OFFSET $2`,
@@ -315,7 +315,7 @@ const Query = {
     // Build location filter - matches pattern from _getPendingTickets, _getActiveTickets
     if (location) {
       const locationParamIndex = params.length + 1;
-      const locationCondition = `(up.branch = 'Both' OR $${locationParamIndex} = 'Both' OR up.branch = $${locationParamIndex})`;
+      const locationCondition = `(up.branch = 'Both'::"UserDesignation" OR $${locationParamIndex}::"UserDesignation" = 'Both'::"UserDesignation" OR up.branch = $${locationParamIndex}::"UserDesignation")`;
       if (statusFilter) {
         locationFilter = `AND ${locationCondition}`;
       } else {
