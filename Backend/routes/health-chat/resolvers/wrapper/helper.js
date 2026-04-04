@@ -348,9 +348,13 @@ async function formatChatRecordsBatch(chats) {
 }
 
 /**
- * Auto-expire tickets that have had no messages for CHAT_EXPIRY_DAYS.
- * Uses the last message timestamp as reference for inactivity.
- * Self-sufficient expiry check - no background process required.
+ * Auto-expire tickets that exceed CHAT_EXPIRY_DAYS.
+ * Two cases are handled:
+ *   1. Ongoing tickets whose session_start + CHAT_EXPIRY_DAYS is in the past
+ *      (matches the expiresAt value shown to patients in the frontend).
+ *   2. Open (pending) tickets that were never approved within CHAT_EXPIRY_DAYS
+ *      (uses archived_at, which is set to current_timestamp on INSERT).
+ * Self-sufficient check — no background process required.
  * Called on relevant queries to ensure data consistency.
  * @param {number|null} patientId - Optional patient ID filter
  * @returns {Promise<number>} Number of tickets expired
@@ -367,41 +371,75 @@ async function autoExpireTickets(patientId = null) {
   }
   if (!patientId) _lastAutoExpireRun = now;
 
-  // Find tickets where the last message was more than CHAT_EXPIRY_DAYS ago
-  // Use parameterized interval to avoid SQL injection
-  const params = [`${CHAT_EXPIRY_DAYS} days`];
-  let query = `
+  const interval = `${CHAT_EXPIRY_DAYS} days`;
+  let expiredCount = 0;
+
+  // ── 1. Expire Ongoing tickets whose session window has elapsed ──────────────
+  // session_start + CHAT_EXPIRY_DAYS < NOW() matches the frontend's expiresAt.
+  // Using extendSession pushes session_start forward, so this stays consistent.
+  const ongoingParams = [interval];
+  let ongoingQuery = `
     UPDATE "HealthChat"
     SET status = 'Expired',
         session_end = NOW(),
         closed_by_type = 'System'
     WHERE status = 'Ongoing'
-    AND (
-      SELECT MAX(stamp) FROM "HealthChatPrompt"
-      WHERE "consultationVirtualId" = "HealthChat".id
-    ) < NOW() - CAST($1 AS INTERVAL)
+    AND session_start IS NOT NULL
+    AND session_start < NOW() - CAST($1 AS INTERVAL)
   `;
 
   if (patientId) {
-    query += ` AND "HealthChat"."patientId" = $2`;
-    params.push(patientId);
+    ongoingQuery += ` AND "patientId" = $2`;
+    ongoingParams.push(patientId);
   }
 
-  query += ` RETURNING id`;
+  ongoingQuery += ` RETURNING id`;
 
-  const result = await db.query(query, params);
+  const ongoingResult = await db.query(ongoingQuery, ongoingParams);
+  expiredCount += ongoingResult.rowCount;
 
-  // Add system message to each expired chat
-  for (const row of result.rows) {
+  for (const row of ongoingResult.rows) {
     await db.query(
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
        VALUES ($1, $2, 'system', NULL, 'Medical')`,
-      [row.id, `This ticket has been automatically closed after ${CHAT_EXPIRY_DAYS} days of inactivity.`]
+      [row.id, `This ticket has been automatically closed by the system after ${CHAT_EXPIRY_DAYS} days of inactivity.`]
     );
   }
 
-  return result.rowCount;
+  // ── 2. Expire Open (pending) tickets with no staff response ─────────────────
+  // archived_at is set to current_timestamp on INSERT, making it the creation time.
+  // If staff never approves within CHAT_EXPIRY_DAYS, expire the request.
+  const openParams = [interval];
+  let openQuery = `
+    UPDATE "HealthChat"
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    WHERE status = 'Open'
+    AND archived_at < NOW() - CAST($1 AS INTERVAL)
+  `;
+
+  if (patientId) {
+    openQuery += ` AND "patientId" = $2`;
+    openParams.push(patientId);
+  }
+
+  openQuery += ` RETURNING id`;
+
+  const openResult = await db.query(openQuery, openParams);
+  expiredCount += openResult.rowCount;
+
+  for (const row of openResult.rows) {
+    await db.query(
+      `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ($1, $2, 'system', NULL, 'Medical')`,
+      [row.id, `This consultation request was automatically closed by the system after ${CHAT_EXPIRY_DAYS} days without a staff response.`]
+    );
+  }
+
+  return expiredCount;
 }
 
 /**

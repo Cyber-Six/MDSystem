@@ -285,7 +285,7 @@ const Query = {
     return result.rows[0].status;
   },
 
-  _searchAppointmentStatuses: async (_, { status, location, offset, limit }, { user, res }) => {
+  _searchAppointmentStatuses: async (_, { status, location, date, schedulerId, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -306,13 +306,15 @@ const Query = {
 
       WHERE ps.status = $1
       AND ss.location = COALESCE($4::"LocationDesignation", ss.location)
-      ORDER BY ps.id DESC
+      AND ($5::date IS NULL OR sde."scheduledDate"::date = $5::date)
+      AND ($6::uuid IS NULL OR ss.id = $6::uuid)
+      ORDER BY sde."scheduledDate" ASC, ps.id DESC
       LIMIT $2 OFFSET $3;
     `;
 
     const result = await db.query(query, 
       [status, limit || 10, 
-       offset || 0, location]
+       offset || 0, location, date || null, schedulerId || null]
       );
     const slots = result.rows;
 
