@@ -385,24 +385,72 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const query = `
-      SELECT
-        sde.*,
-        COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "morningRegistered",
-        COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "morningPending",
-        COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "afternoonRegistered",
-        COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "afternoonPending"
-      FROM "ScheduleDateEntity" sde
-      LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
-      WHERE sde."slotId" = $1
-        AND sde."scheduledDate" >= $2
-        AND sde."scheduledDate" <= $3
-      GROUP BY sde.id
-      ORDER BY sde."scheduledDate" ASC;
-    `;
+    const client = await db.connect();
+    try {
+      // Step 1: Ensure all SlotCustomDate records have corresponding ScheduleDateEntity entries
+      // (in case any were created before the recent fixes and not yet synced)
+      const schedulerDefaults = await client.query(
+        `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+        [schedulerId]
+      );
 
-    const result = await db.query(query, [schedulerId, startDate, endDate]);
-    return result.rows;
+      if (schedulerDefaults.rowCount === 0) {
+        client.release();
+        throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+      }
+
+      const { morningAllowed, afternoonAllowed } = schedulerDefaults.rows[0];
+
+      // Insert missing ScheduleDateEntity entries for any SlotCustomDate that doesn't have one
+      await client.query(
+        `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+         SELECT
+           scd."slotScheduleId",
+           scd."scheduledDate",
+           $2,
+           $3
+         FROM "SlotCustomDate" scd
+         WHERE scd."slotScheduleId" = $1
+           AND scd."scheduledDate" >= $4
+           AND scd."scheduledDate" <= $5
+           AND NOT EXISTS (
+             SELECT 1 FROM "ScheduleDateEntity" sde
+             WHERE sde."slotId" = scd."slotScheduleId"
+               AND sde."scheduledDate" = scd."scheduledDate"
+           )
+         ON CONFLICT ("slotId", "scheduledDate") DO NOTHING;`,
+        [schedulerId, morningAllowed, afternoonAllowed, startDate, endDate]
+      );
+
+      client.release();
+
+      // Step 2: Fetch all ScheduleDateEntity records in the date range with counts
+      const query = `
+        SELECT
+          sde.*,
+          COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "morningRegistered",
+          COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "morningPending",
+          COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "afternoonRegistered",
+          COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "afternoonPending"
+        FROM "ScheduleDateEntity" sde
+        LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
+        WHERE sde."slotId" = $1
+          AND sde."scheduledDate" >= $2
+          AND sde."scheduledDate" <= $3
+        GROUP BY sde.id
+        ORDER BY sde."scheduledDate" ASC;
+      `;
+
+      const result = await db.query(query, [schedulerId, startDate, endDate]);
+      return result.rows;
+    } catch (err) {
+      client.release();
+      logger.error("Error in _listMonthAvailability:", err);
+      throwGraphQLError(res)
+        .message(`Failed to list month availability: ${err.message}`)
+        .status(500)
+        .throw();
+    }
   }
 };
 
@@ -761,6 +809,17 @@ const Mutation = {
       // Use the same client inside transaction (skip if empty)
       if (input.slotCustomDates && input.slotCustomDates.length > 0) {
         await insertSlotCustomDates(schedulerId, input.slotCustomDates, client);
+        // Initialize ScheduleDateEntity for each custom date with scheduler defaults
+        for (const scheduledDate of input.slotCustomDates) {
+          await client.query(
+            `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+             SELECT $1, $2, $3, $4
+             WHERE NOT EXISTS (
+               SELECT 1 FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2
+             );`,
+            [schedulerId, scheduledDate, input.morningAllowed, input.afternoonAllowed]
+          );
+        }
       }
       if (input.whiteLists && input.whiteLists.length > 0) {
         await insertSchedulerWhitelist(schedulerId, input.whiteLists, client);
@@ -1042,7 +1101,7 @@ const Mutation = {
 
       // Fetch scheduler defaults for slot count fallback
       const schedulerResult = await client.query(
-        `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+        `SELECT "morningAllowed", "afternoonAllowed", "containsCustomDates" FROM "slotScheduler" WHERE id = $1;`,
         [schedulerId]
       );
       if (schedulerResult.rowCount === 0) {
@@ -1073,41 +1132,44 @@ const Mutation = {
         values
       );
 
-      // If custom slot counts were provided, upsert into ScheduleDateEntity
+      // Always initialize/upsert ScheduleDateEntity for every custom date
       for (const dateEntry of dates) {
-        if (typeof dateEntry === 'object' &&
-            (dateEntry.morningAllowed != null || dateEntry.afternoonAllowed != null)) {
-          const scheduledDate = dateEntry.scheduledDate;
-          const morning = dateEntry.morningAllowed ?? defaults.morningAllowed;
-          const afternoon = dateEntry.afternoonAllowed ?? defaults.afternoonAllowed;
+        const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
+        const morning = (typeof dateEntry === 'object' && dateEntry.morningAllowed != null)
+          ? dateEntry.morningAllowed
+          : defaults.morningAllowed;
+        const afternoon = (typeof dateEntry === 'object' && dateEntry.afternoonAllowed != null)
+          ? dateEntry.afternoonAllowed
+          : defaults.afternoonAllowed;
 
-          const existing = await client.query(
-            `SELECT id FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2 LIMIT 1;`,
-            [schedulerId, scheduledDate]
+        const existing = await client.query(
+          `SELECT id FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2 LIMIT 1;`,
+          [schedulerId, scheduledDate]
+        );
+
+        if (existing.rowCount > 0) {
+          await client.query(
+            `UPDATE "ScheduleDateEntity"
+             SET "morningAllowed" = $1, "afternoonAllowed" = $2
+             WHERE "slotId" = $3 AND "scheduledDate" = $4;`,
+            [morning, afternoon, schedulerId, scheduledDate]
           );
-
-          if (existing.rowCount > 0) {
-            await client.query(
-              `UPDATE "ScheduleDateEntity"
-               SET "morningAllowed" = $1, "afternoonAllowed" = $2
-               WHERE "slotId" = $3 AND "scheduledDate" = $4;`,
-              [morning, afternoon, schedulerId, scheduledDate]
-            );
-          } else {
-            await client.query(
-              `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
-               VALUES ($1, $2, $3, $4);`,
-              [schedulerId, scheduledDate, morning, afternoon]
-            );
-          }
+        } else {
+          await client.query(
+            `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+             VALUES ($1, $2, $3, $4);`,
+            [schedulerId, scheduledDate, morning, afternoon]
+          );
         }
       }
 
-      // Keep containsCustomDates flag in sync (atomic within transaction)
-      await client.query(
-        `UPDATE "slotScheduler" SET "containsCustomDates" = true WHERE id = $1;`,
-        [schedulerId]
-      );
+      // Step 1: If containsCustomDates is currently false, set it to true
+      if (!defaults.containsCustomDates) {
+        await client.query(
+          `UPDATE "slotScheduler" SET "containsCustomDates" = true WHERE id = $1;`,
+          [schedulerId]
+        );
+      }
 
       await client.query('COMMIT');
 
