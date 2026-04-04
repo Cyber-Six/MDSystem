@@ -89,7 +89,7 @@ app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/media', mediaRoutes);
-app.use('/announcement', AnnouncementRoutes);s
+app.use('/announcement', AnnouncementRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/documents', documentRoutes);
 app.use('/settings', settingsRoutes);
