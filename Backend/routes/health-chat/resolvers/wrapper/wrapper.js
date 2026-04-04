@@ -351,16 +351,13 @@ const Query = {
       // This ensures the frontend has complete ticket history for dividers and
       // initial-context (purposeSynth) even when archive filter is off.
       const patientIds = result.rows.map(r => r.patientId);
-      let allTicketsFormatted = [];
-      if (patientIds.length > 0) {
-        const allTicketsResult = await db.query(
-          `SELECT * FROM "HealthChat"
-           WHERE "patientId" = ANY($1)
-           ORDER BY id DESC`,
-          [patientIds]
-        );
-        allTicketsFormatted = await formatChatRecordsBatch(allTicketsResult.rows);
-      }
+      const allTicketsResult = await db.query(
+        `SELECT * FROM "HealthChat"
+         WHERE "patientId" = ANY($1)
+         ORDER BY id DESC`,
+        [patientIds]
+      );
+      const allTicketsFormatted = await formatChatRecordsBatch(allTicketsResult.rows);
 
       // Group tickets by patientId
       const ticketsByPatient = new Map();

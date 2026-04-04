@@ -411,11 +411,9 @@ async function autoExpireTickets(patientId = null) {
     );
   }
 
-  // ── 2. Expire Open tickets where the patient account is Inactive/Locked/Disabled ──
+  // ── 2. Expire Open tickets where the patient account is already Expired ──────
   // Open tickets have no session_start so step 1 never catches them.
   // Tie them to the patient's credential status for account-level expiry.
-  // Note: 'Expired' is not a valid CredentialStatus enum value in the DB;
-  //       we check the actual inactive statuses instead.
   let openExpiredQuery = `
     UPDATE "HealthChat" hc
     SET status = 'Expired',
@@ -424,7 +422,7 @@ async function autoExpireTickets(patientId = null) {
     FROM "UserCredentials" uc
     WHERE hc."patientId" = uc.id
     AND hc.status = 'Open'
-    AND uc.credentials_status::text IN ('Inactive', 'Locked', 'Disabled')
+    AND uc.credentials_status = 'Expired'
   `;
   const openExpiredParams = [];
 
