@@ -158,25 +158,16 @@ function ReadOnlyOralFindings({ catalogs, oralFindings }) {
 function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, applianceProfile, photoRecord, oralFindingCatalogs, dentalProcedureMap, applianceTagMap }) {
   const [expanded, setExpanded] = useState(index === 0);
 
-  // The visit's own system timestamp (independent of any dental grade).
-  // If the dental grade was created BEFORE this visit was submitted, the staff
-  // hasn't graded the new record yet — treat the grade as absent so stale tooth
-  // chart / oral findings from a previous visit are not displayed.
-  const visitTimestamp = dentalHistoryRecord?.created_at || procedureProfile?.created_at || applianceProfile?.created_at || photoRecord?.created_at || null;
-  const effectiveRecord = record && visitTimestamp && new Date(record.created_at) < new Date(visitTimestamp)
-    ? null
-    : record;
-
   const toothStates = useMemo(() => {
     const states = {};
-    (effectiveRecord?.ToothPlacements || []).forEach((tp) => {
+    (record?.ToothPlacements || []).forEach((tp) => {
       states[tp.toothIndex] = ENUM_TO_CODE[tp.legend] ?? tp.legend;
     });
     return states;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveRecord]);
+  }, [record]);
 
-  const oralFindings   = effectiveRecord?.oralFindings || [];
+  const oralFindings   = record?.oralFindings || [];
   const procedures     = procedureProfile?.procedures || [];
   const appliances     = applianceProfile?.appliances || [];
   const conditionCount = Object.values(toothStates).filter((s) => s !== '✓').length;
@@ -189,7 +180,7 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
     procedureProfile?.created_at ||
     applianceProfile?.created_at ||
     photoRecord?.created_at ||
-    effectiveRecord?.created_at ||
+    record?.created_at ||
     null;
   const anchorDate = clinicalDate || systemTimestamp;
 
@@ -201,7 +192,7 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
     ? new Date(systemTimestamp).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
     : '';
 
-  const hasAny = effectiveRecord || dentalHistoryRecord || procedureProfile || applianceProfile || photoRecord;
+  const hasAny = record || dentalHistoryRecord || procedureProfile || applianceProfile || photoRecord;
   if (!hasAny) return null;
 
   return (
@@ -224,12 +215,12 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
               )}
             </p>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              {effectiveRecord && (
+              {record && (
                 conditionCount > 0
                   ? <span className="text-[11px] text-warning-600 dark:text-warning-400 font-medium">{conditionCount} tooth condition{conditionCount !== 1 ? 's' : ''}</span>
                   : <span className="text-[11px] text-success-600 dark:text-success-400 font-medium">No tooth conditions</span>
               )}
-              {effectiveRecord && positiveCount > 0 && (
+              {record && positiveCount > 0 && (
                 <span className="text-[11px] text-error-600 dark:text-error-400">· {positiveCount} positive oral finding{positiveCount !== 1 ? 's' : ''}</span>
               )}
               {procedures.length > 0 && (
@@ -374,10 +365,10 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
           )}
 
           {/* ── Tooth Chart ── */}
-          {effectiveRecord && (
+          {record && (
             <PatientSectionCard title="Tooth Chart">
               <ToothChart
-                key={`${effectiveRecord.id}-chart`}
+                key={`${record.id}-chart`}
                 initialStates={toothStates}
                 isEditing={false}
               />
@@ -385,17 +376,17 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
           )}
 
           {/* ── Oral Findings ── */}
-          {effectiveRecord && (
+          {record && (
             <PatientSectionCard title="Oral Findings">
               <ReadOnlyOralFindings catalogs={oralFindingCatalogs} oralFindings={oralFindings} />
             </PatientSectionCard>
           )}
 
           {/* ── Notes ── */}
-          {effectiveRecord?.notes && (
+          {record?.notes && (
             <div className="px-1 pt-1">
               <h4 className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1">Notes</h4>
-              <p className="text-sm text-secondary-700 dark:text-neutral-300">{effectiveRecord.notes}</p>
+              <p className="text-sm text-secondary-700 dark:text-neutral-300">{record.notes}</p>
             </div>
           )}
 
@@ -480,7 +471,7 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
     );
   }
 
-  const dentalRecords     = historyData?.getUserDentalRecord           ?? [];
+  const allDentalRecords  = historyData?.getUserDentalRecord           ?? [];
   const dentalHistories   = (historyData?.getUserDentalHistory          ?? []).filter(r => r.status === 'Approved');
   const procedureProfiles = (historyData?.getUserDentalProcedureProfile ?? []).filter(r => r.status === 'Approved');
   const applianceProfiles = (historyData?.getUserOralApplianceProfile   ?? []).filter(r => r.status === 'Approved');
@@ -488,7 +479,7 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
 
   // Number of visit-based cards is driven solely by visit data (histories, procedures,
   // appliances, photos). Standalone dental grades created from the Dental Grading tab
-  // must NOT inflate this count or shift the index-based pairing.
+  // must NOT inflate this count.
   const maxCount = Math.max(
     dentalHistories.length,
     procedureProfiles.length,
@@ -496,10 +487,11 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
     photoRecords.length,
   );
 
-  // If there are more dental records than visit cards, the excess newer records are
-  // standalone grades (created from the Dental Grading tab). Offset into the array so
-  // each visit card still receives its original consultation-linked dental record.
-  const dentalOffset = Math.max(0, dentalRecords.length - maxCount);
+  // Records are ordered newest-first (DESC). Standalone grades created from the Dental
+  // Grading tab are the newest entries in that list. Skip them so this tab only pairs
+  // visit-linked dental grades with their corresponding visit records.
+  const dentalRecordOffset = Math.max(0, allDentalRecords.length - maxCount);
+  const dentalRecords      = allDentalRecords.slice(dentalRecordOffset);
 
   if (maxCount === 0) {
     return (
@@ -523,7 +515,7 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
           <RecordEntry
             key={i}
             index={i}
-            record={dentalRecords[i + dentalOffset] ?? null}
+            record={dentalRecords[i] ?? null}
             dentalHistoryRecord={dentalHistories[i] ?? null}
             procedureProfile={procedureProfiles[i] ?? null}
             applianceProfile={applianceProfiles[i] ?? null}
