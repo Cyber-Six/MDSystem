@@ -8,6 +8,13 @@ const dotenv = require('dotenv');
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+const RESET_PASSWORD_DOMAIN_ROUTE = process.env.RESET_PASSWORD_DOMAIN_ROUTE?.trim();
+if (!RESET_PASSWORD_DOMAIN_ROUTE) {
+  throw new Error(
+    'Missing required environment variable RESET_PASSWORD_DOMAIN_ROUTE. Set it in Backend/.env before starting the server.'
+  );
+}
+
 // ✅ Email Verification Expiration
 const EMAIL_VERIF_EXP_SECONDS = Number(process.env.EMAIL_VERIF_EXPIRATION) || 300;
 const EMAIL_VERIF_EXP_MINUTES = Math.floor(EMAIL_VERIF_EXP_SECONDS / 60);
@@ -200,8 +207,7 @@ function notificationTemplate({ title, message, notes, ctaText, ctaLink }) {
 }
 
 function passwordResetTemplate(sessionToken, portal) {
-  const route = process.env.RESET_PASSWORD_DOMAIN_ROUTE;
-  const resetLink = `https://${portal}.${route}/${sessionToken}`;
+  const resetLink = `https://${portal}.${RESET_PASSWORD_DOMAIN_ROUTE}/${sessionToken}`;
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
       <h2 style="color:#2F4F4F;">MDSystem Password Reset</h2>
