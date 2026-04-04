@@ -1899,6 +1899,16 @@ const Mutation = {
         [oldAdminId, permissions.is_admin]
       );
 
+      // Update designations: new admin gets Both, old admin defaults to Manila
+      await client.query(
+        `UPDATE "MedicalPersonnel" SET designation = 'Both'::"UserDesignation" WHERE id = $1`,
+        [newAdminId]
+      );
+      await client.query(
+        `UPDATE "MedicalPersonnel" SET designation = NULL WHERE id = $1`,
+        [oldAdminId]
+      );
+
       // Log audit trail within transaction
       await db.setSystemAuditLog({
         client: client,

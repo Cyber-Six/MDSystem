@@ -193,7 +193,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
                   {profile?.email ?? '—'}
                 </p>
                 <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
-                  {profile?.role ?? '—'}
+                  {isAdmin ? 'Admin' : (profile?.role ?? '—')}
                 </p>
               </div>
             )}
