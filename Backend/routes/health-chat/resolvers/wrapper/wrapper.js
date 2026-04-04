@@ -691,9 +691,9 @@ const Mutation = {
         [chatId, user.id]
       );
 
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Cannot close this ticket. It may already be closed or expired.").status(400).throw();
-    }
+      if (result.rowCount === 0) {
+        throw new Error("Cannot close this ticket. It may already be closed or expired.");
+      }
 
       // Add system message
       await client.query(
@@ -707,6 +707,9 @@ const Mutation = {
       chat = await formatChatRecord(result.rows[0]);
     } catch (error) {
       await client.query('ROLLBACK');
+      if (error.message === "Cannot close this ticket. It may already be closed or expired.") {
+        throwGraphQLError(res).message(error.message).status(400).throw();
+      }
       throwGraphQLError(res).message("Failed to close ticket").status(500).throw();
     } finally {
       client.release();
@@ -1129,7 +1132,7 @@ const Mutation = {
   },
 
 
-  _transferTicket: async (_, { chatId, newMedicalId }, { user, res }) => {
+  _transferTicket: async (_, { chatId, toMedicalId }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -1152,7 +1155,7 @@ const Mutation = {
     }
 
     // Verify new medical staff must be different from current
-    if (Number(newMedicalId) === Number(user.id)) {
+    if (Number(toMedicalId) === Number(user.id)) {
       throwGraphQLError(res).message("New medical staff must be different from current").status(400).throw();
     }
 
@@ -1162,7 +1165,7 @@ const Mutation = {
        FROM "MedicalPersonnel" mp
        JOIN "UserCredentials" uc ON uc.id = mp.id
        WHERE mp.id = $1`,
-      [newMedicalId]
+      [toMedicalId]
     );
 
     if (newStaffCheck.rowCount === 0) {
@@ -1184,7 +1187,7 @@ const Mutation = {
          SET "medicalId" = $1
          WHERE id = $2
          RETURNING *`,
-        [newMedicalId, chatId]
+        [toMedicalId, chatId]
       );
 
       if (result.rowCount === 0) {
@@ -1196,7 +1199,7 @@ const Mutation = {
         `INSERT INTO "HealthChatPrompt"
          ("consultationVirtualId", "text", "promptType", "userId", "userType")
          VALUES ($1, $2, 'system', $3, 'Medical')`,
-        [chatId, `Ticket transferred from staff ID ${user.id} to staff ID ${newMedicalId}.`, user.id]
+        [chatId, `Ticket transferred from staff ID ${user.id} to staff ID ${toMedicalId}.`, user.id]
       );
 
       await client.query('COMMIT');
@@ -1212,15 +1215,15 @@ const Mutation = {
     if (updatedChat.patientId) {
       notifyUser(updatedChat.patientId, 'healthchat:ticket-transferred', {
         chatId,
-        newMedicalId,
+        newMedicalId: toMedicalId,
         chat: updatedChat
       });
     }
 
     // Notify the new medical staff about the transfer
-    notifyUser(String(newMedicalId), 'healthchat:ticket-transferred', {
+    notifyUser(String(toMedicalId), 'healthchat:ticket-transferred', {
       chatId,
-      newMedicalId,
+      newMedicalId: toMedicalId,
       chat: updatedChat
     });
 
