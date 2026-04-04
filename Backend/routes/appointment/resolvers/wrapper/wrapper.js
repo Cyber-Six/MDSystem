@@ -135,10 +135,12 @@ const Query = {
         .throw();
     }
 
-    // Scheduler/date validation
-    const isValidDate = await validateSchedulerDate(schedulerId, date);
-    if (!isValidDate) {
-      throwGraphQLError(res).message("Invalid date for scheduler").status(400).throw();
+    // Scheduler/date validation (skipped for medical/staff callers)
+    if (!skipTimeframe) {
+      const isValidDate = await validateSchedulerDate(schedulerId, date);
+      if (!isValidDate) {
+        throwGraphQLError(res).message("Invalid date for scheduler").status(400).throw();
+      }
     }
 
     // Step 1: Try to fetch existing schedule (respect staff edits)
@@ -169,19 +171,25 @@ const Query = {
 
     const { morningAllowed, afternoonAllowed } = schedulerResult.rows[0];
 
-    // Step 3: Insert new schedule with defaults
+    // Step 3: Insert new schedule with defaults (WHERE NOT EXISTS guards against race conditions)
     const newScheduleResult = await db.query(
       `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
-       VALUES ($1, $2, $3, $4)
+       SELECT $1, $2, $3, $4
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "ScheduleDateEntity"
+         WHERE "slotId" = $1 AND "scheduledDate" = $2
+       )
        RETURNING *;`,
       [schedulerId, date, morningAllowed, afternoonAllowed]
     );
 
-    if (newScheduleResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to create schedule for the date").status(500).throw();
-    }
-
-    const newSchedule = newScheduleResult.rows[0];
+    // If insert returned nothing, another request created it first — fetch it
+    const newSchedule = newScheduleResult.rowCount > 0
+      ? newScheduleResult.rows[0]
+      : (await db.query(
+          `SELECT * FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2;`,
+          [schedulerId, date]
+        )).rows[0];
 
     // Step 4: Return with zero counts for a fresh schedule
     return {
@@ -417,8 +425,7 @@ const Query = {
              SELECT 1 FROM "ScheduleDateEntity" sde
              WHERE sde."slotId" = scd."slotScheduleId"
                AND sde."scheduledDate" = scd."scheduledDate"
-           )
-         ON CONFLICT ("slotId", "scheduledDate") DO NOTHING;`,
+           );`,
         [schedulerId, morningAllowed, afternoonAllowed, startDate, endDate]
       );
 
@@ -1235,6 +1242,20 @@ const Mutation = {
           .status(404)
           .throw();
       }
+
+      // Also clean up ScheduleDateEntity for removed custom dates
+      // (only remove if no patientSlot appointments reference them)
+      const deletedDates = result.rows.map(r => r.scheduledDate);
+      await client.query(
+        `DELETE FROM "ScheduleDateEntity" sde
+         WHERE sde."slotId" = $1
+           AND sde."scheduledDate" = ANY($2)
+           AND NOT EXISTS (
+             SELECT 1 FROM "patientSlot" ps
+             WHERE ps."slotEntityId" = sde.id
+           );`,
+        [schedulerId, deletedDates]
+      );
 
       // Keep containsCustomDates flag in sync (atomic within transaction)
       const remaining = await client.query(

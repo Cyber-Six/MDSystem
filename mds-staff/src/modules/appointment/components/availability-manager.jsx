@@ -197,25 +197,20 @@ const AvailabilityManager = () => {
       return;
     }
 
-    // Only load override data if the date is available
-    if (isAvailable) {
-      setLoadingDayData(true);
-      try {
-        const data = await getScheduleAvailability(activeScheduler.id, dateStr);
-        setDayOverrideData(data);
-        // Refresh month availability since getScheduleAvailability may create a new ScheduleDateEntity
-        if (currentMonthRange) {
-          loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-        }
-      } catch (err) {
-        console.error('Failed to load day data:', err);
-        setDayOverrideData(null);
-      } finally {
-        setLoadingDayData(false);
+    // Load override data for any date (staff can view/edit all dates)
+    setLoadingDayData(true);
+    try {
+      const data = await getScheduleAvailability(activeScheduler.id, dateStr);
+      setDayOverrideData(data);
+      // Refresh month availability since getScheduleAvailability may create a new ScheduleDateEntity
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
       }
-    } else {
-      // For unavailable dates, clear override data
+    } catch (err) {
+      console.error('Failed to load day data:', err);
       setDayOverrideData(null);
+    } finally {
+      setLoadingDayData(false);
     }
   };
 
@@ -767,7 +762,7 @@ const AvailabilityManager = () => {
                 loading={loadingDayData}
                 events={events}
                 customDates={customDates}
-                isDateAvailable={selectedCalendarDate ? isDateAvailable(selectedCalendarDate) : false}
+                isDateAvailable={selectedCalendarDate ? (isDateAvailable(selectedCalendarDate) || !!dayOverrideData) : false}
                 onAddCustomDate={handleAddCustomDateFromEditor}
                 onRemoveCustomDate={handleRemoveCustomDateFromEditor}
               />
