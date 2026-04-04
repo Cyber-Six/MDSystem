@@ -170,6 +170,7 @@ const GQL_INITIATE_ADMIN_TRANSFER = `
       ok
       message
       verificationRequired
+      bootstrapMode
     }
   }
 `;

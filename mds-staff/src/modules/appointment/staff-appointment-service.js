@@ -73,10 +73,10 @@ const sendGraphQL = async (query, variables = {}) => {
  * @param {number} [limit=20]
  * @returns {Promise<Array>} patientSlot[]
  */
-export const searchByStatus = async (status, offset = 0, limit = 20) => {
+export const searchByStatus = async (status, offset = 0, limit = 20, { date, schedulerId } = {}) => {
   const data = await sendGraphQL(`
-    query SearchAppointmentStatuses($status: SCHEDULING_STATUS!, $offset: Int, $limit: Int) {
-      searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit) {
+    query SearchAppointmentStatuses($status: SCHEDULING_STATUS!, $offset: Int, $limit: Int, $date: Date, $schedulerId: ID) {
+      searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit, date: $date, schedulerId: $schedulerId) {
         id
         patientId
         patientIdentifier
@@ -100,7 +100,7 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
         }
       }
     }
-  `, { status, offset, limit });
+  `, { status, offset, limit, date: date || null, schedulerId: schedulerId || null });
   return data.searchAppointmentStatuses;
 };
 

@@ -349,9 +349,14 @@ async function formatChatRecordsBatch(chats) {
 }
 
 /**
- * Auto-expire tickets that have had no messages for CHAT_EXPIRY_DAYS.
- * Uses the last message timestamp as reference for inactivity.
- * Self-sufficient expiry check - no background process required.
+ * Auto-expire tickets that exceed CHAT_EXPIRY_DAYS.
+ * Four cases are handled:
+ *   1. Ongoing tickets whose session_start + CHAT_EXPIRY_DAYS is in the past.
+ *   2. Open tickets where the patient account is already Expired in UserCredentials.
+ *   3. Stale Open tickets where the last message is older than CHAT_EXPIRY_DAYS
+ *      (every new ticket has a creation system message from _createTicket as the anchor).
+ *   4. Legacy Open tickets with zero messages (MAX(stamp) IS NULL skips step 3 in SQL).
+ * Self-sufficient check — no background process required.
  * Called on relevant queries to ensure data consistency.
  * @param {number|null} patientId - Optional patient ID filter
  * @returns {Promise<number>} Number of tickets expired

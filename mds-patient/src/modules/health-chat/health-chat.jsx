@@ -153,8 +153,16 @@ const HealthChat = () => {
     const pollInterval = setInterval(async () => {
       try {
         const updatedTicket = await getCurrentActiveTicket();
-        if (updatedTicket && updatedTicket.status !== 'Open') {
-          // Ticket status changed! Update local state
+        if (!updatedTicket) {
+          // Previously-open ticket is no longer active — it was auto-expired or closed.
+          // Load the most recent ticket so the UI shows the closed/expired state and
+          // the patient can create a new conversation instead of being stuck.
+          console.log('[HealthChat] Polling: active ticket gone, loading most recent.');
+          const mostRecent = await getMostRecentTicket();
+          setTicket(mostRecent);
+          if (mostRecent?.id) await loadMessages(mostRecent.id);
+        } else if (updatedTicket.status !== 'Open') {
+          // Ticket status changed (e.g. Approved → Ongoing)
           console.log('[HealthChat] Polling detected status change:', updatedTicket.status);
           setTicket(updatedTicket);
           if (updatedTicket.id) {
@@ -517,6 +525,7 @@ const HealthChat = () => {
                 <TicketDivider
                   closedAt={ticket.session_end || ticket.archived_at || ticket.expiresAt}
                   closedBy={ticket.closedBy || (ticket.status === 'Expired' ? 'System' : 'Unknown')}
+                  ticketStatus={ticket.status}
                 />
               </div>
             )}

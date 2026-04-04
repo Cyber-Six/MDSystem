@@ -550,6 +550,18 @@ const Mutation = {
       throwGraphQLError(res).message("Failed to create ticket").status(500).throw();
     }
 
+    const chatId = result.rows[0].id;
+
+    // Insert a creation system message so the ticket has an inactivity timestamp anchor.
+    // autoExpireTickets uses MAX(stamp) to detect stale Open tickets; without this
+    // message a pending ticket with no chat activity would never be auto-expired.
+    await db.query(
+      `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ($1, 'Consultation request submitted. Waiting for staff response.', 'system', NULL, 'Medical')`,
+      [chatId]
+    );
+
     const chat = await formatChatRecord(result.rows[0]);
 
     // Notify all medical staff about new ticket
@@ -679,9 +691,9 @@ const Mutation = {
         [chatId, user.id]
       );
 
-      if (result.rowCount === 0) {
-        throw new Error("Failed to close ticket");
-      }
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Cannot close this ticket. It may already be closed or expired.").status(400).throw();
+    }
 
       // Add system message
       await client.query(
@@ -798,6 +810,7 @@ const Mutation = {
     // Notify all medical staff about ticket status change (so other staff can update their UI)
     emitToRole('medical', 'healthchat:ticket-status-changed', {
       chatId: chat.id,
+      patientId: chat.patientId,
       status: 'Ongoing',
       approvedBy: user.id
     });
@@ -844,7 +857,8 @@ const Mutation = {
          SET status = 'Closed',
              "medicalId" = $1,
              notes = $2,
-             closed_by_type = 'Staff'
+             session_end = NOW(),
+           closed_by_type = 'Staff'
          WHERE id = $3
          RETURNING *`,
         [user.id, reason || 'Ticket rejected by staff.', chatId]
@@ -882,6 +896,7 @@ const Mutation = {
     // Notify all medical staff about ticket status change (so other staff can update their UI)
     emitToRole('medical', 'healthchat:ticket-status-changed', {
       chatId: chat.id,
+      patientId: chat.patientId,
       status: 'Closed',
       rejectedBy: user.id,
       reason: reason || 'Not specified'
