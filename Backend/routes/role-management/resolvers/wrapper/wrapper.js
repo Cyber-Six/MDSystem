@@ -1452,7 +1452,7 @@ const Mutation = {
       await clearAdminTransferPasswordFailures(oldAdminId);
 
       // Validate that new admin user exists and is different from current admin
-      if (oldAdminId === newAdminUserId) {
+      if (String(oldAdminId) === String(newAdminUserId)) {
         // Log failed attempt
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
@@ -1740,7 +1740,7 @@ const Mutation = {
       }
 
       // Verify that the current user is the old admin
-      if (currentUserId !== parseInt(oldAdminId, 10)) {
+      if (String(currentUserId) !== String(oldAdminId)) {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: currentUserId,

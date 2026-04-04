@@ -1,6 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { axiosRequest } from '../../../packages-core-adapter';
 import PatientSectionCard from './section-card';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
+} from 'recharts';
 
 /* ─── GraphQL ─────────────────────────────────────────────── */
 
@@ -118,6 +122,131 @@ function HistoryBlock({ index, isCurrent, record }) {
   );
 }
 
+/* ─── Analytics Component ─────────────────────────────────── */
+
+const TOOLTIP_STYLE = {
+  backgroundColor: '#1f2937',
+  border: 'none',
+  borderRadius: 8,
+  fontSize: 12,
+  color: '#e5e7eb',
+};
+const AXIS_STYLE = { fontSize: 11, fill: '#9ca3af' };
+const GRID_STYLE = { stroke: '#374151', strokeDasharray: '3 3' };
+const CHART_MARGIN = { top: 8, right: 12, left: -16, bottom: 4 };
+
+function MiniLineChart({ data, dataKeys, colors, height = 150 }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={CHART_MARGIN}>
+        <CartesianGrid {...GRID_STYLE} />
+        <XAxis dataKey="label" tick={AXIS_STYLE} interval="preserveStartEnd" />
+        <YAxis tick={AXIS_STYLE} width={36} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} />
+        {dataKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />}
+        {dataKeys.map(({ key, name, color }, i) => (
+          <Line
+            key={key}
+            type="monotone"
+            dataKey={key}
+            stroke={color || colors?.[i] || '#f59e0b'}
+            strokeWidth={2}
+            dot={{ r: 3 }}
+            activeDot={{ r: 5 }}
+            name={name || key}
+            connectNulls
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function VitalSignsAnalytics({ history }) {
+  const chartData = useMemo(() => {
+    return [...history].reverse().map((r) => {
+      const bmi =
+        r.height_cm && r.weight_kg
+          ? parseFloat((r.weight_kg / ((r.height_cm / 100) ** 2)).toFixed(1))
+          : null;
+      const bpParts = r.blood_pressure ? r.blood_pressure.split('/') : [];
+      const systolic = bpParts[0] ? parseInt(bpParts[0], 10) : null;
+      const diastolic = bpParts[1] ? parseInt(bpParts[1], 10) : null;
+      const d = new Date(r.created_at);
+      const label = d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+      return {
+        label,
+        weight: r.weight_kg ? parseFloat(r.weight_kg) : null,
+        bmi,
+        systolic,
+        diastolic,
+        heartRate: r.heart_rate ? parseInt(r.heart_rate, 10) : null,
+      };
+    });
+  }, [history]);
+
+  if (history.length < 2) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <p className="text-sm text-center text-secondary-400 dark:text-neutral-500">
+          At least 2 vital sign entries are needed to display trends.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+      {/* Weight */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-secondary-400 dark:text-neutral-500 mb-2">
+          Weight (kg)
+        </p>
+        <MiniLineChart
+          data={chartData}
+          dataKeys={[{ key: 'weight', name: 'Weight (kg)', color: '#f59e0b' }]}
+        />
+      </div>
+
+      {/* BMI */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-secondary-400 dark:text-neutral-500 mb-2">
+          BMI
+        </p>
+        <MiniLineChart
+          data={chartData}
+          dataKeys={[{ key: 'bmi', name: 'BMI', color: '#60a5fa' }]}
+        />
+      </div>
+
+      {/* Blood Pressure */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-secondary-400 dark:text-neutral-500 mb-2">
+          Blood Pressure (mmHg)
+        </p>
+        <MiniLineChart
+          data={chartData}
+          dataKeys={[
+            { key: 'systolic', name: 'Systolic', color: '#f87171' },
+            { key: 'diastolic', name: 'Diastolic', color: '#fb923c' },
+          ]}
+        />
+      </div>
+
+      {/* Heart Rate */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-secondary-400 dark:text-neutral-500 mb-2">
+          Heart Rate (bpm)
+        </p>
+        <MiniLineChart
+          data={chartData}
+          dataKeys={[{ key: 'heartRate', name: 'Heart Rate (bpm)', color: '#34d399' }]}
+        />
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Component ──────────────────────────────────────── */
 
 const INITIAL_FORM = {
@@ -170,19 +299,38 @@ export default function VitalSignsTab({ patient }) {
     setSaveError(null);
     setSaveSuccess(false);
 
+    const parsedHeightCm = form.height_cm !== '' ? parseFloat(form.height_cm) : null;
+    const parsedWeightKg = form.weight_kg !== '' ? parseFloat(form.weight_kg) : null;
+    const parsedTemperature = form.temperature !== '' ? parseFloat(form.temperature) : null;
+
     const input = {
-      height_cm: parseFloat(form.height_cm),
-      weight_kg: parseFloat(form.weight_kg),
+      height_cm: parsedHeightCm,
+      weight_kg: parsedWeightKg,
       blood_pressure: form.blood_pressure.trim(),
       heart_rate: parseInt(form.heart_rate, 10),
-      temperature: parseFloat(form.temperature),
+      temperature: parsedTemperature,
       notes: form.notes.trim() || null,
     };
 
-    // Basic validation
-    if (isNaN(input.height_cm) || isNaN(input.weight_kg) || !input.blood_pressure || isNaN(input.heart_rate) || isNaN(input.temperature)) {
+    // Basic validation — only blood_pressure and heart_rate are required
+    if (!input.blood_pressure || isNaN(input.heart_rate)) {
       setSaving(false);
-      setSaveError('Please fill in all required fields with valid numbers.');
+      setSaveError('Please fill in all required fields (Blood Pressure and Heart Rate).');
+      return;
+    }
+    if (parsedHeightCm !== null && isNaN(parsedHeightCm)) {
+      setSaving(false);
+      setSaveError('Height must be a valid number.');
+      return;
+    }
+    if (parsedWeightKg !== null && isNaN(parsedWeightKg)) {
+      setSaving(false);
+      setSaveError('Weight must be a valid number.');
+      return;
+    }
+    if (parsedTemperature !== null && isNaN(parsedTemperature)) {
+      setSaving(false);
+      setSaveError('Temperature must be a valid number.');
       return;
     }
 
@@ -207,11 +355,11 @@ export default function VitalSignsTab({ patient }) {
       <PatientSectionCard title="Create Vital Signs">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <InputField label="Height (cm) *" value={form.height_cm} onChange={handleChange('height_cm')} placeholder="e.g. 170" type="number" step="0.1" />
-            <InputField label="Weight (kg) *" value={form.weight_kg} onChange={handleChange('weight_kg')} placeholder="e.g. 65" type="number" step="0.1" />
+            <InputField label="Height (cm)" value={form.height_cm} onChange={handleChange('height_cm')} placeholder="e.g. 170" type="number" step="0.1" />
+            <InputField label="Weight (kg)" value={form.weight_kg} onChange={handleChange('weight_kg')} placeholder="e.g. 65" type="number" step="0.1" />
             <InputField label="Blood Pressure *" value={form.blood_pressure} onChange={handleChange('blood_pressure')} placeholder="e.g. 120/80" />
             <InputField label="Heart Rate (bpm) *" value={form.heart_rate} onChange={handleChange('heart_rate')} placeholder="e.g. 72" type="number" />
-            <InputField label="Temperature (°C) *" value={form.temperature} onChange={handleChange('temperature')} placeholder="e.g. 36.5" type="number" step="0.1" />
+            <InputField label="Temperature (°C)" value={form.temperature} onChange={handleChange('temperature')} placeholder="e.g. 36.5" type="number" step="0.1" />
           </div>
 
           <label className="block">
@@ -249,30 +397,48 @@ export default function VitalSignsTab({ patient }) {
         </form>
       </PatientSectionCard>
 
-      {/* ── Vital Signs History ── */}
-      <PatientSectionCard title="Vital Signs History">
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <svg className="animate-spin w-6 h-6 text-primary-500 mr-2" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span className="text-sm text-secondary-500 dark:text-neutral-400">Loading vital signs…</span>
-          </div>
-        ) : loadError ? (
-          <div className="px-3 py-4 rounded-md bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-700 dark:text-error-400">
-            {loadError}
-          </div>
-        ) : history.length === 0 ? (
-          <p className="text-sm text-secondary-400 dark:text-neutral-500">No vital signs recorded yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {history.map((record, i) => (
-              <HistoryBlock key={record.id} index={i} isCurrent={i === 0} record={record} />
-            ))}
-          </div>
-        )}
-      </PatientSectionCard>
+      {/* ── Analytics + History side-by-side ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+        {/* Analytics — 50% */}
+        <PatientSectionCard title="Vital Signs Analytics">
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <svg className="animate-spin w-5 h-5 text-primary-500 mr-2" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm text-secondary-500 dark:text-neutral-400">Loading…</span>
+            </div>
+          ) : loadError ? null : (
+            <VitalSignsAnalytics history={history} />
+          )}
+        </PatientSectionCard>
+
+        {/* History — 50% */}
+        <PatientSectionCard title="Vital Signs History">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <svg className="animate-spin w-6 h-6 text-primary-500 mr-2" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm text-secondary-500 dark:text-neutral-400">Loading vital signs…</span>
+            </div>
+          ) : loadError ? (
+            <div className="px-3 py-4 rounded-md bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-700 dark:text-error-400">
+              {loadError}
+            </div>
+          ) : history.length === 0 ? (
+            <p className="text-sm text-secondary-400 dark:text-neutral-500">No vital signs recorded yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {history.map((record, i) => (
+                <HistoryBlock key={record.id} index={i} isCurrent={i === 0} record={record} />
+              ))}
+            </div>
+          )}
+        </PatientSectionCard>
+      </div>
     </div>
   );
 }
