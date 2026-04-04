@@ -771,7 +771,7 @@ const MedicalInventory = () => {
     setShowActionModal(true);
   };
 
-  const handleConfirmAction = async (request, notes) => {
+  const handleConfirmAction = async (request, notes, approvedQuantity, approvedBatchId) => {
     const requestId = request?.id;
     if (!requestId) return;
 
@@ -784,7 +784,16 @@ const MedicalInventory = () => {
       
       // Update local state
       setRequests(requests.map((r) => 
-        r.id === requestId ? { ...r, status, notes: notes || null } : r
+        r.id === requestId 
+          ? { 
+              ...r, 
+              status, 
+              notes: notes || null,
+              // Store approved quantity and batch in frontend state for use during dispensing
+              approvedQuantity: isApprove ? approvedQuantity : null,
+              approvedBatchId: isApprove ? approvedBatchId : null
+            } 
+          : r
       ));
       
       showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
@@ -1099,6 +1108,8 @@ const MedicalInventory = () => {
         <RequestActionModal
           request={selectedActionRequest}
           action={actionType}
+          batches={batches}
+          items={items}
           onConfirm={handleConfirmAction}
           onCancel={() => {
             setShowActionModal(false);

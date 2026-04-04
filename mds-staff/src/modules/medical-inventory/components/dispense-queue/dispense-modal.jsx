@@ -11,12 +11,25 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
   const [manualQties, setManualQties] = useState(() => {
     const initial = {};
     requestItems.forEach((item, idx) => {
-      const isStudent = item.quantity === null || item.quantity === undefined;
-      initial[idx] = isStudent ? '' : String(item.quantity ?? '');
+      // If there's an approved quantity, use it; otherwise use the quantity from the request (for backward compatibility)
+      // For now, we only support a single item per request, so use approvedQuantity if available
+      if (request.approvedQuantity && idx === 0) {
+        initial[idx] = String(request.approvedQuantity);
+      } else {
+        const isStudent = item.quantity === null || item.quantity === undefined;
+        initial[idx] = isStudent ? '' : String(item.quantity ?? '');
+      }
     });
     return initial;
   });
-  const [manualBatchSelection, setManualBatchSelection] = useState({}); // Track manually selected batches per item idx
+  const [manualBatchSelection, setManualBatchSelection] = useState(() => {
+    const initial = {};
+    // Pre-select approved batch if available
+    if (request.approvedBatchId) {
+      initial[0] = request.approvedBatchId;
+    }
+    return initial;
+  }); // Track manually selected batches per item idx
   const [notes, setNotes] = useState('');
 
   // Helper to format date safely
@@ -120,7 +133,15 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 z-10">
           <h2 className="text-sm font-bold text-secondary-900 dark:text-white">Dispense Medicine</h2>
-          <p className="text-[11px] text-secondary-500 dark:text-neutral-400 leading-none m-0 mt-1">FEFO allocation preview — {requestItems.length} item{requestItems.length !== 1 ? 's' : ''}</p>
+          <p className="text-[11px] text-secondary-500 dark:text-neutral-400 leading-none m-0 mt-1">
+            {request.approvedQuantity && request.approvedBatchId ? (
+              <span className="text-success-600 dark:text-success-400">✓ Ready to complete — quantity and batch pre-selected</span>
+            ) : request.approvedQuantity ? (
+              <span className="text-accent-600 dark:text-accent-400">Quantity pre-approved — select batch to continue</span>
+            ) : (
+              <span>FEFO allocation preview — {requestItems.length} item{requestItems.length !== 1 ? 's' : ''}</span>
+            )}
+          </p>
         </div>
 
         <div className="p-4 space-y-3">
@@ -170,16 +191,34 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                   </div>
                   <label className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
                     Quantity {isStudent && <span className="text-warning-500">(Not specified)</span>}
+                    {request.approvedQuantity && idx === 0 && <span className="text-success-500"> ✓ Approved</span>}
                   </label>
                   <input
                     type="number"
                     min={1}
                     max={totalAvailable}
                     value={manualQties[idx]}
-                    onChange={(e) => setManualQties({ ...manualQties, [idx]: e.target.value })}
+                    onChange={(e) => {
+                      // Only allow changes if there's no approved quantity
+                      if (!request.approvedQuantity || idx !== 0) {
+                        setManualQties({ ...manualQties, [idx]: e.target.value });
+                      }
+                    }}
+                    readOnly={request.approvedQuantity && idx === 0}
                     placeholder={`Max: ${totalAvailable}`}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${isStudent ? 'border-warning-400 dark:border-warning-600' : 'border-neutral-300 dark:border-neutral-600'}`}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                      request.approvedQuantity && idx === 0
+                        ? 'border-success-300 dark:border-success-600 bg-success-50 dark:bg-success-900/10 cursor-not-allowed'
+                        : isStudent
+                        ? 'border-warning-400 dark:border-warning-600'
+                        : 'border-neutral-300 dark:border-neutral-600'
+                    }`}
                   />
+                  {request.approvedQuantity && idx === 0 && (
+                    <p className="text-[10px] text-success-600 dark:text-success-400 mt-1">
+                      Approved in previous step. Quantity is locked to {request.approvedQuantity} unit{request.approvedQuantity > 1 ? 's' : ''}.
+                    </p>
+                  )}
                   {qty > totalAvailable && (
                     <p className="text-[10px] text-error-500 mt-1">Insufficient stock. Only {totalAvailable} available.</p>
                   )}
@@ -194,12 +233,22 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                   {qty > 0 && (
                     <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600">
                       <label className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                        Batch Preference (Optional)
+                        Batch {request.approvedBatchId && idx === 0 ? <span className="text-success-500">✓ Locked</span> : <span className="text-secondary-400">(Optional)</span>}
                       </label>
                       <select
                         value={manualBatchSelection[idx] || ''}
-                        onChange={(e) => setManualBatchSelection({ ...manualBatchSelection, [idx]: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        onChange={(e) => {
+                          // Only allow changes if there's no approved batch
+                          if (!request.approvedBatchId || idx !== 0) {
+                            setManualBatchSelection({ ...manualBatchSelection, [idx]: e.target.value });
+                          }
+                        }}
+                        disabled={request.approvedBatchId && idx === 0}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                          request.approvedBatchId && idx === 0
+                            ? 'border-success-300 dark:border-success-600 bg-success-50 dark:bg-success-900/10 cursor-not-allowed opacity-75'
+                            : 'border-neutral-300 dark:border-neutral-600'
+                        }`}
                       >
                         <option value="">Auto (FEFO)</option>
                         {batches
@@ -215,6 +264,11 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                             </option>
                           ))}
                       </select>
+                      {request.approvedBatchId && idx === 0 && (
+                        <p className="text-[10px] text-success-600 dark:text-success-400 mt-1">
+                          Batch selected during approval. Click Complete to dispense.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -300,7 +354,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors">Cancel</button>
           <button onClick={handleSubmit} disabled={!isValid} className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-1 ${isValid ? 'bg-primary-500 hover:bg-primary-600' : 'bg-neutral-300 dark:bg-neutral-600 cursor-not-allowed'}`}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-            Confirm Dispense
+            {request.approvedBatchId ? 'Complete' : 'Confirm Dispense'}
           </button>
         </div>
       </div>
