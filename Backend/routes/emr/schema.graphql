@@ -100,6 +100,7 @@ type DentalHistory {
     lastDentalCleaning: String!
     purpose: String
 
+    status: UpdateStatus
     lastVisitDate: Date
     archived_at: Date
 }
@@ -209,6 +210,8 @@ type DentalPhotoRecord{
     upperTeeth: UUID!
     lowerTeeth: UUID!
     isValid: Boolean!
+
+    status: UpdateStatus
     archived_at: Date
     created_at: Date
 }
@@ -293,6 +296,8 @@ type OralApplianceProfile{
   id: ID!
   appliances: [OralAppliance!]!
   notes: String
+  status: UpdateStatus
+
   archived_at: Date
   created_at: Date
 }
