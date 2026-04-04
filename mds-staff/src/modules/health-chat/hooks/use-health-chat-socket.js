@@ -37,6 +37,7 @@ export function useHealthChatSocket() {
     updateTicketStatus,
     updateConversationForNewMessage,
     removeTicket,
+    removeConversation,
     setUserTyping,
     refreshTickets,
     setSocketError,
@@ -56,6 +57,7 @@ export function useHealthChatSocket() {
   const setSocketErrorRef = useRef(setSocketError);
   const refreshTicketsRef = useRef(refreshTickets);
   const removeTicketRef = useRef(removeTicket);
+  const removeConversationRef = useRef(removeConversation);
   const markTicketClosedRef = useRef(markTicketClosed);
   const filterRef = useRef(filter);
   const ticketsRef = useRef(tickets);
@@ -71,11 +73,12 @@ export function useHealthChatSocket() {
     setSocketErrorRef.current = setSocketError;
     refreshTicketsRef.current = refreshTickets;
     removeTicketRef.current = removeTicket;
+    removeConversationRef.current = removeConversation;
     markTicketClosedRef.current = markTicketClosed;
     filterRef.current = filter;
     ticketsRef.current = tickets;
     updateTicketExpiresAtRef.current = updateTicketExpiresAt;
-  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, markTicketClosed, filter, tickets, updateTicketExpiresAt]);
+  }, [addMessage, addTicket, updateTicketStatus, updateConversationForNewMessage, setUserTyping, setSocketError, refreshTickets, removeTicket, removeConversation, markTicketClosed, filter, tickets, updateTicketExpiresAt]);
 
   // Check if selected chat is archived (should not receive typing events)
   const isArchived = selectedTicket && ['Closed', 'Expired'].includes(selectedTicket.status);
@@ -207,6 +210,26 @@ export function useHealthChatSocket() {
       socketService.on('healthchat:session-extended', (data) => {
         if (data.chatId && data.expiresAt) {
           updateTicketExpiresAtRef.current(data.chatId, data.expiresAt);
+        }
+      });
+
+      // Listen for ticket transferred away from current staff
+      socketService.on('healthchat:ticket-transferred', (data) => {
+        if (data.chatId && data.patientId) {
+          // Remove the conversation with slide-out animation
+          removeConversationRef.current(String(data.patientId));
+          // Refresh to get updated list
+          refreshTicketsRef.current();
+        }
+      });
+
+      // Listen for ticket taken over by admin
+      socketService.on('healthchat:ticket-taken-over', (data) => {
+        if (data.chatId && data.patientId) {
+          // Remove the conversation with slide-out animation
+          removeConversationRef.current(String(data.patientId));
+          // Refresh to get updated list
+          refreshTicketsRef.current();
         }
       });
     }).catch((err) => {
