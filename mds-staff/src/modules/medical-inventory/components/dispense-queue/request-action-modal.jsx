@@ -3,10 +3,16 @@ import React, { useState } from 'react';
 /**
  * Request Action Modal
  * Reusable modal for approving or rejecting medicine requests with optional notes
+ * Includes batch selection during approval for FEFO allocation
  */
-const RequestActionModal = ({ request, action, onConfirm, onCancel }) => {
+const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = [], items = [] }) => {
   const [notes, setNotes] = useState('');
+  const [approvedQuantity, setApprovedQuantity] = useState(
+    request?.items?.[0]?.quantity || ''
+  );
+  const [approvedBatchId, setApprovedBatchId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [quantityError, setQuantityError] = useState('');
 
   if (!request) return null;
 
@@ -15,10 +21,36 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel }) => {
 
   if (!isApprove && !isReject) return null;
 
+  // Get available batches for the requested medicine (matching item and location)
+  const requestedItem = request?.items?.[0];
+  const availableBatches = batches.filter((b) => {
+    const available = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
+    const sameItem = requestedItem?.itemId
+      ? String(b.medicalItemId) === String(requestedItem.itemId)
+      : requestedItem?.medicineId
+      ? String(b.medicalItemId) === String(requestedItem.medicineId)
+      : false;
+    const sameLocation = request?.location
+      ? b.location === request.location
+      : true;
+    
+    return sameItem && available > 0 && sameLocation;
+  }).sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
   const handleSubmit = async () => {
+    // Validate quantity only for approval
+    if (isApprove) {
+      const qty = Number(approvedQuantity);
+      if (!approvedQuantity || isNaN(qty) || qty <= 0) {
+        setQuantityError('Quantity must be a positive number');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
-      await onConfirm(request, notes || null);
+      // Pass approvedQuantity and approvedBatchId along with notes
+      await onConfirm(request, notes || null, isApprove ? Number(approvedQuantity) : null, isApprove ? approvedBatchId : null);
     } finally {
       setIsSubmitting(false);
     }
@@ -118,6 +150,61 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel }) => {
               </div>
             )}
           </div>
+
+          {/* Approved Quantity Input (only for approval) */}
+          {isApprove && (
+            <div>
+              <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-2">
+                Approved Quantity <span className="text-error-500">*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={approvedQuantity}
+                onChange={(e) => {
+                  setApprovedQuantity(e.target.value);
+                  setQuantityError('');
+                }}
+                placeholder="Enter quantity to approve"
+                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                  quantityError
+                    ? 'border-error-300 dark:border-error-600'
+                    : 'border-neutral-300 dark:border-neutral-600'
+                }`}
+              />
+              {quantityError && (
+                <p className="text-xs text-error-600 dark:text-error-400 mt-1">{quantityError}</p>
+              )}
+            </div>
+          )}
+
+          {/* Batch/FEFO Selection (only for approval) */}
+          {isApprove && availableBatches.length > 0 && (
+            <div>
+              <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-2">
+                Batch Selection (Optional - Auto: FEFO)
+              </label>
+              <select
+                value={approvedBatchId}
+                onChange={(e) => setApprovedBatchId(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">Auto (FEFO - Earliest Expiry First)</option>
+                {availableBatches.map((batch) => {
+                  const expiry = batch.expiryDate ? new Date(batch.expiryDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
+                  const available = batch.availableQuantity ?? batch.currentQuantity ?? 0;
+                  return (
+                    <option key={batch.id} value={batch.id}>
+                      {batch.batchNumber || batch.id} — Expires {expiry} ({available} available)
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">
+                {approvedBatchId ? 'Batch locked for dispense step' : 'Staff can adjust during dispense if needed'}
+              </p>
+            </div>
+          )}
 
           {/* Notes Input */}
           <div>

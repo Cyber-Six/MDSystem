@@ -79,7 +79,7 @@ const Mutation = {
       }, new Map()).entries()
     ).map(([batchId, quantity]) => ({ batchId, quantity }));
 
-    await validateBatchesWithQuantity(mergedItems, res);
+    await validateBatchesWithQuantity(mergedItems, input.location, res);
     /*
     // Combine duplicate batch entries before validation to avoid undercount checks.
     const mergedItems = Array.from(
