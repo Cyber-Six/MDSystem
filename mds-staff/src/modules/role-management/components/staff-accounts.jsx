@@ -330,8 +330,8 @@ const StaffAccounts = () => {
                     {/* Role — inline dropdown */}
                     <td className="py-3 px-3">
                       {isPending || isStaffAdmin ? (
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isPending ? 'bg-neutral-100 dark:bg-neutral-800 text-secondary-400 dark:text-neutral-500' : getRoleColor(s.role)}`}>
-                          {isPending ? '—' : (s.role || 'Unassigned')}
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isPending ? 'bg-neutral-100 dark:bg-neutral-800 text-secondary-400 dark:text-neutral-500' : isStaffAdmin ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : getRoleColor(s.role)}`}>
+                          {isPending ? '—' : isStaffAdmin ? 'Admin' : (s.role || 'Unassigned')}
                         </span>
                       ) : (
                         <>
