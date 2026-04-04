@@ -51,10 +51,10 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
         {/* Header */}
         <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-secondary-900 dark:text-white">
+            <h2 className="text-xl font-bold text-secondary-900 dark:text-white">
               {isEditing ? 'Edit Event' : 'Create Availability Event'}
             </h2>
-            <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
+            <p className="text-sm text-secondary-500 dark:text-neutral-400 mt-0.5">
               Override default slot schedule for specific dates
             </p>
           </div>
@@ -72,51 +72,51 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* Event Name */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Event Name</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Event Name</label>
             <input
               type="text"
               value={formData.name}
               onChange={handleChange('name')}
               placeholder="e.g., NSTP Health Screening Week"
               required
-              className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3 py-2 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
 
           {/* Date Range */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Start Date</label>
+              <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Start Date</label>
               <input
                 type="date"
                 value={formData.startDate}
                 onChange={handleChange('startDate')}
                 required
-                className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">End Date</label>
+              <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">End Date</label>
               <input
                 type="date"
                 value={formData.endDate}
                 onChange={handleChange('endDate')}
                 required
-                className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
           </div>
 
           {/* Affects */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Affects</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Affects</label>
             <div className="flex gap-2">
               {['All', 'Medical Only', 'Dental Only'].map((opt) => (
                 <button
                   key={opt}
                   type="button"
                   onClick={() => setFormData((prev) => ({ ...prev, affects: opt }))}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     formData.affects === opt
                       ? 'bg-primary-500 text-white'
                       : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
@@ -130,11 +130,11 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
 
           {/* Effect */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Effect</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Effect</label>
             <select
               value={formData.effect}
               onChange={handleChange('effect')}
-              className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3 py-2 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
             >
               <option value="Suspend">Suspend — No appointments</option>
               <option value="Reduce">Reduce — Lower slot count</option>
@@ -145,26 +145,26 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
           {/* Slot Override (shown only for Reduce/Expand) */}
           {showSlotInputs && (
             <div className="bg-neutral-50 dark:bg-neutral-700/50 rounded-lg p-3 space-y-3">
-              <p className="text-xs font-medium text-secondary-600 dark:text-neutral-300">Override Slot Counts</p>
+              <p className="text-sm font-medium text-secondary-600 dark:text-neutral-300">Override Slot Counts</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Morning Slots</label>
+                  <label className="text-xs text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Morning Slots</label>
                   <input
                     type="text"
                     inputMode="numeric"
                     value={formData.morningSlots}
                     onChange={handleChange('morningSlots')}
-                    className="w-full px-3 py-1.5 text-sm bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    className="w-full px-3 py-1.5 text-base bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Afternoon Slots</label>
+                  <label className="text-xs text-secondary-500 dark:text-neutral-400 mb-1 block uppercase tracking-wider">Afternoon Slots</label>
                   <input
                     type="text"
                     inputMode="numeric"
                     value={formData.afternoonSlots}
                     onChange={handleChange('afternoonSlots')}
-                    className="w-full px-3 py-1.5 text-sm bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    className="w-full px-3 py-1.5 text-base bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                 </div>
               </div>
@@ -173,11 +173,11 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
 
           {/* Recurrence */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Recurrence</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Recurrence</label>
             <select
               value={formData.recurrence}
               onChange={handleChange('recurrence')}
-              className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3 py-2 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
             >
               <option value="None">None — One-time event</option>
               <option value="Weekly">Weekly</option>
@@ -187,13 +187,13 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
 
           {/* Notes */}
           <div>
-            <label className="text-xs font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Notes (Optional)</label>
+            <label className="text-sm font-medium text-secondary-600 dark:text-neutral-300 mb-1.5 block">Notes (Optional)</label>
             <textarea
               value={formData.notes}
               onChange={handleChange('notes')}
               rows={2}
               placeholder="Additional details about this event..."
-              className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
+              className="w-full px-3 py-2 text-base bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
             />
           </div>
 
@@ -202,13 +202,13 @@ const EventModal = ({ isOpen, onClose, onSave, initialDate, editingEvent }) => {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 text-sm font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
+              className="flex-1 px-4 py-2 text-base font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors"
+              className="flex-1 px-4 py-2 text-base font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors"
             >
               {isEditing ? 'Update Event' : 'Create Event'}
             </button>

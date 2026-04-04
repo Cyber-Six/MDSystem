@@ -263,7 +263,7 @@ const StaffAccounts = () => {
       </div>
 
       {/* Staff Count */}
-      <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mb-1.5">
+      <p className="text-xs text-secondary-400 dark:text-neutral-500 mb-1.5">
         {filteredStaff.length} staff account{filteredStaff.length !== 1 ? 's' : ''}
         {filterRole !== 'all' && ` · ${filterRole}`}
         {filterStatus !== 'all' && ` · ${filterStatus}`}
@@ -294,12 +294,12 @@ const StaffAccounts = () => {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
-                <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Name</th>
-                <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden md:table-cell">Email</th>
-                <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Role</th>
-                <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden md:table-cell">Branch</th>
-                <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden sm:table-cell">Status</th>
-                <th className="text-left py-2 px-3 text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden lg:table-cell">Last Login</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Name</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden md:table-cell">Email</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Role</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden md:table-cell">Branch</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden sm:table-cell">Status</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider hidden lg:table-cell">Last Login</th>
               </tr>
             </thead>
             <tbody>
@@ -319,18 +319,18 @@ const StaffAccounts = () => {
                           {s.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()}
                         </div>
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-xs font-medium text-secondary-900 dark:text-white truncate">{s.name}</span>
+                          <span className="text-sm font-medium text-secondary-900 dark:text-white truncate">{s.name}</span>
                         </div>
                       </div>
                     </td>
                     <td className="py-3 px-3 hidden md:table-cell">
-                      <span className="text-[11px] text-secondary-500 dark:text-neutral-400">{s.email}</span>
+                      <span className="text-xs text-secondary-500 dark:text-neutral-400">{s.email}</span>
                     </td>
 
                     {/* Role — inline dropdown */}
                     <td className="py-3 px-3">
                       {isPending || isStaffAdmin ? (
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isPending ? 'bg-neutral-100 dark:bg-neutral-800 text-secondary-400 dark:text-neutral-500' : isStaffAdmin ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : getRoleColor(s.role)}`}>
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isPending ? 'bg-neutral-100 dark:bg-neutral-800 text-secondary-400 dark:text-neutral-500' : isStaffAdmin ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : getRoleColor(s.role)}`}>
                           {isPending ? '—' : isStaffAdmin ? 'Admin' : (s.role || 'Unassigned')}
                         </span>
                       ) : (
@@ -338,7 +338,7 @@ const StaffAccounts = () => {
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'role', e.currentTarget); }}
                             disabled={!!cellLoading}
-                            className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full transition-colors ${getRoleColor(s.role)} hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-700`}
+                            className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full transition-colors ${getRoleColor(s.role)} hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-700`}
                           >
                             {cellLoading?.staffId === s.id && cellLoading?.field === 'role' ? (
                               <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
@@ -355,7 +355,7 @@ const StaffAccounts = () => {
                                 <button
                                   key={t.id}
                                   onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'role', t.label, t.id); }}
-                                  className="w-full text-left px-3 py-1.5 text-[11px] text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                              className="w-full text-left px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                                 >
                                   {t.label}
                                 </button>
@@ -373,23 +373,23 @@ const StaffAccounts = () => {
                     {/* Branch — inline dropdown */}
                     <td className="py-3 px-3 hidden md:table-cell">
                       {isPending ? (
-                        <span className="text-[10px] text-secondary-500 dark:text-neutral-400">—</span>
+                        <span className="text-xs text-secondary-500 dark:text-neutral-400">—</span>
                       ) : isStaffAdmin ? (
-                        <span className="text-[10px] text-secondary-500 dark:text-neutral-400">
-                          {s.branch === 'QuezonCity' ? 'Quezon City' : (s.branch || 'Both')}
+                        <span className="text-xs text-secondary-500 dark:text-neutral-400">
+                          {s.branch === 'QuezonCity' ? 'Quezon City' : s.branch === 'Both' || !s.branch ? 'MLA & QC (Both)' : s.branch}
                         </span>
                       ) : (
                         <>
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'branch', e.currentTarget); }}
                             disabled={!!cellLoading}
-                            className="inline-flex items-center gap-1 text-[10px] text-secondary-600 dark:text-neutral-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                            className="inline-flex items-center gap-1 text-xs text-secondary-600 dark:text-neutral-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                           >
                             {cellLoading?.staffId === s.id && cellLoading?.field === 'branch' ? (
                               <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
                             ) : (
                               <>
-                                {s.branch === 'QuezonCity' ? 'Quezon City' : (s.branch || '—')}
+                                {s.branch === 'QuezonCity' ? 'Quezon City' : s.branch === 'Both' ? 'MLA & QC (Both)' : (s.branch || '—')}
                                 <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                               </>
                             )}
@@ -400,9 +400,9 @@ const StaffAccounts = () => {
                                 <button
                                   key={b}
                                   onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'branch', b); }}
-                                  className="w-full text-left px-3 py-1.5 text-[11px] text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-                                >
-                                  {b === 'QuezonCity' ? 'Quezon City' : b}
+                                className="w-full text-left px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                              >
+                                  {b === 'QuezonCity' ? 'Quezon City' : b === 'Both' ? 'MLA & QC (Both)' : b}
                                 </button>
                               ))}
                             </div>,
@@ -415,7 +415,7 @@ const StaffAccounts = () => {
                     {/* Status — inline dropdown */}
                     <td className="py-3 px-3 hidden sm:table-cell">
                       {isPending || isStaffAdmin ? (
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${sc.text}`}>
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium ${sc.text}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
                           {s.status}
                         </span>
@@ -424,7 +424,7 @@ const StaffAccounts = () => {
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleDropdown(s.id, 'status', e.currentTarget); }}
                             disabled={!!cellLoading}
-                            className={`inline-flex items-center gap-1 text-[10px] font-medium ${sc.text} hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-700 rounded-full px-1.5 py-0.5 transition-colors`}
+                            className={`inline-flex items-center gap-1 text-xs font-medium ${sc.text} hover:ring-2 hover:ring-primary-300 dark:hover:ring-primary-700 rounded-full px-1.5 py-0.5 transition-colors`}
                           >
                             {cellLoading?.staffId === s.id && cellLoading?.field === 'status' ? (
                               <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
@@ -444,7 +444,7 @@ const StaffAccounts = () => {
                                   <button
                                     key={st}
                                     onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'status', st); }}
-                                    className="w-full text-left px-3 py-1.5 text-[11px] text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors flex items-center gap-1.5"
+                                    className="w-full text-left px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors flex items-center gap-1.5"
                                   >
                                     <span className={`w-1.5 h-1.5 rounded-full ${stc.dot}`} />
                                     {st}
@@ -458,7 +458,7 @@ const StaffAccounts = () => {
                       )}
                     </td>
 
-                    <td className="py-3 px-3 text-[10px] text-secondary-500 dark:text-neutral-400 hidden lg:table-cell whitespace-nowrap">
+                    <td className="py-3 px-3 text-xs text-secondary-500 dark:text-neutral-400 hidden lg:table-cell whitespace-nowrap">
                       {s.lastLogin || 'Never'}
                     </td>
                   </tr>
@@ -643,7 +643,7 @@ const StaffAccounts = () => {
                       onChange={(e) => setAddForm(prev => ({ ...prev, designation: e.target.value }))}
                       className="w-full px-3 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-secondary-800 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
                     >
-                      <option value="Both">Both</option>
+                      <option value="Both">MLA & QC (Both)</option>
                       <option value="Manila">Manila</option>
                       <option value="QuezonCity">Quezon City</option>
                     </select>
