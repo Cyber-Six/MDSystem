@@ -3,6 +3,11 @@ const { generateOTP } = require('../utils/security.js');
 const { redisConfig } = require('../config/redis.js');
 const logger = require('../utils/logger.js');
 
+const path = require('path');
+const dotenv = require('dotenv');
+
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 // ✅ Email Verification Expiration
 const EMAIL_VERIF_EXP_SECONDS = Number(process.env.EMAIL_VERIF_EXPIRATION) || 300;
 const EMAIL_VERIF_EXP_MINUTES = Math.floor(EMAIL_VERIF_EXP_SECONDS / 60);
