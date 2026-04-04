@@ -135,7 +135,7 @@ const WhitelistManager = ({ schedulerId, isOpen, onClose, onUpdate }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-lg h-[600px] flex flex-col">
         {/* Header */}
         <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
