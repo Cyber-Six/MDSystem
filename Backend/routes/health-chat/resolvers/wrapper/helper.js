@@ -402,12 +402,12 @@ async function autoExpireTickets(patientId = null) {
   if (ongoingResult.rows.length > 0) {
     const ongoingMsg = `This ticket has been automatically closed by the system after ${CHAT_EXPIRY_DAYS} days of inactivity.`;
     const ongoingValues = ongoingResult.rows
-      .map((_, i) => `($${i + 1}, '${ongoingMsg}', 'system', NULL, 'Medical')`)
+      .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
       .join(', ');
     await db.query(
       `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
        VALUES ${ongoingValues}`,
-      ongoingResult.rows.map(r => r.id)
+      [ongoingMsg, ...ongoingResult.rows.map(r => r.id)]
     );
   }
 
@@ -439,12 +439,12 @@ async function autoExpireTickets(patientId = null) {
   if (openExpiredResult.rows.length > 0) {
     const openExpiredMsg = 'This ticket has been automatically closed because the patient account has expired.';
     const openExpiredValues = openExpiredResult.rows
-      .map((_, i) => `($${i + 1}, '${openExpiredMsg}', 'system', NULL, 'Medical')`)
+      .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
       .join(', ');
     await db.query(
       `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
        VALUES ${openExpiredValues}`,
-      openExpiredResult.rows.map(r => r.id)
+      [openExpiredMsg, ...openExpiredResult.rows.map(r => r.id)]
     );
   }
 
@@ -479,12 +479,12 @@ async function autoExpireTickets(patientId = null) {
   if (staleOpenResult.rows.length > 0) {
     const staleMsg = `This consultation request was automatically closed by the system after ${CHAT_EXPIRY_DAYS} days without a staff response.`;
     const staleValues = staleOpenResult.rows
-      .map((_, i) => `($${i + 1}, '${staleMsg}', 'system', NULL, 'Medical')`)
+      .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
       .join(', ');
     await db.query(
       `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
        VALUES ${staleValues}`,
-      staleOpenResult.rows.map(r => r.id)
+      [staleMsg, ...staleOpenResult.rows.map(r => r.id)]
     );
   }
 
@@ -518,12 +518,12 @@ async function autoExpireTickets(patientId = null) {
   if (noMsgResult.rows.length > 0) {
     const noMsgMsg = 'This ticket has been automatically closed (no activity recorded).';
     const noMsgValues = noMsgResult.rows
-      .map((_, i) => `($${i + 1}, '${noMsgMsg}', 'system', NULL, 'Medical')`)
+      .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
       .join(', ');
     await db.query(
       `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
        VALUES ${noMsgValues}`,
-      noMsgResult.rows.map(r => r.id)
+      [noMsgMsg, ...noMsgResult.rows.map(r => r.id)]
     );
   }
 

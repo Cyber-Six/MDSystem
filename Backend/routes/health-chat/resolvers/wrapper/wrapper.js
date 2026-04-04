@@ -623,13 +623,13 @@ const Mutation = {
        SET status = 'Closed',
            session_end = NOW(),
            closed_by_type = 'Patient'
-       WHERE id = $1 AND "patientId" = $2
+       WHERE id = $1 AND "patientId" = $2 AND status IN ('Open', 'Ongoing')
        RETURNING *`,
       [chatId, user.id]
     );
 
     if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to close ticket").status(500).throw();
+      throwGraphQLError(res).message("Cannot close this ticket. It may already be closed or expired.").status(400).throw();
     }
 
     // Add system message

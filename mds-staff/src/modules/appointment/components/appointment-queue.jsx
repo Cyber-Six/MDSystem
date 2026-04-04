@@ -220,14 +220,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
               </span>
             ) : (
               tabCounts[tab.key] !== undefined && (
-                <span
-                  title={filterDate || filterSchedulerId ? 'Global count — filters are active' : undefined}
-                  className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold transition-opacity ${filterDate || filterSchedulerId ? 'opacity-40' : ''} ${
-                    activeTab === tab.key
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
-                      : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
-                  }`}>
-                  {formatCount(tabCounts[tab.key])}{filterDate || filterSchedulerId ? '*' : ''}
+                <span className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${
+                  activeTab === tab.key
+                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                    : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
+                }`}>
+                  {formatCount(tabCounts[tab.key])}
                 </span>
               )
             )}
