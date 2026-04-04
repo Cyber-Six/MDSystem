@@ -46,4 +46,30 @@ function groupByOutcome(queryResult) {
   }
   return map;
 }
-module.exports = { getLatestOutcome, getOutcomeData, groupByOutcome };
+
+async function getPatientIdFromConsultationId(ConsultationId) {
+  const query = `
+    SELECT "patientId"
+    FROM "Consultation"
+    WHERE id = $1
+  `;
+
+  const result = await db.query(query, [ConsultationId]);
+  return result.rows[0]?.patientId || null;
+}
+
+async function getPatientIdFromOutcomeId(outcomeId) {
+  const query = `
+    SELECT c."patientId"
+    FROM "ConsultationOutcome" co
+    JOIN "Consultation" c ON co."consultationId" = c.id
+    WHERE co.id = $1
+  `;
+
+  const result = await db.query(query, [outcomeId]);
+  return result.rows[0]?.patientId || null;
+}
+
+module.exports = { getLatestOutcome, getOutcomeData,
+  groupByOutcome, getPatientIdFromConsultationId,
+  getPatientIdFromOutcomeId };
