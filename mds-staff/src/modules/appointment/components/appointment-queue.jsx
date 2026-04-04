@@ -220,12 +220,14 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
               </span>
             ) : (
               tabCounts[tab.key] !== undefined && (
-                <span className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${
-                  activeTab === tab.key
-                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
-                    : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
-                }`}>
-                  {formatCount(tabCounts[tab.key])}
+                <span
+                  title={filterDate || filterSchedulerId ? 'Global count — filters are active' : undefined}
+                  className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold transition-opacity ${filterDate || filterSchedulerId ? 'opacity-40' : ''} ${
+                    activeTab === tab.key
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                      : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
+                  }`}>
+                  {formatCount(tabCounts[tab.key])}{filterDate || filterSchedulerId ? '*' : ''}
                 </span>
               )
             )}
@@ -250,20 +252,23 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         </div>
 
         {/* Date filter */}
-        <div className="relative">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-secondary-400 dark:text-neutral-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <input
-            type="date"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            className="pl-8 pr-3 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-          />
+        <div className="flex items-center gap-1">
+          <div className="relative">
+            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-secondary-400 dark:text-neutral-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="pl-8 pr-3 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
           {filterDate && (
             <button
               onClick={() => setFilterDate('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-secondary-400 dark:text-neutral-500 hover:text-secondary-600 dark:hover:text-neutral-300"
+              title="Clear date filter"
+              className="p-1 rounded text-secondary-400 dark:text-neutral-500 hover:text-secondary-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -382,7 +387,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                     <p className="text-sm font-medium text-secondary-500 dark:text-neutral-400">No appointments found</p>
-                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">No {activeTab} appointments at the moment</p>
+                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">
+                      {filterDate || filterSchedulerId
+                        ? 'Try adjusting or clearing the active filters'
+                        : `No ${activeTab} appointments at the moment`}
+                    </p>
                   </td>
                 </tr>
               )}

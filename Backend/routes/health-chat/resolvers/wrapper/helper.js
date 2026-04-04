@@ -398,12 +398,15 @@ async function autoExpireTickets(patientId = null) {
   const ongoingResult = await db.query(ongoingQuery, ongoingParams);
   expiredCount += ongoingResult.rowCount;
 
-  for (const row of ongoingResult.rows) {
+  if (ongoingResult.rows.length > 0) {
+    const ongoingMsg = `This ticket has been automatically closed by the system after ${CHAT_EXPIRY_DAYS} days of inactivity.`;
+    const ongoingValues = ongoingResult.rows
+      .map((_, i) => `($${i + 1}, '${ongoingMsg}', 'system', NULL, 'Medical')`)
+      .join(', ');
     await db.query(
-      `INSERT INTO "HealthChatPrompt"
-       ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, $2, 'system', NULL, 'Medical')`,
-      [row.id, `This ticket has been automatically closed by the system after ${CHAT_EXPIRY_DAYS} days of inactivity.`]
+      `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ${ongoingValues}`,
+      ongoingResult.rows.map(r => r.id)
     );
   }
 
@@ -430,12 +433,15 @@ async function autoExpireTickets(patientId = null) {
   const openResult = await db.query(openQuery, openParams);
   expiredCount += openResult.rowCount;
 
-  for (const row of openResult.rows) {
+  if (openResult.rows.length > 0) {
+    const openMsg = `This consultation request was automatically closed by the system after ${CHAT_EXPIRY_DAYS} days without a staff response.`;
+    const openValues = openResult.rows
+      .map((_, i) => `($${i + 1}, '${openMsg}', 'system', NULL, 'Medical')`)
+      .join(', ');
     await db.query(
-      `INSERT INTO "HealthChatPrompt"
-       ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, $2, 'system', NULL, 'Medical')`,
-      [row.id, `This consultation request was automatically closed by the system after ${CHAT_EXPIRY_DAYS} days without a staff response.`]
+      `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ${openValues}`,
+      openResult.rows.map(r => r.id)
     );
   }
 

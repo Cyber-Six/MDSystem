@@ -49,12 +49,15 @@ const AdminTransfer = () => {
     setIsInitiating(true);
     try {
       const result = await initiateAdminTransfer(selectedUserId, password);
-      if (result.ok && result.verificationRequired) {
-        setPassword('');
-        setStep('verify');
-      } else if (result.ok && result.bootstrapMode) {
+      if (result.ok && result.bootstrapMode) {
         setPassword('');
         setStep('bootstrap');
+      } else if (result.ok && result.verificationRequired) {
+        setPassword('');
+        setStep('verify');
+      } else if (result.ok) {
+        // Unexpected response shape — surface the server message
+        setInitiateError(result.message || 'Unexpected response from server.');
       }
     } catch (err) {
       setInitiateError(err.message || 'Failed to initiate transfer.');
@@ -324,7 +327,7 @@ const AdminTransfer = () => {
         </form>
       )}
 
-      {/* ── Step 3: Success ── */}
+      {/* ── Step 4: Success ── */}
       {step === 'success' && (
         <div className="text-center py-6">
           <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center">
@@ -337,7 +340,7 @@ const AdminTransfer = () => {
             {transferResult?.message || 'Admin privileges have been transferred successfully.'}
           </p>
           <p className="text-[11px] text-secondary-400 dark:text-neutral-500">
-            You no longer have admin access. The page will redirect shortly.
+            You no longer have admin access. Please refresh the page.
           </p>
         </div>
       )}
