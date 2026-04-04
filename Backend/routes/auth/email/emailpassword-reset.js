@@ -20,7 +20,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
 
     // ✅ 0. Check if this IP is locked from resetpw attempts
     if (await isResetPwLocked(ip)) {
-      delayRandom(1000, 3000); // add random delay to mitigate brute-force
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       return res.status(429).json({
         error: "LOCKED_OUT",
         message: "Too many invalid attempts. Try again later."
@@ -31,7 +31,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
 
     // ✅ 1. Required fields
     if (!email || !recaptchaToken) {
-      delayRandom(1000, 3000); // add random delay to mitigate brute-force
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "MISSING_FIELDS",
@@ -41,7 +41,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
 
     // ✅ 2. Institutional email validation
     if (!isValidEmail(email)) {
-      delayRandom(1000, 3000); // add random delay to mitigate brute-force
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "INVALID_INSTITUTION_EMAIL",
@@ -53,7 +53,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
     const { verifyRecaptcha } = require('../../../services/recaptcha.js');
     const recaptchaValid = await verifyRecaptcha(recaptchaToken);
     if (!recaptchaValid) {
-      delayRandom(1000, 3000); // add random delay to mitigate brute-force
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "INVALID_RECAPTCHA",
@@ -83,7 +83,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
       profile.penaltyCooldown_resetpw );
 
     if (attemptsExceeded) {
-      delayRandom(1000, 1500); // add random delay to mitigate brute-force
+      await delayRandom(1000, 1500); // add random delay to mitigate brute-force
       return res.status(429).json({
         error: "EMAIL_ATTEMPT_LIMIT_REACHED",
         message: "Too many attempts. Please try again later."
@@ -127,7 +127,7 @@ router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), 
 
     // ✅ 1. Required fields
     if (!verificationKey || !newPassword) {
-      delayRandom(1000, 3000); // add random delay to mitigate brute-force
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       return res.status(400).json({
         error: "MISSING_FIELDS",
         message: "Verification key and new password are required."
@@ -136,7 +136,7 @@ router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), 
 
     // ✅ 2. Check if IP is locked out
     if (await isResetPwLocked(ip)) {
-      delayRandom(1000, 3000); // add random delay to mitigate brute-force
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       return res.status(429).json({
         error: "LOCKED_OUT",
         message: "Too many invalid attempts. Try again later."
@@ -149,7 +149,7 @@ router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), 
     if (!userId) {
       // ❗ Record failure for invalid or expired key
       await recordResetPwFailure(ip);
-      delayRandom(1000, 3000); // add random delay to mitigate brute-force
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       return res.status(400).json({
         error: "INVALID_OR_EXPIRED_KEY",
         message: "The verification key is invalid or has expired."
