@@ -349,11 +349,12 @@ async function formatChatRecordsBatch(chats) {
 
 /**
  * Auto-expire tickets that exceed CHAT_EXPIRY_DAYS.
- * Two cases are handled:
- *   1. Ongoing tickets whose session_start + CHAT_EXPIRY_DAYS is in the past
- *      (matches the expiresAt value shown to patients in the frontend).
- *   2. Open (pending) tickets that were never approved within CHAT_EXPIRY_DAYS
- *      (uses archived_at, which is set to current_timestamp on INSERT).
+ * Four cases are handled:
+ *   1. Ongoing tickets whose session_start + CHAT_EXPIRY_DAYS is in the past.
+ *   2. Open tickets where the patient account is already Expired in UserCredentials.
+ *   3. Stale Open tickets where the last message is older than CHAT_EXPIRY_DAYS
+ *      (every new ticket has a creation system message from _createTicket as the anchor).
+ *   4. Legacy Open tickets with zero messages (MAX(stamp) IS NULL skips step 3 in SQL).
  * Self-sufficient check — no background process required.
  * Called on relevant queries to ensure data consistency.
  * @param {number|null} patientId - Optional patient ID filter
@@ -375,8 +376,8 @@ async function autoExpireTickets(patientId = null) {
   let expiredCount = 0;
 
   // ── 1. Expire Ongoing tickets whose session window has elapsed ──────────────
-  // session_start + CHAT_EXPIRY_DAYS < NOW() matches the frontend's expiresAt.
-  // Using extendSession pushes session_start forward, so this stays consistent.
+  // session_start + CHAT_EXPIRY_DAYS <= NOW() matches the frontend's expiresAt.
+  // extendSession pushes session_start forward by 1 day, so this stays consistent.
   const ongoingParams = [interval];
   let ongoingQuery = `
     UPDATE "HealthChat"
@@ -385,7 +386,7 @@ async function autoExpireTickets(patientId = null) {
         closed_by_type = 'System'
     WHERE status = 'Ongoing'
     AND session_start IS NOT NULL
-    AND session_start < NOW() - CAST($1 AS INTERVAL)
+    AND session_start + CAST($1 AS INTERVAL) <= NOW()
   `;
 
   if (patientId) {
@@ -410,38 +411,119 @@ async function autoExpireTickets(patientId = null) {
     );
   }
 
-  // ── 2. Expire Open (pending) tickets with no staff response ─────────────────
-  // archived_at is set to current_timestamp on INSERT, making it the creation time.
-  // If staff never approves within CHAT_EXPIRY_DAYS, expire the request.
-  const openParams = [interval];
-  let openQuery = `
+  // ── 2. Expire Open tickets where the patient account is already Expired ──────
+  // Open tickets have no session_start so step 1 never catches them.
+  // Tie them to the patient's credential status for account-level expiry.
+  let openExpiredQuery = `
+    UPDATE "HealthChat" hc
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    FROM "UserCredentials" uc
+    WHERE hc."patientId" = uc.id
+    AND hc.status = 'Open'
+    AND uc.credentials_status = 'Expired'
+  `;
+  const openExpiredParams = [];
+
+  if (patientId) {
+    openExpiredQuery += ` AND hc."patientId" = $1`;
+    openExpiredParams.push(patientId);
+  }
+
+  openExpiredQuery += ` RETURNING hc.id`;
+
+  const openExpiredResult = await db.query(openExpiredQuery, openExpiredParams);
+  expiredCount += openExpiredResult.rowCount;
+
+  if (openExpiredResult.rows.length > 0) {
+    const openExpiredMsg = 'This ticket has been automatically closed because the patient account has expired.';
+    const openExpiredValues = openExpiredResult.rows
+      .map((_, i) => `($${i + 1}, '${openExpiredMsg}', 'system', NULL, 'Medical')`)
+      .join(', ');
+    await db.query(
+      `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ${openExpiredValues}`,
+      openExpiredResult.rows.map(r => r.id)
+    );
+  }
+
+  // ── 3. Expire stale Open tickets by inactivity ───────────────────────────────
+  // Uses MAX(stamp) from HealthChatPrompt as the activity anchor.
+  // _createTicket inserts a creation system message, so every new Open ticket has at
+  // least one stamp. Tickets with no messages are NOT matched here (MAX IS NULL makes
+  // the < comparison false in SQL) — handled by step 4.
+  const staleOpenParams = [interval];
+  let staleOpenQuery = `
     UPDATE "HealthChat"
     SET status = 'Expired',
         session_end = NOW(),
         closed_by_type = 'System'
     WHERE status = 'Open'
-    AND archived_at < NOW() - CAST($1 AS INTERVAL)
+    AND (
+      SELECT MAX(stamp) FROM "HealthChatPrompt"
+      WHERE "consultationVirtualId" = "HealthChat".id
+    ) < NOW() - CAST($1 AS INTERVAL)
   `;
 
   if (patientId) {
-    openQuery += ` AND "patientId" = $2`;
-    openParams.push(patientId);
+    staleOpenQuery += ` AND "HealthChat"."patientId" = $2`;
+    staleOpenParams.push(patientId);
   }
 
-  openQuery += ` RETURNING id`;
+  staleOpenQuery += ` RETURNING id`;
 
-  const openResult = await db.query(openQuery, openParams);
-  expiredCount += openResult.rowCount;
+  const staleOpenResult = await db.query(staleOpenQuery, staleOpenParams);
+  expiredCount += staleOpenResult.rowCount;
 
-  if (openResult.rows.length > 0) {
-    const openMsg = `This consultation request was automatically closed by the system after ${CHAT_EXPIRY_DAYS} days without a staff response.`;
-    const openValues = openResult.rows
-      .map((_, i) => `($${i + 1}, '${openMsg}', 'system', NULL, 'Medical')`)
+  if (staleOpenResult.rows.length > 0) {
+    const staleMsg = `This consultation request was automatically closed by the system after ${CHAT_EXPIRY_DAYS} days without a staff response.`;
+    const staleValues = staleOpenResult.rows
+      .map((_, i) => `($${i + 1}, '${staleMsg}', 'system', NULL, 'Medical')`)
       .join(', ');
     await db.query(
       `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ${openValues}`,
-      openResult.rows.map(r => r.id)
+       VALUES ${staleValues}`,
+      staleOpenResult.rows.map(r => r.id)
+    );
+  }
+
+  // ── 4. Expire legacy Open tickets with zero messages ────────────────────────
+  // MAX(stamp) IS NULL causes step 3's < comparison to always be false in SQL.
+  // Any Open ticket with no HealthChatPrompt rows is stale by definition —
+  // new tickets always have a creation message from _createTicket.
+  const noMsgParams = [];
+  let noMsgQuery = `
+    UPDATE "HealthChat"
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    WHERE status = 'Open'
+    AND NOT EXISTS (
+      SELECT 1 FROM "HealthChatPrompt"
+      WHERE "consultationVirtualId" = "HealthChat".id
+    )
+  `;
+
+  if (patientId) {
+    noMsgQuery += ` AND "HealthChat"."patientId" = $1`;
+    noMsgParams.push(patientId);
+  }
+
+  noMsgQuery += ` RETURNING id`;
+
+  const noMsgResult = await db.query(noMsgQuery, noMsgParams);
+  expiredCount += noMsgResult.rowCount;
+
+  if (noMsgResult.rows.length > 0) {
+    const noMsgMsg = 'This ticket has been automatically closed (no activity recorded).';
+    const noMsgValues = noMsgResult.rows
+      .map((_, i) => `($${i + 1}, '${noMsgMsg}', 'system', NULL, 'Medical')`)
+      .join(', ');
+    await db.query(
+      `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ${noMsgValues}`,
+      noMsgResult.rows.map(r => r.id)
     );
   }
 
