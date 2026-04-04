@@ -636,6 +636,8 @@ type DentalProcedureProfile {
   id: ID!
   procedures: [dentalProcedureRecord!]!
   notes: String
+  
+  status: UpdateStatus
   archived_at: Date
   created_at: Date
   }
