@@ -4,7 +4,7 @@ import { logout } from '../../packages-core-adapter';
 import { useStaffNotifications } from '../../modules/notification/notification-context';
 import { useSettings } from '../../context/settings-context';
 import { usePatientTabs } from '../../context/patient-tabs-context';
-import { useStaffProfile } from '../../hooks/use-staff-profile';
+import { useStaffProfile, clearStaffProfileCache } from '../../hooks/use-staff-profile';
 
 function formatRelativeTime(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -578,9 +578,11 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                   onClick={async () => {
                     try {
                       clearTabs();
+                      clearStaffProfileCache();
                       await logout(true);
                     } catch {
                       clearTabs();
+                      clearStaffProfileCache();
                       window.location.href = '/auth';
                     }
                   }}

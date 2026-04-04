@@ -89,8 +89,9 @@ router.get('/me/profile', jwtProtect("medical"), async (req, res) => {
             [req.user.id]
         );
 
+        // A valid JWT guarantees this user exists in UserCredentials
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Profile not found' });
+            return res.status(500).json({ error: 'Unexpected: authenticated user not found in credentials' });
         }
 
         const row = result.rows[0];
@@ -102,7 +103,7 @@ router.get('/me/profile', jwtProtect("medical"), async (req, res) => {
 
         res.json({
             email: row.email || null,
-            name: nameParts.join(' ') || null,
+            name: nameParts.length > 0 ? nameParts.join(' ') : null,
             firstName: row.first_name || null,
             lastName: row.last_name || null,
             role: row.personnel_role || null,
