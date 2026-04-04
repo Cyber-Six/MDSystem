@@ -12,7 +12,7 @@ export const MODULE_PERMISSION_MAP = {
   dentalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_set_dental_record', 'consultation_allow_view', 'consultation_allow_edit'],
   appointments: ['appointment_allow_approval', 'appointment_allow_view_records', 'appointment_allow_view_configuration', 'appointment_allow_edit_configuration'],
   inventory: ['inventory_allow_view', 'inventory_allow_edit', 'inventory_allow_dispense', 'inventory_allow_manage_requests', 'inventory_allow_prescribe'],
-  healthChat: ['health_chat_allow_access', 'health_chat_allow_manage'],
+  healthChat: ['health_chat_allow_access'],
   analytics: ['analytics_allow_view', 'analytics_allow_export'],
   // roleManagement excluded — admin-only via is_admin, not assignable via templates
 };
@@ -40,7 +40,6 @@ export const PERMISSION_KEY_LABELS = {
   inventory_allow_prescribe: 'Prescribe Medicine',
   medicine_request_allow_approve: 'Approve Medicine Requests',
   health_chat_allow_access: 'Access Health Chat',
-  health_chat_allow_manage: 'Manage Health Chat',
   analytics_allow_view: 'View Analytics',
   analytics_allow_export: 'Export Analytics',
   // role_management keys excluded — admin-only

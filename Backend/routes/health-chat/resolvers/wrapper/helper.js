@@ -1,4 +1,5 @@
 const db = require("../../../../config/query.js");
+const pool = db.db(); // Get the pool for transactions
 
 // Chat expiry duration in days
 const CHAT_EXPIRY_DAYS = 3;
@@ -367,41 +368,52 @@ async function autoExpireTickets(patientId = null) {
   }
   if (!patientId) _lastAutoExpireRun = now;
 
-  // Find tickets where the last message was more than CHAT_EXPIRY_DAYS ago
-  // Use parameterized interval to avoid SQL injection
-  const params = [`${CHAT_EXPIRY_DAYS} days`];
-  let query = `
-    UPDATE "HealthChat"
-    SET status = 'Expired',
-        session_end = NOW(),
-        closed_by_type = 'System'
-    WHERE status = 'Ongoing'
-    AND (
-      SELECT MAX(stamp) FROM "HealthChatPrompt"
-      WHERE "consultationVirtualId" = "HealthChat".id
-    ) < NOW() - CAST($1 AS INTERVAL)
-  `;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  if (patientId) {
-    query += ` AND "HealthChat"."patientId" = $2`;
-    params.push(patientId);
+    // Find tickets where the last message was more than CHAT_EXPIRY_DAYS ago
+    // Use parameterized interval to avoid SQL injection
+    const params = [`${CHAT_EXPIRY_DAYS} days`];
+    let query = `
+      UPDATE "HealthChat"
+      SET status = 'Expired',
+          session_end = NOW(),
+          closed_by_type = 'System'
+      WHERE status = 'Ongoing'
+      AND (
+        SELECT MAX(stamp) FROM "HealthChatPrompt"
+        WHERE "consultationVirtualId" = "HealthChat".id
+      ) < NOW() - CAST($1 AS INTERVAL)
+    `;
+
+    if (patientId) {
+      query += ` AND "HealthChat"."patientId" = $2`;
+      params.push(patientId);
+    }
+
+    query += ` RETURNING id`;
+
+    const result = await client.query(query, params);
+
+    // Add system message to each expired chat (within the same transaction)
+    for (const row of result.rows) {
+      await client.query(
+        `INSERT INTO "HealthChatPrompt"
+         ("consultationVirtualId", "text", "promptType", "userId", "userType")
+         VALUES ($1, $2, 'system', NULL, 'Medical')`,
+        [row.id, `This ticket has been automatically closed after ${CHAT_EXPIRY_DAYS} days of inactivity.`]
+      );
+    }
+
+    await client.query('COMMIT');
+    return result.rowCount;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  query += ` RETURNING id`;
-
-  const result = await db.query(query, params);
-
-  // Add system message to each expired chat
-  for (const row of result.rows) {
-    await db.query(
-      `INSERT INTO "HealthChatPrompt"
-       ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, $2, 'system', NULL, 'Medical')`,
-      [row.id, `This ticket has been automatically closed after ${CHAT_EXPIRY_DAYS} days of inactivity.`]
-    );
-  }
-
-  return result.rowCount;
 }
 
 /**
@@ -424,6 +436,23 @@ async function hasActiveTicket(patientId) {
   return result.rowCount > 0;
 }
 
+async function getPatientIdFromChatId(chatId) {
+  const { rows, rowCount } = await db.query(
+    `SELECT "patientId"
+     FROM "HealthChat"
+     WHERE id = $1
+     LIMIT 1`,
+    [chatId]
+  );
+
+  if (rowCount === 0) {
+    return null; // or throw an error if you want strict enforcement
+  }
+
+  return rows[0].patientId;
+}
+
+
 module.exports = {
   CHAT_EXPIRY_DAYS,
   calculateExpiryDate,
@@ -438,5 +467,6 @@ module.exports = {
   formatMessage,
   hasActiveTicket,
   autoExpireTickets,
-  getLastMessageInfo
+  getLastMessageInfo,
+  getPatientIdFromChatId,
 };

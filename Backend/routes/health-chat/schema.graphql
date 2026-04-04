@@ -26,6 +26,12 @@ enum ClosedBy {
   System
 }
 
+enum Designation {
+  Manila
+  QuezonCity
+  Both
+}
+
 # Types
 type HealthChat {
   id: ID!
@@ -137,13 +143,13 @@ type Query {
   getTicketMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
 
   # Medical queries
-  getPendingTickets(offset: Int, limit: Int): HealthChatList!
-  getActiveTickets(offset: Int, limit: Int): HealthChatList!
-  getAllTickets(status: ChatStatus, offset: Int, limit: Int): HealthChatList!
+  getPendingTickets(location: Designation, offset: Int, limit: Int): HealthChatList!
+  getActiveTickets(location: Designation, offset: Int, limit: Int): HealthChatList!
+  getAllTickets(location: Designation, status: ChatStatus, offset: Int, limit: Int): HealthChatList!
   getTicket(chatId: ID!): HealthChat
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
   # NEW: Get conversations grouped by patient
-  getPatientConversations(statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
+  getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
   # NEW: Get all messages for a patient (across all tickets)
   getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
 }
@@ -164,5 +170,8 @@ type Mutation {
   sendMedicalMessage(input: SendMessageInput!): MessageResult!
   closeTicket(input: CloseTicketInput!): TicketResult!
   deleteArchivedTicket(chatId: ID!): TicketResult!
+
+  transferTicket(chatId: ID!, toMedicalId: Int!): TicketResult!
+  takeoverOngoingTicket(chatId: ID!): TicketResult! # for admin only
   expireOldTickets: Int!
 }

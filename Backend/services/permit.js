@@ -38,7 +38,6 @@ const permissions = {
   inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",
 
   health_chat_allow_access: "ALLOW_TO_ACCESS_HEALTH_CHAT",
-  health_chat_allow_manage: "ALLOW_TO_MANAGE_HEALTH_CHAT",
 
   analytics_allow_view: "ALLOW_TO_VIEW_ANALYTICS",
   analytics_allow_export: "ALLOW_TO_EXPORT_ANALYTICS",
@@ -54,6 +53,10 @@ const ADMIN_ONLY_KEYS = new Set([
   'role_management_allow_access',
   'role_management_allow_edit',
 ]);
+
+async function isMedicalAdmin(userId) {
+  return await findMedicalPermit(userId, permissions.is_admin);;
+}
 
 async function getMedicalpermits(personnelId) {
   const result = await db.query(
@@ -934,7 +937,6 @@ const MODULE_PERMISSION_MAP = {
   ],
   healthChat: [
     'health_chat_allow_access',
-    'health_chat_allow_manage',
   ],
   analytics: [
     'analytics_allow_view',
@@ -1061,6 +1063,7 @@ async function getStaffModulePermissions(personnelId) {
 }
 
 module.exports = {
+  isMedicalAdmin,
   setMedicalPermit,
   unsetMedicalPermit,
   isMedicalPermitted,
