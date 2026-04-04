@@ -45,6 +45,10 @@ ALTER TABLE "slotScheduler"
 ADD CONSTRAINT slot_label_location_unique
 UNIQUE (label, location);
 
+ALTER TABLE "SlotCustomDate"
+ADD CONSTRAINT "SlotCustomDate_slotScheduleId_scheduledDate_key"
+UNIQUE ("slotScheduleId", "scheduledDate");
+
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES

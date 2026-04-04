@@ -148,11 +148,11 @@ const Mutation = {
     
     // Notify user of attendance record
     await notifyUser(
-      result.userId,
+      result.patientId,
       'appointment:attendance-recorded',
       { slotId, arrived_at },
       {
-        email: await db.findEmailByUserId(result.userId),
+        email: await db.findEmailByUserId(result.patientId),
         title: 'Attendance Recorded',
         message: 'Your appointment attendance has been recorded.',
       }

@@ -178,20 +178,24 @@ async function insertSlotCustomDates(slotScheduleId, dates, db) {
     throw new Error("Dates array must not be empty");
   }
 
-  // SlotCustomDate only stores (slotScheduleId, scheduledDate) — no slot count columns.
-  // Slot count overrides are stored in ScheduleDateEntity instead.
+  // Same WHERE NOT EXISTS approach to avoid needing a unique constraint on (slotScheduleId, scheduledDate)
   const values = [];
-  const placeholders = dates.map((dateEntry, i) => {
+  const selectParts = dates.map((dateEntry, i) => {
     const offset = i * 2;
     const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
     values.push(slotScheduleId, scheduledDate);
-    return `($${offset + 1}, $${offset + 2})`;
+    return `($${offset + 1}::integer, $${offset + 2}::date)`;
   });
 
   const query = `
     INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
-    VALUES ${placeholders.join(", ")}
-    ON CONFLICT ("slotScheduleId", "scheduledDate") DO NOTHING
+    SELECT v."slotScheduleId", v."scheduledDate"
+    FROM (VALUES ${selectParts.join(", ")}) AS v("slotScheduleId", "scheduledDate")
+    WHERE NOT EXISTS (
+      SELECT 1 FROM "SlotCustomDate" scd
+      WHERE scd."slotScheduleId" = v."slotScheduleId"
+        AND scd."scheduledDate" = v."scheduledDate"
+    )
     RETURNING *;
   `;
 
