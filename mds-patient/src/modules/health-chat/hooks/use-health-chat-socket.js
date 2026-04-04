@@ -32,7 +32,8 @@ export function useHealthChatSocket({
   onTyping,
   onTicketApproved,
   onTicketClosed,
-  onSessionExtended
+  onSessionExtended,
+  onStaffChanged,
 }) {
   const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -50,6 +51,7 @@ export function useHealthChatSocket({
   const onTicketApprovedRef = useRef(onTicketApproved);
   const onTicketClosedRef = useRef(onTicketClosed);
   const onSessionExtendedRef = useRef(onSessionExtended);
+  const onStaffChangedRef = useRef(onStaffChanged);
 
   // Keep refs up to date with latest callbacks
   useEffect(() => {
@@ -58,7 +60,8 @@ export function useHealthChatSocket({
     onTicketApprovedRef.current = onTicketApproved;
     onTicketClosedRef.current = onTicketClosed;
     onSessionExtendedRef.current = onSessionExtended;
-  }, [onNewMessage, onTyping, onTicketApproved, onTicketClosed, onSessionExtended]);
+    onStaffChangedRef.current = onStaffChanged;
+  }, [onNewMessage, onTyping, onTicketApproved, onTicketClosed, onSessionExtended, onStaffChanged]);
 
   // Determine if we should be connected
   // Only connect when chat is active (Ongoing) or pending (Open)
@@ -161,6 +164,20 @@ export function useHealthChatSocket({
       socketService.on('healthchat:session-extended', (data) => {
         if (String(data.chatId) === String(chatIdRef.current)) {
           onSessionExtendedRef.current?.(data);
+        }
+      });
+
+      // Listen for ticket transferred to a different staff
+      socketService.on('healthchat:ticket-transferred', (data) => {
+        if (String(data.chatId) === String(chatIdRef.current) && data.chat?.medical) {
+          onStaffChangedRef.current?.(data.chat.medical);
+        }
+      });
+
+      // Listen for ticket taken over by admin
+      socketService.on('healthchat:ticket-taken-over', (data) => {
+        if (String(data.chatId) === String(chatIdRef.current) && data.chat?.medical) {
+          onStaffChangedRef.current?.(data.chat.medical);
         }
       });
 

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
-import { Loader2, RefreshCw, Lock } from 'lucide-react';
+import { Loader2, RefreshCw, Lock, ShieldAlert } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
 import { getPatientMessages } from '../health-chat-service';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import ChatHeader from './chat-header';
 import MessageBubble from './message-bubble';
 import MessageInput from './message-input';
@@ -11,6 +12,7 @@ import TicketDivider from './ticket-divider';
 import PrescriptionPanel from './PrescriptionPanel';
 import ConsultationPanel from './ConsultationPanel';
 import ExpiryWarningBanner from './expiry-warning-banner';
+import ConfirmModal from './confirm-modal';
 
 const ChatPanel = ({ emitTyping }) => {
   const {
@@ -28,11 +30,17 @@ const ChatPanel = ({ emitTyping }) => {
     sendMessage,
     isExtendingSession,
     extendSessionChat,
+    isAdmin,
+    takeoverTicket,
   } = useHealthChat();
+
+  const { profile } = useStaffProfile();
 
   const [showPrescription, setShowPrescription] = useState(false);
   const [showConsultation, setShowConsultation] = useState(false);
   const [consultationData, setConsultationData] = useState(null);
+  const [showTakeoverConfirm, setShowTakeoverConfirm] = useState(false);
+  const [takeoverLoading, setTakeoverLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -157,6 +165,25 @@ const ChatPanel = ({ emitTyping }) => {
   const isArchived = isExpired || isClosed;
   const isPatientTyping = !isArchived && typingUsers[selectedPatientId || selectedChatId]?.isTyping;
   const isPending  = selectedTicket?.status === 'Open';
+
+  // Admin view-only: ticket is active but assigned to a different staff member
+  const assignedMedical = selectedTicket?.medical;
+  const isViewOnly = isAdmin && !isArchived && !isPending
+    && assignedMedical?.email && profile?.email
+    && assignedMedical.email !== profile.email;
+
+  const handleTakeover = async () => {
+    if (!activeTicketId) return;
+    try {
+      setTakeoverLoading(true);
+      await takeoverTicket(activeTicketId);
+      setShowTakeoverConfirm(false);
+    } catch (err) {
+      console.error('[ChatPanel] Takeover failed:', err);
+    } finally {
+      setTakeoverLoading(false);
+    }
+  };
 
   // Scroll to bottom when messages load or chat changes
   // Skip when loading older messages (pagination) to preserve scroll position
@@ -323,6 +350,26 @@ const ChatPanel = ({ emitTyping }) => {
             {isExpired ? 'This conversation is expired' : 'This conversation is closed'}
           </div>
         </div>
+      ) : isViewOnly ? (
+        <div className="flex-shrink-0 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 space-y-2">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400">
+            <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>
+              Handled by <strong>{assignedMedical.firstName} {assignedMedical.lastName}</strong>
+              {assignedMedical.role ? ` — ${assignedMedical.role}` : ''}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowTakeoverConfirm(true)}
+            disabled={takeoverLoading}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold
+                       transition-all duration-150 disabled:opacity-50
+                       bg-primary-500 hover:bg-primary-600 text-secondary-900"
+          >
+            {takeoverLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+            Take Over Ticket
+          </button>
+        </div>
       ) : (
         <MessageInput
           emitTyping={emitTyping}
@@ -362,6 +409,17 @@ const ChatPanel = ({ emitTyping }) => {
       activeTicketId={activeTicketId}
       sendMessage={sendMessage}
       consultationData={consultationData}
+    />
+
+    {/* Takeover confirmation modal */}
+    <ConfirmModal
+      isOpen={showTakeoverConfirm}
+      onClose={() => setShowTakeoverConfirm(false)}
+      onConfirm={handleTakeover}
+      title="Take Over Ticket"
+      message={`Replying to this conversation will take it over from ${assignedMedical?.firstName || 'the current staff'}. The previous staff member will lose access to this ticket. Are you sure?`}
+      confirmText="Take Over"
+      variant="warning"
     />
     </div>
   );

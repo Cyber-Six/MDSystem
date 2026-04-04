@@ -303,9 +303,13 @@ const Query = {
     // Auto-expire any expired ongoing tickets
     await autoExpireTickets();
 
+    // Determine if the current user is an admin (admins see all conversations)
+    const isAdmin = await isMedicalAdmin(user.id);
+
     // Build status filter
     let statusFilter = '';
     let locationFilter = '';
+    let medicalFilter = '';
     const params = [];
     if (statuses && statuses.length > 0) {
         statusFilter = `WHERE status = ANY($1)`;
@@ -322,6 +326,18 @@ const Query = {
         locationFilter = `WHERE ${locationCondition}`;
       }
       params.push(location);
+    }
+
+    // Non-admin staff: only see their assigned tickets + pending (Open) tickets
+    if (!isAdmin) {
+      const medicalParamIndex = params.length + 1;
+      const medicalCondition = `(hc."medicalId" = $${medicalParamIndex} OR hc.status = 'Open')`;
+      if (statusFilter || locationFilter) {
+        medicalFilter = `AND ${medicalCondition}`;
+      } else {
+        medicalFilter = `WHERE ${medicalCondition}`;
+      }
+      params.push(user.id);
     }
 
     // Get unique patients with their latest ticket
@@ -345,6 +361,7 @@ const Query = {
         JOIN "UsersPersonal" up ON up.id = hc."patientId"
         ${statusFilter}
         ${locationFilter}
+        ${medicalFilter}
       ),
       LatestTickets AS (
         SELECT * FROM RankedTickets WHERE rn = 1
@@ -358,6 +375,7 @@ const Query = {
         JOIN "UsersPersonal" up ON up.id = hc."patientId"
         ${statusFilter}
         ${locationFilter}
+        ${medicalFilter}
         GROUP BY "patientId"
       )
       SELECT
@@ -389,6 +407,7 @@ const Query = {
         JOIN "UsersPersonal" up ON up.id = hc."patientId"
         ${statusFilter}
         ${locationFilter}
+        ${medicalFilter}
       `;
       const countParams = [];
       if (statuses && statuses.length > 0) {
@@ -396,6 +415,9 @@ const Query = {
       }
       if (location) {
         countParams.push(location);
+      }
+      if (!isAdmin) {
+        countParams.push(user.id);
       }
       const countResult = await db.query(countQuery, countParams);
 
@@ -1187,15 +1209,17 @@ const Mutation = {
     }
 
     const chat = chatResult.rows[0];
+    const previousMedicalId = chat.medicalId;
 
-    // Authorization: must be the currently assigned medical staff
-    if (Number(chat.medicalId) !== Number(user.id)) {
+    // Authorization: must be the currently assigned medical staff OR an admin
+    const isAdmin = await isMedicalAdmin(user.id);
+    if (!isAdmin && Number(chat.medicalId) !== Number(user.id)) {
       throwGraphQLError(res).message("Not authorized to transfer this ticket").status(403).throw();
     }
 
     // Verify new medical staff must be different from current
-    if (Number(toMedicalId) === Number(user.id)) {
-      throwGraphQLError(res).message("New medical staff must be different from current").status(400).throw();
+    if (Number(toMedicalId) === Number(chat.medicalId)) {
+      throwGraphQLError(res).message("New medical staff must be different from current assignee").status(400).throw();
     }
 
     // Verify new medical staff exists and is active
@@ -1215,6 +1239,14 @@ const Mutation = {
       throwGraphQLError(res).message("New medical staff is not active").status(400).throw();
     }
 
+    // Fetch names for system message
+    const [fromStaffInfo, toStaffInfo] = await Promise.all([
+      getParticipantInfo(previousMedicalId),
+      getParticipantInfo(toMedicalId)
+    ]);
+    const fromName = fromStaffInfo ? `${fromStaffInfo.firstName} ${fromStaffInfo.lastName}`.trim() : 'Unknown';
+    const toName = toStaffInfo ? `${toStaffInfo.firstName} ${toStaffInfo.lastName}`.trim() : 'Unknown';
+
     const client = await pool.connect();
     let updatedChat;
     try {
@@ -1233,12 +1265,12 @@ const Mutation = {
         throw new Error("Failed to transfer ticket");
       }
 
-      // Add system message about transfer
+      // Add system message about transfer with actual names
       await client.query(
         `INSERT INTO "HealthChatPrompt"
          ("consultationVirtualId", "text", "promptType", "userId", "userType")
          VALUES ($1, $2, 'system', $3, 'Medical')`,
-        [chatId, `Ticket transferred from staff ID ${user.id} to staff ID ${toMedicalId}.`, user.id]
+        [chatId, `Ticket transferred from ${fromName} to ${toName}.`, user.id]
       );
 
       await client.query('COMMIT');
@@ -1266,6 +1298,16 @@ const Mutation = {
       chat: updatedChat
     });
 
+    // Notify the previous medical staff so their UI removes the conversation
+    if (previousMedicalId && Number(previousMedicalId) !== Number(toMedicalId)) {
+      notifyUser(String(previousMedicalId), 'healthchat:ticket-transferred', {
+        chatId,
+        newMedicalId: toMedicalId,
+        previousMedicalId,
+        chat: updatedChat
+      });
+    }
+
     return {
       success: true,
       chat: updatedChat,
@@ -1289,10 +1331,19 @@ const Mutation = {
     }
 
     const chat = chatResult.rows[0];
+    const previousMedicalId = chat.medicalId;
 
     if (Number(chat.medicalId) === Number(user.id)) {
       throwGraphQLError(res).message("You are already assigned to this ticket").status(400).throw();
     }
+
+    // Fetch names for system message
+    const [takerInfo, previousInfo] = await Promise.all([
+      getParticipantInfo(user.id),
+      getParticipantInfo(previousMedicalId)
+    ]);
+    const takerName = takerInfo ? `${takerInfo.firstName} ${takerInfo.lastName}`.trim() : 'Unknown';
+    const previousName = previousInfo ? `${previousInfo.firstName} ${previousInfo.lastName}`.trim() : 'Unknown';
 
     const client = await pool.connect();
     let updatedChat;
@@ -1312,12 +1363,12 @@ const Mutation = {
         throw new Error("Failed to takeover ticket");
       }
 
-      // Add system message about takeover
+      // Add system message about takeover with actual names
       await client.query(
         `INSERT INTO "HealthChatPrompt"
          ("consultationVirtualId", "text", "promptType", "userId", "userType")
          VALUES ($1, $2, 'system', $3, 'Medical')`,
-        [chatId, `Ticket taken over by staff ID ${user.id}.`, user.id]
+        [chatId, `Ticket taken over by ${takerName} from ${previousName}.`, user.id]
       );
 
       await client.query('COMMIT');
@@ -1334,6 +1385,16 @@ const Mutation = {
       notifyUser(updatedChat.patientId, 'healthchat:ticket-taken-over', {
         chatId,
         newMedicalId: user.id,
+        chat: updatedChat
+      });
+    }
+
+    // Notify the previous medical staff so their UI removes the conversation
+    if (previousMedicalId && Number(previousMedicalId) !== Number(user.id)) {
+      notifyUser(String(previousMedicalId), 'healthchat:ticket-taken-over', {
+        chatId,
+        newMedicalId: user.id,
+        previousMedicalId,
         chat: updatedChat
       });
     }

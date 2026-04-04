@@ -129,18 +129,24 @@ const AvailabilityManager = () => {
     loadSchedulers();
   }, [loadSchedulers]);
 
-  // Update edit form when scheduler changes
+  // Update edit form and reload data when active scheduler ID changes.
+  // Use activeScheduler?.id (not the full object) so optimistic updates
+  // (e.g. containsCustomDates toggling) don't trigger a redundant reload.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeScheduler && !isCreatingNew) {
       setEditForm({ ...activeScheduler });
-      // Load requirements for this scheduler
+      setMonthAvailability({});
       loadRequirements(activeScheduler.id);
-      // Load whitelist count
       loadWhitelistCount(activeScheduler.id);
-      // Load custom dates
       loadCustomDates(activeScheduler.id);
+      // Reload month availability for the current calendar range
+      // (currentMonthRange is intentionally read from closure, not in deps)
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+      }
     }
-  }, [activeScheduler, isCreatingNew]);
+  }, [activeScheduler?.id, isCreatingNew]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load custom dates for a scheduler
   const loadCustomDates = async (schedulerId) => {
@@ -324,6 +330,14 @@ const AvailabilityManager = () => {
     // Clear day slot editor state
     setSelectedCalendarDate(null);
     setDayOverrideData(null);
+    // Immediately clear stale data from previous scheduler so calendar shows clean state
+    setMonthAvailability({});
+    setCustomDates([]);
+    // Load fresh data for the newly selected scheduler
+    loadCustomDates(sched.id);
+    if (currentMonthRange) {
+      loadMonthAvailability(sched.id, currentMonthRange.startDate, currentMonthRange.endDate);
+    }
     // Clear custom date picker state
     setShowCustomDatePicker(false);
     setCustomDateInput({
@@ -391,6 +405,10 @@ const AvailabilityManager = () => {
         // Sync containsCustomDates flag locally
         setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: true } : prev);
         setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: true } : s));
+        // Refresh calendar to reflect the new ScheduleDateEntity entries
+        if (currentMonthRange) {
+          loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+        }
       } catch (err) {
         setError(err.message || 'Failed to add custom date');
       } finally {
@@ -424,6 +442,10 @@ const AvailabilityManager = () => {
         setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
         setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: stillHas } : prev);
         setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: stillHas } : s));
+        // Refresh calendar to reflect the removed ScheduleDateEntity entries
+        if (currentMonthRange) {
+          loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+        }
       } catch (err) {
         setError(err.message || 'Failed to remove custom date');
       } finally {

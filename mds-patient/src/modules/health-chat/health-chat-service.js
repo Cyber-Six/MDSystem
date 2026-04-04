@@ -49,6 +49,7 @@ export const getMyTickets = async (status = null, offset = 0, limit = 10) => {
             firstName
             lastName
             email
+            role
           }
         }
         total
@@ -90,6 +91,7 @@ export const getMyTicket = async (chatId) => {
           firstName
           lastName
           email
+          role
         }
       }
     }
@@ -122,6 +124,7 @@ export const getTicketMessages = async (chatId, offset = 0, limit = 50) => {
           firstName
           lastName
           email
+          role
         }
       }
     }
@@ -189,6 +192,7 @@ export const sendMessage = async (chatId, text = null, filename = null, promptTy
             firstName
             lastName
             email
+            role
           }
         }
       }

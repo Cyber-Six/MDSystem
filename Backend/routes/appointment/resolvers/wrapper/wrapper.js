@@ -1223,39 +1223,76 @@ const Mutation = {
         .throw();
     }
 
+    // Fetch scheduler defaults and scheduleFlags before opening the transaction
+    const schedulerResult = await db.query(
+      `SELECT "scheduleFlags", "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+      [schedulerId]
+    );
+    if (schedulerResult.rowCount === 0) {
+      throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+    }
+    const { scheduleFlags, morningAllowed: defMorning, afternoonAllowed: defAfternoon } = schedulerResult.rows[0];
+
     const client = await db.connect();
     try {
       await client.query('BEGIN');
 
+      // Normalize dates to plain DATE strings and cast in query to avoid type mismatch
+      const normalizedDates = dates.map(d => (typeof d === 'string' ? d.split('T')[0] : d));
+
       const result = await client.query(
         `DELETE FROM "SlotCustomDate"
          WHERE "slotScheduleId" = $1
-         AND "scheduledDate" = ANY($2)
-         RETURNING "scheduledDate";`,
-        [schedulerId, dates]
+         AND "scheduledDate"::date = ANY($2::date[])
+         RETURNING "scheduledDate"::date::text AS "scheduledDate";`,
+        [schedulerId, normalizedDates]
       );
 
       if (result.rowCount === 0) {
         await client.query('ROLLBACK');
+        client.release();
         throwGraphQLError(res)
           .message("No matching custom dates found to unset")
           .status(404)
           .throw();
       }
 
-      // Also clean up ScheduleDateEntity for removed custom dates
-      // (only remove if no patientSlot appointments reference them)
       const deletedDates = result.rows.map(r => r.scheduledDate);
-      await client.query(
-        `DELETE FROM "ScheduleDateEntity" sde
-         WHERE sde."slotId" = $1
-           AND sde."scheduledDate" = ANY($2)
-           AND NOT EXISTS (
-             SELECT 1 FROM "patientSlot" ps
-             WHERE ps."slotEntityId" = sde.id
-           );`,
-        [schedulerId, deletedDates]
-      );
+
+      // For each deleted date:
+      // - If the day is still in the default weekly schedule (scheduleFlags) → reset ScheduleDateEntity to defaults
+      // - If not → delete ScheduleDateEntity (only if no appointments reference it)
+      //
+      // DOW mapping: Sun=0→64, Mon=1→1, Tue=2→2, Wed=3→4, Thu=4→8, Fri=5→16, Sat=6→32
+      for (const dateStr of deletedDates) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dow = new Date(y, m - 1, d).getDay(); // 0=Sun
+        const flagMap = [64, 1, 2, 4, 8, 16, 32]; // index by DOW
+        const dayFlag = flagMap[dow];
+        const isDefaultScheduled = (scheduleFlags & dayFlag) > 0;
+
+        if (isDefaultScheduled) {
+          // Reset to scheduler defaults rather than deleting
+          await client.query(
+            `UPDATE "ScheduleDateEntity"
+             SET "morningAllowed" = $1, "afternoonAllowed" = $2
+             WHERE "slotId" = $3 AND "scheduledDate"::date = $4::date;`,
+            [defMorning, defAfternoon, schedulerId, dateStr]
+          );
+        } else {
+          // Delete if no appointments reference this entity
+          await client.query(
+            `DELETE FROM "ScheduleDateEntity" sde
+             WHERE sde."slotId" = $1
+               AND sde."scheduledDate"::date = $2::date
+               AND NOT EXISTS (
+                 SELECT 1 FROM "patientSlot" ps
+                 WHERE ps."slotEntityId" = sde.id
+               );`,
+            [schedulerId, dateStr]
+          );
+        }
+      }
 
       // Keep containsCustomDates flag in sync (atomic within transaction)
       const remaining = await client.query(
@@ -1269,8 +1306,7 @@ const Mutation = {
 
       await client.query('COMMIT');
 
-      // Return the list of dates that were actually deleted
-      return result.rows.map(r => r.scheduledDate);
+      return deletedDates;
     } catch (err) {
       await client.query('ROLLBACK');
       logger.error("Error in _unsetCustomDates:", err);

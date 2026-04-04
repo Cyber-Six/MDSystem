@@ -101,8 +101,18 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
     };
 
     const checkIsCustomDate = (dayOfWeek, dateStr) => {
-      const dayName = dayIndexToName[dayOfWeek];
-      return !currentSchedulePerWeek.includes(dayName) && customDateSet.has(dateStr);
+      // Any date in SlotCustomDate table = custom (regardless of whether the day is also in schedule)
+      if (customDateSet.has(dateStr)) return true;
+      // Any date whose ScheduleDateEntity slot counts differ from the scheduler defaults = modified
+      const apiData = monthAvailability[dateStr];
+      if (apiData) {
+        const defaultMorning = slotDefaults?.morning ?? 0;
+        const defaultAfternoon = slotDefaults?.afternoon ?? 0;
+        if (apiData.morningAllowed !== defaultMorning || apiData.afternoonAllowed !== defaultAfternoon) {
+          return true;
+        }
+      }
+      return false;
     };
 
     const data = {};
@@ -146,6 +156,8 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
         afternoonPending,
         event: dayEvent || null,
         isCustomDate: isCustom,
+        // Distinguish between a SlotCustomDate entry vs a modified-slot scheduled day
+        isSlotCustomDate: customDateSet.has(dateStr),
       };
     }
     return data;
@@ -351,8 +363,11 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
                   {cell.day}
                 </span>
                 <div className="flex items-center gap-0.5">
-                  {slotInfo?.isCustomDate && (
+                  {slotInfo?.isSlotCustomDate && (
                     <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-violet-500" title="Custom date" />
+                  )}
+                  {slotInfo?.isCustomDate && !slotInfo?.isSlotCustomDate && (
+                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-fuchsia-400" title="Modified slots" />
                   )}
                   {statusDots[status] && !slotInfo?.isCustomDate && (
                     <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${statusDots[status]}`} />
