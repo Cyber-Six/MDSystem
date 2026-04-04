@@ -1,5 +1,6 @@
 const path = require("path");
 const dotenv = require("dotenv");
+const strict = require("assert/strict");
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 
@@ -31,6 +32,11 @@ const rateLimitMatrix = {
 
   },
 
+  strictLimiter: {
+    ipWindow: Number(process.env.STRICT_RATE_LIMIT_WINDOW) || 60,
+    ipMax: Number(process.env.STRICT_RATE_LIMIT_MAX_REQUESTS) || 5
+  },
+  
   genericLimiter: {
     ipWindow: Number(process.env.GENERIC_ROUTE_RATE_LIMIT_WINDOW) || 60,
     ipMax: Number(process.env.GENERIC_ROUTE_RATE_LIMIT_MAX_REQUESTS) || 30

@@ -147,6 +147,14 @@ async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
   return current > limit;
 }
 
+async function getIPRateLimitTTL(ip, route = "") {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `rl:${route}:ip:${ip}`;
+  const ttl = await client.ttl(key);
+  return ttl > 0 ? ttl : 0;
+}
+
+
 async function rateLimitEmailCooldown(email, portal = "", route = "", cooldownSeconds = 30) {
   if (!client) throw new Error("Redis client not initialized");
 
@@ -156,6 +164,14 @@ async function rateLimitEmailCooldown(email, portal = "", route = "", cooldownSe
 
   await client.set(key, "1", { EX: cooldownSeconds });
   return false; // allowed
+}
+
+async function rateLimitEmailCooldownTTL(email, portal = "", route = "") {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `rl:${portal}:${route}:ec:${email}`;
+  const ttl = await client.ttl(key);
+
+  return ttl > 0 ? ttl : 0;
 }
 
 async function deleteEmailCooldown(email, portal = "", route = "") {
@@ -1076,7 +1092,9 @@ module.exports = {
   verifyOTP,
   deleteOTP,
   rateLimitIP,
+  getIPRateLimitTTL,
   rateLimitEmailCooldown,
+  rateLimitEmailCooldownTTL,
   deleteEmailCooldown,
   rateLimitEmailAttempts,
   deleteEmailAttempts,
