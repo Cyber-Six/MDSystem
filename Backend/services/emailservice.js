@@ -9,9 +9,9 @@ const dotenv = require('dotenv');
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const RESET_PASSWORD_DOMAIN_ROUTE = process.env.RESET_PASSWORD_DOMAIN_ROUTE?.trim();
-if (!RESET_PASSWORD_DOMAIN_ROUTE) {
+if (!RESET_PASSWORD_DOMAIN_ROUTE || ['undefined', 'null'].includes(RESET_PASSWORD_DOMAIN_ROUTE.toLowerCase())) {
   throw new Error(
-    'Missing required environment variable RESET_PASSWORD_DOMAIN_ROUTE. Set it in Backend/.env before starting the server.'
+    'Invalid or missing RESET_PASSWORD_DOMAIN_ROUTE. Set it to a real domain/path in Backend/.env before starting the server.'
   );
 }
 
