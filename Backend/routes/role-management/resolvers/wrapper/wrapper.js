@@ -1924,6 +1924,31 @@ const Mutation = {
       // Delete the transfer session
       await deleteAdminTransferSession(verificationToken);
 
+      // Assign default staff role to old admin after losing admin privileges
+      try {
+        const templatesResult = await listPermissionTemplates();
+        if (templatesResult.templates && templatesResult.templates.length > 0) {
+          const defaultTemplate = templatesResult.templates[0];
+          await applyTemplateToStaff({
+            personnelId: oldAdminId,
+            templateId: defaultTemplate.id,
+            assignedBy: newAdminId,
+          });
+          logger.info(`Default template "${defaultTemplate.label}" applied to past admin: userId=${oldAdminId}`);
+        }
+        // Always ensure is_staff is set regardless of template availability
+        await setStaffPermissionsExtended({
+          personnelId: String(oldAdminId),
+          permissionsList: [{ key: 'is_staff', enabled: true }],
+          assignedBy: String(newAdminId),
+          defaultBranch: 'Both',
+        });
+        logger.info(`is_staff permission ensured for past admin: userId=${oldAdminId}`);
+      } catch (defaultRoleError) {
+        logger.error(`Failed to assign default staff role to past admin ${oldAdminId}: ${defaultRoleError.message}`);
+        // Non-critical — transfer already completed successfully
+      }
+
       logger.info(`Admin transfer completed successfully: oldAdminId=${oldAdminId}, newAdminId=${newAdminId}, bootstrapMode=${isBootstrapMode && isBootstrapToken}`);
 
       return {
