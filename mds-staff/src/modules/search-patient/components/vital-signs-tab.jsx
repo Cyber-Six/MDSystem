@@ -299,19 +299,38 @@ export default function VitalSignsTab({ patient }) {
     setSaveError(null);
     setSaveSuccess(false);
 
+    const parsedHeightCm = form.height_cm !== '' ? parseFloat(form.height_cm) : null;
+    const parsedWeightKg = form.weight_kg !== '' ? parseFloat(form.weight_kg) : null;
+    const parsedTemperature = form.temperature !== '' ? parseFloat(form.temperature) : null;
+
     const input = {
-      height_cm: parseFloat(form.height_cm),
-      weight_kg: parseFloat(form.weight_kg),
+      height_cm: parsedHeightCm,
+      weight_kg: parsedWeightKg,
       blood_pressure: form.blood_pressure.trim(),
       heart_rate: parseInt(form.heart_rate, 10),
-      temperature: parseFloat(form.temperature),
+      temperature: parsedTemperature,
       notes: form.notes.trim() || null,
     };
 
-    // Basic validation
-    if (isNaN(input.height_cm) || isNaN(input.weight_kg) || !input.blood_pressure || isNaN(input.heart_rate) || isNaN(input.temperature)) {
+    // Basic validation — only blood_pressure and heart_rate are required
+    if (!input.blood_pressure || isNaN(input.heart_rate)) {
       setSaving(false);
-      setSaveError('Please fill in all required fields with valid numbers.');
+      setSaveError('Please fill in all required fields (Blood Pressure and Heart Rate).');
+      return;
+    }
+    if (parsedHeightCm !== null && isNaN(parsedHeightCm)) {
+      setSaving(false);
+      setSaveError('Height must be a valid number.');
+      return;
+    }
+    if (parsedWeightKg !== null && isNaN(parsedWeightKg)) {
+      setSaving(false);
+      setSaveError('Weight must be a valid number.');
+      return;
+    }
+    if (parsedTemperature !== null && isNaN(parsedTemperature)) {
+      setSaving(false);
+      setSaveError('Temperature must be a valid number.');
       return;
     }
 
@@ -336,11 +355,11 @@ export default function VitalSignsTab({ patient }) {
       <PatientSectionCard title="Create Vital Signs">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <InputField label="Height (cm) *" value={form.height_cm} onChange={handleChange('height_cm')} placeholder="e.g. 170" type="number" step="0.1" />
-            <InputField label="Weight (kg) *" value={form.weight_kg} onChange={handleChange('weight_kg')} placeholder="e.g. 65" type="number" step="0.1" />
+            <InputField label="Height (cm)" value={form.height_cm} onChange={handleChange('height_cm')} placeholder="e.g. 170" type="number" step="0.1" />
+            <InputField label="Weight (kg)" value={form.weight_kg} onChange={handleChange('weight_kg')} placeholder="e.g. 65" type="number" step="0.1" />
             <InputField label="Blood Pressure *" value={form.blood_pressure} onChange={handleChange('blood_pressure')} placeholder="e.g. 120/80" />
             <InputField label="Heart Rate (bpm) *" value={form.heart_rate} onChange={handleChange('heart_rate')} placeholder="e.g. 72" type="number" />
-            <InputField label="Temperature (°C) *" value={form.temperature} onChange={handleChange('temperature')} placeholder="e.g. 36.5" type="number" step="0.1" />
+            <InputField label="Temperature (°C)" value={form.temperature} onChange={handleChange('temperature')} placeholder="e.g. 36.5" type="number" step="0.1" />
           </div>
 
           <label className="block">
