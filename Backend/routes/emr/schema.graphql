@@ -102,6 +102,7 @@ type DentalHistory {
 
     status: UpdateStatus
     lastVisitDate: Date
+    created_at: Date
     archived_at: Date
 }
  ## 
@@ -636,7 +637,7 @@ type DentalProcedureProfile {
   id: ID!
   procedures: [dentalProcedureRecord!]!
   notes: String
-  
+
   status: UpdateStatus
   archived_at: Date
   created_at: Date
