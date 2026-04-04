@@ -74,26 +74,42 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
   const obgynData = data?.getUserObgynHistory?.[0] || null;
   const emergencyData = data?.getUserEmergencyContact?.[0] || null;
   const medicationData = data?.getUserMedicationProfile?.[0] || null;
-  const dentalHistory = data?.getUserDentalHistory?.[0] || null;
-  const applianceData = data?.getUserOralApplianceProfile?.[0] || null;
-  const procedureData = data?.getUserDentalProcedureProfile?.[0] || null;
+  const dentalHistory = (data?.getUserDentalHistory || []).find(r => r.status === 'Approved') || null;
+  const applianceData = (data?.getUserOralApplianceProfile || []).find(r => r.status === 'Approved') || null;
+  const procedureData = (data?.getUserDentalProcedureProfile || []).find(r => r.status === 'Approved') || null;
+  const dentalPhotoData = (data?.getUserDentalPhotoRecord || []).find(r => r.status === 'Approved') || null;
+
+  // Find the latest approved-visit submission timestamp so we can detect a stale
+  // dental grade (one the staff created for a previous visit but never updated for
+  // the newly-approved submission).
+  const _latestApprovedVisitTs = [
+    dentalHistory?.created_at,
+    applianceData?.created_at,
+    procedureData?.created_at,
+    dentalPhotoData?.created_at,
+  ].filter(Boolean).reduce((max, ts) => (new Date(ts) > new Date(max) ? ts : max), null);
 
   // Use the same offset logic as the Dental Record History sub-tab: skip standalone
   // grades (created from the Dental Grading tab) so the Dental Record tab always
   // displays the most recent visit-linked dental record, not a standalone grade.
   const _allDentalRecords = data?.getUserDentalRecord || [];
   const _dentalVisitMaxCount = Math.max(
-    (data?.getUserDentalHistory || []).length,
-    (data?.getUserDentalProcedureProfile || []).length,
-    (data?.getUserOralApplianceProfile || []).length,
-    (data?.getUserDentalPhotoRecord || []).length,
+    (data?.getUserDentalHistory || []).filter(r => r.status === 'Approved').length,
+    (data?.getUserDentalProcedureProfile || []).filter(r => r.status === 'Approved').length,
+    (data?.getUserOralApplianceProfile || []).filter(r => r.status === 'Approved').length,
+    (data?.getUserDentalPhotoRecord || []).filter(r => r.status === 'Approved').length,
   );
   const _dentalOffset = Math.max(0, _allDentalRecords.length - _dentalVisitMaxCount);
-  const dentalRecord = _allDentalRecords[_dentalOffset] || _allDentalRecords[0] || null;
+  const _candidateDentalRecord = _allDentalRecords[_dentalOffset] || _allDentalRecords[0] || null;
+  // If the candidate dental grade was created BEFORE the most recent approved visit
+  // submission, the staff hasn't graded this new record yet — don't show stale data.
+  const dentalRecord = (_candidateDentalRecord && _latestApprovedVisitTs &&
+    new Date(_candidateDentalRecord.created_at) < new Date(_latestApprovedVisitTs))
+    ? null
+    : _candidateDentalRecord;
   const visionData = data?.getUserVisualAcuityProfile?.[0] || null;
   const hospData = data?.getUserHospitalizationProfile?.[0] || null;
   const opData = data?.getUserOperationProfile?.[0] || null;
-  const dentalPhotoData = data?.getUserDentalPhotoRecord?.[0] || null;
 
   const profile = profileData?.getUserPersonalRecord || null;
 
