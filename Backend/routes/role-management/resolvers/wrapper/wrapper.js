@@ -1119,6 +1119,14 @@ const Mutation = {
           [designation, userId]
         );
 
+        // Update branch in all existing permissions
+        await client.query(
+          `UPDATE "rolesMap"
+           SET branch = $1::"UserDesignation"
+           WHERE "personnelId" = $2`,
+          [designation, userId]
+        );
+
         logger.info(`Staff branch changed to "${designation}" for userId=${userId} by adminId=${user.id}`);
       }
 
