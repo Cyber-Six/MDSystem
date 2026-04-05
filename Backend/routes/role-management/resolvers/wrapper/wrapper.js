@@ -1998,6 +1998,14 @@ const Mutation = {
         [oldAdminId]
       );
 
+      // Update roles: new admin gets Admin role, old admin reverts to their previous role (or Staff)
+      await client.query(
+        `UPDATE "MedicalPersonnel" SET role = 'Admin' WHERE id = $1`,
+        [newAdminId]
+      );
+      // Old admin keeps their role (don't change it) - they may have been a Doctor, Nurse, etc.
+      // Only change designation, not role
+
       // Log audit trail within transaction
       await db.setSystemAuditLog({
         client: client,
@@ -2028,6 +2036,13 @@ const Mutation = {
         const templatesResult = await listPermissionTemplates();
         if (templatesResult.templates && templatesResult.templates.length > 0) {
           const defaultTemplate = templatesResult.templates[0];
+
+          // Update old admin's role to match the default template
+          await client.query(
+            `UPDATE "MedicalPersonnel" SET role = $1 WHERE id = $2`,
+            [defaultTemplate.label, oldAdminId]
+          );
+
           await applyTemplateToStaff({
             personnelId: oldAdminId,
             templateId: defaultTemplate.id,
