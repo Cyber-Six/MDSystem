@@ -54,6 +54,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   // Filter state
   const [filterDate,        setFilterDate]        = useState('');
   const [filterSchedulerId, setFilterSchedulerId] = useState('');
+  const [filterLocation,    setFilterLocation]    = useState('');
   const [schedulers,        setSchedulers]        = useState([]);
 
   // Pagination state
@@ -75,11 +76,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   }, [search]);
 
   /** Fetch fresh status counts from server, respecting current filters */
-  const refreshCounts = useCallback(async (date, schedulerId) => {
+  const refreshCounts = useCallback(async (date, schedulerId, location) => {
     try {
       const counts = await getStatusCounts({
         date: date || null,
         schedulerId: schedulerId || null,
+        location: location || null,
       });
       const updated = {};
       for (const tab of TABS) {
@@ -92,7 +94,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   }, []);
 
   /* Fetch appointments (first page or fresh load) */
-  const fetchAppointments = useCallback(async (status, date, schedulerId) => {
+  const fetchAppointments = useCallback(async (status, date, schedulerId, location) => {
     // Bump generation — any in-flight fetch from a previous call will see a
     // mismatch and discard its result, preventing stale overwrites.
     const gen = ++fetchGenRef.current;
@@ -100,7 +102,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     setHasMore(false);
     setOffset(0);
     try {
-      const data = await searchByStatus(status, 0, PAGE_SIZE, { date: date || null, schedulerId: schedulerId || null });
+      const data = await searchByStatus(status, 0, PAGE_SIZE, { date: date || null, schedulerId: schedulerId || null, location: location || null });
       if (gen !== fetchGenRef.current) return; // stale response — discard
       setAppointments(data || []);
       setHasMore((data?.length ?? 0) === PAGE_SIZE);
@@ -134,13 +136,13 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         return updated;
       });
       // Also re-fetch actual counts from server to stay in sync
-      refreshCounts(filterDate, filterSchedulerId);
+      refreshCounts(filterDate, filterSchedulerId, filterLocation);
     },
     refresh: () => {
-      fetchAppointments(activeTab, filterDate, filterSchedulerId);
-      refreshCounts(filterDate, filterSchedulerId);
+      fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation);
+      refreshCounts(filterDate, filterSchedulerId, filterLocation);
     },
-  }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId]);
+  }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId, filterLocation]);
 
   /* Load schedulers once on mount for the filter dropdown */
   useEffect(() => {
@@ -158,21 +160,21 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         isFirstCountFetch.current = false;
         setLoadingCounts(true);
         try {
-          await refreshCounts(filterDate, filterSchedulerId);
+          await refreshCounts(filterDate, filterSchedulerId, filterLocation);
         } finally {
           setLoadingCounts(false);
         }
       } else {
-        refreshCounts(filterDate, filterSchedulerId);
+        refreshCounts(filterDate, filterSchedulerId, filterLocation);
       }
     };
     run();
-  }, [filterDate, filterSchedulerId, refreshCounts]);
+  }, [filterDate, filterSchedulerId, filterLocation, refreshCounts]);
 
   /* Fetch appointments whenever the active tab or active filters change */
   useEffect(() => {
-    fetchAppointments(activeTab, filterDate, filterSchedulerId);
-  }, [activeTab, filterDate, filterSchedulerId, fetchAppointments]);
+    fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation);
+  }, [activeTab, filterDate, filterSchedulerId, filterLocation, fetchAppointments]);
 
   /* Load next page — called automatically by IntersectionObserver */
   const handleLoadMore = useCallback(async () => {
@@ -182,7 +184,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     setLoadingMore(true);
     const nextOffset = offset + PAGE_SIZE;
     try {
-      const data = await searchByStatus(activeTab, nextOffset, PAGE_SIZE, { date: filterDate || null, schedulerId: filterSchedulerId || null });
+      const data = await searchByStatus(activeTab, nextOffset, PAGE_SIZE, { date: filterDate || null, schedulerId: filterSchedulerId || null, location: filterLocation || null });
       setAppointments((prev) => [...prev, ...(data || [])]);
       setHasMore((data?.length ?? 0) === PAGE_SIZE);
       setOffset(nextOffset);
@@ -192,7 +194,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [activeTab, offset, hasMore, filterDate, filterSchedulerId]);
+  }, [activeTab, offset, hasMore, filterDate, filterSchedulerId, filterLocation]);
 
   /* IntersectionObserver — auto-trigger next page when sentinel enters viewport */
   useEffect(() => {
@@ -223,8 +225,8 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const handleTabChange = (key) => {
     if (key === activeTab) {
       // Same tab clicked — force refresh
-      fetchAppointments(key, filterDate, filterSchedulerId);
-      refreshCounts(filterDate, filterSchedulerId);
+      fetchAppointments(key, filterDate, filterSchedulerId, filterLocation);
+      refreshCounts(filterDate, filterSchedulerId, filterLocation);
     } else {
       setActiveTab(key);
     }
@@ -331,10 +333,28 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           </select>
         </div>
 
+        {/* Location filter */}
+        <div className="relative">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-secondary-400 dark:text-neutral-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <select
+            value={filterLocation}
+            onChange={(e) => setFilterLocation(e.target.value)}
+            className="pl-8 pr-6 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none"
+          >
+            <option value="">All Locations</option>
+            <option value="Arlegui">Arlegui</option>
+            <option value="Casal">Casal</option>
+            <option value="QuezonCity">Quezon City</option>
+          </select>
+        </div>
+
         {/* Clear filters button — only when any filter active */}
-        {(filterDate || filterSchedulerId) && (
+        {(filterDate || filterSchedulerId || filterLocation) && (
           <button
-            onClick={() => { setFilterDate(''); setFilterSchedulerId(''); }}
+            onClick={() => { setFilterDate(''); setFilterSchedulerId(''); setFilterLocation(''); }}
             className="px-2.5 py-1.5 text-sm bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-md text-error-600 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/40 transition-colors whitespace-nowrap"
           >
             Clear Filters
@@ -343,7 +363,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
 
         {/* Result count + refresh */}
         <button
-          onClick={() => { fetchAppointments(activeTab, filterDate, filterSchedulerId); refreshCounts(); }}
+          onClick={() => { fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation); refreshCounts(filterDate, filterSchedulerId, filterLocation); }}
           className="px-2.5 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-600 transition-colors"
         >
           Refresh
@@ -425,7 +445,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                     </svg>
                     <p className="text-base font-medium text-secondary-500 dark:text-neutral-400">No appointments found</p>
                     <p className="text-sm text-secondary-400 dark:text-neutral-500 mt-0.5">
-                      {filterDate || filterSchedulerId
+                      {filterDate || filterSchedulerId || filterLocation
                         ? 'Try adjusting or clearing the active filters'
                         : `No ${activeTab} appointments at the moment`}
                     </p>
