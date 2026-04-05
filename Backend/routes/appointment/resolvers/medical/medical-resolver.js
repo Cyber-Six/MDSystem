@@ -63,12 +63,12 @@ const Query = {
     return await Wrapper.Query._searchAppointmentStatuses(_, { status, location, date, schedulerId, offset, limit }, { user, res });
   },
 
-  getAppointmentStatusCounts: async (_, { location }, { user, res }) => {
+  getAppointmentStatusCounts: async (_, { location, schedulerId, date }, { user, res }) => {
     const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_records, location);
     if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getAppointmentStatusCounts(_, { location }, { user, res });
+    return await Wrapper.Query._getAppointmentStatusCounts(_, { location, schedulerId, date }, { user, res });
   },
 
   listAppointmentSchedule: async (_, { schedulerId, date }, { user, res }) => {
