@@ -833,10 +833,11 @@ async function deletePermissionTemplate(templateId) {
  * @param {number} params.personnelId - Staff user ID
  * @param {number} params.templateId - Template ID to apply
  * @param {number} params.assignedBy - Admin user ID applying the template
+ * @param {string} params.staffBranch - Staff's branch designation (Manila, QuezonCity, Both) - all permissions inherit this branch
  * @param {Object} params.client - Optional database client for transaction support
  * @returns {Promise<Object>} Result with inserted permissions
  */
-async function applyTemplateToStaff({ personnelId, templateId, assignedBy, client }) {
+async function applyTemplateToStaff({ personnelId, templateId, assignedBy, staffBranch, client }) {
   // Get template permissions
   const template = await getPermissionTemplate(templateId);
 
@@ -845,12 +846,13 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy, clien
   }
 
   // Filter only enabled permissions
+  // If staffBranch provided, all permissions inherit the staff's branch (override template's branches)
   const enabledPermissions = template.permissions
     .filter(p => p.enabled)
     .map(p => ({
       key: p.key,
       enabled: true,
-      branch: p.branch
+      branch: staffBranch || p.branch  // Use staff's branch if provided, otherwise use template's branch
     }));
 
   // Apply permissions using existing function, passing client through
@@ -858,7 +860,7 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy, clien
     personnelId: String(personnelId),
     permissionsList: enabledPermissions,
     assignedBy: String(assignedBy),
-    defaultBranch: 'Both',
+    defaultBranch: staffBranch || 'Both',
     client  // Pass through client
   });
 
@@ -913,9 +915,12 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
     // Clear existing permissions (clean slate)
     await clearMedicalPermits(String(staff.id), client);
 
-    // Build full permissions: template perms + is_staff with staff-specific branch
+    // Build full permissions: override template branches with staff's branch + is_staff with staff-specific branch
     const staffPermissions = [
-      ...enabledPermissions,
+      ...enabledPermissions.map(p => ({
+        ...p,
+        branch: branch  // Override template branch with staff's actual branch
+      })),
       { key: 'is_staff', enabled: true, branch }
     ];
 
@@ -924,7 +929,7 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
       personnelId: String(staff.id),
       permissionsList: staffPermissions,
       assignedBy: String(assignedBy),
-      defaultBranch: 'Both',
+      defaultBranch: branch,  // Use staff's branch as default
       client  // Pass through client
     });
 

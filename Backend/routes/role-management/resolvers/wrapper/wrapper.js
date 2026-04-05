@@ -642,9 +642,10 @@ const Mutation = {
           personnelId: userId,
           templateId: effectiveTemplateId,
           assignedBy: user.id,
+          staffBranch: designation,  // Staff's branch - all permissions inherit this
           client  // Pass client for transaction participation
         });
-        logger.info(`Template ${effectiveTemplateId} applied to new medical personnel: userId=${userId}`);
+        logger.info(`Template ${effectiveTemplateId} applied to new medical personnel: userId=${userId}, staffBranch=${designation}`);
       }
 
       await client.query('COMMIT');
@@ -749,9 +750,10 @@ const Mutation = {
         await applyTemplateToStaff({
           personnelId: userId,
           templateId,
-          assignedBy: user.id
+          assignedBy: user.id,
+          staffBranch: personnel.designation  // Use the staff's branch - all permissions inherit this
         });
-        logger.info(`Template ${templateId} applied to medical personnel: userId=${userId}`);
+        logger.info(`Template ${templateId} applied to medical personnel: userId=${userId}, staffBranch=${personnel.designation}`);
       } catch (error) {
         logger.error(`Failed to apply template during update: ${error.message}`);
         // Continue - personnel updated but template not applied
@@ -1062,6 +1064,7 @@ const Mutation = {
             personnelId: userId,
             templateId: effectiveTemplateId,
             assignedBy: user.id,
+            staffBranch: branch,  // Use staff's current branch - all permissions inherit this
             client  // Pass client for transaction participation
           });
         }
@@ -1339,9 +1342,9 @@ const Mutation = {
   },
 
   _applyTemplateToStaff: async (_, { userId, templateId }, { user, res }) => {
-    // Verify user exists and is Medical staff
+    // Verify user exists and is Medical staff - also get their branch designation
     const userResult = await db.query(
-      `SELECT uc.id, uc.identity, mp.id AS "medicalId"
+      `SELECT uc.id, uc.identity, mp.id AS "medicalId", mp.designation AS branch
        FROM "UserCredentials" uc
        LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        WHERE uc.id = $1
@@ -1374,10 +1377,11 @@ const Mutation = {
       const result = await applyTemplateToStaff({
         personnelId: userId,
         templateId,
-        assignedBy: user.id
+        assignedBy: user.id,
+        staffBranch: targetUser.branch  // Use the staff's branch - all permissions inherit this
       });
 
-      logger.info(`Template applied to staff: userId=${userId}, templateId=${templateId}, by adminId=${user.id}`);
+      logger.info(`Template applied to staff: userId=${userId}, templateId=${templateId}, staffBranch=${targetUser.branch}, by adminId=${user.id}`);
 
       return {
         ok: true,
