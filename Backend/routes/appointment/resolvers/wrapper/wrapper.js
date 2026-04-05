@@ -350,19 +350,21 @@ const Query = {
     return slots.map(s => ({ ...s, requirements: reqBySlot[s.id] || [] }));
   },
 
-  _getAppointmentStatusCounts: async (_, { location }, { user, res }) => {
+  _getAppointmentStatusCounts: async (_, { location, schedulerId, date }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
     const result = await db.query(`
-      SELECT status, COUNT(*)::int AS count
-      FROM "patientSlot"ps
+      SELECT ps.status, COUNT(*)::int AS count
+      FROM "patientSlot" ps
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
       WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
-      GROUP BY status;
-    `, [location]);
+        AND ($2::integer IS NULL OR ss.id = $2::integer)
+        AND ($3::date IS NULL OR sde."scheduledDate"::date = $3::date)
+      GROUP BY ps.status;
+    `, [location || null, schedulerId ? parseInt(schedulerId, 10) : null, date || null]);
 
     return result.rows;
   },
