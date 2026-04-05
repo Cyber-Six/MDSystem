@@ -676,7 +676,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       case 'medicines':
         return <PatientMedicineRequestsTab patient={patient} />;
       case 'documents':
-        return <PatientDocumentsTab />;
+        return <PatientDocumentsTab patient={patient} />;
       case 'obgyne':
         return <PatientObgyneTab patient={patient} />;
       default:

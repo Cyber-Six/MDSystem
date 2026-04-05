@@ -20,7 +20,7 @@ const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const mediaRoutes = require('./routes/media/media.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
-const documentRoutes = require('./routes/documents/documents.js');
+const documentPatientRoutes = require('./routes/documents/document/document-patient.js');
 const settingsRoutes = require('./routes/settings/settings.js');
 
 const { initPatientEMRGraphQL, initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
@@ -96,7 +96,7 @@ app.use('/auth/push-token', pushTokenRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
-app.use('/documents', documentRoutes);
+app.use('/documents', documentPatientRoutes);
 app.use('/settings', settingsRoutes);
 // ======================================
 
