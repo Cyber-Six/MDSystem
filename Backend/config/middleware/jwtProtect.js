@@ -67,7 +67,7 @@ function jwtProtect(requiredRole = "patient") {
           logger.warn(`[AUTH] Invalid/expired session userId=${decoded.id}, expectedSid=${activeSession}, providedSid=${decoded.sid}, route=${req.path}, ip=${req.ip}`);
           return res.status(401).json({
             error: "INVALID_SESSION",
-            message: "Session invalid or expired — please re‑login"
+            message: "Session invalid or expired — please re-login"
           });
         }
 

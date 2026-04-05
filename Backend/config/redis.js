@@ -272,8 +272,8 @@ async function verifyOTP(email, code, otpInput, portal) {
     }
 
     // ✅ Progressive delay
-    if (failures <= 3) await delayRandom(500, 1500);
-    else await delayRandom(2000, (failures+2)*1000);
+    if (failures <= 3) await delayRandom(500, 1500,1, 0);
+    else await delayRandom(500, 2500, failures, 0.5);
 
     return false;
   }
