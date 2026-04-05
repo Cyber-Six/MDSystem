@@ -33,11 +33,50 @@ function generateOTP(length = 6) {
   return otp;
 }
 
-// anti timed based attack delay
-function delayRandom(minMs = 1000, maxMs = 1500) {
-    const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+/**
+ * Randomized delay with min/max bounds, feed bias, blend shaping,
+ * cryptographic randomness, and capped feed effect.
+ *
+ * @param {number} minMs - Minimum delay in ms (absolute floor).
+ * @param {number} maxMs - Maximum delay in ms (absolute ceiling).
+ * @param {number} feed - Hook factor (e.g. failures count).
+ * @param {number} blend - Curve blend between linear (0) and log (1).
+ * @param {number} maxFeed - Cap for feed effect (default 10).
+ * @returns {Promise<void>}
+ */
+function delayRandom(minMs = 500, maxMs = 2500, feed = 1, blend = 0.5, maxFeed = 10) {
+    if (minMs > maxMs) {
+        throw new Error("minMs must be <= maxMs");
+    }
+
+    // Cap feed so it doesn't explode
+    const effectiveFeed = Math.min(feed, maxFeed);
+
+    // Cryptographically strong random in [0,1]
+    const randArray = new Uint32Array(1);
+    crypto.getRandomValues(randArray);
+    let rand = randArray[0] / 2**32;
+
+    // Linear component
+    const linear = rand;
+
+    // Logarithmic component (skew toward lower values)
+    const log = Math.log1p(rand * (Math.E - 1)) / Math.log(Math.E);
+
+    // Blend between linear and log
+    let shaped = (1 - blend) * linear + blend * log;
+
+    // Bias upward as feed increases (higher feed → closer to max)
+    shaped = Math.pow(shaped, 1 / effectiveFeed);
+
+    // Clamp
+    shaped = Math.min(Math.max(shaped, 0), 1);
+
+    // Map into [min, max]
+    const ms = Math.floor(shaped * (maxMs - minMs)) + minMs;
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+
 
 function generateUUID() {
   return crypto.randomUUID();

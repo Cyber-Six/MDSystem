@@ -15,7 +15,7 @@ const router = express.Router();
  * GET /documents/requests
  * List document requests for the authenticated patient
  */
-router.get('/requests', jwtProtect('patient'), async (req, res) => {
+router.get('/requests', jwtProtect("patient"), async (req, res) => {
   try {
     const patientId = req.user.id;
 
@@ -65,7 +65,7 @@ router.get('/requests', jwtProtect('patient'), async (req, res) => {
  * Submit a document request (create or update submission with 'Pending' status)
  * Body: file (optional - UUID of uploaded file)
  */
-router.post('/requests/:documentId', jwtProtect('patient'), async (req, res) => {
+router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => {
   const client = await connect();
   let promotedFile = null;
   try {
@@ -200,7 +200,7 @@ router.post('/requests/:documentId', jwtProtect('patient'), async (req, res) => 
  * GET /documents/me
  * List all generated documents for the authenticated patient
  */
-router.get('/me', jwtProtect('patient'), async (req, res) => {
+router.get('/me', jwtProtect("patient"), async (req, res) => {
   try {
     const patientId = req.user.id;
 

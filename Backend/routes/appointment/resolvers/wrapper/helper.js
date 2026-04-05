@@ -53,7 +53,12 @@ async function validateSchedulerDate(schedulerId, date) {
   // Parse the date-only string as LOCAL midnight (avoids UTC off-by-one in
   // non-UTC timezones — `new Date("YYYY-MM-DD")` is UTC midnight per spec).
   const [y, m, d] = date.split('-').map(Number);
-  const dayName = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long" });
+  // Use getDay() for locale-independent English weekday names.
+  // toLocaleDateString("en-US", ...) depends on Node.js ICU build; on servers
+  // with limited ICU it may return a non-English name (e.g., "Martes" instead
+  // of "Tuesday"), causing the scheduleFlags comparison to always fail.
+  const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayName = DAYS_EN[new Date(y, m - 1, d).getDay()];
   console.log(`Validating scheduler date: Scheduler ID ${schedulerId}, Date ${date} (${dayName})`);
   // First check weekly schedule flags
   const queryScheduler = `

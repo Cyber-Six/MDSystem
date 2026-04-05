@@ -145,8 +145,9 @@ async function unsetMedicalPermit({ personnelId, labels = [] }) {
 }
 
 
-async function clearMedicalPermits(personnelId) {
-  const result = await db.query(
+async function clearMedicalPermits(personnelId, client) {
+  const queryClient = client || db;
+  const result = await queryClient.query(
     `DELETE FROM "rolesMap"
      WHERE "personnelId" = $1
      RETURNING *;`,
@@ -202,8 +203,11 @@ async function getStaffPermissions(personnelId) {
  * @param {Array} params.permissionsList - Array of { key, enabled, branch? }
  * @param {number} params.assignedBy
  * @param {string} params.defaultBranch - Default branch if not specified per permission
+ * @param {Object} params.client - Optional database client for transaction support
  */
-async function setStaffPermissionsExtended({ personnelId, permissionsList, assignedBy, defaultBranch = 'Both' }) {
+async function setStaffPermissionsExtended({ personnelId, permissionsList, assignedBy, defaultBranch = 'Both', client }) {
+  const queryClient = client || db;
+
   const toInsert = [];  // Array of { label, branch }
   const toDelete = [];  // Array of labels
 
@@ -227,7 +231,7 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
 
   // Delete permissions set to false (removes records entirely)
   if (toDelete.length > 0) {
-    await db.query(
+    await queryClient.query(
       `DELETE FROM "rolesMap" rm
        USING "rolesTable" rt
        WHERE rm."rolesId" = rt.id
@@ -249,7 +253,7 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
       i += 2;
     }
 
-    await db.query(
+    await queryClient.query(
       `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
        SELECT $1, r.id, v.branch::"UserDesignation", $2
        FROM (VALUES ${values.join(",")}) AS v(label, branch)
@@ -275,8 +279,9 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
  * @param {Array} params.permissionsList - Array of { key, enabled }
  * @param {number} params.assignedBy
  * @param {string} params.branch - Applied to ALL permissions
+ * @param {Object} params.client - Optional database client for transaction support
  */
-async function setStaffPermissionsStandard({ personnelId, permissionsList, assignedBy, branch = 'Both' }) {
+async function setStaffPermissionsStandard({ personnelId, permissionsList, assignedBy, branch = 'Both', client }) {
   // Convert standard format to extended format by adding branch to each permission
   const extendedPermissionsList = permissionsList.map(perm => ({
     ...perm,
@@ -288,7 +293,8 @@ async function setStaffPermissionsStandard({ personnelId, permissionsList, assig
     personnelId,
     permissionsList: extendedPermissionsList,
     assignedBy,
-    defaultBranch: branch  // Not used since all have explicit branch, but for safety
+    defaultBranch: branch,  // Not used since all have explicit branch, but for safety
+    client  // Pass through client
   });
 }
 
@@ -666,6 +672,23 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
   try {
     await client.query('BEGIN');
 
+    // Check if template is the protected Admin template
+    const templateCheck = await client.query(
+      `SELECT label FROM "rolesTemplate" WHERE id = $1 LIMIT 1`,
+      [templateId]
+    );
+
+    if (templateCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new Error(`Template with id ${templateId} not found`);
+    }
+
+    const currentTemplate = templateCheck.rows[0];
+    if (currentTemplate.label === 'Admin') {
+      await client.query('ROLLBACK');
+      throw new Error('The Admin template is protected and cannot be modified');
+    }
+
     // Update label if provided
     if (label !== undefined && label !== null) {
       await client.query(
@@ -754,6 +777,23 @@ async function deletePermissionTemplate(templateId) {
   try {
     await client.query('BEGIN');
 
+    // Check if template is the protected Admin template
+    const templateCheck = await client.query(
+      `SELECT label FROM "rolesTemplate" WHERE id = $1 LIMIT 1`,
+      [templateId]
+    );
+
+    if (templateCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return false;  // Template doesn't exist
+    }
+
+    const template = templateCheck.rows[0];
+    if (template.label === 'Admin') {
+      await client.query('ROLLBACK');
+      throw new Error('The Admin template is protected and cannot be deleted');
+    }
+
     // Delete template permissions first (foreign key constraint)
     await client.query(
       `DELETE FROM "rolesTemplateMap"
@@ -793,9 +833,10 @@ async function deletePermissionTemplate(templateId) {
  * @param {number} params.personnelId - Staff user ID
  * @param {number} params.templateId - Template ID to apply
  * @param {number} params.assignedBy - Admin user ID applying the template
+ * @param {Object} params.client - Optional database client for transaction support
  * @returns {Promise<Object>} Result with inserted permissions
  */
-async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
+async function applyTemplateToStaff({ personnelId, templateId, assignedBy, client }) {
   // Get template permissions
   const template = await getPermissionTemplate(templateId);
 
@@ -812,12 +853,13 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
       branch: p.branch
     }));
 
-  // Apply permissions using existing function
+  // Apply permissions using existing function, passing client through
   await setStaffPermissionsExtended({
     personnelId: String(personnelId),
     permissionsList: enabledPermissions,
     assignedBy: String(assignedBy),
-    defaultBranch: 'Both'
+    defaultBranch: 'Both',
+    client  // Pass through client
   });
 
   logger.info(`Template applied to staff: templateId=${templateId}, personnelId=${personnelId}, by userId=${assignedBy}`);
@@ -837,9 +879,10 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
  * @param {number} params.templateId - The template that was updated
  * @param {string} params.roleLabel  - The role label to match staff against
  * @param {number} params.assignedBy - The admin user ID performing the update
+ * @param {Object} params.client - Optional database client for transaction support
  * @returns {Promise<{ affectedCount: number }>}
  */
-async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy }) {
+async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy, client }) {
   // Get the updated template for its current permissions
   const template = await getPermissionTemplate(templateId);
   if (!template) {
@@ -868,7 +911,7 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy 
     const branch = staff.designation || 'Both';
 
     // Clear existing permissions (clean slate)
-    await clearMedicalPermits(String(staff.id));
+    await clearMedicalPermits(String(staff.id), client);
 
     // Build full permissions: template perms + is_staff with staff-specific branch
     const staffPermissions = [
@@ -881,7 +924,8 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy 
       personnelId: String(staff.id),
       permissionsList: staffPermissions,
       assignedBy: String(assignedBy),
-      defaultBranch: 'Both'
+      defaultBranch: 'Both',
+      client  // Pass through client
     });
 
     affectedCount++;

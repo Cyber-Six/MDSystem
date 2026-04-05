@@ -20,8 +20,8 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
 
     // ✅ 0. Check if this IP is locked from resetpw attempts
     if (await isResetPwLocked(ip)) {
-      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
-      return res.status(429).json({
+      await delayRandom(200, 500);
+      return res.status(429).set("Retry-After", 3).json({
         error: "LOCKED_OUT",
         message: "Too many invalid attempts. Try again later."
       });
@@ -31,7 +31,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
 
     // ✅ 1. Required fields
     if (!email || !recaptchaToken) {
-      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
+      await delayRandom(200, 500); // add random delay to mitigate brute-force
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "MISSING_FIELDS",
