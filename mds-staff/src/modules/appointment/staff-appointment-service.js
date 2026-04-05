@@ -73,10 +73,10 @@ const sendGraphQL = async (query, variables = {}) => {
  * @param {number} [limit=20]
  * @returns {Promise<Array>} patientSlot[]
  */
-export const searchByStatus = async (status, offset = 0, limit = 20, { date, schedulerId } = {}) => {
+export const searchByStatus = async (status, offset = 0, limit = 20, { date, schedulerId, location } = {}) => {
   const data = await sendGraphQL(`
-    query SearchAppointmentStatuses($status: SCHEDULING_STATUS!, $offset: Int, $limit: Int, $date: Date, $schedulerId: ID) {
-      searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit, date: $date, schedulerId: $schedulerId) {
+    query SearchAppointmentStatuses($status: SCHEDULING_STATUS!, $offset: Int, $limit: Int, $date: Date, $schedulerId: ID, $location: LOCATION_DESIGNATION) {
+      searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit, date: $date, schedulerId: $schedulerId, location: $location) {
         id
         patientId
         patientIdentifier
@@ -100,7 +100,7 @@ export const searchByStatus = async (status, offset = 0, limit = 20, { date, sch
         }
       }
     }
-  `, { status, offset, limit, date: date || null, schedulerId: schedulerId || null });
+  `, { status, offset, limit, date: date || null, schedulerId: schedulerId || null, location: location || null });
   return data.searchAppointmentStatuses;
 };
 
@@ -109,15 +109,15 @@ export const searchByStatus = async (status, offset = 0, limit = 20, { date, sch
  * @param {{ schedulerId?: string, date?: string }} [filters]
  * @returns {Promise<Object>} e.g. { Pending: 5, Scheduled: 10, ... }
  */
-export const getStatusCounts = async ({ schedulerId, date } = {}) => {
+export const getStatusCounts = async ({ schedulerId, date, location } = {}) => {
   const data = await sendGraphQL(`
-    query GetAppointmentStatusCounts($schedulerId: ID, $date: Date) {
-      getAppointmentStatusCounts(schedulerId: $schedulerId, date: $date) {
+    query GetAppointmentStatusCounts($schedulerId: ID, $date: Date, $location: LOCATION_DESIGNATION) {
+      getAppointmentStatusCounts(schedulerId: $schedulerId, date: $date, location: $location) {
         status
         count
       }
     }
-  `, { schedulerId: schedulerId || null, date: date || null });
+  `, { schedulerId: schedulerId || null, date: date || null, location: location || null });
   const counts = {};
   for (const { status, count } of data.getAppointmentStatusCounts) {
     counts[status] = count;
@@ -130,20 +130,6 @@ export const getStatusCounts = async ({ schedulerId, date } = {}) => {
  * @param {string} userId
  * @returns {Promise<string|null>}
  */
-/**
- * Resolve a patient's internal userId from their student/employee identifier.
- * @param {number} identifier - Student or employee ID number
- * @returns {Promise<string|null>}
- */
-export const resolvePatientByIdentifier = async (identifier) => {
-  const data = await sendGraphQL(`
-    query ResolvePatientByIdentifier($identifier: Int!) {
-      resolvePatientByIdentifier(identifier: $identifier)
-    }
-  `, { identifier: Number(identifier) });
-  return data.resolvePatientByIdentifier;
-};
-
 export const getPatientStatus = async (userId) => {
   const data = await sendGraphQL(`
     query GetUserAppointmentStatus($userId: ID!) {

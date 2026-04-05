@@ -260,6 +260,19 @@ async function getPatientIdFromSlotId(slotId) {
   return result.rows[0].patientId;
 }
 
+// Helper function to get user ID via identifier
+async function getUserIDViaIdentifier(identifier, branch) {
+  const query = `
+    SELECT uc.id as "userId"
+    FROM "UserCredentials" uc
+    INNER JOIN "UsersPersonal" up ON uc.id = up.id
+    WHERE up.identifier = $1 AND
+    (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both')
+  `;
+  const result = await db.query(query, [identifier, branch]);
+  return result.rows;
+}
+
 module.exports = {
   decodeSchedulingFlags,
   encodeSchedulingFlags,
@@ -270,5 +283,6 @@ module.exports = {
   insertSlotCustomDates,
   insertSchedulerWhitelist,
   getBranchFromShedulerId,
-  getPatientIdFromSlotId
+  getPatientIdFromSlotId,
+  getUserIDViaIdentifier
 };
