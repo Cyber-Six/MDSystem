@@ -563,6 +563,14 @@ const Mutation = {
     // Role is now a free-form string - no validation needed
     // It can match a template label or be any custom role name
 
+    // ⚠️ SECURITY: Block direct Admin role assignment - only transfers allowed
+    if (role === 'Admin') {
+      throwGraphQLError(res)
+        .message('Cannot directly assign Admin role. Admin privileges can only be granted through Admin Transfer.')
+        .status(403)
+        .throw();
+    }
+
     // Validate that role matches an existing template label
     const templatesResult = await listPermissionTemplates();
     const matchingTemplate = templatesResult.templates.find(t => t.label === role);
@@ -824,6 +832,16 @@ const Mutation = {
       throwGraphQLError(res).message('branch must be Manila, QuezonCity, or Both.').status(400).throw();
     }
 
+    // ⚠️ SECURITY: Block IS_ADMIN assignment - only transfers allowed
+    for (const perm of permissionsList) {
+      if (perm.key === 'is_admin' && perm.enabled) {
+        throwGraphQLError(res)
+          .message('Cannot directly assign IS_ADMIN permission. Admin privileges can only be granted through Admin Transfer.')
+          .status(403)
+          .throw();
+      }
+    }
+
     await setStaffPermissionsStandard({
       personnelId: String(userId),
       permissionsList,
@@ -848,6 +866,14 @@ const Mutation = {
 
     // Validate each permission's branch if provided
     for (const perm of permissionsList) {
+      // ⚠️ SECURITY: Block IS_ADMIN assignment - only transfers allowed
+      if (perm.key === 'is_admin' && perm.enabled) {
+        throwGraphQLError(res)
+          .message('Cannot directly assign IS_ADMIN permission. Admin privileges can only be granted through Admin Transfer.')
+          .status(403)
+          .throw();
+      }
+
       if (perm.branch && !validBranches.includes(perm.branch)) {
         throwGraphQLError(res)
           .message(`Invalid branch "${perm.branch}" for permission "${perm.key}". Must be Manila, QuezonCity, or Both.`)
@@ -888,10 +914,13 @@ const Mutation = {
       }
     }
 
-    // Warn if roleManagement module is being enabled
+    // ⚠️ SECURITY: Block roleManagement module assignment - only transfers allowed
     const rmModule = modules.find(m => m.moduleId === 'roleManagement');
     if (rmModule && rmModule.enabled) {
-      logger.warn(`⚠️ Admin privilege being granted to userId=${userId} by adminId=${user.id}`);
+      throwGraphQLError(res)
+        .message('Cannot directly assign Admin/roleManagement privileges. Admin privileges can only be granted through Admin Transfer.')
+        .status(403)
+        .throw();
     }
 
     try {
@@ -956,6 +985,14 @@ const Mutation = {
       if (permitted) {
         throwGraphQLError(res)
           .message('Admin role cannot be changed directly. Use Admin Transfer instead.')
+          .status(403)
+          .throw();
+      }
+
+      // ⚠️ SECURITY: Block direct Admin role assignment - only transfers allowed
+      if (role === 'Admin') {
+        throwGraphQLError(res)
+          .message('Cannot directly assign Admin role. Admin privileges can only be granted through Admin Transfer.')
           .status(403)
           .throw();
       }
