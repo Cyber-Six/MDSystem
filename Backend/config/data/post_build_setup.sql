@@ -300,3 +300,37 @@ VALUES
 
 ('ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'Permission to access role management panel'),
 ('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates');
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ADMIN TEMPLATE: Immutable template containing admin-only permissions
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Ensure IS_ADMIN permission exists
+INSERT INTO "rolesTable" (label, data)
+VALUES ('IS_ADMIN', 'System administrator with full access and bypass permissions')
+ON CONFLICT DO NOTHING;
+
+-- Create Admin template (if not already created)
+-- Note: This template is marked as special and should not be editable/deletable
+INSERT INTO "rolesTemplate" (label, created_by, created_at)
+VALUES ('Admin', 1, NOW())
+ON CONFLICT DO NOTHING;
+
+-- Populate Admin template with admin-only permissions (idempotent)
+-- Only insert if not already mapped
+INSERT INTO "rolesTemplateMap" ("templateId", "rolesId", branch, created_at)
+SELECT
+  rt.id,
+  r.id,
+  'Both'::"UserDesignation",
+  NOW()
+FROM "rolesTemplate" rt
+JOIN "rolesTable" r ON true
+WHERE
+  rt.label = 'Admin'
+  AND r.label IN ('IS_ADMIN', 'ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'ALLOW_TO_EDIT_ROLE_MANAGEMENT')
+  AND NOT EXISTS (
+    SELECT 1 FROM "rolesTemplateMap" rtm
+    WHERE rtm."templateId" = rt.id
+    AND rtm."rolesId" = r.id
+  );
+
