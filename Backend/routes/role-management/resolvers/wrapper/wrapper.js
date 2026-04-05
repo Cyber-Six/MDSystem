@@ -744,6 +744,17 @@ const Mutation = {
     const updateResult = await db.query(updateQuery, params);
     const personnel = updateResult.rows[0];
 
+    // If designation changed, update branch in all existing permissions
+    if (designation !== undefined) {
+      await db.query(
+        `UPDATE "rolesMap"
+         SET branch = $1::"UserDesignation"
+         WHERE "personnelId" = $2`,
+        [designation, userId]
+      );
+      logger.info(`Updated branch to "${designation}" for all permissions of userId=${userId}`);
+    }
+
     // If template provided, apply permissions from template
     if (templateId !== undefined) {
       try {
