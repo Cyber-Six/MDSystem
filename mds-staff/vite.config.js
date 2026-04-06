@@ -61,10 +61,16 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
-        '/dashboard/stats': {
+        '/dashboard': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
+          secure: BACKEND_URL.startsWith('https'),
+          bypass: function(req) {
+            // Only proxy POST requests (GraphQL) — let React Router handle browser GET navigation
+            if (req.method === 'GET') {
+              return '/index.html';
+            }
+          },
         },
         '/medical-update': {
           target: BACKEND_URL,
