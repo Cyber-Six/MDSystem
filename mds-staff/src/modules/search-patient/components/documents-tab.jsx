@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PatientSectionCard from './section-card';
 import { getRequiredDocuments, requestDocument, approveDocument, rejectDocument, archiveDocument, cancelDocument, viewDocumentFile } from '../../../services/document-service';
+import ConfirmationModal from '../../../components/modals/ConfirmationModal';
 
 const STATUS_STYLES = {
   Recorded:  'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
@@ -146,6 +147,14 @@ export default function PatientDocumentsTab({ patient }) {
   // Preview modal state
   const [previewModal, setPreviewModal] = useState({ isOpen: false, fileUrl: null, fileType: null, fileName: null });
 
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    type: null, // 'reject', 'archive', 'cancel'
+    documentId: null,
+    documentLabel: null,
+  });
+
   const patientId = patient?.id;
 
   const loadDocuments = useCallback(async () => {
@@ -199,15 +208,22 @@ export default function PatientDocumentsTab({ patient }) {
     }
   };
 
-  const handleReject = async (documentId) => {
-    if (!confirm('Are you sure you want to reject this document?')) {
-      return;
-    }
+  const handleReject = async (documentId, documentLabel) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'reject',
+      documentId,
+      documentLabel,
+    });
+  };
+
+  const confirmReject = async (reason) => {
+    const documentId = confirmModal.documentId;
+    setConfirmModal({ isOpen: false, type: null, documentId: null, documentLabel: null });
     setRejecting(documentId);
     setError('');
     try {
-      const noteText = notes[documentId] || null;
-      await rejectDocument(documentId, patientId, noteText);
+      await rejectDocument(documentId, patientId, reason || null);
       setNotes(prev => ({ ...prev, [documentId]: '' }));
       await loadDocuments();
     } catch (err) {
@@ -217,15 +233,22 @@ export default function PatientDocumentsTab({ patient }) {
     }
   };
 
-  const handleArchive = async (documentId) => {
-    if (!confirm('Archive this document? You can request a new one after archiving.')) {
-      return;
-    }
+  const handleArchive = async (documentId, documentLabel) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'archive',
+      documentId,
+      documentLabel,
+    });
+  };
+
+  const confirmArchive = async (archiveNotes) => {
+    const documentId = confirmModal.documentId;
+    setConfirmModal({ isOpen: false, type: null, documentId: null, documentLabel: null });
     setArchiving(documentId);
     setError('');
     try {
-      const noteText = notes[documentId] || null;
-      await archiveDocument(documentId, patientId, noteText);
+      await archiveDocument(documentId, patientId, archiveNotes || null);
       setNotes(prev => ({ ...prev, [documentId]: '' }));
       await loadDocuments();
     } catch (err) {
@@ -261,10 +284,18 @@ export default function PatientDocumentsTab({ patient }) {
     setPreviewModal({ isOpen: false, fileUrl: null, fileType: null, fileName: null });
   };
 
-  const handleCancel = async (documentId) => {
-    if (!confirm('Cancel this document request? The patient will no longer see this request.')) {
-      return;
-    }
+  const handleCancel = async (documentId, documentLabel) => {
+    setConfirmModal({
+      isOpen: true,
+      type: 'cancel',
+      documentId,
+      documentLabel,
+    });
+  };
+
+  const confirmCancel = async () => {
+    const documentId = confirmModal.documentId;
+    setConfirmModal({ isOpen: false, type: null, documentId: null, documentLabel: null });
     setCancelling(documentId);
     setError('');
     try {
@@ -274,6 +305,62 @@ export default function PatientDocumentsTab({ patient }) {
       setError(err.message || 'Failed to cancel document request');
     } finally {
       setCancelling(null);
+    }
+  };
+
+  const closeConfirmModal = () => {
+    setConfirmModal({ isOpen: false, type: null, documentId: null, documentLabel: null });
+  };
+
+  const handleConfirmAction = (notes) => {
+    if (confirmModal.type === 'reject') {
+      confirmReject(notes);
+    } else if (confirmModal.type === 'archive') {
+      confirmArchive(notes);
+    } else if (confirmModal.type === 'cancel') {
+      confirmCancel();
+    }
+  };
+
+  const getConfirmModalConfig = () => {
+    const { type, documentLabel } = confirmModal;
+    
+    switch (type) {
+      case 'reject':
+        return {
+          title: 'Reject Document',
+          message: `Are you sure you want to reject "${documentLabel}"?`,
+          description: 'The patient will be notified about this rejection.',
+          confirmText: 'Reject',
+          variant: 'danger',
+          showNotesInput: true,
+          notesLabel: 'Rejection Reason',
+          notesPlaceholder: 'Enter reason for rejection...',
+          notesRequired: false,
+        };
+      case 'archive':
+        return {
+          title: 'Archive Document',
+          message: `Archive "${documentLabel}"?`,
+          description: 'You can request a new document after archiving. This action will move the current document to archived submissions.',
+          confirmText: 'Archive',
+          variant: 'danger',
+          showNotesInput: true,
+          notesLabel: 'Archive Notes (Optional)',
+          notesPlaceholder: 'Enter notes about why this is being archived...',
+          notesRequired: false,
+        };
+      case 'cancel':
+        return {
+          title: 'Cancel Document Request',
+          message: `Cancel the request for "${documentLabel}"?`,
+          description: 'The patient will no longer see this document request.',
+          confirmText: 'Cancel Request',
+          variant: 'danger',
+          showNotesInput: false,
+        };
+      default:
+        return {};
     }
   };
 
@@ -684,7 +771,7 @@ export default function PatientDocumentsTab({ patient }) {
 
                         {/* Reject Button */}
                         <button
-                          onClick={() => handleReject(doc.id)}
+                          onClick={() => handleReject(doc.id, doc.label)}
                           disabled={isApproving || isRejecting}
                           className="px-2.5 py-1 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
                         >
@@ -703,7 +790,7 @@ export default function PatientDocumentsTab({ patient }) {
 
                         {/* Cancel Request Button */}
                         <button
-                          onClick={() => handleCancel(doc.id)}
+                          onClick={() => handleCancel(doc.id, doc.label)}
                           disabled={cancelling === doc.id || isApproving || isRejecting}
                           className="px-2.5 py-1 text-xs font-medium text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
                         >
@@ -757,7 +844,7 @@ export default function PatientDocumentsTab({ patient }) {
                           className="w-full px-2 py-1.5 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
                         />
                         <button
-                          onClick={() => handleArchive(doc.id)}
+                          onClick={() => handleArchive(doc.id, doc.label)}
                           disabled={isArchiving}
                           className="px-2.5 py-1 text-xs font-medium text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
                         >
@@ -799,6 +886,15 @@ export default function PatientDocumentsTab({ patient }) {
         fileUrl={previewModal.fileUrl}
         fileType={previewModal.fileType}
         fileName={previewModal.fileName}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmModal}
+        onConfirm={handleConfirmAction}
+        isLoading={rejecting === confirmModal.documentId || archiving === confirmModal.documentId || cancelling === confirmModal.documentId}
+        {...getConfirmModalConfig()}
       />
     </PatientSectionCard>
   );
