@@ -78,11 +78,20 @@ const DateSessionPicker = ({
   // Build custom date set for quick lookup (handles both string and object formats)
   const customDateSet = useMemo(() => {
     const set = new Set();
+    const toLocal = (s) => {
+      if (!s) return '';
+      if (!s.includes('T') && !s.endsWith('Z')) return s;
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return s.split('T')[0];
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
     (customDates || []).forEach(cd => {
       if (typeof cd === 'string') {
-        set.add(cd.split('T')[0]);
+        const key = toLocal(cd);
+        if (key) set.add(key);
       } else if (cd?.scheduledDate) {
-        set.add(cd.scheduledDate.split('T')[0]);
+        const key = toLocal(String(cd.scheduledDate));
+        if (key) set.add(key);
       }
     });
     return set;

@@ -3,14 +3,23 @@ import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check,
 
 /**
  * Normalize a date value (string, Date, or number) to YYYY-MM-DD format.
+ * Uses LOCAL date getters so UTC-offset ISO timestamps (e.g. "2026-04-07T16:00:00.000Z"
+ * from a UTC+8 server) resolve to the correct local calendar date ("2026-04-08").
  */
 const normalizeDate = (val) => {
   if (!val) return '';
-  if (typeof val === 'string') return val.split('T')[0];
+  if (typeof val === 'string') {
+    // Pure date string "YYYY-MM-DD" — return as-is
+    if (!val.includes('T') && !val.endsWith('Z')) return val;
+    // ISO timestamp — parse and use LOCAL date parts to avoid UTC offset shifting the date
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val.split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
   if (val instanceof Date || typeof val === 'number') {
     const d = new Date(val);
     if (isNaN(d.getTime())) return '';
-    return d.toISOString().split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
   return '';
 };
@@ -166,10 +175,8 @@ const AvailabilityManager = () => {
       const data = await getMonthAvailability(schedulerId, startDate, endDate);
       const lookup = {};
       for (const entry of (data || [])) {
-        const dateStr = typeof entry.scheduledDate === 'string'
-          ? entry.scheduledDate.split('T')[0]
-          : entry.scheduledDate;
-        lookup[dateStr] = entry;
+        const dateStr = normalizeDate(entry.scheduledDate);
+        if (dateStr) lookup[dateStr] = entry;
       }
       setMonthAvailability(lookup);
     } catch (err) {

@@ -169,9 +169,16 @@ const PatientAppointment = () => {
       const data = await getMonthAvailability(selectedScheduler.id, startDate, endDate);
       const lookup = {};
       for (const entry of (data || [])) {
-        const dateStr = typeof entry.scheduledDate === 'string'
-          ? entry.scheduledDate.split('T')[0]
-          : entry.scheduledDate;
+        let dateStr;
+        const s = String(entry.scheduledDate || '');
+        if (!s) continue;
+        if (!s.includes('T') && !s.endsWith('Z')) {
+          dateStr = s;
+        } else {
+          const d = new Date(s);
+          dateStr = isNaN(d.getTime()) ? s.split('T')[0]
+            : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
         lookup[dateStr] = entry;
       }
       setMonthAvailability(lookup);
