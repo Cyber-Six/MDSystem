@@ -563,6 +563,14 @@ const Mutation = {
     // Role is now a free-form string - no validation needed
     // It can match a template label or be any custom role name
 
+    // ⚠️ SECURITY: Block direct Admin role assignment - only transfers allowed
+    if (role === 'Admin') {
+      throwGraphQLError(res)
+        .message('Cannot directly assign Admin role. Admin privileges can only be granted through Admin Transfer.')
+        .status(403)
+        .throw();
+    }
+
     // Validate that role matches an existing template label
     const templatesResult = await listPermissionTemplates();
     const matchingTemplate = templatesResult.templates.find(t => t.label === role);
@@ -634,9 +642,10 @@ const Mutation = {
           personnelId: userId,
           templateId: effectiveTemplateId,
           assignedBy: user.id,
+          staffBranch: designation,  // Staff's branch - all permissions inherit this
           client  // Pass client for transaction participation
         });
-        logger.info(`Template ${effectiveTemplateId} applied to new medical personnel: userId=${userId}`);
+        logger.info(`Template ${effectiveTemplateId} applied to new medical personnel: userId=${userId}, staffBranch=${designation}`);
       }
 
       await client.query('COMMIT');
@@ -735,15 +744,27 @@ const Mutation = {
     const updateResult = await db.query(updateQuery, params);
     const personnel = updateResult.rows[0];
 
+    // If designation changed, update branch in all existing permissions
+    if (designation !== undefined) {
+      await db.query(
+        `UPDATE "rolesMap"
+         SET branch = $1::"UserDesignation"
+         WHERE "personnelId" = $2`,
+        [designation, userId]
+      );
+      logger.info(`Updated branch to "${designation}" for all permissions of userId=${userId}`);
+    }
+
     // If template provided, apply permissions from template
     if (templateId !== undefined) {
       try {
         await applyTemplateToStaff({
           personnelId: userId,
           templateId,
-          assignedBy: user.id
+          assignedBy: user.id,
+          staffBranch: personnel.designation  // Use the staff's branch - all permissions inherit this
         });
-        logger.info(`Template ${templateId} applied to medical personnel: userId=${userId}`);
+        logger.info(`Template ${templateId} applied to medical personnel: userId=${userId}, staffBranch=${personnel.designation}`);
       } catch (error) {
         logger.error(`Failed to apply template during update: ${error.message}`);
         // Continue - personnel updated but template not applied
@@ -824,6 +845,16 @@ const Mutation = {
       throwGraphQLError(res).message('branch must be Manila, QuezonCity, or Both.').status(400).throw();
     }
 
+    // ⚠️ SECURITY: Block IS_ADMIN assignment - only transfers allowed
+    for (const perm of permissionsList) {
+      if (perm.key === 'is_admin' && perm.enabled) {
+        throwGraphQLError(res)
+          .message('Cannot directly assign IS_ADMIN permission. Admin privileges can only be granted through Admin Transfer.')
+          .status(403)
+          .throw();
+      }
+    }
+
     await setStaffPermissionsStandard({
       personnelId: String(userId),
       permissionsList,
@@ -848,6 +879,14 @@ const Mutation = {
 
     // Validate each permission's branch if provided
     for (const perm of permissionsList) {
+      // ⚠️ SECURITY: Block IS_ADMIN assignment - only transfers allowed
+      if (perm.key === 'is_admin' && perm.enabled) {
+        throwGraphQLError(res)
+          .message('Cannot directly assign IS_ADMIN permission. Admin privileges can only be granted through Admin Transfer.')
+          .status(403)
+          .throw();
+      }
+
       if (perm.branch && !validBranches.includes(perm.branch)) {
         throwGraphQLError(res)
           .message(`Invalid branch "${perm.branch}" for permission "${perm.key}". Must be Manila, QuezonCity, or Both.`)
@@ -888,10 +927,13 @@ const Mutation = {
       }
     }
 
-    // Warn if roleManagement module is being enabled
+    // ⚠️ SECURITY: Block roleManagement module assignment - only transfers allowed
     const rmModule = modules.find(m => m.moduleId === 'roleManagement');
     if (rmModule && rmModule.enabled) {
-      logger.warn(`⚠️ Admin privilege being granted to userId=${userId} by adminId=${user.id}`);
+      throwGraphQLError(res)
+        .message('Cannot directly assign Admin/roleManagement privileges. Admin privileges can only be granted through Admin Transfer.')
+        .status(403)
+        .throw();
     }
 
     try {
@@ -956,6 +998,14 @@ const Mutation = {
       if (permitted) {
         throwGraphQLError(res)
           .message('Admin role cannot be changed directly. Use Admin Transfer instead.')
+          .status(403)
+          .throw();
+      }
+
+      // ⚠️ SECURITY: Block direct Admin role assignment - only transfers allowed
+      if (role === 'Admin') {
+        throwGraphQLError(res)
+          .message('Cannot directly assign Admin role. Admin privileges can only be granted through Admin Transfer.')
           .status(403)
           .throw();
       }
@@ -1025,6 +1075,7 @@ const Mutation = {
             personnelId: userId,
             templateId: effectiveTemplateId,
             assignedBy: user.id,
+            staffBranch: branch,  // Use staff's current branch - all permissions inherit this
             client  // Pass client for transaction participation
           });
         }
@@ -1065,6 +1116,14 @@ const Mutation = {
       if (designation) {
         await client.query(
           `UPDATE "MedicalPersonnel" SET designation = $1 WHERE id = $2`,
+          [designation, userId]
+        );
+
+        // Update branch in all existing permissions
+        await client.query(
+          `UPDATE "rolesMap"
+           SET branch = $1::"UserDesignation"
+           WHERE "personnelId" = $2`,
           [designation, userId]
         );
 
@@ -1302,9 +1361,9 @@ const Mutation = {
   },
 
   _applyTemplateToStaff: async (_, { userId, templateId }, { user, res }) => {
-    // Verify user exists and is Medical staff
+    // Verify user exists and is Medical staff - also get their branch designation
     const userResult = await db.query(
-      `SELECT uc.id, uc.identity, mp.id AS "medicalId"
+      `SELECT uc.id, uc.identity, mp.id AS "medicalId", mp.designation AS branch
        FROM "UserCredentials" uc
        LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        WHERE uc.id = $1
@@ -1337,10 +1396,11 @@ const Mutation = {
       const result = await applyTemplateToStaff({
         personnelId: userId,
         templateId,
-        assignedBy: user.id
+        assignedBy: user.id,
+        staffBranch: targetUser.branch  // Use the staff's branch - all permissions inherit this
       });
 
-      logger.info(`Template applied to staff: userId=${userId}, templateId=${templateId}, by adminId=${user.id}`);
+      logger.info(`Template applied to staff: userId=${userId}, templateId=${templateId}, staffBranch=${targetUser.branch}, by adminId=${user.id}`);
 
       return {
         ok: true,
@@ -1998,6 +2058,14 @@ const Mutation = {
         [oldAdminId]
       );
 
+      // Update roles: new admin gets Admin role, old admin reverts to their previous role (or Staff)
+      await client.query(
+        `UPDATE "MedicalPersonnel" SET role = 'Admin' WHERE id = $1`,
+        [newAdminId]
+      );
+      // Old admin keeps their role (don't change it) - they may have been a Doctor, Nurse, etc.
+      // Only change designation, not role
+
       // Log audit trail within transaction
       await db.setSystemAuditLog({
         client: client,
@@ -2028,6 +2096,13 @@ const Mutation = {
         const templatesResult = await listPermissionTemplates();
         if (templatesResult.templates && templatesResult.templates.length > 0) {
           const defaultTemplate = templatesResult.templates[0];
+
+          // Update old admin's role to match the default template
+          await client.query(
+            `UPDATE "MedicalPersonnel" SET role = $1 WHERE id = $2`,
+            [defaultTemplate.label, oldAdminId]
+          );
+
           await applyTemplateToStaff({
             personnelId: oldAdminId,
             templateId: defaultTemplate.id,

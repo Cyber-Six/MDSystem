@@ -14,33 +14,59 @@ const router = express.Router();
 /**
  * GET /documents/requests
  * List document requests for the authenticated patient
+ * 
+ * Returns ALL documents with their current active status:
+ * - Requested: Staff requested, waiting for patient upload
+ * - Pending: Patient uploaded, waiting for staff review
+ * - Recorded: Approved by staff
+ * - Rejected: Rejected by staff (shown for history/resubmission awareness)
+ * 
+ * Also includes rejectedSubmissions array for audit trail
  */
 router.get('/requests', jwtProtect("patient"), async (req, res) => {
   try {
     const patientId = req.user.id;
 
+    // Get all submissions for this patient, grouped by document tag
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
-              prd.id as "submissionId", prd.status,
+              prd.id as "submissionId", prd.status, prd.file,
+              prd."notes",
               prd."recordedBy", prd."created_at" as "submittedAt",
               up.first_name as "recordedByFirstName", up.last_name as "recordedByLastName"
        FROM "rawDocumentTag" rdt
        LEFT JOIN "patientRawDocument" prd ON prd."documentTagId" = rdt.id
          AND prd."patientId" = $1
        LEFT JOIN "UsersPersonal" up ON prd."recordedBy" = up.id
-       WHERE rdt."isActive" = true AND prd.status = 'Requested'
-       ORDER BY rdt.id`,
+       WHERE rdt."isActive" = true
+       ORDER BY rdt.id, prd."created_at" DESC`,
       [patientId]
     );
 
-    const documents = result.rows.map((row) => ({
-      id: row.id,
-      label: row.label,
-      isActive: row.isActive,
-      submission: row.submissionId
-        ? {
+    // Group by document tag ID
+    const docMap = new Map();
+    
+    result.rows.forEach((row) => {
+      if (!docMap.has(row.id)) {
+        docMap.set(row.id, {
+          id: row.id,
+          label: row.label,
+          isActive: row.isActive,
+          submission: null,
+        });
+      }
+      
+      const doc = docMap.get(row.id);
+      
+      if (row.submissionId && row.status !== 'Archived') {
+        // Active submission (Requested, Pending, Recorded)
+        // Only set if not already set (first one is most recent)
+        if (!doc.submission) {
+          doc.submission = {
             id: row.submissionId,
             status: row.status,
+            file: row.file,
+            notes: row.notes,
             recordedBy: row.recordedBy
               ? {
                   id: row.recordedBy,
@@ -48,9 +74,12 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
                 }
               : null,
             submittedAt: row.submittedAt,
-          }
-        : null,
-    }));
+          };
+        }
+      }
+    });
+
+    const documents = Array.from(docMap.values());
 
     logger.info('Patient document requests listed', { patientId, count: documents.length });
     res.json({ success: true, documents });
@@ -62,8 +91,13 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
 
 /**
  * POST /documents/requests/:documentId
- * Submit a document request (create or update submission with 'Pending' status)
- * Body: file (optional - UUID of uploaded file)
+ * Submit a document request (upload file and set status to 'Pending')
+ * Body: file (required - UUID of uploaded/staged file)
+ * 
+ * RULES:
+ * - Patient can ONLY submit for documents with status 'Requested'
+ * - Selecting file + calling this API = submission (manual submit required from UI)
+ * - Cannot submit if already Pending, Recorded, or no request exists
  */
 router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => {
   const client = await connect();
@@ -75,13 +109,26 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
     const { file } = req.body;
     const patientId = req.user.id;
 
-    // Check if the document tag exists and get existing submission
+    // File is required for submission
+    if (!file) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'FILE_REQUIRED',
+        message: 'A file must be uploaded to submit a document.',
+      });
+    }
+
+    // Check if the document tag exists and get CURRENT active submission
+    // (not Archived, not Rejected)
     const existingResult = await client.query(
-      `SELECT prd.id, prd.status, prd.file
+      `SELECT prd.id, prd.status, prd.file, rdt.label
        FROM "rawDocumentTag" rdt
        LEFT JOIN "patientRawDocument" prd ON
-         prd."documentTagId" = rdt.id AND prd."patientId" = $2
-       WHERE rdt.id = $1 AND rdt."isActive" = true`,
+         prd."documentTagId" = rdt.id AND prd."patientId" = $2 
+         AND prd.status NOT IN ('Archived', 'Rejected')
+       WHERE rdt.id = $1 AND rdt."isActive" = true
+       ORDER BY prd."created_at" DESC
+       LIMIT 1`,
       [documentId, patientId]
     );
 
@@ -93,62 +140,56 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
     const existing = existingResult.rows[0];
     const oldFile = existing?.file;
 
-    // Validate status transitions
-    if (existing.id) {
-      switch (existing.status) {
-        case 'Pending':
-          if (!file) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({
-              error: 'REQUEST_ALREADY_PENDING',
-              message: 'A request for this document is already pending review.',
-            });
-          }
-          // Allow file upload/replacement for pending requests
-          break;
-        case 'Recorded':
-        case 'Archived':
-          await client.query('ROLLBACK');
-          return res.status(400).json({
-            error: 'DOCUMENT_ALREADY_PROCESSED',
-            message: 'This document has already been recorded or archived.',
-          });
+    // Validate: can only submit for 'Requested' status
+    if (!existing.id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'NO_REQUEST_EXISTS',
+        message: 'This document has not been requested by staff. You cannot upload documents without a request.',
+      });
+    }
+
+    if (existing.status !== 'Requested') {
+      await client.query('ROLLBACK');
+      
+      if (existing.status === 'Pending') {
+        return res.status(400).json({
+          error: 'ALREADY_SUBMITTED',
+          message: 'You have already submitted this document. Please wait for staff review.',
+        });
       }
-    }
-
-    // Promote file if provided
-    if (file) {
-      try {
-        promotedFile = await promoteFile(patientId, file, 'documents');
-      } catch (err) {
-        await client.query('ROLLBACK');
-        logger.warn('Failed to promote document file', { error: err.message });
-        return res.status(400).json({ error: 'INVALID_FILE', message: 'Failed to process document file' });
+      
+      if (existing.status === 'Recorded') {
+        return res.status(400).json({
+          error: 'ALREADY_APPROVED',
+          message: 'This document has already been approved.',
+        });
       }
+      
+      return res.status(400).json({
+        error: 'INVALID_STATUS',
+        message: `Cannot submit document with status '${existing.status}'.`,
+      });
     }
 
-    let submissionId;
-
-    if (existing.id) {
-      // Update existing submission
-      const updateResult = await client.query(
-        `UPDATE "patientRawDocument"
-         SET file = COALESCE($1, file), status = 'Pending'
-         WHERE "documentTagId" = $2 AND "patientId" = $3
-         RETURNING id`,
-        [promotedFile || null, documentId, patientId]
-      );
-      submissionId = updateResult.rows[0].id;
-    } else {
-      // Create new submission with 'Pending' status
-      const insertResult = await client.query(
-        `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", file, status)
-         VALUES ($1, $2, $3, 'Pending')
-         RETURNING id`,
-        [documentId, patientId, promotedFile || null]
-      );
-      submissionId = insertResult.rows[0].id;
+    // Promote file from staging
+    try {
+      promotedFile = await promoteFile(patientId, file, 'documents');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.warn('Failed to promote document file', { error: err.message });
+      return res.status(400).json({ error: 'INVALID_FILE', message: 'Failed to process document file' });
     }
+
+    // Update submission to 'Pending' status with the uploaded file
+    const updateResult = await client.query(
+      `UPDATE "patientRawDocument"
+       SET file = $1, status = 'Pending'
+       WHERE id = $2
+       RETURNING id`,
+      [promotedFile, existing.id]
+    );
+    const submissionId = updateResult.rows[0].id;
 
     // Delete old file only after SQL succeeds
     if (oldFile && promotedFile && promotedFile !== oldFile) {

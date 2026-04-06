@@ -1,16 +1,17 @@
 # Health Chat System Documentation
 
 ## Table of Contents
+
 1. [Overview](#overview)
 2. [Architecture](#architecture)
 3. [Database Schema](#database-schema)
 4. [GraphQL API](#graphql-api)
 5. [Resolvers](#resolvers)
-6. [Security & Permissions](#security--permissions)
+6. [Security &amp; Permissions](#security--permissions)
 7. [Real-time Features](#real-time-features)
 8. [Atomic Transactions](#atomic-transactions)
 9. [Helper Functions](#helper-functions)
-10. [Bug Fixes & Improvements](#bug-fixes--improvements)
+10. [Bug Fixes &amp; Improvements](#bug-fixes--improvements)
 11. [Usage Examples](#usage-examples)
 
 ---
@@ -54,10 +55,11 @@ Backend/routes/health-chat/
 ### GraphQL Endpoints
 
 - **Patient Endpoint**: `/healthchat/patient`
+
   - Authentication: `jwtProtect("patient")`
   - Access: All verified patients
-
 - **Medical Endpoint**: `/healthchat/medical`
+
   - Authentication: `jwtProtect("medical")`
   - Access: Medical personnel with health_chat_allow_access permission
 
@@ -75,35 +77,37 @@ Backend/routes/health-chat/
 ### Tables
 
 #### HealthChat
+
 Primary table for chat tickets/sessions.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | SERIAL PRIMARY KEY | Ticket ID |
-| patientId | INT NOT NULL | Foreign key to patient |
-| medicalId | INT | Foreign key to assigned medical staff |
-| purpose | TEXT NOT NULL | Reason for consultation |
-| notes | TEXT | Additional notes from staff |
-| status | ENUM | Open, Ongoing, Closed, Expired |
-| session_start | TIMESTAMP | When session was approved |
-| session_end | TIMESTAMP | When session was closed |
-| consent_logged | BOOLEAN | Whether consent was logged |
-| closed_by_type | ENUM | Patient, Staff, System |
-| archived_at | TIMESTAMP | When archived |
+| Column         | Type               | Description                           |
+| -------------- | ------------------ | ------------------------------------- |
+| id             | SERIAL PRIMARY KEY | Ticket ID                             |
+| patientId      | INT NOT NULL       | Foreign key to patient                |
+| medicalId      | INT                | Foreign key to assigned medical staff |
+| purpose        | TEXT NOT NULL      | Reason for consultation               |
+| notes          | TEXT               | Additional notes from staff           |
+| status         | ENUM               | Open, Ongoing, Closed, Expired        |
+| session_start  | TIMESTAMP          | When session was approved             |
+| session_end    | TIMESTAMP          | When session was closed               |
+| consent_logged | BOOLEAN            | Whether consent was logged            |
+| closed_by_type | ENUM               | Patient, Staff, System                |
+| archived_at    | TIMESTAMP          | When archived                         |
 
 #### HealthChatPrompt
+
 Messages within tickets.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | SERIAL PRIMARY KEY | Message ID |
-| consultationVirtualId | INT NOT NULL | Foreign key to HealthChat |
-| text | TEXT | Message text |
-| filename | UUID | Uploaded file reference |
-| promptType | ENUM | text, file, system |
-| userId | INT | Sender ID (NULL for system) |
-| userType | ENUM | Patient, Medical |
-| stamp | TIMESTAMP | Message timestamp |
+| Column                | Type               | Description                 |
+| --------------------- | ------------------ | --------------------------- |
+| id                    | SERIAL PRIMARY KEY | Message ID                  |
+| consultationVirtualId | INT NOT NULL       | Foreign key to HealthChat   |
+| text                  | TEXT               | Message text                |
+| filename              | UUID               | Uploaded file reference     |
+| promptType            | ENUM               | text, file, system          |
+| userId                | INT                | Sender ID (NULL for system) |
+| userType              | ENUM               | Patient, Medical            |
+| stamp                 | TIMESTAMP          | Message timestamp           |
 
 ### Ticket Lifecycle
 
@@ -129,6 +133,7 @@ Messages within tickets.
 ### Types
 
 #### HealthChat
+
 ```graphql
 type HealthChat {
   id: ID!
@@ -152,6 +157,7 @@ type HealthChat {
 ```
 
 #### PatientConversation
+
 Messenger-style grouping of all tickets for a patient.
 
 ```graphql
@@ -171,6 +177,7 @@ type PatientConversation {
 ### Patient Queries
 
 #### getMyTickets
+
 Get all tickets for the authenticated patient.
 
 ```graphql
@@ -182,6 +189,7 @@ getMyTickets(
 ```
 
 **Parameters**:
+
 - `status`: Filter by ticket status (optional)
 - `offset`: Pagination offset (default: 0)
 - `limit`: Results per page (default: 10)
@@ -193,6 +201,7 @@ getMyTickets(
 ---
 
 #### getMyTicket
+
 Get a specific ticket by ID.
 
 ```graphql
@@ -204,6 +213,7 @@ getMyTicket(chatId: ID!): HealthChat
 ---
 
 #### getTicketMessages
+
 Get messages for a specific ticket.
 
 ```graphql
@@ -215,6 +225,7 @@ getTicketMessages(
 ```
 
 **Parameters**:
+
 - `chatId`: Ticket ID
 - `offset`: Message offset (default: 0)
 - `limit`: Messages per page (default: 50)
@@ -228,6 +239,7 @@ getTicketMessages(
 ### Medical Queries
 
 #### getPendingTickets
+
 Get all tickets awaiting approval (status=Open).
 
 ```graphql
@@ -239,11 +251,13 @@ getPendingTickets(
 ```
 
 **Parameters**:
+
 - `location`: Manila | QuezonCity | Both (default: Both)
 
 **Security**: Location-based permission check
 
 **Business Logic**:
+
 - Filters by patient's branch
 - Orders by ID ASC (oldest first)
 - Auto-expires old tickets before query
@@ -251,6 +265,7 @@ getPendingTickets(
 ---
 
 #### getActiveTickets
+
 Get all ongoing tickets (status=Ongoing).
 
 ```graphql
@@ -264,12 +279,14 @@ getActiveTickets(
 **Security**: Location-based permission check
 
 **Business Logic**:
+
 - Orders by session_start DESC (most recent first)
 - Auto-expires old tickets before query
 
 ---
 
 #### getAllTickets
+
 Get all tickets with optional status filter.
 
 ```graphql
@@ -286,6 +303,7 @@ getAllTickets(
 ---
 
 #### getPatientConversations
+
 Get conversations grouped by patient (Messenger-style UI).
 
 ```graphql
@@ -298,6 +316,7 @@ getPatientConversations(
 ```
 
 **Returns**: One row per patient with:
+
 - Latest ticket (prioritized: Ongoing > Open > others)
 - Last message across all tickets
 - Unread count
@@ -308,6 +327,7 @@ getPatientConversations(
 ---
 
 #### getPatientMessages
+
 Get all messages for a patient across all their tickets.
 
 ```graphql
@@ -320,6 +340,7 @@ getPatientMessages(
 ```
 
 **Parameters**:
+
 - `before`: Timestamp for cursor-based pagination
 
 **Returns**: Messages in ASC order with ticket metadata
@@ -329,6 +350,7 @@ getPatientMessages(
 ---
 
 #### getMessages
+
 Get messages for a specific ticket (medical view).
 
 ```graphql
@@ -340,10 +362,12 @@ getMessages(
 ```
 
 **Security**:
+
 - Verifies medical staff is assigned to ticket OR is admin
 - Patient-based permission check
 
 **Business Logic**:
+
 - Only assigned staff can view messages
 - Admins can override with `isMedicalAdmin()` check
 
@@ -352,6 +376,7 @@ getMessages(
 ### Patient Mutations
 
 #### createTicket
+
 Create a new consultation ticket.
 
 ```graphql
@@ -366,9 +391,11 @@ input CreateTicketInput {
 ```
 
 **Validation**:
+
 - Patient must not have any active ticket (Open or Ongoing)
 
 **Behavior**:
+
 - Creates ticket with status=Open
 - Emits `healthchat:ticket-created` to all medical staff
 
@@ -377,6 +404,7 @@ input CreateTicketInput {
 ---
 
 #### sendPatientMessage
+
 Send a message as a patient.
 
 ```graphql
@@ -393,16 +421,19 @@ input SendMessageInput {
 ```
 
 **Validation**:
+
 - Must provide either text or file
 - Verifies patient owns the ticket
 - Auto-expires tickets before checking status
 - Chat must be active (Open or Ongoing)
 
 **File Handling**:
+
 - Promotes file from temp storage using `promoteFile()`
 - Category: "eConsultation"
 
 **Real-time**:
+
 - Emits to room `healthchat:${chatId}`
 - Notifies assigned medical staff via `notifyUser()`
 
@@ -411,6 +442,7 @@ input SendMessageInput {
 ---
 
 #### closeMyTicket
+
 Patient closes their own ticket.
 
 ```graphql
@@ -418,6 +450,7 @@ closeMyTicket(chatId: ID!): TicketResult!
 ```
 
 **Atomic Transaction**:
+
 ```sql
 BEGIN;
 UPDATE HealthChat SET status='Closed', session_end=NOW(), closed_by_type='Patient' WHERE id=? AND patientId=?;
@@ -426,6 +459,7 @@ COMMIT;
 ```
 
 **Real-time**:
+
 - Emits to room `healthchat:${chatId}`
 - Notifies all medical staff via `emitToRole('medical')`
 
@@ -434,6 +468,7 @@ COMMIT;
 ### Medical Mutations
 
 #### approveTicket
+
 Approve a pending ticket and start session.
 
 ```graphql
@@ -448,10 +483,12 @@ input ApproveTicketInput {
 ```
 
 **Validation**:
+
 - Ticket must be status=Open
 - Patient-based permission check
 
 **Atomic Transaction**:
+
 ```sql
 BEGIN;
 UPDATE HealthChat SET
@@ -466,12 +503,14 @@ COMMIT;
 ```
 
 **Real-time**:
+
 - Notifies patient via `notifyUser()`
 - Notifies all medical staff about status change
 
 ---
 
 #### rejectTicket
+
 Reject a pending ticket.
 
 ```graphql
@@ -482,17 +521,20 @@ rejectTicket(
 ```
 
 **Validation**:
+
 - Ticket must be status=Open
 
 **Atomic Transaction**: Similar to approve, but sets status=Closed
 
 **Real-time**:
+
 - Notifies patient with rejection reason
 - Notifies all medical staff
 
 ---
 
 #### sendMedicalMessage
+
 Send a message as medical staff.
 
 ```graphql
@@ -502,17 +544,20 @@ sendMedicalMessage(
 ```
 
 **Validation**:
+
 - Auto-expires tickets before checking
 - Chat must be active
 - Verifies assigned staff (medicalId must match or be NULL)
 
 **Real-time**:
+
 - Emits to room `healthchat:${chatId}`
 - Notifies patient via `notifyUser()`
 
 ---
 
 #### closeTicket
+
 Medical staff closes a ticket.
 
 ```graphql
@@ -529,12 +574,14 @@ input CloseTicketInput {
 **Atomic Transaction**: UPDATE + INSERT system message
 
 **Real-time**:
+
 - Emits to room
 - Notifies patient
 
 ---
 
 #### deleteArchivedTicket
+
 Permanently delete a closed/expired ticket.
 
 ```graphql
@@ -542,10 +589,12 @@ deleteArchivedTicket(chatId: ID!): TicketResult!
 ```
 
 **Validation**:
+
 - Ticket must be status=Closed OR status=Expired
 - Admin permission recommended (handled in routes)
 
 **Atomic Transaction**:
+
 ```sql
 BEGIN;
 DELETE FROM HealthChatPrompt WHERE consultationVirtualId=?;
@@ -558,6 +607,7 @@ COMMIT;
 ---
 
 #### transferTicket
+
 Transfer ticket to another medical staff member.
 
 ```graphql
@@ -568,11 +618,13 @@ transferTicket(
 ```
 
 **Authorization**:
+
 - Must be currently assigned staff
 - New staff must be different from current
 - **Bug Fix**: Now verifies new staff exists and is active
 
 **Validation**:
+
 ```sql
 SELECT id, is_active FROM MedicalPersonnel WHERE id=?
 ```
@@ -580,12 +632,14 @@ SELECT id, is_active FROM MedicalPersonnel WHERE id=?
 **Atomic Transaction**: UPDATE medicalId + INSERT system message
 
 **Real-time**:
+
 - Notifies patient
 - Notifies new medical staff
 
 ---
 
 #### takeoverOngoingTicket
+
 Admin forcefully takes over a ticket.
 
 ```graphql
@@ -595,6 +649,7 @@ takeoverOngoingTicket(chatId: ID!): TicketResult!
 **Authorization**: `isMedicalAdmin()` required
 
 **Validation**:
+
 - User cannot already be assigned to ticket
 
 **Atomic Transaction**: UPDATE + INSERT system message
@@ -602,6 +657,7 @@ takeoverOngoingTicket(chatId: ID!): TicketResult!
 ---
 
 #### extendSession
+
 Extend session by 1 day.
 
 ```graphql
@@ -611,11 +667,13 @@ extendSession(chatId: ID!): TicketResult!
 **Authorization**: Patient OR assigned medical staff
 
 **Validation**:
+
 - Session must be Ongoing
 - Must be within 48 hours of expiry
 - Must not already be expired
 
 **Atomic Transaction**:
+
 ```sql
 BEGIN;
 UPDATE HealthChat SET session_start = session_start + INTERVAL '1 day' WHERE id=?;
@@ -628,6 +686,7 @@ COMMIT;
 ---
 
 #### expireOldTickets
+
 Manually trigger expiry of old tickets.
 
 ```graphql
@@ -647,11 +706,13 @@ expireOldTickets: Int!
 Simple wrapper layer that proxies to core wrapper resolvers.
 
 **Queries**:
+
 - `getMyTickets` → `Wrapper.Query._getMyTickets`
 - `getMyTicket` → `Wrapper.Query._getMyTicket`
 - `getTicketMessages` → `Wrapper.Query._getTicketMessages`
 
 **Mutations**:
+
 - `createTicket` → `Wrapper.Mutation._createTicket`
 - `sendPatientMessage` → `Wrapper.Mutation._sendPatientMessage`
 - `closeMyTicket` → `Wrapper.Mutation._closeMyTicket`
@@ -664,18 +725,20 @@ Adds permission layer before delegating to wrapper.
 **Permission Types**:
 
 1. **Location-based**: `isMedicalPermittedLocationBased(userId, permission, location)`
+
    - Used for: getPendingTickets, getActiveTickets, getAllTickets, getPatientConversations
    - Permission: `permissions.health_chat_allow_access`
-
 2. **Patient-based**: `isMedicalPermittedPatientBased(userId, permission, patientId)`
+
    - Used for: All mutations and single-patient queries
    - Permission: `permissions.health_chat_allow_access`
    - Checks if staff can access that specific patient
-
 3. **Admin-only**: `isMedicalAdmin(userId)`
+
    - Used for: takeoverOngoingTicket
 
 **Query Flow Example**:
+
 ```javascript
 getPendingTickets: async (_, { location='Both', offset, limit }, context) => {
   // 1. Check location-based permission
@@ -695,6 +758,7 @@ getPendingTickets: async (_, { location='Both', offset, limit }, context) => {
 ```
 
 **Transfer Validation**:
+
 ```javascript
 transferTicket: async (_, { chatId, toMedicalId }, context) => {
   // Check current staff has access
@@ -719,6 +783,7 @@ Core business logic with atomic transaction support.
 **Key Implementation Details**:
 
 1. **Transaction Pattern**:
+
 ```javascript
 const client = await pool.connect();
 try {
@@ -739,10 +804,11 @@ try {
 ```
 
 2. **Auto-Expiry Integration**:
+
    - Called in all read operations to ensure data consistency
    - Mutation operations expire before status checks
-
 3. **Real-time Emissions**:
+
    - `emitToRoom('healthchat:${chatId}', event, data)`: Notify room participants
    - `emitToRole('medical', event, data)`: Notify all medical staff
    - `notifyUser(userId, event, data)`: Direct user notification
@@ -754,6 +820,7 @@ try {
 ### Authentication
 
 **JWT Protection**:
+
 - Patient endpoint: `jwtProtect("patient")`
 - Medical endpoint: `jwtProtect("medical")`
 
@@ -762,6 +829,7 @@ Both use `checkCredentialsStatus` middleware to ensure active accounts.
 ### Authorization Layers
 
 #### 1. Patient Security
+
 - Ownership verification: `verifyPatientOwnsChat(chatId, patientId)`
 - Can only see/modify own tickets
 - Cannot create multiple active tickets
@@ -769,6 +837,7 @@ Both use `checkCredentialsStatus` middleware to ensure active accounts.
 #### 2. Medical Security
 
 **Location-based Access**:
+
 ```javascript
 // Staff can only see patients from their designated branch
 const isPermitted = await isMedicalPermittedLocationBased(
@@ -779,6 +848,7 @@ const isPermitted = await isMedicalPermittedLocationBased(
 ```
 
 **Patient-based Access**:
+
 ```javascript
 // Staff can only access patients assigned to their branch
 const patientId = await getPatientIdFromChatId(chatId);
@@ -790,6 +860,7 @@ const isPermitted = await isMedicalPermittedPatientBased(
 ```
 
 **Admin Override**:
+
 ```javascript
 // _getMessages allows admin to view any ticket
 const medicalId = rows[0].medicalId;
@@ -804,10 +875,12 @@ if (medicalId && medicalId !== user.id) {
 ### Cross-Staff Protection
 
 **Message Access**:
+
 - Only assigned staff can send messages to a ticket
 - Admins can view but not send to unassigned tickets (by design)
 
 **Ticket Ownership**:
+
 ```javascript
 if (medicalId && medicalId !== user.id) {
   throw "Unauthorized to send message in this chat";
@@ -817,6 +890,7 @@ if (medicalId && medicalId !== user.id) {
 ### Transfer Security
 
 **Triple Verification**:
+
 1. Current staff must be assigned to ticket
 2. New staff must exist in MedicalPersonnel table
 3. New staff must be `is_active = true`
@@ -831,6 +905,7 @@ if (medicalId && medicalId !== user.id) {
 #### Emitted by Server
 
 **healthchat:ticket-created**
+
 ```javascript
 emitToRole('medical', 'healthchat:ticket-created', {
   chat: HealthChat
@@ -838,6 +913,7 @@ emitToRole('medical', 'healthchat:ticket-created', {
 ```
 
 **healthchat:new-message**
+
 ```javascript
 emitToRoom('healthchat:${chatId}', 'healthchat:new-message', {
   chatId: number,
@@ -849,6 +925,7 @@ notifyUser(userId, 'healthchat:new-message', { ... });
 ```
 
 **healthchat:ticket-closed**
+
 ```javascript
 emitToRoom('healthchat:${chatId}', 'healthchat:ticket-closed', {
   chatId: number,
@@ -858,6 +935,7 @@ emitToRoom('healthchat:${chatId}', 'healthchat:ticket-closed', {
 ```
 
 **healthchat:ticket-approved**
+
 ```javascript
 notifyUser(patientId, 'healthchat:ticket-approved', {
   chat: HealthChat
@@ -865,6 +943,7 @@ notifyUser(patientId, 'healthchat:ticket-approved', {
 ```
 
 **healthchat:ticket-rejected**
+
 ```javascript
 notifyUser(patientId, 'healthchat:ticket-rejected', {
   chat: HealthChat,
@@ -873,6 +952,7 @@ notifyUser(patientId, 'healthchat:ticket-rejected', {
 ```
 
 **healthchat:ticket-status-changed**
+
 ```javascript
 emitToRole('medical', 'healthchat:ticket-status-changed', {
   chatId: number,
@@ -884,6 +964,7 @@ emitToRole('medical', 'healthchat:ticket-status-changed', {
 ```
 
 **healthchat:ticket-transferred**
+
 ```javascript
 notifyUser(patientId, 'healthchat:ticket-transferred', {
   chatId: number,
@@ -895,6 +976,7 @@ notifyUser(newMedicalId, 'healthchat:ticket-transferred', { ... });
 ```
 
 **healthchat:ticket-taken-over**
+
 ```javascript
 notifyUser(patientId, 'healthchat:ticket-taken-over', {
   chatId: number,
@@ -904,6 +986,7 @@ notifyUser(patientId, 'healthchat:ticket-taken-over', {
 ```
 
 **healthchat:session-extended**
+
 ```javascript
 emitToRoom('healthchat:${chatId}', 'healthchat:session-extended', {
   chatId: number,
@@ -918,6 +1001,7 @@ emitToRoom('healthchat:${chatId}', 'healthchat:session-extended', {
 **Room Naming**: `healthchat:${chatId}`
 
 **Participants**:
+
 - Patient
 - Assigned medical staff
 - Other medical staff can listen for global events via role emission
@@ -931,6 +1015,7 @@ All mutations that perform multiple database operations now use PostgreSQL trans
 ### Why Transactions?
 
 **Problem**: Without transactions, if any operation fails midway:
+
 - Ticket status changes but no system message is recorded
 - Messages deleted but ticket remains (orphaned data)
 - Inconsistent audit trail
@@ -978,21 +1063,22 @@ return await formatChatRecord(result);
 
 ### Mutations Using Transactions
 
-| Mutation | Operations | Isolation Benefit |
-|----------|-----------|-------------------|
-| `_closeMyTicket` | UPDATE status + INSERT system message | Ensures closure is logged |
-| `_approveTicket` | UPDATE (assign staff, start session) + INSERT message | Ensures approval is logged |
-| `_rejectTicket` | UPDATE status + INSERT message | Ensures rejection is logged |
-| `_closeTicket` | UPDATE status + INSERT message | Ensures closure is logged |
-| `_deleteArchivedTicket` | DELETE messages + DELETE ticket | **Prevents orphaned tickets** |
-| `_transferTicket` | UPDATE medicalId + INSERT message | Ensures transfer is logged |
-| `_takeoverOngoingTicket` | UPDATE medicalId + INSERT message | Ensures takeover is logged |
-| `_extendSession` | UPDATE session_start + INSERT message | Ensures extension is logged |
-| `autoExpireTickets` | UPDATE multiple tickets + INSERT messages for each | **Prevents partial expiry** |
+| Mutation                   | Operations                                            | Isolation Benefit                   |
+| -------------------------- | ----------------------------------------------------- | ----------------------------------- |
+| `_closeMyTicket`         | UPDATE status + INSERT system message                 | Ensures closure is logged           |
+| `_approveTicket`         | UPDATE (assign staff, start session) + INSERT message | Ensures approval is logged          |
+| `_rejectTicket`          | UPDATE status + INSERT message                        | Ensures rejection is logged         |
+| `_closeTicket`           | UPDATE status + INSERT message                        | Ensures closure is logged           |
+| `_deleteArchivedTicket`  | DELETE messages + DELETE ticket                       | **Prevents orphaned tickets** |
+| `_transferTicket`        | UPDATE medicalId + INSERT message                     | Ensures transfer is logged          |
+| `_takeoverOngoingTicket` | UPDATE medicalId + INSERT message                     | Ensures takeover is logged          |
+| `_extendSession`         | UPDATE session_start + INSERT message                 | Ensures extension is logged         |
+| `autoExpireTickets`      | UPDATE multiple tickets + INSERT messages for each    | **Prevents partial expiry**   |
 
 ### Critical Fix: autoExpireTickets
 
 **Before** (BUGGY):
+
 ```javascript
 // Update all expired tickets
 const result = await db.query('UPDATE HealthChat SET status=Expired...');
@@ -1004,6 +1090,7 @@ for (const row of result.rows) {
 ```
 
 **After** (FIXED):
+
 ```javascript
 const client = await pool.connect();
 try {
@@ -1033,6 +1120,7 @@ If ANY insert fails, ALL ticket updates are rolled back.
 ### Core Helpers (`helper.js`)
 
 #### calculateExpiryDate(sessionStart)
+
 Calculate expiry date from session start.
 
 ```javascript
@@ -1044,6 +1132,7 @@ calculateExpiryDate(sessionStart) => Date
 ---
 
 #### isChatExpired(sessionStart)
+
 Check if a chat has expired.
 
 ```javascript
@@ -1055,6 +1144,7 @@ isChatExpired(sessionStart) => boolean
 ---
 
 #### verifyPatientOwnsChat(chatId, patientId)
+
 Verify ownership of a ticket.
 
 ```javascript
@@ -1066,6 +1156,7 @@ verifyPatientOwnsChat(chatId, patientId) => Promise<boolean>
 ---
 
 #### checkChatStatus(chatId)
+
 Check if chat is active.
 
 ```javascript
@@ -1076,6 +1167,7 @@ checkChatStatus(chatId) => Promise<{
 ```
 
 **Logic**:
+
 - Returns `false` if chat not found
 - Returns `false` if status is Ongoing but expired by time
 - Returns `true` if status is Open or Ongoing (and not expired)
@@ -1083,6 +1175,7 @@ checkChatStatus(chatId) => Promise<{
 ---
 
 #### formatChatRecord(chat)
+
 Enrich chat record with participant info and calculated fields.
 
 ```javascript
@@ -1090,6 +1183,7 @@ formatChatRecord(chat) => Promise<HealthChat>
 ```
 
 **Adds**:
+
 - `patient`: ChatParticipant object
 - `medical`: ChatParticipant object
 - `closedBy`: Enum value
@@ -1101,6 +1195,7 @@ formatChatRecord(chat) => Promise<HealthChat>
 ---
 
 #### formatChatRecordsBatch(chats)
+
 Batch-format multiple chat records to avoid N+1 queries.
 
 ```javascript
@@ -1108,6 +1203,7 @@ formatChatRecordsBatch(chats) => Promise<HealthChat[]>
 ```
 
 **Optimizations**:
+
 - Collects all unique userIds
 - Fetches participants in 1 query: `getParticipantInfoBatch(userIds)`
 - Fetches last messages in 1 query: `getLastMessageInfoBatch(chatIds)`
@@ -1118,6 +1214,7 @@ formatChatRecordsBatch(chats) => Promise<HealthChat[]>
 ---
 
 #### getParticipantInfo(userId)
+
 Get user info for a single participant.
 
 ```javascript
@@ -1125,6 +1222,7 @@ getParticipantInfo(userId) => Promise<ChatParticipant>
 ```
 
 **Query**:
+
 ```sql
 SELECT uc.id, up.first_name, up.last_name, uc.email, up.identifier,
        p.profile, up.branch, up.date_of_birth, up.sex
@@ -1137,6 +1235,7 @@ WHERE uc.id = $1
 ---
 
 #### getParticipantInfoBatch(userIds)
+
 Batch-fetch participant info.
 
 ```javascript
@@ -1148,6 +1247,7 @@ getParticipantInfoBatch(userIds) => Promise<Map<userId, ChatParticipant>>
 ---
 
 #### getLastMessageInfo(chatId)
+
 Get last message and unread count for a chat.
 
 ```javascript
@@ -1159,6 +1259,7 @@ getLastMessageInfo(chatId) => Promise<{
 ```
 
 **Unread Logic**:
+
 ```sql
 -- Count Patient messages after the last Medical message
 SELECT COUNT(*) FROM HealthChatPrompt
@@ -1174,6 +1275,7 @@ WHERE consultationVirtualId = $1
 ---
 
 #### getLastMessageInfoBatch(chatIds)
+
 Batch-fetch last messages for multiple chats.
 
 ```javascript
@@ -1181,6 +1283,7 @@ getLastMessageInfoBatch(chatIds) => Promise<Map<chatId, MessageInfo>>
 ```
 
 **Optimizations**:
+
 - Uses `DISTINCT ON (consultationVirtualId)` for last messages
 - Single query for all unread counts
 - Single batch query for sender info
@@ -1188,6 +1291,7 @@ getLastMessageInfoBatch(chatIds) => Promise<Map<chatId, MessageInfo>>
 ---
 
 #### autoExpireTickets(patientId?)
+
 Automatically expire tickets with no activity for 3 days.
 
 ```javascript
@@ -1195,11 +1299,13 @@ autoExpireTickets(patientId = null) => Promise<number>
 ```
 
 **Parameters**:
+
 - `patientId`: Optional. If provided, only expires that patient's tickets
 
 **Cooldown**: 30 seconds (skipped if patientId provided)
 
 **Logic**:
+
 ```sql
 UPDATE HealthChat
 SET status = 'Expired',
@@ -1217,6 +1323,7 @@ WHERE status = 'Ongoing'
 ---
 
 #### hasActiveTicket(patientId)
+
 Check if patient has any active ticket.
 
 ```javascript
@@ -1224,12 +1331,14 @@ hasActiveTicket(patientId) => Promise<boolean>
 ```
 
 **Logic**:
+
 1. Auto-expires patient's tickets first
 2. Checks for any Open or Ongoing tickets
 
 ---
 
 #### formatMessage(message)
+
 Enrich message with sender info.
 
 ```javascript
@@ -1241,6 +1350,7 @@ formatMessage(message) => Promise<HealthChatPrompt>
 ---
 
 #### getPatientIdFromChatId(chatId)
+
 Get patient ID from a chat ID.
 
 ```javascript
@@ -1268,6 +1378,7 @@ getPatientIdFromChatId(chatId) => Promise<number | null>
 ### 2. ✅ _deleteArchivedTicket Data Loss Prevention (CRITICAL)
 
 **Issue**:
+
 ```javascript
 await db.query('DELETE FROM HealthChatPrompt...'); // ✅ Success
 await db.query('DELETE FROM HealthChat...');       // ❌ Fails
@@ -1287,6 +1398,7 @@ await db.query('DELETE FROM HealthChat...');       // ❌ Fails
 **Issue**: No verification that `newMedicalId` exists or is active.
 
 **Code**:
+
 ```javascript
 // BEFORE: Only checked if different from current
 if (Number(newMedicalId) === Number(user.id)) {
@@ -1317,6 +1429,7 @@ if (!newStaffCheck.rows[0].is_active) {
 ### 4. ✅ _sendPatientMessage Race Condition (MEDIUM)
 
 **Issue**:
+
 ```javascript
 // Insert message first
 await db.query('INSERT INTO HealthChatPrompt...');
@@ -1355,6 +1468,7 @@ if (medicalId) {
 ### 5. ✅ All Mutations Now Transactional
 
 **Mutations Fixed**:
+
 - `_closeMyTicket`
 - `_approveTicket`
 - `_rejectTicket`
@@ -1366,6 +1480,7 @@ if (medicalId) {
 **Benefit**: Ensures data consistency and complete audit trails
 
 **Pattern Applied**:
+
 ```javascript
 const client = await pool.connect();
 try {
@@ -1702,6 +1817,7 @@ AUTO_EXPIRE_COOLDOWN_MS = 30000  // 30 seconds cooldown for auto-expiry
 ## Testing Checklist
 
 ### Patient Tests
+
 - [ ] Create ticket when no active ticket exists
 - [ ] Fail to create ticket when already has active ticket
 - [ ] Send message to own ticket
@@ -1711,6 +1827,7 @@ AUTO_EXPIRE_COOLDOWN_MS = 30000  // 30 seconds cooldown for auto-expiry
 - [ ] Fail to extend session when >48 hours from expiry
 
 ### Medical Tests
+
 - [ ] View pending tickets filtered by location
 - [ ] Approve pending ticket
 - [ ] Reject pending ticket with reason
@@ -1723,11 +1840,13 @@ AUTO_EXPIRE_COOLDOWN_MS = 30000  // 30 seconds cooldown for auto-expiry
 - [ ] Extend session (medical side)
 
 ### Transaction Tests
+
 - [ ] Simulate DB failure during closeTicket → verify rollback
 - [ ] Simulate DB failure during deleteArchivedTicket → verify no orphaned data
 - [ ] Simulate failure in autoExpireTickets → verify no partial updates
 
 ### Real-time Tests
+
 - [ ] Patient receives notification when ticket approved
 - [ ] Staff receives notification when new ticket created
 - [ ] Both parties receive message in real-time
@@ -1742,6 +1861,7 @@ AUTO_EXPIRE_COOLDOWN_MS = 30000  // 30 seconds cooldown for auto-expiry
 **Problem**: Fetching 20 chats, each needing patient/medical info = 40+ queries
 
 **Solution**: Batch functions
+
 - `formatChatRecordsBatch()` - Fetches all participants in 2 queries
 - `getParticipantInfoBatch()` - Single query with `ANY($1)`
 - `getLastMessageInfoBatch()` - Uses `DISTINCT ON` for efficiency
@@ -1751,6 +1871,7 @@ AUTO_EXPIRE_COOLDOWN_MS = 30000  // 30 seconds cooldown for auto-expiry
 **Problem**: Every query triggering expiry check = excessive DB load
 
 **Solution**: 30-second cooldown
+
 ```javascript
 let _lastAutoExpireRun = 0;
 if (now - _lastAutoExpireRun < 30000) {
@@ -1761,6 +1882,7 @@ if (now - _lastAutoExpireRun < 30000) {
 ### Pagination
 
 All list queries support:
+
 - `offset`: Starting position
 - `limit`: Results per page
 - Returns `total` count for UI pagination
@@ -1809,6 +1931,7 @@ All list queries support:
 **Cause**: Non-admin staff trying to view messages in ticket assigned to another staff member
 
 **Solution**:
+
 - Use transfer feature to reassign
 - Or contact admin for takeover
 
@@ -1835,6 +1958,7 @@ All list queries support:
 **Cause**: WebSocket connection issue
 
 **Solution**:
+
 1. Check socket connection status
 2. Verify user is in correct room: `healthchat:${chatId}`
 3. Check network/firewall blocking WebSocket traffic
@@ -1853,6 +1977,7 @@ All list queries support:
 ## Changelog
 
 ### Version 2.0 (April 2026)
+
 - ✅ Added atomic transactions to all mutations
 - ✅ Fixed autoExpireTickets race condition
 - ✅ Fixed deleteArchivedTicket data loss bug
@@ -1862,12 +1987,14 @@ All list queries support:
 - ✅ Added comprehensive documentation
 
 ### Version 1.5
+
 - Added patient conversations view (Messenger-style)
 - Added session extension feature
 - Added batch formatting for performance
 - Added location-based filtering
 
 ### Version 1.0
+
 - Initial implementation
 - Basic ticket creation and messaging
 - Auto-expiry system
