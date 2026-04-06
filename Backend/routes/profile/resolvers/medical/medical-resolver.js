@@ -132,7 +132,19 @@ const Mutation = {
     }
     const result = await Wrapper.Mutation._reloadCredentialStatus(_, { userId }, { user, res });
     return result;
-  }
+  },
+
+  staffSetBranchIdentifier: async (_, { userId, identifier, branch }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.profile_allow_edit, userId);
+    if (!isPermitted) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    await Wrapper.Mutation._UserBranchIdentifier(_, { userId, input: { identifier, branch } }, { user, res });
+    return true;
+  },
 };
 
 module.exports = { Query, Mutation };

@@ -160,6 +160,7 @@ type Mutation {
   reloadUserCredentialStatus(userId: ID!): String
   
   staffSetCredentialStatus(userId: ID!, status: CredentialStatus!): CredentialStatus
+  staffSetBranchIdentifier(userId: ID!, identifier: String!, branch: USER_BRANCH!): Boolean
 
 
 }

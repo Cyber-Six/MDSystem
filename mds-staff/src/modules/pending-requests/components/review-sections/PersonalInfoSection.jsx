@@ -95,8 +95,34 @@ const PersonalInfoSection = ({
             type="select"
             options={['Male', 'Female', 'Other']}
           />
-          <DataRow label="Identifier" value={basicInfo?.identifier} />
-          <DataRow label="Branch" value={basicInfo?.branch === 'QuezonCity' ? 'Quezon City' : basicInfo?.branch} />
+          {isEmployee ? (
+            <>
+              <EditableField
+                label="Identifier"
+                value={getVal('identifier', basicInfo?.identifier)}
+                originalValue={getOriginal('identifier', basicInfo?.identifier)}
+                isEditing={isEditing}
+                onChange={(v) => onFieldChange?.('identifier', v)}
+              />
+              <EditableField
+                label="Branch"
+                value={getVal('branch', basicInfo?.branch)}
+                originalValue={getOriginal('branch', basicInfo?.branch)}
+                isEditing={isEditing}
+                onChange={(v) => onFieldChange?.('branch', v)}
+                type="select"
+                options={[
+                  { value: 'Manila', label: 'Manila' },
+                  { value: 'QuezonCity', label: 'Quezon City' },
+                ]}
+              />
+            </>
+          ) : (
+            <>
+              <DataRow label="Identifier" value={basicInfo?.identifier} />
+              <DataRow label="Branch" value={basicInfo?.branch === 'QuezonCity' ? 'Quezon City' : basicInfo?.branch} />
+            </>
+          )}
         </dl>
       </div>
 

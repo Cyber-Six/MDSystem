@@ -601,6 +601,18 @@ export const staffUpdateStudentProfile = async (userId, input) => {
   return data.updateStudentProfile;
 };
 
+// ── Branch / Identifier (Employee) ──────────────────────────────────────────
+
+export const staffSetBranchIdentifier = async (userId, identifier, branch) => {
+  const data = await sendProfileGraphQL(
+    `mutation StaffSetBranchIdentifier($userId: ID!, $identifier: String!, $branch: USER_BRANCH!) {
+       staffSetBranchIdentifier(userId: $userId, identifier: $identifier, branch: $branch)
+     }`,
+    { userId, identifier, branch },
+  );
+  return data.staffSetBranchIdentifier;
+};
+
 // ── Employee Profile ─────────────────────────────────────────────────────────
 
 export const staffUpdateEmployeeProfile = async (userId, input) => {
@@ -828,6 +840,17 @@ export const submitStaffEdits = async (userId, editedFields, recordData) => {
       mutations.push(
         staffUpdateEmployeeProfile(userId, employeeFields)
           .catch((e) => { errors.push(`Employee profile: ${e.message}`); }),
+      );
+    }
+
+    // Branch / Identifier for Employee → /profile/medical
+    const isEmployee = recordData?.basicInfo?.profile_type === 'Employee' || recordData?.profile?.department;
+    if (isEmployee && (pi.identifier !== undefined || pi.branch !== undefined)) {
+      const newIdentifier = pi.identifier ?? recordData?.basicInfo?.identifier ?? '';
+      const newBranch = pi.branch ?? recordData?.basicInfo?.branch ?? 'Manila';
+      mutations.push(
+        staffSetBranchIdentifier(userId, String(newIdentifier), newBranch)
+          .catch((e) => { errors.push(`Branch/Identifier: ${e.message}`); }),
       );
     }
   }
