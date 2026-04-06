@@ -29,7 +29,8 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
               prd.id as "submissionId", prd.file, prd.status,
-              prd."recordedBy", prd."archived_at", prd."created_at" as "submittedAt"
+              prd."recordedBy", prd."reviewNotes", prd."requestNotes",
+              prd."archived_at", prd."created_at" as "submittedAt"
        FROM "rawDocumentTag" rdt
        LEFT JOIN "patientRawDocument" prd ON prd."documentTagId" = rdt.id
          AND prd."patientId" = $1
@@ -48,6 +49,8 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
             file: row.file,
             status: row.status,
             recordedBy: row.recordedBy,
+            reviewNotes: row.reviewNotes,
+            requestNotes: row.requestNotes,
             archivedAt: row.archived_at,
             submittedAt: row.submittedAt,
           }
@@ -240,7 +243,7 @@ router.post('/required/:documentId', jwtProtect('medical'), async (req, res) => 
 /**
  * POST /documents/required/:documentId/approve
  * Approve a submitted document (sets status to 'Recorded')
- * Body: patientId (required)
+ * Body: patientId (required), notes (optional)
  */
 router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, res) => {
   const client = await connect();
@@ -248,7 +251,7 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
     await client.query('BEGIN');
 
     const { documentId } = req.params;
-    const { patientId } = req.body;
+    const { patientId, notes } = req.body;
 
     if (!patientId) {
       await client.query('ROLLBACK');
@@ -272,13 +275,13 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
     const existing = existingResult.rows[0];
     const tagLabel = existing.label;
 
-    // Update to Recorded status
+    // Update to Recorded status with optional notes
     const updateResult = await client.query(
       `UPDATE "patientRawDocument"
-       SET status = 'Recorded', "recordedBy" = $1
-       WHERE "documentTagId" = $2 AND "patientId" = $3
+       SET status = 'Recorded', "recordedBy" = $1, "reviewNotes" = $2
+       WHERE "documentTagId" = $3 AND "patientId" = $4
        RETURNING id`,
-      [req.user.id, documentId, patientId]
+      [req.user.id, notes || null, documentId, patientId]
     );
 
     const submissionId = updateResult.rows[0].id;
@@ -293,6 +296,7 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
           documentId,
           label: tagLabel,
           message: `Your submitted document "${tagLabel}" has been approved.`,
+          notes,
         }
       );
     } catch (notifErr) {
@@ -319,7 +323,7 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
 /**
  * POST /documents/required/:documentId/reject
  * Reject a submitted document
- * Body: patientId (required)
+ * Body: patientId (required), notes (optional)
  */
 router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, res) => {
   const client = await connect();
@@ -327,7 +331,7 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
     await client.query('BEGIN');
 
     const { documentId } = req.params;
-    const { patientId } = req.body;
+    const { patientId, notes } = req.body;
 
     if (!patientId) {
       await client.query('ROLLBACK');
@@ -351,13 +355,13 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
     const existing = existingResult.rows[0];
     const tagLabel = existing.label;
 
-    // Update to Rejected status
+    // Update to Rejected status with optional notes
     const updateResult = await client.query(
       `UPDATE "patientRawDocument"
-       SET status = 'Rejected', "recordedBy" = $1
-       WHERE "documentTagId" = $2 AND "patientId" = $3
+       SET status = 'Rejected', "recordedBy" = $1, "reviewNotes" = $2
+       WHERE "documentTagId" = $3 AND "patientId" = $4
        RETURNING id`,
-      [req.user.id, documentId, patientId]
+      [req.user.id, notes || null, documentId, patientId]
     );
 
     const submissionId = updateResult.rows[0].id;
@@ -372,6 +376,7 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
           documentId,
           label: tagLabel,
           message: `Your submitted document "${tagLabel}" has been rejected.`,
+          notes,
         }
       );
     } catch (notifErr) {
@@ -398,7 +403,7 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
 /**
  * POST /documents/required/:documentId/request
  * Request a document from patient (create or update submission with 'Requested' status)
- * Body: patientId (required)
+ * Body: patientId (required), notes (optional - explains why the document is needed)
  */
 router.post('/required/:documentId/request', jwtProtect('medical'), async (req, res) => {
   const client = await connect();
@@ -406,7 +411,7 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
     await client.query('BEGIN');
 
     const { documentId } = req.params;
-    const { patientId } = req.body;
+    const { patientId, notes } = req.body;
 
     if (!patientId) {
       await client.query('ROLLBACK');
@@ -445,22 +450,22 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
     let submissionId;
 
     if (existing) {
-      // Update existing submission to 'Requested' status
+      // Update existing submission to 'Requested' status with notes
       const updateResult = await client.query(
         `UPDATE "patientRawDocument"
-         SET status = 'Requested', "recordedBy" = $1
-         WHERE "documentTagId" = $2 AND "patientId" = $3
+         SET status = 'Requested', "recordedBy" = $1, "requestNotes" = $2
+         WHERE "documentTagId" = $3 AND "patientId" = $4
          RETURNING id`,
-        [req.user.id, documentId, patientId]
+        [req.user.id, notes || null, documentId, patientId]
       );
       submissionId = updateResult.rows[0].id;
     } else {
-      // Create new submission with 'Requested' status
+      // Create new submission with 'Requested' status and notes
       const insertResult = await client.query(
-        `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", status, "recordedBy")
-         VALUES ($1, $2, 'Requested', $3)
+        `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", status, "recordedBy", "requestNotes")
+         VALUES ($1, $2, 'Requested', $3, $4)
          RETURNING id`,
-        [documentId, patientId, req.user.id]
+        [documentId, patientId, req.user.id, notes || null]
       );
       submissionId = insertResult.rows[0].id;
     }
@@ -477,6 +482,7 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
           documentId,
           label: tagLabel,
           message: `Your healthcare provider has requested you to submit: ${tagLabel}`,
+          notes,
         }
       );
     } catch (notifErr) {

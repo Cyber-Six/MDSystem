@@ -47,6 +47,7 @@ export default function PatientDocumentsTab({ patient }) {
   const [rejecting, setRejecting] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [filter, setFilter] = useState('All');
+  const [notes, setNotes] = useState({});
 
   const patientId = patient?.id;
 
@@ -75,7 +76,9 @@ export default function PatientDocumentsTab({ patient }) {
     setRequesting(documentId);
     setError('');
     try {
-      await requestDocument(documentId, patientId);
+      const noteText = notes[documentId] || null;
+      await requestDocument(documentId, patientId, noteText);
+      setNotes(prev => ({ ...prev, [documentId]: '' }));
       await loadDocuments();
     } catch (err) {
       setError(err.message || 'Failed to request document');
@@ -88,7 +91,9 @@ export default function PatientDocumentsTab({ patient }) {
     setApproving(documentId);
     setError('');
     try {
-      await approveDocument(documentId, patientId);
+      const noteText = notes[documentId] || null;
+      await approveDocument(documentId, patientId, noteText);
+      setNotes(prev => ({ ...prev, [documentId]: '' }));
       await loadDocuments();
     } catch (err) {
       setError(err.message || 'Failed to approve document');
@@ -104,7 +109,9 @@ export default function PatientDocumentsTab({ patient }) {
     setRejecting(documentId);
     setError('');
     try {
-      await rejectDocument(documentId, patientId);
+      const noteText = notes[documentId] || null;
+      await rejectDocument(documentId, patientId, noteText);
+      setNotes(prev => ({ ...prev, [documentId]: '' }));
       await loadDocuments();
     } catch (err) {
       setError(err.message || 'Failed to reject document');
@@ -269,34 +276,63 @@ export default function PatientDocumentsTab({ patient }) {
 
                 {/* Submission Info */}
                 {doc.submission && (
-                  <div className="mt-2 ml-10 text-xs text-secondary-500 dark:text-neutral-400">
+                  <div className="mt-2 ml-10 text-xs text-secondary-500 dark:text-neutral-400 space-y-1">
                     {doc.submission.submittedAt && (
                       <div>Submitted: {formatDate(doc.submission.submittedAt)}</div>
+                    )}
+                    {doc.submission.requestNotes && (
+                      <div className="p-2 bg-primary-50 dark:bg-primary-900/10 rounded border border-primary-200 dark:border-primary-800">
+                        <span className="font-medium text-primary-600 dark:text-primary-400">Request Note:</span>
+                        <p className="mt-0.5 text-secondary-700 dark:text-neutral-300">{doc.submission.requestNotes}</p>
+                      </div>
+                    )}
+                    {doc.submission.reviewNotes && (
+                      <div className={`p-2 rounded border ${
+                        status === 'Recorded' ? 'bg-success-50 dark:bg-success-900/10 border-success-200 dark:border-success-800' :
+                        status === 'Rejected' ? 'bg-error-50 dark:bg-error-900/10 border-error-200 dark:border-error-800' :
+                        'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
+                      }`}>
+                        <span className={`font-medium ${
+                          status === 'Recorded' ? 'text-success-600 dark:text-success-400' :
+                          status === 'Rejected' ? 'text-error-600 dark:text-error-400' :
+                          'text-secondary-600 dark:text-neutral-400'
+                        }`}>Review Note:</span>
+                        <p className="mt-0.5 text-secondary-700 dark:text-neutral-300">{doc.submission.reviewNotes}</p>
+                      </div>
                     )}
                   </div>
                 )}
 
                 {/* Actions Row */}
-                <div className="mt-2 ml-10 flex items-center gap-2">
-                  {/* Missing: Show Request button */}
+                <div className="mt-2 ml-10 space-y-2">
+                  {/* Missing: Show notes input and Request button */}
                   {status === 'Missing' && (
-                    <button
-                      onClick={() => handleRequest(doc.id)}
-                      disabled={isRequesting}
-                      className="px-2.5 py-1 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                    >
-                      {isRequesting ? (
-                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                        </svg>
-                      ) : (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                      )}
-                      Request
-                    </button>
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={notes[doc.id] || ''}
+                        onChange={(e) => setNotes(prev => ({ ...prev, [doc.id]: e.target.value }))}
+                        placeholder="Add a note explaining why this document is needed (optional)..."
+                        className="w-full px-2 py-1.5 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                      <button
+                        onClick={() => handleRequest(doc.id)}
+                        disabled={isRequesting}
+                        className="px-2.5 py-1 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                      >
+                        {isRequesting ? (
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        )}
+                        Request
+                      </button>
+                    </div>
                   )}
 
                   {/* Requested: Show waiting message */}
@@ -306,9 +342,9 @@ export default function PatientDocumentsTab({ patient }) {
                     </span>
                   )}
 
-                  {/* Pending: Show View File + Approve/Reject buttons */}
+                  {/* Pending: Show View File + notes + Approve/Reject buttons */}
                   {status === 'Pending' && (
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-2">
                       {/* View File Button */}
                       {doc.submission?.file && (
                         <button
@@ -331,43 +367,55 @@ export default function PatientDocumentsTab({ patient }) {
                         </button>
                       )}
 
-                      {/* Approve Button */}
-                      <button
-                        onClick={() => handleApprove(doc.id)}
-                        disabled={isApproving || isRejecting}
-                        className="px-2.5 py-1 text-xs font-medium text-white bg-success-500 hover:bg-success-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                      >
-                        {isApproving ? (
-                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                        Approve
-                      </button>
+                      {/* Notes input */}
+                      <input
+                        type="text"
+                        value={notes[doc.id] || ''}
+                        onChange={(e) => setNotes(prev => ({ ...prev, [doc.id]: e.target.value }))}
+                        placeholder="Add review notes (optional)..."
+                        className="w-full px-2 py-1.5 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
 
-                      {/* Reject Button */}
-                      <button
-                        onClick={() => handleReject(doc.id)}
-                        disabled={isApproving || isRejecting}
-                        className="px-2.5 py-1 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                      >
-                        {isRejecting ? (
-                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        )}
-                        Reject
-                      </button>
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2">
+                        {/* Approve Button */}
+                        <button
+                          onClick={() => handleApprove(doc.id)}
+                          disabled={isApproving || isRejecting}
+                          className="px-2.5 py-1 text-xs font-medium text-white bg-success-500 hover:bg-success-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {isApproving ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          Approve
+                        </button>
+
+                        {/* Reject Button */}
+                        <button
+                          onClick={() => handleReject(doc.id)}
+                          disabled={isApproving || isRejecting}
+                          className="px-2.5 py-1 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {isRejecting ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          )}
+                          Reject
+                        </button>
+                      </div>
                     </div>
                   )}
 
