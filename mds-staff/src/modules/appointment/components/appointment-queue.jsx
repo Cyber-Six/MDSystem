@@ -74,10 +74,13 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     return () => clearTimeout(timer);
   }, [search]);
 
-  /** Fetch fresh status counts from server */
-  const refreshCounts = useCallback(async () => {
+  /** Fetch fresh status counts from server, respecting current filters */
+  const refreshCounts = useCallback(async (date, schedulerId) => {
     try {
-      const counts = await getStatusCounts();
+      const counts = await getStatusCounts({
+        date: date || null,
+        schedulerId: schedulerId || null,
+      });
       const updated = {};
       for (const tab of TABS) {
         updated[tab.key] = counts[tab.key] || 0;
@@ -131,11 +134,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         return updated;
       });
       // Also re-fetch actual counts from server to stay in sync
-      refreshCounts();
+      refreshCounts(filterDate, filterSchedulerId);
     },
     refresh: () => {
       fetchAppointments(activeTab, filterDate, filterSchedulerId);
-      refreshCounts();
+      refreshCounts(filterDate, filterSchedulerId);
     },
   }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId]);
 
@@ -144,18 +147,27 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     listAllSchedulers().then(setSchedulers).catch(() => {});
   }, []);
 
-  /* Load status counts once on mount */
+  /* Load status counts — on mount and whenever filters change.
+     filterDate/filterSchedulerId default to '' which coerces to null
+     in refreshCounts ('' || null), so "all schedulers / all dates" is
+     handled correctly by the backend when no filter is selected. */
+  const isFirstCountFetch = useRef(true);
   useEffect(() => {
-    const loadCounts = async () => {
-      try {
+    const run = async () => {
+      if (isFirstCountFetch.current) {
+        isFirstCountFetch.current = false;
         setLoadingCounts(true);
-        await refreshCounts();
-      } finally {
-        setLoadingCounts(false);
+        try {
+          await refreshCounts(filterDate, filterSchedulerId);
+        } finally {
+          setLoadingCounts(false);
+        }
+      } else {
+        refreshCounts(filterDate, filterSchedulerId);
       }
     };
-    loadCounts();
-  }, [refreshCounts]);
+    run();
+  }, [filterDate, filterSchedulerId, refreshCounts]);
 
   /* Fetch appointments whenever the active tab or active filters change */
   useEffect(() => {
@@ -212,7 +224,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     if (key === activeTab) {
       // Same tab clicked — force refresh
       fetchAppointments(key, filterDate, filterSchedulerId);
-      refreshCounts();
+      refreshCounts(filterDate, filterSchedulerId);
     } else {
       setActiveTab(key);
     }
