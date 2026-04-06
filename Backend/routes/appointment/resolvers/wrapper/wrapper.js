@@ -1545,7 +1545,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const cancelReason = reason || 'This appointment date is no longer available. We apologize for the inconvenience.';
+    const cancelReason = reason || 'This appointment date is no longer available. We apologize for the inconvenience. Please rebook at your earliest convenience.';
 
     const client = await db.connect();
     try {
