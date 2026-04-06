@@ -183,16 +183,15 @@ async function diagnosesByType(branch, startDate, endDate) {
 async function bmiTrends(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
-  const dg = dateGroupExpr(groupBy, 'vs.recorded_at');
+  const dg = dateGroupExpr(groupBy, 'vs.created_at');
   const result = await db.query(`
     SELECT ${dg.expr} as ${dg.alias},
       ROUND(AVG(vs.weight_kg / POWER(vs.height_cm / 100, 2))::numeric, 2) as avg_bmi,
       COUNT(*) as sample_count
     FROM "VitalSigns" vs
-    INNER JOIN "Consultation" c ON vs.id = c."vitalSignsId"
-    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "Patients" p ON vs."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE vs.recorded_at BETWEEN $1 AND $2 AND vs.height_cm > 0 AND vs.weight_kg > 0 ${bf.clause}
+    WHERE vs.created_at BETWEEN $1 AND $2 AND vs.height_cm > 0 AND vs.weight_kg > 0 ${bf.clause}
     GROUP BY ${dg.expr} ORDER BY ${dg.alias}
   `, [startDate, endDate, ...bf.params]);
 
@@ -209,17 +208,16 @@ async function bmiTrends(branch, startDate, endDate, options = {}) {
 async function bloodPressureTrends(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
   const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
-  const dg = dateGroupExpr(groupBy, 'vs.recorded_at');
+  const dg = dateGroupExpr(groupBy, 'vs.created_at');
   const result = await db.query(`
     SELECT ${dg.expr} as ${dg.alias},
       ROUND(AVG(CAST(SPLIT_PART(vs.blood_pressure, '/', 1) AS INTEGER))::numeric, 1) as avg_systolic,
       ROUND(AVG(CAST(SPLIT_PART(vs.blood_pressure, '/', 2) AS INTEGER))::numeric, 1) as avg_diastolic,
       COUNT(*) as sample_count
     FROM "VitalSigns" vs
-    INNER JOIN "Consultation" c ON vs.id = c."vitalSignsId"
-    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "Patients" p ON vs."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE vs.recorded_at BETWEEN $1 AND $2 AND vs.blood_pressure IS NOT NULL
+    WHERE vs.created_at BETWEEN $1 AND $2 AND vs.blood_pressure IS NOT NULL
     AND vs.blood_pressure ~ '^[0-9]+/[0-9]+$' ${bf.clause}
     GROUP BY ${dg.expr} ORDER BY ${dg.alias}
   `, [startDate, endDate, ...bf.params]);

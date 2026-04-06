@@ -174,20 +174,6 @@ export const loadInitialQueueData = async (status, limit = 15, { date, scheduler
         status
         count
       }
-      schedulers: listAllOpenAppointments(offset: 0, limit: 200) {
-        id
-        label
-        location
-        patientType
-        schedulePerWeek
-        morningAllowed
-        afternoonAllowed
-        notes
-        isActive
-        containsCustomDates
-        whitelistOnly
-        created_at
-      }
     }
   `, { status, limit, date: date || null, schedulerId: schedulerId || null, location: location || null });
 
@@ -199,7 +185,6 @@ export const loadInitialQueueData = async (status, limit = 15, { date, scheduler
   return {
     appointments: data.appointments || [],
     counts,
-    schedulers: data.schedulers || [],
   };
 };
 
