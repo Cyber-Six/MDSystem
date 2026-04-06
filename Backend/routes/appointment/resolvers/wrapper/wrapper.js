@@ -465,6 +465,25 @@ const Query = {
     } finally {
       client.release();
     }
+  },
+
+  // -- Returns active appointment count for a given scheduler + date (for pre-action checks) --
+  _checkDateOccupancy: async (_, { schedulerId, date }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const result = await db.query(
+      `SELECT COUNT(*)::int AS count
+       FROM "patientSlot" ps
+       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+       WHERE sde."slotId" = $1
+         AND sde."scheduledDate"::date = $2::date
+         AND ps.status IN ('Pending', 'Scheduled', 'InProgress');`,
+      [schedulerId, date]
+    );
+
+    return { count: result.rows[0]?.count ?? 0 };
   }
 };
 
@@ -1517,9 +1536,50 @@ const Mutation = {
         .status(500)
         .throw();
     }
+  },
+
+  // -- Bulk-reject all active appointments for a scheduler + date --
+  // Used when staff force-deletes/disables a date with existing bookings.
+  _cancelDateAppointments: async (_, { schedulerId, date, reason }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const cancelReason = reason || 'This appointment date is no longer available. We apologize for the inconvenience.';
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Reject all Pending/Scheduled/InProgress slots for this date
+      const result = await client.query(
+        `UPDATE "patientSlot" ps
+         SET status = 'Rejected', notes = $1, "approvedBy" = $2
+         FROM "ScheduleDateEntity" sde
+         WHERE sde.id = ps."slotEntityId"
+           AND sde."slotId" = $3
+           AND sde."scheduledDate"::date = $4::date
+           AND ps.status IN ('Pending', 'Scheduled', 'InProgress')
+         RETURNING ps.id, ps."patientId";`,
+        [cancelReason, user.id, schedulerId, date]
+      );
+
+      await client.query('COMMIT');
+
+      return result.rowCount;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _cancelDateAppointments:", err);
+      throwGraphQLError(res)
+        .message(`Failed to cancel appointments: ${err.message}`)
+        .status(500)
+        .throw();
+    } finally {
+      client.release();
+    }
   }
 
-};  
+};
 
 
 module.exports = { Query, Mutation };

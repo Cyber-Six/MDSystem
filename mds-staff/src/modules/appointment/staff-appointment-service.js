@@ -639,3 +639,36 @@ export const updateDateIdentity = async (schedulerId, date, input) => {
   `, { schedulerId, date, input });
   return data.updateDateIdentity;
 };
+
+/**
+ * Check how many active (Pending/Scheduled/InProgress) appointments exist for a date.
+ * @param {string} schedulerId
+ * @param {string} date - YYYY-MM-DD
+ * @returns {Promise<{ count: number }>}
+ */
+export const checkDateOccupancy = async (schedulerId, date) => {
+  const data = await sendGraphQL(`
+    query CheckDateOccupancy($schedulerId: ID!, $date: Date!) {
+      checkDateOccupancy(schedulerId: $schedulerId, date: $date) {
+        count
+      }
+    }
+  `, { schedulerId, date });
+  return data.checkDateOccupancy;
+};
+
+/**
+ * Bulk-reject all active appointments for a scheduler + date.
+ * @param {string} schedulerId
+ * @param {string} date - YYYY-MM-DD
+ * @param {string} [reason]
+ * @returns {Promise<number>} count of cancelled appointments
+ */
+export const cancelDateAppointments = async (schedulerId, date, reason) => {
+  const data = await sendGraphQL(`
+    mutation CancelDateAppointments($schedulerId: ID!, $date: Date!, $reason: String) {
+      cancelDateAppointments(schedulerId: $schedulerId, date: $date, reason: $reason)
+    }
+  `, { schedulerId, date, reason });
+  return data.cancelDateAppointments;
+};
