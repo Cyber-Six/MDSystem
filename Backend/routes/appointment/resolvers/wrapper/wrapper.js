@@ -397,6 +397,8 @@ const Query = {
 
     const client = await db.connect();
     try {
+      await client.query('BEGIN');
+
       // Step 1: Ensure all SlotCustomDate records have corresponding ScheduleDateEntity entries
       // (in case any were created before the recent fixes and not yet synced)
       const schedulerDefaults = await client.query(
@@ -405,7 +407,7 @@ const Query = {
       );
 
       if (schedulerDefaults.rowCount === 0) {
-        client.release();
+        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Scheduler not found").status(404).throw();
       }
 
@@ -431,34 +433,37 @@ const Query = {
         [schedulerId, morningAllowed, afternoonAllowed, startDate, endDate]
       );
 
-      client.release();
+      // Step 2: Fetch all ScheduleDateEntity records in the date range with counts.
+      // Runs in the same transaction so the SELECT sees the just-inserted rows and
+      // no concurrent writes can slip in between the INSERT and the read.
+      const result = await client.query(
+        `SELECT
+           sde.*,
+           COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "morningRegistered",
+           COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "morningPending",
+           COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "afternoonRegistered",
+           COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "afternoonPending"
+         FROM "ScheduleDateEntity" sde
+         LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
+         WHERE sde."slotId" = $1
+           AND sde."scheduledDate" >= $2
+           AND sde."scheduledDate" <= $3
+         GROUP BY sde.id
+         ORDER BY sde."scheduledDate" ASC;`,
+        [schedulerId, startDate, endDate]
+      );
 
-      // Step 2: Fetch all ScheduleDateEntity records in the date range with counts
-      const query = `
-        SELECT
-          sde.*,
-          COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "morningRegistered",
-          COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "morningPending",
-          COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "afternoonRegistered",
-          COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "afternoonPending"
-        FROM "ScheduleDateEntity" sde
-        LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
-        WHERE sde."slotId" = $1
-          AND sde."scheduledDate" >= $2
-          AND sde."scheduledDate" <= $3
-        GROUP BY sde.id
-        ORDER BY sde."scheduledDate" ASC;
-      `;
-
-      const result = await db.query(query, [schedulerId, startDate, endDate]);
+      await client.query('COMMIT');
       return result.rows;
     } catch (err) {
-      client.release();
+      await client.query('ROLLBACK');
       logger.error("Error in _listMonthAvailability:", err);
       throwGraphQLError(res)
         .message(`Failed to list month availability: ${err.message}`)
         .status(500)
         .throw();
+    } finally {
+      client.release();
     }
   }
 };
@@ -481,6 +486,17 @@ const Mutation = {
       const isValidDate = await validateSchedulerDate(schedulerId, date);
       if (!isValidDate) {
         throwGraphQLError(res).message("Invalid date for scheduler").status(400).throw();
+      }
+
+      // Validate timeframe (patients cannot book beyond MAX_SCHEDULING_DAYS)
+      if (!isWithinFutureTimeframe(date, MAX_SCHEDULING_DAYS)) {
+        const today = new Date();
+        const latestAllowed = new Date(today);
+        latestAllowed.setDate(today.getDate() + MAX_SCHEDULING_DAYS);
+        throwGraphQLError(res)
+          .message(`Scheduling is only allowed from ${today.toISOString().split("T")[0]} up to ${latestAllowed.toISOString().split("T")[0]}`)
+          .status(400)
+          .throw();
       }
 
       // Ensure requirements are satisfied
@@ -529,8 +545,8 @@ const Mutation = {
       // Check availability (atomic within transaction)
       const countResult = await client.query(
         `SELECT
-           COUNT(*) FILTER (WHERE "session" = 'Morning' AND "status" != 'CancelledByPatient' AND "status" != 'CancelledByMedical') AS "morningUsed",
-           COUNT(*) FILTER (WHERE "session" = 'Afternoon' AND "status" != 'CancelledByPatient' AND "status" != 'CancelledByMedical') AS "afternoonUsed"
+           COUNT(*) FILTER (WHERE "session" = 'Morning' AND "status" IN ('Pending', 'Scheduled', 'InProgress', 'Completed')) AS "morningUsed",
+           COUNT(*) FILTER (WHERE "session" = 'Afternoon' AND "status" IN ('Pending', 'Scheduled', 'InProgress', 'Completed')) AS "afternoonUsed"
          FROM "patientSlot" WHERE "slotEntityId" = $1;`,
         [schedule.id]
       );
@@ -638,6 +654,16 @@ const Mutation = {
       if (appointment.patientId !== parseInt(patientId)) {
         await client.query('ROLLBACK');
         throwGraphQLError(res).message("Unauthorized: appointment does not belong to this patient").status(403).throw();
+      }
+
+      // Verify the appointment is in a cancellable state
+      const cancellableStatuses = ["Pending", "Scheduled", "InProgress"];
+      if (!cancellableStatuses.includes(appointment.status)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message(`Cannot cancel appointment with status "${appointment.status}". Only ${cancellableStatuses.join(", ")} appointments can be cancelled.`)
+          .status(400)
+          .throw();
       }
 
       // Decide cancellation status based on who is cancelling

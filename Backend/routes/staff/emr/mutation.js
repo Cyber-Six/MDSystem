@@ -386,12 +386,12 @@ const Mutation = {
 
   // Create OralFindingCatalog
   createOralFindingCatalog: async (_, { input }, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(
+    const { permitted } = await permit.isMedicalPermitted(
       user.id,
       permit.permissions.emr_allow_edit_catalogs
     );
 
-    if (!isPermitted) {
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to create OralFindingCatalog`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -423,12 +423,12 @@ const Mutation = {
 
   // Update OralFindingCatalog
   updateOralFindingCatalog: async (_, { id, input }, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(
+    const { permitted } = await permit.isMedicalPermitted(
       user.id,
       permit.permissions.emr_allow_edit_catalogs
     );
 
-    if (!isPermitted) {
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update OralFindingCatalog`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -490,12 +490,12 @@ const Mutation = {
 
   // Delete OralFindingCatalog
   deleteOralFindingCatalog: async (_, { id }, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermitted(
+    const { permitted } = await permit.isMedicalPermitted(
       user.id,
       permit.permissions.emr_allow_edit_catalogs
     );
 
-    if (!isPermitted) {
+    if (!permitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to delete OralFindingCatalog`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }

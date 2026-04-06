@@ -4,31 +4,31 @@ import { AnnouncementCarousel } from '../anouncement';
 import { fetchDashboardStats } from './dashboard-service';
 
 const DEFAULT_STATS = {
-  pendingRequests: 0,
+  pendingRequests: null,
   pendingBreakdown: { emr: 0, appointments: 0, medicine: 0 },
-  todayAppointments: 0,
-  todayRemaining: 0,
-  activeConsultations: 0,
-  lowStockItems: 0,
+  todayAppointments: null,
+  todayRemaining: null,
+  activeConsultations: null,
+  lowStockItems: null,
 };
 
 const normalizeStats = (incoming) => {
   const source = incoming && typeof incoming === 'object' ? incoming : {};
   const breakdown = source.pendingBreakdown && typeof source.pendingBreakdown === 'object'
     ? source.pendingBreakdown
-    : {};
+    : { emr: 0, appointments: 0, medicine: 0 };
 
   return {
-    pendingRequests: Number(source.pendingRequests) || 0,
+    pendingRequests: source.pendingRequests !== null ? Number(source.pendingRequests) : null,
     pendingBreakdown: {
       emr: Number(breakdown.emr) || 0,
       appointments: Number(breakdown.appointments) || 0,
       medicine: Number(breakdown.medicine) || 0,
     },
-    todayAppointments: Number(source.todayAppointments) || 0,
-    todayRemaining: Number(source.todayRemaining) || 0,
-    activeConsultations: Number(source.activeConsultations) || 0,
-    lowStockItems: Number(source.lowStockItems) || 0,
+    todayAppointments: source.todayAppointments !== null ? Number(source.todayAppointments) : null,
+    todayRemaining: source.todayRemaining !== null ? Number(source.todayRemaining) : null,
+    activeConsultations: source.activeConsultations !== null ? Number(source.activeConsultations) : null,
+    lowStockItems: source.lowStockItems !== null ? Number(source.lowStockItems) : null,
   };
 };
 
@@ -44,21 +44,41 @@ const StaffDashboard = () => {
   const [tomorrowAvailability, setTomorrowAvailability] = useState({});
   const [recentPatients, setRecentPatients] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [canViewPatients, setCanViewPatients] = useState(false);
+  const [canViewRequests, setCanViewRequests] = useState(false);
+  const [canViewAvailability, setCanViewAvailability] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     try {
       setError(null);
       const data = await fetchDashboardStats();
-      setStats(normalizeStats(data?.stats));
-      setTomorrowAvailability(data?.tomorrowAvailability && typeof data.tomorrowAvailability === 'object' ? data.tomorrowAvailability : {});
+      setStats(normalizeStats(data));
+      // tomorrowAvailability is now an array, convert to object for backwards compatibility
+      const tomorrowObj = {};
+      if (Array.isArray(data?.tomorrowAvailability)) {
+        for (const slot of data.tomorrowAvailability) {
+          tomorrowObj[slot.label] = { open: slot.open, total: slot.total };
+        }
+      }
+      setTomorrowAvailability(tomorrowObj);
+      // Track permissions by checking if data was returned
+      const hasRecentPatients = data?.recentPatients !== null;
+      const hasRequests = data?.recentRequests !== null;
+      const hasAvailability = data?.tomorrowAvailability !== null;
+      setCanViewPatients(hasRecentPatients);
+      setCanViewRequests(hasRequests);
+      setCanViewAvailability(hasAvailability);
       setRecentPatients(Array.isArray(data?.recentPatients) ? data.recentPatients : []);
-      setPendingRequests(Array.isArray(data?.pendingRequests) ? data.pendingRequests : []);
+      setPendingRequests(Array.isArray(data?.recentRequests) ? data.recentRequests : []);
     } catch (err) {
       console.error('Failed to load dashboard stats:', err);
       setStats(DEFAULT_STATS);
       setTomorrowAvailability({});
       setRecentPatients([]);
       setPendingRequests([]);
+      setCanViewPatients(false);
+      setCanViewRequests(false);
+      setCanViewAvailability(false);
       setError('Failed to load dashboard data');
     } finally {
       setLoading(false);
@@ -73,11 +93,11 @@ const StaffDashboard = () => {
   }, [loadDashboard]);
 
   const statCards = [
-    { label: 'Pending Requests', value: stats.pendingRequests, change: stats.pendingRequests > 0 ? `${stats.pendingBreakdown.emr} EMR · ${stats.pendingBreakdown.appointments} Appt · ${stats.pendingBreakdown.medicine} Rx` : '—', color: 'warning', icon: 'pending', link: '/pending' },
-    { label: "Today's Appointments", value: stats.todayAppointments, change: `${stats.todayRemaining} remaining`, color: 'accent', icon: 'calendar', link: '/appointments' },
-    { label: 'Active Consultations', value: stats.activeConsultations, change: stats.activeConsultations > 0 ? 'In progress' : '—', color: 'success', icon: 'chat' },
-    { label: 'Low Stock Items', value: stats.lowStockItems, change: stats.lowStockItems > 0 ? 'Needs attention' : '—', color: 'error', icon: 'alert', link: '/inventory' },
-  ];
+    stats.pendingRequests !== null && { label: 'Pending Requests', value: stats.pendingRequests, change: stats.pendingRequests > 0 ? `${stats.pendingBreakdown.emr} EMR · ${stats.pendingBreakdown.appointments} Appt · ${stats.pendingBreakdown.medicine} Rx` : '—', color: 'warning', icon: 'pending', link: '/pending' },
+    stats.todayAppointments !== null && { label: "Today's Appointments", value: stats.todayAppointments, change: `${stats.todayRemaining ?? 0} remaining`, color: 'accent', icon: 'calendar', link: '/appointments' },
+    stats.activeConsultations !== null && { label: 'Active Consultations', value: stats.activeConsultations, change: stats.activeConsultations > 0 ? 'In progress' : '—', color: 'success', icon: 'chat' },
+    stats.lowStockItems !== null && { label: 'Low Stock Items', value: stats.lowStockItems, change: stats.lowStockItems > 0 ? 'Needs attention' : '—', color: 'error', icon: 'alert', link: '/inventory' },
+  ].filter(Boolean); // Remove false values from cards user doesn't have permission for
 
   const icons = {
     pending: (
@@ -134,7 +154,7 @@ const StaffDashboard = () => {
                 </span>
                 <span className="text-xs text-secondary-500 dark:text-neutral-400">{stat.change}</span>
               </div>
-              <p className="text-2xl font-bold text-secondary-800 dark:text-white">{loading ? '—' : stat.value}</p>
+              <p className="text-2xl font-bold text-secondary-800 dark:text-white">{loading ? '—' : (stat.value !== null ? stat.value : '—')}</p>
               <p className="text-xs text-secondary-500 dark:text-neutral-400">{stat.label}</p>
             </Card>
           );
@@ -177,134 +197,142 @@ const StaffDashboard = () => {
 
       {/* Appointment & Availability Widgets */}
       <div className="grid sm:grid-cols-2 gap-3">
-        {/* Today's Appointments Widget */}
-        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Today's Appointments</h3>
-            <Link to="/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">View Queue</Link>
+        {/* Today's Appointments Widget - Show if user has permission */}
+        {stats.todayAppointments !== null && (
+          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Today's Appointments</h3>
+              <Link to="/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">View Queue</Link>
+            </div>
+            <div className="flex items-baseline gap-1 mb-1">
+              <span className="text-2xl font-bold text-secondary-800 dark:text-white">{loading ? '—' : stats.todayAppointments}</span>
+              <span className="text-xs text-secondary-500 dark:text-neutral-400">total</span>
+              <span className="text-xs text-accent-600 dark:text-accent-400 ml-2">{loading ? '—' : stats.todayRemaining ?? 0} remaining</span>
+            </div>
           </div>
-          <div className="flex items-baseline gap-1 mb-1">
-            <span className="text-2xl font-bold text-secondary-800 dark:text-white">{loading ? '—' : stats.todayAppointments}</span>
-            <span className="text-xs text-secondary-500 dark:text-neutral-400">total</span>
-            <span className="text-xs text-accent-600 dark:text-accent-400 ml-2">{loading ? '—' : stats.todayRemaining} remaining</span>
-          </div>
-        </div>
+        )}
 
-        {/* Tomorrow's Availability Widget */}
-        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Tomorrow's Availability</h3>
-            <Link to="/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">Manage Slots</Link>
-          </div>
-          <div className="space-y-2">
-            {Object.keys(tomorrowAvailability).length === 0 && !loading ? (
-              <p className="text-xs text-secondary-400 dark:text-neutral-500">No schedulers configured</p>
-            ) : (
-              Object.entries(tomorrowAvailability).map(([label, data], idx) => {
-                const booked = data.total - data.open;
-                const pct = data.total > 0 ? (booked / data.total) * 100 : 0;
-                return (
-                  <div key={idx} className="flex items-center justify-between">
-                    <span className="text-xs text-secondary-500 dark:text-neutral-400 truncate max-w-[100px]">{label}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${idx % 2 === 0 ? 'bg-accent-500' : 'bg-purple-500'}`}
-                          style={{ width: `${pct}%` }}
-                        />
+        {/* Tomorrow's Availability Widget - Show if user has permission */}
+        {canViewAvailability && (
+          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Tomorrow's Availability</h3>
+              <Link to="/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">Manage Slots</Link>
+            </div>
+            <div className="space-y-2">
+              {(Object.keys(tomorrowAvailability).length === 0 && !loading) ? (
+                <p className="text-xs text-secondary-400 dark:text-neutral-500">No schedulers configured</p>
+              ) : (
+                Object.entries(tomorrowAvailability).map(([label, data], idx) => {
+                  const booked = data.total - data.open;
+                  const pct = data.total > 0 ? (booked / data.total) * 100 : 0;
+                  return (
+                    <div key={idx} className="flex items-center justify-between">
+                      <span className="text-xs text-secondary-500 dark:text-neutral-400 truncate max-w-[100px]">{label}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-1.5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${idx % 2 === 0 ? 'bg-accent-500' : 'bg-purple-500'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
+                          {loading ? '—' : `${data.open}/${data.total}`}
+                        </span>
                       </div>
-                      <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
-                        {loading ? '—' : `${data.open}/${data.total}`}
-                      </span>
                     </div>
-                  </div>
                 );
               })
             )}
           </div>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Two Column Layout */}
       <div className="grid lg:grid-cols-2 gap-4">
-        {/* Recent Patients */}
-        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-          <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Recent Patients</h3>
-            <Link to="/search" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
-              View all
-            </Link>
-          </div>
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-            {loading ? (
-              <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
-            ) : recentPatients.length === 0 ? (
-              <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No recent patients</div>
-            ) : (
-              recentPatients.map((patient) => (
-                <Link
-                  key={patient.id}
-                  to={`/patient/${patient.id}`}
-                  className="flex items-center justify-between p-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-xs font-medium text-secondary-600 dark:text-neutral-300">
-                      {patient.name?.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2)}
+        {/* Recent Patients - Show if user has permission */}
+        {canViewPatients && (
+          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+            <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Recent Patients</h3>
+              <Link to="/search" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
+              {loading ? (
+                <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
+              ) : recentPatients.length === 0 ? (
+                <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No recent patients</div>
+              ) : (
+                recentPatients.map((patient) => (
+                  <Link
+                    key={patient.id}
+                    to={`/patient/${patient.id}`}
+                    className="flex items-center justify-between p-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-xs font-medium text-secondary-600 dark:text-neutral-300">
+                        {patient.name?.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-secondary-800 dark:text-white">{patient.name}</p>
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400">{patient.identifier || '—'} • {patient.program}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-secondary-800 dark:text-white">{patient.name}</p>
-                      <p className="text-xs text-secondary-500 dark:text-neutral-400">{patient.identifier || '—'} • {patient.program}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs text-secondary-400 dark:text-neutral-500">
-                    {patient.lastVisit ? new Date(patient.lastVisit).toLocaleDateString() : '—'}
-                  </span>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Pending Requests */}
-        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-          <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Pending Requests</h3>
-            <Link to="/pending" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
-              View all
-            </Link>
-          </div>
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-            {loading ? (
-              <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
-            ) : pendingRequests.length === 0 ? (
-              <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No pending requests</div>
-            ) : (
-              pendingRequests.map((request) => (
-                <div key={request.id} className="flex items-center justify-between p-3">
-                  <div>
-                    <p className="text-sm font-medium text-secondary-800 dark:text-white">{request.name}</p>
-                    <p className="text-xs text-secondary-500 dark:text-neutral-400">
-                      {request.type} • {request.submitted ? new Date(request.submitted).toLocaleDateString() : '—'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 text-xs font-medium rounded">
-                      {request.status}
+                    <span className="text-xs text-secondary-400 dark:text-neutral-500">
+                      {patient.lastVisit ? new Date(patient.lastVisit).toLocaleDateString() : '—'}
                     </span>
-                    <Link
-                      to={request.type === 'Appointment' ? '/appointments' : '/pending'}
-                      className="p-1 text-secondary-400 hover:text-secondary-600 dark:text-neutral-500 dark:hover:text-neutral-300"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
-                  </div>
-                </div>
-              ))
-            )}
+                  </Link>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Pending Requests - Show if user has permission */}
+        {canViewRequests && (
+          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+            <div className="p-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Pending Requests</h3>
+              <Link to="/pending" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
+              {loading ? (
+                <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">Loading...</div>
+              ) : pendingRequests.length === 0 ? (
+                <div className="p-6 text-center text-xs text-secondary-400 dark:text-neutral-500">No pending requests</div>
+              ) : (
+                pendingRequests.map((request) => (
+                  <div key={request.id} className="flex items-center justify-between p-3">
+                    <div>
+                      <p className="text-sm font-medium text-secondary-800 dark:text-white">{request.name}</p>
+                      <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                        {request.type} • {request.submitted ? new Date(request.submitted).toLocaleDateString() : '—'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 text-xs font-medium rounded">
+                        {request.status}
+                      </span>
+                      <Link
+                        to={request.type === 'Appointment' ? '/appointments' : '/pending'}
+                        className="p-1 text-secondary-400 hover:text-secondary-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
