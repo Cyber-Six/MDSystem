@@ -16,11 +16,11 @@ const docGen = require('./doc-generate-module/index.js');
 const EXPORT_META = {
   'consultations-by-type':    { label: 'Consultations by Type',       xAxis: 'Type',          yAxis: 'Count',   chartType: 'pie' },
   'consultations-by-mode':    { label: 'Consultations by Mode',       xAxis: 'Mode',          yAxis: 'Count',   chartType: 'doughnut' },
-  'consultation-trends':      { label: 'Monthly Consultation Trends', xAxis: 'Month',         yAxis: 'Count',   chartType: 'line' },
+  'consultation-trends':      { label: 'Consultation Trends',         xAxis: 'Period',         yAxis: 'Count',   chartType: 'line' },
   'top-diagnoses':            { label: 'Top 10 Diagnoses',            xAxis: 'Diagnosis',     yAxis: 'Count',   chartType: 'bar' },
   'diagnoses-by-type':        { label: 'Diagnoses by Type',           xAxis: 'Type',          yAxis: 'Count',   chartType: 'pie' },
-  'bmi-trends':               { label: 'BMI Trends (Monthly)',        xAxis: 'Month',         yAxis: 'Avg BMI', chartType: 'line' },
-  'blood-pressure-trends':    { label: 'Blood Pressure Trends',       xAxis: 'Month',         yAxis: 'Avg Systolic', chartType: 'line' },
+  'bmi-trends':               { label: 'BMI Trends',                  xAxis: 'Period',        yAxis: 'Avg BMI', chartType: 'line' },
+  'blood-pressure-trends':    { label: 'Blood Pressure Trends',       xAxis: 'Period',        yAxis: 'Avg BP',  chartType: 'line' },
   'immunization-coverage':    { label: 'Immunization Coverage',       xAxis: 'Vaccine',       yAxis: 'Patients',chartType: 'bar' },
   'dental-procedures':        { label: 'Top Dental Procedures',       xAxis: 'Procedure',     yAxis: 'Count',   chartType: 'bar' },
   'lifestyle-risks':          { label: 'Lifestyle Risk Factors',      xAxis: 'Risk Factor',   yAxis: 'Count',   chartType: 'bar' },
@@ -82,10 +82,11 @@ const EXPORT_PRESETS = {
  * @param {string} branch
  * @param {string} startDate
  * @param {string} endDate
+ * @param {object} [options] - Extra options (e.g. { groupBy: 'weekly' })
  * @returns {Promise<Object>} Map of dataType → { labels, values, total }
  */
-async function fetchExportData(dataTypes, branch, startDate, endDate) {
-  const results = await analytics.executeBatchQueries(dataTypes, branch, startDate, endDate);
+async function fetchExportData(dataTypes, branch, startDate, endDate, options = {}) {
+  const results = await analytics.executeBatchQueries(dataTypes, branch, startDate, endDate, options);
   const filtered = {};
 
   for (const [key, result] of Object.entries(results)) {
@@ -308,34 +309,46 @@ async function generateExcel(data, meta) {
 
 /**
  * Generate PDF report buffer.
- * Each metric gets a data table (top 10 rows) and an embedded chart image.
+ * Each metric gets a ranked data table (sorted desc) and an embedded chart image.
  *
  * @param {Object} data - Map of dataType → { labels, values, total }
  * @param {Object} meta - { branch, startDate, endDate, title, physician, clinic }
  * @returns {Promise<{buffer: Buffer, filename: string}>}
  */
 async function generatePDF(data, meta) {
-  // Build sections for the StaffReportTemplate
   const sections = [];
+  const isTrendType = (dt) => ['consultation-trends', 'bmi-trends', 'blood-pressure-trends'].includes(dt);
 
   for (const [dataType, result] of Object.entries(data)) {
     const exportMeta = EXPORT_META[dataType];
     if (!exportMeta || !result.labels || result.labels.length === 0) continue;
 
-    // Build table data (top 10 for tables with many rows)
     const maxRows = 10;
-    const tableLabels = result.labels.slice(0, maxRows);
-    const tableValues = result.values.slice(0, maxRows);
+    const isTrend = isTrendType(dataType);
+
+    // Sort by value desc for non-trend data; chronological for trends
+    let indices = result.labels.map((_, i) => i);
+    if (!isTrend) {
+      indices.sort((a, b) => (result.values[b] || 0) - (result.values[a] || 0));
+    }
+    indices = indices.slice(0, maxRows);
+
+    const tableLabels = indices.map(i => result.labels[i]);
+    const tableValues = indices.map(i => result.values[i]);
+    const isBP = dataType === 'blood-pressure-trends';
 
     sections.push({
       title: exportMeta.label,
       chartType: exportMeta.chartType,
       labels: tableLabels,
       values: tableValues,
+      diastolicValues: isBP ? indices.map(i => result.diastolicValues?.[i]) : undefined,
       total: result.total || 0,
       xAxis: exportMeta.xAxis,
       yAxis: exportMeta.yAxis,
-      summary: `Total: ${result.total || 0}  |  Items shown: ${tableLabels.length}${result.labels.length > maxRows ? ` of ${result.labels.length}` : ''}`,
+      isTrend,
+      isBP,
+      summary: `Total Records: ${result.total || 0}  |  Items shown: ${tableLabels.length}${result.labels.length > maxRows ? ` of ${result.labels.length}` : ''}`,
     });
   }
 
@@ -378,114 +391,162 @@ async function generatePDF(data, meta) {
 
 /**
  * Generate a focused PDF for a single analytics metric.
- * Includes a detail table and a chart.
+ * Layout: Header → Report Info → Ranked Data Table (sorted desc) → Chart at bottom.
+ * Optimized to fit in 1–2 pages.
  *
  * @param {string} dataType
- * @param {Object} result - { labels, values, total }
- * @param {Object} meta - { branch, startDate, endDate, physician }
+ * @param {Object} result - { labels, values, total, diastolicValues?, groupBy? }
+ * @param {Object} meta - { branch, startDate, endDate, physician, groupBy? }
  * @returns {Promise<{buffer: Buffer, filename: string}>}
  */
 async function generateSingleMetricPDF(dataType, result, meta) {
   const exportMeta = EXPORT_META[dataType];
   if (!exportMeta) throw new Error(`Unknown export type: ${dataType}`);
 
-  const doc = pdf.createDocument({ size: 'letter' });
+  const isTrend = ['consultation-trends', 'bmi-trends', 'blood-pressure-trends'].includes(dataType);
+  const isBP = dataType === 'blood-pressure-trends';
+  const groupBy = result.groupBy || meta.groupBy || 'monthly';
+  const groupLabel = groupBy.charAt(0).toUpperCase() + groupBy.slice(1);
 
-  // Header
-  pdf.addHeader(doc, exportMeta.label, `${meta.startDate} to ${meta.endDate}`, {
+  const doc = pdf.createDocument({ size: 'letter', margins: { top: 50, bottom: 50, left: 54, right: 54 } });
+
+  // ── Header ──────────────────────────────────────────────
+  const reportTitle = isTrend
+    ? `${exportMeta.label} (${groupLabel})`
+    : exportMeta.label;
+
+  pdf.addHeader(doc, reportTitle, `${meta.startDate} to ${meta.endDate}`, {
     clinicName: 'TIP Medical-Dental Services',
     address: meta.branch === 'QuezonCity'
       ? 'Quezon City Campus, Philippines'
       : 'Manila Campus, Philippines',
   });
 
-  // Metadata
+  // ── Report Metadata (compact) ──────────────────────────
   pdf.addSectionHeading(doc, 'Report Information');
   pdf.addField(doc, 'Branch', branchLabel(meta.branch));
   pdf.addField(doc, 'Date Range', `${meta.startDate} to ${meta.endDate}`);
-  pdf.addField(doc, 'Total', String(result.total || 0));
+  if (isTrend) pdf.addField(doc, 'Grouping', groupLabel);
+  pdf.addField(doc, 'Total Records', String(result.total || 0));
   pdf.addField(doc, 'Generated', new Date().toLocaleString('en-US'));
-  doc.moveDown();
+  doc.moveDown(0.5);
 
-  // Data Table (top 10)
-  pdf.addSectionHeading(doc, 'Data Table');
-  const maxRows = 10;
-  const headers = [exportMeta.xAxis, exportMeta.yAxis, 'Percentage'];
-  const rows = [];
-
-  for (let i = 0; i < Math.min(result.labels.length, maxRows); i++) {
-    const pct = result.total > 0 ? ((result.values[i] / result.total) * 100).toFixed(1) + '%' : '0%';
-    rows.push([result.labels[i], String(result.values[i] || 0), pct]);
+  // ── Data Table ─────────────────────────────────────────
+  // Sort by value descending for non-trend data; keep chronological for trends
+  const maxRows = 15;
+  let sortedIndices = result.labels.map((_, i) => i);
+  if (!isTrend) {
+    sortedIndices.sort((a, b) => (result.values[b] || 0) - (result.values[a] || 0));
   }
+  sortedIndices = sortedIndices.slice(0, maxRows);
 
-  if (rows.length > 0) {
-    pdf.addTable(doc, headers, rows, {
-      columnWidths: [250, 100, 118],
+  pdf.addSectionHeading(doc, isTrend ? 'Data Summary' : 'Data Table');
+
+  if (isBP) {
+    // Blood Pressure: show Systolic, Diastolic, and combined
+    const headers = ['#', 'Period', 'Avg Systolic', 'Avg Diastolic', 'Avg BP'];
+    const rows = sortedIndices.map((idx, rank) => [
+      String(rank + 1),
+      result.labels[idx],
+      String(result.values[idx] || 0),
+      String(result.diastolicValues?.[idx] || 0),
+      `${result.values[idx] || 0}/${result.diastolicValues?.[idx] || 0}`,
+    ]);
+    if (rows.length > 0) {
+      pdf.addTable(doc, headers, rows, {
+        columnWidths: [30, 100, 95, 95, 84],
+      });
+    }
+  } else {
+    const headers = isTrend
+      ? ['#', 'Period', exportMeta.yAxis]
+      : ['#', exportMeta.xAxis, exportMeta.yAxis, '%'];
+
+    const rows = sortedIndices.map((idx, rank) => {
+      const pct = result.total > 0 ? ((result.values[idx] / result.total) * 100).toFixed(1) + '%' : '0%';
+      if (isTrend) {
+        return [String(rank + 1), result.labels[idx], String(result.values[idx] || 0)];
+      }
+      return [String(rank + 1), result.labels[idx], String(result.values[idx] || 0), pct];
     });
+
+    if (rows.length > 0) {
+      const colWidths = isTrend
+        ? [30, 220, 154]
+        : [30, 210, 80, 84];
+      pdf.addTable(doc, headers, rows, { columnWidths: colWidths });
+    }
   }
 
   if (result.labels.length > maxRows) {
-    doc
-      .fontSize(8)
-      .fillColor('#666666')
-      .text(`(Showing top ${maxRows} of ${result.labels.length} items)`, { align: 'center' });
-    doc.moveDown(0.5);
+    doc.fontSize(8).fillColor('#666666')
+      .text(`Showing top ${maxRows} of ${result.labels.length} items`, { align: 'center' });
+    doc.moveDown(0.3);
   }
 
-  // Chart
+  // ── Chart Visualization ────────────────────────────────
   try {
-    const chartLabels = result.labels.slice(0, maxRows);
-    const chartValues = result.values.slice(0, maxRows);
+    const chartLabels = sortedIndices.map(i => result.labels[i]);
+    const chartValues = sortedIndices.map(i => result.values[i]);
 
     let chartBuffer;
-    const chartOpts = { width: 450, height: 280, title: exportMeta.label };
+    const chartOpts = { width: 460, height: 250, title: reportTitle };
 
-    switch (exportMeta.chartType) {
-      case 'pie':
-        chartBuffer = await chart.generatePieChart(chartLabels, chartValues, chartOpts);
-        break;
-      case 'doughnut':
-        chartBuffer = await chart.generateDoughnutChart(chartLabels, chartValues, chartOpts);
-        break;
-      case 'line':
-        chartBuffer = await chart.generateLineChart(chartLabels, [{
-          label: exportMeta.label,
-          data: chartValues,
-          borderColor: '#2196F3',
-          fill: false,
-        }], chartOpts);
-        break;
-      case 'bar':
-      default:
-        chartBuffer = await chart.generateBarChart(chartLabels, [{
-          label: exportMeta.label,
-          data: chartValues,
-          backgroundColor: '#4CAF50',
-        }], chartOpts);
-        break;
+    if (isBP && result.diastolicValues) {
+      // Blood Pressure: dual-line chart (systolic + diastolic)
+      chartBuffer = await chart.generateLineChart(chartLabels, [
+        { label: 'Systolic', data: chartValues, borderColor: '#F44336', fill: false },
+        { label: 'Diastolic', data: sortedIndices.map(i => result.diastolicValues[i]), borderColor: '#2196F3', fill: false },
+      ], chartOpts);
+    } else {
+      switch (exportMeta.chartType) {
+        case 'pie':
+          chartBuffer = await chart.generatePieChart(chartLabels, chartValues, chartOpts);
+          break;
+        case 'doughnut':
+          chartBuffer = await chart.generateDoughnutChart(chartLabels, chartValues, chartOpts);
+          break;
+        case 'line':
+          chartBuffer = await chart.generateLineChart(chartLabels, [{
+            label: exportMeta.label,
+            data: chartValues,
+            borderColor: '#2196F3',
+            fill: false,
+          }], chartOpts);
+          break;
+        case 'bar':
+        default:
+          chartBuffer = await chart.generateBarChart(chartLabels, [{
+            label: exportMeta.label,
+            data: chartValues,
+            backgroundColor: '#4CAF50',
+          }], chartOpts);
+          break;
+      }
     }
 
-    if (doc.y > 400) doc.addPage();
+    // Move to next page only if chart won't fit
+    if (doc.y > 480) doc.addPage();
+    else doc.moveDown(0.5);
 
     pdf.addSectionHeading(doc, 'Chart Visualization');
-    const chartX = (doc.page.width - 450) / 2;
-    pdf.embedImage(doc, chartBuffer, { x: chartX, y: doc.y, width: 450, height: 280 });
-    doc.y += 290;
+    const chartX = (doc.page.width - 460) / 2;
+    pdf.embedImage(doc, chartBuffer, { x: chartX, y: doc.y, width: 460, height: 250 });
+    doc.y += 260;
   } catch (err) {
     logger.warn('Chart generation failed for single metric PDF', { dataType, error: err.message });
     doc.fontSize(8).fillColor('#999').text('[Chart could not be generated]', { align: 'center' });
   }
 
-  // Footer
-  doc.moveDown();
+  // ── Footer ─────────────────────────────────────────────
+  doc.moveDown(0.5);
   doc.fontSize(8).fillColor('#666666').text(
     'This report is generated for internal use only.',
     { align: 'center' }
   );
 
-  // Physician signature
   if (meta.physician) {
-    doc.moveDown();
+    doc.moveDown(0.5);
     const name = `Generated by: ${meta.physician.firstName} ${meta.physician.lastName}`;
     doc.fontSize(10).font('Helvetica').fillColor('#333333').text(name, { align: 'right' });
   }

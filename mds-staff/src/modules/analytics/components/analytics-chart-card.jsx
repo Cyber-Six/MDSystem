@@ -6,7 +6,7 @@ import { CHART_TYPE_MAP, exportSingleMetric } from '../analytics-service';
  * Analytics Chart Card
  * Consistent card wrapper for each analytics chart with title, total, and loading states.
  */
-const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, branch, startDate, endDate }) => {
+const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, branch, startDate, endDate, groupBy }) => {
   const chartType = CHART_TYPE_MAP[dataType] || 'bar';
   const [exporting, setExporting] = useState(false);
 
@@ -14,13 +14,13 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
     if (!branch || !startDate || !endDate) return;
     setExporting(true);
     try {
-      await exportSingleMetric(dataType, { branch, startDate, endDate });
+      await exportSingleMetric(dataType, { branch, startDate, endDate, groupBy });
     } catch {
       // silent — user will see no file downloaded
     } finally {
       setExporting(false);
     }
-  }, [dataType, branch, startDate, endDate]);
+  }, [dataType, branch, startDate, endDate, groupBy]);
 
   // Transform {labels, values} -> [{name, value}]
   const chartData = data?.data

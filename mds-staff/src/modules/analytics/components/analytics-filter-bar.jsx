@@ -1,25 +1,27 @@
 import React, { memo } from 'react';
-import { BRANCHES, QUERY_CATEGORIES } from '../analytics-service';
+import { BRANCHES, QUERY_CATEGORIES, PERIOD_PRESETS } from '../analytics-service';
 
 /**
  * Analytics Filter Bar
- * Controls for branch, date range, and category filters.
+ * Controls for branch, period, date range, and category filters.
  */
 const AnalyticsFilterBar = memo(({
   branch,
   startDate,
   endDate,
+  groupBy,
   activeCategory,
   onBranchChange,
   onStartDateChange,
   onEndDateChange,
+  onGroupByChange,
   onCategoryChange,
   onRefresh,
   loading,
 }) => {
   return (
     <div className="space-y-2">
-      {/* Top Row: Branch + Date Range + Refresh */}
+      {/* Top Row: Branch + Period + Date Range + Refresh */}
       <div className="flex flex-wrap items-end gap-3">
         {/* Branch Selector */}
         <div className="flex-shrink-0">
@@ -31,6 +33,20 @@ const AnalyticsFilterBar = memo(({
           >
             {BRANCHES.map((b) => (
               <option key={b.value} value={b.value}>{b.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Period Selector */}
+        <div className="flex-shrink-0">
+          <label className="block text-[11px] text-secondary-500 dark:text-neutral-400 mb-1 font-medium">Period</label>
+          <select
+            value={groupBy}
+            onChange={(e) => onGroupByChange(e.target.value)}
+            className="px-2.5 py-1.5 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+          >
+            {PERIOD_PRESETS.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
         </div>
