@@ -1,5 +1,5 @@
 import React, { useState, useCallback, memo } from 'react';
-import { exportAnalytics, EXPORT_PRESETS, QUERY_CATEGORIES } from '../analytics-service';
+import { exportAnalytics, EXPORT_PRESETS, QUERY_CATEGORIES, CHART_TYPE_MAP } from '../analytics-service';
 
 const FORMAT_OPTIONS = [
   {
@@ -41,35 +41,77 @@ const SCOPE_OPTIONS = [
     label: cat.label,
     description: `${cat.queries.length} metrics`,
   })),
+  { value: 'custom', label: 'Select Specific Metrics', description: 'Choose individual metrics' },
 ];
+
+/** Friendly labels for individual metric selection */
+const METRIC_LABELS = {
+  'consultations-by-type': 'Consultations by Type',
+  'consultations-by-mode': 'Consultations by Mode',
+  'consultation-trends': 'Consultation Trends',
+  'top-diagnoses': 'Top 10 Diagnoses',
+  'diagnoses-by-type': 'Diagnoses by Type',
+  'bmi-trends': 'BMI Trends',
+  'blood-pressure-trends': 'Blood Pressure Trends',
+  'immunization-coverage': 'Immunization Coverage',
+  'dental-procedures': 'Top Dental Procedures',
+  'lifestyle-risks': 'Lifestyle Risk Factors',
+  'allergy-by-type': 'Allergies by Type',
+  'allergy-by-severity': 'Allergies by Severity',
+  'appointments-by-category': 'Appointments by Category',
+  'appointments-by-status': 'Appointments by Status',
+  'appointments-by-session': 'Appointments by Session',
+};
+
+const ALL_METRIC_KEYS = Object.keys(CHART_TYPE_MAP);
 
 /**
  * Analytics Export Modal
  * Allows the user to pick format, scope (preset), and trigger download.
  */
-const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate }) => {
+const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate, groupBy }) => {
   const [format, setFormat] = useState('pdf');
   const [scope, setScope] = useState('full-report');
+  const [selectedMetrics, setSelectedMetrics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const toggleMetric = useCallback((metric) => {
+    setSelectedMetrics(prev =>
+      prev.includes(metric) ? prev.filter(m => m !== metric) : [...prev, metric]
+    );
+  }, []);
 
   const handleExport = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await exportAnalytics(format, {
+      const opts = {
         branch,
         startDate,
         endDate,
-        preset: scope,
-      });
+        groupBy,
+      };
+
+      if (scope === 'custom') {
+        if (selectedMetrics.length === 0) {
+          setError('Please select at least one metric.');
+          setLoading(false);
+          return;
+        }
+        opts.dataTypes = selectedMetrics;
+      } else {
+        opts.preset = scope;
+      }
+
+      await exportAnalytics(format, opts);
       onClose();
     } catch (err) {
       setError(err?.response?.data?.message || 'Export failed. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [format, scope, branch, startDate, endDate, onClose]);
+  }, [format, scope, selectedMetrics, branch, startDate, endDate, groupBy, onClose]);
 
   if (!open) return null;
 
@@ -135,6 +177,33 @@ const AnalyticsExportModal = memo(({ open, onClose, branch, startDate, endDate }
               ))}
             </select>
           </div>
+
+          {/* Custom Metric Selection */}
+          {scope === 'custom' && (
+            <div>
+              <label className="block text-[11px] font-medium text-secondary-500 dark:text-neutral-400 mb-1.5">
+                Select Metrics ({selectedMetrics.length} selected)
+              </label>
+              <div className="max-h-40 overflow-y-auto border border-neutral-200 dark:border-neutral-600 rounded-lg p-2 space-y-1">
+                {ALL_METRIC_KEYS.map((key) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 px-2 py-1 rounded cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedMetrics.includes(key)}
+                      onChange={() => toggleMetric(key)}
+                      className="rounded border-neutral-300 dark:border-neutral-500 text-primary-500 focus:ring-primary-500 h-3.5 w-3.5"
+                    />
+                    <span className="text-xs text-secondary-700 dark:text-neutral-300">
+                      {METRIC_LABELS[key] || key}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Summary */}
           <div className="bg-neutral-50 dark:bg-neutral-700/30 rounded-lg px-3 py-2.5 text-[11px] text-secondary-500 dark:text-neutral-400 space-y-0.5">

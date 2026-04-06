@@ -55,6 +55,49 @@ export const CHART_TYPE_MAP = {
   'appointments-by-session': 'pie',
 };
 
+// ── Period Preset Options ────────────────────────────────────────────────────
+
+export const PERIOD_PRESETS = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'yearly', label: 'Yearly' },
+  { value: 'custom', label: 'Custom Range' },
+];
+
+/**
+ * Calculate start/end dates based on a period preset
+ */
+export function getDateRangeForPeriod(period) {
+  const now = new Date();
+  const endDate = now.toISOString().slice(0, 10);
+  let start = new Date(now);
+
+  switch (period) {
+    case 'daily':
+      start.setDate(start.getDate() - 7); // last 7 days
+      break;
+    case 'weekly':
+      start.setDate(start.getDate() - 28); // last 4 weeks
+      break;
+    case 'monthly':
+      start.setMonth(start.getMonth() - 6); // last 6 months
+      break;
+    case 'quarterly':
+      start.setFullYear(start.getFullYear() - 1); // last year
+      break;
+    case 'yearly':
+      start.setFullYear(start.getFullYear() - 5); // last 5 years
+      break;
+    default:
+      start.setMonth(start.getMonth() - 6);
+      break;
+  }
+
+  return { startDate: start.toISOString().slice(0, 10), endDate };
+}
+
 // ── Branch Options ───────────────────────────────────────────────────────────
 
 export const BRANCHES = [
@@ -79,11 +122,12 @@ export async function fetchAvailableQueries() {
  * @param {string} branch - 'Manila' | 'QuezonCity' | 'Both'
  * @param {string} startDate - ISO date string (YYYY-MM-DD)
  * @param {string} endDate - ISO date string (YYYY-MM-DD)
+ * @param {string} [groupBy] - 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
  * @returns {Promise<{labels: string[], values: number[], total: number}>}
  */
-export async function fetchQueryData(dataType, branch, startDate, endDate) {
+export async function fetchQueryData(dataType, branch, startDate, endDate, groupBy) {
   const response = await axiosRequest.get(`/analytics/query/${encodeURIComponent(dataType)}`, {
-    params: { branch, startDate, endDate },
+    params: { branch, startDate, endDate, groupBy },
   });
   return response.data;
 }
@@ -94,9 +138,10 @@ export async function fetchQueryData(dataType, branch, startDate, endDate) {
  * @param {string} branch
  * @param {string} startDate
  * @param {string} endDate
+ * @param {string} [groupBy] - 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
  * @returns {Promise<Map<string, object>>} Map of dataType -> response data
  */
-export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate) {
+export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate, groupBy) {
   const results = new Map();
 
   try {
@@ -105,6 +150,7 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
       branch,
       startDate,
       endDate,
+      groupBy,
     });
 
     if (response.data.success && response.data.results) {
@@ -126,7 +172,7 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
     // Fallback: if batch endpoint fails, fetch individually
     const promises = dataTypes.map(async (dataType) => {
       try {
-        const data = await fetchQueryData(dataType, branch, startDate, endDate);
+        const data = await fetchQueryData(dataType, branch, startDate, endDate, groupBy);
         // Guard: if the backend returned HTML instead of JSON (e.g. not yet deployed),
         // treat it as an error so charts show an empty/error state instead of crashing.
         if (typeof data !== 'object' || data === null) {
@@ -162,13 +208,13 @@ export const EXPORT_PRESETS = {
  * The response is a Blob (binary file) that gets saved by the browser.
  *
  * @param {'csv'|'excel'|'pdf'} format
- * @param {Object} opts - { branch, startDate, endDate, dataTypes?, preset? }
+ * @param {Object} opts - { branch, startDate, endDate, dataTypes?, preset?, groupBy? }
  */
 export async function exportAnalytics(format, opts) {
-  const { branch, startDate, endDate, dataTypes, preset } = opts;
+  const { branch, startDate, endDate, dataTypes, preset, groupBy } = opts;
   const response = await axiosRequest.post(
     '/analytics/export',
-    { format, branch, startDate, endDate, dataTypes, preset },
+    { format, branch, startDate, endDate, dataTypes, preset, groupBy },
     { responseType: 'blob' },
   );
 
@@ -178,13 +224,13 @@ export async function exportAnalytics(format, opts) {
 /**
  * Download a focused single-metric PDF report.
  * @param {string} dataType
- * @param {Object} opts - { branch, startDate, endDate }
+ * @param {Object} opts - { branch, startDate, endDate, groupBy? }
  */
 export async function exportSingleMetric(dataType, opts) {
-  const { branch, startDate, endDate } = opts;
+  const { branch, startDate, endDate, groupBy } = opts;
   const response = await axiosRequest.post(
     '/analytics/export/single',
-    { dataType, branch, startDate, endDate },
+    { dataType, branch, startDate, endDate, groupBy },
     { responseType: 'blob' },
   );
 

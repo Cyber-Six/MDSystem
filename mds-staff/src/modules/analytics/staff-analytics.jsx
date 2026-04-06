@@ -8,6 +8,7 @@ import {
   fetchAvailableQueries,
   QUERY_CATEGORIES,
   CHART_TYPE_MAP,
+  getDateRangeForPeriod,
 } from './analytics-service';
 
 // ── Friendly display names ───────────────────────────────────────────────────
@@ -15,10 +16,10 @@ import {
 const QUERY_LABELS = {
   'consultations-by-type': 'Consultations by Type',
   'consultations-by-mode': 'Consultations by Mode',
-  'consultation-trends': 'Monthly Consultation Trends',
+  'consultation-trends': 'Consultation Trends',
   'top-diagnoses': 'Top 10 Diagnoses',
   'diagnoses-by-type': 'Diagnoses by Type',
-  'bmi-trends': 'BMI Trends (Monthly)',
+  'bmi-trends': 'BMI Trends',
   'blood-pressure-trends': 'Blood Pressure Trends',
   'immunization-coverage': 'Immunization Coverage',
   'dental-procedures': 'Top Dental Procedures',
@@ -30,17 +31,6 @@ const QUERY_LABELS = {
   'appointments-by-session': 'Appointments by Session',
 };
 
-// ── Date helpers ─────────────────────────────────────────────────────────────
-
-function getDefaultDates() {
-  const now = new Date();
-  const endDate = now.toISOString().slice(0, 10);
-  const start = new Date(now);
-  start.setMonth(start.getMonth() - 6);
-  const startDate = start.toISOString().slice(0, 10);
-  return { startDate, endDate };
-}
-
 // ── All query keys ───────────────────────────────────────────────────────────
 
 const ALL_QUERY_KEYS = Object.keys(CHART_TYPE_MAP);
@@ -50,10 +40,11 @@ const ALL_QUERY_KEYS = Object.keys(CHART_TYPE_MAP);
  * Main analytics page matching the staff portal design system.
  */
 const StaffAnalytics = () => {
-  const defaults = getDefaultDates();
+  const defaults = getDateRangeForPeriod('monthly');
   const [branch, setBranch] = useState('Both');
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
+  const [groupBy, setGroupBy] = useState('monthly');
   const [activeCategory, setActiveCategory] = useState('all');
   const [results, setResults] = useState(new Map());
   const [loading, setLoading] = useState(false);
@@ -85,7 +76,7 @@ const StaffAnalytics = () => {
     setLoading(true);
 
     try {
-      const data = await fetchMultipleQueries(ALL_QUERY_KEYS, branch, startDate, endDate);
+      const data = await fetchMultipleQueries(ALL_QUERY_KEYS, branch, startDate, endDate, groupBy);
       if (reqId === abortRef.current) {
         setResults(data);
         setInitialLoad(false);
@@ -97,7 +88,7 @@ const StaffAnalytics = () => {
         setLoading(false);
       }
     }
-  }, [branch, startDate, endDate]);
+  }, [branch, startDate, endDate, groupBy]);
 
   // Initial load
   useEffect(() => {
@@ -130,10 +121,19 @@ const StaffAnalytics = () => {
         branch={branch}
         startDate={startDate}
         endDate={endDate}
+        groupBy={groupBy}
         activeCategory={activeCategory}
         onBranchChange={setBranch}
         onStartDateChange={setStartDate}
         onEndDateChange={setEndDate}
+        onGroupByChange={(g) => {
+          setGroupBy(g);
+          if (g !== 'custom') {
+            const range = getDateRangeForPeriod(g);
+            setStartDate(range.startDate);
+            setEndDate(range.endDate);
+          }
+        }}
         onCategoryChange={setActiveCategory}
         onRefresh={loadData}
         loading={loading}
@@ -166,6 +166,7 @@ const StaffAnalytics = () => {
               branch={branch}
               startDate={startDate}
               endDate={endDate}
+              groupBy={groupBy}
             />
           ))}
         </div>
@@ -185,6 +186,7 @@ const StaffAnalytics = () => {
         branch={branch}
         startDate={startDate}
         endDate={endDate}
+        groupBy={groupBy}
       />
     </div>
   );
