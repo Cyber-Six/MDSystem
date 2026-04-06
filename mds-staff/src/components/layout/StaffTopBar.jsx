@@ -297,16 +297,16 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                               key={alert.id}
                               type="button"
                               onClick={() => { setShowNotifications(false); navigate('/inventory'); }}
-                              className={`w-full text-left px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${rowBg}`}
+                              className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${rowBg}`}
                             >
-                              <div className="flex items-start gap-2">
-                                <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                              <div className="flex items-start gap-2.5">
+                                <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
                                 <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <p className="text-xs font-medium text-secondary-800 dark:text-white truncate leading-none m-0">{alert.itemName}</p>
+                                    <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{alert.itemName}</p>
                                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${labelColor}`}>{label}</span>
                                   </div>
-                                  <p className="text-[11px] text-secondary-500 dark:text-neutral-400 line-clamp-1 leading-snug m-0">{alert.detail}</p>
+                                  <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-1 leading-snug m-0">{alert.detail}</p>
                                 </div>
                               </div>
                             </button>
@@ -335,14 +335,14 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                             key={notif.id}
                             type="button"
                             onClick={() => handleNotifClick(notif)}
-                            className={`w-full text-left px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                            className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
                           >
-                            <div className="flex items-start gap-2">
-                              {notif.unread && <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-primary-500" />}
+                            <div className="flex items-start gap-2.5">
+                              {notif.unread && <span className="mt-1 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
                               <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                <p className="text-xs font-medium text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
-                                <p className="text-[11px] text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
-                                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
+                                <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
+                                <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
+                                <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
                               </div>
                             </div>
                           </button>
@@ -351,7 +351,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                     )
                   )}
 
-                  {/* ── Medicine Requests Tab ── */}}
+                  {/* ── Medicine Requests Tab ── */}
                   {activeNotifTab === 'medicine' && (
                     medicineNotifs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-6 text-center px-4">
@@ -370,21 +370,21 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                             key={notif.id}
                             type="button"
                             onClick={() => { handleNotifClick(notif); }}
-                            className={`w-full text-left px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                            className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
                           >
-                            <div className="flex items-start gap-2">
-                              {notif.unread && <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-primary-500" />}
+                            <div className="flex items-start gap-2.5">
+                              {notif.unread && <span className="mt-1 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
                               <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <p className="text-xs font-medium text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
+                                  <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
                                   {notif.location && (
                                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 shrink-0">{notif.location}</span>
                                   )}
                                 </div>
-                                <p className="text-[11px] text-secondary-500 dark:text-neutral-400 line-clamp-1 leading-snug m-0">{notif.message}</p>
+                                <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-1 leading-snug m-0">{notif.message}</p>
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">Pending</span>
-                                  <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
+                                  <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
                                 </div>
                               </div>
                             </div>
@@ -413,14 +413,14 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                             key={notif.id}
                             type="button"
                             onClick={() => { handleNotifClick(notif); }}
-                            className={`w-full text-left px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                            className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
                           >
-                            <div className="flex items-start gap-2">
-                              {notif.unread && <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-primary-500" />}
+                            <div className="flex items-start gap-2.5">
+                              {notif.unread && <span className="mt-1 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
                               <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                <p className="text-xs font-medium text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
-                                <p className="text-[11px] text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
-                                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
+                                <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
+                                <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
+                                <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
                               </div>
                             </div>
                           </button>
@@ -429,7 +429,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                     )
                   )}
 
-                  {/* ── General Tab ── */}}
+                  {/* ── General Tab ── */}
                   {activeNotifTab === 'general' && (
                     generalNotifs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-6 text-center px-4">
@@ -448,14 +448,14 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                             key={notif.id}
                             type="button"
                             onClick={() => { markAsRead(notif.id); }}
-                            className={`w-full text-left px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                            className={`w-full text-left px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700/60 transition-colors ${notif.unread ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
                           >
-                            <div className="flex items-start gap-2">
-                              {notif.unread && <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-primary-500" />}
+                            <div className="flex items-start gap-2.5">
+                              {notif.unread && <span className="mt-1 w-2 h-2 rounded-full shrink-0 bg-primary-500" />}
                               <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                                <p className="text-xs font-medium text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
-                                <p className="text-[11px] text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
-                                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
+                                <p className="text-sm font-semibold text-secondary-800 dark:text-white truncate leading-none m-0">{notif.title}</p>
+                                <p className="text-xs text-secondary-500 dark:text-neutral-400 line-clamp-2 leading-snug m-0">{notif.message}</p>
+                                <p className="text-[11px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{formatRelativeTime(notif.time)}</p>
                               </div>
                             </div>
                           </button>
@@ -529,29 +529,30 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
           {/* User Dropdown */}
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700 py-1 z-50">
-              <div className="px-3 py-3 border-b border-neutral-200 dark:border-neutral-700 space-y-0.5 min-w-0">
-                {profile?.name && (
-                  <p className="text-xs font-semibold text-secondary-800 dark:text-white break-all" title={profile.name}>
-                    {profile.name}
-                  </p>
-                )}
-                {profile?.email && (
-                  <p className="text-[11px] text-secondary-500 dark:text-neutral-400 break-all" title={profile.email}>
-                    {profile.email}
-                  </p>
-                )}
-                {(isAdmin || profile?.role || profile?.branch) && (
-                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 max-w-[10rem] truncate" title={isAdmin ? 'Admin' : (profile?.role ?? '')}>
-                      {isAdmin ? 'Admin' : (profile?.role ?? '—')}
-                    </span>
-                    {profile?.branch && (
-                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">
-                        {profile.branch === 'Both' ? 'MLA & QC Branch' : profile.branch + ' Branch'}
+              {/* User profile header with avatar */}
+              <div className="flex items-start gap-3 px-3 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                  {profile?.firstName?.[0] ?? profile?.email?.[0]?.toUpperCase() ?? 'S'}
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {profile?.email && (
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate leading-none m-0" title={profile.email}>
+                      {profile.email}
+                    </p>
+                  )}
+                  {(isAdmin || profile?.role || profile?.branch) && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 truncate" title={isAdmin ? 'Admin' : (profile?.role ?? '')}>
+                        {isAdmin ? 'Admin' : (profile?.role ?? '—')}
                       </span>
-                    )}
-                  </div>
-                )}
+                      {profile?.branch && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">
+                          {profile.branch === 'Both' ? 'MLA & QC' : profile.branch}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <button className="w-full px-3 py-2 text-left text-sm text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700">
                 Profile

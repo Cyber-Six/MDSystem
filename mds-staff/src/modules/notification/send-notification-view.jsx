@@ -206,14 +206,12 @@ const SendNotificationView = () => {
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 max-w-2xl mx-auto">
-      {/* Page header */}
-      <div className="mb-4">
-        <h1 className="text-base font-semibold text-secondary-800 dark:text-white">
-          Send Notification
-        </h1>
-        <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
-          Broadcast a message to staff or patients.
-        </p>
+      {/* Page header — consistent with other module headers */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Send Notification</h1>
+          <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mt-0.5">Broadcast a message to staff or patients.</p>
+        </div>
       </div>
 
       <form
@@ -297,20 +295,20 @@ const SendNotificationView = () => {
                   {filteredResults.map(user => (
                     <li
                       key={user.id}
-                      className="flex items-center justify-between px-3 py-1.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer"
+                      className="flex items-center justify-between px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer"
                       onClick={() => addRecipient(user)}
                     >
                       <div className="flex flex-col gap-0.5 min-w-0">
-                        <p className="text-xs font-medium text-secondary-800 dark:text-white truncate leading-none m-0">
+                        <p className="text-sm font-medium text-secondary-800 dark:text-white truncate leading-none m-0">
                           {recipientType === 'staff' ? user.name : formatPatientName(user)}
                         </p>
-                        <p className="text-[11px] text-secondary-400 dark:text-neutral-500 truncate leading-none m-0">
+                        <p className="text-xs text-secondary-400 dark:text-neutral-500 truncate leading-none m-0">
                           {recipientType === 'staff'
                             ? [user.role, user.branch].filter(Boolean).join(' · ')
                             : [user.identifier, user.branch].filter(Boolean).join(' · ')}
                         </p>
                       </div>
-                      <span className="ml-2 shrink-0 text-primary-500 text-[11px] font-semibold">Add</span>
+                      <span className="ml-3 shrink-0 text-primary-500 text-xs font-semibold">Add</span>
                     </li>
                   ))}
                 </ul>
