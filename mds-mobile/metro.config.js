@@ -11,6 +11,12 @@ const extraNodeModules = {
 
 config.resolver.extraNodeModules = extraNodeModules;
 
+// Allow packages in the core workspace package to resolve their dependencies
+// from mds-mobile's node_modules (since packages/core has no node_modules).
+config.resolver.nodeModulesPaths = [
+  path.resolve(__dirname, 'node_modules'),
+];
+
 // Watch the core package for changes (extend Expo's defaults)
 config.watchFolders = [
   ...(config.watchFolders ?? []),
