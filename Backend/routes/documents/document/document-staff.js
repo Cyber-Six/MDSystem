@@ -36,11 +36,11 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
       `SELECT id, label, "isActive" FROM "rawDocumentTag" WHERE "isActive" = true ORDER BY id`
     );
 
-    // Get all submissions for this patient (including archived and rejected)
+    // Get all submissions for this patient (including archived)
     const submissionsResult = await db.query(
       `SELECT prd.id, prd."documentTagId", prd.file, prd.status,
               prd."recordedBy", prd."notes",
-              prd."archived_at", prd."rejected_at", prd."created_at" as "submittedAt",
+              prd."archived_at", prd."created_at" as "submittedAt",
               up.first_name as "recordedByFirstName", up.last_name as "recordedByLastName"
        FROM "patientRawDocument" prd
        LEFT JOIN "UsersPersonal" up ON prd."recordedBy" = up.id
@@ -65,7 +65,6 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
         } : null,
         notes: sub.notes,
         archivedAt: sub.archived_at,
-        rejectedAt: sub.rejected_at,
         submittedAt: sub.submittedAt,
       });
     });
@@ -74,17 +73,11 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
     const documents = tagsResult.rows.map((tag) => {
       const allSubmissions = submissionsByTag[tag.id] || [];
       
-      // Current submission = first non-archived, non-rejected, or null if none
-      // Active states: Requested, Pending, Recorded
-      const currentSubmission = allSubmissions.find(s => 
-        s.status !== 'Archived' && s.status !== 'Rejected'
-      ) || null;
+      // Current submission = first non-archived
+      const currentSubmission = allSubmissions.find(s => s.status !== 'Archived') || null;
       
       // Archived submissions (historical approved versions - append-only)
       const archivedSubmissions = allSubmissions.filter(s => s.status === 'Archived');
-      
-      // Rejected submissions (audit trail for failed submissions)
-      const rejectedSubmissions = allSubmissions.filter(s => s.status === 'Rejected');
 
       return {
         id: tag.id,
@@ -92,7 +85,6 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
         isActive: tag.isActive,
         submission: currentSubmission,
         archivedSubmissions: archivedSubmissions,
-        rejectedSubmissions: rejectedSubmissions,
       };
     });
 
@@ -367,10 +359,9 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
  * Body: patientId (required), notes (optional)
  * 
  * BEHAVIOR:
- * - Marks the current submission as 'Rejected' (preserved for history/audit)
- * - Document type becomes available for re-request (Missing state for staff)
- * - Staff can request a new version, creating a fresh submission
- * - Rejected submissions are kept for audit trail
+ * - Deletes the current submission
+ * - Document type becomes available for re-request (Missing state)
+ * - Staff can request a new version
  */
 router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, res) => {
   const client = await connect();
@@ -385,14 +376,13 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
-    // Find the CURRENT (non-archived, non-rejected) submission
-    // Only Pending or Requested submissions can be rejected
+    // Find the CURRENT (non-archived) submission - only Pending can be rejected
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
        FROM "patientRawDocument" prd
        JOIN "rawDocumentTag" rdt ON rdt.id = prd."documentTagId"
        WHERE prd."documentTagId" = $1 AND prd."patientId" = $2 
-         AND prd.status NOT IN ('Archived', 'Rejected', 'Recorded')
+         AND prd.status NOT IN ('Archived', 'Recorded')
        ORDER BY prd."created_at" DESC
        LIMIT 1`,
       [documentId, patientId]
@@ -406,17 +396,12 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
     const existing = existingResult.rows[0];
     const tagLabel = existing.label;
 
-    // Update this submission to Rejected status
-    // Set rejected_at timestamp for tracking
-    const updateResult = await client.query(
-      `UPDATE "patientRawDocument"
-       SET status = 'Rejected', "recordedBy" = $1, "notes" = $2, "rejected_at" = NOW()
-       WHERE id = $3
-       RETURNING id`,
-      [req.user.id, notes || null, existing.id]
+    // Delete the submission so staff can request again
+    await client.query(
+      `DELETE FROM "patientRawDocument" WHERE id = $1`,
+      [existing.id]
     );
 
-    const submissionId = updateResult.rows[0].id;
     await client.query('COMMIT');
 
     // Notify patient
@@ -435,14 +420,13 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
       logger.warn('Document rejection notification failed', { error: notifErr.message });
     }
 
-    logger.info('Document rejected', {
+    logger.info('Document rejected and removed', {
       documentId,
       patientId,
-      submissionId,
       rejectedBy: req.user.id,
     });
 
-    res.json({ success: true, submissionId });
+    res.json({ success: true });
   } catch (err) {
     await client.query('ROLLBACK');
     logger.error('Error rejecting document', { error: err.message });
@@ -458,8 +442,7 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
  * Body: patientId (required), notes (optional - explains why the document is needed)
  * 
  * BEHAVIOR:
- * - If no active submission exists (Missing or all Archived/Rejected): Creates new 'Requested' submission
- * - If Rejected submission exists: Creates NEW submission (preserves rejected for history)
+ * - If no active submission exists (Missing or all Archived): Creates new 'Requested' submission
  * - If Recorded submission exists: Must archive first before requesting new
  * - If Requested/Pending submission exists: Updates existing with new notes
  */
@@ -487,12 +470,11 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
       return res.status(404).json({ error: 'DOCUMENT_TAG_NOT_FOUND' });
     }
 
-    // Check if there's an ACTIVE submission (not Archived, not Rejected)
-    // Rejected submissions are treated as "history" - new request creates fresh submission
+    // Check if there's an ACTIVE submission (not Archived)
     const existingResult = await client.query(
       `SELECT id, status FROM "patientRawDocument"
        WHERE "documentTagId" = $1 AND "patientId" = $2 
-         AND status NOT IN ('Archived', 'Rejected')
+         AND status != 'Archived'
        ORDER BY "created_at" DESC
        LIMIT 1`,
       [documentId, patientId]
@@ -522,8 +504,8 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
       );
       submissionId = updateResult.rows[0].id;
     } else {
-      // No active submission exists (all are Archived/Rejected, or never requested)
-      // Create NEW submission - this preserves rejected/archived history
+      // No active submission exists (all are Archived, or never requested)
+      // Create NEW submission
       const insertResult = await client.query(
         `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", status, "recordedBy", "notes")
          VALUES ($1, $2, 'Requested', $3, $4)
