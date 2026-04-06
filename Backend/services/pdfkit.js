@@ -206,22 +206,21 @@ function addFooter(doc, options = {}) {
     showDate = true,
   } = options;
 
-  const pages = doc.bufferedPageRange();
+  const { count, start } = doc.bufferedPageRange();
 
-  for (let i = 0; i < pages.count; i++) {
-    doc.switchToPage(i);
+  for (let i = 0; i < count; i++) {
+    doc.switchToPage(start + i);
 
-    const footerY = doc.page.height - doc.page.margins.bottom + 20;
+    const origBottom = doc.page.margins.bottom;
+    const footerY = doc.page.height - origBottom + 20;
 
-    // Temporarily disable bottom margin to prevent PDFKit from
-    // auto-paginating when writing in the footer zone
-    const savedBottom = doc.page.margins.bottom;
+    // Zero bottom margin so text() at y=footerY cannot trigger a new page
     doc.page.margins.bottom = 0;
 
-    // Footer text (left)
     if (text) {
       doc
         .fontSize(FONT_SIZES.small)
+        .font('Helvetica')
         .fillColor(COLORS.secondary)
         .text(text, doc.page.margins.left, footerY, {
           width: 200,
@@ -230,7 +229,6 @@ function addFooter(doc, options = {}) {
         });
     }
 
-    // Date (center)
     if (showDate) {
       const dateStr = new Date().toLocaleDateString('en-US', {
         year: 'numeric',
@@ -239,6 +237,7 @@ function addFooter(doc, options = {}) {
       });
       doc
         .fontSize(FONT_SIZES.small)
+        .font('Helvetica')
         .fillColor(COLORS.secondary)
         .text(dateStr, 0, footerY, {
           width: doc.page.width,
@@ -247,21 +246,24 @@ function addFooter(doc, options = {}) {
         });
     }
 
-    // Page numbers (right)
-    if (showPageNumbers && pages.count > 1) {
+    if (showPageNumbers && count > 1) {
       doc
         .fontSize(FONT_SIZES.small)
+        .font('Helvetica')
         .fillColor(COLORS.secondary)
         .text(
-          `Page ${i + 1} of ${pages.count}`,
+          `Page ${i + 1} of ${count}`,
           doc.page.width - doc.page.margins.right - 100,
           footerY,
           { width: 100, align: 'right', lineBreak: false }
         );
     }
 
-    // Restore bottom margin
-    doc.page.margins.bottom = savedBottom;
+    // Restore margin and cap doc.y so it stays within the content area.
+    // This prevents PDFKit from adding a phantom blank page when doc.end() is called.
+    doc.page.margins.bottom = origBottom;
+    const safeBottom = doc.page.height - origBottom - 2;
+    if (doc.y > safeBottom) doc.y = safeBottom;
   }
 }
 

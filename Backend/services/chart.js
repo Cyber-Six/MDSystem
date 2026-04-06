@@ -5,19 +5,12 @@ const logger = require('../utils/logger.js');
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 400;
 
-// Create chart canvas instance (reusable)
-let chartCanvas = null;
-
-function getChartCanvas(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
-  // Create new canvas if dimensions differ or doesn't exist
-  if (!chartCanvas || chartCanvas.width !== width || chartCanvas.height !== height) {
-    chartCanvas = new ChartJSNodeCanvas({
-      width,
-      height,
-      backgroundColour: 'white',
-    });
-  }
-  return chartCanvas;
+function createChartCanvas(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
+  return new ChartJSNodeCanvas({
+    width,
+    height,
+    backgroundColour: 'white',
+  });
 }
 
 /**
@@ -27,6 +20,14 @@ function getChartCanvas(width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT) {
  * @param {object} options - Additional chart options
  * @returns {Promise<Buffer>} PNG image buffer
  */
+// Truncate labels that are too long to display cleanly on charts
+function truncateLabels(labels, maxLength = 30) {
+  return labels.map(l => {
+    const s = String(l || '');
+    return s.length > maxLength ? s.substring(0, maxLength - 1) + '…' : s;
+  });
+}
+
 async function generateChart(type, data, options = {}) {
   const {
     width = DEFAULT_WIDTH,
@@ -35,30 +36,45 @@ async function generateChart(type, data, options = {}) {
     ...chartOptions
   } = options;
 
-  const canvas = getChartCanvas(width, height);
+  // Always create a fresh canvas — avoids concurrency issues in Express context
+  const canvas = createChartCanvas(width, height);
+
+  // Truncate labels for non-pie charts so axis labels render cleanly
+  const chartData = { ...data };
+  if (type === 'bar' || type === 'line') {
+    chartData.labels = truncateLabels(data.labels || []);
+  }
 
   const configuration = {
     type,
-    data,
+    data: chartData,
     options: {
       responsive: false,
       plugins: {
         title: {
           display: !!title,
           text: title,
-          font: { size: 16, weight: 'bold' },
+          font: { size: 14, weight: 'bold' },
         },
         legend: {
           display: true,
           position: 'bottom',
+          labels: { font: { size: 10 }, padding: 8 },
         },
       },
+      scales: (type === 'bar' || type === 'line') ? {
+        x: { ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 0 } },
+        y: { ticks: { font: { size: 9 } } },
+      } : undefined,
       ...chartOptions,
     },
   };
 
   try {
     const buffer = await canvas.renderToBuffer(configuration);
+    if (!buffer || buffer.length < 100) {
+      throw new Error('Chart rendered empty buffer');
+    }
     logger.debug(`Chart generated: type=${type}, size=${buffer.length} bytes`);
     return buffer;
   } catch (err) {
