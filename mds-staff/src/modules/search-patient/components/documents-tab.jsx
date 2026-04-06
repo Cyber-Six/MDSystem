@@ -47,7 +47,6 @@ export default function PatientDocumentsTab({ patient }) {
   const [rejecting, setRejecting] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [filter, setFilter] = useState('All');
-  const [reviewNotes, setReviewNotes] = useState({});
 
   const patientId = patient?.id;
 
@@ -89,9 +88,7 @@ export default function PatientDocumentsTab({ patient }) {
     setApproving(documentId);
     setError('');
     try {
-      const notes = reviewNotes[documentId] || null;
-      await approveDocument(documentId, patientId, notes);
-      setReviewNotes(prev => ({ ...prev, [documentId]: '' }));
+      await approveDocument(documentId, patientId);
       await loadDocuments();
     } catch (err) {
       setError(err.message || 'Failed to approve document');
@@ -101,16 +98,13 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const handleReject = async (documentId) => {
-    const notes = reviewNotes[documentId]?.trim();
-    if (!notes) {
-      setError('Please provide a reason for rejection');
+    if (!confirm('Are you sure you want to reject this document?')) {
       return;
     }
     setRejecting(documentId);
     setError('');
     try {
-      await rejectDocument(documentId, patientId, notes);
-      setReviewNotes(prev => ({ ...prev, [documentId]: '' }));
+      await rejectDocument(documentId, patientId);
       await loadDocuments();
     } catch (err) {
       setError(err.message || 'Failed to reject document');
@@ -275,15 +269,9 @@ export default function PatientDocumentsTab({ patient }) {
 
                 {/* Submission Info */}
                 {doc.submission && (
-                  <div className="mt-2 ml-10 text-xs text-secondary-500 dark:text-neutral-400 space-y-1">
+                  <div className="mt-2 ml-10 text-xs text-secondary-500 dark:text-neutral-400">
                     {doc.submission.submittedAt && (
                       <div>Submitted: {formatDate(doc.submission.submittedAt)}</div>
-                    )}
-                    {doc.submission.reviewNotes && (
-                      <div className="p-2 bg-neutral-50 dark:bg-neutral-800 rounded border border-neutral-200 dark:border-neutral-700">
-                        <span className="font-medium text-secondary-600 dark:text-neutral-300">Review Note:</span>
-                        <p className="mt-1 text-secondary-700 dark:text-neutral-400">{doc.submission.reviewNotes}</p>
-                      </div>
                     )}
                   </div>
                 )}
@@ -318,9 +306,9 @@ export default function PatientDocumentsTab({ patient }) {
                     </span>
                   )}
 
-                  {/* Pending: Show View File + Approve/Reject with notes */}
+                  {/* Pending: Show View File + Approve/Reject buttons */}
                   {status === 'Pending' && (
-                    <div className="space-y-2 w-full">
+                    <div className="flex items-center gap-2">
                       {/* View File Button */}
                       {doc.submission?.file && (
                         <button
@@ -343,52 +331,43 @@ export default function PatientDocumentsTab({ patient }) {
                         </button>
                       )}
 
-                      {/* Notes Textarea */}
-                      <textarea
-                        value={reviewNotes[doc.id] || ''}
-                        onChange={(e) => setReviewNotes(prev => ({ ...prev, [doc.id]: e.target.value }))}
-                        placeholder="Add notes (optional for approval, required for rejection)..."
-                        rows={2}
-                        className="w-full px-2 py-1.5 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
+                      {/* Approve Button */}
+                      <button
+                        onClick={() => handleApprove(doc.id)}
+                        disabled={isApproving || isRejecting}
+                        className="px-2.5 py-1 text-xs font-medium text-white bg-success-500 hover:bg-success-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                      >
+                        {isApproving ? (
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        Approve
+                      </button>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleApprove(doc.id)}
-                          disabled={isApproving || isRejecting}
-                          className="px-2.5 py-1 text-xs font-medium text-white bg-success-500 hover:bg-success-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                        >
-                          {isApproving ? (
-                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleReject(doc.id)}
-                          disabled={isApproving || isRejecting}
-                          className="px-2.5 py-1 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                        >
-                          {isRejecting ? (
-                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          )}
-                          Reject
-                        </button>
-                      </div>
+                      {/* Reject Button */}
+                      <button
+                        onClick={() => handleReject(doc.id)}
+                        disabled={isApproving || isRejecting}
+                        className="px-2.5 py-1 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                      >
+                        {isRejecting ? (
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                        Reject
+                      </button>
                     </div>
                   )}
 

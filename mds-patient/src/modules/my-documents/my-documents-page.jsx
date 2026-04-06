@@ -267,34 +267,10 @@ export default function MyDocumentsPage() {
                     <StatusBadge status={status} />
                   </div>
 
-                  {/* Review Notes */}
-                  {doc.submission?.reviewNotes && (
-                    <div className={`mb-3 p-3 rounded border text-xs ${
-                      isApproved ? 'bg-success-50 dark:bg-success-900/10 border-success-200 dark:border-success-800' :
-                      isRejected ? 'bg-error-50 dark:bg-error-900/10 border-error-200 dark:border-error-800' :
-                      'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
-                    }`}>
-                      <p className={`font-medium mb-1 ${
-                        isApproved ? 'text-success-700 dark:text-success-400' :
-                        isRejected ? 'text-error-700 dark:text-error-400' :
-                        'text-secondary-600 dark:text-neutral-300'
-                      }`}>
-                        {isApproved ? '✓ Review Note:' : isRejected ? '✗ Rejection Reason:' : 'ℹ Review Note:'}
-                      </p>
-                      <p className={`${
-                        isApproved ? 'text-success-600 dark:text-success-300' :
-                        isRejected ? 'text-error-600 dark:text-error-300' :
-                        'text-secondary-700 dark:text-neutral-400'
-                      }`}>
-                        {doc.submission.reviewNotes}
-                      </p>
-                    </div>
-                  )}
-
                   {/* Status Messages */}
                   {needsReview && (
                     <div className="mb-3 p-2 bg-warning-50 dark:bg-warning-900/10 border border-warning-200 dark:border-warning-700 rounded text-xs text-warning-700 dark:text-warning-300">
-                      ⏳ Your document is being reviewed by staff. You'll be notified once it's approved or if changes are needed.
+                      ⏳ Your document is being reviewed by staff. You'll be notified once it's approved or rejected.
                     </div>
                   )}
                   {isApproved && (
@@ -304,7 +280,7 @@ export default function MyDocumentsPage() {
                   )}
                   {isRejected && (
                     <div className="mb-3 p-2 bg-error-50 dark:bg-error-900/10 border border-error-200 dark:border-error-700 rounded text-xs text-error-700 dark:text-error-300">
-                      ✗ This document was rejected. Please review the reason above and contact your healthcare provider if you have questions.
+                      ✗ This document was rejected. Please contact your healthcare provider for more information.
                     </div>
                   )}
 

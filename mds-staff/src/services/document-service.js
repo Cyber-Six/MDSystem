@@ -35,13 +35,11 @@ export const requestDocument = async (documentId, patientId) => {
  * Approve a submitted document (sets status to 'Recorded').
  * @param {string|number} documentId - The document tag ID
  * @param {string|number} patientId - The patient ID
- * @param {string} [notes] - Optional review notes
  * @returns {Promise<{submissionId: number}>}
  */
-export const approveDocument = async (documentId, patientId, notes = null) => {
+export const approveDocument = async (documentId, patientId) => {
   const response = await axiosRequest.post(`/documents/required/${documentId}/approve`, {
     patientId,
-    notes,
   });
   if (!response.data?.success) {
     throw new Error(response.data?.error || 'Failed to approve document');
@@ -53,16 +51,11 @@ export const approveDocument = async (documentId, patientId, notes = null) => {
  * Reject a submitted document (sets status to 'Rejected').
  * @param {string|number} documentId - The document tag ID
  * @param {string|number} patientId - The patient ID
- * @param {string} notes - Required rejection reason
  * @returns {Promise<{submissionId: number}>}
  */
-export const rejectDocument = async (documentId, patientId, notes) => {
-  if (!notes || !notes.trim()) {
-    throw new Error('Rejection reason is required');
-  }
+export const rejectDocument = async (documentId, patientId) => {
   const response = await axiosRequest.post(`/documents/required/${documentId}/reject`, {
     patientId,
-    notes,
   });
   if (!response.data?.success) {
     throw new Error(response.data?.error || 'Failed to reject document');

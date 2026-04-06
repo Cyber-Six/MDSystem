@@ -22,7 +22,7 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
 
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
-              prd.id as "submissionId", prd.status, prd.file, prd."reviewNotes",
+              prd.id as "submissionId", prd.status, prd.file,
               prd."recordedBy", prd."created_at" as "submittedAt",
               up.first_name as "recordedByFirstName", up.last_name as "recordedByLastName"
        FROM "rawDocumentTag" rdt
@@ -44,7 +44,6 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
             id: row.submissionId,
             status: row.status,
             file: row.file,
-            reviewNotes: row.reviewNotes,
             recordedBy: row.recordedBy
               ? {
                   id: row.recordedBy,
