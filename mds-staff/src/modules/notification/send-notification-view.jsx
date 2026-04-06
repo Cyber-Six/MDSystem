@@ -205,25 +205,23 @@ const SendNotificationView = () => {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-secondary-800 dark:text-white">
-          Send Notification
-        </h1>
-        <p className="text-sm text-secondary-500 dark:text-neutral-400 mt-1">
-          Broadcast a message to staff or patients.
-        </p>
+    <div className="p-4 max-w-2xl mx-auto">
+      {/* Page header — consistent with other module headers */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Send Notification</h1>
+          <p className="text-[11px] text-secondary-500 dark:text-neutral-400 mt-0.5">Broadcast a message to staff or patients.</p>
+        </div>
       </div>
 
       <form
         onSubmit={handleSend}
-        className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm p-6 space-y-6"
+        className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm p-4 space-y-4"
       >
         {/* ── Recipient type (admin only) ────────────────────────────────── */}
         {isAdmin && (
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-2">
+            <label className="block text-[10px] font-semibold uppercase tracking-widest text-secondary-500 dark:text-neutral-400 mb-1.5">
               Notify group
             </label>
             <div className="flex gap-2">
@@ -235,7 +233,7 @@ const SendNotificationView = () => {
                   key={opt.value}
                   type="button"
                   onClick={() => handleRecipientType(opt.value)}
-                  className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${
                     recipientType === opt.value
                       ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
                       : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-600'
@@ -250,12 +248,12 @@ const SendNotificationView = () => {
 
         {/* ── Recipients ────────────────────────────────────────────────── */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-2">
+          <label className="block text-[10px] font-semibold uppercase tracking-widest text-secondary-500 dark:text-neutral-400 mb-1.5">
             Recipients
           </label>
 
           {/* ── Select recipients panel ──────────────────────────────────── */}
-          <div className="space-y-3">
+          <div className="space-y-2">
               {/* Search input */}
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none">
@@ -293,24 +291,24 @@ const SendNotificationView = () => {
 
               {/* Search results */}
               {filteredResults.length > 0 && (
-                <ul className="max-h-48 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-600 divide-y divide-neutral-100 dark:divide-neutral-700">
+                <ul className="max-h-40 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-600 divide-y divide-neutral-100 dark:divide-neutral-700">
                   {filteredResults.map(user => (
                     <li
                       key={user.id}
-                      className="flex items-center justify-between px-3 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer"
+                      className="flex items-center justify-between px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer"
                       onClick={() => addRecipient(user)}
                     >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <p className="text-sm font-medium text-secondary-800 dark:text-white truncate leading-none m-0">
                           {recipientType === 'staff' ? user.name : formatPatientName(user)}
                         </p>
-                        <p className="text-xs text-secondary-400 dark:text-neutral-500 truncate">
+                        <p className="text-xs text-secondary-400 dark:text-neutral-500 truncate leading-none m-0">
                           {recipientType === 'staff'
                             ? [user.role, user.branch].filter(Boolean).join(' · ')
                             : [user.identifier, user.branch].filter(Boolean).join(' · ')}
                         </p>
                       </div>
-                      <span className="ml-2 shrink-0 text-primary-500 text-xs font-medium">Add</span>
+                      <span className="ml-3 shrink-0 text-primary-500 text-xs font-semibold">Add</span>
                     </li>
                   ))}
                 </ul>
@@ -329,14 +327,14 @@ const SendNotificationView = () => {
               {/* Selected chips */}
               {selected.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 mb-2">
+                  <p className="text-[10px] font-semibold text-secondary-500 dark:text-neutral-400 mb-1.5">
                     Selected ({selected.length})
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {selected.map(r => (
                       <span
                         key={r.id}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 rounded-full text-xs font-medium"
+                        className="flex items-center gap-1 px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 rounded-full text-[11px] font-medium"
                       >
                         {r.label}
                         <button
@@ -364,10 +362,10 @@ const SendNotificationView = () => {
 
         {/* ── Title ─────────────────────────────────────────────────────── */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-1.5">
             <label
               htmlFor="notification-title"
-              className="block text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400"
+              className="block text-[10px] font-semibold uppercase tracking-widest text-secondary-500 dark:text-neutral-400"
             >
               Title
             </label>
@@ -392,10 +390,10 @@ const SendNotificationView = () => {
 
         {/* ── Message ───────────────────────────────────────────────────── */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-1.5">
             <label
               htmlFor="notification-message"
-              className="block text-xs font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400"
+              className="block text-[10px] font-semibold uppercase tracking-widest text-secondary-500 dark:text-neutral-400"
             >
               Message
             </label>
@@ -415,7 +413,7 @@ const SendNotificationView = () => {
             onChange={e => {
               if (e.target.value.length <= MAX_MESSAGE_LENGTH) setMessage(e.target.value);
             }}
-            rows={4}
+            rows={3}
             placeholder="Write your notification message…"
             className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
           />
@@ -424,7 +422,7 @@ const SendNotificationView = () => {
         {/* ── Result feedback ───────────────────────────────────────────── */}
         {result && (
           <div
-            className={`rounded-lg px-4 py-3 text-sm ${
+            className={`rounded-lg px-3 py-2 text-xs ${
               result.type === 'success'
                 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700'
                 : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-700'
@@ -445,7 +443,7 @@ const SendNotificationView = () => {
           <button
             type="submit"
             disabled={!canSend}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:bg-neutral-300 dark:disabled:bg-neutral-600 text-white text-sm font-medium transition-colors disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-primary-600 hover:bg-primary-700 disabled:bg-neutral-300 dark:disabled:bg-neutral-600 text-white text-xs font-medium transition-colors disabled:cursor-not-allowed"
           >
             {isSending ? (
               <>

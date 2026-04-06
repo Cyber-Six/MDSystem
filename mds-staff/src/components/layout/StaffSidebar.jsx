@@ -144,14 +144,14 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
 
         {/* Navigation */}
         <nav className="flex-1 py-2 overflow-y-auto">
-          <ul className="space-y-0.5 px-2">
+          <ul className="flex flex-col gap-0.5 px-2">
             {navItems.map((item) => (
               <li key={item.path}>
                 <Link
                   to={item.path}
                   onClick={onClose}
                   title={item.label}
-                  className={`flex items-center gap-3 px-2 py-2 rounded-md text-sm font-medium transition-colors no-underline hover:no-underline ${
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium transition-colors no-underline hover:no-underline ${
                     isActive(item)
                       ? 'bg-primary-100 dark:bg-primary-900/30 text-secondary-700 dark:text-primary-400 hover:text-secondary-700 dark:hover:text-primary-400'
                       : 'text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-secondary-600 dark:hover:text-neutral-300'
@@ -188,13 +188,13 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
             {isExpanded && (
               <div className="min-w-0 flex-1">
                 <p
-                  className="text-xs font-medium text-secondary-800 dark:text-white leading-tight break-all"
+                  className="text-xs font-medium text-secondary-800 dark:text-white leading-none m-0 break-all"
                   title={profile?.email ?? ''}
                 >
                   {profile?.email ?? '—'}
                 </p>
                 <p
-                  className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight mt-0.5 break-all"
+                  className="text-xs text-secondary-500 dark:text-neutral-400 leading-none m-0 mt-0.5 break-all"
                   title={isAdmin ? 'Admin' : (profile?.role ?? '')}
                 >
                   {isAdmin ? 'Admin' : (profile?.role ?? '—')}

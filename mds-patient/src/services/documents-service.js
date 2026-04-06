@@ -18,7 +18,7 @@ export const getMyDocuments = async () => {
  * @returns {Blob}
  */
 export const downloadMyDocument = async (documentId) => {
-  const response = await axiosRequest.get(`/documents/my/${documentId}`, {
+  const response = await axiosRequest.get(`/documents/my/download/${documentId}`, {
     responseType: 'blob',
   });
   return response.data;

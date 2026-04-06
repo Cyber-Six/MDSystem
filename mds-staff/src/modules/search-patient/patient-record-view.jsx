@@ -732,21 +732,31 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       <section className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 text-white font-semibold flex items-center justify-center shrink-0">
+            <div
+              className="w-12 h-12 rounded-full text-white font-semibold flex items-center justify-center shrink-0"
+              style={{ background: '#C9A01E' }}
+            >
               {initials}
             </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
-                {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id} · {patient.program || patient.department || 'N/A'} · {patient.year || 'N/A'}
-              </p>
-              <div className="mt-1 flex items-center gap-1.5">
-                {['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(patient.status) && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status}</span>
+            <div className="min-w-0 flex flex-col gap-0.5">
+              <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id ? (
+                  <span className="text-xs font-mono text-secondary-500 dark:text-neutral-400">
+                    {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id}
+                  </span>
+                ) : null}
+                {(patient.program || patient.department) && (
+                  <span className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
+                    {patient.program || patient.department}{patient.year ? ` · ${patient.year}` : ''}
+                  </span>
                 )}
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">{patient.type}</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">{patient.type}</span>
+                {['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(patient.status) && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status}</span>
+                )}
                 {isMockPatient && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">Mock Mode</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">Mock Mode</span>
                 )}
               </div>
             </div>
