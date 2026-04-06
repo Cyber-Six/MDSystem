@@ -300,3 +300,13 @@ VALUES
 
 ('ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'Permission to access role management panel'),
 ('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates');
+
+-- User preferences table (stores portal settings per user)
+CREATE TABLE IF NOT EXISTS "UsersPreferences" (
+  id           INTEGER PRIMARY KEY REFERENCES "UserCredentials"(id) ON DELETE CASCADE,
+  appearance   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  notification JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id);

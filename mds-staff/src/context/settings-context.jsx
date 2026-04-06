@@ -1,5 +1,37 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { tokenService } from '../packages-core-adapter';
+import { tokenService, axiosRequest } from '../packages-core-adapter';
+
+// ── DB ↔ Frontend format converters ──────────────────────────────────────────
+// Converts between the flat localStorage shape and the nested API shape.
+
+function toBackendPrefs(s) {
+  return {
+    appearance:   { themeMode: s.themeMode, fontSize: s.fontSize, compactSidebar: s.compactSidebar },
+    notification: {
+      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume, soundByModule: s.soundByModule,
+      showBadges: s.showBadges, showBanners: s.showBanners, bannerErrorsOnly: s.bannerErrorsOnly,
+      bannerCompact: s.bannerCompact, bannerAutoDismiss: s.bannerAutoDismiss, bannerDismissDelay: s.bannerDismissDelay,
+    },
+  };
+}
+
+function mergeFromBackendPrefs(prefs) {
+  const flat = { ...(prefs.appearance || {}), ...(prefs.notification || {}) };
+  const merged = sanitizeSettings(flat);
+  if (prefs.notification?.soundByModule && typeof prefs.notification.soundByModule === 'object') {
+    merged.soundByModule = { ...DEFAULT_SETTINGS.soundByModule, ...merged.soundByModule };
+  }
+  return merged;
+}
+
+// Returns true only when a valid refresh token is present (user is logged in).
+function isAuthenticated() {
+  try {
+    return !!tokenService.TokenStorage.getRefreshToken();
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Default settings for new users.
@@ -154,6 +186,23 @@ export function SettingsProvider({ children }) {
   // Track which key we last loaded so we can detect user switches.
   const currentKeyRef = useRef(getUserSettingsKey());
 
+  // ── Sync from DB after login ──────────────────────────────────────────────
+  // Only fires when a refresh token is present (user is logged in).
+  // localStorage loads instantly; DB values overlay it once fetched.
+  useEffect(() => {
+    if (!isAuthenticated()) return; // no token — skip to avoid 401/SESSION_EXPIRED
+    let cancelled = false;
+    axiosRequest.get('/settings')
+      .then((res) => {
+        if (cancelled || !res.data?.ok) return;
+        const fromDb = mergeFromBackendPrefs(res.data.preferences);
+        if (!cancelled) { setSettings(fromDb); saveSettings(fromDb); }
+      })
+      .catch(() => { /* network or auth error — localStorage fallback stays */ });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Reload settings whenever the active user changes (login / logout in the same tab
   // or from another tab). This is triggered by:
   //   1. A custom 'mds:auth-changed' event dispatched by login/logout handlers.
@@ -224,6 +273,10 @@ export function SettingsProvider({ children }) {
     const updated = typeof next === 'function' ? next(settingsRef.current) : next;
     setSettings(updated);
     saveSettings(updated);
+    // Fire-and-forget: persist to DB if logged in (localStorage is the offline fallback)
+    if (isAuthenticated()) {
+      axiosRequest.patch('/settings', toBackendPrefs(updated)).catch(() => {});
+    }
   }, []);
 
   /**
