@@ -267,45 +267,48 @@ export default function MyDocumentsPage() {
                     <StatusBadge status={status} />
                   </div>
 
-                  {/* Request Notes - show when staff requested and added a note */}
-                  {doc.submission?.requestNotes && (
-                    <div className="mb-3 p-3 bg-primary-50 dark:bg-primary-900/10 rounded border border-primary-200 dark:border-primary-800">
-                      <p className="text-xs font-medium text-primary-700 dark:text-primary-400 mb-1">📋 Why this document is needed:</p>
-                      <p className="text-xs text-secondary-700 dark:text-neutral-300">{doc.submission.requestNotes}</p>
-                    </div>
-                  )}
-
-                  {/* Review Notes - show after approval/rejection */}
-                  {doc.submission?.reviewNotes && (isApproved || isRejected) && (
+                  {/* Notes - show when staff added notes (for any status) */}
+                  {doc.submission?.notes && (
                     <div className={`mb-3 p-3 rounded border text-xs ${
+                      status === 'Requested' ? 'bg-primary-50 dark:bg-primary-900/10 border-primary-200 dark:border-primary-800' :
                       isApproved ? 'bg-success-50 dark:bg-success-900/10 border-success-200 dark:border-success-800' :
-                      'bg-error-50 dark:bg-error-900/10 border-error-200 dark:border-error-800'
+                      isRejected ? 'bg-error-50 dark:bg-error-900/10 border-error-200 dark:border-error-800' :
+                      'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                     }`}>
                       <p className={`font-medium mb-1 ${
-                        isApproved ? 'text-success-700 dark:text-success-400' : 'text-error-700 dark:text-error-400'
+                        status === 'Requested' ? 'text-primary-700 dark:text-primary-400' :
+                        isApproved ? 'text-success-700 dark:text-success-400' : 
+                        isRejected ? 'text-error-700 dark:text-error-400' :
+                        'text-secondary-700 dark:text-neutral-400'
                       }`}>
-                        {isApproved ? '✓ Review Note:' : '✗ Rejection Reason:'}
+                        {status === 'Requested' ? '📋 Why this document is needed:' :
+                         isApproved ? '✓ Review Note:' : 
+                         isRejected ? '✗ Rejection Reason:' :
+                         'Note:'}
                       </p>
                       <p className={`${
-                        isApproved ? 'text-success-600 dark:text-success-300' : 'text-error-600 dark:text-error-300'
+                        status === 'Requested' ? 'text-secondary-700 dark:text-neutral-300' :
+                        isApproved ? 'text-success-600 dark:text-success-300' : 
+                        isRejected ? 'text-error-600 dark:text-error-300' :
+                        'text-secondary-700 dark:text-neutral-300'
                       }`}>
-                        {doc.submission.reviewNotes}
+                        {doc.submission.notes}
                       </p>
                     </div>
                   )}
 
-                  {/* Status Messages */}
-                  {needsReview && (
+                  {/* Status Messages - only show if no notes */}
+                  {needsReview && !doc.submission?.notes && (
                     <div className="mb-3 p-2 bg-warning-50 dark:bg-warning-900/10 border border-warning-200 dark:border-warning-700 rounded text-xs text-warning-700 dark:text-warning-300">
                       ⏳ Your document is being reviewed by staff. You'll be notified once it's approved or rejected.
                     </div>
                   )}
-                  {isApproved && !doc.submission?.reviewNotes && (
+                  {isApproved && !doc.submission?.notes && (
                     <div className="mb-3 p-2 bg-success-50 dark:bg-success-900/10 border border-success-200 dark:border-success-700 rounded text-xs text-success-700 dark:text-success-300">
                       ✓ This document has been approved by staff. No further action needed.
                     </div>
                   )}
-                  {isRejected && !doc.submission?.reviewNotes && (
+                  {isRejected && !doc.submission?.notes && (
                     <div className="mb-3 p-2 bg-error-50 dark:bg-error-900/10 border border-error-200 dark:border-error-700 rounded text-xs text-error-700 dark:text-error-300">
                       ✗ This document was rejected. Please contact your healthcare provider for more information.
                     </div>

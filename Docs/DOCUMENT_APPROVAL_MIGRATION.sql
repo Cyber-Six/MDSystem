@@ -9,13 +9,13 @@
 -- PostgreSQL doesn't allow direct modification of enums, so we need to add the new value
 ALTER TYPE "RawDocumentStatus" ADD VALUE IF NOT EXISTS 'Rejected';
 
--- Step 2: Add reviewNotes column for staff feedback
+-- Step 2: Add notes column for staff feedback
+-- This single column is used for:
+-- - Explaining why document is needed (when requesting)
+-- - Feedback when approving
+-- - Reason when rejecting
 ALTER TABLE "patientRawDocument" 
-ADD COLUMN IF NOT EXISTS "reviewNotes" TEXT;
-
--- Step 3: Add requestNotes column for request context (optional - for staff to explain why they need the document)
-ALTER TABLE "patientRawDocument" 
-ADD COLUMN IF NOT EXISTS "requestNotes" TEXT;
+ADD COLUMN IF NOT EXISTS "notes" TEXT;
 
 -- ============================================================
 -- VERIFICATION QUERIES (run these to confirm changes)
@@ -35,6 +35,5 @@ ADD COLUMN IF NOT EXISTS "requestNotes" TEXT;
 -- To rollback, you would need to:
 -- 1. Update any 'Rejected' records to another status
 -- 2. Recreate the enum without 'Rejected'
--- 3. Drop the reviewNotes and requestNotes columns:
---    ALTER TABLE "patientRawDocument" DROP COLUMN IF EXISTS "reviewNotes";
---    ALTER TABLE "patientRawDocument" DROP COLUMN IF EXISTS "requestNotes";
+-- 3. Drop the notes column:
+--    ALTER TABLE "patientRawDocument" DROP COLUMN IF EXISTS "notes";

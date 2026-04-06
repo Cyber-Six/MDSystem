@@ -280,24 +280,20 @@ export default function PatientDocumentsTab({ patient }) {
                     {doc.submission.submittedAt && (
                       <div>Submitted: {formatDate(doc.submission.submittedAt)}</div>
                     )}
-                    {doc.submission.requestNotes && (
-                      <div className="p-2 bg-primary-50 dark:bg-primary-900/10 rounded border border-primary-200 dark:border-primary-800">
-                        <span className="font-medium text-primary-600 dark:text-primary-400">Request Note:</span>
-                        <p className="mt-0.5 text-secondary-700 dark:text-neutral-300">{doc.submission.requestNotes}</p>
-                      </div>
-                    )}
-                    {doc.submission.reviewNotes && (
+                    {doc.submission.notes && (
                       <div className={`p-2 rounded border ${
+                        status === 'Requested' ? 'bg-primary-50 dark:bg-primary-900/10 border-primary-200 dark:border-primary-800' :
                         status === 'Recorded' ? 'bg-success-50 dark:bg-success-900/10 border-success-200 dark:border-success-800' :
                         status === 'Rejected' ? 'bg-error-50 dark:bg-error-900/10 border-error-200 dark:border-error-800' :
                         'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                       }`}>
                         <span className={`font-medium ${
+                          status === 'Requested' ? 'text-primary-600 dark:text-primary-400' :
                           status === 'Recorded' ? 'text-success-600 dark:text-success-400' :
                           status === 'Rejected' ? 'text-error-600 dark:text-error-400' :
                           'text-secondary-600 dark:text-neutral-400'
-                        }`}>Review Note:</span>
-                        <p className="mt-0.5 text-secondary-700 dark:text-neutral-300">{doc.submission.reviewNotes}</p>
+                        }`}>Note:</span>
+                        <p className="mt-0.5 text-secondary-700 dark:text-neutral-300">{doc.submission.notes}</p>
                       </div>
                     )}
                   </div>

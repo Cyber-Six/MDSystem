@@ -29,7 +29,7 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
               prd.id as "submissionId", prd.file, prd.status,
-              prd."recordedBy", prd."reviewNotes", prd."requestNotes",
+              prd."recordedBy", prd."notes",
               prd."archived_at", prd."created_at" as "submittedAt"
        FROM "rawDocumentTag" rdt
        LEFT JOIN "patientRawDocument" prd ON prd."documentTagId" = rdt.id
@@ -49,8 +49,7 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
             file: row.file,
             status: row.status,
             recordedBy: row.recordedBy,
-            reviewNotes: row.reviewNotes,
-            requestNotes: row.requestNotes,
+            notes: row.notes,
             archivedAt: row.archived_at,
             submittedAt: row.submittedAt,
           }
@@ -278,7 +277,7 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
     // Update to Recorded status with optional notes
     const updateResult = await client.query(
       `UPDATE "patientRawDocument"
-       SET status = 'Recorded', "recordedBy" = $1, "reviewNotes" = $2
+       SET status = 'Recorded', "recordedBy" = $1, "notes" = $2
        WHERE "documentTagId" = $3 AND "patientId" = $4
        RETURNING id`,
       [req.user.id, notes || null, documentId, patientId]
@@ -358,7 +357,7 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
     // Update to Rejected status with optional notes
     const updateResult = await client.query(
       `UPDATE "patientRawDocument"
-       SET status = 'Rejected', "recordedBy" = $1, "reviewNotes" = $2
+       SET status = 'Rejected', "recordedBy" = $1, "notes" = $2
        WHERE "documentTagId" = $3 AND "patientId" = $4
        RETURNING id`,
       [req.user.id, notes || null, documentId, patientId]
@@ -453,7 +452,7 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
       // Update existing submission to 'Requested' status with notes
       const updateResult = await client.query(
         `UPDATE "patientRawDocument"
-         SET status = 'Requested', "recordedBy" = $1, "requestNotes" = $2
+         SET status = 'Requested', "recordedBy" = $1, "notes" = $2
          WHERE "documentTagId" = $3 AND "patientId" = $4
          RETURNING id`,
         [req.user.id, notes || null, documentId, patientId]
@@ -462,7 +461,7 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
     } else {
       // Create new submission with 'Requested' status and notes
       const insertResult = await client.query(
-        `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", status, "recordedBy", "requestNotes")
+        `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", status, "recordedBy", "notes")
          VALUES ($1, $2, 'Requested', $3, $4)
          RETURNING id`,
         [documentId, patientId, req.user.id, notes || null]
