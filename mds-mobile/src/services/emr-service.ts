@@ -932,7 +932,10 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
           date_of_birth sex civil_status nationality religion
           contactNumber present_address province_address
         }
-        branchId: getBranchIdentifier { identifier }
+        branchId: getPersonalRecord {
+          branch
+          identifier
+        }
       }`, {}, { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
@@ -943,14 +946,15 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
           secondContact { contactName relationship contactNumber address }
         }
         medicalHistory: getMedicalHistory { conditions { conditionId relationship } notes }
-        allergyProfile: getAllergyProfile { allergies { allergenCatalogId status } notes }
-        hospitalizationProfile: getHospitalizationProfile { hospitalizations { conditionId admissionDate notes } notes }
+        allergyProfile: getAllergyProfile { allergies { allergenCatalogId status severity } notes }
+        hospitalizationProfile: getHospitalizationProfile { hospitalizations { conditionId admissionDate dischargeDate notes } notes }
         operationProfile: getOperationProfile { operations { procedureId operationDate notes } notes }
         medicationProfile: getMedicationProfile { medications { medicineId description } notes }
-        immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId } notes }
-        lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption }
+        immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate } notes }
+        lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency }
         visualAcuity: getVisualAcuityProfile { notes acuity { left_eye right_eye recorded_at } }
         dentalHistory: getDentalHistory { seenByDentist lastDentalCleaning lastVisitDate }
+        dentalProcedureProfile: getDentalProcedureProfile { procedures { procedureTypeId } }
         dentalPhotoRecord: getDentalPhotoRecord { upperTeeth lowerTeeth }
         oralAppliance: getOralApplianceProfile { appliances { tagId arch } }
         obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }

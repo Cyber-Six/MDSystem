@@ -97,6 +97,15 @@ const Query = {
     }
     return await Wrapper.Query._listSchedulerWhitelist(_, { schedulerId, offset, limit }, { user, res });
   },
+
+  checkDateOccupancy: async (_, { schedulerId, date }, { user, res }) => {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, scheduleBranch);
+    if (!isPermitted) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._checkDateOccupancy(_, { schedulerId, date }, { user, res });
+  },
 };
 
 const Mutation = {
@@ -258,6 +267,15 @@ const Mutation = {
     }
     
     return await Wrapper.Mutation._updateDateIdentity(_, { schedulerId, date, input }, { user, res });
+  },
+
+  cancelDateAppointments: async (_, { schedulerId, date, reason }, { user, res }) => {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Mutation._cancelDateAppointments(_, { schedulerId, date, reason }, { user, res });
   }
 };
 
