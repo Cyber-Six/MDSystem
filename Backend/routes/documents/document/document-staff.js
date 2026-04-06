@@ -237,6 +237,111 @@ router.post('/required/:documentId', jwtProtect('medical'), async (req, res) => 
   }
 });
 
+/**
+ * POST /documents/required/:documentId/request
+ * Request a document from patient (create or update submission with 'Requested' status)
+ * Body: patientId (required)
+ */
+router.post('/required/:documentId/request', jwtProtect('medical'), async (req, res) => {
+  const client = await connect();
+  try {
+    await client.query('BEGIN');
+
+    const { documentId } = req.params;
+    const { patientId } = req.body;
+
+    if (!patientId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    // Check if the document tag exists
+    const tagResult = await client.query(
+      `SELECT id, label FROM "rawDocumentTag" WHERE id = $1 AND "isActive" = true`,
+      [documentId]
+    );
+
+    if (tagResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'DOCUMENT_TAG_NOT_FOUND' });
+    }
+
+    // Check if submission already exists
+    const existingResult = await client.query(
+      `SELECT id, status FROM "patientRawDocument"
+       WHERE "documentTagId" = $1 AND "patientId" = $2`,
+      [documentId, patientId]
+    );
+
+    const existing = existingResult.rows[0];
+
+    // Validate: cannot request if already recorded/archived
+    if (existing?.status === 'Recorded' || existing?.status === 'Archived') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'DOCUMENT_ALREADY_PROCESSED',
+        message: 'This document has already been recorded or archived.',
+      });
+    }
+
+    let submissionId;
+
+    if (existing) {
+      // Update existing submission to 'Requested' status
+      const updateResult = await client.query(
+        `UPDATE "patientRawDocument"
+         SET status = 'Requested', "recordedBy" = $1
+         WHERE "documentTagId" = $2 AND "patientId" = $3
+         RETURNING id`,
+        [req.user.id, documentId, patientId]
+      );
+      submissionId = updateResult.rows[0].id;
+    } else {
+      // Create new submission with 'Requested' status
+      const insertResult = await client.query(
+        `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", status, "recordedBy")
+         VALUES ($1, $2, 'Requested', $3)
+         RETURNING id`,
+        [documentId, patientId, req.user.id]
+      );
+      submissionId = insertResult.rows[0].id;
+    }
+
+    await client.query('COMMIT');
+
+    // Notify patient about the document request
+    try {
+      const tagLabel = tagResult.rows[0].label;
+      await notifyUser(
+        String(patientId),
+        'document:requested',
+        {
+          documentId,
+          label: tagLabel,
+          message: `Your healthcare provider has requested you to submit: ${tagLabel}`,
+        }
+      );
+    } catch (notifErr) {
+      logger.warn('Document request notification failed', { error: notifErr.message, documentId });
+    }
+
+    logger.info('Document requested from patient', {
+      documentId,
+      patientId,
+      submissionId,
+      requestedBy: req.user.id,
+    });
+
+    res.json({ success: true, submissionId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error('Error requesting document', { error: err.message });
+    res.status(500).json({ error: 'REQUEST_FAILED', message: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ============================================================
 // GENERATED DOCUMENTS - TEMPLATE INFO
 // ============================================================

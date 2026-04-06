@@ -35,28 +35,28 @@ const AppointmentCard = ({ appointment, onViewDetails }) => {
     >
       {/* Left — patient id + slot id */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
-        <div className="w-7 h-7 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-[10px] font-semibold text-secondary-600 dark:text-neutral-300 flex-shrink-0">
+        <div className="w-7 h-7 bg-neutral-200 dark:bg-neutral-600 rounded-full flex items-center justify-center text-xs font-semibold text-secondary-600 dark:text-neutral-300 flex-shrink-0">
           {patientId?.toString().slice(-2) || '?'}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-secondary-800 dark:text-white truncate leading-tight">Patient {patientId}</p>
-          <p className="text-[11px] text-secondary-500 dark:text-neutral-400 truncate leading-tight">Slot #{id}</p>
+          <p className="text-base font-medium text-secondary-800 dark:text-white truncate leading-tight">Patient {patientId}</p>
+          <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate leading-tight">Slot #{id}</p>
         </div>
       </div>
 
       {/* Right — session, date, status */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
         {session && (
-          <span className={`hidden sm:inline px-1.5 py-0.5 text-[11px] font-medium rounded ${SESSION_STYLES[session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300'}`}>
+          <span className={`hidden sm:inline px-1.5 py-0.5 text-xs font-medium rounded ${SESSION_STYLES[session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300'}`}>
             {session}
           </span>
         )}
         {created_at && (
-          <span className="text-[11px] text-secondary-500 dark:text-neutral-400 hidden md:inline">
+          <span className="text-xs text-secondary-500 dark:text-neutral-400 hidden md:inline">
             {new Date(created_at).toLocaleDateString()}
           </span>
         )}
-        <span className={`px-1.5 py-0.5 text-[11px] font-medium rounded ${STATUS_STYLES[status] || 'bg-neutral-100 text-neutral-600'}`}>
+        <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${STATUS_STYLES[status] || 'bg-neutral-100 text-neutral-600'}`}>
           {status}
         </span>
       </div>

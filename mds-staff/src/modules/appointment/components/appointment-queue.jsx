@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import { searchByStatus, getStatusCounts, listAllSchedulers } from '../staff-appointment-service';
 
 /* ── constants ─────────────────────────────────────── */
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 15;
 const SEARCH_DEBOUNCE_MS = 300;
 
 const STATUS_STYLES = {
@@ -61,6 +61,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   const [hasMore,     setHasMore]     = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // Refs — sentinel for IntersectionObserver, in-flight lock, stale-request guard
+  const sentinelRef     = useRef(null);
+  const loadingMoreRef  = useRef(false);  // lock without triggering re-renders
+  const fetchGenRef     = useRef(0);      // incremented on every fresh fetch
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -69,10 +74,13 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     return () => clearTimeout(timer);
   }, [search]);
 
-  /** Fetch fresh status counts from server */
-  const refreshCounts = useCallback(async () => {
+  /** Fetch fresh status counts from server, respecting current filters */
+  const refreshCounts = useCallback(async (date, schedulerId) => {
     try {
-      const counts = await getStatusCounts();
+      const counts = await getStatusCounts({
+        date: date || null,
+        schedulerId: schedulerId || null,
+      });
       const updated = {};
       for (const tab of TABS) {
         updated[tab.key] = counts[tab.key] || 0;
@@ -85,18 +93,24 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
 
   /* Fetch appointments (first page or fresh load) */
   const fetchAppointments = useCallback(async (status, date, schedulerId) => {
+    // Bump generation — any in-flight fetch from a previous call will see a
+    // mismatch and discard its result, preventing stale overwrites.
+    const gen = ++fetchGenRef.current;
     setLoading(true);
+    setHasMore(false);
     setOffset(0);
     try {
       const data = await searchByStatus(status, 0, PAGE_SIZE, { date: date || null, schedulerId: schedulerId || null });
+      if (gen !== fetchGenRef.current) return; // stale response — discard
       setAppointments(data || []);
       setHasMore((data?.length ?? 0) === PAGE_SIZE);
     } catch (err) {
+      if (gen !== fetchGenRef.current) return;
       console.error('Failed to fetch appointments:', err);
       setAppointments([]);
       setHasMore(false);
     } finally {
-      setLoading(false);
+      if (gen === fetchGenRef.current) setLoading(false);
     }
   }, []);
 
@@ -120,11 +134,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         return updated;
       });
       // Also re-fetch actual counts from server to stay in sync
-      refreshCounts();
+      refreshCounts(filterDate, filterSchedulerId);
     },
     refresh: () => {
       fetchAppointments(activeTab, filterDate, filterSchedulerId);
-      refreshCounts();
+      refreshCounts(filterDate, filterSchedulerId);
     },
   }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId]);
 
@@ -133,28 +147,40 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     listAllSchedulers().then(setSchedulers).catch(() => {});
   }, []);
 
-  /* Load status counts once on mount */
+  /* Load status counts — on mount and whenever filters change.
+     filterDate/filterSchedulerId default to '' which coerces to null
+     in refreshCounts ('' || null), so "all schedulers / all dates" is
+     handled correctly by the backend when no filter is selected. */
+  const isFirstCountFetch = useRef(true);
   useEffect(() => {
-    const loadCounts = async () => {
-      try {
+    const run = async () => {
+      if (isFirstCountFetch.current) {
+        isFirstCountFetch.current = false;
         setLoadingCounts(true);
-        await refreshCounts();
-      } finally {
-        setLoadingCounts(false);
+        try {
+          await refreshCounts(filterDate, filterSchedulerId);
+        } finally {
+          setLoadingCounts(false);
+        }
+      } else {
+        refreshCounts(filterDate, filterSchedulerId);
       }
     };
-    loadCounts();
-  }, [refreshCounts]);
+    run();
+  }, [filterDate, filterSchedulerId, refreshCounts]);
 
   /* Fetch appointments whenever the active tab or active filters change */
   useEffect(() => {
     fetchAppointments(activeTab, filterDate, filterSchedulerId);
   }, [activeTab, filterDate, filterSchedulerId, fetchAppointments]);
 
-  /* Load more (pagination) */
+  /* Load next page — called automatically by IntersectionObserver */
   const handleLoadMore = useCallback(async () => {
-    const nextOffset = offset + PAGE_SIZE;
+    // Guard: skip if a load is already in-flight or there is nothing more
+    if (loadingMoreRef.current || !hasMore) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
+    const nextOffset = offset + PAGE_SIZE;
     try {
       const data = await searchByStatus(activeTab, nextOffset, PAGE_SIZE, { date: filterDate || null, schedulerId: filterSchedulerId || null });
       setAppointments((prev) => [...prev, ...(data || [])]);
@@ -163,9 +189,22 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     } catch (err) {
       console.error('Failed to load more appointments:', err);
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [activeTab, offset, filterDate, filterSchedulerId]);
+  }, [activeTab, offset, hasMore, filterDate, filterSchedulerId]);
+
+  /* IntersectionObserver — auto-trigger next page when sentinel enters viewport */
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) handleLoadMore(); },
+      { rootMargin: '120px', threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [handleLoadMore]);
 
   /* Client-side search filter on patientIdentifier / name / email */
   const rows = useMemo(() => {
@@ -185,7 +224,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     if (key === activeTab) {
       // Same tab clicked — force refresh
       fetchAppointments(key, filterDate, filterSchedulerId);
-      refreshCounts();
+      refreshCounts(filterDate, filterSchedulerId);
     } else {
       setActiveTab(key);
     }
@@ -195,12 +234,12 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
 
       {/* ─── Tabs ─── */}
-      <div className="flex border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto">
+      <div className="flex border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto overflow-y-hidden min-h-[56px]">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => handleTabChange(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
               activeTab === tab.key
                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                 : 'border-transparent text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
@@ -211,7 +250,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             </svg>
             {tab.label}
             {loadingCounts ? (
-              <span className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold animate-pulse ${
+              <span className={`ml-0.5 px-2 py-0.5 text-sm rounded-full font-semibold animate-pulse ${
                 activeTab === tab.key
                   ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                   : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
@@ -220,7 +259,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
               </span>
             ) : (
               tabCounts[tab.key] !== undefined && (
-                <span className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-semibold ${
+                <span className={`ml-0.5 px-2 py-0.5 text-sm rounded-full font-semibold ${
                   activeTab === tab.key
                     ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                     : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-500 dark:text-neutral-400'
@@ -245,7 +284,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             placeholder="Search by name, ID, or email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+            className="w-full pl-8 pr-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
           />
         </div>
 
@@ -259,7 +298,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
               type="date"
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              className="pl-8 pr-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
           {filterDate && (
@@ -283,7 +322,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           <select
             value={filterSchedulerId}
             onChange={(e) => setFilterSchedulerId(e.target.value)}
-            className="pl-8 pr-6 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none max-w-[180px]"
+            className="pl-8 pr-6 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none max-w-[180px]"
           >
             <option value="">All Schedulers</option>
             {schedulers.map((s) => (
@@ -296,7 +335,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         {(filterDate || filterSchedulerId) && (
           <button
             onClick={() => { setFilterDate(''); setFilterSchedulerId(''); }}
-            className="px-2.5 py-1.5 text-xs bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-md text-error-600 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/40 transition-colors whitespace-nowrap"
+            className="px-2.5 py-1.5 text-sm bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-md text-error-600 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/40 transition-colors whitespace-nowrap"
           >
             Clear Filters
           </button>
@@ -305,11 +344,11 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         {/* Result count + refresh */}
         <button
           onClick={() => { fetchAppointments(activeTab, filterDate, filterSchedulerId); refreshCounts(); }}
-          className="px-2.5 py-1.5 text-xs bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-600 transition-colors"
+          className="px-2.5 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-600 transition-colors"
         >
           Refresh
         </button>
-        <span className="text-[11px] text-secondary-400 dark:text-neutral-500 whitespace-nowrap">
+        <span className="text-xs text-secondary-400 dark:text-neutral-500 whitespace-nowrap">
           {rows.length} result{rows.length !== 1 ? 's' : ''}
         </span>
       </div>
@@ -319,7 +358,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
         {loading ? (
           <div className="px-4 py-12 text-center">
             <div className="animate-spin mx-auto w-6 h-6 rounded-full border-2 border-current/20 border-t-current text-primary-500 mb-2" />
-            <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading appointments...</p>
+            <p className="text-sm text-secondary-400 dark:text-neutral-500">Loading appointments...</p>
           </div>
         ) : (
           <>
@@ -327,7 +366,7 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             <thead>
               <tr className="bg-neutral-50/60 dark:bg-neutral-700/30">
                 {['Patient', 'Scheduled', 'Session', 'Status', 'Purpose'].map((h) => (
-                  <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider whitespace-nowrap" style={{ width: '20%' }}>
+                  <th key={h} className="text-left px-4 py-2.5 text-sm font-bold text-secondary-700 dark:text-neutral-200 uppercase tracking-wider whitespace-nowrap" style={{ width: '20%' }}>
                     {h}
                   </th>
                 ))}
@@ -341,38 +380,38 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                   className="hover:bg-primary-50/40 dark:hover:bg-neutral-700/30 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-2.5" style={{ width: '20%' }}>
-                    <p className="text-sm font-semibold text-secondary-900 dark:text-neutral-100">
+                    <p className="text-base font-semibold text-secondary-900 dark:text-neutral-100">
                       {apt.patientIdentifier ?? apt.patientId}
                     </p>
                     {apt.patientName && (
-                      <p className="text-xs text-secondary-700 dark:text-neutral-300 mt-0.5">{apt.patientName}</p>
+                      <p className="text-sm text-secondary-700 dark:text-neutral-300 mt-0.5">{apt.patientName}</p>
                     )}
                   </td>
                   <td className="px-4 py-2.5" style={{ width: '20%' }}>
                     {apt.scheduledDate ? (
                       <div>
-                        <p className="text-sm font-semibold text-secondary-900 dark:text-neutral-100">
+                        <p className="text-base font-semibold text-secondary-900 dark:text-neutral-100">
                           {new Date(apt.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
                         </p>
                         {apt.schedulerLabel && (
-                          <p className="text-xs text-secondary-700 dark:text-neutral-300 mt-0.5 truncate max-w-[160px]">{apt.schedulerLabel}</p>
+                          <p className="text-sm text-secondary-700 dark:text-neutral-300 mt-0.5 truncate max-w-[160px]">{apt.schedulerLabel}</p>
                         )}
                       </div>
                     ) : (
-                      <span className="text-sm text-secondary-600 dark:text-neutral-400">—</span>
+                      <span className="text-base text-secondary-600 dark:text-neutral-400">—</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5" style={{ width: '20%' }}>
-                    <span className={`inline-block px-2.5 py-1 text-xs font-semibold rounded ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200'}`}>
+                    <span className={`inline-block px-2.5 py-1 text-sm font-semibold rounded ${SESSION_STYLES[apt.session] || 'bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200'}`}>
                       {apt.session}
                     </span>
                   </td>
                   <td className="px-4 py-2.5" style={{ width: '20%' }}>
-                    <span className={`inline-block px-2.5 py-1 text-xs font-semibold rounded ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-700'}`}>
+                    <span className={`inline-block px-2.5 py-1 text-sm font-semibold rounded ${STATUS_STYLES[apt.status] || 'bg-neutral-100 text-neutral-700'}`}>
                       {apt.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-sm text-secondary-800 dark:text-neutral-200 truncate" style={{ width: '20%' }}>
+                  <td className="px-4 py-2.5 text-base text-secondary-800 dark:text-neutral-200 truncate" style={{ width: '20%' }}>
                     {apt.purpose ? (
                       <span title={apt.purpose}>{apt.purpose.length > 40 ? apt.purpose.slice(0, 40) + '…' : apt.purpose}</span>
                     ) : '—'}
@@ -384,8 +423,8 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
                     <svg className="mx-auto w-8 h-8 text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
-                    <p className="text-sm font-medium text-secondary-500 dark:text-neutral-400">No appointments found</p>
-                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">
+                    <p className="text-base font-medium text-secondary-500 dark:text-neutral-400">No appointments found</p>
+                    <p className="text-sm text-secondary-400 dark:text-neutral-500 mt-0.5">
                       {filterDate || filterSchedulerId
                         ? 'Try adjusting or clearing the active filters'
                         : `No ${activeTab} appointments at the moment`}
@@ -396,21 +435,18 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             </tbody>
           </table>
 
-          {/* ─── Load More (Pagination) ─── */}
-          {hasMore && (
-            <div className="px-4 py-3 border-t border-neutral-100 dark:border-neutral-700/60 text-center">
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="px-4 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors disabled:opacity-50"
-              >
-                {loadingMore ? 'Loading…' : 'Load more'}
-              </button>
-            </div>
-          )}
           </>
         )}
       </div>
+
+      {/* ─── Infinite scroll sentinel ─── */}
+      {/* Sits outside overflow-x-auto so the vertical IntersectionObserver fires correctly */}
+      {hasMore && <div ref={sentinelRef} className="h-px" aria-hidden />}
+      {loadingMore && (
+        <div className="py-3 flex justify-center border-t border-neutral-100 dark:border-neutral-700/60">
+          <div className="animate-spin w-4 h-4 rounded-full border-2 border-current/20 border-t-current text-primary-500" />
+        </div>
+      )}
     </div>
   );
 });

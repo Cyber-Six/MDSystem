@@ -105,18 +105,19 @@ export const searchByStatus = async (status, offset = 0, limit = 20, { date, sch
 };
 
 /**
- * Get appointment counts grouped by status (single query).
+ * Get appointment counts grouped by status, optionally filtered.
+ * @param {{ schedulerId?: string, date?: string }} [filters]
  * @returns {Promise<Object>} e.g. { Pending: 5, Scheduled: 10, ... }
  */
-export const getStatusCounts = async () => {
+export const getStatusCounts = async ({ schedulerId, date } = {}) => {
   const data = await sendGraphQL(`
-    query GetAppointmentStatusCounts {
-      getAppointmentStatusCounts {
+    query GetAppointmentStatusCounts($schedulerId: ID, $date: Date) {
+      getAppointmentStatusCounts(schedulerId: $schedulerId, date: $date) {
         status
         count
       }
     }
-  `);
+  `, { schedulerId: schedulerId || null, date: date || null });
   const counts = {};
   for (const { status, count } of data.getAppointmentStatusCounts) {
     counts[status] = count;

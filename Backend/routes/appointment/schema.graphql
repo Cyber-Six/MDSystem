@@ -209,7 +209,7 @@ type Query {
   listMonthAvailability(schedulerId: ID!, startDate: Date!, endDate: Date!): [ScheduleDateEntity!]
 
   searchAppointmentStatuses(status: SCHEDULING_STATUS!, location: LOCATION_DESIGNATION, date: Date, schedulerId: ID, offset: Int, limit: Int): [patientSlot!]
-  getAppointmentStatusCounts(location: LOCATION_DESIGNATION): [StatusCount!]
+  getAppointmentStatusCounts(location: LOCATION_DESIGNATION, schedulerId: ID, date: Date): [StatusCount!]
   listSchedulerWhitelist(schedulerId: ID!, offset: Int, limit: Int): [WhitelistEntry!]
 }
 

@@ -1,5 +1,7 @@
-const { rateLimitIP } = require("../redis.js");
+const { rateLimitIP, getIPRateLimitTTL, rateLimitIPCount } = require("../redis.js");
 const { detectRoleFromEmail } = require("../../utils/validator.js");
+const { delayRandom } = require("../../utils/security.js");
+
 const { mapRoleToProfile, rateLimitMatrix } = require("../data/matrix.js");
 const { detectPortalFromSubdomain } = require("../../utils/portal.js");
 
@@ -16,9 +18,14 @@ function ipRateLimiter(profileName="genericLimiter", route = "r") {
 
     const ipBlocked = await rateLimitIP(ip, route, ipMax, ipWindow);
     if (ipBlocked) {
+      const ttl = await getIPRateLimitTTL(ip, route);
+      const count = await rateLimitIPCount(ip, route);
+      const { min, max } = { min: (count + 1) * 500, max: (count + 1) * 1000 };
+      await delayRandom(min < 500 ? 500 : min, max > 5000 ? 5000 : max);
       return res.status(429).json({
         error: "RATE_LIMITED",
-        message: "Too many requests. Please slow down."
+        message: `Too many requests. Please try again in ${ttl} seconds.`,
+        retryAfterSeconds: ttl
       });
     }
 

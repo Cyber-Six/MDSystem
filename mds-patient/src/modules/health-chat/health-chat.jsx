@@ -113,6 +113,14 @@ const HealthChat = () => {
     if (data?.chatId) loadMessages(data.chatId);
   }, [loadMessages]);
 
+  // Handle staff change (transfer/takeover) — update ticket medical info for header
+  const handleStaffChanged = useCallback((newMedical) => {
+    setTicket(prev => {
+      if (!prev) return prev;
+      return { ...prev, medical: newMedical, medicalId: newMedical.id };
+    });
+  }, []);
+
   // Socket hook
   const { isConnected: isSocketConnected, socketError, emitTyping } = useHealthChatSocket({
     chatId: ticket?.id,
@@ -121,7 +129,8 @@ const HealthChat = () => {
     onTyping: handleTypingIndicator,
     onTicketApproved: handleTicketApproved,
     onTicketClosed: handleTicketClosed,
-    onSessionExtended: handleSessionExtended
+    onSessionExtended: handleSessionExtended,
+    onStaffChanged: handleStaffChanged,
   });
 
   const scrollToBottom = useCallback(() => {
@@ -695,6 +704,10 @@ const HealthChat = () => {
                 ticketStatus={ticket.status}
                 ticketPurpose={ticket.purpose}
                 ticketCreatedAt={ticket.session_start}
+                staffName={ticket.medical?.firstName
+                  ? `${ticket.medical.firstName}${ticket.medical.lastName ? ' ' + ticket.medical.lastName : ''}`
+                  : null}
+                staffRole={ticket.medical?.role || null}
                 isStaffTyping={isStaffTyping}
                 attachedFile={attachedFile}
                 onFileStaged={setAttachedFile}

@@ -161,7 +161,7 @@ const DaySlotEditor = ({
         <div className="flex-1 flex items-center justify-center px-3">
           <div className="flex items-center gap-2 text-secondary-400 dark:text-neutral-500">
             <Calendar className="w-4 h-4" />
-            <p className="text-xs font-medium">Click a date on the calendar to view and edit</p>
+            <p className="text-sm font-medium">Click a date on the calendar to view and edit</p>
           </div>
         </div>
       ) : loading ? (
@@ -169,7 +169,7 @@ const DaySlotEditor = ({
         <div className="flex-1 flex items-center justify-center px-3">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
-            <span className="text-xs text-secondary-500 dark:text-neutral-400">Loading...</span>
+            <span className="text-sm text-secondary-500 dark:text-neutral-400">Loading...</span>
           </div>
         </div>
       ) : !isDateAvailable && !isCustomDate ? (
@@ -179,19 +179,19 @@ const DaySlotEditor = ({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <Calendar className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0" />
-                <span className="text-xs font-semibold text-secondary-800 dark:text-white truncate">{formatDateShort(selectedDate)}</span>
-                <span className="px-1.5 py-px text-[9px] font-semibold bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 rounded-full uppercase">
+                <span className="text-sm font-semibold text-secondary-800 dark:text-white truncate">{formatDateShort(selectedDate)}</span>
+                <span className="px-1.5 py-px text-xs font-semibold bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 rounded-full uppercase">
                   Closed
                 </span>
               </div>
-              <p className="text-[10px] text-secondary-400 dark:text-neutral-500 ml-5">
+              <p className="text-xs text-secondary-400 dark:text-neutral-500 ml-5">
                 {getDayOfWeek(selectedDate)} is not in the schedule. Enable it to accept appointments.
               </p>
             </div>
             <button
               onClick={handleAddAsCustomDate}
               disabled={saving}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm flex-shrink-0 ml-2"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm flex-shrink-0 ml-2"
             >
               {saving ? (
                 <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -209,14 +209,14 @@ const DaySlotEditor = ({
           <div className="flex items-center justify-between px-3 pt-2 pb-1">
             <div className="flex items-center gap-1.5 min-w-0">
               <Calendar className="w-3.5 h-3.5 text-primary-500 flex-shrink-0" />
-              <span className="text-xs font-semibold text-secondary-800 dark:text-white truncate">{formatDateShort(selectedDate)}</span>
+              <span className="text-sm font-semibold text-secondary-800 dark:text-white truncate">{formatDateShort(selectedDate)}</span>
               {isCustomDate && (
-                <span className="px-1.5 py-px text-[9px] font-semibold bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-full flex-shrink-0">
+                <span className="px-1.5 py-px text-xs font-semibold bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-full flex-shrink-0">
                   Custom
                 </span>
               )}
               {isCustomized && !isCustomDate && (
-                <span className="px-1.5 py-px text-[9px] font-semibold bg-accent-100 dark:bg-accent-900/30 text-accent-600 dark:text-accent-400 rounded-full flex-shrink-0">
+                <span className="px-1.5 py-px text-xs font-semibold bg-accent-100 dark:bg-accent-900/30 text-accent-600 dark:text-accent-400 rounded-full flex-shrink-0">
                   Modified
                 </span>
               )}
@@ -226,7 +226,7 @@ const DaySlotEditor = ({
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-white bg-primary-500 hover:bg-primary-600 rounded transition-colors disabled:opacity-50"
                 >
                   {saving ? (
                     <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -256,7 +256,7 @@ const DaySlotEditor = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
                   <Sun className="w-3 h-3 text-accent-500" />
-                  <span className="text-[10px] font-semibold text-secondary-700 dark:text-neutral-300">Morning</span>
+                  <span className="text-xs font-semibold text-secondary-700 dark:text-neutral-300">Morning</span>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button
@@ -270,7 +270,7 @@ const DaySlotEditor = ({
                     inputMode="numeric"
                     value={morningSlots}
                     onChange={handleSlotChange(setMorningSlots)}
-                    className="w-10 text-center px-1 py-0.5 text-xs font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    className="w-10 text-center px-1 py-0.5 text-sm font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                   <button
                     onClick={() => setMorningSlots(morningSlots + 1)}
@@ -280,7 +280,7 @@ const DaySlotEditor = ({
                   </button>
                 </div>
               </div>
-              <div className="flex justify-between text-[10px] mt-1">
+              <div className="flex justify-between text-xs mt-1">
                 <span className="text-secondary-400">
                   {displayMorningRegistered}<span className="text-secondary-300 mx-0.5">/</span>{displayMorningPending}p
                 </span>
@@ -295,7 +295,7 @@ const DaySlotEditor = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
                   <Moon className="w-3 h-3 text-warning-500" />
-                  <span className="text-[10px] font-semibold text-secondary-700 dark:text-neutral-300">Afternoon</span>
+                  <span className="text-xs font-semibold text-secondary-700 dark:text-neutral-300">Afternoon</span>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button
@@ -309,7 +309,7 @@ const DaySlotEditor = ({
                     inputMode="numeric"
                     value={afternoonSlots}
                     onChange={handleSlotChange(setAfternoonSlots)}
-                    className="w-10 text-center px-1 py-0.5 text-xs font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    className="w-10 text-center px-1 py-0.5 text-sm font-bold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
                   />
                   <button
                     onClick={() => setAfternoonSlots(afternoonSlots + 1)}
@@ -319,7 +319,7 @@ const DaySlotEditor = ({
                   </button>
                 </div>
               </div>
-              <div className="flex justify-between text-[10px] mt-1">
+              <div className="flex justify-between text-xs mt-1">
                 <span className="text-secondary-400">
                   {displayAfternoonRegistered}<span className="text-secondary-300 mx-0.5">/</span>{displayAfternoonPending}p
                 </span>
@@ -337,7 +337,7 @@ const DaySlotEditor = ({
               {dayEvents.map((ev) => (
                 <span
                   key={ev.id}
-                  className={`px-1.5 py-0.5 text-[9px] font-medium rounded ${
+                  className={`px-1.5 py-0.5 text-xs font-medium rounded ${
                     ev.effect === 'Suspend'
                       ? 'bg-error-100 dark:bg-error-900/30 text-error-600 dark:text-error-400'
                       : 'bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400'

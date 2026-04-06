@@ -29,6 +29,8 @@ const ChatBox = ({
   ticketStatus,
   ticketPurpose,
   ticketCreatedAt,
+  staffName,
+  staffRole,
   isStaffTyping,
   attachedFile,
   onFileStaged,
@@ -144,13 +146,15 @@ const ChatBox = ({
             <p
               className="font-heading font-semibold text-sm text-secondary-800 dark:text-white leading-tight m-0"
             >
-              Medical Staff
+              {staffName || 'Medical Staff'}
             </p>
             <p
               className="text-xs leading-tight m-0 mt-0.5 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400"
             >
               {isStaffTyping ? (
                 <span className="text-primary-600 font-medium">Typing…</span>
+              ) : staffRole && !isFrozen && !isPending ? (
+                staffRole
               ) : (
                 getStatusLabel()
               )}
@@ -282,7 +286,7 @@ const ChatBox = ({
           })}
 
           {/* Typing indicator */}
-          <TypingIndicator isTyping={isStaffTyping} />
+          <TypingIndicator isTyping={isStaffTyping} label={staffName || 'Medical Staff'} />
 
           {/* Error inline */}
           {error && (

@@ -181,18 +181,22 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
 
         {/* Footer - User Info */}
         <div className="border-t border-neutral-200 dark:border-neutral-700 p-2">
-          <div className={`flex items-center gap-2 px-2 py-2 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-700 cursor-pointer ${
-            isExpanded ? '' : 'justify-center'
-          }`}>
+          <div className={`flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-700 cursor-pointer justify-center`}>
             <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
               {profile?.firstName?.[0] ?? profile?.email?.[0]?.toUpperCase() ?? 'S'}
             </div>
             {isExpanded && (
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-secondary-800 dark:text-white truncate" title={profile?.email ?? ''}>
+              <div className="min-w-0 flex-1">
+                <p
+                  className="text-xs font-medium text-secondary-800 dark:text-white leading-tight break-all"
+                  title={profile?.email ?? ''}
+                >
                   {profile?.email ?? '—'}
                 </p>
-                <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
+                <p
+                  className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight mt-0.5 break-all"
+                  title={isAdmin ? 'Admin' : (profile?.role ?? '')}
+                >
                   {isAdmin ? 'Admin' : (profile?.role ?? '—')}
                 </p>
               </div>

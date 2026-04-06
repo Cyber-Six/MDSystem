@@ -1,25 +1,27 @@
 const express = require("express");
 const router = express.Router();
 
-const { portalBasedIpRateLimiter } = require('../../../config/middleware/ratelimiter.js');
+const { ipRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const logger = require('../../../utils/logger.js');
 const { isValidEmail } = require('../../../utils/validator.js');
 const { detectPortalFromSubdomain } = require('../../../utils/portal.js');
-const { rateLimitEmailCooldown, rateLimitEmailAttempts, getUserIdFromVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
+const { rateLimitEmailCooldown, rateLimitEmailAttempts, rateLimitEmailCooldownTTL,
+  getUserIdFromVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
 const query = require('../../../config/query.js');
 
 const { recordResetPwFailure, clearResetPwFailures, isResetPwLocked} = require('../../../config/redis.js');
 const { rateLimitMatrix } = require('../../../config/data/matrix.js');
 const { enqueueResetPassword } = require('../../../services/emailservice.js');
+const { delayRandom } = require('../../../utils/security.js');
 
-
-router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => {
+router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res) => {
   const ip = req.ip;
   try {
 
     // ✅ 0. Check if this IP is locked from resetpw attempts
     if (await isResetPwLocked(ip)) {
-      return res.status(429).json({
+      await delayRandom(200, 500);
+      return res.status(429).set("Retry-After", 3).json({
         error: "LOCKED_OUT",
         message: "Too many invalid attempts. Try again later."
       });
@@ -29,6 +31,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
 
     // ✅ 1. Required fields
     if (!email || !recaptchaToken) {
+      await delayRandom(200, 500); // add random delay to mitigate brute-force
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "MISSING_FIELDS",
@@ -38,6 +41,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
 
     // ✅ 2. Institutional email validation
     if (!isValidEmail(email)) {
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "INVALID_INSTITUTION_EMAIL",
@@ -49,6 +53,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
     const { verifyRecaptcha } = require('../../../services/recaptcha.js');
     const recaptchaValid = await verifyRecaptcha(recaptchaToken);
     if (!recaptchaValid) {
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "INVALID_RECAPTCHA",
@@ -64,9 +69,11 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
 
     const cooldownActive = await rateLimitEmailCooldown(email, portal, purpose, profile.emailCooldown_resetpw);
     if (cooldownActive) {
+      const ttl = await rateLimitEmailCooldownTTL(email, portal, purpose);
       return res.status(429).json({
         error: "EMAIL_COOLDOWN_ACTIVE",
-        message: "Too many attempts. Please try again later."
+        message: `Too many attempts. Please try again in ${ttl} seconds.`,
+        retryAfterSeconds: ttl
       });
     }
 
@@ -76,6 +83,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
       profile.penaltyCooldown_resetpw );
 
     if (attemptsExceeded) {
+      await delayRandom(1000, 1500); // add random delay to mitigate brute-force
       return res.status(429).json({
         error: "EMAIL_ATTEMPT_LIMIT_REACHED",
         message: "Too many attempts. Please try again later."
@@ -110,7 +118,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
   }
 });
 
-router.post("/reset-password/:verificationKey", portalBasedIpRateLimiter(), async (req, res) => {
+router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), async (req, res) => {
   try {
     const { newPassword } = req.body;
     const verificationKey = req.params.verificationKey;
@@ -119,6 +127,7 @@ router.post("/reset-password/:verificationKey", portalBasedIpRateLimiter(), asyn
 
     // ✅ 1. Required fields
     if (!verificationKey || !newPassword) {
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       return res.status(400).json({
         error: "MISSING_FIELDS",
         message: "Verification key and new password are required."
@@ -127,6 +136,7 @@ router.post("/reset-password/:verificationKey", portalBasedIpRateLimiter(), asyn
 
     // ✅ 2. Check if IP is locked out
     if (await isResetPwLocked(ip)) {
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       return res.status(429).json({
         error: "LOCKED_OUT",
         message: "Too many invalid attempts. Try again later."
@@ -139,7 +149,7 @@ router.post("/reset-password/:verificationKey", portalBasedIpRateLimiter(), asyn
     if (!userId) {
       // ❗ Record failure for invalid or expired key
       await recordResetPwFailure(ip);
-
+      await delayRandom(1000, 3000); // add random delay to mitigate brute-force
       return res.status(400).json({
         error: "INVALID_OR_EXPIRED_KEY",
         message: "The verification key is invalid or has expired."

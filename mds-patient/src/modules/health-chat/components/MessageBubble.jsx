@@ -37,6 +37,9 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
         formatTime={formatTime}
         isFirstInGroup={isFirstInGroup}
         isLastInGroup={isLastInGroup}
+        senderName={message.sender?.firstName
+          ? `${message.sender.firstName}${message.sender.lastName ? ' ' + message.sender.lastName : ''}`
+          : null}
       />
     );
   }
@@ -63,7 +66,9 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
         {/* Sender label — only on first bubble of a staff group */}
         {!isPatient && isFirstInGroup && (
           <span className="text-[10px] font-medium mb-1 px-1 text-neutral-400 dark:text-neutral-500">
-            Medical Staff
+            {message.sender?.firstName
+              ? `${message.sender.firstName}${message.sender.lastName ? ' ' + message.sender.lastName : ''}`
+              : 'Medical Staff'}
           </span>
         )}
 
@@ -112,7 +117,7 @@ const MessageBubble = ({ message, formatTime, isFirstInGroup = true, isLastInGro
 /**
  * FileMessage — patient side
  */
-const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup = true, isLastInGroup = true }) => {
+const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup = true, isLastInGroup = true, senderName }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const fileUrl = getFileUrl(fileId);
   const { blobUrl, loading: fileLoading, error: fileError, contentType } = useAuthFile(fileUrl);
@@ -149,7 +154,7 @@ const FileMessage = ({ fileId, isPatient, timestamp, formatTime, isFirstInGroup 
         >
           {!isPatient && isFirstInGroup && (
             <span className="text-[10px] font-medium mb-1 px-1 text-neutral-400 dark:text-neutral-500">
-              Medical Staff
+              {senderName || 'Medical Staff'}
             </span>
           )}
 

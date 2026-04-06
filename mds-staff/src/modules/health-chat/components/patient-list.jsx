@@ -11,7 +11,8 @@ const PatientList = () => {
     selectChat,
     typingUsers,
     needsReplyChats,
-    selectedFilters
+    selectedFilters,
+    removingPatientIds,
   } = useHealthChat();
 
   // Which statuses each filter bucket covers
@@ -100,16 +101,24 @@ const PatientList = () => {
           from { opacity: 0; transform: translateY(-12px); max-height: 0; }
           to { opacity: 1; transform: translateY(0); max-height: 80px; }
         }
+        @keyframes listSlideOut {
+          from { opacity: 1; transform: translateX(0); max-height: 80px; }
+          to { opacity: 0; transform: translateX(100%); max-height: 0; }
+        }
       `}</style>
       {visibleTickets.map((ticket) => {
         const ticketId = String(ticket.id);
         const patientId = String(ticket.patientId);
         const isNew = newTicketIds.has(ticketId);
+        const isRemoving = removingPatientIds?.has(patientId);
 
         return (
           <div
             key={ticket.id}
-            style={isNew ? {
+            style={isRemoving ? {
+              animation: 'listSlideOut 300ms ease-in forwards',
+              pointerEvents: 'none',
+            } : isNew ? {
               animation: 'listSlideIn 400ms ease-out',
             } : undefined}
           >

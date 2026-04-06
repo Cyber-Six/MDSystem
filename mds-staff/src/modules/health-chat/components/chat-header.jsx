@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { X, Check, Clock, User, ChevronDown, AlertCircle, Trash2 } from 'lucide-react';
+import { X, Check, Clock, User, ChevronDown, AlertCircle, Trash2, ArrowRightLeft } from 'lucide-react';
 import { useHealthChat } from '../context/health-chat-context';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import { formatPatientName, getPatientInitials } from '../health-chat-service';
 import TicketStatusBadge from './ticket-status-badge';
 import ConfirmModal from './confirm-modal';
+import TransferModal from './transfer-modal';
 
 const ChatHeader = () => {
-  const { selectedTicket, activeTicketId, approveTicket, rejectTicket, closeTicket, deleteTicket } = useHealthChat();
+  const { selectedTicket, activeTicketId, approveTicket, rejectTicket, closeTicket, deleteTicket, transferTicket, isAdmin } = useHealthChat();
+  const { profile } = useStaffProfile();
 
   const [actionLoading, setActionLoading] = useState(null);
   const [showPatientInfo, setShowPatientInfo] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null, reason: '' });
 
@@ -161,17 +165,30 @@ const ChatHeader = () => {
           )}
 
           {isActive && (
-            <button
-              onClick={() => setConfirmModal({ isOpen: true, type: 'close', reason: '' })}
-              disabled={!!actionLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                         transition-all duration-150 disabled:opacity-50
-                         text-neutral-500 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700
-                         hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
-            >
-              <X className="w-3.5 h-3.5" />
-              Close Ticket
-            </button>
+            <>
+              <button
+                onClick={() => setShowTransferModal(true)}
+                disabled={!!actionLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                           transition-all duration-150 disabled:opacity-50
+                           text-neutral-500 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700
+                           hover:text-primary-600 dark:hover:text-primary-400 hover:border-primary-200 dark:hover:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                Transfer
+              </button>
+              <button
+                onClick={() => setConfirmModal({ isOpen: true, type: 'close', reason: '' })}
+                disabled={!!actionLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                           transition-all duration-150 disabled:opacity-50
+                           text-neutral-500 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700
+                           hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <X className="w-3.5 h-3.5" />
+                Close Ticket
+              </button>
+            </>
           )}
 
           {isArchived && (
@@ -335,6 +352,13 @@ const ChatHeader = () => {
         message="Are you sure you want to permanently delete this archived ticket? This action cannot be undone and will remove all messages."
         confirmText="Delete Permanently"
         variant="danger"
+      />
+
+      <TransferModal
+        isOpen={showTransferModal}
+        onClose={() => setShowTransferModal(false)}
+        onTransfer={(toMedicalId) => transferTicket(activeTicketId, toMedicalId)}
+        currentMedicalEmail={profile?.email}
       />
     </>
   );

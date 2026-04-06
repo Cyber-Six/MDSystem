@@ -26,7 +26,7 @@ const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js'
 const staffRoutes = require('./routes/staff/staff.js');
 const dashboardRoutes = require('./routes/dashboard/dashboard.js');
 const mediaRoutes = require('./routes/media/media.js');
-const documentRoutes = require('./routes/documents/documents.js');
+const documentStaffRoutes = require('./routes/documents/document/document-staff.js');
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
 const settingsRoutes = require('./routes/settings/settings.js');
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
@@ -91,7 +91,7 @@ app.use('/dashboard', dashboardRoutes);
 app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
 app.use('/analytics', analyticsRoutes);
-app.use('/documents', documentRoutes);
+app.use('/documents', documentStaffRoutes);
 app.use('/settings', settingsRoutes);
 
 // ======================================

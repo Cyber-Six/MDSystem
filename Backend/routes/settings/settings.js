@@ -7,6 +7,31 @@ const redis = require("../../config/redis.js");
 const logger = require("../../utils/logger.js");
 
 // ========================================
+// TABLE AUTO-CREATION
+// ========================================
+// Runs once on backend startup. Uses IF NOT EXISTS so it's safe to call repeatedly.
+async function ensureTable() {
+  try {
+    await query.query(`
+      CREATE TABLE IF NOT EXISTS "UsersPreferences" (
+        id           INTEGER PRIMARY KEY REFERENCES "UserCredentials"(id) ON DELETE CASCADE,
+        appearance   JSONB NOT NULL DEFAULT '{}'::jsonb,
+        notification JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await query.query(
+      `CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id)`
+    );
+    logger.info('[PREFS] UsersPreferences table ready');
+  } catch (err) {
+    logger.error('[PREFS] Failed to ensure UsersPreferences table:', err.message);
+  }
+}
+ensureTable();
+
+// ========================================
 // CONFIGURATION
 // ========================================
 

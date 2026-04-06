@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getMyDocuments, downloadMyDocument } from '../../services/documents-service';
+import { 
+  getMyDocuments, 
+  downloadMyDocument,
+  getRequestedDocuments,
+  uploadRequestedDocument,
+} from '../../services/documents-service';
+import { axiosRequest } from '../../packages-core-adapter';
 
 const TYPE_LABELS = {
   prescription: 'Prescription',
@@ -31,9 +37,13 @@ function formatDateTime(dateStr) {
 
 export default function MyDocumentsPage() {
   const [documents, setDocuments] = useState([]);
+  const [requestedDocs, setRequestedDocs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingRequests, setLoadingRequests] = useState(true);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(null);
+  const [uploading, setUploading] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState({});
   const [filter, setFilter] = useState('all');
 
   const loadDocuments = useCallback(async () => {
@@ -49,9 +59,78 @@ export default function MyDocumentsPage() {
     }
   }, []);
 
+  const loadRequestedDocuments = useCallback(async () => {
+    setLoadingRequests(true);
+    try {
+      const docs = await getRequestedDocuments();
+      setRequestedDocs(docs);
+    } catch (err) {
+      console.error('Failed to load requested documents:', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadDocuments();
-  }, [loadDocuments]);
+    loadRequestedDocuments();
+  }, [loadDocuments, loadRequestedDocuments]);
+
+  const uploadFileToStaging = async (file) => {
+    const body = new FormData();
+    body.append('file', file);
+
+    const response = await axiosRequest.post('/media/stage', body, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+
+    if (!response.data?.fileId) {
+      throw new Error('File upload failed - no fileId returned');
+    }
+
+    return response.data.fileId;
+  };
+
+  const handleFileSelect = async (documentId, file) => {
+    if (!file) return;
+
+    setUploading(documentId);
+    setError('');
+    setUploadProgress(prev => ({ ...prev, [documentId]: 0 }));
+
+    try {
+      // Stage the file first
+      setUploadProgress(prev => ({ ...prev, [documentId]: 30 }));
+      const fileUUID = await uploadFileToStaging(file);
+
+      // Submit the document request with the staged file
+      setUploadProgress(prev => ({ ...prev, [documentId]: 60 }));
+      await uploadRequestedDocument(documentId, fileUUID);
+
+      setUploadProgress(prev => ({ ...prev, [documentId]: 100 }));
+
+      // Reload both lists
+      await Promise.all([loadDocuments(), loadRequestedDocuments()]);
+
+      // Clear progress after a brief delay
+      setTimeout(() => {
+        setUploadProgress(prev => {
+          const next = { ...prev };
+          delete next[documentId];
+          return next;
+        });
+      }, 1000);
+    } catch (err) {
+      setError(err.message || 'Failed to upload document.');
+      setUploadProgress(prev => {
+        const next = { ...prev };
+        delete next[documentId];
+        return next;
+      });
+    } finally {
+      setUploading(null);
+    }
+  };
 
   const handleDownload = async (doc) => {
     setDownloading(doc.id);
@@ -90,6 +169,103 @@ export default function MyDocumentsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Requested Documents Section */}
+      {requestedDocs.length > 0 && (
+        <div className="bg-warning-50 dark:bg-warning-900/10 border-2 border-warning-200 dark:border-warning-800 rounded-xl p-5">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg className="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-bold text-warning-900 dark:text-warning-200 mb-1">
+                📋 Documents Requested ({requestedDocs.length})
+              </h2>
+              <p className="text-sm text-warning-700 dark:text-warning-300">
+                Your healthcare provider has requested the following documents. Please upload them as soon as possible.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {requestedDocs.map((doc) => {
+              const progress = uploadProgress[doc.id];
+              const isUploading = uploading === doc.id;
+
+              return (
+                <div
+                  key={doc.id}
+                  className="bg-white dark:bg-neutral-800 border border-warning-200 dark:border-neutral-600 rounded-lg p-4"
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-9 h-9 rounded bg-warning-100 dark:bg-warning-900/20 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-secondary-900 dark:text-white mb-1">
+                        {doc.label}
+                      </h3>
+                      {doc.submission?.recordedBy && (
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                          Requested by: {doc.submission.recordedBy.name}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Upload Area */}
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id={`file-upload-${doc.id}`}
+                      accept="image/*,application/pdf"
+                      onChange={(e) => handleFileSelect(doc.id, e.target.files[0])}
+                      disabled={isUploading}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor={`file-upload-${doc.id}`}
+                      className={`block w-full px-4 py-6 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${
+                        isUploading
+                          ? 'border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/30 cursor-not-allowed'
+                          : 'border-primary-300 dark:border-primary-700 bg-primary-50/50 dark:bg-primary-900/10 hover:bg-primary-100 dark:hover:bg-primary-900/20 hover:border-primary-400 dark:hover:border-primary-600'
+                      }`}
+                    >
+                      {isUploading ? (
+                        <div className="space-y-2">
+                          <svg className="w-8 h-8 mx-auto text-primary-500 dark:text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                          <p className="text-sm font-medium text-primary-700 dark:text-primary-400">
+                            Uploading... {progress || 0}%
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <svg className="w-8 h-8 mx-auto text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          <p className="text-sm font-medium text-primary-700 dark:text-primary-400">
+                            Click to upload or drag file here
+                          </p>
+                          <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                            PDF or image files accepted
+                          </p>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

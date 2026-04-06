@@ -53,7 +53,12 @@ async function validateSchedulerDate(schedulerId, date) {
   // Parse the date-only string as LOCAL midnight (avoids UTC off-by-one in
   // non-UTC timezones — `new Date("YYYY-MM-DD")` is UTC midnight per spec).
   const [y, m, d] = date.split('-').map(Number);
-  const dayName = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long" });
+  // Use getDay() for locale-independent English weekday names.
+  // toLocaleDateString("en-US", ...) depends on Node.js ICU build; on servers
+  // with limited ICU it may return a non-English name (e.g., "Martes" instead
+  // of "Tuesday"), causing the scheduleFlags comparison to always fail.
+  const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayName = DAYS_EN[new Date(y, m - 1, d).getDay()];
   console.log(`Validating scheduler date: Scheduler ID ${schedulerId}, Date ${date} (${dayName})`);
   // First check weekly schedule flags
   const queryScheduler = `
@@ -178,26 +183,24 @@ async function insertSlotCustomDates(slotScheduleId, dates, db) {
     throw new Error("Dates array must not be empty");
   }
 
-  // Build placeholders for new format with optional slots
-  // dates can be array of objects {scheduledDate, morningAllowed?, afternoonAllowed?}
-  // or array of date strings for backward compatibility
+  // Same WHERE NOT EXISTS approach to avoid needing a unique constraint on (slotScheduleId, scheduledDate)
   const values = [];
-  const placeholders = dates.map((dateEntry, i) => {
-    const offset = i * 4;
+  const selectParts = dates.map((dateEntry, i) => {
+    const offset = i * 2;
     const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
-    const morning = typeof dateEntry === 'object' ? (dateEntry.morningAllowed ?? null) : null;
-    const afternoon = typeof dateEntry === 'object' ? (dateEntry.afternoonAllowed ?? null) : null;
-    values.push(slotScheduleId, scheduledDate, morning, afternoon);
-    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`;
+    values.push(slotScheduleId, scheduledDate);
+    return `($${offset + 1}::integer, $${offset + 2}::date)`;
   });
 
   const query = `
-    INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate", "morningAllowed", "afternoonAllowed")
-    VALUES ${placeholders.join(", ")}
-    ON CONFLICT ("slotScheduleId", "scheduledDate")
-    DO UPDATE SET
-      "morningAllowed" = EXCLUDED."morningAllowed",
-      "afternoonAllowed" = EXCLUDED."afternoonAllowed"
+    INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
+    SELECT v."slotScheduleId", v."scheduledDate"
+    FROM (VALUES ${selectParts.join(", ")}) AS v("slotScheduleId", "scheduledDate")
+    WHERE NOT EXISTS (
+      SELECT 1 FROM "SlotCustomDate" scd
+      WHERE scd."slotScheduleId" = v."slotScheduleId"
+        AND scd."scheduledDate" = v."scheduledDate"
+    )
     RETURNING *;
   `;
 

@@ -572,6 +572,28 @@ function resolveUnionBranch(patientBranches) {
   return 'Both';
 }
 
+// Auto-create UsersPreferences table if it doesn't exist.
+// Runs lazily on first preferences query, then skips.
+let _prefsTableReady = false;
+async function ensurePrefsTable() {
+  if (_prefsTableReady) return;
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS "UsersPreferences" (
+        id           INTEGER PRIMARY KEY REFERENCES "UserCredentials"(id) ON DELETE CASCADE,
+        appearance   JSONB NOT NULL DEFAULT '{}'::jsonb,
+        notification JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id)`);
+    _prefsTableReady = true;
+  } catch (err) {
+    logger.error('[PREFS] ensurePrefsTable failed:', err.message);
+  }
+}
+
 /**
  * Get user preferences (appearance, notification settings)
  * @param {string|number} userId
@@ -586,6 +608,7 @@ async function getUserPreferences(userId) {
   `;
 
   try {
+    await ensurePrefsTable();
     const result = await query(sql, [userId]);
     if (result.rows.length === 0) return null;
 
@@ -611,25 +634,26 @@ async function setUserPreferences(userId, updates) {
     INSERT INTO "UsersPreferences" (id, appearance, notification)
     VALUES ($1, $2, $3)
     ON CONFLICT(id) DO UPDATE SET
-      appearance = COALESCE($2, "UsersPreferences".appearance),
-      notification = COALESCE($3, "UsersPreferences".notification),
-      updated_at = NOW()
+      appearance   = COALESCE($2::jsonb, "UsersPreferences".appearance),
+      notification = COALESCE($3::jsonb, "UsersPreferences".notification),
+      updated_at   = NOW()
     RETURNING appearance, notification;
   `;
 
   try {
-    const appearance = updates.appearance ? JSON.stringify(updates.appearance) : null;
+    await ensurePrefsTable();
+    const appearance   = updates.appearance   ? JSON.stringify(updates.appearance)   : null;
     const notification = updates.notification ? JSON.stringify(updates.notification) : null;
 
     const result = await query(sql, [userId, appearance, notification]);
 
     if (result.rows.length === 0) {
-      throw new Error("Failed to set preferences");
+      throw new Error('Failed to set preferences');
     }
 
     const row = result.rows[0];
     return {
-      appearance: row.appearance || {},
+      appearance:   row.appearance   || {},
       notification: row.notification || {}
     };
   } catch (err) {

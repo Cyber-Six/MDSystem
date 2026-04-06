@@ -153,7 +153,7 @@ router.post('/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => 
 
         return res.status(429).json({
             error: "OTP_LOCKED_OUT",
-            message: "Too many invalid attempts. Please try again later.",
+            message: `Too many invalid attempts. Please try again in ${ttl} seconds.`,
             attempts: failures,
             attemptLimit: Number(process.env.OTP_GLOBAL_ATTEMPT_LIMIT),
             retryAfterSeconds: ttl
