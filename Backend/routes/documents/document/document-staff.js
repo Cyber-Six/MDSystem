@@ -437,12 +437,12 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
 
     const existing = existingResult.rows[0];
 
-    // Validate: cannot request if already recorded/archived
-    if (existing?.status === 'Recorded' || existing?.status === 'Archived') {
+    // Validate: cannot request if currently recorded (must archive first)
+    if (existing?.status === 'Recorded') {
       await client.query('ROLLBACK');
       return res.status(400).json({
-        error: 'DOCUMENT_ALREADY_PROCESSED',
-        message: 'This document has already been recorded or archived.',
+        error: 'DOCUMENT_ALREADY_RECORDED',
+        message: 'This document is already recorded. Archive it first before requesting a new one.',
       });
     }
 
@@ -450,9 +450,10 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
 
     if (existing) {
       // Update existing submission to 'Requested' status with notes
+      // This allows re-requesting archived documents
       const updateResult = await client.query(
         `UPDATE "patientRawDocument"
-         SET status = 'Requested', "recordedBy" = $1, "notes" = $2
+         SET status = 'Requested', "recordedBy" = $1, "notes" = $2, "archived_at" = NULL
          WHERE "documentTagId" = $3 AND "patientId" = $4
          RETURNING id`,
         [req.user.id, notes || null, documentId, patientId]
@@ -500,6 +501,95 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
     await client.query('ROLLBACK');
     logger.error('Error requesting document', { error: err.message });
     res.status(500).json({ error: 'REQUEST_FAILED', message: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * POST /documents/required/:documentId/archive
+ * Archive a recorded document (sets status to 'Archived')
+ * Body: patientId (required), notes (optional - reason for archiving)
+ */
+router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, res) => {
+  const client = await connect();
+  try {
+    await client.query('BEGIN');
+
+    const { documentId } = req.params;
+    const { patientId, notes } = req.body;
+
+    if (!patientId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    // Check if submission exists and is Recorded
+    const existingResult = await client.query(
+      `SELECT prd.id, prd.status, rdt.label
+       FROM "patientRawDocument" prd
+       JOIN "rawDocumentTag" rdt ON rdt.id = prd."documentTagId"
+       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2`,
+      [documentId, patientId]
+    );
+
+    if (existingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'SUBMISSION_NOT_FOUND' });
+    }
+
+    const existing = existingResult.rows[0];
+
+    if (existing.status !== 'Recorded') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'INVALID_STATUS', 
+        message: 'Only recorded documents can be archived.' 
+      });
+    }
+
+    const tagLabel = existing.label;
+
+    // Update to Archived status with timestamp and optional notes
+    const updateResult = await client.query(
+      `UPDATE "patientRawDocument"
+       SET status = 'Archived', "archived_at" = NOW(), "notes" = $1
+       WHERE "documentTagId" = $2 AND "patientId" = $3
+       RETURNING id`,
+      [notes || null, documentId, patientId]
+    );
+
+    const submissionId = updateResult.rows[0].id;
+    await client.query('COMMIT');
+
+    // Notify patient
+    try {
+      await notifyUser(
+        String(patientId),
+        'document:archived',
+        {
+          documentId,
+          label: tagLabel,
+          message: `Your document "${tagLabel}" has been archived.`,
+          notes,
+        }
+      );
+    } catch (notifErr) {
+      logger.warn('Document archive notification failed', { error: notifErr.message });
+    }
+
+    logger.info('Document archived', {
+      documentId,
+      patientId,
+      submissionId,
+      archivedBy: req.user.id,
+    });
+
+    res.json({ success: true, submissionId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error('Error archiving document', { error: err.message });
+    res.status(500).json({ error: 'ARCHIVE_FAILED', message: err.message });
   } finally {
     client.release();
   }

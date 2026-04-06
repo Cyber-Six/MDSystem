@@ -70,6 +70,24 @@ export const rejectDocument = async (documentId, patientId, notes = null) => {
 };
 
 /**
+ * Archive a recorded document (sets status to 'Archived').
+ * @param {string|number} documentId - The document tag ID
+ * @param {string|number} patientId - The patient ID
+ * @param {string} [notes] - Optional reason for archiving
+ * @returns {Promise<{submissionId: number}>}
+ */
+export const archiveDocument = async (documentId, patientId, notes = null) => {
+  const response = await axiosRequest.post(`/documents/required/${documentId}/archive`, {
+    patientId,
+    notes,
+  });
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || 'Failed to archive document');
+  }
+  return response.data;
+};
+
+/**
  * Record a document (sets status to 'Recorded').
  * @param {string|number} documentId - The document tag ID
  * @param {string|number} patientId - The patient ID
