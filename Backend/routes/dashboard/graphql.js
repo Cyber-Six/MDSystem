@@ -26,7 +26,7 @@ const dashboardSchema = makeExecutableSchema({
 function initDashboardGraphQL(app) {
   app.use(
     '/dashboard',
-    ipRateLimiter('staffDashboard', 'staff'),
+    ipRateLimiter("genericLimiter", "staff"),
     jwtProtect('medical'),
     graphqlHTTP((req) => {
       if (!req.body || !req.body.query) {
