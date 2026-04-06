@@ -141,6 +141,10 @@ type ScheduleRequirement {
   isActive: Boolean!
 }
 
+type DateOccupancy {
+  count: Int!
+}
+
 input ScheduleRequirementInput {
   label: String!
   notes: String
@@ -211,6 +215,7 @@ type Query {
   searchAppointmentStatuses(status: SCHEDULING_STATUS!, location: LOCATION_DESIGNATION, date: Date, schedulerId: ID, offset: Int, limit: Int): [patientSlot!]
   getAppointmentStatusCounts(location: LOCATION_DESIGNATION, schedulerId: ID, date: Date): [StatusCount!]
   listSchedulerWhitelist(schedulerId: ID!, offset: Int, limit: Int): [WhitelistEntry!]
+  checkDateOccupancy(schedulerId: ID!, date: Date!): DateOccupancy!
 }
 
 # Mutations
@@ -236,4 +241,5 @@ type Mutation {
   removeEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]
 
   updateDateIdentity(schedulerId: ID!, date: Date!, input: ScheduleDateEntityUpdate!): ScheduleDateEntity
+  cancelDateAppointments(schedulerId: ID!, date: Date!, reason: String): Int!
 }

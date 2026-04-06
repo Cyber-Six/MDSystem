@@ -77,12 +77,22 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
   // Use editForm.schedulePerWeek for immediate reflection of changes, fallback to activeScheduler
   const currentSchedulePerWeek = editForm?.schedulePerWeek || activeScheduler?.schedulePerWeek || [];
 
+  // Normalize an API date value to local "YYYY-MM-DD" (handles UTC ISO timestamps from pg)
+  const toLocalDateKey = (val) => {
+    if (!val) return '';
+    const s = String(val);
+    if (!s.includes('T') && !s.endsWith('Z')) return s; // pure date string
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s.split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   // Create a map of custom dates for quick lookup (date -> custom date info)
   const customDateMap = useMemo(() => {
     const map = {};
     customDates.forEach(cd => {
-      const dateStr = cd.scheduledDate?.split('T')[0] || cd.scheduledDate;
-      map[dateStr] = cd;
+      const dateStr = toLocalDateKey(cd.scheduledDate);
+      if (dateStr) map[dateStr] = cd;
     });
     return map;
   }, [customDates]);

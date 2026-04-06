@@ -30,57 +30,54 @@ const extractContactNumber = (contact: any): string | null => {
 export const getPatientProfile = async (): Promise<PatientProfile> => {
   if (_cache && Date.now() - _cacheTimestamp < CACHE_TTL_MS) return _cache;
 
-  const profileData = await sendGraphQLRequest(
-    `query GetPatientProfileData {
-      personalLog: getPersonalRecordLog {
-        id first_name middle_name last_name suffix contactNumber
-      }
-      personalRecord: getPersonalRecord { id }
-      personalLogStatus: getPersonalRecordLogStatus
-      loginEmail: getLoginEmail
-      branchId: getBranchIdentifier { identifier }
-    }`,
-    {},
-    { endpoint: '/profile/patient' },
-  ).catch(() => ({}));
-
-  const log = (profileData as any)?.personalLog || {};
-  const activeStatuses = new Set(['InProgress', 'Pending', 'Revision', 'Approved']);
-  const hasActiveProfile = activeStatuses.has((profileData as any)?.personalLogStatus);
-
-  let emergencyData: any = null;
-
-  if (hasActiveProfile) {
-    emergencyData = await sendGraphQLRequest(
+  const [profileResult, emergencyResult] = await Promise.allSettled([
+    sendGraphQLRequest(
+      `query GetPatientProfileData {
+        personalLog: getPersonalRecordLog {
+          id first_name middle_name last_name suffix contactNumber
+        }
+        personalRecord: getPersonalRecord { id identifier }
+        personalLogStatus: getPersonalRecordLogStatus
+        loginEmail: getLoginEmail
+      }`,
+      {},
+      { endpoint: '/profile/patient' },
+    ),
+    sendGraphQLRequest(
       `query GetEmergencyContact {
-        emergencyContact: getEmergencyContact {
+        emergencyContact: getEmergencyContact(approved: true) {
           firstContact { contactNumber }
           secondContact { contactNumber }
         }
       }`,
       {},
-    ).catch(() => null);
+    ),
+  ]);
+
+  const profileData =
+    profileResult.status === 'fulfilled'
+      ? profileResult.value
+      : ((profileResult as PromiseRejectedResult).reason?.data || {});
+
+  if (profileResult.status === 'rejected') {
+    console.warn('[Profile Service] Could not fetch patient profile data:', (profileResult as PromiseRejectedResult).reason?.message);
   }
 
-  if (!emergencyData) {
-    const userId = (profileData as any)?.personalRecord?.id || log.id || null;
-    if (userId) {
-      emergencyData = await sendGraphQLRequest(
-        `query GetLatestEmergencyContact($userId: ID!, $offset: Int, $limit: Int) {
-          emergencyContacts: getUserEmergencyContact(userId: $userId, offset: $offset, limit: $limit) {
-            firstContact { contactNumber }
-            secondContact { contactNumber }
-          }
-        }`,
-        { userId, offset: 0, limit: 1 },
-      ).catch(() => null);
-    }
+  const emergencyData =
+    emergencyResult.status === 'fulfilled'
+      ? emergencyResult.value
+      : null;
+
+  if (emergencyResult.status === 'rejected') {
+    console.warn('[Profile Service] Active emergency contact fetch failed:', (emergencyResult as PromiseRejectedResult).reason?.message);
   }
+
+  const log = (profileData as any)?.personalLog || {};
 
   const latestEmergency =
-    emergencyData?.emergencyContact ||
-    (Array.isArray(emergencyData?.emergencyContacts)
-      ? emergencyData.emergencyContacts[0]
+    (emergencyData as any)?.emergencyContact ||
+    (Array.isArray((emergencyData as any)?.emergencyContacts)
+      ? (emergencyData as any).emergencyContacts[0]
       : null) ||
     null;
 
@@ -94,7 +91,7 @@ export const getPatientProfile = async (): Promise<PatientProfile> => {
     contactNumber: log.contactNumber || null,
     firstEmergencyContactNumber: extractContactNumber(latestEmergency?.firstContact),
     secondEmergencyContactNumber: extractContactNumber(latestEmergency?.secondContact),
-    identifier: (profileData as any)?.branchId?.identifier || null,
+    identifier: (profileData as any)?.personalRecord?.identifier || null,
   };
 
   return _cache;

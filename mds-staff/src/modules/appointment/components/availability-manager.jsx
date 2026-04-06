@@ -3,14 +3,23 @@ import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check,
 
 /**
  * Normalize a date value (string, Date, or number) to YYYY-MM-DD format.
+ * Uses LOCAL date getters so UTC-offset ISO timestamps (e.g. "2026-04-07T16:00:00.000Z"
+ * from a UTC+8 server) resolve to the correct local calendar date ("2026-04-08").
  */
 const normalizeDate = (val) => {
   if (!val) return '';
-  if (typeof val === 'string') return val.split('T')[0];
+  if (typeof val === 'string') {
+    // Pure date string "YYYY-MM-DD" — return as-is
+    if (!val.includes('T') && !val.endsWith('Z')) return val;
+    // ISO timestamp — parse and use LOCAL date parts to avoid UTC offset shifting the date
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val.split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
   if (val instanceof Date || typeof val === 'number') {
     const d = new Date(val);
     if (isNaN(d.getTime())) return '';
-    return d.toISOString().split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
   return '';
 };
@@ -18,6 +27,7 @@ import AvailabilityCalendar from './availability-calendar';
 import EventModal from './event-modal';
 import WhitelistManager from './whitelist-manager';
 import DaySlotEditor from './day-slot-editor';
+import DateOccupancyModal from './date-occupancy-modal';
 import {
   listAllSchedulers,
   createScheduler,
@@ -33,6 +43,8 @@ import {
   listCustomDates,
   setCustomDates as setCustomDatesAPI,
   unsetCustomDates as unsetCustomDatesAPI,
+  checkDateOccupancy,
+  cancelDateAppointments,
 } from '../staff-appointment-service';
 
 // Include Sunday in the days list - Sunday disabled by default, only enabled via custom dates
@@ -90,6 +102,9 @@ const AvailabilityManager = () => {
     afternoonAllowed: null,
     useCustomSlots: false,
   });
+
+  // Date occupancy modal — shown when a date being disabled/removed still has active bookings
+  const [occupancyModal, setOccupancyModal] = useState(null); // null | { date, count, actionLabel, onKeep, onCancelAll }
 
   // Month availability state (real booking data for calendar)
   const [monthAvailability, setMonthAvailability] = useState({});
@@ -166,10 +181,8 @@ const AvailabilityManager = () => {
       const data = await getMonthAvailability(schedulerId, startDate, endDate);
       const lookup = {};
       for (const entry of (data || [])) {
-        const dateStr = typeof entry.scheduledDate === 'string'
-          ? entry.scheduledDate.split('T')[0]
-          : entry.scheduledDate;
-        lookup[dateStr] = entry;
+        const dateStr = normalizeDate(entry.scheduledDate);
+        if (dateStr) lookup[dateStr] = entry;
       }
       setMonthAvailability(lookup);
     } catch (err) {
@@ -260,22 +273,26 @@ const AvailabilityManager = () => {
   // Handle removing a custom date from DaySlotEditor
   const handleRemoveCustomDateFromEditor = async (dateStr) => {
     if (!activeScheduler?.id) return;
-    try {
-      const normalized = normalizeDate(dateStr);
-      await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
-      const remaining = await listCustomDates(activeScheduler.id, 0, 1);
-      const stillHas = (remaining?.length || 0) > 0;
-      setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
-      setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: stillHas } : prev);
-      setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: stillHas } : s));
-      setDayOverrideData(null);
-      // Refresh month availability
-      if (currentMonthRange) {
-        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to remove custom date');
-    }
+    const normalized = normalizeDate(dateStr);
+    await _withOccupancyCheck(
+      normalized,
+      'Remove this custom date',
+      async () => {
+        try {
+          await _doUnsetCustomDate(normalized);
+        } catch (err) {
+          setError(err.message || 'Failed to remove custom date');
+        }
+      },
+      async () => {
+        try {
+          await cancelDateAppointments(activeScheduler.id, normalized);
+          await _doUnsetCustomDate(normalized);
+        } catch (err) {
+          setError(err.message || 'Failed to cancel appointments and remove custom date');
+        }
+      },
+    );
   };
 
   // Handle saving day override
@@ -316,21 +333,67 @@ const AvailabilityManager = () => {
     }
   };
 
+  // Core helper: execute a disable/remove action, optionally after pre-cancelling bookings
+  const _doDisableDate = async (dateStr) => {
+    const result = await updateDateIdentity(activeScheduler.id, dateStr, {
+      morningAllowed: 0,
+      afternoonAllowed: 0,
+    });
+    setDayOverrideData(result);
+    if (currentMonthRange) {
+      loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+    }
+  };
+
+  const _doUnsetCustomDate = async (normalized) => {
+    await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
+    const remaining = await listCustomDates(activeScheduler.id, 0, 1);
+    const stillHas = (remaining?.length || 0) > 0;
+    setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
+    setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: stillHas } : prev);
+    setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: stillHas } : s));
+    setDayOverrideData(null);
+    if (currentMonthRange) {
+      loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+    }
+  };
+
+  // Shared: show the occupancy modal if the date has active bookings, else run immediately
+  const _withOccupancyCheck = async (dateStr, actionLabel, onKeep, onCancelAll) => {
+    try {
+      const { count } = await checkDateOccupancy(activeScheduler.id, dateStr);
+      if (count > 0) {
+        setOccupancyModal({ date: dateStr, count, actionLabel, onKeep, onCancelAll });
+      } else {
+        await onKeep(); // No bookings — proceed silently with the "keep" path (safe no-op)
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to check date occupancy');
+    }
+  };
+
   // Handle disabling a date (set both sessions to 0)
   const handleDisableDate = async (dateStr) => {
     if (!activeScheduler?.id || !dateStr) return;
-    try {
-      const result = await updateDateIdentity(activeScheduler.id, dateStr, {
-        morningAllowed: 0,
-        afternoonAllowed: 0,
-      });
-      setDayOverrideData(result);
-      if (currentMonthRange) {
-        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to disable date');
-    }
+    await _withOccupancyCheck(
+      dateStr,
+      'Disable this date',
+      async () => {
+        try {
+          await _doDisableDate(dateStr);
+        } catch (err) {
+          setError(err.message || 'Failed to disable date');
+        }
+      },
+      async () => {
+        try {
+          await cancelDateAppointments(activeScheduler.id, dateStr);
+          await _doDisableDate(dateStr);
+        } catch (err) {
+          setError(err.message || 'Failed to cancel appointments and disable date');
+        }
+      },
+    );
   };
 
   // Handle re-enabling a disabled date (reset to scheduler defaults)
@@ -459,27 +522,34 @@ const AvailabilityManager = () => {
   const handleRemoveCustomDate = async (dateStr) => {
     const normalized = normalizeDate(dateStr);
     if (isCreatingNew) {
-      // For new scheduler, just remove from local state
+      // For new scheduler, just remove from local state (no bookings possible)
       setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
     } else if (activeScheduler?.id) {
-      // For existing scheduler, remove from backend
-      try {
-        setSaving(true);
-        await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
-        const remaining = await listCustomDates(activeScheduler.id, 0, 1);
-        const stillHas = (remaining?.length || 0) > 0;
-        setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
-        setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: stillHas } : prev);
-        setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: stillHas } : s));
-        // Refresh calendar to reflect the removed ScheduleDateEntity entries
-        if (currentMonthRange) {
-          loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-        }
-      } catch (err) {
-        setError(err.message || 'Failed to remove custom date');
-      } finally {
-        setSaving(false);
-      }
+      await _withOccupancyCheck(
+        normalized,
+        'Remove this custom date',
+        async () => {
+          try {
+            setSaving(true);
+            await _doUnsetCustomDate(normalized);
+          } catch (err) {
+            setError(err.message || 'Failed to remove custom date');
+          } finally {
+            setSaving(false);
+          }
+        },
+        async () => {
+          try {
+            setSaving(true);
+            await cancelDateAppointments(activeScheduler.id, normalized);
+            await _doUnsetCustomDate(normalized);
+          } catch (err) {
+            setError(err.message || 'Failed to cancel appointments and remove custom date');
+          } finally {
+            setSaving(false);
+          }
+        },
+      );
     }
   };
 
@@ -1388,6 +1458,19 @@ const AvailabilityManager = () => {
         onClose={() => setShowWhitelistPanel(false)}
         onUpdate={() => loadWhitelistCount(activeScheduler?.id)}
       />
+
+      {/* Date occupancy modal — shown when disabling/removing a date that still has active bookings */}
+      {occupancyModal && (
+        <DateOccupancyModal
+          isOpen
+          onClose={() => setOccupancyModal(null)}
+          date={occupancyModal.date}
+          count={occupancyModal.count}
+          actionLabel={occupancyModal.actionLabel}
+          onKeep={occupancyModal.onKeep}
+          onCancelAll={occupancyModal.onCancelAll}
+        />
+      )}
     </div>
   );
 };
