@@ -46,6 +46,7 @@ const StaffDashboard = () => {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [canViewPatients, setCanViewPatients] = useState(false);
   const [canViewRequests, setCanViewRequests] = useState(false);
+  const [canViewAvailability, setCanViewAvailability] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -63,8 +64,10 @@ const StaffDashboard = () => {
       // Track permissions by checking if data was returned
       const hasRecentPatients = data?.recentPatients !== null;
       const hasRequests = data?.recentRequests !== null;
+      const hasAvailability = data?.tomorrowAvailability !== null;
       setCanViewPatients(hasRecentPatients);
       setCanViewRequests(hasRequests);
+      setCanViewAvailability(hasAvailability);
       setRecentPatients(Array.isArray(data?.recentPatients) ? data.recentPatients : []);
       setPendingRequests(Array.isArray(data?.recentRequests) ? data.recentRequests : []);
     } catch (err) {
@@ -75,6 +78,7 @@ const StaffDashboard = () => {
       setPendingRequests([]);
       setCanViewPatients(false);
       setCanViewRequests(false);
+      setCanViewAvailability(false);
       setError('Failed to load dashboard data');
     } finally {
       setLoading(false);
@@ -209,7 +213,7 @@ const StaffDashboard = () => {
         )}
 
         {/* Tomorrow's Availability Widget - Show if user has permission */}
-        {stats.tomorrowAvailability !== null && (
+        {canViewAvailability && (
           <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Tomorrow's Availability</h3>
