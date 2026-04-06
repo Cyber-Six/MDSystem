@@ -241,7 +241,7 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
  * GET /documents/me
  * List all generated documents for the authenticated patient
  */
-router.get('/me', jwtProtect("patient"), async (req, res) => {
+router.get('/my', jwtProtect("patient"), async (req, res) => {
   try {
     const patientId = req.user.id;
 
@@ -275,13 +275,62 @@ router.get('/me', jwtProtect("patient"), async (req, res) => {
     logger.error('Patient document list failed', { error: err.message });
     res.status(500).json({ error: 'LIST_FAILED', message: err.message });
   }
+}); 
+
+/**
+ * GET /documents/me/download/:documentId
+ * Download a specific generated document as PDF for the authenticated patient
+ */
+router.get('/my/download/:documentId', jwtProtect('patient'), async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const patientId = req.user.id;
+
+    // Verify document belongs to this patient
+    const docResult = await db.query(
+      `SELECT pd.id, dt.template as "templateType", dt.description
+       FROM "PatientDocuments" pd
+       JOIN "documentTemplate" dt ON pd."templateId" = dt.id
+       WHERE pd.id = $1 AND pd."patientId" = $2`,
+      [documentId, patientId]
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
+    }
+
+    const doc = docResult.rows[0];
+
+    // Fetch stored PDF buffer
+    const dataResult = await db.query(
+      `SELECT data FROM "documentData" WHERE "documentId" = $1`,
+      [documentId]
+    );
+
+    if (dataResult.rows.length === 0) {
+      return res.status(404).json({ error: 'DOCUMENT_DATA_NOT_FOUND' });
+    }
+
+    const pdfBuffer = Buffer.from(dataResult.rows[0].data, 'base64');
+    const filename = `${doc.templateType}_${documentId}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+
+    logger.info('Patient document downloaded', { documentId, patientId });
+  } catch (err) {
+    logger.error('Patient document download failed', { error: err.message });
+    res.status(500).json({ error: 'DOWNLOAD_FAILED', message: err.message });
+  }
 });
 
 /**
  * GET /documents/me/:docType
  * List documents of a specific type for the authenticated patient
  */
-router.get('/me/:docType', jwtProtect('patient'), async (req, res) => {
+router.get('/my/:docType', jwtProtect('patient'), async (req, res) => {
   try {
     const { docType } = req.params;
     const patientId = req.user.id;
