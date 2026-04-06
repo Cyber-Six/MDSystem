@@ -450,10 +450,10 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
 
     if (existing) {
       // Update existing submission to 'Requested' status with notes
-      // This allows re-requesting archived documents
+      // Keep archived_at for historical tracking (don't clear it)
       const updateResult = await client.query(
         `UPDATE "patientRawDocument"
-         SET status = 'Requested', "recordedBy" = $1, "notes" = $2, "archived_at" = NULL
+         SET status = 'Requested', "recordedBy" = $1, "notes" = $2, file = NULL
          WHERE "documentTagId" = $3 AND "patientId" = $4
          RETURNING id`,
         [req.user.id, notes || null, documentId, patientId]

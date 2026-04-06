@@ -157,10 +157,19 @@ export default function PatientDocumentsTab({ patient }) {
     return doc.submission.status;
   };
 
+  // Special handling for Archived filter - show documents that were archived (have archived_at)
+  // even if they've been re-requested (status changed to Requested)
+  const getFilteredDocs = () => {
+    if (filter === 'All') return documents;
+    if (filter === 'Archived') {
+      // Show all documents that have been archived (archived_at is not null)
+      return documents.filter(d => d.submission?.archivedAt);
+    }
+    return documents.filter(d => getDocStatus(d) === filter);
+  };
+
   const statuses = ['All', 'Missing', 'Requested', 'Pending', 'Recorded', 'Rejected', 'Archived'];
-  const filtered = filter === 'All' 
-    ? documents 
-    : documents.filter(d => getDocStatus(d) === filter);
+  const filtered = getFilteredDocs();
 
   const submittedDocs = documents.filter(d => d.submission?.status === 'Recorded' || d.submission?.status === 'Archived');
   const pendingDocs = documents.filter(d => d.submission?.status === 'Pending');
@@ -287,9 +296,20 @@ export default function PatientDocumentsTab({ patient }) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                     </div>
-                    <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">
-                      {doc.label}
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">
+                        {doc.label}
+                      </p>
+                      {/* Show archive info when in Archived filter */}
+                      {filter === 'Archived' && doc.submission?.archivedAt && (
+                        <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                          📦 Archived {formatDate(doc.submission.archivedAt)}
+                          {status !== 'Archived' && (
+                            <span className="ml-1 text-primary-600 dark:text-primary-400">→ {status}</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <StatusBadge status={status} />
                 </div>
