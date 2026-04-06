@@ -249,7 +249,7 @@ async function getPatientIdFromSlotId(slotId) {
   const query = `
     SELECT ps."patientId"
     FROM "patientSlot" ps
-    WHERE ps.id = $1
+    WHERE ps."slotEntityId" = $1
     LIMIT 1;
   `;
 
