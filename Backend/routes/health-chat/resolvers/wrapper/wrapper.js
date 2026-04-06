@@ -1102,7 +1102,7 @@ const Mutation = {
     };
   },
 
-  _transferTicket: async (_, { chatId, newMedicalId }, { user, res }) => {
+  _transferTicket: async (_, { chatId, toMedicalId }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -1129,7 +1129,7 @@ const Mutation = {
        SET "medicalId" = $1
        WHERE id = $2 AND status = 'Ongoing'
        RETURNING *`,
-      [newMedicalId, chatId]
+      [toMedicalId, chatId]
     );
 
     if (result.rowCount === 0) {
@@ -1141,7 +1141,7 @@ const Mutation = {
     // Notify the entire chat room about the transfer
     emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-transferred', {
       chatId,
-      newMedicalId,
+      toMedicalId,
       chat: updatedChat
     });
 
@@ -1149,7 +1149,7 @@ const Mutation = {
     if (updatedChat.patientId) {
       notifyUser(String(updatedChat.patientId), 'healthchat:ticket-transferred', {
         chatId,
-        newMedicalId,
+        toMedicalId,
         chat: updatedChat
       });
     }
@@ -1196,7 +1196,7 @@ const Mutation = {
     // Notify the entire chat room about the takeover
     emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-taken-over', {
       chatId,
-      newMedicalId: user.id,
+      toMedicalId: user.id,
       chat: updatedChat
     });
 
@@ -1204,7 +1204,7 @@ const Mutation = {
     if (updatedChat.patientId) {
       notifyUser(String(updatedChat.patientId), 'healthchat:ticket-taken-over', {
         chatId,
-        newMedicalId: user.id,
+        toMedicalId: user.id,
         chat: updatedChat
       });
     }
