@@ -29,7 +29,7 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
               prd.id as "submissionId", prd.file, prd.status,
-              prd."recordedBy", prd."archived_at", prd."created_at" as "submittedAt"
+              prd."recordedBy", prd."reviewNotes", prd."archived_at", prd."created_at" as "submittedAt"
        FROM "rawDocumentTag" rdt
        LEFT JOIN "patientRawDocument" prd ON prd."documentTagId" = rdt.id
          AND prd."patientId" = $1
@@ -48,6 +48,7 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
             file: row.file,
             status: row.status,
             recordedBy: row.recordedBy,
+            reviewNotes: row.reviewNotes,
             archivedAt: row.archived_at,
             submittedAt: row.submittedAt,
           }
@@ -232,6 +233,171 @@ router.post('/required/:documentId', jwtProtect('medical'), async (req, res) => 
     await client.query('ROLLBACK');
     logger.error('Error recording required document', { error: err.message });
     res.status(500).json({ error: 'RECORD_FAILED', message: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * POST /documents/required/:documentId/approve
+ * Approve a submitted document (sets status to 'Recorded')
+ * Body: patientId (required), notes (optional)
+ */
+router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, res) => {
+  const client = await connect();
+  try {
+    await client.query('BEGIN');
+
+    const { documentId } = req.params;
+    const { patientId, notes } = req.body;
+
+    if (!patientId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    // Check if submission exists
+    const existingResult = await client.query(
+      `SELECT prd.id, prd.status, rdt.label
+       FROM "patientRawDocument" prd
+       JOIN "rawDocumentTag" rdt ON rdt.id = prd."documentTagId"
+       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2`,
+      [documentId, patientId]
+    );
+
+    if (existingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'SUBMISSION_NOT_FOUND' });
+    }
+
+    const existing = existingResult.rows[0];
+    const tagLabel = existing.label;
+
+    // Update to Recorded status with notes
+    const updateResult = await client.query(
+      `UPDATE "patientRawDocument"
+       SET status = 'Recorded', "recordedBy" = $1, "reviewNotes" = $2
+       WHERE "documentTagId" = $3 AND "patientId" = $4
+       RETURNING id`,
+      [req.user.id, notes || null, documentId, patientId]
+    );
+
+    const submissionId = updateResult.rows[0].id;
+    await client.query('COMMIT');
+
+    // Notify patient
+    try {
+      await notifyUser(
+        String(patientId),
+        'document:approved',
+        {
+          documentId,
+          label: tagLabel,
+          message: `Your submitted document "${tagLabel}" has been approved.`,
+          notes,
+        }
+      );
+    } catch (notifErr) {
+      logger.warn('Document approval notification failed', { error: notifErr.message });
+    }
+
+    logger.info('Document approved', {
+      documentId,
+      patientId,
+      submissionId,
+      approvedBy: req.user.id,
+    });
+
+    res.json({ success: true, submissionId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error('Error approving document', { error: err.message });
+    res.status(500).json({ error: 'APPROVE_FAILED', message: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * POST /documents/required/:documentId/reject
+ * Reject a submitted document
+ * Body: patientId (required), notes (required)
+ */
+router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, res) => {
+  const client = await connect();
+  try {
+    await client.query('BEGIN');
+
+    const { documentId } = req.params;
+    const { patientId, notes } = req.body;
+
+    if (!patientId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    if (!notes || !notes.trim()) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'NOTES_REQUIRED', message: 'Please provide a reason for rejection' });
+    }
+
+    // Check if submission exists
+    const existingResult = await client.query(
+      `SELECT prd.id, prd.status, rdt.label
+       FROM "patientRawDocument" prd
+       JOIN "rawDocumentTag" rdt ON rdt.id = prd."documentTagId"
+       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2`,
+      [documentId, patientId]
+    );
+
+    if (existingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'SUBMISSION_NOT_FOUND' });
+    }
+
+    const existing = existingResult.rows[0];
+    const tagLabel = existing.label;
+
+    // Update to Rejected status with notes
+    const updateResult = await client.query(
+      `UPDATE "patientRawDocument"
+       SET status = 'Rejected', "recordedBy" = $1, "reviewNotes" = $2
+       WHERE "documentTagId" = $3 AND "patientId" = $4
+       RETURNING id`,
+      [req.user.id, notes, documentId, patientId]
+    );
+
+    const submissionId = updateResult.rows[0].id;
+    await client.query('COMMIT');
+
+    // Notify patient
+    try {
+      await notifyUser(
+        String(patientId),
+        'document:rejected',
+        {
+          documentId,
+          label: tagLabel,
+          message: `Your submitted document "${tagLabel}" has been rejected.`,
+          notes,
+        }
+      );
+    } catch (notifErr) {
+      logger.warn('Document rejection notification failed', { error: notifErr.message });
+    }
+
+    logger.info('Document rejected', {
+      documentId,
+      patientId,
+      submissionId,
+      rejectedBy: req.user.id,
+    });
+
+    res.json({ success: true, submissionId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error('Error rejecting document', { error: err.message });
+    res.status(500).json({ error: 'REJECT_FAILED', message: err.message });
   } finally {
     client.release();
   }

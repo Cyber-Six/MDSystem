@@ -14,6 +14,7 @@ const router = express.Router();
 /**
  * GET /documents/requests
  * List document requests for the authenticated patient
+ * Includes: Requested (needs upload), Pending (under review), Recorded (approved), Rejected
  */
 router.get('/requests', jwtProtect("patient"), async (req, res) => {
   try {
@@ -21,14 +22,15 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
 
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
-              prd.id as "submissionId", prd.status,
+              prd.id as "submissionId", prd.status, prd.file, prd."reviewNotes",
               prd."recordedBy", prd."created_at" as "submittedAt",
               up.first_name as "recordedByFirstName", up.last_name as "recordedByLastName"
        FROM "rawDocumentTag" rdt
        LEFT JOIN "patientRawDocument" prd ON prd."documentTagId" = rdt.id
          AND prd."patientId" = $1
        LEFT JOIN "UsersPersonal" up ON prd."recordedBy" = up.id
-       WHERE rdt."isActive" = true AND prd.status = 'Requested'
+       WHERE rdt."isActive" = true 
+         AND prd.status IN ('Requested', 'Pending', 'Recorded', 'Rejected')
        ORDER BY rdt.id`,
       [patientId]
     );
@@ -41,6 +43,8 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
         ? {
             id: row.submissionId,
             status: row.status,
+            file: row.file,
+            reviewNotes: row.reviewNotes,
             recordedBy: row.recordedBy
               ? {
                   id: row.recordedBy,

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PatientSectionCard from './section-card';
-import { getRequiredDocuments, requestDocument, recordDocument, viewDocumentFile } from '../../../services/document-service';
+import { getRequiredDocuments, requestDocument, approveDocument, rejectDocument, viewDocumentFile } from '../../../services/document-service';
 
 const STATUS_STYLES = {
   Recorded:  'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
   Pending:   'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400',
   Requested: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400',
+  Rejected:  'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400',
   Archived:  'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400',
   Missing:   'bg-neutral-50 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500',
 };
@@ -14,6 +15,7 @@ const STATUS_DOT = {
   Recorded:  'bg-success-500',
   Pending:   'bg-warning-500',
   Requested: 'bg-primary-500',
+  Rejected:  'bg-error-500',
   Archived:  'bg-neutral-400',
   Missing:   'bg-neutral-300 dark:bg-neutral-600',
 };
@@ -41,9 +43,11 @@ export default function PatientDocumentsTab({ patient }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [requesting, setRequesting] = useState(null);
-  const [recording, setRecording] = useState(null);
+  const [approving, setApproving] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [filter, setFilter] = useState('All');
+  const [reviewNotes, setReviewNotes] = useState({});
 
   const patientId = patient?.id;
 
@@ -81,16 +85,37 @@ export default function PatientDocumentsTab({ patient }) {
     }
   };
 
-  const handleRecord = async (documentId) => {
-    setRecording(documentId);
+  const handleApprove = async (documentId) => {
+    setApproving(documentId);
     setError('');
     try {
-      await recordDocument(documentId, patientId);
+      const notes = reviewNotes[documentId] || null;
+      await approveDocument(documentId, patientId, notes);
+      setReviewNotes(prev => ({ ...prev, [documentId]: '' }));
       await loadDocuments();
     } catch (err) {
-      setError(err.message || 'Failed to record document');
+      setError(err.message || 'Failed to approve document');
     } finally {
-      setRecording(null);
+      setApproving(null);
+    }
+  };
+
+  const handleReject = async (documentId) => {
+    const notes = reviewNotes[documentId]?.trim();
+    if (!notes) {
+      setError('Please provide a reason for rejection');
+      return;
+    }
+    setRejecting(documentId);
+    setError('');
+    try {
+      await rejectDocument(documentId, patientId, notes);
+      setReviewNotes(prev => ({ ...prev, [documentId]: '' }));
+      await loadDocuments();
+    } catch (err) {
+      setError(err.message || 'Failed to reject document');
+    } finally {
+      setRejecting(null);
     }
   };
 
@@ -112,13 +137,14 @@ export default function PatientDocumentsTab({ patient }) {
     return doc.submission.status;
   };
 
-  const statuses = ['All', 'Missing', 'Requested', 'Pending', 'Recorded', 'Archived'];
+  const statuses = ['All', 'Missing', 'Requested', 'Pending', 'Recorded', 'Rejected', 'Archived'];
   const filtered = filter === 'All' 
     ? documents 
     : documents.filter(d => getDocStatus(d) === filter);
 
   const submittedDocs = documents.filter(d => d.submission?.status === 'Recorded' || d.submission?.status === 'Archived');
   const pendingDocs = documents.filter(d => d.submission?.status === 'Pending');
+  const rejectedDocs = documents.filter(d => d.submission?.status === 'Rejected');
   const requestedDocs = documents.filter(d => d.submission?.status === 'Requested');
   const missingDocs = documents.filter(d => !d.submission);
 
@@ -154,11 +180,15 @@ export default function PatientDocumentsTab({ patient }) {
       <div className="flex gap-4 mb-4 pb-3 border-b border-neutral-100 dark:border-neutral-700/60">
         <div className="text-center">
           <p className="text-lg font-bold text-success-600 dark:text-success-400">{submittedDocs.length}</p>
-          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Submitted</p>
+          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Approved</p>
         </div>
         <div className="text-center">
           <p className="text-lg font-bold text-warning-600 dark:text-warning-400">{pendingDocs.length}</p>
           <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Pending</p>
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold text-error-600 dark:text-error-400">{rejectedDocs.length}</p>
+          <p className="text-[10px] text-secondary-400 dark:text-neutral-500 uppercase">Rejected</p>
         </div>
         <div className="text-center">
           <p className="text-lg font-bold text-primary-600 dark:text-primary-400">{requestedDocs.length}</p>
@@ -222,7 +252,8 @@ export default function PatientDocumentsTab({ patient }) {
           {filtered.map((doc) => {
             const status = getDocStatus(doc);
             const isRequesting = requesting === doc.id;
-            const isRecording = recording === doc.id;
+            const isApproving = approving === doc.id;
+            const isRejecting = rejecting === doc.id;
             const isViewing = viewing === doc.submission?.file;
 
             return (
@@ -244,9 +275,15 @@ export default function PatientDocumentsTab({ patient }) {
 
                 {/* Submission Info */}
                 {doc.submission && (
-                  <div className="mt-2 ml-10 text-xs text-secondary-500 dark:text-neutral-400">
+                  <div className="mt-2 ml-10 text-xs text-secondary-500 dark:text-neutral-400 space-y-1">
                     {doc.submission.submittedAt && (
-                      <span>Submitted: {formatDate(doc.submission.submittedAt)}</span>
+                      <div>Submitted: {formatDate(doc.submission.submittedAt)}</div>
+                    )}
+                    {doc.submission.reviewNotes && (
+                      <div className="p-2 bg-neutral-50 dark:bg-neutral-800 rounded border border-neutral-200 dark:border-neutral-700">
+                        <span className="font-medium text-secondary-600 dark:text-neutral-300">Review Note:</span>
+                        <p className="mt-1 text-secondary-700 dark:text-neutral-400">{doc.submission.reviewNotes}</p>
+                      </div>
                     )}
                   </div>
                 )}
@@ -281,9 +318,10 @@ export default function PatientDocumentsTab({ patient }) {
                     </span>
                   )}
 
-                  {/* Pending: Show View File + Record buttons */}
+                  {/* Pending: Show View File + Approve/Reject with notes */}
                   {status === 'Pending' && (
-                    <>
+                    <div className="space-y-2 w-full">
+                      {/* View File Button */}
                       {doc.submission?.file && (
                         <button
                           onClick={() => handleViewFile(doc.submission.file)}
@@ -304,28 +342,58 @@ export default function PatientDocumentsTab({ patient }) {
                           View File
                         </button>
                       )}
-                      <button
-                        onClick={() => handleRecord(doc.id)}
-                        disabled={isRecording}
-                        className="px-2.5 py-1 text-xs font-medium text-white bg-success-500 hover:bg-success-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                      >
-                        {isRecording ? (
-                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                        Mark as Recorded
-                      </button>
-                    </>
+
+                      {/* Notes Textarea */}
+                      <textarea
+                        value={reviewNotes[doc.id] || ''}
+                        onChange={(e) => setReviewNotes(prev => ({ ...prev, [doc.id]: e.target.value }))}
+                        placeholder="Add notes (optional for approval, required for rejection)..."
+                        rows={2}
+                        className="w-full px-2 py-1.5 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleApprove(doc.id)}
+                          disabled={isApproving || isRejecting}
+                          className="px-2.5 py-1 text-xs font-medium text-white bg-success-500 hover:bg-success-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {isApproving ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleReject(doc.id)}
+                          disabled={isApproving || isRejecting}
+                          className="px-2.5 py-1 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {isRejecting ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          )}
+                          Reject
+                        </button>
+                      </div>
+                    </div>
                   )}
 
-                  {/* Recorded: Show View File button */}
-                  {status === 'Recorded' && doc.submission?.file && (
+                  {/* Recorded/Rejected: Show View File button */}
+                  {(status === 'Recorded' || status === 'Rejected') && doc.submission?.file && (
                     <button
                       onClick={() => handleViewFile(doc.submission.file)}
                       disabled={isViewing}
