@@ -61,7 +61,7 @@ export default function MyDocumentsPage() {
   const [downloading, setDownloading] = useState(null);
   const [uploading, setUploading] = useState(null);
   const [uploadProgress, setUploadProgress] = useState({});
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('requested');
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -181,11 +181,85 @@ export default function MyDocumentsPage() {
     }
   };
 
-  const uniqueTypes = [...new Set(documents.map(d => d.templateType))];
-  const filtered = filter === 'all' ? documents : documents.filter(d => d.templateType === filter);
+  const getFilteredRequestedDocs = () => {
+    if (filter === 'requested') {
+      return requestedDocs.filter(d => (d.submission?.status || 'Requested') === 'Requested');
+    }
+    if (filter === 'rejected') {
+      return requestedDocs.filter(d => d.submission?.status === 'Rejected');
+    }
+    if (filter === 'accepted') {
+      return requestedDocs.filter(d => d.submission?.status === 'Recorded');
+    }
+    return requestedDocs;
+  };
+
+  const filteredRequested = getFilteredRequestedDocs();
+  const requestedCount = requestedDocs.filter(d => (d.submission?.status || 'Requested') === 'Requested').length;
+  const rejectedCount = requestedDocs.filter(d => d.submission?.status === 'Rejected').length;
+  const acceptedCount = requestedDocs.filter(d => d.submission?.status === 'Recorded').length;
+
+  // For the "My Documents" section, show all documents (issued documents)
+  const filtered = documents;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">Requested Documents</h1>
+          <p className="text-sm text-secondary-500 dark:text-neutral-400 mt-1">
+            Manage your healthcare provider's document requests
+          </p>
+        </div>
+        <button
+          onClick={loadRequestedDocuments}
+          disabled={loadingRequests}
+          className="px-3 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded-lg transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+        >
+          <svg className={`w-4 h-4 ${loadingRequests ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
+      </div>
+
+      {/* Filter Tabs */}
+      {requestedDocs.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          <button
+            onClick={() => setFilter('requested')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              filter === 'requested'
+                ? 'bg-primary-600 text-white'
+                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+            }`}
+          >
+            Requested ({requestedCount})
+          </button>
+          <button
+            onClick={() => setFilter('rejected')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              filter === 'rejected'
+                ? 'bg-error-600 text-white'
+                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+            }`}
+          >
+            Rejected ({rejectedCount})
+          </button>
+          <button
+            onClick={() => setFilter('accepted')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              filter === 'accepted'
+                ? 'bg-success-600 text-white'
+                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+            }`}
+          >
+            Accepted ({acceptedCount})
+          </button>
+        </div>
+      )}
+
       {/* Requested Documents Section */}
       {requestedDocs.length > 0 && (
         <div className="bg-warning-50 dark:bg-warning-900/10 border-2 border-warning-200 dark:border-warning-800 rounded-xl p-5">
@@ -197,16 +271,18 @@ export default function MyDocumentsPage() {
             </div>
             <div className="flex-1">
               <h2 className="text-lg font-bold text-warning-900 dark:text-warning-200 mb-1">
-                📋 Documents Requested ({requestedDocs.length})
+                📋 Documents
               </h2>
               <p className="text-sm text-warning-700 dark:text-warning-300">
-                Your healthcare provider has requested the following documents. Please upload them as soon as possible.
+                {filter === 'requested' && 'Documents waiting for your upload'}
+                {filter === 'rejected' && 'Documents that were rejected by staff'}
+                {filter === 'accepted' && 'Documents approved by staff'}
               </p>
             </div>
           </div>
 
           <div className="space-y-3">
-            {requestedDocs.map((doc) => {
+            {filteredRequested.map((doc) => {
               const progress = uploadProgress[doc.id];
               const isUploading = uploading === doc.id;
               const status = doc.submission?.status || 'Requested';
@@ -366,51 +442,25 @@ export default function MyDocumentsPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">My Documents</h1>
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 mt-1">
-            View and download your medical documents
+      {/* No documents in current filter */}
+      {requestedDocs.length > 0 && filteredRequested.length === 0 && (
+        <div className="text-center py-12">
+          <svg className="w-16 h-16 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <p className="text-neutral-500 dark:text-neutral-400 text-sm">
+            {filter === 'requested' && 'No documents waiting for upload'}
+            {filter === 'rejected' && 'No rejected documents'}
+            {filter === 'accepted' && 'No accepted documents'}
           </p>
         </div>
-        <button
-          onClick={loadDocuments}
-          disabled={loading}
-          className="px-3 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded-lg transition-colors disabled:opacity-50 inline-flex items-center gap-2"
-        >
-          <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </button>
-      </div>
+      )}
 
-      {/* Filter chips */}
-      {uniqueTypes.length > 1 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === 'all'
-                ? 'bg-primary-600 text-white'
-                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-            }`}
-          >
-            All ({documents.length})
-          </button>
-          {uniqueTypes.map(type => (
-            <button
-              key={type}
-              onClick={() => setFilter(type)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                filter === type
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-              }`}
-            >
-              {TYPE_LABELS[type] || type} ({documents.filter(d => d.templateType === type).length})
-            </button>
+      {/* Loading */}
+      {loadingRequests && (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-20 bg-neutral-100 dark:bg-neutral-700 rounded-lg animate-pulse" />
           ))}
         </div>
       )}
@@ -442,6 +492,28 @@ export default function MyDocumentsPage() {
           </svg>
           <p className="text-secondary-500 dark:text-neutral-400 text-sm">No documents found</p>
           <p className="text-secondary-400 dark:text-neutral-500 text-xs mt-1">Documents issued by your healthcare provider will appear here.</p>
+        </div>
+      )}
+
+      {/* My Documents Header */}
+      {documents.length > 0 && (
+        <div className="flex items-center justify-between mt-8">
+          <div>
+            <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">My Documents</h1>
+            <p className="text-sm text-secondary-500 dark:text-neutral-400 mt-1">
+              View and download your medical documents issued by your healthcare provider
+            </p>
+          </div>
+          <button
+            onClick={loadDocuments}
+            disabled={loading}
+            className="px-3 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded-lg transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+          >
+            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
         </div>
       )}
 

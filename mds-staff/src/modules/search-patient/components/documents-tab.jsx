@@ -47,7 +47,7 @@ export default function PatientDocumentsTab({ patient }) {
   const [rejecting, setRejecting] = useState(null);
   const [archiving, setArchiving] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const [filter, setFilter] = useState('All');
+  const [filter, setFilter] = useState('Missing');
   const [notes, setNotes] = useState({});
 
   const patientId = patient?.id;
@@ -153,37 +153,43 @@ export default function PatientDocumentsTab({ patient }) {
   };
 
   const getDocStatus = (doc) => {
+    // RULE: submission.status should NEVER be 'Archived'
+    // Archived items go into archivedSubmissions array only
     if (!doc.submission) return 'Missing';
-    // Treat archived documents as "Missing" in the workflow
-    // (archived means the current active version is no longer valid)
+    
+    // SafeGuard: If somehow archived, treat as missing
     if (doc.submission.status === 'Archived') return 'Missing';
+    
+    // Return the ONLY active state this document is in
     return doc.submission.status;
   };
 
   // For Archived filter, show documents that have archived submissions
   const getFilteredDocs = () => {
-    if (filter === 'All') return documents;
     if (filter === 'Archived') {
-      // Show documents with archived submissions - either in archivedSubmissions array OR current submission with Archived status
+      // Show documents with archived submissions (historical versions)
+      // Only show if archivedSubmissions array has items
       return documents.filter(d => 
-        (d.archivedSubmissions && d.archivedSubmissions.length > 0) || 
-        d.submission?.status === 'Archived'
+        d.archivedSubmissions && d.archivedSubmissions.length > 0
       );
     }
-    // For other filters, use the status (which treats 'Archived' as 'Missing')
+    
+    // For other filters, use the status (which ensures exclusive state membership)
+    // Each document exists in ONLY ONE active state
     return documents.filter(d => getDocStatus(d) === filter);
   };
 
-  const statuses = ['All', 'Missing', 'Requested', 'Pending', 'Recorded', 'Rejected', 'Archived'];
+  // Deduplication: Ensure only ONE active submission per document type
+  // This prevents duplicate requests from showing
+  const statuses = ['Missing', 'Requested', 'Pending', 'Recorded', 'Rejected', 'Archived'];
   const filtered = getFilteredDocs();
 
   const submittedDocs = documents.filter(d => d.submission?.status === 'Recorded');
   const pendingDocs = documents.filter(d => d.submission?.status === 'Pending');
   const rejectedDocs = documents.filter(d => d.submission?.status === 'Rejected');
   const requestedDocs = documents.filter(d => d.submission?.status === 'Requested');
-  // Include both documents with no submission and documents with 'Archived' status
-  // (archived documents become "missing" again in the workflow)
-  const missingDocs = documents.filter(d => !d.submission || d.submission?.status === 'Archived');
+  // Missing = no active submission (all archived, or never requested)
+  const missingDocs = documents.filter(d => !d.submission);
 
   if (!patientId) {
     return (
@@ -286,7 +292,73 @@ export default function PatientDocumentsTab({ patient }) {
       {/* Documents List */}
       {!loading && filtered.length > 0 && (
         <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60 -mx-3 -mb-3">
-          {filtered.map((doc) => {
+          {filter === 'Archived' ? (
+            // Special rendering for Archived filter - show each submission as separate item
+            documents
+              .filter(doc => doc.archivedSubmissions && doc.archivedSubmissions.length > 0)
+              .flatMap((doc) => {
+                // IMPORTANT: Only show archivedSubmissions (never show current submission)
+                // Current submission should NEVER have status='Archived'
+                return doc.archivedSubmissions.map((archived, idx) => (
+                  <div key={`${doc.id}-archived-${archived.id}`} className="px-3 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors">
+                    {/* Header Row */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4 h-4 text-secondary-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-secondary-800 dark:text-white truncate">
+                            {doc.label} <span className="text-neutral-500 dark:text-neutral-400">({idx + 1})</span>
+                          </p>
+                        </div>
+                      </div>
+                      <StatusBadge status="Archived" />
+                    </div>
+
+                    {/* Submission Info */}
+                    <div className="mt-2 ml-10 text-xs text-secondary-500 dark:text-neutral-400 space-y-1">
+                      <div className="inline-block px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 rounded text-[10px] font-medium mb-2">
+                        📦 Archived {formatDate(archived.archivedAt)}
+                      </div>
+                      {archived.submittedAt && (
+                        <div>Submitted: {formatDate(archived.submittedAt)}</div>
+                      )}
+                      {archived.notes && (
+                        <div className="p-2 rounded border bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700">
+                          <span className="font-medium text-neutral-600 dark:text-neutral-400">Note:</span>
+                          <p className="mt-0.5 text-neutral-700 dark:text-neutral-300">{archived.notes}</p>
+                        </div>
+                      )}
+                      {archived.file && (
+                        <button
+                          onClick={() => handleViewFile(archived.file)}
+                          disabled={viewing === archived.file}
+                          className="mt-2 px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {viewing === archived.file ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                          View File
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ));
+              })
+          ) : (
+            // Default rendering for other filters
+            filtered.map((doc) => {
             const status = getDocStatus(doc);
             const isRequesting = requesting === doc.id;
             const isApproving = approving === doc.id;
@@ -575,7 +647,8 @@ export default function PatientDocumentsTab({ patient }) {
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
       )}
 
