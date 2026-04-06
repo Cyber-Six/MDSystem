@@ -1,16 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getPendingTickets } from '../health-chat-service';
-
-const POLL_INTERVAL = 60_000; // 60 seconds
 
 /**
  * Lightweight hook to track pending health chat ticket count.
  * Designed to work outside HealthChatProvider (e.g., sidebar badge).
- * Polls every 60s for the pending count.
+ * Fetches the pending count when mounted.
  */
 export function useHealthChatBadge() {
   const [count, setCount] = useState(0);
-  const intervalRef = useRef(null);
 
   const fetchCount = useCallback(async () => {
     try {
@@ -23,8 +20,6 @@ export function useHealthChatBadge() {
 
   useEffect(() => {
     fetchCount();
-    intervalRef.current = setInterval(fetchCount, POLL_INTERVAL);
-    return () => clearInterval(intervalRef.current);
   }, [fetchCount]);
 
   return count;

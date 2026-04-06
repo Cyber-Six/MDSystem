@@ -25,8 +25,6 @@ export function useHealthChatSocket() {
   const joinedRoomsRef = useRef(new Set());
   const processedMessageIds = useRef(new Set());
   const closedChatIds = useRef(new Set());
-  const pollingIntervalRef = useRef(null);
-  const lastMessageCheckRef = useRef(null);
 
   const {
     selectedChatId,
@@ -368,72 +366,6 @@ export function useHealthChatSocket() {
       }
     };
   }, []);
-
-  /**
-   * 3-minute polling fallback for message updates
-   * Runs independently of socket status to ensure messages are never missed
-   * Uses patientMessages endpoint since selectedChatId is actually patientId
-   */
-  useEffect(() => {
-    // Always clear previous interval first
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-
-    if (!selectedChatId || isArchived) {
-      return; // Nothing to poll
-    }
-
-    const POLLING_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
-
-    const pollForNewMessages = async () => {
-      try {
-        console.log('[HealthChatSocket Staff] Polling for new messages for patient:', selectedChatId);
-        // Use getPatientMessages since selectedChatId is actually patientId in the grouped approach
-        const { getPatientMessages } = await import('../health-chat-service');
-
-        // Fetch recent messages (last 10)
-        const messages = await getPatientMessages(Number(selectedChatId), { limit: 10 });
-
-        // Check if any messages are new (not in processedMessageIds)
-        const newMessages = messages.filter(msg => {
-          const messageId = String(msg.id);
-          return !processedMessageIds.current.has(messageId);
-        });
-
-        if (newMessages.length > 0) {
-          console.log(`[HealthChatSocket Staff] Polling found ${newMessages.length} new message(s)`);
-          // Add each new message to the UI + mark as processed
-          newMessages.forEach(msg => {
-            const messageId = String(msg.id);
-            processedMessageIds.current.add(messageId);
-            // Keep Set size bounded
-            if (processedMessageIds.current.size > 100) {
-              const firstKey = processedMessageIds.current.values().next().value;
-              processedMessageIds.current.delete(firstKey);
-            }
-            addMessageRef.current(selectedChatId, msg);
-          });
-        } else {
-          console.log('[HealthChatSocket Staff] Polling: no new messages');
-        }
-      } catch (error) {
-        console.error('[HealthChatSocket Staff] Polling error:', error);
-      }
-    };
-
-    // Start polling interval
-    pollingIntervalRef.current = setInterval(pollForNewMessages, POLLING_INTERVAL_MS);
-
-    // Cleanup interval on unmount or chatId change
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-    };
-  }, [selectedChatId, isArchived]);
 
   return {
     isConnected,
