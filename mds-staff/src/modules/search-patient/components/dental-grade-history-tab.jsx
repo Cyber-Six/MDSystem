@@ -487,11 +487,45 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
     photoRecords.length,
   );
 
-  // Records are ordered newest-first (DESC). Standalone grades created from the Dental
-  // Grading tab are the newest entries in that list. Skip them so this tab only pairs
-  // visit-linked dental grades with their corresponding visit records.
-  const dentalRecordOffset = Math.max(0, allDentalRecords.length - maxCount);
-  const dentalRecords      = allDentalRecords.slice(dentalRecordOffset);
+  // ── Date-based pairing of staff dental grades to patient visits ──
+  // A grade belongs to a visit if it was created AFTER that visit's date
+  // and BEFORE the next newer visit's date. This prevents ungraded patient
+  // records from incorrectly showing an older grade by positional index.
+  const matchedGrades = (() => {
+    const grades = new Array(maxCount).fill(null);
+    if (allDentalRecords.length === 0 || maxCount === 0) return grades;
+
+    // Build visit dates array (newest-first, matching API sort order)
+    const visitDates = [];
+    for (let i = 0; i < maxCount; i++) {
+      const d = dentalHistories[i]?.created_at
+        || procedureProfiles[i]?.created_at
+        || applianceProfiles[i]?.created_at
+        || photoRecords[i]?.created_at;
+      visitDates.push(d ? new Date(d).getTime() : 0);
+    }
+
+    // For each grade (newest-first), find the visit whose time-window it falls into
+    for (const grade of allDentalRecords) {
+      if (!grade.created_at) continue;
+      const gradeTime = new Date(grade.created_at).getTime();
+
+      for (let i = 0; i < maxCount; i++) {
+        if (visitDates[i] === 0) continue;
+        // Grade must come after this visit
+        if (gradeTime < visitDates[i]) continue;
+        // Grade must come before the next newer visit (if any)
+        if (i > 0 && gradeTime >= visitDates[i - 1]) continue;
+        // This visit's time-window matches; assign if not already taken
+        if (grades[i] === null) {
+          grades[i] = grade;
+        }
+        break; // grade can only belong to one visit window
+      }
+    }
+
+    return grades;
+  })();
 
   if (maxCount === 0) {
     return (
@@ -515,7 +549,7 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
           <RecordEntry
             key={i}
             index={i}
-            record={dentalRecords[i] ?? null}
+            record={matchedGrades[i] ?? null}
             dentalHistoryRecord={dentalHistories[i] ?? null}
             procedureProfile={procedureProfiles[i] ?? null}
             applianceProfile={applianceProfiles[i] ?? null}
