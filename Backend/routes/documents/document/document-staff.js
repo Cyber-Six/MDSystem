@@ -277,12 +277,14 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
-    // Check if submission exists
+    // Find the CURRENT (non-archived) submission
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
        FROM "patientRawDocument" prd
        JOIN "rawDocumentTag" rdt ON rdt.id = prd."documentTagId"
-       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2`,
+       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2 AND prd.status != 'Archived'
+       ORDER BY prd."created_at" DESC
+       LIMIT 1`,
       [documentId, patientId]
     );
 
@@ -294,13 +296,13 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
     const existing = existingResult.rows[0];
     const tagLabel = existing.label;
 
-    // Update to Recorded status with optional notes
+    // Update ONLY this specific submission to Recorded status
     const updateResult = await client.query(
       `UPDATE "patientRawDocument"
        SET status = 'Recorded', "recordedBy" = $1, "notes" = $2
-       WHERE "documentTagId" = $3 AND "patientId" = $4
+       WHERE id = $3
        RETURNING id`,
-      [req.user.id, notes || null, documentId, patientId]
+      [req.user.id, notes || null, existing.id]
     );
 
     const submissionId = updateResult.rows[0].id;
@@ -357,12 +359,14 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
-    // Check if submission exists
+    // Find the CURRENT (non-archived) submission
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
        FROM "patientRawDocument" prd
        JOIN "rawDocumentTag" rdt ON rdt.id = prd."documentTagId"
-       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2`,
+       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2 AND prd.status != 'Archived'
+       ORDER BY prd."created_at" DESC
+       LIMIT 1`,
       [documentId, patientId]
     );
 
@@ -374,13 +378,13 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
     const existing = existingResult.rows[0];
     const tagLabel = existing.label;
 
-    // Update to Rejected status with optional notes
+    // Update ONLY this specific submission to Rejected status
     const updateResult = await client.query(
       `UPDATE "patientRawDocument"
        SET status = 'Rejected', "recordedBy" = $1, "notes" = $2
-       WHERE "documentTagId" = $3 AND "patientId" = $4
+       WHERE id = $3
        RETURNING id`,
-      [req.user.id, notes || null, documentId, patientId]
+      [req.user.id, notes || null, existing.id]
     );
 
     const submissionId = updateResult.rows[0].id;
@@ -448,10 +452,12 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
       return res.status(404).json({ error: 'DOCUMENT_TAG_NOT_FOUND' });
     }
 
-    // Check if submission already exists
+    // Check if there's already a CURRENT (non-archived) submission
     const existingResult = await client.query(
       `SELECT id, status FROM "patientRawDocument"
-       WHERE "documentTagId" = $1 AND "patientId" = $2`,
+       WHERE "documentTagId" = $1 AND "patientId" = $2 AND status != 'Archived'
+       ORDER BY "created_at" DESC
+       LIMIT 1`,
       [documentId, patientId]
     );
 
@@ -469,18 +475,18 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
     let submissionId;
 
     if (existing) {
-      // Update existing submission to 'Requested' status with notes
-      // Keep archived_at for historical tracking (don't clear it)
+      // Update existing non-archived submission to 'Requested' status
       const updateResult = await client.query(
         `UPDATE "patientRawDocument"
          SET status = 'Requested', "recordedBy" = $1, "notes" = $2, file = NULL
-         WHERE "documentTagId" = $3 AND "patientId" = $4
+         WHERE id = $3
          RETURNING id`,
-        [req.user.id, notes || null, documentId, patientId]
+        [req.user.id, notes || null, existing.id]
       );
       submissionId = updateResult.rows[0].id;
     } else {
-      // Create new submission with 'Requested' status and notes
+      // No current submission exists - create NEW submission
+      // (Archived ones are preserved separately)
       const insertResult = await client.query(
         `INSERT INTO "patientRawDocument" ("documentTagId", "patientId", status, "recordedBy", "notes")
          VALUES ($1, $2, 'Requested', $3, $4)

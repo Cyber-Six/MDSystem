@@ -453,10 +453,11 @@ export default function PatientDocumentsTab({ patient }) {
                   </div>
                 )}
 
-                {/* Actions Row */}
-                <div className="mt-2 ml-10 space-y-2">
-                  {/* Missing: Show notes input and Request button */}
-                  {status === 'Missing' && (
+                {/* Actions Row - Hide when viewing Archived filter */}
+                {filter !== 'Archived' && (
+                  <div className="mt-2 ml-10 space-y-2">
+                    {/* Missing: Show notes input and Request button */}
+                    {status === 'Missing' && (
                     <div className="space-y-2">
                       <input
                         type="text"
@@ -645,6 +646,7 @@ export default function PatientDocumentsTab({ patient }) {
                     </button>
                   )}
                 </div>
+                )}
               </div>
             );
           })

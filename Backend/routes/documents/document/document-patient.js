@@ -80,13 +80,15 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
     const { file } = req.body;
     const patientId = req.user.id;
 
-    // Check if the document tag exists and get existing submission
+    // Check if the document tag exists and get CURRENT (non-archived) submission
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, prd.file
        FROM "rawDocumentTag" rdt
        LEFT JOIN "patientRawDocument" prd ON
-         prd."documentTagId" = rdt.id AND prd."patientId" = $2
-       WHERE rdt.id = $1 AND rdt."isActive" = true`,
+         prd."documentTagId" = rdt.id AND prd."patientId" = $2 AND prd.status != 'Archived'
+       WHERE rdt.id = $1 AND rdt."isActive" = true
+       ORDER BY prd."created_at" DESC
+       LIMIT 1`,
       [documentId, patientId]
     );
 
@@ -135,13 +137,13 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
     let submissionId;
 
     if (existing.id) {
-      // Update existing submission
+      // Update existing CURRENT submission by specific ID
       const updateResult = await client.query(
         `UPDATE "patientRawDocument"
          SET file = COALESCE($1, file), status = 'Pending'
-         WHERE "documentTagId" = $2 AND "patientId" = $3
+         WHERE id = $2
          RETURNING id`,
-        [promotedFile || null, documentId, patientId]
+        [promotedFile || null, existing.id]
       );
       submissionId = updateResult.rows[0].id;
     } else {
