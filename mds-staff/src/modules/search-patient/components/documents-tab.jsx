@@ -38,6 +38,98 @@ function formatDate(dateStr) {
   });
 }
 
+// Document Preview Modal Component
+function DocumentPreviewModal({ isOpen, onClose, fileUrl, fileType, fileName }) {
+  if (!isOpen) return null;
+
+  // Detect file type from MIME or filename
+  const isPdf = fileType === 'application/pdf' || fileName?.toLowerCase().endsWith('.pdf');
+  const isImage = fileType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName || '');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div 
+        className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-neutral-800 rounded-xl shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900">
+          <h3 className="text-sm font-medium text-secondary-800 dark:text-white truncate">
+            {fileName || 'Document Preview'}
+          </h3>
+          <div className="flex items-center gap-2">
+            <a
+              href={fileUrl}
+              download={fileName}
+              className="px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors"
+            >
+              Download
+            </a>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-auto max-h-[calc(90vh-60px)] bg-neutral-100 dark:bg-neutral-900">
+          {isImage ? (
+            <div className="flex items-center justify-center p-4 min-h-[400px]">
+              <img
+                src={fileUrl}
+                alt="Document Preview"
+                className="max-w-full max-h-[80vh] object-contain rounded shadow-lg"
+              />
+            </div>
+          ) : isPdf ? (
+            <iframe
+              src={fileUrl}
+              title="Document Preview"
+              className="w-full h-[80vh] border-0"
+            />
+          ) : (
+            // For unknown types, try iframe first (works for many formats)
+            <iframe
+              src={fileUrl}
+              title="Document Preview"
+              className="w-full h-[80vh] border-0"
+              onError={(e) => {
+                // If iframe fails, show download option
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'flex';
+              }}
+            />
+          )}
+          
+          {/* Fallback download UI (hidden by default) */}
+          {!isImage && !isPdf && (
+            <div className="hidden flex-col items-center justify-center p-8 text-center h-[80vh]">
+              <svg className="w-16 h-16 text-neutral-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-neutral-600 dark:text-neutral-400 mb-4">
+                Preview not available for this file type
+              </p>
+              <a
+                href={fileUrl}
+                download={fileName}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+              >
+                Download File
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PatientDocumentsTab({ patient }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +141,9 @@ export default function PatientDocumentsTab({ patient }) {
   const [viewing, setViewing] = useState(null);
   const [filter, setFilter] = useState('Missing');
   const [notes, setNotes] = useState({});
+  
+  // Preview modal state
+  const [previewModal, setPreviewModal] = useState({ isOpen: false, fileUrl: null, fileType: null, fileName: null });
 
   const patientId = patient?.id;
 
@@ -139,17 +234,30 @@ export default function PatientDocumentsTab({ patient }) {
     }
   };
 
-  const handleViewFile = async (fileId) => {
+  const handleViewFile = async (fileId, fileName = 'Document') => {
     setViewing(fileId);
+    setError('');
     try {
       const blob = await viewDocumentFile(fileId);
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      setPreviewModal({
+        isOpen: true,
+        fileUrl: url,
+        fileType: blob.type,
+        fileName: fileName,
+      });
     } catch (err) {
       setError('Failed to open file');
     } finally {
       setViewing(null);
     }
+  };
+
+  const closePreviewModal = () => {
+    if (previewModal.fileUrl) {
+      URL.revokeObjectURL(previewModal.fileUrl);
+    }
+    setPreviewModal({ isOpen: false, fileUrl: null, fileType: null, fileName: null });
   };
 
   const getDocStatus = (doc) => {
@@ -326,7 +434,7 @@ export default function PatientDocumentsTab({ patient }) {
                       )}
                       {archived.file && (
                         <button
-                          onClick={() => handleViewFile(archived.file)}
+                          onClick={() => handleViewFile(archived.file, `${doc.label} - Archived v${idx + 1}`)}
                           disabled={viewing === archived.file}
                           className="mt-2 px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
                         >
@@ -431,7 +539,7 @@ export default function PatientDocumentsTab({ patient }) {
                         )}
                         {archived.file && (
                           <button
-                            onClick={() => handleViewFile(archived.file)}
+                            onClick={() => handleViewFile(archived.file, `${doc.label} - Archived v${doc.archivedSubmissions.length - idx}`)}
                             disabled={isViewing}
                             className="mt-1 px-2 py-0.5 text-[10px] font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50"
                           >
@@ -489,7 +597,7 @@ export default function PatientDocumentsTab({ patient }) {
                       {/* View File Button */}
                       {doc.submission?.file && (
                         <button
-                          onClick={() => handleViewFile(doc.submission.file)}
+                          onClick={() => handleViewFile(doc.submission.file, `${doc.label} - Pending Review`)}
                           disabled={isViewing}
                           className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
                         >
@@ -565,7 +673,7 @@ export default function PatientDocumentsTab({ patient }) {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleViewFile(doc.submission.file)}
+                          onClick={() => handleViewFile(doc.submission.file, `${doc.label} - Recorded`)}
                           disabled={isViewing}
                           className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
                         >
@@ -628,6 +736,15 @@ export default function PatientDocumentsTab({ patient }) {
           <p className="text-xs text-secondary-400 dark:text-neutral-500">No documents with status "{filter}"</p>
         </div>
       )}
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={previewModal.isOpen}
+        onClose={closePreviewModal}
+        fileUrl={previewModal.fileUrl}
+        fileType={previewModal.fileType}
+        fileName={previewModal.fileName}
+      />
     </PatientSectionCard>
   );
 }
