@@ -227,13 +227,6 @@ export default function MyDocumentsPage() {
       // Documents that need patient upload (status = Requested)
       return requestedDocs.filter(d => d.submission?.status === 'Requested');
     }
-    if (filter === 'rejected') {
-      // Documents with rejected submissions (current or historical)
-      return requestedDocs.filter(d => 
-        d.submission?.status === 'Rejected' || 
-        (d.rejectedSubmissions && d.rejectedSubmissions.length > 0)
-      );
-    }
     if (filter === 'pending') {
       // Documents awaiting staff review
       return requestedDocs.filter(d => d.submission?.status === 'Pending');
@@ -247,10 +240,6 @@ export default function MyDocumentsPage() {
   const filteredRequested = getFilteredRequestedDocs();
   const requestedCount = requestedDocs.filter(d => d.submission?.status === 'Requested').length;
   const pendingCount = requestedDocs.filter(d => d.submission?.status === 'Pending').length;
-  const rejectedCount = requestedDocs.filter(d => 
-    d.submission?.status === 'Rejected' || 
-    (d.rejectedSubmissions && d.rejectedSubmissions.length > 0)
-  ).length;
   const acceptedCount = requestedDocs.filter(d => d.submission?.status === 'Recorded').length;
 
   // For the "My Documents" section, show all documents (issued documents)
@@ -302,16 +291,6 @@ export default function MyDocumentsPage() {
             Pending ({pendingCount})
           </button>
           <button
-            onClick={() => setFilter('rejected')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === 'rejected'
-                ? 'bg-error-600 text-white'
-                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-            }`}
-          >
-            Rejected ({rejectedCount})
-          </button>
-          <button
             onClick={() => setFilter('accepted')}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               filter === 'accepted'
@@ -340,7 +319,6 @@ export default function MyDocumentsPage() {
               <p className="text-sm text-warning-700 dark:text-warning-300">
                 {filter === 'requested' && 'Documents waiting for your upload'}
                 {filter === 'pending' && 'Documents awaiting staff review'}
-                {filter === 'rejected' && 'Documents that were rejected by staff'}
                 {filter === 'accepted' && 'Documents approved by staff'}
               </p>
             </div>
@@ -356,14 +334,12 @@ export default function MyDocumentsPage() {
               const canUpload = status === 'Requested';
               const needsReview = status === 'Pending';
               const isApproved = status === 'Recorded';
-              const isRejected = status === 'Rejected';
 
               return (
                 <div
                   key={doc.id}
                   className={`bg-white dark:bg-neutral-800 border rounded-lg p-4 ${
                     isApproved ? 'border-success-200 dark:border-success-800' :
-                    isRejected ? 'border-error-200 dark:border-error-800' :
                     needsReview ? 'border-warning-200 dark:border-warning-600' :
                     'border-warning-200 dark:border-neutral-600'
                   }`}
@@ -372,20 +348,16 @@ export default function MyDocumentsPage() {
                     <div className="flex items-start gap-3 flex-1">
                       <div className={`w-9 h-9 rounded flex items-center justify-center flex-shrink-0 ${
                         isApproved ? 'bg-success-100 dark:bg-success-900/20' :
-                        isRejected ? 'bg-error-100 dark:bg-error-900/20' :
                         needsReview ? 'bg-warning-100 dark:bg-warning-900/20' :
                         'bg-warning-100 dark:bg-warning-900/20'
                       }`}>
                         <svg className={`w-4 h-4 ${
                           isApproved ? 'text-success-600 dark:text-success-400' :
-                          isRejected ? 'text-error-600 dark:text-error-400' :
                           needsReview ? 'text-warning-600 dark:text-warning-400' :
                           'text-warning-600 dark:text-warning-400'
                         }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           {isApproved ? (
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          ) : isRejected ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           ) : (
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           )}
@@ -415,24 +387,20 @@ export default function MyDocumentsPage() {
                     <div className={`mb-3 p-3 rounded border text-xs ${
                       status === 'Requested' ? 'bg-primary-50 dark:bg-primary-900/10 border-primary-200 dark:border-primary-800' :
                       isApproved ? 'bg-success-50 dark:bg-success-900/10 border-success-200 dark:border-success-800' :
-                      isRejected ? 'bg-error-50 dark:bg-error-900/10 border-error-200 dark:border-error-800' :
                       'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
                     }`}>
                       <p className={`font-medium mb-1 ${
                         status === 'Requested' ? 'text-primary-700 dark:text-primary-400' :
                         isApproved ? 'text-success-700 dark:text-success-400' : 
-                        isRejected ? 'text-error-700 dark:text-error-400' :
                         'text-secondary-700 dark:text-neutral-400'
                       }`}>
                         {status === 'Requested' ? '📋 Why this document is needed:' :
                          isApproved ? '✓ Review Note:' : 
-                         isRejected ? '✗ Rejection Reason:' :
                          'Note:'}
                       </p>
                       <p className={`${
                         status === 'Requested' ? 'text-secondary-700 dark:text-neutral-300' :
                         isApproved ? 'text-success-600 dark:text-success-300' : 
-                        isRejected ? 'text-error-600 dark:text-error-300' :
                         'text-secondary-700 dark:text-neutral-300'
                       }`}>
                         {doc.submission.notes}
@@ -443,17 +411,12 @@ export default function MyDocumentsPage() {
                   {/* Status Messages - only show if no notes */}
                   {needsReview && !doc.submission?.notes && (
                     <div className="mb-3 p-2 bg-warning-50 dark:bg-warning-900/10 border border-warning-200 dark:border-warning-700 rounded text-xs text-warning-700 dark:text-warning-300">
-                      ⏳ Your document is being reviewed by staff. You'll be notified once it's approved or rejected.
+                      ⏳ Your document is being reviewed by staff. You'll be notified once it's approved.
                     </div>
                   )}
                   {isApproved && !doc.submission?.notes && (
                     <div className="mb-3 p-2 bg-success-50 dark:bg-success-900/10 border border-success-200 dark:border-success-700 rounded text-xs text-success-700 dark:text-success-300">
                       ✓ This document has been approved by staff. No further action needed.
-                    </div>
-                  )}
-                  {isRejected && !doc.submission?.notes && (
-                    <div className="mb-3 p-2 bg-error-50 dark:bg-error-900/10 border border-error-200 dark:border-error-700 rounded text-xs text-error-700 dark:text-error-300">
-                      ✗ This document was rejected. Please contact your healthcare provider for more information.
                     </div>
                   )}
 
@@ -557,32 +520,6 @@ export default function MyDocumentsPage() {
                       )}
                     </div>
                   )}
-
-                  {/* Show rejected submission history in Rejected filter */}
-                  {filter === 'rejected' && doc.rejectedSubmissions && doc.rejectedSubmissions.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs font-medium text-error-700 dark:text-error-400">
-                        📋 Rejection History
-                      </p>
-                      {doc.rejectedSubmissions.map((rejected, idx) => (
-                        <div key={rejected.id} className="p-2 bg-error-50 dark:bg-error-900/10 border border-error-200 dark:border-error-800 rounded text-xs">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-error-700 dark:text-error-400 font-medium">
-                              Submission {doc.rejectedSubmissions.length - idx}
-                            </span>
-                            <span className="text-error-500 dark:text-error-500">
-                              {formatDate(rejected.rejectedAt || rejected.submittedAt)}
-                            </span>
-                          </div>
-                          {rejected.notes && (
-                            <p className="text-error-600 dark:text-error-300 mt-1">
-                              Reason: {rejected.notes}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -599,7 +536,6 @@ export default function MyDocumentsPage() {
           <p className="text-neutral-500 dark:text-neutral-400 text-sm">
             {filter === 'requested' && 'No documents waiting for upload'}
             {filter === 'pending' && 'No documents pending review'}
-            {filter === 'rejected' && 'No rejected documents'}
             {filter === 'accepted' && 'No accepted documents'}
           </p>
         </div>

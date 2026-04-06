@@ -31,7 +31,7 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
               prd.id as "submissionId", prd.status, prd.file,
-              prd."notes", prd."rejected_at",
+              prd."notes",
               prd."recordedBy", prd."created_at" as "submittedAt",
               up.first_name as "recordedByFirstName", up.last_name as "recordedByLastName"
        FROM "rawDocumentTag" rdt
@@ -53,39 +53,29 @@ router.get('/requests', jwtProtect("patient"), async (req, res) => {
           label: row.label,
           isActive: row.isActive,
           submission: null,
-          rejectedSubmissions: [],
         });
       }
       
       const doc = docMap.get(row.id);
       
-      if (row.submissionId) {
-        const submissionData = {
-          id: row.submissionId,
-          status: row.status,
-          file: row.file,
-          notes: row.notes,
-          rejectedAt: row.rejected_at,
-          recordedBy: row.recordedBy
-            ? {
-                id: row.recordedBy,
-                name: `${row.recordedByFirstName || ''} ${row.recordedByLastName || ''}`.trim() || 'Unknown',
-              }
-            : null,
-          submittedAt: row.submittedAt,
-        };
-        
-        // Categorize submission
-        if (row.status === 'Rejected') {
-          doc.rejectedSubmissions.push(submissionData);
-        } else if (row.status !== 'Archived') {
-          // Active submission (Requested, Pending, Recorded)
-          // Only set if not already set (first one is most recent)
-          if (!doc.submission) {
-            doc.submission = submissionData;
-          }
+      if (row.submissionId && row.status !== 'Archived') {
+        // Active submission (Requested, Pending, Recorded)
+        // Only set if not already set (first one is most recent)
+        if (!doc.submission) {
+          doc.submission = {
+            id: row.submissionId,
+            status: row.status,
+            file: row.file,
+            notes: row.notes,
+            recordedBy: row.recordedBy
+              ? {
+                  id: row.recordedBy,
+                  name: `${row.recordedByFirstName || ''} ${row.recordedByLastName || ''}`.trim() || 'Unknown',
+                }
+              : null,
+            submittedAt: row.submittedAt,
+          };
         }
-        // Archived submissions are not shown to patient in this endpoint
       }
     });
 
