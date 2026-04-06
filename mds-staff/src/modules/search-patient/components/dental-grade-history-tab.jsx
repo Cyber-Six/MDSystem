@@ -7,18 +7,18 @@ import { ENUM_TO_CODE } from './tooth-chart-constants';
 const GQL_DENTAL_RECORD_HISTORY = `
   query GetDentalRecordHistory($userId: ID!) {
     getUserDentalHistory(userId: $userId, limit: 50) {
-      id seenByDentist lastDentalCleaning purpose lastVisitDate
+      id seenByDentist lastDentalCleaning purpose lastVisitDate status created_at
     }
     getUserOralApplianceProfile(userId: $userId, limit: 50) {
-      id notes created_at
+      id notes created_at status
       appliances { id tagId status dateIssued arch }
     }
     getUserDentalProcedureProfile(userId: $userId, limit: 50) {
-      id notes created_at
+      id notes created_at status
       procedures { id procedureTypeId procedureDate }
     }
     getUserDentalPhotoRecord(userId: $userId, limit: 50) {
-      id upperTeeth lowerTeeth isValid created_at
+      id upperTeeth lowerTeeth isValid created_at status
     }
     dentalProcedureCatalogs: getDomainCatalogs(domain: DentalProcedure) { id name }
     oralApplianceCatalogs: getOralApplianceCatalogs { id name }
@@ -164,6 +164,7 @@ function RecordEntry({ index, record, dentalHistoryRecord, procedureProfile, app
       states[tp.toothIndex] = ENUM_TO_CODE[tp.legend] ?? tp.legend;
     });
     return states;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record]);
 
   const oralFindings   = record?.oralFindings || [];
@@ -470,15 +471,15 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
     );
   }
 
-  const dentalRecords     = historyData?.getUserDentalRecord           ?? [];
-  const dentalHistories   = historyData?.getUserDentalHistory          ?? [];
-  const procedureProfiles = historyData?.getUserDentalProcedureProfile ?? [];
-  const applianceProfiles = historyData?.getUserOralApplianceProfile   ?? [];
-  const photoRecords      = historyData?.getUserDentalPhotoRecord      ?? [];
+  const allDentalRecords  = historyData?.getUserDentalRecord           ?? [];
+  const dentalHistories   = (historyData?.getUserDentalHistory          ?? []).filter(r => r.status === 'Approved');
+  const procedureProfiles = (historyData?.getUserDentalProcedureProfile ?? []).filter(r => r.status === 'Approved');
+  const applianceProfiles = (historyData?.getUserOralApplianceProfile   ?? []).filter(r => r.status === 'Approved');
+  const photoRecords      = (historyData?.getUserDentalPhotoRecord      ?? []).filter(r => r.status === 'Approved');
 
   // Number of visit-based cards is driven solely by visit data (histories, procedures,
   // appliances, photos). Standalone dental grades created from the Dental Grading tab
-  // must NOT inflate this count or shift the index-based pairing.
+  // must NOT inflate this count.
   const maxCount = Math.max(
     dentalHistories.length,
     procedureProfiles.length,
@@ -486,10 +487,45 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
     photoRecords.length,
   );
 
-  // If there are more dental records than visit cards, the excess newer records are
-  // standalone grades (created from the Dental Grading tab). Offset into the array so
-  // each visit card still receives its original consultation-linked dental record.
-  const dentalOffset = Math.max(0, dentalRecords.length - maxCount);
+  // ── Date-based pairing of staff dental grades to patient visits ──
+  // A grade belongs to a visit if it was created AFTER that visit's date
+  // and BEFORE the next newer visit's date. This prevents ungraded patient
+  // records from incorrectly showing an older grade by positional index.
+  const matchedGrades = (() => {
+    const grades = new Array(maxCount).fill(null);
+    if (allDentalRecords.length === 0 || maxCount === 0) return grades;
+
+    // Build visit dates array (newest-first, matching API sort order)
+    const visitDates = [];
+    for (let i = 0; i < maxCount; i++) {
+      const d = dentalHistories[i]?.created_at
+        || procedureProfiles[i]?.created_at
+        || applianceProfiles[i]?.created_at
+        || photoRecords[i]?.created_at;
+      visitDates.push(d ? new Date(d).getTime() : 0);
+    }
+
+    // For each grade (newest-first), find the visit whose time-window it falls into
+    for (const grade of allDentalRecords) {
+      if (!grade.created_at) continue;
+      const gradeTime = new Date(grade.created_at).getTime();
+
+      for (let i = 0; i < maxCount; i++) {
+        if (visitDates[i] === 0) continue;
+        // Grade must come after this visit
+        if (gradeTime < visitDates[i]) continue;
+        // Grade must come before the next newer visit (if any)
+        if (i > 0 && gradeTime >= visitDates[i - 1]) continue;
+        // This visit's time-window matches; assign if not already taken
+        if (grades[i] === null) {
+          grades[i] = grade;
+        }
+        break; // grade can only belong to one visit window
+      }
+    }
+
+    return grades;
+  })();
 
   if (maxCount === 0) {
     return (
@@ -513,7 +549,7 @@ export default function PatientDentalGradeHistoryTab({ patient }) {
           <RecordEntry
             key={i}
             index={i}
-            record={dentalRecords[i + dentalOffset] ?? null}
+            record={matchedGrades[i] ?? null}
             dentalHistoryRecord={dentalHistories[i] ?? null}
             procedureProfile={procedureProfiles[i] ?? null}
             applianceProfile={applianceProfiles[i] ?? null}
