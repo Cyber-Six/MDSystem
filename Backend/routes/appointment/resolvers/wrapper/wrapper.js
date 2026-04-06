@@ -1278,7 +1278,6 @@ const Mutation = {
 
       if (result.rowCount === 0) {
         await client.query('ROLLBACK');
-        client.release();
         throwGraphQLError(res)
           .message("No matching custom dates found to unset")
           .status(404)
