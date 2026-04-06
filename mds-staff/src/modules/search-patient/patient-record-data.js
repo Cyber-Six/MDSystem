@@ -39,14 +39,14 @@ export const GQL_FULL_RECORD = `
       medications { id medicineId description }
     }
     getUserDentalHistory(userId: $userId, limit: 50) {
-      id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at
+      id seenByDentist lastDentalCleaning purpose lastVisitDate archived_at status created_at
     }
     getUserOralApplianceProfile(userId: $userId, limit: 50) {
-      id notes created_at
+      id notes created_at status
       appliances { id tagId status dateIssued arch }
     }
     getUserDentalProcedureProfile(userId: $userId, limit: 50) {
-      id notes created_at
+      id notes created_at status
       procedures { id procedureTypeId procedureDate }
     }
     getUserVisualAcuityProfile(userId: $userId, limit: 1) {
@@ -70,7 +70,7 @@ export const GQL_FULL_RECORD = `
     medicationCatalogs: getDomainCatalogs(domain: Medication) { id name }
     oralApplianceCatalogs: getOralApplianceCatalogs { id name }
     getUserDentalPhotoRecord(userId: $userId, limit: 50) {
-      id upperTeeth lowerTeeth isValid created_at
+      id upperTeeth lowerTeeth isValid created_at status
     }
   }
 `;
