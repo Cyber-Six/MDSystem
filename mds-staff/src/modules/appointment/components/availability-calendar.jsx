@@ -95,8 +95,6 @@ const AvailabilityCalendar = ({ selectedDate, onSelectDate, events, slotDefaults
       const dayName = dayIndexToName[dayOfWeek];
       if (currentSchedulePerWeek.includes(dayName)) return true;
       if (customDateSet.has(dateStr)) return true;
-      // Also consider dates that have API data (ScheduleDateEntity exists)
-      if (monthAvailability[dateStr]) return true;
       return false;
     };
 

@@ -452,8 +452,13 @@ export function StaffNotificationProvider({ children }) {
   const unseenInventoryCount = inventoryAlerts.filter((a) => !seenInventoryIds.has(a.id)).length;
   const unreadCount = notifications.filter((n) => n.unread).length + unseenInventoryCount;
 
+  /** Emit a raw socket event (e.g. to join/leave a server-side room). */
+  const emit = useCallback((event, data) => {
+    socketRef.current?.emit(event, data);
+  }, []);
+
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll, clearNotificationsByType, removeNotificationByRefId, subscribe, inventoryAlerts, markInventoryAlertsAsSeen, refreshInventoryAlerts }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, clearAll, clearNotificationsByType, removeNotificationByRefId, subscribe, emit, inventoryAlerts, markInventoryAlertsAsSeen, refreshInventoryAlerts }}>
       {children}
     </NotificationContext.Provider>
   );

@@ -1477,13 +1477,35 @@ const Mutation = {
         RETURNING *;
       `;
 
-      const result = await db.query(query, values);
+      let result = await db.query(query, values);
 
+      // If no entity exists yet, create one with scheduler defaults then retry
       if (result.rowCount === 0) {
-        throwGraphQLError(res)
-          .message("No matching schedule date entity found to update")
-          .status(404)
-          .throw();
+        const schedulerDefaults = await db.query(
+          `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+          [schedulerId]
+        );
+        if (schedulerDefaults.rowCount === 0) {
+          throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+        }
+        const { morningAllowed: defMorning, afternoonAllowed: defAfternoon } = schedulerDefaults.rows[0];
+
+        await db.query(
+          `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+           SELECT $1, $2, $3, $4
+           WHERE NOT EXISTS (
+             SELECT 1 FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2
+           );`,
+          [schedulerId, date, defMorning, defAfternoon]
+        );
+
+        result = await db.query(query, values);
+        if (result.rowCount === 0) {
+          throwGraphQLError(res)
+            .message("Failed to create and update schedule date entity")
+            .status(500)
+            .throw();
+        }
       }
 
       // Attach computed counts so GraphQL can resolve morningRegistered, etc.

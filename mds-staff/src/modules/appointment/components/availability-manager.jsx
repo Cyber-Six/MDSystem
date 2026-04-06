@@ -195,29 +195,24 @@ const AvailabilityManager = () => {
     }
   };
 
-  // Handle calendar date selection - load day-specific data (allow all dates)
-  const handleDateSelect = async (dateStr, isAvailable = true) => {
+  // Handle calendar date selection — read-only, never creates DB rows
+  const handleDateSelect = (dateStr) => {
     setSelectedCalendarDate(dateStr);
     if (!activeScheduler?.id || !dateStr) {
       setDayOverrideData(null);
       return;
     }
 
-    // Load override data for any date (staff can view/edit all dates)
-    setLoadingDayData(true);
-    try {
-      const data = await getScheduleAvailability(activeScheduler.id, dateStr);
-      setDayOverrideData(data);
-      // Refresh month availability since getScheduleAvailability may create a new ScheduleDateEntity
-      if (currentMonthRange) {
-        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-      }
-    } catch (err) {
-      console.error('Failed to load day data:', err);
+    // For closed dates: show the "Add as custom date" prompt
+    if (!isDateAvailable(dateStr)) {
       setDayOverrideData(null);
-    } finally {
-      setLoadingDayData(false);
+      return;
     }
+
+    // Use already-loaded monthAvailability data (no API call = no ScheduleDateEntity creation)
+    // For dates without an entity yet, dayOverrideData stays null and DaySlotEditor
+    // falls back to scheduler defaults.
+    setDayOverrideData(monthAvailability[dateStr] || null);
   };
 
   // Check if a specific date is available (in schedule or custom dates)
@@ -306,11 +301,10 @@ const AvailabilityManager = () => {
       const input = session === 'morning'
         ? { morningAllowed: value }
         : { afternoonAllowed: value };
-      await updateDateIdentity(activeScheduler.id, dateStr, input);
-      // If this is the currently selected date, refresh the day data
+      const result = await updateDateIdentity(activeScheduler.id, dateStr, input);
+      // Update the day slot editor if this is the currently selected date
       if (dateStr === selectedCalendarDate) {
-        const data = await getScheduleAvailability(activeScheduler.id, dateStr);
-        setDayOverrideData(data);
+        setDayOverrideData(result);
       }
       // Refresh month availability to update calendar view
       if (currentMonthRange) {
@@ -319,6 +313,40 @@ const AvailabilityManager = () => {
     } catch (err) {
       setError(err.message || 'Failed to update session limit');
       throw err;
+    }
+  };
+
+  // Handle disabling a date (set both sessions to 0)
+  const handleDisableDate = async (dateStr) => {
+    if (!activeScheduler?.id || !dateStr) return;
+    try {
+      const result = await updateDateIdentity(activeScheduler.id, dateStr, {
+        morningAllowed: 0,
+        afternoonAllowed: 0,
+      });
+      setDayOverrideData(result);
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to disable date');
+    }
+  };
+
+  // Handle re-enabling a disabled date (reset to scheduler defaults)
+  const handleResetDate = async (dateStr) => {
+    if (!activeScheduler?.id || !dateStr) return;
+    try {
+      const result = await updateDateIdentity(activeScheduler.id, dateStr, {
+        morningAllowed: activeScheduler.morningAllowed,
+        afternoonAllowed: activeScheduler.afternoonAllowed,
+      });
+      setDayOverrideData(result);
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to reset date');
     }
   };
 
@@ -372,6 +400,7 @@ const AvailabilityManager = () => {
       notes: '',
       isActive: true,
       whitelistOnly: false,
+      purposeRequired: false,
     });
     setRequirements([]);
     setPendingRequirements([]);
@@ -476,6 +505,7 @@ const AvailabilityManager = () => {
           notes: editForm.notes || null,
           isActive: editForm.isActive,
           whitelistOnly: editForm.whitelistOnly,
+          purposeRequired: editForm.purposeRequired ?? false,
         });
         await loadSchedulers(updated?.id ?? editForm.id);
       } else {
@@ -489,6 +519,7 @@ const AvailabilityManager = () => {
           afternoonAllowed: editForm.afternoonAllowed,
           notes: editForm.notes || null,
           whitelistOnly: editForm.whitelistOnly ?? false,
+          purposeRequired: editForm.purposeRequired ?? false,
           slotCustomDates: [],
           whiteLists: [],
         });
@@ -784,9 +815,11 @@ const AvailabilityManager = () => {
                 loading={loadingDayData}
                 events={events}
                 customDates={customDates}
-                isDateAvailable={selectedCalendarDate ? (isDateAvailable(selectedCalendarDate) || !!dayOverrideData) : false}
+                isDateAvailable={selectedCalendarDate ? isDateAvailable(selectedCalendarDate) : false}
                 onAddCustomDate={handleAddCustomDateFromEditor}
                 onRemoveCustomDate={handleRemoveCustomDateFromEditor}
+                onDisableDate={handleDisableDate}
+                onResetDate={handleResetDate}
               />
             )}
 
@@ -1115,6 +1148,18 @@ const AvailabilityManager = () => {
                       <div>
                         <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Active</p>
                         <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Open and accepting appointments</p>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={editForm.purposeRequired ?? false}
+                        onChange={(e) => setEditForm({ ...editForm, purposeRequired: e.target.checked })}
+                        className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Require Purpose</p>
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Patients must provide a reason for their visit</p>
                       </div>
                     </label>
                     <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">

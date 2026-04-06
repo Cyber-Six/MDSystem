@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sun, Moon, Plus, Minus, X, Check, Calendar, Trash2, Clock } from 'lucide-react';
+import { Sun, Moon, Plus, Minus, X, Check, Calendar, Trash2, Clock, Ban, RotateCcw } from 'lucide-react';
 
 /**
  * Normalize a date value (string, Date, or number) to YYYY-MM-DD format.
@@ -33,6 +33,8 @@ const DaySlotEditor = ({
   isDateAvailable = true,
   onAddCustomDate,
   onRemoveCustomDate,
+  onDisableDate,
+  onResetDate,
 }) => {
   const selectedDate = normalizeDate(rawSelectedDate);
   const [morningSlots, setMorningSlots] = useState(0);
@@ -119,6 +121,31 @@ const DaySlotEditor = ({
     }
   };
 
+  const handleDisableDate = async () => {
+    if (onDisableDate) {
+      setSaving(true);
+      try {
+        await onDisableDate(selectedDate);
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  const handleResetDate = async () => {
+    if (onResetDate) {
+      setSaving(true);
+      try {
+        await onResetDate(selectedDate);
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  // Check if date is explicitly disabled (both sessions = 0)
+  const isExplicitlyDisabled = isDateAvailable && displayMorning === 0 && displayAfternoon === 0;
+
   const formatDateShort = (dateStr) => {
     if (!dateStr) return '';
     const normalized = normalizeDate(dateStr);
@@ -185,7 +212,7 @@ const DaySlotEditor = ({
                 </span>
               </div>
               <p className="text-xs text-secondary-400 dark:text-neutral-500 ml-5">
-                {getDayOfWeek(selectedDate)} is not in the schedule. Enable it to accept appointments.
+                {getDayOfWeek(selectedDate)} is not in the regular schedule. Add it as a custom date to accept appointments.
               </p>
             </div>
             <button
@@ -198,8 +225,55 @@ const DaySlotEditor = ({
               ) : (
                 <Plus className="w-3 h-3" />
               )}
-              Enable
+              Add Custom Date
             </button>
+          </div>
+        </div>
+      ) : isExplicitlyDisabled ? (
+        /* Disabled day - re-enable */
+        <div className="flex-1 flex flex-col justify-center px-3 py-2">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Ban className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+                <span className="text-sm font-semibold text-secondary-800 dark:text-white truncate">{formatDateShort(selectedDate)}</span>
+                <span className="px-1.5 py-px text-xs font-semibold bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-full uppercase">
+                  Disabled
+                </span>
+                {isCustomDate && (
+                  <span className="px-1.5 py-px text-xs font-semibold bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-full flex-shrink-0">
+                    Custom
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-secondary-400 dark:text-neutral-500 ml-5">
+                This date is disabled. Patients cannot book appointments on this day.
+              </p>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+              <button
+                onClick={handleResetDate}
+                disabled={saving}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+              >
+                {saving ? (
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <RotateCcw className="w-3 h-3" />
+                )}
+                Re-enable
+              </button>
+              {isCustomDate && (
+                <button
+                  onClick={handleRemoveAsCustomDate}
+                  disabled={saving}
+                  className="p-1 text-error-400 hover:text-error-600 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors disabled:opacity-50"
+                  title="Remove custom date"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ) : (
@@ -236,6 +310,14 @@ const DaySlotEditor = ({
                   Save
                 </button>
               )}
+              <button
+                onClick={handleDisableDate}
+                disabled={saving}
+                className="p-1 text-neutral-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded transition-colors disabled:opacity-50"
+                title="Disable this date"
+              >
+                <Ban className="w-3.5 h-3.5" />
+              </button>
               {isCustomDate && (
                 <button
                   onClick={handleRemoveAsCustomDate}
