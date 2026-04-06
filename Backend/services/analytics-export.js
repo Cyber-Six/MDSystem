@@ -453,8 +453,9 @@ async function generateSingleMetricPDF(dataType, result, meta) {
       `${result.values[idx] || 0}/${result.diastolicValues?.[idx] || 0}`,
     ]);
     if (rows.length > 0) {
+      // Column widths must sum to tableWidth = 612 - 54 - 54 = 504
       pdf.addTable(doc, headers, rows, {
-        columnWidths: [30, 100, 95, 95, 84],
+        columnWidths: [30, 200, 90, 90, 94],
       });
     }
   } else {
@@ -471,9 +472,10 @@ async function generateSingleMetricPDF(dataType, result, meta) {
     });
 
     if (rows.length > 0) {
+      // Column widths must sum to tableWidth = 612 - 54 - 54 = 504
       const colWidths = isTrend
-        ? [30, 220, 154]
-        : [30, 210, 80, 84];
+        ? [30, 330, 144]   // 504 total
+        : [30, 300, 90, 84]; // 504 total
       pdf.addTable(doc, headers, rows, { columnWidths: colWidths });
     }
   }
@@ -525,17 +527,29 @@ async function generateSingleMetricPDF(dataType, result, meta) {
       }
     }
 
-    // Move to next page only if chart won't fit
-    if (doc.y > 480) doc.addPage();
-    else doc.moveDown(0.5);
+    // Add page only if chart (250pt) + heading (~20pt) + padding (20pt) won't fit
+    const chartNeeds = 290;
+    const pageContentBottom = doc.page.height - doc.page.margins.bottom - 20;
+    if (doc.y + chartNeeds > pageContentBottom) {
+      doc.addPage();
+    } else {
+      doc.moveDown(0.5);
+    }
 
-    pdf.addSectionHeading(doc, 'Chart Visualization');
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#2F4F4F').text('Chart Visualization');
+    doc.moveDown(0.3);
+    doc.font('Helvetica').fillColor('#333333');
+
     const chartX = (doc.page.width - 460) / 2;
     pdf.embedImage(doc, chartBuffer, { x: chartX, y: doc.y, width: 460, height: 250 });
     doc.y += 260;
   } catch (err) {
-    logger.warn('Chart generation failed for single metric PDF', { dataType, error: err.message });
-    doc.fontSize(8).fillColor('#999').text('[Chart could not be generated]', { align: 'center' });
+    logger.warn('Chart generation failed for single metric PDF', {
+      dataType,
+      error: err.message,
+      stack: err.stack,
+    });
+    doc.fontSize(8).fillColor('#999999').text('[Chart could not be generated]', { align: 'center' });
   }
 
   // ── Footer ─────────────────────────────────────────────

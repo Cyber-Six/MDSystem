@@ -1102,6 +1102,120 @@ const Mutation = {
     };
   },
 
+  _transferTicket: async (_, { chatId, toMedicalId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Verify the chat exists and is ongoing
+    const chatResult = await db.query(
+      `SELECT * FROM "HealthChat" WHERE id = $1 AND status = 'Ongoing'`,
+      [chatId]
+    );
+
+    if (chatResult.rowCount === 0) {
+      throwGraphQLError(res).message("Active chat session not found").status(404).throw();
+    }
+
+    const chat = chatResult.rows[0];
+
+    if (Number(chat.medicalId) !== Number(user.id)) {
+      throwGraphQLError(res).message(`You are not the assigned medical staff for this ticket`).status(403).throw();
+    }
+
+    // Update the medicalId to the new medical staff
+    const result = await db.query(
+      `UPDATE "HealthChat"
+       SET "medicalId" = $1
+       WHERE id = $2 AND status = 'Ongoing'
+       RETURNING *`,
+      [toMedicalId, chatId]
+    );
+
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to transfer ticket").status(500).throw();
+    }
+
+    const updatedChat = await formatChatRecord(result.rows[0]);
+
+    // Notify the entire chat room about the transfer
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-transferred', {
+      chatId,
+      toMedicalId,
+      chat: updatedChat
+    });
+
+    // Also notify the patient if they're offline
+    if (updatedChat.patientId) {
+      notifyUser(String(updatedChat.patientId), 'healthchat:ticket-transferred', {
+        chatId,
+        toMedicalId,
+        chat: updatedChat
+      });
+    }
+
+    return {
+      success: true,
+      chat: updatedChat,
+      message: "Ticket transferred successfully."
+    };
+  },
+
+  _takeoverOngoingTicket: async (_, { chatId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    
+    // Verify the chat exists and is ongoing
+    const chatResult = await db.query(
+      `SELECT * FROM "HealthChat" WHERE id = $1 AND status = 'Ongoing'`,
+      [chatId]
+    );
+
+    if (chatResult.rowCount === 0) {
+      throwGraphQLError(res).message("Active chat session not found").status(404).throw();
+    }
+
+    const chat = chatResult.rows[0];
+
+    // Update the medicalId to the current user
+    const result = await db.query(
+      `UPDATE "HealthChat"
+       SET "medicalId" = $1
+       WHERE id = $2 AND status = 'Ongoing'
+       RETURNING *`,
+      [user.id, chatId]
+    );
+
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to take over ticket").status(500).throw();
+    }
+
+    const updatedChat = await formatChatRecord(result.rows[0]);
+
+    // Notify the entire chat room about the takeover
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-taken-over', {
+      chatId,
+      toMedicalId: user.id,
+      chat: updatedChat
+    });
+
+    // Also notify the patient if they're offline
+    if (updatedChat.patientId) {
+      notifyUser(String(updatedChat.patientId), 'healthchat:ticket-taken-over', {
+        chatId,
+        toMedicalId: user.id,
+        chat: updatedChat
+      });
+    }
+
+    return {
+      success: true,
+      chat: updatedChat,
+      message: "You have taken over this ticket."
+    };
+  },
+
   /**
    * Extend the session by 1 day
    * Available to both patient (owns the chat) and medical staff (assigned to chat)
