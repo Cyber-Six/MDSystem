@@ -26,35 +26,55 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
-    const result = await db.query(
-      `SELECT rdt.id, rdt.label, rdt."isActive",
-              prd.id as "submissionId", prd.file, prd.status,
+    // Get all document tags
+    const tagsResult = await db.query(
+      `SELECT id, label, "isActive" FROM "rawDocumentTag" WHERE "isActive" = true ORDER BY id`
+    );
+
+    // Get all submissions for this patient (including archived)
+    const submissionsResult = await db.query(
+      `SELECT prd.id, prd."documentTagId", prd.file, prd.status,
               prd."recordedBy", prd."notes",
               prd."archived_at", prd."created_at" as "submittedAt"
-       FROM "rawDocumentTag" rdt
-       LEFT JOIN "patientRawDocument" prd ON prd."documentTagId" = rdt.id
-         AND prd."patientId" = $1
-       WHERE rdt."isActive" = true
-       ORDER BY rdt.id`,
+       FROM "patientRawDocument" prd
+       WHERE prd."patientId" = $1
+       ORDER BY prd."created_at" DESC`,
       [patientId]
     );
 
-    const documents = result.rows.map((row) => ({
-      id: row.id,
-      label: row.label,
-      isActive: row.isActive,
-      submission: row.submissionId
-        ? {
-            id: row.submissionId,
-            file: row.file,
-            status: row.status,
-            recordedBy: row.recordedBy,
-            notes: row.notes,
-            archivedAt: row.archived_at,
-            submittedAt: row.submittedAt,
-          }
-        : null,
-    }));
+    // Group submissions by document tag
+    const submissionsByTag = {};
+    submissionsResult.rows.forEach(sub => {
+      if (!submissionsByTag[sub.documentTagId]) {
+        submissionsByTag[sub.documentTagId] = [];
+      }
+      submissionsByTag[sub.documentTagId].push({
+        id: sub.id,
+        file: sub.file,
+        status: sub.status,
+        recordedBy: sub.recordedBy,
+        notes: sub.notes,
+        archivedAt: sub.archived_at,
+        submittedAt: sub.submittedAt,
+      });
+    });
+
+    // Build response with all submissions
+    const documents = tagsResult.rows.map((tag) => {
+      const allSubmissions = submissionsByTag[tag.id] || [];
+      // Current submission = first non-archived, or null if all are archived
+      const currentSubmission = allSubmissions.find(s => s.status !== 'Archived') || null;
+      // Archived submissions
+      const archivedSubmissions = allSubmissions.filter(s => s.status === 'Archived');
+
+      return {
+        id: tag.id,
+        label: tag.label,
+        isActive: tag.isActive,
+        submission: currentSubmission,
+        archivedSubmissions: archivedSubmissions,
+      };
+    });
 
     res.json({ success: true, documents });
   } catch (err) {
@@ -508,7 +528,7 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
 
 /**
  * POST /documents/required/:documentId/archive
- * Archive a recorded document (sets status to 'Archived')
+ * Archive a recorded document (keeps it as historical record)
  * Body: patientId (required), notes (optional - reason for archiving)
  */
 router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, res) => {
@@ -524,12 +544,14 @@ router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, 
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
-    // Check if submission exists and is Recorded
+    // Find the current non-archived submission
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
        FROM "patientRawDocument" prd
        JOIN "rawDocumentTag" rdt ON rdt.id = prd."documentTagId"
-       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2`,
+       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2 AND prd.status != 'Archived'
+       ORDER BY prd."created_at" DESC
+       LIMIT 1`,
       [documentId, patientId]
     );
 
@@ -550,13 +572,13 @@ router.post('/required/:documentId/archive', jwtProtect('medical'), async (req, 
 
     const tagLabel = existing.label;
 
-    // Update to Archived status with timestamp and optional notes
+    // Update to Archived status - keeps the record as history
     const updateResult = await client.query(
       `UPDATE "patientRawDocument"
        SET status = 'Archived', "archived_at" = NOW(), "notes" = $1
-       WHERE "documentTagId" = $2 AND "patientId" = $3
+       WHERE id = $2
        RETURNING id`,
-      [notes || null, documentId, patientId]
+      [notes || null, existing.id]
     );
 
     const submissionId = updateResult.rows[0].id;
