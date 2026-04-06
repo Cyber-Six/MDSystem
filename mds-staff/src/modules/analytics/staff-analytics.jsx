@@ -14,21 +14,21 @@ import {
 // ── Friendly display names ───────────────────────────────────────────────────
 
 const QUERY_LABELS = {
-  'consultations-by-type': 'Consultations by Type',
-  'consultations-by-mode': 'Consultations by Mode',
-  'consultation-trends': 'Consultation Trends',
-  'top-diagnoses': 'Top 10 Diagnoses',
-  'diagnoses-by-type': 'Diagnoses by Type',
+  'consultations-by-type': 'By Type',
+  'consultations-by-mode': 'By Mode',
+  'consultation-trends': 'Trends',
+  'top-diagnoses': 'Top Diagnoses',
+  'diagnoses-by-type': 'By Type',
   'bmi-trends': 'BMI Trends',
-  'blood-pressure-trends': 'Blood Pressure Trends',
-  'immunization-coverage': 'Immunization Coverage',
-  'dental-procedures': 'Top Dental Procedures',
-  'lifestyle-risks': 'Lifestyle Risk Factors',
-  'allergy-by-type': 'Allergies by Type',
-  'allergy-by-severity': 'Allergies by Severity',
-  'appointments-by-category': 'Appointments by Category',
-  'appointments-by-status': 'Appointments by Status',
-  'appointments-by-session': 'Appointments by Session',
+  'blood-pressure-trends': 'BP Trends',
+  'immunization-coverage': 'Immunization',
+  'dental-procedures': 'Dental Procedures',
+  'lifestyle-risks': 'Lifestyle Risks',
+  'allergy-by-type': 'By Type',
+  'allergy-by-severity': 'By Severity',
+  'appointments-by-category': 'By Category',
+  'appointments-by-status': 'By Status',
+  'appointments-by-session': 'By Session',
 };
 
 // ── All query keys ───────────────────────────────────────────────────────────
@@ -96,24 +96,53 @@ const StaffAnalytics = () => {
   }, [loadData]);
 
   return (
-    <div className="space-y-3">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-1.5">
+      {/* Page Header — title left, category tabs + export right (matches Appointments/Inventory) */}
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Analytics</h1>
+          <h1 className="text-xl font-bold text-secondary-800 dark:text-white leading-none m-0">Analytics</h1>
           <p className="text-[11px] text-secondary-500 dark:text-neutral-400">
             View clinic performance metrics and health data insights
           </p>
         </div>
-        <button
-          onClick={() => setExportOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary-700 hover:bg-secondary-800 dark:bg-neutral-600 dark:hover:bg-neutral-500 text-white text-xs font-medium rounded-md transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-          Export
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Category Tabs */}
+          <div className="flex gap-0.5 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
+            <button
+              onClick={() => setActiveCategory('all')}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                activeCategory === 'all'
+                  ? 'bg-primary-500 text-white shadow-sm'
+                  : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+              }`}
+            >
+              All
+            </button>
+            {Object.entries(QUERY_CATEGORIES).map(([key, cat]) => (
+              <button
+                key={key}
+                onClick={() => setActiveCategory(key)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                  activeCategory === key
+                    ? 'bg-primary-500 text-white shadow-sm'
+                    : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+          {/* Export */}
+          <button
+            onClick={() => setExportOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary-700 hover:bg-secondary-800 dark:bg-neutral-600 dark:hover:bg-neutral-500 text-white text-xs font-medium rounded-md transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -122,7 +151,6 @@ const StaffAnalytics = () => {
         startDate={startDate}
         endDate={endDate}
         groupBy={groupBy}
-        activeCategory={activeCategory}
         onBranchChange={setBranch}
         onStartDateChange={setStartDate}
         onEndDateChange={setEndDate}
@@ -134,7 +162,6 @@ const StaffAnalytics = () => {
             setEndDate(range.endDate);
           }
         }}
-        onCategoryChange={setActiveCategory}
         onRefresh={loadData}
         loading={loading}
       />
@@ -153,7 +180,7 @@ const StaffAnalytics = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {visibleQueries.map((queryKey) => (
             <AnalyticsChartCard
               key={queryKey}
