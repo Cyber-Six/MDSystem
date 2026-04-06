@@ -256,18 +256,31 @@ const SchedulerModal = ({ isOpen, onClose, onSave, onDelete, editingScheduler })
             />
           </div>
 
-          {/* Active toggle (edit only) */}
-          {isEditing && (
+          {/* Toggles */}
+          <div className="flex flex-col gap-1.5">
+            {isEditing && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isActive}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+                  className="w-4 h-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-base text-secondary-700 dark:text-neutral-300">Active</span>
+              </label>
+            )}
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={formData.isActive}
-                onChange={(e) => setFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+                checked={formData.purposeRequired}
+                onChange={(e) => setFormData((prev) => ({ ...prev, purposeRequired: e.target.checked }))}
                 className="w-4 h-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500"
               />
-              <span className="text-base text-secondary-700 dark:text-neutral-300">Active</span>
+              <span className="text-base text-secondary-700 dark:text-neutral-300">
+                Require Purpose / Reason for Visit
+              </span>
             </label>
-          )}
+          </div>
 
           {/* ── Requirements ───────────────────────────────────────────── */}
           <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
@@ -407,6 +420,7 @@ function getDefaults(scheduler) {
     notes: scheduler?.notes || '',
     isActive: scheduler?.isActive ?? true,
     whitelistOnly: scheduler?.whitelistOnly ?? false,
+    purposeRequired: scheduler?.purposeRequired ?? false,
   };
 }
 

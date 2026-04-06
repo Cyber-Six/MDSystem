@@ -82,6 +82,7 @@ const notificationHandlers = {
       if (typeof ack === 'function') ack({ error: 'INTERNAL_ERROR', message: err.message });
     }
   },
+
 };
 
 registerHandlers(notificationHandlers);

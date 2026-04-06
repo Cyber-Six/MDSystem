@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
-import { searchByStatus, getStatusCounts, listAllSchedulers } from '../staff-appointment-service';
+import { searchByStatus, getStatusCounts, listAllSchedulers, loadInitialQueueData } from '../staff-appointment-service';
 
 /* ── constants ─────────────────────────────────────── */
 
@@ -144,35 +144,63 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     },
   }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId, filterLocation]);
 
-  /* Load schedulers once on mount for the filter dropdown */
+  /* Initial load — combines schedulers + counts + first-page appointments into
+     a single HTTP request to minimise round-trips on a low-power server.
+     Subsequent tab/filter changes use the individual fetchers below. */
+  const isInitialLoad = useRef(true);
   useEffect(() => {
-    listAllSchedulers().then(setSchedulers).catch(() => {});
-  }, []);
-
-  /* Load status counts — on mount and whenever filters change.
-     filterDate/filterSchedulerId default to '' which coerces to null
-     in refreshCounts ('' || null), so "all schedulers / all dates" is
-     handled correctly by the backend when no filter is selected. */
-  const isFirstCountFetch = useRef(true);
-  useEffect(() => {
+    let cancelled = false;
     const run = async () => {
-      if (isFirstCountFetch.current) {
-        isFirstCountFetch.current = false;
-        setLoadingCounts(true);
-        try {
-          await refreshCounts(filterDate, filterSchedulerId, filterLocation);
-        } finally {
+      const gen = ++fetchGenRef.current;
+      setLoading(true);
+      setLoadingCounts(true);
+      setHasMore(false);
+      setOffset(0);
+      try {
+        const result = await loadInitialQueueData(
+          activeTab,
+          PAGE_SIZE,
+          { date: filterDate || null, schedulerId: filterSchedulerId || null, location: filterLocation || null }
+        );
+        if (cancelled || gen !== fetchGenRef.current) return;
+        setSchedulers(result.schedulers);
+        setTabCounts(result.counts);
+        setAppointments(result.appointments);
+        setHasMore(result.appointments.length === PAGE_SIZE);
+      } catch (err) {
+        if (cancelled || gen !== fetchGenRef.current) return;
+        console.error('Failed to load initial queue data:', err);
+        setAppointments([]);
+        setHasMore(false);
+      } finally {
+        if (!cancelled && gen === fetchGenRef.current) {
+          setLoading(false);
           setLoadingCounts(false);
         }
-      } else {
-        refreshCounts(filterDate, filterSchedulerId, filterLocation);
       }
     };
     run();
-  }, [filterDate, filterSchedulerId, filterLocation, refreshCounts]);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  /* Fetch appointments whenever the active tab or active filters change */
+  /* Re-fetch everything when filters change (after initial mount) */
   useEffect(() => {
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation);
+    refreshCounts(filterDate, filterSchedulerId, filterLocation);
+  }, [filterDate, filterSchedulerId, filterLocation, refreshCounts, fetchAppointments]);
+
+  /* Re-fetch appointments when tab changes (after initial mount) */
+  const isInitialTabRender = useRef(true);
+  useEffect(() => {
+    if (isInitialTabRender.current) {
+      isInitialTabRender.current = false;
+      return;
+    }
     fetchAppointments(activeTab, filterDate, filterSchedulerId, filterLocation);
   }, [activeTab, filterDate, filterSchedulerId, filterLocation, fetchAppointments]);
 

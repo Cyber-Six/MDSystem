@@ -126,6 +126,84 @@ export const getStatusCounts = async ({ schedulerId, date, location } = {}) => {
 };
 
 /**
+ * Load the queue's initial data in a single GraphQL request:
+ *   - status counts (tab badges)
+ *   - scheduler list (filter dropdown)
+ *   - first page of appointments for the given status
+ *
+ * Reduces 3 separate HTTP round-trips to 1.
+ *
+ * @param {string} status - Active tab's SCHEDULING_STATUS
+ * @param {number} [limit=15]
+ * @param {{ date?: string, schedulerId?: string, location?: string }} [filters]
+ * @returns {Promise<{ appointments: Array, counts: Object, schedulers: Array }>}
+ */
+export const loadInitialQueueData = async (status, limit = 15, { date, schedulerId, location } = {}) => {
+  const data = await sendGraphQL(`
+    query LoadInitialQueue(
+      $status: SCHEDULING_STATUS!, $limit: Int,
+      $date: Date, $schedulerId: ID, $location: LOCATION_DESIGNATION
+    ) {
+      appointments: searchAppointmentStatuses(
+        status: $status, offset: 0, limit: $limit,
+        date: $date, schedulerId: $schedulerId, location: $location
+      ) {
+        id
+        patientId
+        patientIdentifier
+        patientName
+        patientEmail
+        slotEntityId
+        status
+        session
+        scheduledDate
+        schedulerLabel
+        approvedBy
+        purpose
+        notes
+        arrived_at
+        created_at
+        requirements {
+          id
+          scheduleRequirementId
+          filename
+          created_at
+        }
+      }
+      counts: getAppointmentStatusCounts(date: $date, schedulerId: $schedulerId, location: $location) {
+        status
+        count
+      }
+      schedulers: listAllOpenAppointments(offset: 0, limit: 200) {
+        id
+        label
+        location
+        patientType
+        schedulePerWeek
+        morningAllowed
+        afternoonAllowed
+        notes
+        isActive
+        containsCustomDates
+        whitelistOnly
+        created_at
+      }
+    }
+  `, { status, limit, date: date || null, schedulerId: schedulerId || null, location: location || null });
+
+  const counts = {};
+  for (const { status: s, count } of data.counts) {
+    counts[s] = count;
+  }
+
+  return {
+    appointments: data.appointments || [],
+    counts,
+    schedulers: data.schedulers || [],
+  };
+};
+
+/**
  * Get a specific patient's current appointment status.
  * @param {string} userId
  * @returns {Promise<string|null>}
