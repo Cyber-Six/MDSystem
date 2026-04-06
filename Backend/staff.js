@@ -16,6 +16,7 @@ const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventor
 const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 const { initRoleManagementGraphQL } = require('./routes/role-management/graphql.js');
+const { initDashboardGraphQL } = require('./routes/dashboard/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
@@ -24,7 +25,7 @@ const analyticsRoutes = require('./routes/documents/analytics/analytics.js');
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 const staffRoutes = require('./routes/staff/staff.js');
-const dashboardRoutes = require('./routes/dashboard/dashboard.js');
+const dashboardRestRoutes = require('./routes/dashboard/rest-endpoint.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentStaffRoutes = require('./routes/documents/document/document-staff.js');
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
@@ -78,6 +79,7 @@ initMedicalMedicineRequestGraphQL(app);
 initPrescriptionGraphQL(app);
 initMedicalHealthChatGraphQL(app);
 initRoleManagementGraphQL(app);
+initDashboardGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
@@ -87,7 +89,7 @@ app.use('/auth/refresh', refreshAuthRoutes);
 
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
-app.use('/dashboard', dashboardRoutes);
+app.use('/dashboard/rest', dashboardRestRoutes);
 app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
 app.use('/analytics', analyticsRoutes);

@@ -60,8 +60,11 @@ export default function MyDocumentsPage() {
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(null);
   const [uploading, setUploading] = useState(null);
+  const [submitting, setSubmitting] = useState(null);
   const [uploadProgress, setUploadProgress] = useState({});
   const [filter, setFilter] = useState('requested');
+  // Staged files: { documentId: { file: File, fileId: string (staged UUID) } }
+  const [stagedFiles, setStagedFiles] = useState({});
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -116,18 +119,17 @@ export default function MyDocumentsPage() {
     setUploadProgress(prev => ({ ...prev, [documentId]: 0 }));
 
     try {
-      // Stage the file first
-      setUploadProgress(prev => ({ ...prev, [documentId]: 30 }));
+      // Stage the file (upload to temporary storage)
+      setUploadProgress(prev => ({ ...prev, [documentId]: 50 }));
       const fileUUID = await uploadFileToStaging(file);
-
-      // Submit the document request with the staged file
-      setUploadProgress(prev => ({ ...prev, [documentId]: 60 }));
-      await uploadRequestedDocument(documentId, fileUUID);
 
       setUploadProgress(prev => ({ ...prev, [documentId]: 100 }));
 
-      // Reload both lists
-      await Promise.all([loadDocuments(), loadRequestedDocuments()]);
+      // Store staged file info - do NOT submit yet
+      setStagedFiles(prev => ({
+        ...prev,
+        [documentId]: { file, fileId: fileUUID },
+      }));
 
       // Clear progress after a brief delay
       setTimeout(() => {
@@ -136,9 +138,9 @@ export default function MyDocumentsPage() {
           delete next[documentId];
           return next;
         });
-      }, 1000);
+      }, 500);
     } catch (err) {
-      setError(err.message || 'Failed to upload document.');
+      setError(err.message || 'Failed to upload file.');
       setUploadProgress(prev => {
         const next = { ...prev };
         delete next[documentId];
@@ -147,6 +149,45 @@ export default function MyDocumentsPage() {
     } finally {
       setUploading(null);
     }
+  };
+
+  // Manual submit - patient must click Submit to send staged file
+  const handleSubmit = async (documentId) => {
+    const staged = stagedFiles[documentId];
+    if (!staged?.fileId) {
+      setError('No file selected. Please select a file first.');
+      return;
+    }
+
+    setSubmitting(documentId);
+    setError('');
+
+    try {
+      await uploadRequestedDocument(documentId, staged.fileId);
+
+      // Clear staged file
+      setStagedFiles(prev => {
+        const next = { ...prev };
+        delete next[documentId];
+        return next;
+      });
+
+      // Reload both lists
+      await Promise.all([loadDocuments(), loadRequestedDocuments()]);
+    } catch (err) {
+      setError(err.message || 'Failed to submit document.');
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  // Cancel staged file
+  const handleCancelStaged = (documentId) => {
+    setStagedFiles(prev => {
+      const next = { ...prev };
+      delete next[documentId];
+      return next;
+    });
   };
 
   const handleDownload = async (doc) => {
@@ -183,10 +224,19 @@ export default function MyDocumentsPage() {
 
   const getFilteredRequestedDocs = () => {
     if (filter === 'requested') {
-      return requestedDocs.filter(d => (d.submission?.status || 'Requested') === 'Requested');
+      // Documents that need patient upload (status = Requested)
+      return requestedDocs.filter(d => d.submission?.status === 'Requested');
     }
     if (filter === 'rejected') {
-      return requestedDocs.filter(d => d.submission?.status === 'Rejected');
+      // Documents with rejected submissions (current or historical)
+      return requestedDocs.filter(d => 
+        d.submission?.status === 'Rejected' || 
+        (d.rejectedSubmissions && d.rejectedSubmissions.length > 0)
+      );
+    }
+    if (filter === 'pending') {
+      // Documents awaiting staff review
+      return requestedDocs.filter(d => d.submission?.status === 'Pending');
     }
     if (filter === 'accepted') {
       return requestedDocs.filter(d => d.submission?.status === 'Recorded');
@@ -195,8 +245,12 @@ export default function MyDocumentsPage() {
   };
 
   const filteredRequested = getFilteredRequestedDocs();
-  const requestedCount = requestedDocs.filter(d => (d.submission?.status || 'Requested') === 'Requested').length;
-  const rejectedCount = requestedDocs.filter(d => d.submission?.status === 'Rejected').length;
+  const requestedCount = requestedDocs.filter(d => d.submission?.status === 'Requested').length;
+  const pendingCount = requestedDocs.filter(d => d.submission?.status === 'Pending').length;
+  const rejectedCount = requestedDocs.filter(d => 
+    d.submission?.status === 'Rejected' || 
+    (d.rejectedSubmissions && d.rejectedSubmissions.length > 0)
+  ).length;
   const acceptedCount = requestedDocs.filter(d => d.submission?.status === 'Recorded').length;
 
   // For the "My Documents" section, show all documents (issued documents)
@@ -238,6 +292,16 @@ export default function MyDocumentsPage() {
             Requested ({requestedCount})
           </button>
           <button
+            onClick={() => setFilter('pending')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              filter === 'pending'
+                ? 'bg-warning-600 text-white'
+                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+            }`}
+          >
+            Pending ({pendingCount})
+          </button>
+          <button
             onClick={() => setFilter('rejected')}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               filter === 'rejected'
@@ -275,6 +339,7 @@ export default function MyDocumentsPage() {
               </h2>
               <p className="text-sm text-warning-700 dark:text-warning-300">
                 {filter === 'requested' && 'Documents waiting for your upload'}
+                {filter === 'pending' && 'Documents awaiting staff review'}
                 {filter === 'rejected' && 'Documents that were rejected by staff'}
                 {filter === 'accepted' && 'Documents approved by staff'}
               </p>
@@ -285,6 +350,8 @@ export default function MyDocumentsPage() {
             {filteredRequested.map((doc) => {
               const progress = uploadProgress[doc.id];
               const isUploading = uploading === doc.id;
+              const isSubmitting = submitting === doc.id;
+              const stagedFile = stagedFiles[doc.id];
               const status = doc.submission?.status || 'Requested';
               const canUpload = status === 'Requested';
               const needsReview = status === 'Pending';
@@ -393,46 +460,127 @@ export default function MyDocumentsPage() {
                   {/* Upload Area - only show if status is Requested */}
                   {canUpload && (
                     <div className="relative">
-                      <input
-                        type="file"
-                        id={`file-upload-${doc.id}`}
-                        accept="image/*,application/pdf"
-                        onChange={(e) => handleFileSelect(doc.id, e.target.files[0])}
-                        disabled={isUploading}
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor={`file-upload-${doc.id}`}
-                        className={`block w-full px-4 py-6 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${
-                          isUploading
-                            ? 'border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/30 cursor-not-allowed'
-                            : 'border-primary-300 dark:border-primary-700 bg-primary-50/50 dark:bg-primary-900/10 hover:bg-primary-100 dark:hover:bg-primary-900/20 hover:border-primary-400 dark:hover:border-primary-600'
-                        }`}
-                      >
-                        {isUploading ? (
-                          <div className="space-y-2">
-                            <svg className="w-8 h-8 mx-auto text-primary-500 dark:text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                            </svg>
-                            <p className="text-sm font-medium text-primary-700 dark:text-primary-400">
-                              Uploading... {progress || 0}%
-                            </p>
+                      {stagedFile ? (
+                        // File is staged - show file info with Submit/Cancel buttons
+                        <div className="p-4 border-2 border-success-300 dark:border-success-700 bg-success-50 dark:bg-success-900/10 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-lg bg-success-100 dark:bg-success-900/30 flex items-center justify-center flex-shrink-0">
+                              <svg className="w-5 h-5 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-success-800 dark:text-success-200 truncate">
+                                {stagedFile.file.name}
+                              </p>
+                              <p className="text-xs text-success-600 dark:text-success-400">
+                                {(stagedFile.file.size / 1024).toFixed(1)} KB • Ready to submit
+                              </p>
+                            </div>
                           </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <svg className="w-8 h-8 mx-auto text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                            <p className="text-sm font-medium text-primary-700 dark:text-primary-400">
-                              Click to upload or drag file here
-                            </p>
-                            <p className="text-xs text-secondary-500 dark:text-neutral-400">
-                              PDF or image files accepted
-                            </p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSubmit(doc.id)}
+                              disabled={isSubmitting}
+                              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-success-600 hover:bg-success-700 rounded-lg transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                            >
+                              {isSubmitting ? (
+                                <>
+                                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                  </svg>
+                                  Submitting...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Submit Document
+                                </>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleCancelStaged(doc.id)}
+                              disabled={isSubmitting}
+                              className="px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
                           </div>
-                        )}
-                      </label>
+                        </div>
+                      ) : (
+                        // No file staged - show upload area
+                        <>
+                          <input
+                            type="file"
+                            id={`file-upload-${doc.id}`}
+                            accept="image/*,application/pdf"
+                            onChange={(e) => handleFileSelect(doc.id, e.target.files[0])}
+                            disabled={isUploading}
+                            className="hidden"
+                          />
+                          <label
+                            htmlFor={`file-upload-${doc.id}`}
+                            className={`block w-full px-4 py-6 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${
+                              isUploading
+                                ? 'border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/30 cursor-not-allowed'
+                                : 'border-primary-300 dark:border-primary-700 bg-primary-50/50 dark:bg-primary-900/10 hover:bg-primary-100 dark:hover:bg-primary-900/20 hover:border-primary-400 dark:hover:border-primary-600'
+                            }`}
+                          >
+                            {isUploading ? (
+                              <div className="space-y-2">
+                                <svg className="w-8 h-8 mx-auto text-primary-500 dark:text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                </svg>
+                                <p className="text-sm font-medium text-primary-700 dark:text-primary-400">
+                                  Uploading... {progress || 0}%
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <svg className="w-8 h-8 mx-auto text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                <p className="text-sm font-medium text-primary-700 dark:text-primary-400">
+                                  Click to select a file
+                                </p>
+                                <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                                  PDF or image files accepted
+                                </p>
+                              </div>
+                            )}
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Show rejected submission history in Rejected filter */}
+                  {filter === 'rejected' && doc.rejectedSubmissions && doc.rejectedSubmissions.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs font-medium text-error-700 dark:text-error-400">
+                        📋 Rejection History
+                      </p>
+                      {doc.rejectedSubmissions.map((rejected, idx) => (
+                        <div key={rejected.id} className="p-2 bg-error-50 dark:bg-error-900/10 border border-error-200 dark:border-error-800 rounded text-xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-error-700 dark:text-error-400 font-medium">
+                              Submission {doc.rejectedSubmissions.length - idx}
+                            </span>
+                            <span className="text-error-500 dark:text-error-500">
+                              {formatDate(rejected.rejectedAt || rejected.submittedAt)}
+                            </span>
+                          </div>
+                          {rejected.notes && (
+                            <p className="text-error-600 dark:text-error-300 mt-1">
+                              Reason: {rejected.notes}
+                            </p>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -450,6 +598,7 @@ export default function MyDocumentsPage() {
           </svg>
           <p className="text-neutral-500 dark:text-neutral-400 text-sm">
             {filter === 'requested' && 'No documents waiting for upload'}
+            {filter === 'pending' && 'No documents pending review'}
             {filter === 'rejected' && 'No rejected documents'}
             {filter === 'accepted' && 'No accepted documents'}
           </p>

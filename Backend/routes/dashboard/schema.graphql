@@ -1,0 +1,175 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Dashboard GraphQL Schema
+#
+# Provides aggregated operational statistics for the staff portal with
+# permission-based access control and branch-aware data filtering.
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+Breakdown of pending requests by type (EMR, Appointments, Medicine)
+Returned only if user has relevant approval permissions
+"""
+type PendingBreakdown {
+  """Number of pending EMR updates (requires emr_allow_approval)"""
+  emr: Int
+
+  """Number of pending appointment requests (requires appointment_allow_approval)"""
+  appointments: Int
+
+  """Number of pending medicine requests (requires medicine_request_allow_approve)"""
+  medicine: Int
+}
+
+"""
+Tomorrow's slot availability grouped by scheduler (Medical, Dental, etc.)
+Requires appointment_allow_view_configuration permission
+"""
+type SlotAvailability {
+  """Number of available slots"""
+  open: Int
+
+  """Total allowed slots"""
+  total: Int
+}
+
+"""
+Recent patient visit information
+Requires profile_allow_view permission
+"""
+type RecentPatient {
+  """Patient user ID"""
+  id: ID!
+
+  """Patient full name"""
+  name: String!
+
+  """Patient identifier (ID number)"""
+  identifier: String
+
+  """Patient program/profile name"""
+  program: String!
+
+  """Last visit timestamp (ISO 8601)"""
+  lastVisit: String!
+}
+
+"""
+Pending request (EMR update or Appointment)
+Requires relevant approval permissions
+"""
+type PendingRequest {
+  """Request unique ID"""
+  id: ID!
+
+  """Patient full name"""
+  name: String!
+
+  """Request type: 'EMR Update' or 'Appointment'"""
+  type: String!
+
+  """Request status (Pending, Revision, etc.)"""
+  status: String!
+
+  """Submission timestamp (ISO 8601)"""
+  submitted: String!
+}
+
+"""
+Aggregated dashboard statistics.
+Fields return null if the user lacks permission to access that data.
+All data is scoped to the user's branch designation.
+
+Permission requirements:
+- pendingRequests/pendingBreakdown: emr_allow_approval (EMR part)
+- todayAppointments/todayRemaining: appointment_allow_view_records
+- activeConsultations: consultation_allow_view
+- lowStockItems: inventory_allow_view
+- tomorrowAvailability: appointment_allow_view_configuration
+- recentPatients: profile_allow_view
+- recentRequests: relevant approval permissions
+"""
+type DashboardStats {
+  """
+  Total pending requests across all types.
+  Null if user lacks all approval permissions.
+  """
+  pendingRequests: Int
+
+  """
+  Breakdown of pending requests by type.
+  Null if user lacks approval permissions.
+  """
+  pendingBreakdown: PendingBreakdown
+
+  """
+  Total appointments scheduled for today.
+  Null if user lacks appointment_allow_view_records permission.
+  """
+  todayAppointments: Int
+
+  """
+  Number of today's appointments not yet arrived at.
+  Null if user lacks appointment_allow_view_records permission.
+  """
+  todayRemaining: Int
+
+  """
+  Number of active consultations (Open, ReOpen, Created).
+  Null if user lacks consultation_allow_view permission.
+  """
+  activeConsultations: Int
+
+  """
+  Number of low stock medical items (threshold: ≤10 units).
+  Null if user lacks inventory_allow_view permission.
+  """
+  lowStockItems: Int
+
+  """
+  Tomorrow's slot availability grouped by scheduler.
+  Null if user lacks appointment_allow_view_configuration permission.
+  """
+  tomorrowAvailability: [TomorrowSlot!]
+
+  """
+  Recent patient visits (last 5).
+  Null if user lacks profile_allow_view permission.
+  Empty array if no permission.
+  """
+  recentPatients: [RecentPatient!]
+
+  """
+  Recent pending requests (latest 5 across EMR and Appointments).
+  Null if user lacks relevant approval permissions.
+  Empty array if no permission.
+  """
+  recentRequests: [PendingRequest!]
+}
+
+"""
+Tomorrow's slot availability for a specific scheduler
+"""
+type TomorrowSlot {
+  """Scheduler label (e.g., 'Medical', 'Dental')"""
+  label: String!
+
+  """Number of open slots"""
+  open: Int!
+
+  """Total allowed slots"""
+  total: Int!
+}
+
+type Query {
+  """
+  Get aggregated dashboard statistics for the current staff member.
+
+  Access Control:
+  - Requires is_staff permission
+  - All data scoped to user's branch designation (Manila, QuezonCity, or Both)
+  - Individual statistics null if user lacks relevant module permission
+
+  Returns: DashboardStats with permission-based field filtering
+  """
+  getDashboardStats: DashboardStats!
+}
