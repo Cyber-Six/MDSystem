@@ -213,6 +213,11 @@ function addFooter(doc, options = {}) {
 
     const footerY = doc.page.height - doc.page.margins.bottom + 20;
 
+    // Temporarily disable bottom margin to prevent PDFKit from
+    // auto-paginating when writing in the footer zone
+    const savedBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+
     // Footer text (left)
     if (text) {
       doc
@@ -221,6 +226,7 @@ function addFooter(doc, options = {}) {
         .text(text, doc.page.margins.left, footerY, {
           width: 200,
           align: 'left',
+          lineBreak: false,
         });
     }
 
@@ -237,6 +243,7 @@ function addFooter(doc, options = {}) {
         .text(dateStr, 0, footerY, {
           width: doc.page.width,
           align: 'center',
+          lineBreak: false,
         });
     }
 
@@ -249,9 +256,12 @@ function addFooter(doc, options = {}) {
           `Page ${i + 1} of ${pages.count}`,
           doc.page.width - doc.page.margins.right - 100,
           footerY,
-          { width: 100, align: 'right' }
+          { width: 100, align: 'right', lineBreak: false }
         );
     }
+
+    // Restore bottom margin
+    doc.page.margins.bottom = savedBottom;
   }
 }
 
@@ -352,16 +362,33 @@ function addTable(doc, headers, rows, options = {}) {
 
   // Data rows
   doc.font('Helvetica').fillColor(COLORS.text);
-  rows.forEach((row) => {
-    currentX = startX;
-    const rowHeight = 18;
+  const pageBottom = doc.page.height - doc.page.margins.bottom - 20;
 
+  rows.forEach((row) => {
+    // Calculate dynamic row height based on tallest cell
+    let maxCellHeight = 14; // minimum
+    row.forEach((cell, i) => {
+      const cellText = String(cell || '');
+      const cellWidth = colWidth[i] - cellPadding * 2;
+      const h = doc.heightOfString(cellText, { width: cellWidth, fontSize: FONT_SIZES.body });
+      if (h > maxCellHeight) maxCellHeight = h;
+    });
+    const rowHeight = maxCellHeight + cellPadding * 2;
+
+    // Page break if row won't fit
+    if (currentY + rowHeight > pageBottom) {
+      doc.addPage();
+      currentY = doc.page.margins.top;
+    }
+
+    currentX = startX;
     row.forEach((cell, i) => {
       doc
         .fontSize(FONT_SIZES.body)
         .text(String(cell || ''), currentX + cellPadding, currentY + cellPadding, {
           width: colWidth[i] - cellPadding * 2,
           align: 'left',
+          lineBreak: true,
         });
       currentX += colWidth[i];
     });
