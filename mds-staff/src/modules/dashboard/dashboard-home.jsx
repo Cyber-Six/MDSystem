@@ -220,7 +220,7 @@ const StaffDashboard = () => {
               <Link to="/appointments" className="text-xs text-primary-600 dark:text-primary-400 hover:underline">Manage Slots</Link>
             </div>
             <div className="space-y-2">
-              {Object.keys(tomorrowAvailability).length === 0 && !loading ? (
+              {(Object.keys(tomorrowAvailability).length === 0 && !loading) ? (
                 <p className="text-xs text-secondary-400 dark:text-neutral-500">No schedulers configured</p>
               ) : (
                 Object.entries(tomorrowAvailability).map(([label, data], idx) => {
@@ -236,14 +236,15 @@ const StaffDashboard = () => {
                             style={{ width: `${pct}%` }}
                           />
                         </div>
-                      <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
-                        {loading ? '—' : `${data.open}/${data.total}`}
-                      </span>
+                        <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">
+                          {loading ? '—' : `${data.open}/${data.total}`}
+                        </span>
+                      </div>
                     </div>
-                  </div>
                 );
               })
             )}
+          </div>
           </div>
         )}
       </div>
