@@ -56,6 +56,18 @@ async function getParticipantInfo(userId) {
   if (result.rowCount === 0) return null;
 
   const row = result.rows[0];
+
+  // Safely format date_of_birth
+  let formattedDOB = null;
+  if (row.date_of_birth) {
+    if (row.date_of_birth instanceof Date) {
+      formattedDOB = row.date_of_birth.toISOString().split('T')[0];
+    } else if (typeof row.date_of_birth === 'string') {
+      // Already a string, just extract the date part if it's ISO format
+      formattedDOB = row.date_of_birth.split('T')[0];
+    }
+  }
+
   return {
     id: row.id,
     firstName: row.first_name || 'Unknown',
@@ -63,7 +75,7 @@ async function getParticipantInfo(userId) {
     email: row.email,
     identifier: row.identifier,
     branch: row.profile || row.branch || null,
-    dateOfBirth: row.date_of_birth ? row.date_of_birth.toISOString().split('T')[0] : null,
+    dateOfBirth: formattedDOB,
     sex: row.sex || null
   };
 }
@@ -235,6 +247,17 @@ async function getParticipantInfoBatch(userIds) {
 
   const map = new Map();
   for (const row of result.rows) {
+    // Safely format date_of_birth
+    let formattedDOB = null;
+    if (row.date_of_birth) {
+      if (row.date_of_birth instanceof Date) {
+        formattedDOB = row.date_of_birth.toISOString().split('T')[0];
+      } else if (typeof row.date_of_birth === 'string') {
+        // Already a string, just extract the date part if it's ISO format
+        formattedDOB = row.date_of_birth.split('T')[0];
+      }
+    }
+
     map.set(row.id, {
       id: row.id,
       firstName: row.first_name || 'Unknown',
@@ -242,7 +265,7 @@ async function getParticipantInfoBatch(userIds) {
       email: row.email,
       identifier: row.identifier,
       branch: row.profile || row.branch || null,
-      dateOfBirth: row.date_of_birth ? row.date_of_birth.toISOString().split('T')[0] : null,
+      dateOfBirth: formattedDOB,
       sex: row.sex || null
     });
   }
