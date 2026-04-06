@@ -241,7 +241,7 @@ const StaffDashboard = () => {
               })
             )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Two Column Layout */}
