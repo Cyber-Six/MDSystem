@@ -411,7 +411,7 @@ async function autoExpireTickets(patientId = null) {
     );
   }
 
-  // ── 2. Expire Open tickets where the patient account is already Expired ──────
+  // ── 2. Expire Open tickets where the patient account is Inactive ──────
   // Open tickets have no session_start so step 1 never catches them.
   // Tie them to the patient's credential status for account-level expiry.
   let openExpiredQuery = `
@@ -422,7 +422,7 @@ async function autoExpireTickets(patientId = null) {
     FROM "UserCredentials" uc
     WHERE hc."patientId" = uc.id
     AND hc.status = 'Open'
-    AND uc.credentials_status = 'Expired'
+    AND uc.credentials_status = 'Inactive'
   `;
   const openExpiredParams = [];
 
@@ -437,7 +437,7 @@ async function autoExpireTickets(patientId = null) {
   expiredCount += openExpiredResult.rowCount;
 
   if (openExpiredResult.rows.length > 0) {
-    const openExpiredMsg = 'This ticket has been automatically closed because the patient account has expired.';
+    const openExpiredMsg = 'This ticket has been automatically closed because the patient account is inactive.';
     const openExpiredValues = openExpiredResult.rows
       .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
       .join(', ');
