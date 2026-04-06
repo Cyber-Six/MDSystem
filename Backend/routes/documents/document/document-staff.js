@@ -437,6 +437,98 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
 });
 
 /**
+ * DELETE /documents/required/:documentId/cancel
+ * Cancel a document request (delete the submission)
+ * Query: patientId (required)
+ * 
+ * BEHAVIOR:
+ * - Deletes the document submission
+ * - Can only cancel Requested or Pending submissions
+ * - Cannot cancel Recorded or Archived documents
+ * - Document type becomes "Missing" again
+ */
+router.delete('/required/:documentId/cancel', jwtProtect('medical'), async (req, res) => {
+  const client = await connect();
+  try {
+    await client.query('BEGIN');
+
+    const { documentId } = req.params;
+    const { patientId } = req.query;
+
+    if (!patientId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    // Find the current submission
+    const existingResult = await client.query(
+      `SELECT prd.id, prd.status, rdt.label
+       FROM "patientRawDocument" prd
+       JOIN "rawDocumentTag" rdt ON rdt.id = prd."documentTagId"
+       WHERE prd."documentTagId" = $1 AND prd."patientId" = $2 
+         AND prd.status NOT IN ('Archived', 'Recorded')
+       ORDER BY prd."created_at" DESC
+       LIMIT 1`,
+      [documentId, patientId]
+    );
+
+    if (existingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'SUBMISSION_NOT_FOUND' });
+    }
+
+    const existing = existingResult.rows[0];
+    const tagLabel = existing.label;
+
+    // Only allow canceling Requested or Pending submissions
+    if (existing.status !== 'Requested' && existing.status !== 'Pending') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'CANNOT_CANCEL', 
+        message: 'Can only cancel Requested or Pending documents. Use Archive for Recorded documents.' 
+      });
+    }
+
+    // Delete the submission
+    await client.query(
+      `DELETE FROM "patientRawDocument" WHERE id = $1`,
+      [existing.id]
+    );
+
+    await client.query('COMMIT');
+
+    // Notify patient
+    try {
+      await notifyUser(
+        String(patientId),
+        'document:cancelled',
+        {
+          documentId,
+          label: tagLabel,
+          message: `The document request for "${tagLabel}" has been cancelled by staff.`,
+        }
+      );
+    } catch (notifErr) {
+      logger.warn('Document cancellation notification failed', { error: notifErr.message });
+    }
+
+    logger.info('Document request cancelled', {
+      documentId,
+      patientId,
+      cancelledBy: req.user.id,
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    logger.error('Error cancelling document', { error: err.message });
+    res.status(500).json({ error: 'CANCEL_FAILED', message: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/**
  * POST /documents/required/:documentId/request
  * Request a document from patient (create or update submission with 'Requested' status)
  * Body: patientId (required), notes (optional - explains why the document is needed)
