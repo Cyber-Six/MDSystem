@@ -169,8 +169,10 @@ class StaffReportTemplate extends BaseTemplate {
     if (!sections?.length) return;
 
     for (const section of sections) {
-      // Check if we need a new page
-      if (this.doc.y > 400) {
+      // Add page if section heading + table (min 60pt) + chart (240pt) won't fit
+      const sectionNeeds = 310;
+      const pageContentBottom = this.doc.page.height - this.doc.page.margins.bottom - 20;
+      if (this.doc.y + sectionNeeds > pageContentBottom) {
         this.doc.addPage();
       }
 
@@ -180,6 +182,7 @@ class StaffReportTemplate extends BaseTemplate {
       if (section.labels?.length > 0) {
         if (section.isBP && section.diastolicValues) {
           // Blood Pressure: show Systolic, Diastolic, Combined
+          // Column widths sum to 468 (standard doc width 612 - 72*2 margins)
           const headers = ['#', 'Period', 'Systolic', 'Diastolic', 'Avg BP'];
           const rows = section.labels.map((label, i) => [
             String(i + 1),
@@ -189,7 +192,7 @@ class StaffReportTemplate extends BaseTemplate {
             `${section.values[i] || 0}/${section.diastolicValues[i] || 0}`,
           ]);
           pdf.addTable(this.doc, headers, rows, {
-            columnWidths: [28, 100, 85, 85, 80],
+            columnWidths: [28, 180, 90, 90, 80],
           });
         } else if (section.isTrend) {
           const headers = ['#', 'Period', section.yAxis || 'Value'];
@@ -199,7 +202,7 @@ class StaffReportTemplate extends BaseTemplate {
             String(section.values[i] || 0),
           ]);
           pdf.addTable(this.doc, headers, rows, {
-            columnWidths: [28, 190, 160],
+            columnWidths: [28, 300, 140],
           });
         } else {
           const headers = ['#', section.xAxis || 'Item', section.yAxis || 'Count', '%'];
@@ -210,7 +213,7 @@ class StaffReportTemplate extends BaseTemplate {
             return [String(i + 1), label, String(section.values[i] || 0), pct];
           });
           pdf.addTable(this.doc, headers, rows, {
-            columnWidths: [28, 200, 80, 70],
+            columnWidths: [28, 280, 90, 70],
           });
         }
         this.doc.moveDown(0.3);
@@ -269,8 +272,13 @@ class StaffReportTemplate extends BaseTemplate {
           }
         }
 
-        // Center the chart below the table
-        if (this.doc.y > 480) this.doc.addPage();
+        // Add page if chart won't fit in remaining space
+        const chartNeeds = 250; // chart height + some padding
+        if (this.doc.y + chartNeeds > pageContentBottom) {
+          this.doc.addPage();
+        } else {
+          this.doc.moveDown(0.3);
+        }
         const chartX = (this.doc.page.width - 420) / 2;
         pdf.embedImage(this.doc, chartBuffer, {
           x: chartX,
