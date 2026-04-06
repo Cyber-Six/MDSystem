@@ -161,6 +161,11 @@ export default defineConfig(({ mode }) => {
             }
           },
         },
+        '/settings': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: BACKEND_URL.startsWith('https'),
+        },
       },
     }
   }
