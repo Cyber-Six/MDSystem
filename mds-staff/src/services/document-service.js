@@ -111,7 +111,7 @@ export const recordDocument = async (documentId, patientId, file = null) => {
  * @returns {Promise<Blob>}
  */
 export const viewDocumentFile = async (fileId) => {
-  const response = await axiosRequest.get(`/media/documents/${fileId}`, {
+  const response = await axiosRequest.get(`/media/record/documents/${fileId}`, {
     responseType: 'blob',
   });
   return response.data;
