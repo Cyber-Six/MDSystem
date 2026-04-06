@@ -117,9 +117,9 @@ const Query = {
   // ==================== MEDICAL QUERIES ====================
 
   /**
-   * Get pending tickets awaiting approval
+   * Get pending tickets awaiting approval, filtered by location
    */
-  _getPendingTickets: async (_, { offset, limit }, { user, res }) => {
+  _getPendingTickets: async (_, { location = 'Both', offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -127,17 +127,35 @@ const Query = {
     // Auto-expire any expired ongoing tickets
     await autoExpireTickets();
 
-    const result = await db.query(
-      `SELECT * FROM "HealthChat"
-       WHERE status = 'Open'
-       ORDER BY id ASC
-       LIMIT $1 OFFSET $2`,
-      [limit || 10, offset || 0]
-    );
+    let query = `SELECT * FROM "HealthChat" WHERE status = 'Open'`;
+    const params = [];
 
-    const countResult = await db.query(
-      `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Open'`
-    );
+    // Filter by location if not 'Both'
+    if (location && location !== 'Both') {
+      query += ` AND "patientId" IN (
+        SELECT p.id FROM "Patient" p
+        WHERE p.branch = $1
+      )`;
+      params.push(location);
+    }
+
+    query += ` ORDER BY id ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit || 10, offset || 0);
+
+    const result = await db.query(query, params);
+
+    // Get count
+    let countQuery = `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Open'`;
+    const countParams = [];
+    if (location && location !== 'Both') {
+      countQuery += ` AND "patientId" IN (
+        SELECT p.id FROM "Patient" p
+        WHERE p.branch = $1
+      )`;
+      countParams.push(location);
+    }
+
+    const countResult = await db.query(countQuery, countParams);
 
     const chats = await formatChatRecordsBatch(result.rows);
 
@@ -148,9 +166,9 @@ const Query = {
   },
 
   /**
-   * Get active (ongoing) tickets assigned to any medical staff
+   * Get active (ongoing) tickets assigned to any medical staff, filtered by location
    */
-  _getActiveTickets: async (_, { offset, limit }, { user, res }) => {
+  _getActiveTickets: async (_, { location = 'Both', offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -158,17 +176,35 @@ const Query = {
     // Auto-expire any expired ongoing tickets (critical for this query)
     await autoExpireTickets();
 
-    const result = await db.query(
-      `SELECT * FROM "HealthChat"
-       WHERE status = 'Ongoing'
-       ORDER BY session_start DESC
-       LIMIT $1 OFFSET $2`,
-      [limit || 10, offset || 0]
-    );
+    let query = `SELECT * FROM "HealthChat" WHERE status = 'Ongoing'`;
+    const params = [];
 
-    const countResult = await db.query(
-      `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Ongoing'`
-    );
+    // Filter by location if not 'Both'
+    if (location && location !== 'Both') {
+      query += ` AND "patientId" IN (
+        SELECT p.id FROM "Patient" p
+        WHERE p.branch = $1
+      )`;
+      params.push(location);
+    }
+
+    query += ` ORDER BY session_start DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit || 10, offset || 0);
+
+    const result = await db.query(query, params);
+
+    // Get count
+    let countQuery = `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Ongoing'`;
+    const countParams = [];
+    if (location && location !== 'Both') {
+      countQuery += ` AND "patientId" IN (
+        SELECT p.id FROM "Patient" p
+        WHERE p.branch = $1
+      )`;
+      countParams.push(location);
+    }
+
+    const countResult = await db.query(countQuery, countParams);
 
     const chats = await formatChatRecordsBatch(result.rows);
 
@@ -179,9 +215,9 @@ const Query = {
   },
 
   /**
-   * Get all tickets with optional status filter
+   * Get all tickets with optional status and location filter
    */
-  _getAllTickets: async (_, { status, offset, limit }, { user, res }) => {
+  _getAllTickets: async (_, { location = 'Both', status, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -191,10 +227,24 @@ const Query = {
 
     let query = `SELECT * FROM "HealthChat"`;
     const params = [];
+    const conditions = [];
 
     if (status) {
-      query += ` WHERE status = $1`;
+      conditions.push(`status = $${params.length + 1}`);
       params.push(status);
+    }
+
+    // Filter by location if not 'Both'
+    if (location && location !== 'Both') {
+      conditions.push(`"patientId" IN (
+        SELECT p.id FROM "Patient" p
+        WHERE p.branch = $${params.length + 1}
+      )`);
+      params.push(location);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
     query += ` ORDER BY id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -205,10 +255,25 @@ const Query = {
     // Get total count
     let countQuery = `SELECT COUNT(*)::int AS total FROM "HealthChat"`;
     const countParams = [];
+    const countConditions = [];
+
     if (status) {
-      countQuery += ` WHERE status = $1`;
+      countConditions.push(`status = $${countParams.length + 1}`);
       countParams.push(status);
     }
+
+    if (location && location !== 'Both') {
+      countConditions.push(`"patientId" IN (
+        SELECT p.id FROM "Patient" p
+        WHERE p.branch = $${countParams.length + 1}
+      )`);
+      countParams.push(location);
+    }
+
+    if (countConditions.length > 0) {
+      countQuery += ` WHERE ${countConditions.join(' AND ')}`;
+    }
+
     const countResult = await db.query(countQuery, countParams);
 
     const chats = await formatChatRecordsBatch(result.rows);
@@ -262,10 +327,10 @@ const Query = {
   },
 
   /**
-   * Get conversations grouped by patient (1 row per patient)
+   * Get conversations grouped by patient (1 row per patient), filtered by location
    * Returns patients with their latest ticket and last message info
    */
-  _getPatientConversations: async (_, { statuses, offset, limit }, { user, res }) => {
+  _getPatientConversations: async (_, { location = 'Both', statuses, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -279,6 +344,23 @@ const Query = {
     if (statuses && statuses.length > 0) {
         statusFilter = `WHERE status = ANY($1)`;
       params.push(statuses);
+    }
+
+    // Build location filter
+    let locationFilter = '';
+    if (location && location !== 'Both') {
+      if (statusFilter) {
+        locationFilter = ` AND "patientId" IN (
+          SELECT p.id FROM "Patient" p
+          WHERE p.branch = $${params.length + 1}
+        )`;
+      } else {
+        locationFilter = ` WHERE "patientId" IN (
+          SELECT p.id FROM "Patient" p
+          WHERE p.branch = $${params.length + 1}
+        )`;
+      }
+      params.push(location);
     }
 
     // Get unique patients with their latest ticket
@@ -299,7 +381,7 @@ const Query = {
               id DESC
           ) as rn
         FROM "HealthChat"
-        ${statusFilter}
+        ${statusFilter}${locationFilter}
       ),
       LatestTickets AS (
         SELECT * FROM RankedTickets WHERE rn = 1
@@ -310,7 +392,7 @@ const Query = {
           COUNT(*) FILTER (WHERE status IN ('Open', 'Ongoing')) as active_count,
           COUNT(*) as total_count
         FROM "HealthChat"
-        ${statusFilter}
+        ${statusFilter}${locationFilter}
         GROUP BY "patientId"
       )
       SELECT
@@ -336,12 +418,12 @@ const Query = {
       const result = await db.query(query, params);
 
       // Get count of unique patients
-      const countQuery = `
+      let countQuery = `
         SELECT COUNT(DISTINCT "patientId")::int as total
         FROM "HealthChat"
-        ${statusFilter}
+        ${statusFilter}${locationFilter}
       `;
-      const countResult = await db.query(countQuery, statuses && statuses.length > 0 ? [statuses] : []);
+      const countResult = await db.query(countQuery, params.slice(0, -2));
 
       // Format conversations using batch lookups to avoid N+1 queries
       // 1. Batch-format the latest tickets from the main query
@@ -351,12 +433,22 @@ const Query = {
       // This ensures the frontend has complete ticket history for dividers and
       // initial-context (purposeSynth) even when archive filter is off.
       const patientIds = result.rows.map(r => r.patientId);
-      const allTicketsResult = await db.query(
-        `SELECT * FROM "HealthChat"
-         WHERE "patientId" = ANY($1)
-         ORDER BY id DESC`,
-        [patientIds]
-      );
+      let allTicketsQuery = `SELECT * FROM "HealthChat"
+         WHERE "patientId" = ANY($1)`;
+      const allTicketsParams = [patientIds];
+
+      // Also respect location filter for all tickets
+      if (location && location !== 'Both') {
+        allTicketsQuery += ` AND "patientId" IN (
+          SELECT p.id FROM "Patient" p
+          WHERE p.branch = $2
+        )`;
+        allTicketsParams.push(location);
+      }
+
+      allTicketsQuery += ` ORDER BY id DESC`;
+
+      const allTicketsResult = await db.query(allTicketsQuery, allTicketsParams);
       const allTicketsFormatted = await formatChatRecordsBatch(allTicketsResult.rows);
 
       // Group tickets by patientId

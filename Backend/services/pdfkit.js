@@ -281,8 +281,9 @@ function addField(doc, label, value, options = {}) {
   const { inline = true, labelWidth = 120 } = options;
 
   if (inline) {
-    const startX = doc.x;
+    const startX = doc.page.margins.left;
     const startY = doc.y;
+    const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right - labelWidth;
 
     doc
       .fontSize(FONT_SIZES.body)
@@ -293,7 +294,10 @@ function addField(doc, label, value, options = {}) {
     doc
       .font('Helvetica')
       .fillColor(COLORS.text)
-      .text(value || 'N/A', startX + labelWidth, startY);
+      .text(value || 'N/A', startX + labelWidth, startY, { width: availableWidth });
+
+    // Reset x to left margin so the next field starts correctly
+    doc.x = doc.page.margins.left;
   } else {
     doc
       .fontSize(FONT_SIZES.body)

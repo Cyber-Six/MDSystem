@@ -144,12 +144,37 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
     },
   }), [activeTab, fetchAppointments, refreshCounts, filterDate, filterSchedulerId, filterLocation]);
 
-  /* Initial load — combines schedulers + counts + first-page appointments into
-     a single HTTP request to minimise round-trips on a low-power server.
-     Subsequent tab/filter changes use the individual fetchers below. */
-  const isInitialLoad = useRef(true);
+  /* Load scheduler list once on mount — independent of the batched query so a
+     permission hiccup on one doesn't block the other. */
   useEffect(() => {
     let cancelled = false;
+    const load = async () => {
+      try {
+        const list = await listAllSchedulers(0, 200);
+        if (!cancelled) setSchedulers(list || []);
+      } catch (err) {
+        console.error('Failed to load schedulers:', err);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Initial load — combines counts + first-page appointments into a single
+     HTTP request to minimise round-trips on a low-power server.
+     Subsequent tab/filter changes use the individual fetchers below.
+
+     StrictMode note: React 18 StrictMode double-invokes effects in dev.  The
+     `isInitialLoad` / `isInitialTabRender` guards must be reset in the cleanup
+     so the second invocation of the filter/tab effects returns early instead of
+     racing with the initial load and corrupting `fetchGenRef.current`. */
+  const isInitialLoad = useRef(true);
+  const isInitialTabRender = useRef(true);
+  useEffect(() => {
+    let cancelled = false;
+    // Reset guards so the filter/tab effects skip on StrictMode's second run
+    isInitialLoad.current = true;
+    isInitialTabRender.current = true;
     const run = async () => {
       const gen = ++fetchGenRef.current;
       setLoading(true);
@@ -163,7 +188,6 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
           { date: filterDate || null, schedulerId: filterSchedulerId || null, location: filterLocation || null }
         );
         if (cancelled || gen !== fetchGenRef.current) return;
-        setSchedulers(result.schedulers);
         setTabCounts(result.counts);
         setAppointments(result.appointments);
         setHasMore(result.appointments.length === PAGE_SIZE);
@@ -180,7 +204,13 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
       }
     };
     run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Reset guards on cleanup so StrictMode's re-invocation of filter/tab
+      // effects treats them as initial renders (i.e. returns early).
+      isInitialLoad.current = true;
+      isInitialTabRender.current = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -195,7 +225,6 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   }, [filterDate, filterSchedulerId, filterLocation, refreshCounts, fetchAppointments]);
 
   /* Re-fetch appointments when tab changes (after initial mount) */
-  const isInitialTabRender = useRef(true);
   useEffect(() => {
     if (isInitialTabRender.current) {
       isInitialTabRender.current = false;

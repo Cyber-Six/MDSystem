@@ -102,8 +102,8 @@ enum UpdateStatus{
 enum CredentialStatus{
   Unverified
   Active
+  Inactive
   Locked
-  Disabled
 }
 
 enum UserIdentity {
