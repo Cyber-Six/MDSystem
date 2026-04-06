@@ -1,7 +1,7 @@
-const db = require('../../../../config/query.js');
-const { isMedicalPermitted } = require('../../../../services/permit.js');
-const logger = require('../../../../utils/logger.js');
-const { throwGraphQLError } = require('../../../../utils/graphql-helper.js');
+const db = require('../../../config/query.js');
+const { isMedicalPermitted } = require('../../../services/permit.js');
+const logger = require('../../../utils/logger.js');
+const { throwGraphQLError } = require('../../../utils/graphql-helper.js');
 
 const Query = {
   _getDashboardStats: async (_, args, { user, res }) => {

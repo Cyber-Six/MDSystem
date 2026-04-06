@@ -1,6 +1,6 @@
 const Wrapper = require('./wrapper.js');
-const { throwGraphQLError } = require('../../../../utils/graphql-helper.js');
-const permit = require('../../../../services/permit.js');
+const { throwGraphQLError } = require('../../../utils/graphql-helper.js');
+const permit = require('../../../services/permit.js');
 
 // ─── PERMISSION CHECK HELPER ──────────────────────────────────────────────────
 
