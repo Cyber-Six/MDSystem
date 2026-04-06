@@ -136,7 +136,25 @@ input CloseTicketInput {
   notes: String
 }
 
-# Queries
+# Patient-only queries
+type PatientQuery {
+  getMyTickets(status: ChatStatus, offset: Int, limit: Int): HealthChatList!
+  getMyTicket(chatId: ID!): HealthChat
+  getTicketMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
+}
+
+# Medical-only queries
+type MedicalQuery {
+  getPendingTickets(location: Designation, offset: Int, limit: Int): HealthChatList!
+  getActiveTickets(location: Designation, offset: Int, limit: Int): HealthChatList!
+  getAllTickets(location: Designation, status: ChatStatus, offset: Int, limit: Int): HealthChatList!
+  getTicket(chatId: ID!): HealthChat
+  getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
+  getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
+  getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
+}
+
+# Unified queries exposed to appropriate role
 type Query {
   # Patient queries
   getMyTickets(status: ChatStatus, offset: Int, limit: Int): HealthChatList!
@@ -149,9 +167,7 @@ type Query {
   getAllTickets(location: Designation, status: ChatStatus, offset: Int, limit: Int): HealthChatList!
   getTicket(chatId: ID!): HealthChat
   getMessages(chatId: ID!, offset: Int, limit: Int): [HealthChatPrompt!]!
-  # NEW: Get conversations grouped by patient
   getPatientConversations(location: Designation, statuses: [ChatStatus], offset: Int, limit: Int): PatientConversationList!
-  # NEW: Get all messages for a patient (across all tickets)
   getPatientMessages(patientId: Int!, offset: Int, limit: Int, before: String): [HealthChatPrompt!]!
 }
 
