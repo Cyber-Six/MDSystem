@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PatientSectionCard from './section-card';
-import { getRequiredDocuments, requestDocument, approveDocument, rejectDocument, archiveDocument, viewDocumentFile } from '../../../services/document-service';
+import { getRequiredDocuments, requestDocument, approveDocument, rejectDocument, archiveDocument, cancelDocument, viewDocumentFile } from '../../../services/document-service';
 
 const STATUS_STYLES = {
   Recorded:  'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
@@ -138,6 +138,7 @@ export default function PatientDocumentsTab({ patient }) {
   const [approving, setApproving] = useState(null);
   const [rejecting, setRejecting] = useState(null);
   const [archiving, setArchiving] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [filter, setFilter] = useState('Missing');
   const [notes, setNotes] = useState({});
@@ -258,6 +259,22 @@ export default function PatientDocumentsTab({ patient }) {
       URL.revokeObjectURL(previewModal.fileUrl);
     }
     setPreviewModal({ isOpen: false, fileUrl: null, fileType: null, fileName: null });
+  };
+
+  const handleCancel = async (documentId) => {
+    if (!confirm('Cancel this document request? The patient will no longer see this request.')) {
+      return;
+    }
+    setCancelling(documentId);
+    setError('');
+    try {
+      await cancelDocument(documentId, patientId);
+      await loadDocuments();
+    } catch (err) {
+      setError(err.message || 'Failed to cancel document request');
+    } finally {
+      setCancelling(null);
+    }
   };
 
   const getDocStatus = (doc) => {
@@ -584,11 +601,30 @@ export default function PatientDocumentsTab({ patient }) {
                     </div>
                   )}
 
-                  {/* Requested: Show waiting message */}
+                  {/* Requested: Show waiting message + Cancel button */}
                   {status === 'Requested' && (
-                    <span className="text-xs text-primary-600 dark:text-primary-400 italic">
-                      Waiting for patient to upload...
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-primary-600 dark:text-primary-400 italic">
+                        Waiting for patient to upload...
+                      </span>
+                      <button
+                        onClick={() => handleCancel(doc.id)}
+                        disabled={cancelling === doc.id}
+                        className="px-2.5 py-1 text-xs font-medium text-error-600 dark:text-error-400 bg-error-50 dark:bg-error-900/20 hover:bg-error-100 dark:hover:bg-error-900/40 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                      >
+                        {cancelling === doc.id ? (
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                        Cancel Request
+                      </button>
+                    </div>
                   )}
 
                   {/* Pending: Show View File + notes + Approve/Reject buttons */}
@@ -663,6 +699,25 @@ export default function PatientDocumentsTab({ patient }) {
                             </svg>
                           )}
                           Reject
+                        </button>
+
+                        {/* Cancel Request Button */}
+                        <button
+                          onClick={() => handleCancel(doc.id)}
+                          disabled={cancelling === doc.id || isApproving || isRejecting}
+                          className="px-2.5 py-1 text-xs font-medium text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {cancelling === doc.id ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          )}
+                          Cancel Request
                         </button>
                       </div>
                     </div>

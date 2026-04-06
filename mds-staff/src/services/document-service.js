@@ -88,6 +88,22 @@ export const archiveDocument = async (documentId, patientId, notes = null) => {
 };
 
 /**
+ * Cancel a document request (deletes the submission).
+ * @param {string|number} documentId - The document tag ID
+ * @param {string|number} patientId - The patient ID
+ * @returns {Promise<{success: boolean}>}
+ */
+export const cancelDocument = async (documentId, patientId) => {
+  const response = await axiosRequest.delete(`/documents/required/${documentId}/cancel`, {
+    params: { patientId },
+  });
+  if (!response.data?.success) {
+    throw new Error(response.data?.error || 'Failed to cancel document');
+  }
+  return response.data;
+};
+
+/**
  * Record a document (sets status to 'Recorded').
  * @param {string|number} documentId - The document tag ID
  * @param {string|number} patientId - The patient ID

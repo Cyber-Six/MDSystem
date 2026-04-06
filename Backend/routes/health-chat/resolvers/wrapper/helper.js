@@ -550,6 +550,15 @@ async function hasActiveTicket(patientId) {
   return result.rowCount > 0;
 }
 
+async function getPatientIdFromChatId(chatId) {
+  const result = await db.query(
+    `SELECT "patientId" FROM "HealthChat"
+     WHERE id = $1`,
+    [chatId]
+  );
+  return result.rowCount > 0 ? result.rows[0].patientId : null;
+}
+
 module.exports = {
   CHAT_EXPIRY_DAYS,
   calculateExpiryDate,
@@ -564,5 +573,6 @@ module.exports = {
   formatMessage,
   hasActiveTicket,
   autoExpireTickets,
-  getLastMessageInfo
+  getLastMessageInfo,
+  getPatientIdFromChatId,
 };
