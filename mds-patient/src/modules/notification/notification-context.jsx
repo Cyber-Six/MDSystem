@@ -81,9 +81,9 @@ const EVENT_MAP = {
     type: 'document',
     route: '/my-documents',
     title: 'Document Requested',
-    message: data?.message || (data?.notes
-      ? `Your healthcare provider has requested: ${data?.label || 'a document'}. Note: ${data.notes}`
-      : `Your healthcare provider has requested: ${data?.label || 'a document'}`),
+    message: data?.notes 
+      ? `${data?.label || 'A document'}\nNote: ${data.notes}`
+      : `${data?.label || 'A document'}`,
     refId: data?.documentId ?? null,
   }),
   'document:approved': (data) => ({

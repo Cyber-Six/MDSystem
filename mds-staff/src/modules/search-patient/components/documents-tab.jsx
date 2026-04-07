@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PatientSectionCard from './section-card';
 import { getRequiredDocuments, requestDocument, approveDocument, rejectDocument, archiveDocument, cancelDocument, viewDocumentFile } from '../../../services/document-service';
 import ConfirmationModal from '../../../components/modals/ConfirmationModal';
+import { useStaffNotifications } from '../../notification/notification-context';
 
 const STATUS_STYLES = {
   Recorded:  'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400',
@@ -156,6 +157,7 @@ export default function PatientDocumentsTab({ patient }) {
   });
 
   const patientId = patient?.id;
+  const { subscribe } = useStaffNotifications();
 
   const loadDocuments = useCallback(async () => {
     if (!patientId) {
@@ -177,6 +179,25 @@ export default function PatientDocumentsTab({ patient }) {
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
+
+  // Subscribe to document:submitted notifications to auto-refresh this patient's documents
+  useEffect(() => {
+    if (!patientId) return;
+
+    const unsubscribe = subscribe('document:submitted', (data) => {
+      // Only refresh if the notification is for this specific patient
+      if (data?.patientId && String(data.patientId) === String(patientId)) {
+        console.log('Document submitted for this patient - refreshing documents', {
+          notificationPatientId: data.patientId,
+          currentPatientId: patientId,
+          documentLabel: data?.label
+        });
+        loadDocuments();
+      }
+    });
+
+    return unsubscribe;
+  }, [subscribe, patientId, loadDocuments]);
 
   const handleRequest = async (documentId) => {
     setRequesting(documentId);

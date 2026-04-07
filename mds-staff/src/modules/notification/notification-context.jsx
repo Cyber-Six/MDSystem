@@ -80,7 +80,7 @@ const EVENT_MAP = {
   }),
   'document:submitted': (data) => ({
     type: 'document',
-    route: '/patient-records',
+    route: '/documents', // Changed from /patient-records to /documents
     routeState: { section: 'documents', patientId: data?.patientId },
     title: 'Document Submitted',
     message: data?.message || (data?.patientName
@@ -332,6 +332,7 @@ export function StaffNotificationProvider({ children }) {
       Object.keys(EVENT_MAP).forEach((event) => {
         service.on(event, (data) => {
           if (!isMounted) return;
+          console.log(`[NOTIFICATION] Received event: ${event}`, data);
           addNotification(event, data);
           const subs = subscribersRef.current[event];
           if (subs) subs.forEach((cb) => cb(data));

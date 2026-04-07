@@ -133,6 +133,13 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
       [documentId, patientId]
     );
 
+    logger.info('Document submission query result:', {
+      documentId,
+      patientId,
+      resultCount: existingResult.rows.length,
+      existingRow: existingResult.rows[0]
+    });
+
     if (existingResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'DOCUMENT_NOT_FOUND' });
