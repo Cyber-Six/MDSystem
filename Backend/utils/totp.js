@@ -64,7 +64,8 @@ function totpGetToken(secret, timestamp = Date.now()) {
 }
 
 function totpVerify(token, secret, window = 1) {
-  if (typeof token !== "string" || token.length !== 6) return false;
+  token = String(token);
+  if (token.length !== 6) return false;
   const now = Date.now();
   const tokenBuf = Buffer.from(token);
   for (let i = -window; i <= window; i++) {
@@ -79,4 +80,42 @@ function totpKeyUri(account, secret, issuer = "MDSystem") {
   return `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }
 
-module.exports = { totpGenerateSecret, totpGetToken, totpVerify, totpKeyUri };
+// ========================================
+// TOTP Secret Encryption (AES-256-GCM)
+// Requires TOTP_ENCRYPTION_KEY env var: 64 hex chars (32 bytes)
+// Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+// ========================================
+function _getEncryptionKey() {
+  const keyHex = process.env.TOTP_ENCRYPTION_KEY;
+  if (!keyHex || keyHex.length !== 64) {
+    throw new Error("TOTP_ENCRYPTION_KEY must be set to a 64-character hex string (32 bytes).");
+  }
+  return Buffer.from(keyHex, "hex");
+}
+
+function encryptTotpSecret(plaintext) {
+  const key = _getEncryptionKey();
+  const iv = crypto.randomBytes(12); // 96-bit IV for GCM
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted.toString("hex")}`;
+}
+
+function decryptTotpSecret(stored) {
+  const key = _getEncryptionKey();
+  const parts = stored.split(":");
+  if (parts.length !== 3) {
+    throw new Error("Invalid encrypted TOTP secret format. Re-run TOTP setup to re-encrypt.");
+  }
+  const [ivHex, authTagHex, encryptedHex] = parts;
+  const iv = Buffer.from(ivHex, "hex");
+  const authTag = Buffer.from(authTagHex, "hex");
+  const encrypted = Buffer.from(encryptedHex, "hex");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+}
+
+module.exports = { totpGenerateSecret, totpGetToken, totpVerify, totpKeyUri,
+                   encryptTotpSecret, decryptTotpSecret };

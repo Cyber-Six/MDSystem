@@ -35,7 +35,10 @@
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
-    }
+    },
+    totp: { // TOTP 2FA encryption key
+      encryptionKey: process.env.TOTP_ENCRYPTION_KEY,
+    },
   };
 
   // ✅ Fail-fast validation
@@ -69,6 +72,10 @@
   
   if (!config.smtp.auth.user || !config.smtp.auth.pass) {
     throw new Error(`❌ Missing required SMTP AUTH config: USER or PASS in .env`);
+  }
+
+  if (!config.totp.encryptionKey || config.totp.encryptionKey.length !== 64) {
+    throw new Error(`❌ TOTP_ENCRYPTION_KEY must be set to a 64-character hex string in .env. Generate one with: npm run setup:totp-key`);
   }
 
   module.exports = config;

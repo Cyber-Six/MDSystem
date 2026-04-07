@@ -29,6 +29,11 @@ ALTER TABLE "ScheduleDateEntity"
 ADD CONSTRAINT schedule_unique_slot_date
 UNIQUE ("slotId", "scheduledDate");
 
+-- TOTP 2FA columns (v0.8.1-dev)
+ALTER TABLE "UserCredentials"
+  ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(255) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false;
+
 ALTER TABLE "DomainTypeCatalog"
 ADD CONSTRAINT uniq_domain_name UNIQUE (domain, name);
 
