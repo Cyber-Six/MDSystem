@@ -106,15 +106,34 @@ const SkeletonLine = ({ w = 'w-full', h = 'h-4' }) => (
   <div className={`${w} ${h} rounded bg-neutral-200 dark:bg-neutral-800 animate-pulse`} />
 );
 
-const StatItem = ({ label, value, loading }) => (
-  <div className="flex flex-col items-center px-5 py-4 min-w-0">
-    {loading
-      ? <SkeletonLine w="w-8" h="h-7" />
-      : <span className="text-3xl font-bold text-neutral-900 dark:text-white tabular-nums leading-none">{value}</span>
-    }
-    <span className="mt-1 text-[11px] font-medium uppercase tracking-widest text-neutral-500 dark:text-neutral-400 whitespace-nowrap">{label}</span>
-  </div>
-);
+const STAT_META = {
+  Pending:      { icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',         color: 'text-amber-500',   bg: 'bg-amber-50 dark:bg-amber-500/10'   },
+  Appointments: { icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10' },
+  'Med Requests':{ icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+  'Health Chats':{ icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z', color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-500/10' },
+};
+
+const StatItem = ({ label, value, loading }) => {
+  const meta = STAT_META[label] ?? { icon: null, color: 'text-neutral-500', bg: 'bg-neutral-100 dark:bg-neutral-800' };
+  return (
+    <div className="flex flex-1 items-center gap-3 px-5 py-4 min-w-0">
+      <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${meta.bg}`}>
+        {meta.icon && (
+          <svg className={`w-4.5 h-4.5 ${meta.color}`} style={{width:'18px',height:'18px'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={meta.icon} />
+          </svg>
+        )}
+      </div>
+      <div className="min-w-0">
+        {loading
+          ? <SkeletonLine w="w-8" h="h-6" />
+          : <span className={`block text-2xl font-extrabold tabular-nums leading-none ${meta.color}`}>{value}</span>
+        }
+        <span className="block mt-0.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 whitespace-nowrap">{label}</span>
+      </div>
+    </div>
+  );
+};
 
 const RequestRow = ({ type, title, date, status, onView, onCancel, canCancel }) => (
   <div className="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800/60 transition-colors group">
@@ -268,11 +287,11 @@ const DashboardHome = ({ firstName }) => {
         </div>
 
         {/* stats strip */}
-        <div className="border-t border-neutral-200 dark:border-neutral-800 flex divide-x divide-neutral-200 dark:divide-neutral-800">
-          <StatItem label="Pending"      value={loading ? '—' : pendingCount} loading={loading} />
-          <StatItem label="Appointments" value={loading ? '—' : upcomingCount} loading={loading} />
-          <StatItem label="Med Requests" value={loading ? '—' : medCount}    loading={loading} />
-          <StatItem label="Health Chats" value={loading ? '—' : chatCount}   loading={loading} />
+        <div className="border-t border-neutral-200 dark:border-neutral-800 grid grid-cols-2 sm:grid-cols-4 gap-0 divide-x divide-neutral-200 dark:divide-neutral-800">
+          <StatItem label="Pending"       value={loading ? '—' : pendingCount}  loading={loading} />
+          <StatItem label="Appointments"  value={loading ? '—' : upcomingCount} loading={loading} />
+          <StatItem label="Med Requests"  value={loading ? '—' : medCount}      loading={loading} />
+          <StatItem label="Health Chats"  value={loading ? '—' : chatCount}     loading={loading} />
         </div>
       </div>
 
