@@ -901,6 +901,22 @@ export function HealthChatProvider({ children }) {
   }, [removeTicket]);
 
   /**
+   * Update the expiresAt for a ticket (called on healthchat:session-extended socket event)
+   */
+  const updateTicketExpiresAt = useCallback((chatId, expiresAt) => {
+    const id = String(chatId);
+    // Update legacy tickets list
+    setTickets(prev => prev.map(t => String(t.id) === id ? { ...t, expiresAt } : t));
+    // Update conversations (nested tickets array)
+    setConversations(prev => prev.map(conv => ({
+      ...conv,
+      tickets: conv.tickets?.map(t => String(t.id) === id ? { ...t, expiresAt } : t),
+    })));
+    // Update selectedTicket if it's the same chat
+    setSelectedTicket(prev => prev && String(prev.id) === id ? { ...prev, expiresAt } : prev);
+  }, []);
+
+  /**
    * Send a message
    */
   const sendMessage = useCallback(async (chatId, text, filename = null, promptType = 'text') => {
@@ -984,22 +1000,6 @@ export function HealthChatProvider({ children }) {
       throw err;
     }
   }, [removeTicket, selectedChatId]);
-
-  /**
-   * Update the expiresAt for a ticket (called on healthchat:session-extended socket event)
-   */
-  const updateTicketExpiresAt = useCallback((chatId, expiresAt) => {
-    const id = String(chatId);
-    // Update legacy tickets list
-    setTickets(prev => prev.map(t => String(t.id) === id ? { ...t, expiresAt } : t));
-    // Update conversations (nested tickets array)
-    setConversations(prev => prev.map(conv => ({
-      ...conv,
-      tickets: conv.tickets?.map(t => String(t.id) === id ? { ...t, expiresAt } : t),
-    })));
-    // Update selectedTicket if it's the same chat
-    setSelectedTicket(prev => prev && String(prev.id) === id ? { ...prev, expiresAt } : prev);
-  }, []);
 
   /**
    * Extend session for a ticket (+1 day)

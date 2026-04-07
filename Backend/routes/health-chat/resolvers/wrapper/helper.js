@@ -181,40 +181,48 @@ async function formatChatRecord(chat) {
  * @returns {Promise<{lastMessage: Object, lastMessageAt: Date, unreadCount: number}>}
  */
 async function getLastMessageInfo(chatId) {
-  // Get last message
-  const lastMsgResult = await db.query(
-    `SELECT * FROM "HealthChatPrompt"
-     WHERE "consultationVirtualId" = $1
-     ORDER BY stamp DESC
-     LIMIT 1`,
+  // Single query that returns the last message row and the unread count together.
+  // Uses a CTE to compute the last Medical stamp once, avoiding a correlated sub-select
+  // and reducing three sequential round-trips to one.
+  const result = await db.query(
+    `WITH last_msg AS (
+       SELECT *
+       FROM "HealthChatPrompt"
+       WHERE "consultationVirtualId" = $1
+       ORDER BY stamp DESC
+       LIMIT 1
+     ),
+     last_medical AS (
+       SELECT MAX(stamp) AS stamp
+       FROM "HealthChatPrompt"
+       WHERE "consultationVirtualId" = $1 AND "userType" = 'Medical'
+     ),
+     unread AS (
+       SELECT COUNT(*)::int AS cnt
+       FROM "HealthChatPrompt" p
+       CROSS JOIN last_medical lm
+       WHERE p."consultationVirtualId" = $1
+         AND p."userType" = 'Patient'
+         AND p.stamp > COALESCE(lm.stamp, '1970-01-01')
+     )
+     SELECT lm.*, u.cnt AS unread_count
+     FROM last_msg lm
+     CROSS JOIN unread u`,
     [chatId]
   );
 
-  if (lastMsgResult.rowCount === 0) {
+  if (result.rowCount === 0) {
     return { lastMessage: null, lastMessageAt: null, unreadCount: 0 };
   }
 
-  const lastMsg = lastMsgResult.rows[0];
-  const lastMessage = await formatMessage(lastMsg);
-
-  // Count unread messages (messages from patient that staff hasn't read)
-  // For simplicity, count messages from Patient after the last Medical message
-  const unreadResult = await db.query(
-    `SELECT COUNT(*)::int as count FROM "HealthChatPrompt"
-     WHERE "consultationVirtualId" = $1
-     AND "userType" = 'Patient'
-     AND stamp > COALESCE(
-       (SELECT MAX(stamp) FROM "HealthChatPrompt"
-        WHERE "consultationVirtualId" = $1 AND "userType" = 'Medical'),
-       '1970-01-01'
-     )`,
-    [chatId]
-  );
+  const row = result.rows[0];
+  // One participant lookup (null-safe for system messages with userId = null)
+  const sender = await getParticipantInfo(row.userId);
 
   return {
-    lastMessage,
-    lastMessageAt: lastMsg.stamp,
-    unreadCount: unreadResult.rows[0]?.count || 0
+    lastMessage: { ...row, sender },
+    lastMessageAt: row.stamp,
+    unreadCount: row.unread_count || 0
   };
 }
 
