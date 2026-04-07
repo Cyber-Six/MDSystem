@@ -30,6 +30,7 @@ const mediaRoutes = require('./routes/media/media.js');
 const documentStaffRoutes = require('./routes/documents/document/document-staff.js');
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
 const settingsRoutes = require('./routes/settings/settings.js');
+const totpRoutes = require('./routes/settings/totp.js');
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
 
 
@@ -94,6 +95,7 @@ app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/documents', documentStaffRoutes);
+app.use('/settings/totp', totpRoutes);
 app.use('/settings', settingsRoutes);
 
 // ======================================

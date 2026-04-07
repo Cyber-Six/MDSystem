@@ -376,7 +376,9 @@ async function createVerificationSession(email, purpose, account_type = "patient
   if (user) { // account do exist
     await client.hSet(key, {
       allow_email_2fa: user.allow_email_2fa ? "true" : "false",
+      totp_enabled: user.totp_enabled ? "true" : "false",
       email_2fa_verified: "false",
+      totp_2fa_verified: "false",
       user_exists: "true",
       user_id: user.id.toString(),       // ✅ internal only
       email,
@@ -463,6 +465,26 @@ async function update2FAInSession(token, email, purpose) {
   // ✅ 3. Mark 2FA as verified
   await client.hSet(key, {
     email_2fa_verified: "true"
+  });
+
+  return true;
+}
+
+async function updateTotp2FAInSession(token, email, purpose) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `verify:${purpose}:${token}`;
+
+  const exists = await client.exists(key);
+  if (!exists) return false;
+
+  const storedEmail = await client.hGet(key, "email");
+  if (!storedEmail || storedEmail.toLowerCase() !== email.toLowerCase()) {
+    return false;
+  }
+
+  await client.hSet(key, {
+    totp_2fa_verified: "true"
   });
 
   return true;
@@ -1115,6 +1137,7 @@ module.exports = {
   getVerificationSession,
   updateConsentInSession,
   update2FAInSession,
+  updateTotp2FAInSession,
   deleteVerificationSession,
   getUserIdFromVerificationSession,
 
