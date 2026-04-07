@@ -97,14 +97,7 @@ export const FAQsScreen: React.FC = () => {
                 >
                   {item.q}
                 </Text>
-                <Text
-                  style={{
-                    color: isDark ? colors.neutral[400] : colors.neutral[500],
-                    fontSize: 16,
-                  }}
-                >
-                  {isOpen ? '▲' : '▼'}
-                </Text>
+                <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
               </View>
               {isOpen && (
                 <Text

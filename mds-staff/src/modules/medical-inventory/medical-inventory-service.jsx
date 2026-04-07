@@ -224,24 +224,56 @@ export const addSupplyBatch = async (input) => {
 
 // ── Batch Queries ─────────────────────────────────────────────────────────────
 
-export const fetchMedicineBatches = async (medicalItemId) => {
+/**
+ * Fetch medicine batches for a medical item.
+ * @param {number} medicalItemId - ID of the medical item
+ * @param {string|null} [location] - LocationDesignation: 'Arlegui' | 'Casal' | 'QuezonCity'
+ * @param {boolean|null} [availableOnly] - Filter to only batches with available quantity > 0
+ * @param {number} [offset] - Pagination offset
+ * @param {number} [limit] - Pagination limit
+ * @returns {Promise<Array>} MedicineBatch[]
+ */
+export const fetchMedicineBatches = async (medicalItemId, location = null, availableOnly = null, offset = null, limit = null) => {
+  // Build variables object, only including non-null values
+  const variables = { medicalItemId };
+  if (location !== null) variables.location = location;
+  if (availableOnly !== null) variables.availableOnly = availableOnly;
+  if (offset !== null) variables.offset = offset;
+  if (limit !== null) variables.limit = limit;
+
   const data = await sendGraphQL(
-    `query GetMedicalSupply($medicalItemId: Int!) {
-      getMedicalSupply(medicalItemId: $medicalItemId) {${MEDICINE_BATCH_FIELDS}
+    `query GetMedicalSupply($medicalItemId: Int!, $location: LocationDesignation, $availableOnly: Boolean, $offset: Int, $limit: Int) {
+      getMedicalSupply(medicalItemId: $medicalItemId, location: $location, availableOnly: $availableOnly, offset: $offset, limit: $limit) {${MEDICINE_BATCH_FIELDS}
       }
     }`,
-    { medicalItemId },
+    variables,
   );
   return data.getMedicalSupply ?? [];
 };
 
-export const fetchSupplyBatches = async (supplyItemId) => {
+/**
+ * Fetch supply batches for a supply item.
+ * @param {number} supplyItemId - ID of the supply item
+ * @param {string|null} [location] - LocationDesignation: 'Arlegui' | 'Casal' | 'QuezonCity'
+ * @param {boolean|null} [availableOnly] - Filter to only batches with available quantity > 0
+ * @param {number} [offset] - Pagination offset
+ * @param {number} [limit] - Pagination limit
+ * @returns {Promise<Array>} SupplyBatch[]
+ */
+export const fetchSupplyBatches = async (supplyItemId, location = null, availableOnly = null, offset = null, limit = null) => {
+  // Build variables object, only including non-null values
+  const variables = { supplyItemId };
+  if (location !== null) variables.location = location;
+  if (availableOnly !== null) variables.availableOnly = availableOnly;
+  if (offset !== null) variables.offset = offset;
+  if (limit !== null) variables.limit = limit;
+
   const data = await sendGraphQL(
-    `query GetSupplyBatches($supplyItemId: Int!) {
-      getSupplyBatches(supplyItemId: $supplyItemId) {${SUPPLY_BATCH_FIELDS}
+    `query GetSupplyBatches($supplyItemId: Int!, $location: LocationDesignation, $availableOnly: Boolean, $offset: Int, $limit: Int) {
+      getSupplyBatches(supplyItemId: $supplyItemId, location: $location, availableOnly: $availableOnly, offset: $offset, limit: $limit) {${SUPPLY_BATCH_FIELDS}
       }
     }`,
-    { supplyItemId },
+    variables,
   );
   return data.getSupplyBatches ?? [];
 };

@@ -77,6 +77,40 @@ const EVENT_MAP = {
     title: 'New Document Available',
     message: data?.message || `A new ${data?.templateType || 'document'} has been issued for you.`,
   }),
+  'document:requested': (data) => ({
+    type: 'document',
+    route: '/my-documents',
+    title: 'Document Requested',
+    message: data?.notes 
+      ? `${data?.label || 'A document'}\nNote: ${data.notes}`
+      : `${data?.label || 'A document'}`,
+    refId: data?.documentId ?? null,
+  }),
+  'document:approved': (data) => ({
+    type: 'document',
+    route: '/my-documents',
+    title: 'Document Approved',
+    message: data?.message || (data?.notes
+      ? `Your submitted document "${data?.label}" has been approved. Note: ${data.notes}`
+      : `Your submitted document "${data?.label}" has been approved.`),
+    refId: data?.documentId ?? null,
+  }),
+  'document:rejected': (data) => ({
+    type: 'document',
+    route: '/my-documents',
+    title: 'Document Rejected',
+    message: data?.message || (data?.notes
+      ? `Your document "${data?.label}" was rejected. Reason: ${data.notes}`
+      : `Your document "${data?.label}" was rejected. Please resubmit.`),
+    refId: data?.documentId ?? null,
+  }),
+  'document:cancelled': (data) => ({
+    type: 'document',
+    route: '/my-documents',
+    title: 'Document Request Cancelled',
+    message: data?.message || `The request for "${data?.label || 'a document'}" has been cancelled.`,
+    refId: data?.documentId ?? null,
+  }),
   'updateTicket:statusChanged': (data) => ({
     type: 'record',
     route: '/record-update',

@@ -3,9 +3,10 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
+import { DatePickerInput } from '../../../components/ui/DatePickerInput';
 import type { FormData } from '../../../services/emr-service';
 
 interface Props {
@@ -20,13 +21,13 @@ export const ObGyneStep: React.FC<Props> = ({ formData, onUpdate, isDark }) => {
   };
 
   const inputStyle = [styles.input, {
-    backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+    backgroundColor: isDark ? colors.neutral[700] : '#FFF',
     color: isDark ? colors.neutral[100] : colors.neutral[900],
     borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
   }];
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <View style={styles.headerRow}>
         <Ionicons name="female" size={22} color={isDark ? colors.primary[300] : colors.primary[600]} />
         <Text style={[styles.title, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>OB-GYN History</Text>
@@ -43,12 +44,11 @@ export const ObGyneStep: React.FC<Props> = ({ formData, onUpdate, isDark }) => {
         <Text style={[styles.hint, { color: isDark ? colors.neutral[500] : colors.neutral[400] }]}>
           (Kailan ang unang araw ng huling regla?)
         </Text>
-        <TextInput
-          style={inputStyle}
+        <DatePickerInput
           value={ob.lastMenstrualPeriod}
-          onChangeText={v => onUpdate({ lastMenstrualPeriod: v })}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+          onChange={v => onUpdate({ lastMenstrualPeriod: v })}
+          isDark={isDark}
+          placeholder="Select date"
         />
 
         {/* Menstruation Duration */}
@@ -101,29 +101,33 @@ export const ObGyneStep: React.FC<Props> = ({ formData, onUpdate, isDark }) => {
           {['Yes', 'No'].map(v => (
             <TouchableOpacity
               key={v}
-              style={[styles.yesNoBtn, ob.dysmenorrhea === v && styles.yesNoBtnSelected]}
+              style={[
+                styles.yesNoBtn,
+                { backgroundColor: ob.dysmenorrhea === v ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100] },
+              ]}
               onPress={() => onUpdate({ dysmenorrhea: v })}
+              activeOpacity={0.7}
             >
-              <Text style={{ color: ob.dysmenorrhea === v ? '#FFF' : isDark ? colors.neutral[300] : colors.neutral[600], fontWeight: '600' }}>{v}</Text>
+              <Text style={{ color: ob.dysmenorrhea === v ? '#FFF' : isDark ? colors.neutral[300] : colors.neutral[600], fontWeight: '600', fontSize: 13 }}>{v}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 40 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
-  title: { fontSize: 18, fontWeight: '700' },
+  title: { fontSize: 17, fontWeight: '700' },
   subtitle: { fontSize: 13, marginBottom: 16 },
-  card: { borderWidth: 1, borderRadius: 12, padding: 16 },
+  card: { borderWidth: 1, borderRadius: 14, padding: 16 },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
   hint: { fontSize: 12, marginBottom: 8 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 14 },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
   yesNoBtns: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  yesNoBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.05)' },
+  yesNoBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   yesNoBtnSelected: { backgroundColor: colors.primary[500] },
 });
 

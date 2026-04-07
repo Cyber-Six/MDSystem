@@ -69,9 +69,9 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({ steps, current
 );
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 12 },
+  container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 12 },
   stepRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  stepItem: { alignItems: 'center', width: 48 },
+  stepItem: { alignItems: 'center', minWidth: 40, maxWidth: 60 },
   circle: {
     width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   circleCompleted: { backgroundColor: colors.success[500] },
   circleActive: { backgroundColor: colors.primary[500] },
   circleText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  label: { fontSize: 9, marginTop: 4, textAlign: 'center' },
+  label: { fontSize: 10, marginTop: 4, textAlign: 'center' },
   labelActive: { fontWeight: '600' },
   connector: { height: 2, flex: 1, marginHorizontal: 2, borderRadius: 1 },
 });
