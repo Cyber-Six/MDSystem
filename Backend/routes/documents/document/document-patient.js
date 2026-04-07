@@ -4,6 +4,7 @@ const { jwtProtect } = require('../../../config/middleware/jwtProtect.js');
 const db = require('../../../config/db.js');
 const { connect } = require('../../../config/query.js');
 const { promoteFile, deleteFile } = require('../../../config/multer.js');
+const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
 
 const router = express.Router();
 
@@ -121,7 +122,7 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
     // Check if the document tag exists and get CURRENT active submission
     // (not Archived, not Rejected)
     const existingResult = await client.query(
-      `SELECT prd.id, prd.status, prd.file, rdt.label
+      `SELECT prd.id, prd.status, prd.file, prd."recordedBy", rdt.label
        FROM "rawDocumentTag" rdt
        LEFT JOIN "patientRawDocument" prd ON
          prd."documentTagId" = rdt.id AND prd."patientId" = $2 
@@ -207,6 +208,37 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
     }
 
     await client.query('COMMIT');
+
+    // Notify the staff member who requested this document
+    const requestedBy = existing.recordedBy;
+    if (requestedBy) {
+      try {
+        // Get patient name for the notification
+        const patientResult = await db.query(
+          `SELECT first_name, last_name FROM "UsersPersonal" WHERE id = $1`,
+          [patientId]
+        );
+        const patient = patientResult.rows[0];
+        const patientName = patient
+          ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'A patient'
+          : 'A patient';
+
+        await notifyUser(
+          String(requestedBy),
+          'document:submitted',
+          {
+            documentId,
+            label: existing.label,
+            submissionId,
+            patientId,
+            patientName,
+            message: `${patientName} has submitted the requested document: ${existing.label}`,
+          }
+        );
+      } catch (notifErr) {
+        logger.warn('Document submission notification failed', { error: notifErr.message, documentId });
+      }
+    }
 
     logger.info('Document request submitted', {
       documentId,

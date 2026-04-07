@@ -78,6 +78,17 @@ const EVENT_MAP = {
     message: 'A patient submitted a record update request.',
     refId: data?.recordId ?? null,
   }),
+  'document:submitted': (data) => ({
+    type: 'document',
+    route: '/patient-records',
+    routeState: { section: 'documents', patientId: data?.patientId },
+    title: 'Document Submitted',
+    message: data?.message || (data?.patientName
+      ? `${data.patientName} has submitted: ${data?.label || 'a document'}`
+      : `A patient has submitted: ${data?.label || 'a document'}`),
+    refId: data?.submissionId ?? null,
+    patientId: data?.patientId ?? null,
+  }),
   'admin:notification': (data) => {
     let title = 'Announcement';
     let message = data?.message ?? 'You received a notification.';
