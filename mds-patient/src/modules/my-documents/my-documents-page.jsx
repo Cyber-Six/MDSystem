@@ -231,8 +231,10 @@ export default function MyDocumentsPage() {
       // Documents awaiting staff review
       return requestedDocs.filter(d => d.submission?.status === 'Pending');
     }
-    if (filter === 'accepted') {
-      return requestedDocs.filter(d => d.submission?.status === 'Recorded');
+    if (filter === 'recorded') {
+      return requestedDocs.filter(d => 
+        d.submission?.status === 'Recorded' || d.submission?.status === 'Rejected'
+      );
     }
     return requestedDocs;
   };
@@ -240,7 +242,9 @@ export default function MyDocumentsPage() {
   const filteredRequested = getFilteredRequestedDocs();
   const requestedCount = requestedDocs.filter(d => d.submission?.status === 'Requested').length;
   const pendingCount = requestedDocs.filter(d => d.submission?.status === 'Pending').length;
-  const acceptedCount = requestedDocs.filter(d => d.submission?.status === 'Recorded').length;
+  const recordedCount = requestedDocs.filter(d => 
+    d.submission?.status === 'Recorded' || d.submission?.status === 'Rejected'
+  ).length;
 
   // For the "My Documents" section, show all documents (issued documents)
   const filtered = documents;
@@ -267,64 +271,91 @@ export default function MyDocumentsPage() {
         </button>
       </div>
 
-      {/* Filter Tabs */}
+      {/* Tab Navigation */}
       {requestedDocs.length > 0 && (
-        <div className="flex items-center gap-1 flex-wrap">
-          <button
-            onClick={() => setFilter('requested')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === 'requested'
-                ? 'bg-primary-600 text-white'
-                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-            }`}
-          >
-            Requested ({requestedCount})
-          </button>
-          <button
-            onClick={() => setFilter('pending')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === 'pending'
-                ? 'bg-warning-600 text-white'
-                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-            }`}
-          >
-            Pending ({pendingCount})
-          </button>
-          <button
-            onClick={() => setFilter('accepted')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === 'accepted'
-                ? 'bg-success-600 text-white'
-                : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600'
-            }`}
-          >
-            Accepted ({acceptedCount})
-          </button>
-        </div>
-      )}
-
-      {/* Requested Documents Section */}
-      {requestedDocs.length > 0 && (
-        <div className="bg-warning-50 dark:bg-warning-900/10 border-2 border-warning-200 dark:border-warning-800 rounded-xl p-5">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <svg className="w-5 h-5 text-warning-600 dark:text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-bold text-warning-900 dark:text-warning-200 mb-1">
-                📋 Documents
-              </h2>
-              <p className="text-sm text-warning-700 dark:text-warning-300">
-                {filter === 'requested' && 'Documents waiting for your upload'}
-                {filter === 'pending' && 'Documents awaiting staff review'}
-                {filter === 'accepted' && 'Documents approved by staff'}
-              </p>
+        <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl overflow-hidden">
+          <div className="border-b border-neutral-200 dark:border-neutral-700">
+            <div className="px-6 py-0 flex items-center gap-0">
+              <button
+                onClick={() => setFilter('requested')}
+                className={`relative px-4 py-3.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                  filter === 'requested'
+                    ? 'text-primary-600 dark:text-primary-400'
+                    : 'text-secondary-600 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  Requested
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
+                    {requestedCount}
+                  </span>
+                </span>
+                {filter === 'requested' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400" />
+                )}
+              </button>
+              <button
+                onClick={() => setFilter('pending')}
+                className={`relative px-4 py-3.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                  filter === 'pending'
+                    ? 'text-primary-600 dark:text-primary-400'
+                    : 'text-secondary-600 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  Pending
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
+                    {pendingCount}
+                  </span>
+                </span>
+                {filter === 'pending' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400" />
+                )}
+              </button>
+              <button
+                onClick={() => setFilter('recorded')}
+                className={`relative px-4 py-3.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                  filter === 'recorded'
+                    ? 'text-primary-600 dark:text-primary-400'
+                    : 'text-secondary-600 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  Recorded
+                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
+                    {recordedCount}
+                  </span>
+                </span>
+                {filter === 'recorded' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400" />
+                )}
+              </button>
             </div>
           </div>
 
-          <div className="space-y-3">
+          {/* Documents List */}
+          <div className="p-6">
+            {loadingRequests ? (
+              <div className="py-12 text-center">
+                <svg className="w-8 h-8 mx-auto text-primary-500 animate-spin mb-3" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <p className="text-sm text-secondary-500 dark:text-neutral-400">Loading documents...</p>
+              </div>
+            ) : filteredRequested.length === 0 ? (
+              <div className="py-12 text-center">
+                <svg className="w-12 h-12 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300">
+                  {filter === 'requested' && 'No requested documents'}
+                  {filter === 'pending' && 'No pending documents'}
+                  {filter === 'recorded' && 'No recorded documents'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
             {filteredRequested.map((doc) => {
               const progress = uploadProgress[doc.id];
               const isUploading = uploading === doc.id;
@@ -338,10 +369,10 @@ export default function MyDocumentsPage() {
               return (
                 <div
                   key={doc.id}
-                  className={`bg-white dark:bg-neutral-800 border rounded-lg p-4 ${
-                    isApproved ? 'border-success-200 dark:border-success-800' :
-                    needsReview ? 'border-warning-200 dark:border-warning-600' :
-                    'border-warning-200 dark:border-neutral-600'
+                  className={`border-2 rounded-xl p-4 transition-all ${
+                    isApproved ? 'border-success-300 dark:border-success-700/50 bg-success-50/30 dark:bg-success-900/10' :
+                    needsReview ? 'border-warning-300 dark:border-warning-700/50 bg-warning-50/30 dark:bg-warning-900/10' :
+                    'border-primary-300 dark:border-primary-700/50 bg-primary-50/30 dark:bg-primary-900/10'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-3">
@@ -394,8 +425,8 @@ export default function MyDocumentsPage() {
                         isApproved ? 'text-success-700 dark:text-success-400' : 
                         'text-secondary-700 dark:text-neutral-400'
                       }`}>
-                        {status === 'Requested' ? '📋 Why this document is needed:' :
-                         isApproved ? '✓ Review Note:' : 
+                        {status === 'Requested' ? 'Request Note' :
+                         isApproved ? 'Approval Note' : 
                          'Note:'}
                       </p>
                       <p className={`${
@@ -411,12 +442,12 @@ export default function MyDocumentsPage() {
                   {/* Status Messages - only show if no notes */}
                   {needsReview && !doc.submission?.notes && (
                     <div className="mb-3 p-2 bg-warning-50 dark:bg-warning-900/10 border border-warning-200 dark:border-warning-700 rounded text-xs text-warning-700 dark:text-warning-300">
-                      ⏳ Your document is being reviewed by staff. You'll be notified once it's approved.
+                      Your document is being reviewed by staff. You'll be notified once it's approved.
                     </div>
                   )}
                   {isApproved && !doc.submission?.notes && (
                     <div className="mb-3 p-2 bg-success-50 dark:bg-success-900/10 border border-success-200 dark:border-success-700 rounded text-xs text-success-700 dark:text-success-300">
-                      ✓ This document has been approved by staff. No further action needed.
+                      This document has been approved by staff. No further action needed.
                     </div>
                   )}
 
@@ -523,30 +554,9 @@ export default function MyDocumentsPage() {
                 </div>
               );
             })}
+              </div>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* No documents in current filter */}
-      {requestedDocs.length > 0 && filteredRequested.length === 0 && (
-        <div className="text-center py-12">
-          <svg className="w-16 h-16 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <p className="text-neutral-500 dark:text-neutral-400 text-sm">
-            {filter === 'requested' && 'No documents waiting for upload'}
-            {filter === 'pending' && 'No documents pending review'}
-            {filter === 'accepted' && 'No accepted documents'}
-          </p>
-        </div>
-      )}
-
-      {/* Loading */}
-      {loadingRequests && (
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-20 bg-neutral-100 dark:bg-neutral-700 rounded-lg animate-pulse" />
-          ))}
         </div>
       )}
 
