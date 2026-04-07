@@ -6,6 +6,7 @@ import {
   uploadRequestedDocument,
 } from '../../services/documents-service';
 import { axiosRequest } from '../../packages-core-adapter';
+import { usePatientNotifications } from '../notification/notification-context';
 
 const TYPE_LABELS = {
   prescription: 'Prescription',
@@ -66,6 +67,8 @@ export default function MyDocumentsPage() {
   // Staged files: { documentId: { file: File, fileId: string (staged UUID) } }
   const [stagedFiles, setStagedFiles] = useState({});
 
+  const { subscribe } = usePatientNotifications();
+
   const loadDocuments = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -95,6 +98,42 @@ export default function MyDocumentsPage() {
     loadDocuments();
     loadRequestedDocuments();
   }, [loadDocuments, loadRequestedDocuments]);
+
+  // Subscribe to document notifications to auto-refresh the lists
+  useEffect(() => {
+    const unsubscribeRequested = subscribe('document:requested', () => {
+      console.log('Document requested - refreshing requested documents');
+      loadRequestedDocuments();
+    });
+    
+    const unsubscribeApproved = subscribe('document:approved', () => {
+      console.log('Document approved - refreshing requested documents');
+      loadRequestedDocuments();
+    });
+    
+    const unsubscribeRejected = subscribe('document:rejected', () => {
+      console.log('Document rejected - refreshing requested documents');
+      loadRequestedDocuments();
+    });
+    
+    const unsubscribeCancelled = subscribe('document:cancelled', () => {
+      console.log('Document cancelled - refreshing requested documents');
+      loadRequestedDocuments();
+    });
+
+    const unsubscribeNew = subscribe('document:new', () => {
+      console.log('New document available - refreshing my documents');
+      loadDocuments();
+    });
+
+    return () => {
+      unsubscribeRequested();
+      unsubscribeApproved(); 
+      unsubscribeRejected();
+      unsubscribeCancelled();
+      unsubscribeNew();
+    };
+  }, [subscribe, loadRequestedDocuments, loadDocuments]);
 
   const uploadFileToStaging = async (file) => {
     const body = new FormData();

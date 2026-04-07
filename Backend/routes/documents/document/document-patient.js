@@ -211,6 +211,14 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
 
     // Notify the staff member who requested this document
     const requestedBy = existing.recordedBy;
+    logger.info('Document submission - checking notification', {
+      documentId,
+      patientId,
+      submissionId,
+      requestedBy,
+      existingRecordedBy: existing.recordedBy
+    });
+    
     if (requestedBy) {
       try {
         // Get patient name for the notification
@@ -222,6 +230,12 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
         const patientName = patient
           ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'A patient'
           : 'A patient';
+
+        logger.info('Sending document:submitted notification', {
+          requestedBy,
+          patientName,
+          documentLabel: existing.label
+        });
 
         await notifyUser(
           String(requestedBy),
@@ -235,9 +249,22 @@ router.post('/requests/:documentId', jwtProtect("patient"), async (req, res) => 
             message: `${patientName} has submitted the requested document: ${existing.label}`,
           }
         );
+        
+        logger.info('Document:submitted notification sent successfully', { requestedBy });
       } catch (notifErr) {
-        logger.warn('Document submission notification failed', { error: notifErr.message, documentId });
+        logger.error('Document submission notification failed', { 
+          error: notifErr.message, 
+          stack: notifErr.stack,
+          documentId, 
+          requestedBy 
+        });
       }
+    } else {
+      logger.warn('No requestedBy found for document submission notification', {
+        documentId,
+        patientId,
+        existingData: existing
+      });
     }
 
     logger.info('Document request submitted', {
