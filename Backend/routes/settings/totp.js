@@ -16,7 +16,7 @@ const TOTP_ISSUER = "MDSystem";
 // GET /settings/totp/status
 // Returns current TOTP 2FA status
 // ========================================
-router.get("/status", jwtProtect("medical"), async (req, res) => {
+router.get("/status", jwtProtect("all"), async (req, res) => {
   const userId = req.user.id;
 
   try {
@@ -47,7 +47,7 @@ router.get("/status", jwtProtect("medical"), async (req, res) => {
 // Generate a new TOTP secret + QR code
 // Does NOT enable TOTP yet — user must verify first
 // ========================================
-router.post("/setup", jwtProtect("medical"), async (req, res) => {
+router.post("/setup", jwtProtect("all"), async (req, res) => {
   const userId = req.user.id;
 
   try {
@@ -111,7 +111,7 @@ router.post("/setup", jwtProtect("medical"), async (req, res) => {
 // Verify a TOTP code and enable 2FA
 // Body: { token: "123456" }
 // ========================================
-router.post("/verify", jwtProtect("medical"), ipRateLimiter("strictLimiter"), async (req, res) => {
+router.post("/verify", jwtProtect("all"), ipRateLimiter("strictLimiter"), async (req, res) => {
   const userId = req.user.id;
   const { token } = req.body;
 
@@ -183,7 +183,7 @@ router.post("/verify", jwtProtect("medical"), ipRateLimiter("strictLimiter"), as
 // Disable TOTP 2FA (requires current authenticator code)
 // Body: { token: "123456" }
 // ========================================
-router.post("/disable", jwtProtect("medical"), ipRateLimiter("strictLimiter"), async (req, res) => {
+router.post("/disable", jwtProtect("all"), ipRateLimiter("strictLimiter"), async (req, res) => {
   const userId = req.user.id;
   const { token } = req.body;
 

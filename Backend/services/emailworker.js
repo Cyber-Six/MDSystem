@@ -53,7 +53,7 @@ function sleep(ms) {
       // ✅ Use buildEmailTemplate for OTP jobs
       let emailDetails;
 
-      if (job.name === 'sendEmailVerification' || job.name === 'sendEmail2FA' || job.name === "sendPasswordResetLink") {
+      if (job.name === 'sendEmailVerification' || job.name === 'sendEmail2FA' || job.name === 'sendSettingsOTP' || job.name === "sendPasswordResetLink") {
         if (job.name === "sendPasswordResetLink"){ // create verification ticket
           data.resetpwlink = await createVerificationSession(userEmail, "resetpassword", portal);
           data.portal = portal === "patient" ? "www" : "staff";
@@ -80,11 +80,12 @@ function sleep(ms) {
       });
 
       // ✅ Store OTP only after successful send (for OTP jobs)
-      if (job.name === 'sendEmailVerification' || job.name === 'sendEmail2FA') {
+      if (job.name === 'sendEmailVerification' || job.name === 'sendEmail2FA' || job.name === 'sendSettingsOTP') {
         try {
           codeMap = {
             'sendEmailVerification': 'emailVerification',
             'sendEmail2FA': 'email2FA',
+            'sendSettingsOTP': 'settingsAction',
           };
 
           await setOTP(userEmail, data.otp, codeMap[job.name], portal);
