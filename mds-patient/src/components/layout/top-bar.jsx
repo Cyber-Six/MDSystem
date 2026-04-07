@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import UserMenu from '@core/components/user-menu/user-menu';
 import { logout } from '../../packages-core-adapter';
 import { usePatientNotifications } from '../../modules/notification/notification-context';
+import { useSettings } from '../../context/settings-context';
 
 function formatRelativeTime(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -20,44 +21,14 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeNotifTab, setActiveNotifTab] = useState('general');
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = usePatientNotifications();
+  const { settings, updateSettings } = useSettings();
 
   const handleNotifClick = (notif) => {
     markAsRead(notif.id);
     setShowNotifications(false);
     if (notif.route) navigate(notif.route);
   };
-  const [themeMode, setThemeMode] = useState(() => {
-    // Initialize from localStorage or default to 'system'
-    return localStorage.getItem('patient_themeMode') || 'system';
-  });
   const notifRef = useRef(null);
-
-  // Apply theme based on mode
-  useEffect(() => {
-    const applyTheme = (mode) => {
-      if (mode === 'system') {
-        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.classList.toggle('dark', systemPrefersDark);
-      } else if (mode === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    };
-
-    applyTheme(themeMode);
-    localStorage.setItem('patient_themeMode', themeMode);
-
-    // Listen for system theme changes when in system mode
-    if (themeMode === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const handleChange = (e) => {
-        document.documentElement.classList.toggle('dark', e.matches);
-      };
-      mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery.removeEventListener('change', handleChange);
-    }
-  }, [themeMode]);
 
   // Get page title based on current route
   const getPageTitle = () => {
@@ -84,11 +55,11 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
   }, []);
 
   // Cycle through theme modes: light -> dark -> system -> light
+  // Writes through the settings context so Portal Preferences page sees the same value.
   const toggleTheme = () => {
-    setThemeMode((current) => {
-      if (current === 'light') return 'dark';
-      if (current === 'dark') return 'system';
-      return 'light';
+    updateSettings((prev) => {
+      const next = prev.themeMode === 'light' ? 'dark' : prev.themeMode === 'dark' ? 'system' : 'light';
+      return { ...prev, themeMode: next };
     });
   };
 
@@ -347,7 +318,7 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
 
           {/* User Avatar */}
           <UserMenu 
-            themeMode={themeMode}
+            themeMode={settings.themeMode}
             toggleTheme={toggleTheme}
             onLogout={handleLogout}
           />
