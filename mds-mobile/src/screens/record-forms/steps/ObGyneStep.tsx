@@ -5,6 +5,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { colors } from '../../../context/ThemeContext';
+import { DatePickerInput } from '../../../components/ui/DatePickerInput';
 import type { FormData } from '../../../services/emr-service';
 
 interface Props {
@@ -42,12 +43,11 @@ export const ObGyneStep: React.FC<Props> = ({ formData, onUpdate, isDark }) => {
         <Text style={[styles.hint, { color: isDark ? colors.neutral[500] : colors.neutral[400] }]}>
           (Kailan ang unang araw ng huling regla?)
         </Text>
-        <TextInput
-          style={inputStyle}
+        <DatePickerInput
           value={ob.lastMenstrualPeriod}
-          onChangeText={v => onUpdate({ lastMenstrualPeriod: v })}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+          onChange={v => onUpdate({ lastMenstrualPeriod: v })}
+          isDark={isDark}
+          placeholder="Select date"
         />
 
         {/* Menstruation Duration */}

@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../../context/ThemeContext';
+import { DatePickerInput } from '../../../components/ui/DatePickerInput';
 import { axiosRequest, getApiBaseUrl } from '../../../core';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
 
@@ -17,6 +18,7 @@ interface Props {
 }
 
 const CLEANING_RANGES = ['0 to 6 months ago', '7 to 11 months ago', '1 year or more'];
+const APPLIANCE_STATUS_OPTIONS = ['Active', 'Completed', 'Removed'];
 
 export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark, catalogs }) => {
   const dh = formData.dentalHistory;
@@ -91,30 +93,59 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
     const current = dh.intraOralAppliances[id];
     const isChecked = typeof current === 'object' ? (current as any)?.checked : !!current;
     const arch = typeof current === 'object' ? ((current as any)?.arch || '') : '';
+    const status = typeof current === 'object' ? ((current as any)?.status || '') : '';
+    const dateIssued = typeof current === 'object' ? ((current as any)?.dateIssued || '') : '';
     onUpdate({
       intraOralAppliances: {
         ...dh.intraOralAppliances,
-        [id]: { checked: !isChecked, arch },
+        [id]: { checked: !isChecked, arch, status, dateIssued },
       },
     });
   };
 
   const handleApplianceArch = (id: string, arch: string) => {
     const current = dh.intraOralAppliances[id];
-    const isChecked = typeof current === 'object' ? !!(current as any)?.checked : !!current;
+    const existing = typeof current === 'object' ? current as any : { checked: true, arch: '', status: '', dateIssued: '' };
     onUpdate({
       intraOralAppliances: {
         ...dh.intraOralAppliances,
-        [id]: { checked: isChecked, arch },
+        [id]: { ...existing, arch },
+      },
+    });
+  };
+
+  const handleApplianceField = (id: string, field: 'status' | 'dateIssued', value: string) => {
+    const current = dh.intraOralAppliances[id];
+    const existing = typeof current === 'object' ? current as any : { checked: true, arch: '', status: '', dateIssued: '' };
+    onUpdate({
+      intraOralAppliances: {
+        ...dh.intraOralAppliances,
+        [id]: { ...existing, [field]: value },
       },
     });
   };
 
   const handleProcedureToggle = (id: string) => {
+    const newVal = !dh.selectedDentalProcedures[id];
     onUpdate({
       selectedDentalProcedures: {
         ...dh.selectedDentalProcedures,
-        [id]: !dh.selectedDentalProcedures[id],
+        [id]: newVal,
+      },
+    });
+    // Remove date if unchecking
+    if (!newVal && dh.procedureDates?.[id]) {
+      const updated = { ...dh.procedureDates };
+      delete updated[id];
+      onUpdate({ procedureDates: updated });
+    }
+  };
+
+  const handleProcedureDate = (id: string, date: string) => {
+    onUpdate({
+      procedureDates: {
+        ...dh.procedureDates,
+        [id]: date,
       },
     });
   };
@@ -191,9 +222,17 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
 
         {dh.firstTimeDentist === 'no' && (
           <View style={{ marginTop: 12 }}>
-            <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>Last Dental Consultation</Text>
-            <TextInput style={inputStyle} value={dh.lastDentalConsultation} onChangeText={v => onUpdate({ lastDentalConsultation: v })}
-              placeholder="YYYY-MM" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
+            <DatePickerInput
+              label="Last Dental Consultation"
+              value={dh.lastDentalConsultation}
+              onChange={v => onUpdate({ lastDentalConsultation: v })}
+              isDark={isDark}
+            />
+            <View style={{ marginTop: 12 }}>
+              <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>Purpose of Dental Visit</Text>
+              <TextInput style={inputStyle} value={dh.purpose || ''} onChangeText={v => onUpdate({ purpose: v })}
+                placeholder="e.g. Cleaning, check-up, toothache" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
+            </View>
           </View>
         )}
 
@@ -221,6 +260,8 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
               const val = dh.intraOralAppliances[app.id];
               const isChecked = typeof val === 'object' ? !!(val as any)?.checked : !!val;
               const arch = typeof val === 'object' ? ((val as any)?.arch || '') : '';
+              const appStatus = typeof val === 'object' ? ((val as any)?.status || '') : '';
+              const appDateIssued = typeof val === 'object' ? ((val as any)?.dateIssued || '') : '';
               return (
                 <View key={app.id}>
                   <TouchableOpacity style={styles.checkRow} onPress={() => handleApplianceToggle(app.id)} activeOpacity={0.7}>
@@ -230,20 +271,48 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
                     <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14, flex: 1 }}>{app.name}</Text>
                   </TouchableOpacity>
                   {isChecked && (
-                    <View style={styles.archRow}>
-                      {['Upper', 'Lower', 'Both'].map(loc => (
-                        <TouchableOpacity
-                          key={loc}
-                          style={[
-                            styles.archBtn,
-                            { backgroundColor: arch === loc ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100] },
-                          ]}
-                          onPress={() => handleApplianceArch(app.id, loc)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={{ color: arch === loc ? '#FFF' : isDark ? colors.neutral[400] : colors.neutral[600], fontSize: 12, fontWeight: '600' }}>{loc}</Text>
-                        </TouchableOpacity>
-                      ))}
+                    <View style={styles.applianceDetails}>
+                      <View style={styles.archRow}>
+                        {['Upper', 'Lower', 'Both'].map(loc => (
+                          <TouchableOpacity
+                            key={loc}
+                            style={[
+                              styles.archBtn,
+                              { backgroundColor: arch === loc ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100] },
+                            ]}
+                            onPress={() => handleApplianceArch(app.id, loc)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={{ color: arch === loc ? '#FFF' : isDark ? colors.neutral[400] : colors.neutral[600], fontSize: 12, fontWeight: '600' }}>{loc}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      <View style={styles.applianceFieldRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.fieldLabel, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>Status *</Text>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                            {APPLIANCE_STATUS_OPTIONS.map(s => (
+                              <TouchableOpacity
+                                key={s}
+                                style={[styles.archBtn, { backgroundColor: appStatus === s ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                                onPress={() => handleApplianceField(app.id, 'status', s)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={{ color: appStatus === s ? '#FFF' : isDark ? colors.neutral[400] : colors.neutral[600], fontSize: 12, fontWeight: '600' }}>{s}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <DatePickerInput
+                            label="Date Issued"
+                            value={appDateIssued}
+                            onChange={v => handleApplianceField(app.id, 'dateIssued', v)}
+                            isDark={isDark}
+                            required
+                          />
+                        </View>
+                      </View>
                     </View>
                   )}
                 </View>
@@ -261,14 +330,30 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
         <Text style={[styles.sublabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
           Which procedures have you had in the past 24 months?
         </Text>
-        {catalogs.dentalProcedureCatalog.map(proc => (
-          <TouchableOpacity key={proc.id} style={styles.checkRow} onPress={() => handleProcedureToggle(proc.id)} activeOpacity={0.7}>
-            <View style={[styles.checkbox, dh.selectedDentalProcedures[proc.id] && styles.checkboxChecked]}>
-              {dh.selectedDentalProcedures[proc.id] && <Text style={styles.checkmark}>✓</Text>}
+        {catalogs.dentalProcedureCatalog.map(proc => {
+          const isChecked = !!dh.selectedDentalProcedures[proc.id];
+          return (
+            <View key={proc.id}>
+              <TouchableOpacity style={styles.checkRow} onPress={() => handleProcedureToggle(proc.id)} activeOpacity={0.7}>
+                <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                  {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14, flex: 1 }}>{proc.name}</Text>
+              </TouchableOpacity>
+              {isChecked && (
+                <View style={{ marginLeft: 32, marginBottom: 8 }}>
+                  <DatePickerInput
+                    label="Procedure Date"
+                    value={dh.procedureDates?.[proc.id] || ''}
+                    onChange={v => handleProcedureDate(proc.id, v)}
+                    isDark={isDark}
+                    required
+                  />
+                </View>
+              )}
             </View>
-            <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14, flex: 1 }}>{proc.name}</Text>
-          </TouchableOpacity>
-        ))}
+          );
+        })}
       </View>
 
       {/* Dental Photos */}
@@ -302,8 +387,11 @@ const styles = StyleSheet.create({
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.neutral[400], alignItems: 'center', justifyContent: 'center' },
   checkboxChecked: { backgroundColor: colors.primary[500], borderColor: colors.primary[500] },
   checkmark: { color: '#FFF', fontSize: 13, fontWeight: '700' },
-  archRow: { flexDirection: 'row', gap: 8, marginLeft: 32, marginBottom: 8 },
+  archRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   archBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
+  applianceDetails: { marginLeft: 32, marginBottom: 8 },
+  applianceFieldRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  fieldLabel: { fontSize: 13, fontWeight: '500', marginBottom: 4 },
   photoSection: { marginBottom: 16 },
   photoPreview: { marginTop: 8 },
   photoImage: { width: '100%', height: 180, borderRadius: 12 },

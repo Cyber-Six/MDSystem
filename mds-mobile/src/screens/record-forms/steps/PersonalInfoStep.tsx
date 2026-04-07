@@ -8,6 +8,7 @@ import {
   StyleSheet, Pressable, Platform, Keyboard,
 } from 'react-native';
 import { colors } from '../../../context/ThemeContext';
+import { DatePickerInput } from '../../../components/ui/DatePickerInput';
 import type { FormData } from '../../../services/emr-service';
 
 interface Props {
@@ -81,7 +82,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
     field: keyof typeof pi,
     placeholder: string,
     errorKey?: string,
-    opts?: { keyboardType?: TextInput['props']['keyboardType'] },
+    opts?: { keyboardType?: TextInput['props']['keyboardType']; maxLength?: number },
   ) => (
     <View style={styles.fieldGroup}>
       <Text style={labelStyle}>{label} *</Text>
@@ -92,6 +93,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
         placeholder={placeholder}
         placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
         keyboardType={opts?.keyboardType}
+        maxLength={opts?.maxLength}
         returnKeyType="done"
       />
       {errors[errorKey || field] && <Text style={styles.errorText}>{errors[errorKey || field]}</Text>}
@@ -174,6 +176,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           onChangeText={v => updateContact('contactNumber', v)}
           placeholder="Contact Number (e.g. 09XXXXXXXXX)"
           keyboardType="phone-pad"
+          maxLength={11}
           placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
           returnKeyType="done"
           onSubmitEditing={() => Keyboard.dismiss()}
@@ -203,13 +206,13 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           {renderField('Middle Name', 'middleName', 'Enter middle name')}
 
           <View style={styles.fieldGroup}>
-            <Text style={labelStyle}>Birthday *</Text>
-            <TextInput
-              style={inputStyle}
+            <DatePickerInput
+              label="Birthday"
               value={pi.birthday}
-              onChangeText={(val) => onUpdate({ birthday: val })}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+              onChange={(val) => onUpdate({ birthday: val })}
+              isDark={isDark}
+              required
+              placeholder="Select birthday"
             />
           </View>
 
@@ -218,7 +221,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
 
           {renderField('Nationality', 'nationality', 'Enter nationality')}
           {renderField('Religion', 'religion', 'Enter religion')}
-          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad' })}
+          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad', maxLength: 11 })}
           {renderField('Present Address', 'address', 'Enter present address')}
           {renderField('Province Address', 'provinceAddress', 'Enter province address')}
           {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
