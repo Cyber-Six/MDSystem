@@ -4,8 +4,9 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Animated, StyleSheet } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface TypingIndicatorProps {
   isTyping: boolean;
@@ -58,7 +59,7 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({ isTyping }) => {
     <View style={styles.container}>
       {/* Staff avatar */}
       <View style={styles.avatar}>
-        <Text style={styles.avatarText}>🩺</Text>
+        <MaterialCommunityIcons name="stethoscope" size={14} color={colors.primary[500]} />
       </View>
 
       {/* Dots bubble */}
@@ -95,9 +96,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(244,196,48,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 14,
   },
   bubble: {
     flexDirection: 'row',

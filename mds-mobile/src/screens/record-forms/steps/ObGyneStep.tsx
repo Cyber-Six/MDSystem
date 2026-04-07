@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData } from '../../../services/emr-service';
 
@@ -27,7 +28,7 @@ export const ObGyneStep: React.FC<Props> = ({ formData, onUpdate, isDark }) => {
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.headerRow}>
-        <Text style={{ fontSize: 22 }}>♀</Text>
+        <Ionicons name="female" size={22} color={isDark ? colors.primary[300] : colors.primary[600]} />
         <Text style={[styles.title, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>OB-GYN History</Text>
       </View>
       <Text style={[styles.subtitle, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>

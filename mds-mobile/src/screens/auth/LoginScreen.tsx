@@ -14,6 +14,7 @@ import {
   StyleSheet
 } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { Input, Button, Alert, LinkButton, Checkbox } from '../../components/ui/FormComponents';
 import { DataConsent } from '../../components/auth/DataConsent';
@@ -335,7 +336,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         styles.iconCircle,
         { backgroundColor: isDark ? 'rgba(241, 197, 38, 0.2)' : colors.primary[100] }
       ]}>
-        <Text style={styles.iconEmoji}>📧</Text>
+        <Ionicons name="mail" size={40} color={colors.primary[500]} />
       </View>
 
       <Text style={[
@@ -428,7 +429,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {currentStep === 'credentials' && (
             <View style={styles.header}>
               <View style={styles.logoContainer}>
-                <Text style={styles.logoEmoji}>🏥</Text>
+                <Ionicons name="medkit" size={40} color="#FFFFFF" />
               </View>
               <Text style={[
                 styles.title,
@@ -490,7 +491,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   logoEmoji: {
-    fontSize: 40,
+    // unused
+  },
+  iconEmoji: {
+    // unused
   },
   title: {
     fontSize: 28,
@@ -524,9 +528,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
     marginBottom: 20,
-  },
-  iconEmoji: {
-    fontSize: 40,
   },
   stepTitle: {
     fontSize: 24,

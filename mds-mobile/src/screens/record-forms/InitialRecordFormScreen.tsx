@@ -362,7 +362,7 @@ const InitialRecordFormScreen: React.FC = () => {
             {isSubmitting ? (
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
-              <Text style={[styles.navBtnText, { color: '#FFF' }]}>Submit ✓</Text>
+              <Text style={[styles.navBtnText, { color: '#FFF' }]}>Submit</Text>
             )}
           </TouchableOpacity>
         ) : (

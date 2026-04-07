@@ -166,16 +166,16 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
           if (data?.senderType === 'Medical' && data?.message) {
             const msg = data.message;
             const body = msg.content_type === 'file'
-              ? '📎 Sent an image'
+              ? 'Sent an image'
               : (msg.content || 'New message');
-            await handleEvent('💬 Health Chat', body, { type: 'health-chat', chatId: data.chatId }, true);
+            await handleEvent('Health Chat', body, { type: 'health-chat', chatId: data.chatId }, true);
           }
         });
 
         // Listen for ticket approval
         socketService.on('healthchat:ticket-approved', async (data: any) => {
           await handleEvent(
-            '✅ Health Chat Approved',
+            'Health Chat Approved',
             'Your health chat request has been approved. A staff member is ready to assist you.',
             { type: 'health-chat', chatId: data?.chat?.id },
             true,
@@ -195,7 +195,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
         // Listen for ticket rejection
         socketService.on('healthchat:ticket-rejected', async (data: any) => {
           await handleEvent(
-            '❌ Health Chat Declined',
+            'Health Chat Declined',
             'Your health chat request was not approved. You may try again later.',
             { type: 'health-chat', chatId: data?.chat?.id },
             true,
@@ -210,12 +210,12 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
           const body = data?.notes
             ? `Your appointment has been ${verb}. Note: ${data.notes}`
             : `Your appointment has been ${verb}.`;
-          await handleEvent(`📅 Appointment ${status}`, body, { type: 'appointment' });
+          await handleEvent(`Appointment ${status}`, body, { type: 'appointment' });
         });
 
         socketService.on('appointment:attendance-recorded', async () => {
           await handleEvent(
-            '📅 Attendance Recorded',
+            'Attendance Recorded',
             'Your clinic visit has been recorded.',
             { type: 'appointment' },
           );
@@ -225,7 +225,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
 
         socketService.on('medicine:request:approved', async () => {
           await handleEvent(
-            '💊 Medicine Request Approved',
+            'Medicine Request Approved',
             'Your medicine request has been approved.',
             { type: 'medicine' },
           );
@@ -233,7 +233,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
 
         socketService.on('medicine:request:rejected', async () => {
           await handleEvent(
-            '💊 Medicine Request Declined',
+            'Medicine Request Declined',
             'Your medicine request was declined.',
             { type: 'medicine' },
           );
@@ -241,7 +241,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
 
         socketService.on('medicine:request:pending', async () => {
           await handleEvent(
-            '💊 Medicine Request Received',
+            'Medicine Request Received',
             'Your medicine request is being processed.',
             { type: 'medicine' },
           );
@@ -249,7 +249,7 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
 
         socketService.on('medicine:prescription:issued', async () => {
           await handleEvent(
-            '📄 Prescription Ready',
+            'Prescription Ready',
             'A new prescription has been issued for you.',
             { type: 'medicine' },
           );
@@ -260,13 +260,13 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
         socketService.on('updateTicket:statusChanged', async (data: any) => {
           const newStatus = data?.newStatus ?? 'Updated';
           const body = data?.message ?? `Your record update request has been ${newStatus.toLowerCase()}.`;
-          await handleEvent(`📋 Record Update ${newStatus}`, body, { type: 'record' });
+          await handleEvent(`Record Update ${newStatus}`, body, { type: 'record' });
         });
 
         // ── Staff announcements ─────────────────────────────────────────────
 
         socketService.on('staff:notification', async (data: any) => {
-          let title = '📢 Message from Staff';
+          let title = 'Message from Staff';
           let body = '';
 
           if (data?.message) {

@@ -6,6 +6,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 
 interface ChatHeaderProps {
   ticketStatus: string;
@@ -57,7 +59,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       {/* Left: avatar + name + status */}
       <View style={styles.leftSection}>
         <View style={styles.avatarContainer}>
-          <Text style={styles.avatarEmoji}>🩺</Text>
+          <MaterialCommunityIcons name="stethoscope" size={20} color={colors.primary[500]} />
           <View style={[styles.statusDot, { backgroundColor: getStatusDot() }]} />
         </View>
         <View>
@@ -86,14 +88,14 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       <View style={styles.rightSection}>
         {!isSocketConnected && isActive && (
           <TouchableOpacity
-            style={styles.refreshBtn}
+            style={[
+              styles.refreshBtn,
+            ]}
             onPress={onRefresh}
             disabled={isLoading}
             activeOpacity={0.6}
           >
-            <Text style={{ fontSize: 16, color: isDark ? colors.neutral[500] : colors.neutral[400] }}>
-              ↻
-            </Text>
+            <Ionicons name="refresh" size={16} color={isDark ? colors.neutral[500] : colors.neutral[400]} />
           </TouchableOpacity>
         )}
 
@@ -115,7 +117,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                 { color: isDark ? colors.neutral[300] : colors.neutral[600] },
               ]}
             >
-              ✕ Close
+              Close
             </Text>
           </TouchableOpacity>
         )}
@@ -147,9 +149,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(244,196,48,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarEmoji: {
-    fontSize: 20,
   },
   statusDot: {
     position: 'absolute',

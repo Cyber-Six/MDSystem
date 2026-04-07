@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Image, StyleSheet, Alert, Platform, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import { axiosRequest, getApiBaseUrl } from '../../../core';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
@@ -170,7 +171,7 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
                 <View key={app.id}>
                   <TouchableOpacity style={styles.checkRow} onPress={() => handleApplianceToggle(app.id)}>
                     <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                      {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                      {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                     </View>
                     <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14 }}>{app.name}</Text>
                   </TouchableOpacity>
@@ -201,7 +202,7 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
         {catalogs.dentalProcedureCatalog.map(proc => (
           <TouchableOpacity key={proc.id} style={styles.checkRow} onPress={() => handleProcedureToggle(proc.id)}>
             <View style={[styles.checkbox, dh.selectedDentalProcedures[proc.id] && styles.checkboxChecked]}>
-              {dh.selectedDentalProcedures[proc.id] && <Text style={styles.checkmark}>✓</Text>}
+              {dh.selectedDentalProcedures[proc.id] && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
             </View>
             <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14, flex: 1 }}>{proc.name}</Text>
           </TouchableOpacity>

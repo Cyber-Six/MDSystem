@@ -244,7 +244,7 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
             disabled
           />
           <Text style={[styles.certCheckLabel, { color: textColor }]}>
-            {formData.certification?.verified ? '✓ Certified' : 'Not yet certified (use Submit button)'}
+            {formData.certification?.verified ? 'Certified' : 'Not yet certified (use Submit button)'}
           </Text>
         </View>
       </View>

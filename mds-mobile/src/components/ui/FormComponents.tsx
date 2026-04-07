@@ -15,6 +15,7 @@ import {
   ViewStyle,
   TextStyle
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 
 // ============ Input Component ============
@@ -251,7 +252,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({ checked, onPress, label }) =
         }
       ]}>
         {checked && (
-          <Text style={styles.checkmark}>✓</Text>
+          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
         )}
       </View>
       <Text style={[

@@ -16,6 +16,7 @@ import {
 
 import { useTheme, colors } from '../../context/ThemeContext';
 import { axiosRequest } from '../../core';
+import { Ionicons } from '@expo/vector-icons';
 
 export const ChangePasswordScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { isDark } = useTheme();
@@ -108,7 +109,7 @@ export const ChangePasswordScreen: React.FC<{ navigation: any }> = ({ navigation
               placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
             />
             <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowCurrent(!showCurrent)}>
-              <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500] }}>{showCurrent ? '🙈' : '👁️'}</Text>
+              <Ionicons name={showCurrent ? 'eye-off' : 'eye'} size={20} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
             </TouchableOpacity>
           </View>
 
@@ -124,7 +125,7 @@ export const ChangePasswordScreen: React.FC<{ navigation: any }> = ({ navigation
               placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
             />
             <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowNew(!showNew)}>
-              <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500] }}>{showNew ? '🙈' : '👁️'}</Text>
+              <Ionicons name={showNew ? 'eye-off' : 'eye'} size={20} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
             </TouchableOpacity>
           </View>
 
@@ -140,7 +141,7 @@ export const ChangePasswordScreen: React.FC<{ navigation: any }> = ({ navigation
               placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
             />
             <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirm(!showConfirm)}>
-              <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500] }}>{showConfirm ? '🙈' : '👁️'}</Text>
+              <Ionicons name={showConfirm ? 'eye-off' : 'eye'} size={20} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
             </TouchableOpacity>
           </View>
 

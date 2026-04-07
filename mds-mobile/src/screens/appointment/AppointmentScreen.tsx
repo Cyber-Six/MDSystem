@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import {
   STATUS,
@@ -82,21 +83,25 @@ const StepIndicator: React.FC<{ step: number; isDark: boolean }> = ({
                   },
             ]}
           >
-            <Text
-              style={[
-                styles.stepNumber,
-                {
-                  color:
-                    i <= step
-                      ? '#FFFFFF'
-                      : isDark
-                      ? colors.neutral[400]
-                      : colors.neutral[500],
-                },
-              ]}
-            >
-              {i < step ? '✓' : i + 1}
-            </Text>
+            {i < step ? (
+              <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+            ) : (
+              <Text
+                style={[
+                  styles.stepNumber,
+                  {
+                    color:
+                      i <= step
+                        ? '#FFFFFF'
+                        : isDark
+                        ? colors.neutral[400]
+                        : colors.neutral[500],
+                  },
+                ]}
+              >
+                {i + 1}
+              </Text>
+            )}
           </View>
           <Text
             style={[
@@ -446,7 +451,7 @@ export const AppointmentScreen: React.FC = () => {
       >
         {/* Header Banner */}
         <View style={[styles.headerBanner, { backgroundColor: colors.primary[500] }]}>
-          <Text style={styles.headerIcon}>📅</Text>
+          <Ionicons name="calendar" size={28} color="#FFFFFF" style={styles.headerIcon} />
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Appointments</Text>
             <Text style={styles.headerSubtitle}>Schedule and manage your appointments</Text>
@@ -458,7 +463,7 @@ export const AppointmentScreen: React.FC = () => {
           <View style={[styles.alertBox, { backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50], borderColor: colors.error[400] }]}>
             <Text style={{ color: colors.error[500], flex: 1 }}>{error}</Text>
             <TouchableOpacity onPress={() => setError(null)}>
-              <Text style={{ color: colors.error[500], fontWeight: 'bold', fontSize: 18 }}>×</Text>
+              <Ionicons name="close" size={18} color={colors.error[500]} />
             </TouchableOpacity>
           </View>
         )}
@@ -468,7 +473,7 @@ export const AppointmentScreen: React.FC = () => {
           <View style={[styles.alertBox, { backgroundColor: isDark ? 'rgba(34,197,94,0.15)' : colors.success[50], borderColor: colors.success[400] }]}>
             <Text style={{ color: colors.success[500], flex: 1 }}>{successMessage}</Text>
             <TouchableOpacity onPress={() => setSuccessMessage('')}>
-              <Text style={{ color: colors.success[500], fontWeight: 'bold', fontSize: 18 }}>×</Text>
+              <Ionicons name="close" size={18} color={colors.success[500]} />
             </TouchableOpacity>
           </View>
         )}
@@ -503,7 +508,7 @@ export const AppointmentScreen: React.FC = () => {
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
             <View style={styles.rejectionHeader}>
               <View style={[styles.rejectionIcon, { backgroundColor: isDark ? 'rgba(239,68,68,0.2)' : colors.error[50] }]}>
-                <Text style={{ fontSize: 20 }}>✕</Text>
+                <Ionicons name="close" size={20} color={colors.error[500]} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cardTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
@@ -544,7 +549,7 @@ export const AppointmentScreen: React.FC = () => {
                 </Text>
                 {schedulers.length === 0 ? (
                   <View style={[styles.emptyState, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
-                    <Text style={styles.emptyIcon}>📅</Text>
+                    <Ionicons name="calendar" size={36} color={isDark ? colors.neutral[400] : colors.neutral[500]} style={styles.emptyIcon} />
                     <Text style={[styles.emptyText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
                       No appointment types are currently available.
                     </Text>
@@ -821,9 +826,12 @@ export const AppointmentScreen: React.FC = () => {
                                 }]}
                                 onPress={() => setLightboxUri(uploaded.localUri)}
                               >
-                                <Text style={{ fontSize: 13, color: isDark ? colors.neutral[200] : colors.secondary[800] }}>
-                                  👁 View
-                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="eye" size={13} color={isDark ? colors.neutral[200] : colors.secondary[800]} />
+                                  <Text style={{ fontSize: 13, color: isDark ? colors.neutral[200] : colors.secondary[800] }}>
+                                    View
+                                  </Text>
+                                </View>
                               </TouchableOpacity>
                               <TouchableOpacity
                                 style={[styles.reqActionBtn, {
@@ -831,7 +839,10 @@ export const AppointmentScreen: React.FC = () => {
                                 }]}
                                 onPress={() => handleRemoveRequirement(req.id)}
                               >
-                                <Text style={{ fontSize: 13, color: colors.error[600] }}>✕ Remove</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Ionicons name="close" size={13} color={colors.error[600]} />
+                                  <Text style={{ fontSize: 13, color: colors.error[600] }}>Remove</Text>
+                                </View>
                               </TouchableOpacity>
                               <TouchableOpacity
                                 style={[styles.reqActionBtn, {
@@ -865,7 +876,7 @@ export const AppointmentScreen: React.FC = () => {
                             {isPickingThis ? (
                               <ActivityIndicator size="small" color={colors.primary[500]} />
                             ) : (
-                              <Text style={{ fontSize: 18 }}>📎</Text>
+                              <Ionicons name="attach" size={18} color={isDark ? colors.primary[300] : colors.primary[700]} />
                             )}
                             <Text style={[styles.reqUploadBtnText, {
                               color: isDark ? colors.primary[300] : colors.primary[700],
@@ -878,9 +889,12 @@ export const AppointmentScreen: React.FC = () => {
                         <View style={[styles.reqPhysicalBadge, {
                           backgroundColor: isDark ? 'rgba(99,102,241,0.1)' : '#EEF2FF',
                         }]}>
-                          <Text style={{ fontSize: 12, color: isDark ? '#A5B4FC' : '#4F46E5' }}>
-                            📋 Bring physical copy
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="clipboard" size={12} color={isDark ? '#A5B4FC' : '#4F46E5'} />
+                            <Text style={{ fontSize: 12, color: isDark ? '#A5B4FC' : '#4F46E5' }}>
+                              Bring physical copy
+                            </Text>
+                          </View>
                         </View>
                       )}
                     </View>
@@ -935,7 +949,7 @@ export const AppointmentScreen: React.FC = () => {
                         Requirements
                       </Text>
                       <Text style={[styles.reviewValue, { color: colors.success[600] }]}>
-                        {uploadedRequirements.length} file{uploadedRequirements.length !== 1 ? 's' : ''} uploaded ✓
+                        {uploadedRequirements.length} file{uploadedRequirements.length !== 1 ? 's' : ''} uploaded
                       </Text>
                     </View>
                   )}
@@ -971,7 +985,7 @@ export const AppointmentScreen: React.FC = () => {
           <View style={[styles.modalCard, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
             <View style={styles.modalHeader}>
               <View style={[styles.modalWarningIcon, { backgroundColor: isDark ? 'rgba(239,68,68,0.2)' : colors.error[50] }]}>
-                <Text style={{ fontSize: 20, color: colors.error[500] }}>⚠️</Text>
+                <Ionicons name="warning" size={20} color={colors.error[500]} />
               </View>
               <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Cancel Appointment</Text>
             </View>
@@ -1024,7 +1038,7 @@ export const AppointmentScreen: React.FC = () => {
             onPress={() => setLightboxUri(null)}
             hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }}
           >
-            <Text style={styles.lightboxCloseText}>✕</Text>
+            <Ionicons name="close" size={16} color="#FFFFFF" />
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -1049,7 +1063,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 14,
   },
-  headerIcon: { fontSize: 28 },
+  headerIcon: { marginTop: 1 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
 

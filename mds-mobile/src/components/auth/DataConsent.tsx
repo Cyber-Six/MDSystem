@@ -25,6 +25,7 @@ import {
   Linking,
 } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import { axiosRequest } from '../../core';
 
 // ── HTML Renderer ─────────────────────────────────────────────────────────────
@@ -435,7 +436,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                     },
                   ]}
                 >
-                  <Text style={styles.headerIconText}>🛡️</Text>
+                  <Ionicons name="shield-checkmark" size={24} color={colors.primary[500]} />
                 </View>
                 <View style={styles.headerTextBlock}>
                   <Text style={[styles.headerTitle, { color: textPrimary }]}>
@@ -475,7 +476,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                 ]}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={[styles.closeBtnText, { color: textSecondary }]}>✕</Text>
+                <Ionicons name="close" size={20} color={textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -490,7 +491,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                 </View>
               ) : error && !consentData ? (
                 <View style={styles.centeredState}>
-                  <Text style={styles.errorIcon}>⚠️</Text>
+                  <Ionicons name="warning" size={24} color={colors.error[500]} />
                   <Text style={[styles.errorText, { color: colors.error[600] }]}>
                     {error}
                   </Text>
@@ -518,7 +519,10 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                         },
                       ]}
                     >
-                      <Text style={styles.versionNoticeTitle}>⚠️ Policy Updated</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="warning" size={14} color={isDark ? '#FBBF24' : '#92400E'} />
+                        <Text style={styles.versionNoticeTitle}>Policy Updated</Text>
+                      </View>
                       <Text
                         style={[
                           styles.versionNoticeText,
@@ -573,7 +577,10 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                         },
                       ]}
                     >
-                      <Text style={[styles.versionNoticeTitle, { color: isDark ? '#4ADE80' : '#166534' }]}>✓ Previously Accepted</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="checkmark-circle" size={14} color={isDark ? '#4ADE80' : '#166534'} />
+                        <Text style={[styles.versionNoticeTitle, { color: isDark ? '#4ADE80' : '#166534' }]}>Previously Accepted</Text>
+                      </View>
                       <Text
                         style={[
                           styles.versionNoticeText,
@@ -681,7 +688,7 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                       },
                     ]}
                   >
-                    {agreed && <Text style={styles.checkmark}>✓</Text>}
+                    {agreed && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
                   </View>
                   <View style={styles.checkboxLabelBlock}>
                     <Text
@@ -774,7 +781,8 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                       </View>
                     ) : (
                       <View style={styles.btnContent}>
-                        <Text style={styles.acceptBtnText}>✓  Accept & Continue</Text>
+                        <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                        <Text style={styles.acceptBtnText}>Accept & Continue</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -810,12 +818,10 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                   },
                 ]}
               >
-                <Text style={styles.dialogIconEmoji}>⚠️</Text>
+                <Ionicons name="warning" size={24} color={isDark ? '#FBBF24' : '#92400E'} />
               </View>
             </View>
-            <Text style={[styles.dialogTitle, { color: textPrimary }]}>
-              Data Consent Required
-            </Text>
+            <Text style={[styles.dialogTitle, { color: textPrimary }]}>Data Consent Required</Text>
             <Text style={[styles.dialogBody, { color: textSecondary }]}>
               {purpose === 'register'
                 ? 'Consent is required to create an account. Closing will cancel your registration.'
@@ -877,12 +883,10 @@ export const DataConsent: React.FC<DataConsentProps> = ({
                   },
                 ]}
               >
-                <Text style={styles.dialogIconEmoji}>👤</Text>
+                <Ionicons name="person" size={24} color={colors.primary[500]} />
               </View>
             </View>
-            <Text style={[styles.dialogTitle, { color: textPrimary }]}>
-              Account Already Exists
-            </Text>
+            <Text style={[styles.dialogTitle, { color: textPrimary }]}>Account Already Exists</Text>
             <Text style={[styles.dialogBody, { color: textSecondary }]}>
               An account with this email already exists. Please log in to your existing
               account instead.

@@ -7,14 +7,14 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch --passWithNoTests",
+    "test:coverage": "jest --coverage --passWithNoTests"
   },
   "jest": {
     "preset": "jest-expo",
     "setupFilesAfterEnv": [
-      "<rootDir>/__tests__/setup.ts"
+      "<rootDir>/jest.setup.ts"
     ],
     "moduleNameMapper": {
       "^expo/src/winter(.*)$": "<rootDir>/__mocks__/expo-winter.js",

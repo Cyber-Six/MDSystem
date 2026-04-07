@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Switch, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
 
@@ -52,7 +53,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
         return (
           <TouchableOpacity key={item.id} style={styles.checkRow} onPress={() => toggleFn(item.id)} activeOpacity={0.7}>
             <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-              {isChecked && <Text style={styles.checkmark}>✓</Text>}
+              {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
             </View>
             <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{label}</Text>
           </TouchableOpacity>
