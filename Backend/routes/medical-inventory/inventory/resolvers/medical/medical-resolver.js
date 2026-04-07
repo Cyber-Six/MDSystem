@@ -28,7 +28,7 @@ const Query = {
 
   getMedicalSupply: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_view, args.branch);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_view, args.location);
     if (!isPermitted) {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -38,7 +38,7 @@ const Query = {
 
   getSupplyBatches: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_view, args.branch);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_view, args.location);
     if (!isPermitted) {
       logger.warn("Unauthorized inventory view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

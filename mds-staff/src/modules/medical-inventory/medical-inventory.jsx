@@ -17,6 +17,8 @@ import RequestActionModal from './components/dispense-queue/request-action-modal
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 import { useStaffNotifications } from '../notification/notification-context';
 import { useMedicineRequestSocket } from './hooks/useMedicineRequestSocket';
+import { usePermissions } from '../../context/permissions-context';
+import { useStaffProfile } from '../../hooks/use-staff-profile';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
@@ -35,6 +37,8 @@ import {
 const MedicalInventory = () => {
   const routerLocation = useLocation();
   const { subscribe, refreshInventoryAlerts } = useStaffNotifications();
+  const { hasPermission } = usePermissions();
+  const { profile } = useStaffProfile();
   const [activeSection, setActiveSection] = useState(
     routerLocation.state?.section ?? 'dashboard'
   );
@@ -106,12 +110,23 @@ const MedicalInventory = () => {
   // Helper function to get patient name with caching
   const getPatientNameCached = useCallback(async (patientId) => {
     if (!patientId) return `Patient #${patientId}`;
-    
+
     // Check cache first
     if (patientNameCacheRef.current[patientId]) {
       return patientNameCacheRef.current[patientId];
     }
-    
+
+    // Check if user has permission to view patient information
+    // getPatientBasicInfo requires emr_allow_view permission, which is part of patientSearch or medicalRecords modules
+    const canViewPatientInfo = hasPermission('patientSearch') || hasPermission('medicalRecords');
+
+    if (!canViewPatientInfo) {
+      // User doesn't have permission to view patient info, use fallback immediately
+      const fallback = `Patient #${patientId}`;
+      patientNameCacheRef.current[patientId] = fallback;
+      return fallback;
+    }
+
     try {
       const patient = await getPatientBasicInfo(patientId);
       if (patient) {
@@ -122,12 +137,12 @@ const MedicalInventory = () => {
     } catch (err) {
       console.warn(`Failed to fetch patient info for ID ${patientId}:`, err);
     }
-    
+
     // Fallback to ID if fetch fails
     const fallback = `Patient #${patientId}`;
     patientNameCacheRef.current[patientId] = fallback;
     return fallback;
-  }, []);
+  }, [hasPermission]);
 
   // Helper function to enrich multiple requests with patient names
   const enrichRequestsWithPatientNames = useCallback(async (requests) => {
@@ -153,6 +168,25 @@ const MedicalInventory = () => {
     }));
   }, [getPatientNameCached]);
 
+  // Helper function to get allowed locations based on user's branch
+  const getAllowedLocations = useCallback(() => {
+    if (!profile || !profile.branch) {
+      return ['Arlegui', 'Casal', 'QuezonCity']; // Default: try all locations
+    }
+
+    // Branch determines which locations a staff can access
+    switch (profile.branch) {
+      case 'Manila':
+        return ['Arlegui', 'Casal'];
+      case 'QuezonCity':
+        return ['QuezonCity'];
+      case 'Both':
+        return null; // null means query all locations without filter
+      default:
+        return ['Arlegui', 'Casal', 'QuezonCity']; // Fallback: try all
+    }
+  }, [profile]);
+
   // ── Fetch items from API ───────────────────────────────────────────────
   const loadItems = useCallback(async () => {
     setItemsLoading(true);
@@ -160,15 +194,51 @@ const MedicalInventory = () => {
     try {
       const data = await fetchMedicalItems();
       setItems(data);
+
+      const allowedLocations = getAllowedLocations();
+
       // Fetch batches for all items in parallel
       const batchResults = await Promise.all(
-        data.map((item) => {
+        data.map(async (item) => {
           const isMedicine = item.category?.toLowerCase() === 'medicine';
-          if (isMedicine) {
-            return fetchMedicineBatches(Number(item.id)).then((bs) =>
-              bs.map((b) => ({
+
+          // If allowedLocations is null (user has "Both" access), fetch all batches without filter
+          // Otherwise, fetch batches for each allowed location and combine them
+          let batches = [];
+
+          if (allowedLocations === null) {
+            // User has "Both" access - fetch all batches without location filter
+            if (isMedicine) {
+              batches = await fetchMedicineBatches(Number(item.id));
+            } else {
+              batches = await fetchSupplyBatches(Number(item.id));
+            }
+          } else {
+            // User has limited access - fetch batches for each allowed location
+            const locationBatches = await Promise.all(
+              allowedLocations.map(async (location) => {
+                try {
+                  if (isMedicine) {
+                    return await fetchMedicineBatches(Number(item.id), location);
+                  } else {
+                    return await fetchSupplyBatches(Number(item.id), location);
+                  }
+                } catch (err) {
+                  console.warn(`Failed to fetch batches for location ${location}:`, err);
+                  return [];
+                }
+              })
+            );
+            // Flatten the results from all locations
+            batches = locationBatches.flat();
+          }
+
+          // Normalize the batch data
+          return batches.map((b) => {
+            if (isMedicine) {
+              return {
                 id: b.id,
-                medicalItemId: Number(b.medicalItemId),  // Ensure number type for linking
+                medicalItemId: Number(b.medicalItemId),
                 batchNumber: b.batchNumber,
                 currentQuantity: Number(b.availableQuantity ?? 0),
                 availableQuantity: Number(b.availableQuantity ?? 0),
@@ -179,26 +249,25 @@ const MedicalInventory = () => {
                 location: b.location,
                 supplierName: b.supplierName,
                 notes: b.notes,
-              }))
-            );
-          } else {
-            return fetchSupplyBatches(Number(item.id)).then((bs) =>
-              bs.map((b) => ({
+              };
+            } else {
+              return {
                 id: b.id,
-                medicalItemId: Number(b.supplyItemId),  // Ensure number type for linking
+                medicalItemId: Number(b.supplyItemId),
                 batchNumber: b.batchNumber,
                 currentQuantity: Number(b.currentQuantity ?? 0),
-                availableQuantity: Number(b.currentQuantity ?? 0),  // Map both fields for consistency
+                availableQuantity: Number(b.currentQuantity ?? 0),
                 unit: b.unit,
                 expiryDate: b.expiryDate,
                 location: b.location,
                 supplierName: b.supplierName,
                 notes: b.notes,
-              }))
-            );
-          }
+              };
+            }
+          });
         })
       );
+
       const flatBatches = batchResults.flat();
       setBatches(flatBatches);
     } catch (err) {
@@ -206,7 +275,7 @@ const MedicalInventory = () => {
     } finally {
       setItemsLoading(false);
     }
-  }, []);
+  }, [getAllowedLocations]);
 
   useEffect(() => {
     loadItems();
