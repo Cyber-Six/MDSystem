@@ -530,6 +530,13 @@ export function HealthChatProvider({ children }) {
         lastMessageAt: message.stamp
       };
 
+      // Reset inactivity expiry timer since a new message counts as activity
+      if (ticket.status === 'Ongoing') {
+        const newExpiry = new Date();
+        newExpiry.setDate(newExpiry.getDate() + 3);
+        updated.expiresAt = newExpiry.toISOString();
+      }
+
       // Increment unread count only if this is a Patient message and staff is NOT viewing this patient
       if (senderType === 'Patient' && !isCurrentlySelected) {
         updated.unreadCount = (ticket.unreadCount || 0) + 1;
@@ -619,6 +626,17 @@ export function HealthChatProvider({ children }) {
       });
 
       return newArr;
+    });
+
+    // Also update selectedTicket's expiresAt if the message is for the active ticket
+    setSelectedTicket(prev => {
+      if (!prev || prev.status !== 'Ongoing') return prev;
+      const matchesChat = String(prev.id) === String(chatId) ||
+        prev.tickets?.some(sub => String(sub.id) === String(chatId));
+      if (!matchesChat) return prev;
+      const newExpiry = new Date();
+      newExpiry.setDate(newExpiry.getDate() + 3);
+      return { ...prev, expiresAt: newExpiry.toISOString() };
     });
   }, [selectedPatientId, markNeedsReply, markConversationAsRead]);
 
@@ -894,13 +912,18 @@ export function HealthChatProvider({ children }) {
         if (selectedPatientId) {
           markNeedsReply(selectedPatientId, false);
         }
+        // Reset inactivity expiry timer client-side (server computes from last message)
+        const newExpiry = new Date();
+        newExpiry.setDate(newExpiry.getDate() + 3);
+        const expiresAt = newExpiry.toISOString();
+        updateTicketExpiresAt(chatId, expiresAt);
       }
       return result;
     } catch (err) {
       console.error('[HealthChatContext] Failed to send message:', err);
       throw err;
     }
-  }, [addMessage, selectedPatientId, markNeedsReply]);
+  }, [addMessage, selectedPatientId, markNeedsReply, updateTicketExpiresAt]);
 
   /**
    * Close a ticket

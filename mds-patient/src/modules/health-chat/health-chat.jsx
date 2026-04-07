@@ -55,6 +55,10 @@ const HealthChat = () => {
     setMessages(prev => [...prev, newMessage]);
     // Clear typing indicator when message received
     setIsStaffTyping(false);
+    // Reset expiry timer: each new message resets the 3-day inactivity clock
+    const newExpiry = new Date();
+    newExpiry.setDate(newExpiry.getDate() + 3);
+    setTicket(prev => prev && prev.status === 'Ongoing' ? { ...prev, expiresAt: newExpiry.toISOString() } : prev);
   }, []);
 
   // Handle typing indicator from socket
@@ -107,7 +111,6 @@ const HealthChat = () => {
       return {
         ...prev,
         expiresAt: data.expiresAt || prev.expiresAt,
-        session_start: data.chat?.session_start || prev.session_start,
       };
     });
     if (data?.chatId) loadMessages(data.chatId);
@@ -331,6 +334,10 @@ const HealthChat = () => {
         if (result.success && result.message) setMessages(prev => [...prev, result.message]);
         setInputValue('');
       }
+      // Recalculate expiresAt client-side: expiry resets from now (3 days of inactivity)
+      const newExpiry = new Date();
+      newExpiry.setDate(newExpiry.getDate() + 3);
+      setTicket(prev => prev ? { ...prev, expiresAt: newExpiry.toISOString() } : null);
     } catch (err) {
       // If the session expired server-side, update local state so the UI freezes
       if (err.message && /expired/i.test(err.message)) {
@@ -377,7 +384,6 @@ const HealthChat = () => {
         setTicket(prev => prev ? {
           ...prev,
           expiresAt: result.chat.expiresAt,
-          session_start: result.chat.session_start,
         } : null);
         await loadMessages(ticket.id);
       } else {

@@ -1,29 +1,31 @@
 const db = require("../../../../config/query.js");
 
-// Chat expiry duration in days
+// Chat expiry duration in days (based on last activity / message)
 const CHAT_EXPIRY_DAYS = 3;
 
 /**
- * Calculate expiry date from session start
- * @param {Date|string} sessionStart - The session start timestamp
+ * Calculate expiry date from the last activity timestamp.
+ * Expiry is based on the most recent message (from either side),
+ * NOT on session_start.
+ * @param {Date|string} lastActivityAt - The last message / activity timestamp
  * @returns {Date} - The expiry date
  */
-function calculateExpiryDate(sessionStart) {
-  if (!sessionStart) return null;
-  const startDate = new Date(sessionStart);
+function calculateExpiryDate(lastActivityAt) {
+  if (!lastActivityAt) return null;
+  const startDate = new Date(lastActivityAt);
   const expiryDate = new Date(startDate);
   expiryDate.setDate(expiryDate.getDate() + CHAT_EXPIRY_DAYS);
   return expiryDate;
 }
 
 /**
- * Check if a chat has expired
- * @param {Date|string} sessionStart - The session start timestamp
- * @returns {boolean} - True if expired
+ * Check if a chat has expired based on the last activity timestamp.
+ * @param {Date|string} lastActivityAt - The last message / activity timestamp
+ * @returns {boolean} - True if expired (no activity for CHAT_EXPIRY_DAYS)
  */
-function isChatExpired(sessionStart) {
-  if (!sessionStart) return false;
-  const expiryDate = calculateExpiryDate(sessionStart);
+function isChatExpired(lastActivityAt) {
+  if (!lastActivityAt) return false;
+  const expiryDate = calculateExpiryDate(lastActivityAt);
   return new Date() > expiryDate;
 }
 
@@ -115,7 +117,10 @@ async function verifyMedicalAssignedToChat(chatId, medicalId) {
  */
 async function checkChatStatus(chatId) {
   const result = await db.query(
-    `SELECT status, session_start FROM "HealthChat" WHERE id = $1`,
+    `SELECT hc.status, hc.session_start,
+            (SELECT MAX(p.stamp) FROM "HealthChatPrompt" p
+             WHERE p."consultationVirtualId" = hc.id) AS last_message_at
+     FROM "HealthChat" hc WHERE hc.id = $1`,
     [chatId]
   );
 
@@ -123,11 +128,15 @@ async function checkChatStatus(chatId) {
     return { isActive: false, status: null };
   }
 
-  const { status, session_start } = result.rows[0];
+  const { status, session_start, last_message_at } = result.rows[0];
 
-  // Check if expired by time even if status hasn't been updated
-  if (status === 'Ongoing' && isChatExpired(session_start)) {
-    return { isActive: false, status: 'Expired' };
+  // Check if expired by inactivity even if status hasn't been updated yet.
+  // Expiry is based on the last message, falling back to session_start.
+  if (status === 'Ongoing') {
+    const lastActivityAt = last_message_at || session_start;
+    if (lastActivityAt && isChatExpired(lastActivityAt)) {
+      return { isActive: false, status: 'Expired' };
+    }
   }
 
   const activeStatuses = ['Open', 'Ongoing'];
@@ -149,12 +158,17 @@ async function formatChatRecord(chat) {
     getLastMessageInfo(chat.id)
   ]);
 
+  // Compute expiry based on last message activity (only for Ongoing tickets).
+  // Falls back to session_start if no messages exist yet.
+  const lastActivityAt = lastMessageData?.lastMessageAt || chat.session_start;
+  const expiresAt = chat.status === 'Ongoing' ? calculateExpiryDate(lastActivityAt) : null;
+
   return {
     ...chat,
     patient,
     medical,
     closedBy: chat.closed_by_type || null,
-    expiresAt: calculateExpiryDate(chat.session_start),
+    expiresAt,
     lastMessage: lastMessageData?.lastMessage || null,
     lastMessageAt: lastMessageData?.lastMessageAt || null,
     unreadCount: lastMessageData?.unreadCount || 0
@@ -357,12 +371,15 @@ async function formatChatRecordsBatch(chats) {
 
   return chats.map(chat => {
     const lastMessageData = lastMessageMap.get(chat.id) || {};
+    // Compute expiry based on last message activity (only for Ongoing tickets)
+    const lastActivityAt = lastMessageData.lastMessageAt || chat.session_start;
+    const expiresAt = chat.status === 'Ongoing' ? calculateExpiryDate(lastActivityAt) : null;
     return {
       ...chat,
       patient: participantMap.get(chat.patientId) || null,
       medical: participantMap.get(chat.medicalId) || null,
       closedBy: chat.closed_by_type || null,
-      expiresAt: calculateExpiryDate(chat.session_start),
+      expiresAt,
       lastMessage: lastMessageData.lastMessage || null,
       lastMessageAt: lastMessageData.lastMessageAt || null,
       unreadCount: lastMessageData.unreadCount || 0
@@ -371,10 +388,11 @@ async function formatChatRecordsBatch(chats) {
 }
 
 /**
- * Auto-expire tickets that exceed CHAT_EXPIRY_DAYS.
+ * Auto-expire tickets that exceed CHAT_EXPIRY_DAYS of inactivity.
  * Four cases are handled:
- *   1. Ongoing tickets whose session_start + CHAT_EXPIRY_DAYS is in the past.
- *   2. Open tickets where the patient account is already Expired in UserCredentials.
+ *   1. Ongoing tickets with no message activity for CHAT_EXPIRY_DAYS.
+ *      Uses MAX(stamp) from HealthChatPrompt, falling back to session_start.
+ *   2. Open tickets where the patient account is already Inactive in UserCredentials.
  *   3. Stale Open tickets where the last message is older than CHAT_EXPIRY_DAYS
  *      (every new ticket has a creation system message from _createTicket as the anchor).
  *   4. Legacy Open tickets with zero messages (MAX(stamp) IS NULL skips step 3 in SQL).
@@ -398,9 +416,9 @@ async function autoExpireTickets(patientId = null) {
   const interval = `${CHAT_EXPIRY_DAYS} days`;
   let expiredCount = 0;
 
-  // ── 1. Expire Ongoing tickets whose session window has elapsed ──────────────
-  // session_start + CHAT_EXPIRY_DAYS <= NOW() matches the frontend's expiresAt.
-  // extendSession pushes session_start forward by 1 day, so this stays consistent.
+  // ── 1. Expire Ongoing tickets with no activity for CHAT_EXPIRY_DAYS ─────────
+  // Uses the most recent message (MAX stamp) as the activity anchor.
+  // If no messages exist, falls back to session_start.
   const ongoingParams = [interval];
   let ongoingQuery = `
     UPDATE "HealthChat"
@@ -408,8 +426,11 @@ async function autoExpireTickets(patientId = null) {
         session_end = NOW(),
         closed_by_type = 'System'
     WHERE status = 'Ongoing'
-    AND session_start IS NOT NULL
-    AND session_start + CAST($1 AS INTERVAL) <= NOW()
+    AND COALESCE(
+      (SELECT MAX(stamp) FROM "HealthChatPrompt"
+       WHERE "consultationVirtualId" = "HealthChat".id),
+      session_start
+    ) + CAST($1 AS INTERVAL) <= NOW()
   `;
 
   if (patientId) {
