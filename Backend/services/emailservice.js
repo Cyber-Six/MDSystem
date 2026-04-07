@@ -76,6 +76,22 @@ async function enqueueEmailVerification(userEmail, portal = "patient") {
   };
 }
 
+async function enqueueSettingsOTP(userEmail, portal = "patient") {
+  const otp = generateOTP();
+  const job = await emailQueue.add('sendSettingsOTP', { userEmail, data: { otp }, portal }, {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 1000 },
+    removeOnComplete: true,
+  });
+  const waitingCount = await emailQueue.getWaitingCount();
+  return {
+    jobId: job.id,
+    position: waitingCount,
+    expectedArrivalSeconds: waitingCount * (Number(process.env.EMAIL_DELAY) || 1),
+    validitySeconds: Number(process.env.EMAIL_2FA_EXPIRATION) || 300,
+  };
+}
+
 async function enqueueResetPassword(userEmail, portal = "patient") {
   // Verification token is created by the worker just before sending
   const job = await emailQueue.add('sendPasswordResetLink', { userEmail, data: {}, portal }, {
@@ -315,7 +331,7 @@ function buildEmailTemplate(job_name, userEmail, data) {
   let subject;
   let htmlContent;
 
-  if (job_name === 'sendEmail2FA') {
+  if (job_name === 'sendEmail2FA' || job_name === 'sendSettingsOTP') {
     subject = 'Your MDSystem 2FA Code';
     htmlContent = twoFATemplate(data.otp);
   } else if (job_name === 'sendEmailVerification') {
@@ -348,6 +364,7 @@ module.exports = {
   enqueueEmail,
   enqueueEmailVerification,
   enqueueEmail2FA,
+  enqueueSettingsOTP,
   enqueueResetPassword,
   enqueueNotificationEmail,
   enqueueAdminTransferEmail,

@@ -98,10 +98,10 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Create login verification session (always the same purpose)
   const verificationKey = await createVerificationSession(email, VERIFICATIONKEY_PURPOSE, account_type);
 
-  // ✅ If 2FA is disabled → mark validated inside Redis and return
+  // ✅ Email OTP is always required; TOTP is the preferred alternative when enabled
   return res.status(200).json({
     ok: true,
-    requires2FA: user.allow_email_2fa,
+    requires2FA: true,
     requiresTotp: user.totp_enabled || false,
     LoginKey: verificationKey,
     });
@@ -128,17 +128,14 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
-  if (session.allow_email_2fa === "true" && session.email_2fa_verified !== "true") {
+  // Email OTP is always required; TOTP is accepted as an alternative.
+  // At least one factor (email OTP or TOTP) must be verified.
+  const emailVerified = session.email_2fa_verified === "true";
+  const totpVerified = session.totp_2fa_verified === "true";
+  if (!emailVerified && !totpVerified) {
     return res.status(400).json({
       error: "2FA_NOT_VERIFIED",
-      message: "Email 2FA has not been verified."
-    });
-  }
-
-  if (session.totp_enabled === "true" && session.totp_2fa_verified !== "true") {
-    return res.status(400).json({
-      error: "TOTP_NOT_VERIFIED",
-      message: "Authenticator 2FA has not been verified."
+      message: "Two-factor authentication has not been completed."
     });
   }
 

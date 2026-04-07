@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../../context/settings-context';
 import TotpSettings from './totp-settings';
+import ChangePasswordSettings from './change-password-settings';
 
 /**
  * Unsaved-changes guard dialog
@@ -493,9 +494,8 @@ const PatientSettings = () => {
         description="Manage two-factor authentication for your account"
       >
         <TotpSettings />
+        <ChangePasswordSettings />
       </Section>
-
-      {/* ── Save Bar ── */}
       <div
         className={`sticky bottom-0 bg-white/80 dark:bg-neutral-800/80 backdrop-blur-md rounded-xl border transition-all duration-200 ${
           hasChanges

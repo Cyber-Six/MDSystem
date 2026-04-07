@@ -228,6 +228,10 @@ const OTPMatrix = {
     purpose: "emailVerification",
     expiration: Number(process.env.EMAIL_VERIF_EXPIRATION) || 600, // fallback, // absolute one-time verification
     },
+  settingsAction: {
+    purpose: "settingsAction",
+    expiration: Number(process.env.EMAIL_2FA_EXPIRATION) || 300, // same TTL as 2FA
+    },
   };
 
 async function setOTP(email, otp, code, portal) {
