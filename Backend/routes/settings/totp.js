@@ -125,7 +125,7 @@ router.post("/setup", jwtProtect("medical"), async (req, res) => {
 // Verify a TOTP code and enable 2FA
 // Body: { token: "123456" }
 // ========================================
-router.post("/verify", jwtProtect("medical"), async (req, res) => {
+router.post("/verify", jwtProtect("medical"), ipRateLimiter("strictLimiter"), async (req, res) => {
   const userId = req.user.id;
   const { token } = req.body;
 
@@ -196,7 +196,7 @@ router.post("/verify", jwtProtect("medical"), async (req, res) => {
 // Disable TOTP 2FA (requires current authenticator code)
 // Body: { token: "123456" }
 // ========================================
-router.post("/disable", jwtProtect("medical"), async (req, res) => {
+router.post("/disable", jwtProtect("medical"), ipRateLimiter("strictLimiter"), async (req, res) => {
   const userId = req.user.id;
   const { token } = req.body;
 

@@ -157,7 +157,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
       });
   }
 
-  deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
+  await deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
 
   // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
   const portal = detectPortalFromSubdomain(req);

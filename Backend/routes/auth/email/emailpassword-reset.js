@@ -3,14 +3,13 @@ const router = express.Router();
 
 const { ipRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const logger = require('../../../utils/logger.js');
-const { isValidEmail } = require('../../../utils/validator.js');
+const { isValidEmail, validatePassword } = require('../../../utils/validator.js');
 const { detectPortalFromSubdomain } = require('../../../utils/portal.js');
 const { rateLimitEmailCooldown, rateLimitEmailAttempts, rateLimitEmailCooldownTTL,
-  getUserIdFromVerificationSession, deleteVerificationSession, getVerificationSession } = require('../../../config/redis.js');
-const query = require('../../../config/query.js');
-
-const { recordResetPwFailure, clearResetPwFailures, isResetPwLocked} = require('../../../config/redis.js');
+  deleteVerificationSession, getVerificationSession,
+  recordResetPwFailure, clearResetPwFailures, isResetPwLocked } = require('../../../config/redis.js');
 const { rateLimitMatrix } = require('../../../config/data/matrix.js');
+const query = require('../../../config/query.js');
 const { enqueueResetPassword } = require('../../../services/emailservice.js');
 const { delayRandom } = require('../../../utils/security.js');
 
@@ -153,6 +152,14 @@ router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), 
       return res.status(400).json({
         error: "MISSING_FIELDS",
         message: "Verification key and new password are required."
+      });
+    }
+
+    if (!validatePassword(newPassword)) {
+      await delayRandom(200, 500);
+      return res.status(400).json({
+        error: "INVALID_PASSWORD",
+        message: "Password must be 8–64 characters long."
       });
     }
 
