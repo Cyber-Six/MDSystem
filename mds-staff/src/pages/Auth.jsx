@@ -56,15 +56,15 @@ const Auth = () => {
       )}
 
       {/* Sliding Login Panel */}
-      <div className={`auth-panel fixed top-0 h-screen w-full max-w-[420px] bg-white shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen ? 'right-0' : '-right-full'}`}>
+      <div className={`auth-panel fixed top-0 h-screen w-full max-w-[420px] bg-white dark:bg-neutral-900 shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen ? 'right-0' : '-right-full'}`}>
         <div className="h-full flex flex-col px-8 md:px-6 sm:px-5 py-8 md:py-6">
           {/* X Close Button */}
           <button
             onClick={closePanel}
-            className="absolute top-6 right-6 p-2 hover:bg-neutral-100 rounded-full transition-colors z-20"
+            className="absolute top-6 right-6 p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full transition-colors z-20"
             aria-label="Close login panel"
           >
-            <svg className="w-6 h-6 text-secondary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 text-secondary-600 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -77,10 +77,10 @@ const Auth = () => {
                 alt="MDSystem Logo" 
                 className="h-24 w-24 mx-auto mb-4"
               />
-              <h1 className="text-2xl font-bold text-secondary-900 font-heading mb-1">
+              <h1 className="text-2xl font-bold text-secondary-900 dark:text-white font-heading mb-1">
                 Staff Portal
               </h1>
-              <p className="text-xs text-neutral-600">
+              <p className="text-xs text-neutral-600 dark:text-neutral-400">
                 Sign in to your staff account
               </p>
             </div>
