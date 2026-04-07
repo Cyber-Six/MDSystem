@@ -326,13 +326,17 @@ const HealthChat = () => {
       emitTyping(false);
       if (hasFile) {
         const result = await sendMessage(ticket.id, null, attachedFile.fileId, 'file');
-        if (result.success && result.message) setMessages(prev => [...prev, result.message]);
-        setAttachedFile(null);
+        if (result.success && result.message) {
+          setMessages(prev => [...prev, result.message]);
+          setAttachedFile(null);
+        }
       }
       if (hasText) {
         const result = await sendMessage(ticket.id, inputValue.trim(), null, 'text');
-        if (result.success && result.message) setMessages(prev => [...prev, result.message]);
-        setInputValue('');
+        if (result.success && result.message) {
+          setMessages(prev => [...prev, result.message]);
+          setInputValue('');
+        }
       }
       // Recalculate expiresAt client-side: expiry resets from now (3 days of inactivity)
       const newExpiry = new Date();

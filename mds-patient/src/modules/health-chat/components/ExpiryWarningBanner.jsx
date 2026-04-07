@@ -67,7 +67,7 @@ const ExpiryWarningBanner = ({ expiresAt, isExtending, onExtend }) => {
             ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             : <RefreshCw className="w-3.5 h-3.5" />
           }
-          {isExtending ? 'Extending…' : 'Extend (1D)'}
+          {isExtending ? 'Extending…' : 'Extend'}
         </button>
         <button
           onClick={() => setDismissed(true)}
@@ -129,7 +129,7 @@ const ExpiryWarningBanner = ({ expiresAt, isExtending, onExtend }) => {
                 className="px-4 py-2 text-sm font-semibold rounded-lg transition-colors
                            bg-amber-500 hover:bg-amber-600 text-white"
               >
-                Extend session (1D)
+                Extend session
               </button>
             </div>
           </div>
