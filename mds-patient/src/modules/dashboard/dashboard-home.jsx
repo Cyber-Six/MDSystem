@@ -107,30 +107,21 @@ const SkeletonLine = ({ w = 'w-full', h = 'h-4' }) => (
 );
 
 const STAT_META = {
-  Pending:      { icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',         color: 'text-amber-500',   bg: 'bg-amber-50 dark:bg-amber-500/10'   },
-  Appointments: { icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10' },
-  'Med Requests':{ icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-  'Health Chats':{ icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z', color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-500/10' },
+  Pending:       { color: 'text-amber-500'   },
+  Appointments:  { color: 'text-blue-500'    },
+  'Med Requests':{ color: 'text-emerald-500' },
+  'Health Chats':{ color: 'text-violet-500'  },
 };
 
 const StatItem = ({ label, value, loading }) => {
-  const meta = STAT_META[label] ?? { icon: null, color: 'text-neutral-500', bg: 'bg-neutral-100 dark:bg-neutral-800' };
+  const meta = STAT_META[label] ?? { color: 'text-neutral-500' };
   return (
-    <div className="flex flex-1 items-center gap-3 px-5 py-4 min-w-0">
-      <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${meta.bg}`}>
-        {meta.icon && (
-          <svg className={`w-4.5 h-4.5 ${meta.color}`} style={{width:'18px',height:'18px'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={meta.icon} />
-          </svg>
-        )}
-      </div>
-      <div className="min-w-0">
-        {loading
-          ? <SkeletonLine w="w-8" h="h-6" />
-          : <span className={`block text-2xl font-extrabold tabular-nums leading-none ${meta.color}`}>{value}</span>
-        }
-        <span className="block mt-0.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 whitespace-nowrap">{label}</span>
-      </div>
+    <div className="flex flex-col items-center justify-center px-3 py-4 min-w-0">
+      {loading
+        ? <SkeletonLine w="w-8" h="h-6" />
+        : <span className={`block text-2xl font-extrabold tabular-nums leading-none ${meta.color}`}>{value}</span>
+      }
+      <span className="block mt-1 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 whitespace-nowrap">{label}</span>
     </div>
   );
 };
@@ -325,8 +316,8 @@ const DashboardHome = ({ firstName }) => {
               </span>
             </div>
 
-            {/* subtabs */}
-            <div className="flex gap-0 border-b border-neutral-200 dark:border-neutral-800 overflow-x-auto scrollbar-none">
+            {/* subtabs — 2-col on small screens, 4-col on larger ones */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-neutral-200 dark:border-neutral-800">
               {REQUEST_TABS.map(tab => {
                 const count = tab.key === 'all'
                   ? pendingList.length
@@ -336,7 +327,7 @@ const DashboardHome = ({ firstName }) => {
                   <button
                     key={tab.key}
                     onClick={() => setRequestTab(tab.key)}
-                    className={`relative flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                    className={`relative flex items-center justify-center gap-1 py-2.5 px-1 w-full text-xs font-semibold truncate transition-colors ${
                       active
                         ? 'text-primary-600 dark:text-primary-400'
                         : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
