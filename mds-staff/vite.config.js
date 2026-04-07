@@ -171,6 +171,14 @@ export default defineConfig(({ mode }) => {
           target: BACKEND_URL,
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),
+          bypass: function(req) {
+            // API calls always include an Authorization header; browser navigation does not.
+            // Bypass the proxy for browser GET navigations so Vite serves index.html
+            // and React Router handles the /settings route client-side.
+            if (req.method === 'GET' && !req.headers.authorization) {
+              return '/index.html';
+            }
+          },
         },
       },
     }

@@ -1,90 +1,15 @@
 const express = require("express");
-const crypto = require("crypto");
 const QRCode = require("qrcode");
 
 const { jwtProtect } = require("../../config/middleware/jwtProtect.js");
+const { ipRateLimiter } = require("../../config/middleware/ratelimiter.js");
 const query = require("../../config/query.js");
-const { verifyPassword } = require("../../utils/security.js");
 const logger = require("../../utils/logger.js");
+const { totpGenerateSecret, totpVerify, totpKeyUri } = require("../../utils/totp.js");
 
 const router = express.Router();
 
 const TOTP_ISSUER = "MDSystem";
-
-// ========================================
-// TOTP helpers using native crypto (RFC 6238)
-// ========================================
-const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-
-function base32Encode(buffer) {
-  let bits = 0, value = 0, output = "";
-  for (const byte of buffer) {
-    value = (value << 8) | byte;
-    bits += 8;
-    while (bits >= 5) {
-      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 0x1f];
-      bits -= 5;
-    }
-  }
-  if (bits > 0) output += BASE32_ALPHABET[(value << (5 - bits)) & 0x1f];
-  return output;
-}
-
-function base32Decode(encoded) {
-  const clean = encoded.toUpperCase().replace(/=+$/, "");
-  let bits = 0, value = 0;
-  const output = [];
-  for (const char of clean) {
-    const idx = BASE32_ALPHABET.indexOf(char);
-    if (idx === -1) continue;
-    value = (value << 5) | idx;
-    bits += 5;
-    if (bits >= 8) {
-      output.push((value >>> (bits - 8)) & 0xff);
-      bits -= 8;
-    }
-  }
-  return Buffer.from(output);
-}
-
-function totpGenerateSecret() {
-  return base32Encode(crypto.randomBytes(20));
-}
-
-function totpGetToken(secret, timestamp = Date.now()) {
-  const counter = Math.floor(timestamp / 1000 / 30);
-  const counterBuf = Buffer.alloc(8);
-  let c = counter;
-  for (let i = 7; i >= 0; i--) {
-    counterBuf[i] = c & 0xff;
-    c = Math.floor(c / 256);
-  }
-  const key = base32Decode(secret);
-  const hmac = crypto.createHmac("sha1", key);
-  hmac.update(counterBuf);
-  const digest = hmac.digest();
-  const offset = digest[digest.length - 1] & 0x0f;
-  const code =
-    (((digest[offset] & 0x7f) << 24) |
-      ((digest[offset + 1] & 0xff) << 16) |
-      ((digest[offset + 2] & 0xff) << 8) |
-      (digest[offset + 3] & 0xff)) %
-    1000000;
-  return code.toString().padStart(6, "0");
-}
-
-function totpVerify(token, secret, window = 1) {
-  const now = Date.now();
-  for (let i = -window; i <= window; i++) {
-    if (totpGetToken(secret, now + i * 30000) === token) return true;
-  }
-  return false;
-}
-
-function totpKeyUri(account, secret) {
-  const label = encodeURIComponent(`${TOTP_ISSUER}:${account}`);
-  return `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(TOTP_ISSUER)}&algorithm=SHA1&digits=6&period=30`;
-}
 
 // ========================================
 // Auto-create TOTP columns if missing
@@ -204,10 +129,10 @@ router.post("/verify", jwtProtect("medical"), async (req, res) => {
   const userId = req.user.id;
   const { token } = req.body;
 
-  if (!token || typeof token !== "string" || token.length !== 6) {
+  if (!token || !/^\d{6}$/.test(token)) {
     return res.status(400).json({
       error: "INVALID_TOKEN",
-      message: "A 6-digit verification code is required.",
+      message: "A 6-digit numeric verification code is required.",
     });
   }
 
@@ -268,23 +193,23 @@ router.post("/verify", jwtProtect("medical"), async (req, res) => {
 
 // ========================================
 // POST /settings/totp/disable
-// Disable TOTP 2FA (requires password confirmation)
-// Body: { password: "..." }
+// Disable TOTP 2FA (requires current authenticator code)
+// Body: { token: "123456" }
 // ========================================
 router.post("/disable", jwtProtect("medical"), async (req, res) => {
   const userId = req.user.id;
-  const { password } = req.body;
+  const { token } = req.body;
 
-  if (!password) {
+  if (!token || !/^\d{6}$/.test(token)) {
     return res.status(400).json({
-      error: "MISSING_PASSWORD",
-      message: "Password is required to disable 2FA.",
+      error: "INVALID_TOKEN",
+      message: "A 6-digit numeric authenticator code is required to disable 2FA.",
     });
   }
 
   try {
     const result = await query.query(
-      `SELECT totp_enabled, password_hash FROM "UserCredentials" WHERE id = $1`,
+      `SELECT totp_enabled, totp_secret FROM "UserCredentials" WHERE id = $1`,
       [userId]
     );
 
@@ -292,7 +217,7 @@ router.post("/disable", jwtProtect("medical"), async (req, res) => {
       return res.status(404).json({ error: "USER_NOT_FOUND", message: "User not found." });
     }
 
-    const { totp_enabled, password_hash } = result.rows[0];
+    const { totp_enabled, totp_secret } = result.rows[0];
 
     if (!totp_enabled) {
       return res.status(400).json({
@@ -301,13 +226,13 @@ router.post("/disable", jwtProtect("medical"), async (req, res) => {
       });
     }
 
-    // Verify password
-    const passwordValid = await verifyPassword(password, password_hash);
-    if (!passwordValid) {
-      logger.warn(`[TOTP] Invalid password for disable userId=${userId}`);
-      return res.status(401).json({
-        error: "INVALID_PASSWORD",
-        message: "Incorrect password.",
+    // Verify the current authenticator code
+    const isValid = totpVerify(token, totp_secret);
+    if (!isValid) {
+      logger.warn(`[TOTP] Invalid code for disable userId=${userId}`);
+      return res.status(400).json({
+        error: "INVALID_TOTP_CODE",
+        message: "Invalid authenticator code. Please try again.",
       });
     }
 
@@ -335,7 +260,7 @@ router.post("/disable", jwtProtect("medical"), async (req, res) => {
 // This is called from the login flow, not from settings
 // Body: { token: "123456", verificationKey: "..." }
 // ========================================
-router.post("/validate", async (req, res) => {
+router.post("/validate", ipRateLimiter("strictLimiter"), async (req, res) => {
   const { token, verificationKey, email } = req.body;
 
   if (!token || !verificationKey || !email) {
@@ -345,19 +270,30 @@ router.post("/validate", async (req, res) => {
     });
   }
 
-  if (typeof token !== "string" || token.length !== 6) {
+  if (!/^\d{6}$/.test(token)) {
     return res.status(400).json({
       error: "INVALID_TOKEN",
-      message: "A 6-digit verification code is required.",
+      message: "A 6-digit numeric verification code is required.",
     });
   }
 
   try {
-    const { getVerificationSession } = require("../../config/redis.js");
+    const { getVerificationSession, updateTotp2FAInSession,
+            recordTotpFailureForKey, isTotpLockedForKey,
+            deleteVerificationSession } = require("../../config/redis.js");
 
     // Validate the verification session exists
     const session = await getVerificationSession(verificationKey, "2fa");
     if (!session || !session.email) {
+      return res.status(400).json({
+        error: "INVALID_SESSION",
+        message: "Login session is invalid or expired.",
+      });
+    }
+
+    // Check per-key TOTP failure lock before processing
+    if (await isTotpLockedForKey(verificationKey, "2fa")) {
+      await deleteVerificationSession(verificationKey, "2fa");
       return res.status(400).json({
         error: "INVALID_SESSION",
         message: "Login session is invalid or expired.",
@@ -395,6 +331,8 @@ router.post("/validate", async (req, res) => {
     const isValid = totpVerify(token, totp_secret);
 
     if (!isValid) {
+      const locked = await recordTotpFailureForKey(verificationKey, "2fa");
+      if (locked) await deleteVerificationSession(verificationKey, "2fa");
       return res.status(400).json({
         error: "INVALID_TOTP_CODE",
         message: "Invalid authenticator code. Please try again.",
@@ -402,7 +340,6 @@ router.post("/validate", async (req, res) => {
     }
 
     // Mark 2FA as verified in the session
-    const { updateTotp2FAInSession } = require("../../config/redis.js");
     await updateTotp2FAInSession(verificationKey, email, "2fa");
 
     logger.info(`[TOTP] Login TOTP validated for email=${email}`);

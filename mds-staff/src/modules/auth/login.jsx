@@ -484,11 +484,11 @@ const Login = () => {
               required
               disabled={isLoading}
               autoFocus
-              className="w-full px-4 py-4 bg-neutral-50 
-                       text-secondary-900 text-center text-2xl font-mono tracking-widest
-                       border-2 border-neutral-300 
+              className="w-full px-4 py-4 bg-neutral-50 dark:bg-neutral-900
+                       text-secondary-900 dark:text-white text-center text-2xl font-mono tracking-widest
+                       border-2 border-neutral-300 dark:border-neutral-600
                        rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       placeholder:text-neutral-400 placeholder:text-xl
+                       placeholder:text-neutral-400 dark:placeholder:text-neutral-500 placeholder:text-xl
                        transition-all duration-200 disabled:opacity-50"
             />
           </div>

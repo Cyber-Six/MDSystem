@@ -115,7 +115,17 @@ function validatePreferencesSize(preferences) {
  * Retrieve user preferences (appearance, notification settings)
  * Protected: jwtProtect("all")
  */
-router.get("/", jwtProtect("all"), async (req, res) => {
+router.get("/", (req, res, next) => {
+  // Detect browser navigation: no Authorization header + Accept includes text/html.
+  // In that case skip the API handler so the SPA catch-all (app.get('*path')) can
+  // serve index.html. This fixes hard-refreshing on the /settings SPA route.
+  const hasAuth = Boolean(req.headers.authorization);
+  const acceptsHtml = (req.headers.accept || '').includes('text/html');
+  if (!hasAuth && acceptsHtml) {
+    return next('router');
+  }
+  next();
+}, jwtProtect("all"), async (req, res) => {
   const userId = req.user.id;
 
   try {

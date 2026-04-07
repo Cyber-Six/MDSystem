@@ -105,7 +105,7 @@ const SetupModal = ({ qrCode, secret, onVerify, onCancel, error, isLoading }) =>
               onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))}
               placeholder="000000"
               disabled={isLoading}
-              className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+              className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
             />
 
             {error && (
@@ -146,12 +146,16 @@ const SetupModal = ({ qrCode, secret, onVerify, onCancel, error, isLoading }) =>
 
 // ── Disable Modal ──
 const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [token, setToken] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onConfirm(password);
+    onConfirm(token);
   };
 
   return (
@@ -176,45 +180,30 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
         <div className="px-6 py-5">
           <div className="mb-4 p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-700">
             <p className="text-xs text-warning-700 dark:text-warning-300">
-              Disabling authenticator 2FA will remove the extra security layer from your account.
+              Enter the current code from your authenticator app to confirm disabling 2FA.
               You will need to set it up again if you want to re-enable it.
             </p>
           </div>
 
           <form onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-2">
-              Confirm your password
+              Authenticator code
             </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                disabled={isLoading}
-                className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50 pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary-500 hover:text-secondary-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-              >
-                {showPassword ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M1 1l22 22" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
-            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={token}
+              onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              disabled={isLoading}
+              className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.5em] bg-neutral-50 dark:bg-neutral-900 text-secondary-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 border border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-error-500 focus:border-transparent disabled:opacity-50"
+            />
 
             {error && (
-              <p className="mt-2 text-sm text-error-600 dark:text-error-400">{error}</p>
+              <p className="mt-2 text-sm text-error-600 dark:text-error-400 text-center">{error}</p>
             )}
 
             <div className="flex gap-3 mt-5">
@@ -228,7 +217,7 @@ const DisableModal = ({ onConfirm, onCancel, error, isLoading }) => {
               </button>
               <button
                 type="submit"
-                disabled={isLoading || !password}
+                disabled={isLoading || token.length !== 6}
                 className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg bg-error-500 text-white hover:bg-error-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isLoading ? (
@@ -341,11 +330,11 @@ const TotpSettings = () => {
   };
 
   // ── Disable ──
-  const handleDisable = async (password) => {
+  const handleDisable = async (token) => {
     setError('');
     setActionLoading(true);
     try {
-      const res = await axiosRequest.post('/settings/totp/disable', { password });
+      const res = await axiosRequest.post('/settings/totp/disable', { token });
       if (res.data.ok) {
         setShowDisable(false);
         setTotpEnabled(false);

@@ -17,7 +17,7 @@ const ResetPassword = () => {
   useEffect(() => {
     const validateLink = async () => {
       try {
-        await axiosRequest.get(`/auth/password/reset-password/${verificationKey}`);
+        await axiosRequest.get(`/auth/password/reset-password/check/${verificationKey}`);
         setAllowed(true);
       } catch (err) {
         setError(err.response?.data?.message || "Reset link is invalid or expired.");
@@ -90,6 +90,7 @@ const ResetPassword = () => {
     );
   }
 
+  /* ── Password reset step ─────────────────────────────────────────── */
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-50 dark:bg-dark-bg-primary px-4">
       <div className="w-full max-w-md bg-white dark:bg-dark-bg-secondary rounded-2xl shadow-lg p-8">

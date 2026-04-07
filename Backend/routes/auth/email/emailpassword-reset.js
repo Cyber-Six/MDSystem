@@ -6,7 +6,7 @@ const logger = require('../../../utils/logger.js');
 const { isValidEmail } = require('../../../utils/validator.js');
 const { detectPortalFromSubdomain } = require('../../../utils/portal.js');
 const { rateLimitEmailCooldown, rateLimitEmailAttempts, rateLimitEmailCooldownTTL,
-  getUserIdFromVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
+  getUserIdFromVerificationSession, deleteVerificationSession, getVerificationSession } = require('../../../config/redis.js');
 const query = require('../../../config/query.js');
 
 const { recordResetPwFailure, clearResetPwFailures, isResetPwLocked} = require('../../../config/redis.js');
@@ -118,6 +118,28 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
   }
 });
 
+router.get("/reset-password/check/:verificationKey", ipRateLimiter("strictLimiter"), async (req, res) => {
+  try {
+    const { verificationKey } = req.params;
+    const purpose = "resetpassword";
+
+    const session = await getVerificationSession(verificationKey, purpose);
+    if (!session || !session.user_id) {
+      return res.status(400).json({
+        error: "INVALID_OR_EXPIRED_KEY",
+        message: "The verification key is invalid or has expired."
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+    });
+  } catch (err) {
+    logger.error("Reset password check error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "An unexpected error occurred." });
+  }
+});
+
 router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), async (req, res) => {
   try {
     const { newPassword } = req.body;
@@ -143,11 +165,10 @@ router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), 
       });
     }
 
-    // ✅ 3. Fetch userId from verification session
-    const userId = await getUserIdFromVerificationSession(verificationKey, purpose);
+    // ✅ 3. Fetch full session to check TOTP requirement
+    const session = await getVerificationSession(verificationKey, purpose);
 
-    if (!userId) {
-      // ❗ Record failure for invalid or expired key
+    if (!session || !session.user_id) {
       await recordResetPwFailure(ip);
       await delayRandom(200, 500);
       return res.status(400).json({
@@ -156,13 +177,15 @@ router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), 
       });
     }
 
+    const userId = session.user_id;
+
     // ✅ 4. Update password in DB
     await query.updateUserPasswordById(userId, newPassword);
 
-    // ✅ 5. Cleanup verification session
+    // ✅ 6. Cleanup verification session
     await deleteVerificationSession(verificationKey, purpose);
 
-    // ✅ 6. Clear IP failures on success
+    // ✅ 7. Clear IP failures on success
     await clearResetPwFailures(ip);
 
     return res.status(200).json({

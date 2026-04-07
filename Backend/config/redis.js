@@ -1101,6 +1101,36 @@ function getClient() {
   return client;
 }
 
+/**
+ * Track TOTP failures per verification key to prevent per-key brute-forcing.
+ * Uses a counter key with TTL matching the verification session (default 15 min).
+ *
+ * @param {string} verificationKey - The random session token
+ * @param {string} purpose - e.g. "2fa", "resetpassword"
+ * @param {number} maxAttempts - Lock after this many failures (default 5)
+ * @returns {Promise<boolean>} true if the limit has been reached (caller should block)
+ */
+async function recordTotpFailureForKey(verificationKey, purpose, maxAttempts = 5) {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `totp_fail:${purpose}:${verificationKey}`;
+  const count = await client.incr(key);
+  if (count === 1) {
+    await client.expire(key, Number(process.env.VERIFICATION_SESSION_EXPIRATION) || 900);
+  }
+  return count >= maxAttempts;
+}
+
+/**
+ * Check if the per-key TOTP failure limit has already been reached.
+ * @returns {Promise<boolean>} true if locked
+ */
+async function isTotpLockedForKey(verificationKey, purpose, maxAttempts = 5) {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `totp_fail:${purpose}:${verificationKey}`;
+  const count = parseInt(await client.get(key) || "0", 10);
+  return count >= maxAttempts;
+}
+
 module.exports = {
   redisConfig,
   initRedis,
@@ -1172,4 +1202,7 @@ module.exports = {
   recordAdminTransferPasswordFailure,
   isAdminTransferPasswordLocked,
   clearAdminTransferPasswordFailures,
+
+  recordTotpFailureForKey,
+  isTotpLockedForKey,
 };
