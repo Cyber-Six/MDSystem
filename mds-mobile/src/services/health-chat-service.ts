@@ -303,6 +303,33 @@ export const getFileUrl = (fileId: string): string => {
 };
 
 /**
+ * Extend the active chat session by 1 day.
+ * Mirrors mds-patient health-chat-service.js extendSession()
+ */
+export const extendSession = async (chatId: string): Promise<{
+  success: boolean;
+  message?: string;
+  chat?: Partial<Ticket>;
+}> => {
+  const mutation = `
+    mutation ExtendSession($chatId: ID!) {
+      extendSession(chatId: $chatId) {
+        success
+        message
+        chat {
+          id
+          status
+          session_start
+          expiresAt
+        }
+      }
+    }
+  `;
+  const data = await sendHealthChatRequest(mutation, { chatId });
+  return data.extendSession;
+};
+
+/**
  * Get the current active ticket (if any)
  */
 export const getCurrentActiveTicket = async (): Promise<Ticket | null> => {

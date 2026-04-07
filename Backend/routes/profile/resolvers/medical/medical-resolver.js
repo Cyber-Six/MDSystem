@@ -25,7 +25,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -38,7 +38,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record log status of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -53,7 +53,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view personal record log of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -68,7 +68,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_view, userId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.profile_allow_view, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to view login credentials of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -94,7 +94,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_edit, userId);  
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.profile_allow_edit, userId);  
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to update personal record log of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -110,7 +110,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.profile_allow_approval, userId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.profile_allow_approval, userId);
     if (!isPermitted) {
       logger.warn(`Unauthorized access attempt by staff ${user.id} to set personal record log of user ${userId}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -132,7 +132,19 @@ const Mutation = {
     }
     const result = await Wrapper.Mutation._reloadCredentialStatus(_, { userId }, { user, res });
     return result;
-  }
+  },
+
+  staffSetBranchIdentifier: async (_, { userId, identifier, branch }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.profile_allow_edit, userId);
+    if (!isPermitted) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    await Wrapper.Mutation._UserBranchIdentifier(_, { userId, input: { identifier, branch } }, { user, res });
+    return true;
+  },
 };
 
 module.exports = { Query, Mutation };

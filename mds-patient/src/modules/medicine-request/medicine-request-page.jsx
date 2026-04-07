@@ -209,8 +209,24 @@ const MedicineRequestPage = () => {
 
   // Reload history when staff updates medicine request status via socket
   useEffect(() => {
-    const unsub1 = subscribe('medicine:request:approved', fetchRequestHistory);
-    const unsub2 = subscribe('medicine:request:rejected', fetchRequestHistory);
+    const handleApproved = async (data) => {
+      console.log('🎉 Medicine request approved:', data);
+      // Clear this request from dismissed notifications so modal can show
+      setDismissedNotifications(prev => prev.filter(id => id !== data.requestId));
+      // Fetch updated history which will trigger the notification modal
+      await fetchRequestHistory();
+    };
+
+    const handleRejected = async (data) => {
+      console.log('❌ Medicine request rejected:', data);
+      // Clear this request from dismissed notifications so modal can show
+      setDismissedNotifications(prev => prev.filter(id => id !== data.requestId));
+      // Fetch updated history which will trigger the notification modal
+      await fetchRequestHistory();
+    };
+
+    const unsub1 = subscribe('medicine:request:approved', handleApproved);
+    const unsub2 = subscribe('medicine:request:rejected', handleRejected);
     const unsub3 = subscribe('medicine:request:pending', fetchRequestHistory);
     const unsub4 = subscribe('medicine:prescription:issued', fetchRequestHistory);
     return () => { unsub1(); unsub2(); unsub3(); unsub4(); };

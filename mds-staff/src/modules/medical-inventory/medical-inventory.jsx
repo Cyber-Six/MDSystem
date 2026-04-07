@@ -4,6 +4,7 @@ import InventoryDashboard from './components/inventory-dashboard/inventory-dashb
 import MedicalItemList from './components/medical-item/medical-item-list';
 import MedicalItemDetail from './components/medical-item/medical-item-detail';
 import DispenseQueue from './components/dispense-queue/dispense-queue';
+import DirectRelease from './components/direct-release/direct-release';
 import AddItemModal from './components/medical-item/add-item-modal';
 import EditItemModal from './components/medical-item/edit-item-modal';
 import DeleteItemConfirmation from './components/medical-item/delete-item-confirmation';
@@ -15,6 +16,9 @@ import DispenseMedicineModal from './components/dispense-medicine/dispense-medic
 import RequestActionModal from './components/dispense-queue/request-action-modal';
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 import { useStaffNotifications } from '../notification/notification-context';
+import { useMedicineRequestSocket } from './hooks/useMedicineRequestSocket';
+import { usePermissions } from '../../context/permissions-context';
+import { useStaffProfile } from '../../hooks/use-staff-profile';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
@@ -33,9 +37,12 @@ import {
 const MedicalInventory = () => {
   const routerLocation = useLocation();
   const { subscribe, refreshInventoryAlerts } = useStaffNotifications();
+  const { hasPermission } = usePermissions();
+  const { profile } = useStaffProfile();
   const [activeSection, setActiveSection] = useState(
     routerLocation.state?.section ?? 'dashboard'
   );
+  const [directReleaseLocation, setDirectReleaseLocation] = useState('Casal');
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [itemsError, setItemsError] = useState('');
@@ -103,12 +110,23 @@ const MedicalInventory = () => {
   // Helper function to get patient name with caching
   const getPatientNameCached = useCallback(async (patientId) => {
     if (!patientId) return `Patient #${patientId}`;
-    
+
     // Check cache first
     if (patientNameCacheRef.current[patientId]) {
       return patientNameCacheRef.current[patientId];
     }
-    
+
+    // Check if user has permission to view patient information
+    // getPatientBasicInfo requires emr_allow_view permission, which is part of patientSearch or medicalRecords modules
+    const canViewPatientInfo = hasPermission('patientSearch') || hasPermission('medicalRecords');
+
+    if (!canViewPatientInfo) {
+      // User doesn't have permission to view patient info, use fallback immediately
+      const fallback = `Patient #${patientId}`;
+      patientNameCacheRef.current[patientId] = fallback;
+      return fallback;
+    }
+
     try {
       const patient = await getPatientBasicInfo(patientId);
       if (patient) {
@@ -119,12 +137,12 @@ const MedicalInventory = () => {
     } catch (err) {
       console.warn(`Failed to fetch patient info for ID ${patientId}:`, err);
     }
-    
+
     // Fallback to ID if fetch fails
     const fallback = `Patient #${patientId}`;
     patientNameCacheRef.current[patientId] = fallback;
     return fallback;
-  }, []);
+  }, [hasPermission]);
 
   // Helper function to enrich multiple requests with patient names
   const enrichRequestsWithPatientNames = useCallback(async (requests) => {
@@ -150,6 +168,25 @@ const MedicalInventory = () => {
     }));
   }, [getPatientNameCached]);
 
+  // Helper function to get allowed locations based on user's branch
+  const getAllowedLocations = useCallback(() => {
+    if (!profile || !profile.branch) {
+      return ['Arlegui', 'Casal', 'QuezonCity']; // Default: try all locations
+    }
+
+    // Branch determines which locations a staff can access
+    switch (profile.branch) {
+      case 'Manila':
+        return ['Arlegui', 'Casal'];
+      case 'QuezonCity':
+        return ['QuezonCity'];
+      case 'Both':
+        return null; // null means query all locations without filter
+      default:
+        return ['Arlegui', 'Casal', 'QuezonCity']; // Fallback: try all
+    }
+  }, [profile]);
+
   // ── Fetch items from API ───────────────────────────────────────────────
   const loadItems = useCallback(async () => {
     setItemsLoading(true);
@@ -157,15 +194,51 @@ const MedicalInventory = () => {
     try {
       const data = await fetchMedicalItems();
       setItems(data);
+
+      const allowedLocations = getAllowedLocations();
+
       // Fetch batches for all items in parallel
       const batchResults = await Promise.all(
-        data.map((item) => {
+        data.map(async (item) => {
           const isMedicine = item.category?.toLowerCase() === 'medicine';
-          if (isMedicine) {
-            return fetchMedicineBatches(Number(item.id)).then((bs) =>
-              bs.map((b) => ({
+
+          // If allowedLocations is null (user has "Both" access), fetch all batches without filter
+          // Otherwise, fetch batches for each allowed location and combine them
+          let batches = [];
+
+          if (allowedLocations === null) {
+            // User has "Both" access - fetch all batches without location filter
+            if (isMedicine) {
+              batches = await fetchMedicineBatches(Number(item.id));
+            } else {
+              batches = await fetchSupplyBatches(Number(item.id));
+            }
+          } else {
+            // User has limited access - fetch batches for each allowed location
+            const locationBatches = await Promise.all(
+              allowedLocations.map(async (location) => {
+                try {
+                  if (isMedicine) {
+                    return await fetchMedicineBatches(Number(item.id), location);
+                  } else {
+                    return await fetchSupplyBatches(Number(item.id), location);
+                  }
+                } catch (err) {
+                  console.warn(`Failed to fetch batches for location ${location}:`, err);
+                  return [];
+                }
+              })
+            );
+            // Flatten the results from all locations
+            batches = locationBatches.flat();
+          }
+
+          // Normalize the batch data
+          return batches.map((b) => {
+            if (isMedicine) {
+              return {
                 id: b.id,
-                medicalItemId: Number(b.medicalItemId),  // Ensure number type for linking
+                medicalItemId: Number(b.medicalItemId),
                 batchNumber: b.batchNumber,
                 currentQuantity: Number(b.availableQuantity ?? 0),
                 availableQuantity: Number(b.availableQuantity ?? 0),
@@ -176,26 +249,25 @@ const MedicalInventory = () => {
                 location: b.location,
                 supplierName: b.supplierName,
                 notes: b.notes,
-              }))
-            );
-          } else {
-            return fetchSupplyBatches(Number(item.id)).then((bs) =>
-              bs.map((b) => ({
+              };
+            } else {
+              return {
                 id: b.id,
-                medicalItemId: Number(b.supplyItemId),  // Ensure number type for linking
+                medicalItemId: Number(b.supplyItemId),
                 batchNumber: b.batchNumber,
                 currentQuantity: Number(b.currentQuantity ?? 0),
-                availableQuantity: Number(b.currentQuantity ?? 0),  // Map both fields for consistency
+                availableQuantity: Number(b.currentQuantity ?? 0),
                 unit: b.unit,
                 expiryDate: b.expiryDate,
                 location: b.location,
                 supplierName: b.supplierName,
                 notes: b.notes,
-              }))
-            );
-          }
+              };
+            }
+          });
         })
       );
+
       const flatBatches = batchResults.flat();
       setBatches(flatBatches);
     } catch (err) {
@@ -203,7 +275,7 @@ const MedicalInventory = () => {
     } finally {
       setItemsLoading(false);
     }
-  }, []);
+  }, [getAllowedLocations]);
 
   useEffect(() => {
     loadItems();
@@ -503,6 +575,47 @@ const MedicalInventory = () => {
     loadAllMedicineRequests();
   }, [itemsLoading, loadAllMedicineRequests]);
 
+  // Handle new medicine request from patient (real-time via socket)
+  const handleNewMedicineRequest = useCallback(async (data) => {
+    console.log('🔔 New medicine request received:', data);
+    
+    try {
+      // Fetch the full request details
+      const newRequest = await fetchMedicineRequestById(data.requestId);
+      
+      if (newRequest) {
+        // Enrich with patient name and item details
+        const enrichedWithNames = await enrichRequestsWithPatientNames([newRequest]);
+        const enriched = enrichedWithNames.map(req => ({
+          ...req,
+          items: enrichRequestItems(req.items || []),
+        }));
+        
+        // Add to the beginning of the requests list
+        setRequests(prev => {
+          // Check if already exists (prevent duplicates)
+          const exists = prev.some(r => String(r.id) === String(data.requestId));
+          if (exists) return prev;
+          return [enriched[0], ...prev];
+        });
+        
+        // Notification will be handled by the notification context which listens
+        // to the 'medicine:request:new' event socket directly, so no need for modal here
+      }
+    } catch (err) {
+      console.error('Failed to load new request details:', err);
+      // Still reload all requests as fallback
+      loadAllMedicineRequests();
+    }
+  }, [enrichRequestItems, enrichRequestsWithPatientNames, loadAllMedicineRequests]);
+
+  // Connect to socket for real-time updates
+  const { isConnected: isSocketConnected } = useMedicineRequestSocket(
+    handleNewMedicineRequest,    // onNewRequest
+    null,                         // onRequestUpdate (not used yet)
+    null                          // onRequestStatusChange (not used yet)
+  );
+
   // Reload dispense queue when a patient submits a new medicine request via socket
   useEffect(() => {
     const unsub = subscribe('medicine:request:new', loadAllMedicineRequests);
@@ -727,7 +840,7 @@ const MedicalInventory = () => {
     setShowActionModal(true);
   };
 
-  const handleConfirmAction = async (request, notes) => {
+  const handleConfirmAction = async (request, notes, approvedQuantity, approvedBatchId) => {
     const requestId = request?.id;
     if (!requestId) return;
 
@@ -740,7 +853,16 @@ const MedicalInventory = () => {
       
       // Update local state
       setRequests(requests.map((r) => 
-        r.id === requestId ? { ...r, status, notes: notes || null } : r
+        r.id === requestId 
+          ? { 
+              ...r, 
+              status, 
+              notes: notes || null,
+              // Store approved quantity and batch in frontend state for use during dispensing
+              approvedQuantity: isApprove ? approvedQuantity : null,
+              approvedBatchId: isApprove ? approvedBatchId : null
+            } 
+          : r
       ));
       
       showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
@@ -817,6 +939,10 @@ const MedicalInventory = () => {
       key: 'dispense', label: 'Dispense Queue',
       icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
       badge: requests.filter((r) => r.status === 'Pending' || r.status === 'InProgress').length,
+    },
+    {
+      key: 'direct-release', label: 'Direct Release',
+      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8m0 8l-6-2m6 2l6-2" /></svg>,
     },
   ];
 
@@ -923,6 +1049,52 @@ const MedicalInventory = () => {
         </div>
       )}
 
+      {activeSection === 'direct-release' && (
+        <div className="space-y-3">
+          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
+                <select
+                  value={directReleaseLocation}
+                  onChange={(e) => setDirectReleaseLocation(e.target.value)}
+                  className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
+                >
+                  <option value="Casal">Casal</option>
+                  <option value="Arlegui">Arlegui</option>
+                  <option value="QuezonCity">Quezon City</option>
+                </select>
+              </div>
+            </div>
+
+            <DirectRelease
+              location={directReleaseLocation}
+              onRelease={(result) => {
+                loadAllMedicineRequests();
+                recordTransaction({
+                  action: 'direct_release',
+                  itemId: null,
+                  patientId: result.patientId,
+                  quantity: result.quantity,
+                  notes: result.notes,
+                });
+              }}
+              onShowSuccess={(title, message, details) => {
+                setSuccessModalData({ title, message, details });
+                setShowSuccessModal(true);
+              }}
+              onShowError={(errorMsg) => {
+                setError(errorMsg);
+                setTimeout(() => setError(''), 5000);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
 
       {/* Modals */}
@@ -1005,6 +1177,8 @@ const MedicalInventory = () => {
         <RequestActionModal
           request={selectedActionRequest}
           action={actionType}
+          batches={batches}
+          items={items}
           onConfirm={handleConfirmAction}
           onCancel={() => {
             setShowActionModal(false);

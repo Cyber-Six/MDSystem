@@ -2,7 +2,9 @@ import React from 'react';
 import { Spinner, BackButton } from './shared';
 import { SESSION } from '../patient-appointment-service';
 
-const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, uploadedFiles, submitting, onSubmit, onBack }) => (
+const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, uploadedFiles, purpose, onPurposeChange, submitting, onSubmit, onBack }) => {
+  const purposeRequired = scheduler?.purposeRequired ?? false;
+  return (
   <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-lg p-6">
     <h2 className="text-xl font-semibold text-neutral-900 dark:text-white mb-6">Review &amp; Submit</h2>
     <div className="space-y-3 mb-6">
@@ -39,12 +41,38 @@ const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, 
       )}
     </div>
 
+    {/* Purpose / Reason for Visit */}
+    <div className="mb-6 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+        Purpose / Reason for Visit
+        {purposeRequired
+          ? <span className="text-red-500 ml-0.5">*</span>
+          : null}
+        {' '}<span className="text-neutral-400 text-xs">({purposeRequired ? 'Required' : 'optional'} · {(purpose || '').length}/250)</span>
+      </label>
+      <textarea
+        maxLength={250}
+        rows={3}
+        required={purposeRequired}
+        value={purpose || ''}
+        onChange={(e) => onPurposeChange(e.target.value.slice(0, 250))}
+        placeholder={purposeRequired
+          ? 'Briefly describe the reason for your appointment (Required)'
+          : 'Briefly describe the reason for your appointment (optional)'}
+        className={`w-full px-3 py-2 text-sm rounded-lg border bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none ${
+          purposeRequired && !(purpose || '').trim()
+            ? 'border-red-400 dark:border-red-600'
+            : 'border-neutral-300 dark:border-neutral-600'
+        }`}
+      />
+    </div>
+
     {/* Navigation */}
     <div className="flex justify-between pt-4 border-t border-neutral-200 dark:border-neutral-700">
       <BackButton onClick={onBack} />
       <button
         onClick={onSubmit}
-        disabled={submitting}
+        disabled={submitting || (purposeRequired && !(purpose || '').trim())}
         className="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
       >
         {submitting && <Spinner />}
@@ -52,6 +80,7 @@ const ReviewSubmit = ({ scheduler, selectedDate, selectedSession, requirements, 
       </button>
     </div>
   </div>
-);
+  );
+};
 
 export default ReviewSubmit;

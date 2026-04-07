@@ -92,6 +92,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
     approvedBy,
     arrived_at,
     created_at,
+    purpose,
     notes,
     requirements = [],
   } = appointment;
@@ -151,8 +152,8 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
           {/* Viewer header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex-shrink-0">
             <div>
-              <p className="text-xs font-semibold text-secondary-800 dark:text-white">Requirement file</p>
-              <p className="text-[10px] text-secondary-400 dark:text-neutral-500 font-mono truncate max-w-sm">{viewingFile.filename}</p>
+              <p className="text-sm font-semibold text-secondary-800 dark:text-white">Requirement file</p>
+              <p className="text-xs text-secondary-400 dark:text-neutral-500 font-mono truncate max-w-sm">{viewingFile.filename}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -190,8 +191,8 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                 <svg className="w-12 h-12 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p className="text-sm text-secondary-600 dark:text-neutral-400">Preview not available for this file type.</p>
-                <p className="text-xs text-secondary-400 dark:text-neutral-500">{viewingFile.contentType}</p>
+                <p className="text-base text-secondary-600 dark:text-neutral-400">Preview not available for this file type.</p>
+                <p className="text-sm text-secondary-400 dark:text-neutral-500">{viewingFile.contentType}</p>
               </div>
             )}
           </div>
@@ -203,21 +204,21 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-neutral-800 px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-lg font-bold text-secondary-900 dark:text-white">Appointment #{id}</h2>
+            <h2 className="text-xl font-bold text-secondary-900 dark:text-white">Appointment #{id}</h2>
             <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">
+              <p className="text-sm text-secondary-500 dark:text-neutral-400">
                   Patient: {patientName ? `${patientName} ` : ''}
                   {patientIdentifier ? `ID ${patientIdentifier}` : ''}
                 </p>
               {!hideHistory && historyStatus && (
-                <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${STATUS_COLORS[historyStatus] || 'bg-neutral-100 text-neutral-600'}`}>
+                <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${STATUS_COLORS[historyStatus] || 'bg-neutral-100 text-neutral-600'}`}>
                   Latest: {historyStatus}
                 </span>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-1 text-xs font-medium rounded-md ${statusColors[status] || 'bg-neutral-100 text-neutral-600'}`}>
+            <span className={`px-2.5 py-1 text-sm font-medium rounded-md ${statusColors[status] || 'bg-neutral-100 text-neutral-600'}`}>
               {status}
             </span>
             <button
@@ -236,7 +237,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
           {/* Appointment Details */}
           <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
             <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
-              <h3 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Appointment Details</h3>
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Appointment Details</h3>
             </div>
             <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
               {[
@@ -249,10 +250,22 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                 { label: 'Created', value: created_at ? new Date(created_at).toLocaleString() : '—' },
               ].map(({ label, value }) => (
                 <div key={label}>
-                  <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">{label}</p>
-                  <p className="text-sm font-medium text-secondary-800 dark:text-white">{value}</p>
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5">{label}</p>
+                  <p className="text-base font-medium text-secondary-800 dark:text-white">{value}</p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Patient Purpose / Reason for Visit */}
+          <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+            <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Patient Purpose / Reason for Visit</h3>
+            </div>
+            <div className="p-4">
+              <p className="text-base text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap">
+                {purpose || <span className="italic text-neutral-400 dark:text-neutral-500">No purpose provided</span>}
+              </p>
             </div>
           </div>
 
@@ -260,12 +273,12 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
           {notes && (status === 'Rejected' || status.startsWith('Cancelled')) && (
             <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
               <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
-                <h3 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">
+                <h3 className="text-sm font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">
                   {status === 'Rejected' ? 'Rejection Reason' : 'Cancellation Reason'}
                 </h3>
               </div>
               <div className="p-4">
-                <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap">{notes}</p>
+                <p className="text-base text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap">{notes}</p>
               </div>
             </div>
           )}
@@ -274,7 +287,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
           {requirements.length > 0 && (
             <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
               <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700">
-                <h3 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Submitted Requirements</h3>
+                <h3 className="text-sm font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Submitted Requirements</h3>
               </div>
               <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60">
                 {requirements.map((req) => (
@@ -283,21 +296,21 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300">
+                      <p className="text-base font-medium text-secondary-700 dark:text-neutral-300">
                         Requirement #{req.scheduleRequirementId}
                       </p>
                       {req.filename && (
-                        <p className="text-[10px] text-secondary-400 dark:text-neutral-500 font-mono truncate">{req.filename}</p>
+                        <p className="text-xs text-secondary-400 dark:text-neutral-500 font-mono truncate">{req.filename}</p>
                       )}
                       {fileError?.reqId === req.id && (
-                        <p className="text-[10px] text-error-500 dark:text-error-400 mt-0.5">{fileError.message}</p>
+                        <p className="text-xs text-error-500 dark:text-error-400 mt-0.5">{fileError.message}</p>
                       )}
                     </div>
                     {req.filename && (
                       <button
                         onClick={() => handleViewFile(req)}
                         disabled={loadingReqId === req.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                       >
                         {loadingReqId === req.id ? (
                           <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -323,28 +336,28 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
           {!hideHistory && (
           <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
             <div className="bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Patient Appointment History</h3>
-              <span className="text-[10px] text-secondary-400 dark:text-neutral-500">{history.length} record{history.length !== 1 ? 's' : ''}</span>
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white uppercase tracking-wide">Patient Appointment History</h3>
+              <span className="text-xs text-secondary-400 dark:text-neutral-500">{history.length} record{history.length !== 1 ? 's' : ''}</span>
             </div>
             <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60">
               {historyLoading ? (
-                <div className="px-4 py-3 text-xs text-secondary-400 dark:text-neutral-500">Loading history...</div>
+                <div className="px-4 py-3 text-sm text-secondary-400 dark:text-neutral-500">Loading history...</div>
               ) : history.length === 0 ? (
-                <div className="px-4 py-3 text-xs text-secondary-400 dark:text-neutral-500">No past appointments found.</div>
+                <div className="px-4 py-3 text-sm text-secondary-400 dark:text-neutral-500">No past appointments found.</div>
               ) : (
                 history.map((rec) => (
                   <div key={rec.id} className={`px-4 py-2.5 flex items-center justify-between gap-3 ${rec.id === id ? 'bg-primary-50 dark:bg-primary-900/10' : ''}`}>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-secondary-700 dark:text-neutral-300">#{rec.id}</span>
-                        {rec.id === id && <span className="text-[10px] text-primary-600 dark:text-primary-400 font-semibold">current</span>}
-                        <span className="text-[10px] text-secondary-400 dark:text-neutral-500">{rec.session}</span>
+                        <span className="text-sm font-medium text-secondary-700 dark:text-neutral-300">#{rec.id}</span>
+                        {rec.id === id && <span className="text-xs text-primary-600 dark:text-primary-400 font-semibold">current</span>}
+                        <span className="text-xs text-secondary-400 dark:text-neutral-500">{rec.session}</span>
                       </div>
-                      <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-0.5">
+                      <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">
                         {rec.created_at ? new Date(rec.created_at).toLocaleDateString() : '—'}
                       </p>
                     </div>
-                    <span className={`px-2 py-0.5 text-[10px] font-medium rounded whitespace-nowrap ${STATUS_COLORS[rec.status] || 'bg-neutral-100 text-neutral-600'}`}>
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${STATUS_COLORS[rec.status] || 'bg-neutral-100 text-neutral-600'}`}>
                       {rec.status}
                     </span>
                   </div>
@@ -357,7 +370,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
           {/* Cancel Form */}
           {showCancelForm && (
             <div className="border border-error-200 dark:border-error-800 rounded-lg p-3 bg-error-50 dark:bg-error-900/20">
-              <label className="text-xs font-medium text-error-700 dark:text-error-400 mb-1.5 block">
+              <label className="text-sm font-medium text-error-700 dark:text-error-400 mb-1.5 block">
                 {canReject ? 'Reason for Rejection' : 'Reason for Cancellation'}
               </label>
               <textarea
@@ -365,19 +378,19 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
                 onChange={(e) => setCancelReason(e.target.value)}
                 rows={2}
                 placeholder="Provide a reason..."
-                className="w-full px-3 py-2 text-sm bg-white dark:bg-neutral-700 border border-error-200 dark:border-error-700 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-error-500 resize-none"
+                className="w-full px-3 py-2 text-base bg-white dark:bg-neutral-700 border border-error-200 dark:border-error-700 rounded-md text-secondary-800 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-error-500 resize-none"
               />
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={handleCancel}
                   disabled={!cancelReason.trim()}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-error-500 hover:bg-error-600 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-sm font-medium text-white bg-error-500 hover:bg-error-600 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {canReject ? 'Confirm Reject' : 'Confirm Cancel'}
                 </button>
                 <button
                   onClick={() => { setShowCancelForm(false); setCancelReason(''); }}
-                  className="px-3 py-1.5 text-xs font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
+                  className="px-3 py-1.5 text-sm font-medium text-secondary-600 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded-md transition-colors"
                 >
                   Cancel
                 </button>
@@ -392,7 +405,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
             {(canReject || canCancelByMedical) && !showCancelForm && (
               <button
                 onClick={() => setShowCancelForm(true)}
-                className="px-4 py-2 text-sm font-medium text-error-600 dark:text-error-400 border border-error-200 dark:border-error-700 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-md transition-colors"
+                className="px-4 py-2 text-base font-medium text-error-600 dark:text-error-400 border border-error-200 dark:border-error-700 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-md transition-colors"
               >
                 {canReject ? 'Reject' : 'Cancel'}
               </button>
@@ -400,7 +413,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
             {canConfirm && (
               <button
                 onClick={handleConfirm}
-                className="px-4 py-2 text-sm font-medium text-white bg-success-500 hover:bg-success-600 rounded-md transition-colors"
+                className="px-4 py-2 text-base font-medium text-white bg-success-500 hover:bg-success-600 rounded-md transition-colors"
               >
                 Approve
               </button>
@@ -408,7 +421,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
             {canRecordAttendance && (
               <button
                 onClick={handleRecordAttendance}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors"
+                className="px-4 py-2 text-base font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-md transition-colors"
               >
                 Record Attendance
               </button>
@@ -416,7 +429,7 @@ const AppointmentDetailModal = ({ appointment, onClose, onConfirm, onCancel, onM
             {canMarkComplete && (
               <button
                 onClick={handleMarkComplete}
-                className="px-4 py-2 text-sm font-medium text-white bg-success-500 hover:bg-success-600 rounded-md transition-colors"
+                className="px-4 py-2 text-base font-medium text-white bg-success-500 hover:bg-success-600 rounded-md transition-colors"
               >
                 Mark Complete
               </button>

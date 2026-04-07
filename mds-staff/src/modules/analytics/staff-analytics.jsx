@@ -2,43 +2,34 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import AnalyticsFilterBar from './components/analytics-filter-bar';
 import AnalyticsChartCard from './components/analytics-chart-card';
 import AnalyticsSummaryCards from './components/analytics-summary-cards';
+import AnalyticsExportModal from './components/analytics-export-modal';
 import {
   fetchMultipleQueries,
   fetchAvailableQueries,
   QUERY_CATEGORIES,
   CHART_TYPE_MAP,
+  getDateRangeForPeriod,
 } from './analytics-service';
 
 // ── Friendly display names ───────────────────────────────────────────────────
 
 const QUERY_LABELS = {
-  'consultations-by-type': 'Consultations by Type',
-  'consultations-by-status': 'Consultations by Status',
-  'consultation-trends': 'Monthly Consultation Trends',
-  'top-diagnoses': 'Top 10 Diagnoses',
-  'diagnoses-by-type': 'Diagnoses by Type',
-  'bmi-trends': 'BMI Trends (Monthly)',
-  'blood-pressure-trends': 'Blood Pressure Trends',
-  'immunization-coverage': 'Immunization Coverage',
-  'dental-procedures': 'Top Dental Procedures',
-  'lifestyle-risks': 'Lifestyle Risk Factors',
-  'allergy-by-type': 'Allergies by Type',
-  'allergy-by-severity': 'Allergies by Severity',
-  'appointments-by-category': 'Appointments by Category',
-  'appointments-by-status': 'Appointments by Status',
-  'appointments-by-session': 'Appointments by Session',
+  'consultations-by-type': 'By Type',
+  'consultations-by-mode': 'By Mode',
+  'consultation-trends': 'Trends',
+  'top-diagnoses': 'Top Diagnoses',
+  'diagnoses-by-type': 'By Type',
+  'bmi-trends': 'BMI Trends',
+  'blood-pressure-trends': 'BP Trends',
+  'immunization-coverage': 'Immunization',
+  'dental-procedures': 'Dental Procedures',
+  'lifestyle-risks': 'Lifestyle Risks',
+  'allergy-by-type': 'By Type',
+  'allergy-by-severity': 'By Severity',
+  'appointments-by-category': 'By Category',
+  'appointments-by-status': 'By Status',
+  'appointments-by-session': 'By Session',
 };
-
-// ── Date helpers ─────────────────────────────────────────────────────────────
-
-function getDefaultDates() {
-  const now = new Date();
-  const endDate = now.toISOString().slice(0, 10);
-  const start = new Date(now);
-  start.setMonth(start.getMonth() - 6);
-  const startDate = start.toISOString().slice(0, 10);
-  return { startDate, endDate };
-}
 
 // ── All query keys ───────────────────────────────────────────────────────────
 
@@ -49,14 +40,16 @@ const ALL_QUERY_KEYS = Object.keys(CHART_TYPE_MAP);
  * Main analytics page matching the staff portal design system.
  */
 const StaffAnalytics = () => {
-  const defaults = getDefaultDates();
+  const defaults = getDateRangeForPeriod('monthly');
   const [branch, setBranch] = useState('Both');
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
+  const [groupBy, setGroupBy] = useState('monthly');
   const [activeCategory, setActiveCategory] = useState('all');
   const [results, setResults] = useState(new Map());
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [exportOpen, setExportOpen] = useState(false);
   const abortRef = useRef(0);
 
   // Detect dark mode via class on <html>
@@ -83,7 +76,7 @@ const StaffAnalytics = () => {
     setLoading(true);
 
     try {
-      const data = await fetchMultipleQueries(ALL_QUERY_KEYS, branch, startDate, endDate);
+      const data = await fetchMultipleQueries(ALL_QUERY_KEYS, branch, startDate, endDate, groupBy);
       if (reqId === abortRef.current) {
         setResults(data);
         setInitialLoad(false);
@@ -95,7 +88,7 @@ const StaffAnalytics = () => {
         setLoading(false);
       }
     }
-  }, [branch, startDate, endDate]);
+  }, [branch, startDate, endDate, groupBy]);
 
   // Initial load
   useEffect(() => {
@@ -103,13 +96,53 @@ const StaffAnalytics = () => {
   }, [loadData]);
 
   return (
-    <div className="space-y-3">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Analytics</h1>
-        <p className="text-[11px] text-secondary-500 dark:text-neutral-400">
-          View clinic performance metrics and health data insights
-        </p>
+    <div className="space-y-1.5">
+      {/* Page Header — title left, category tabs + export right (matches Appointments/Inventory) */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-secondary-800 dark:text-white leading-none m-0">Analytics</h1>
+          <p className="text-[11px] text-secondary-500 dark:text-neutral-400">
+            View clinic performance metrics and health data insights
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Category Tabs */}
+          <div className="flex gap-0.5 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
+            <button
+              onClick={() => setActiveCategory('all')}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                activeCategory === 'all'
+                  ? 'bg-primary-500 text-white shadow-sm'
+                  : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+              }`}
+            >
+              All
+            </button>
+            {Object.entries(QUERY_CATEGORIES).map(([key, cat]) => (
+              <button
+                key={key}
+                onClick={() => setActiveCategory(key)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                  activeCategory === key
+                    ? 'bg-primary-500 text-white shadow-sm'
+                    : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+          {/* Export */}
+          <button
+            onClick={() => setExportOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary-700 hover:bg-secondary-800 dark:bg-neutral-600 dark:hover:bg-neutral-500 text-white text-xs font-medium rounded-md transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -117,11 +150,18 @@ const StaffAnalytics = () => {
         branch={branch}
         startDate={startDate}
         endDate={endDate}
-        activeCategory={activeCategory}
+        groupBy={groupBy}
         onBranchChange={setBranch}
         onStartDateChange={setStartDate}
         onEndDateChange={setEndDate}
-        onCategoryChange={setActiveCategory}
+        onGroupByChange={(g) => {
+          setGroupBy(g);
+          if (g !== 'custom') {
+            const range = getDateRangeForPeriod(g);
+            setStartDate(range.startDate);
+            setEndDate(range.endDate);
+          }
+        }}
         onRefresh={loadData}
         loading={loading}
       />
@@ -140,7 +180,7 @@ const StaffAnalytics = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {visibleQueries.map((queryKey) => (
             <AnalyticsChartCard
               key={queryKey}
@@ -150,6 +190,10 @@ const StaffAnalytics = () => {
               loading={loading && !results.has(queryKey)}
               error={results.get(queryKey)?.error}
               dark={dark}
+              branch={branch}
+              startDate={startDate}
+              endDate={endDate}
+              groupBy={groupBy}
             />
           ))}
         </div>
@@ -161,6 +205,16 @@ const StaffAnalytics = () => {
           <p className="text-sm text-secondary-500 dark:text-neutral-400">No analytics queries available for this category.</p>
         </div>
       )}
+
+      {/* Export Modal */}
+      <AnalyticsExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        branch={branch}
+        startDate={startDate}
+        endDate={endDate}
+        groupBy={groupBy}
+      />
     </div>
   );
 };

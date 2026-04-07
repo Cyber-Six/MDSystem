@@ -19,6 +19,8 @@ const RoleTemplates = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState(null); // { type: 'success'|'error', message }
+  const [editingName, setEditingName] = useState(false);
+  const [workingName, setWorkingName] = useState('');
 
   // Load templates from API on mount
   const loadTemplates = useCallback(async () => {
@@ -84,6 +86,8 @@ const RoleTemplates = () => {
     setWorkingPermissions(clonePermissions(role?.permissions || {}));
     setHasChanges(false);
     setConfirmDeleteId(null);
+    setEditingName(false);
+    setWorkingName('');
   };
 
   const handlePermissionChange = (updated) => {
@@ -97,26 +101,36 @@ const RoleTemplates = () => {
     setIsSaving(true);
     setSaveFeedback(null);
     try {
+      const nameChanged = workingName && workingName !== role.name;
       if (role._backendId) {
-        const result = await updateTemplate(role._backendId, undefined, workingPermissions);
+        const result = await updateTemplate(
+          role._backendId,
+          nameChanged ? workingName : undefined,
+          workingPermissions,
+        );
         if (result.message) {
           setSaveFeedback({ type: 'success', message: result.message });
         }
       } else {
-        const result = await createTemplate(role.name, workingPermissions);
+        const effectiveName = nameChanged ? workingName : role.name;
+        const result = await createTemplate(effectiveName, workingPermissions);
         if (result) {
           setRoles((prev) =>
-            prev.map((r) => r.id === selectedRoleId ? { ...r, _backendId: result.id, permissions: clonePermissions(workingPermissions) } : r)
+            prev.map((r) => r.id === selectedRoleId ? { ...r, _backendId: result.id, name: effectiveName, permissions: clonePermissions(workingPermissions) } : r)
           );
         }
         setSaveFeedback({ type: 'success', message: 'Template created successfully.' });
       }
       setRoles((prev) =>
         prev.map((r) =>
-          r.id === selectedRoleId ? { ...r, permissions: clonePermissions(workingPermissions) } : r
+          r.id === selectedRoleId
+            ? { ...r, name: nameChanged ? workingName : r.name, permissions: clonePermissions(workingPermissions) }
+            : r
         )
       );
       setHasChanges(false);
+      setEditingName(false);
+      setWorkingName('');
       // Auto-dismiss feedback after 5 seconds
       setTimeout(() => setSaveFeedback(null), 5000);
     } catch (err) {
@@ -131,6 +145,8 @@ const RoleTemplates = () => {
   const handleCancel = () => {
     setWorkingPermissions(clonePermissions(selectedRole.permissions));
     setHasChanges(false);
+    setEditingName(false);
+    setWorkingName('');
   };
 
   // ── Add Role ──
@@ -300,10 +316,43 @@ const RoleTemplates = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="text-lg font-semibold text-secondary-900 dark:text-white leading-none">{selectedRole.name}</h4>
+                {!selectedRole.locked && editingName ? (
+                  <input
+                    type="text"
+                    value={workingName}
+                    onChange={(e) => { setWorkingName(e.target.value); setHasChanges(true); }}
+                    onKeyDown={(e) => { if (e.key === 'Escape') { setEditingName(false); setWorkingName(''); } }}
+                    autoFocus
+                    className="text-lg font-semibold text-secondary-900 dark:text-white leading-none bg-transparent border-b-2 border-primary-500 outline-none px-0 py-0 w-48"
+                  />
+                ) : (
+                  <h4
+                    className={`text-lg font-semibold text-secondary-900 dark:text-white leading-none ${!selectedRole.locked ? 'cursor-pointer hover:text-primary-600 dark:hover:text-primary-400' : ''}`}
+                    onClick={() => {
+                      if (!selectedRole.locked) {
+                        setEditingName(true);
+                        setWorkingName(selectedRole.name);
+                      }
+                    }}
+                    title={!selectedRole.locked ? 'Click to rename' : undefined}
+                  >
+                    {(editingName && workingName) || selectedRole.name}
+                  </h4>
+                )}
                 <span className={`text-xs px-2 py-0.5 rounded-full border leading-none ${colorMap[selectedRole.color] || colorMap.primary}`}>
                   {selectedRole.locked ? 'System' : 'Custom'}
                 </span>
+                {!selectedRole.locked && !editingName && (
+                  <button
+                    onClick={() => { setEditingName(true); setWorkingName(selectedRole.name); }}
+                    className="p-0.5 rounded text-neutral-400 hover:text-primary-500 transition-colors"
+                    title="Rename template"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                )}
               </div>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">{selectedRole.description}</p>
             </div>

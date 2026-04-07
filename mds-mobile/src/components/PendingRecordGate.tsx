@@ -20,6 +20,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../context/ThemeContext';
 import { useRecordStatus } from '../context/RecordStatusContext';
 
@@ -60,7 +61,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
       >
         <View style={[styles.gateCard, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderColor: isDark ? 'rgba(245,158,11,0.3)' : '#FDE68A' }]}>
           <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(245,158,11,0.15)' : '#FEF3C7' }]}>
-            <Text style={styles.iconEmoji}>⏳</Text>
+            <Ionicons name="time" size={30} color={isDark ? '#FBBF24' : '#92400E'} />
           </View>
 
           <Text style={[styles.gateTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
@@ -83,7 +84,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
 
           {/* Status badge */}
           <View style={[styles.statusBadge, { backgroundColor: isDark ? 'rgba(245,158,11,0.12)' : '#FEF3C7' }]}>
-            <Text style={styles.statusIcon}>⏰</Text>
+            <Ionicons name="time" size={14} color={isDark ? '#FBBF24' : '#92400E'} />
             <Text style={[styles.statusText, { color: isDark ? '#FBBF24' : '#92400E' }]}>
               Status: Pending Approval
             </Text>
@@ -106,7 +107,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
       >
         <View style={[styles.gateCard, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderColor: isDark ? 'rgba(59,130,246,0.3)' : colors.accent[200] }]}>
           <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : colors.accent[50] }]}>
-            <Text style={styles.iconEmoji}>✅</Text>
+            <Ionicons name="checkmark-circle" size={30} color={isDark ? colors.accent[300] : colors.accent[600]} />
           </View>
 
           <Text style={[styles.gateTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
@@ -127,7 +128,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
           </View>
 
           <View style={[styles.statusBadge, { backgroundColor: isDark ? 'rgba(59,130,246,0.12)' : colors.accent[50] }]}>
-            <Text style={styles.statusIcon}>📋</Text>
+            <Ionicons name="clipboard" size={14} color={isDark ? colors.accent[300] : colors.accent[700]} />
             <Text style={[styles.statusText, { color: isDark ? colors.accent[300] : colors.accent[700] }]}>
               Status: Revision Submitted — Awaiting Review
             </Text>
@@ -152,7 +153,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
     >
       <View style={[styles.gateCard, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderColor: isDark ? 'rgba(241,197,38,0.3)' : colors.primary[200] }]}>
         <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50] }]}>
-          <Text style={styles.iconEmoji}>{isRevision ? '✏️' : '📋'}</Text>
+          <Ionicons name={isRevision ? 'create' : 'clipboard'} size={30} color={isDark ? colors.primary[300] : colors.primary[700]} />
         </View>
 
         <Text style={[styles.gateTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
@@ -178,7 +179,7 @@ const PendingRecordGate: React.FC<PendingRecordGateProps> = ({ children }) => {
         )}
 
         <View style={[styles.badgeRow, { backgroundColor: isDark ? 'rgba(241,197,38,0.1)' : colors.primary[50] }]}>
-          <Text style={styles.statusIcon}>🔒</Text>
+          <Ionicons name="lock-closed" size={14} color={isDark ? colors.primary[300] : colors.primary[700]} />
           <Text style={[styles.statusText, { color: isDark ? colors.primary[300] : colors.primary[700] }]}>
             {isRevision ? 'Revision Required' : 'Required for Access'}
           </Text>
@@ -244,9 +245,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 20,
   },
-  iconEmoji: {
-    fontSize: 30,
-  },
+  iconEmoji: {},
   gateTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -306,9 +305,7 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 20,
   },
-  statusIcon: {
-    fontSize: 14,
-  },
+  statusIcon: {},
   statusText: {
     fontSize: 13,
     fontWeight: '600',

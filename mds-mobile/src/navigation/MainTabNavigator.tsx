@@ -5,8 +5,10 @@
 
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, Platform, StyleSheet } from 'react-native';
+import { View, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { DashboardHomeScreen } from '../screens/dashboard/DashboardHomeScreen';
 import { AppointmentScreen } from '../screens/appointment/AppointmentScreen';
@@ -30,17 +32,18 @@ const GatedMedicineScreen = (props: any) => (
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-const TabIcon: React.FC<{ icon: string; focused: boolean }> = ({
-  icon,
-  focused,
-}) => (
-  <View
-    style={[
-      styles.iconContainer,
-      focused && styles.iconContainerFocused,
-    ]}
-  >
-    <Text style={[styles.icon, focused && styles.iconFocused]}>{icon}</Text>
+const TabIcon: React.FC<{
+  name: string;
+  lib?: 'Ionicons' | 'MCI';
+  focused: boolean;
+  color: string;
+}> = ({ name, lib = 'Ionicons', focused, color }) => (
+  <View style={[styles.iconContainer, focused && styles.iconContainerFocused]}>
+    {lib === 'MCI' ? (
+      <MaterialCommunityIcons name={name as any} size={focused ? 22 : 20} color={color} />
+    ) : (
+      <Ionicons name={name as any} size={focused ? 22 : 20} color={color} />
+    )}
   </View>
 );
 
@@ -84,8 +87,8 @@ export const MainTabNavigator: React.FC = () => {
         component={DashboardHomeScreen}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon="🏠" focused={focused} />
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -94,8 +97,8 @@ export const MainTabNavigator: React.FC = () => {
         component={GatedAppointmentScreen}
         options={{
           tabBarLabel: 'Appointments',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon="📅" focused={focused} />
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'calendar' : 'calendar-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -104,11 +107,11 @@ export const MainTabNavigator: React.FC = () => {
         component={GatedHealthChatScreen}
         options={{
           tabBarLabel: 'Health Chat',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon="💬" focused={focused} />
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'chatbubbles' : 'chatbubbles-outline'} focused={focused} color={color} />
           ),
           tabBarBadge: badgeCount > 0 ? badgeCount : undefined,
-          keyboardHidesTabBar: true,
+          tabBarHideOnKeyboard: true,
         }}
       />
       <Tab.Screen
@@ -116,8 +119,8 @@ export const MainTabNavigator: React.FC = () => {
         component={GatedMedicineScreen}
         options={{
           tabBarLabel: 'Medicine',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon="💊" focused={focused} />
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="pill" lib="MCI" focused={focused} color={color} />
           ),
         }}
       />
@@ -126,8 +129,8 @@ export const MainTabNavigator: React.FC = () => {
         component={MoreStackNavigator}
         options={{
           tabBarLabel: 'More',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon="☰" focused={focused} />
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'grid' : 'grid-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -145,12 +148,6 @@ const styles = StyleSheet.create({
   },
   iconContainerFocused: {
     backgroundColor: 'rgba(241,197,38,0.12)',
-  },
-  icon: {
-    fontSize: 18,
-  },
-  iconFocused: {
-    fontSize: 20,
   },
 });
 

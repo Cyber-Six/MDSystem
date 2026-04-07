@@ -41,12 +41,15 @@ async function initRedis(options = {}) {
 async function setKey(key, value, expireSeconds) {
   if (!client) throw new Error("Redis client not initialized");
 
+  const safeValue = String(value);
+
   if (expireSeconds) {
-    await client.set(key, value, { EX: expireSeconds });
+    await client.set(key, safeValue, { EX: expireSeconds });
   } else {
-    await client.set(key, value);
+    await client.set(key, safeValue);
   }
 }
+
 
 async function getKey(key) {
   if (!client) throw new Error("Redis client not initialized");
@@ -144,6 +147,21 @@ async function rateLimitIP(ip, route = "", limit = 10, windowSeconds = 60) {
   return current > limit;
 }
 
+async function rateLimitIPCount(ip, route = "") {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `rl:${route}:ip:${ip}`;
+  const val = await client.get(key);
+  return val ? parseInt(val, 10) : 0;
+}
+
+async function getIPRateLimitTTL(ip, route = "") {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `rl:${route}:ip:${ip}`;
+  const ttl = await client.ttl(key);
+  return ttl > 0 ? ttl : 0;
+}
+
+
 async function rateLimitEmailCooldown(email, portal = "", route = "", cooldownSeconds = 30) {
   if (!client) throw new Error("Redis client not initialized");
 
@@ -153,6 +171,14 @@ async function rateLimitEmailCooldown(email, portal = "", route = "", cooldownSe
 
   await client.set(key, "1", { EX: cooldownSeconds });
   return false; // allowed
+}
+
+async function rateLimitEmailCooldownTTL(email, portal = "", route = "") {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `rl:${portal}:${route}:ec:${email}`;
+  const ttl = await client.ttl(key);
+
+  return ttl > 0 ? ttl : 0;
 }
 
 async function deleteEmailCooldown(email, portal = "", route = "") {
@@ -202,6 +228,10 @@ const OTPMatrix = {
     purpose: "emailVerification",
     expiration: Number(process.env.EMAIL_VERIF_EXPIRATION) || 600, // fallback, // absolute one-time verification
     },
+  settingsAction: {
+    purpose: "settingsAction",
+    expiration: Number(process.env.EMAIL_2FA_EXPIRATION) || 300, // same TTL as 2FA
+    },
   };
 
 async function setOTP(email, otp, code, portal) {
@@ -246,8 +276,8 @@ async function verifyOTP(email, code, otpInput, portal) {
     }
 
     // ✅ Progressive delay
-    if (failures <= 3) await delayRandom(500, 1500);
-    else await delayRandom(2000, (failures+2)*1000);
+    if (failures <= 3) await delayRandom(500, 1500,1, 0);
+    else await delayRandom(500, 2500, failures, 0.5);
 
     return false;
   }
@@ -350,7 +380,9 @@ async function createVerificationSession(email, purpose, account_type = "patient
   if (user) { // account do exist
     await client.hSet(key, {
       allow_email_2fa: user.allow_email_2fa ? "true" : "false",
+      totp_enabled: user.totp_enabled ? "true" : "false",
       email_2fa_verified: "false",
+      totp_2fa_verified: "false",
       user_exists: "true",
       user_id: user.id.toString(),       // ✅ internal only
       email,
@@ -442,6 +474,26 @@ async function update2FAInSession(token, email, purpose) {
   return true;
 }
 
+async function updateTotp2FAInSession(token, email, purpose) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `verify:${purpose}:${token}`;
+
+  const exists = await client.exists(key);
+  if (!exists) return false;
+
+  const storedEmail = await client.hGet(key, "email");
+  if (!storedEmail || storedEmail.toLowerCase() !== email.toLowerCase()) {
+    return false;
+  }
+
+  await client.hSet(key, {
+    totp_2fa_verified: "true"
+  });
+
+  return true;
+}
+
 
 async function deleteVerificationSession(token, purpose) {
   if (!client) throw new Error("Redis client not initialized");
@@ -489,26 +541,25 @@ async function saveRefreshSession(userId, deviceId, data, ttlSeconds) {
   return key;
 }
 
-async function saveStaffAnchor(userId, sessionId, ttlSeconds) {
+const REFRESH_EXP = parseInt(process.env.JWT_REFRESH_EXPIRATION, 10) || 604800;
+async function saveStaffAnchor(userId, sessionId, ttlSeconds=REFRESH_EXP) {
   if (!userId || !sessionId) {
     throw new Error("saveStaffAnchor: userId and sessionId are required");
   }
 
-  const key = `staff:anchor:${userId}`;
+  const key = `staff:anchor:${String(userId)}`;
+  const value = String(sessionId);
 
-  await setKey(
-    key,
-    sessionId,
-    ttlSeconds
-  );
+  await setKey(key, value, ttlSeconds);
 
   return key;
 }
 
+
 async function getStaffAnchor(userId) {
   if (!userId) throw new Error("getStaffAnchor: userId is required");
 
-  const key = `staff:anchor:${userId}`;
+  const key = `staff:anchor:${String(userId)}`;
   return await getKey(key); // string or null
 }
 
@@ -549,7 +600,7 @@ async function deleteAllUserSessions(userId) {
   if (!client) throw new Error("Redis client not initialized");
   if (!userId) throw new Error("deleteAllUserSessions: userId is required");
 
-  const pattern = `rt:${userId}:*`;
+  const pattern = `rt:${String(userId)}:*`;
   const keysToDelete = [];
 
   // Collect all keys matching the pattern
@@ -573,7 +624,7 @@ async function deleteStaffAnchor(userId) {
   if (!client) throw new Error("Redis client not initialized");
   if (!userId) throw new Error("deleteStaffAnchor: userId is required");
 
-  const key = `staff:anchor:${userId}`;
+  const key = `staff:anchor:${String(userId)}`;
   await client.del(key);
 }
 
@@ -1054,6 +1105,36 @@ function getClient() {
   return client;
 }
 
+/**
+ * Track TOTP failures per verification key to prevent per-key brute-forcing.
+ * Uses a counter key with TTL matching the verification session (default 15 min).
+ *
+ * @param {string} verificationKey - The random session token
+ * @param {string} purpose - e.g. "2fa", "resetpassword"
+ * @param {number} maxAttempts - Lock after this many failures (default 5)
+ * @returns {Promise<boolean>} true if the limit has been reached (caller should block)
+ */
+async function recordTotpFailureForKey(verificationKey, purpose, maxAttempts = 5) {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `totp_fail:${purpose}:${verificationKey}`;
+  const count = await client.incr(key);
+  if (count === 1) {
+    await client.expire(key, Number(process.env.VERIFICATION_SESSION_EXPIRATION) || 900);
+  }
+  return count >= maxAttempts;
+}
+
+/**
+ * Check if the per-key TOTP failure limit has already been reached.
+ * @returns {Promise<boolean>} true if locked
+ */
+async function isTotpLockedForKey(verificationKey, purpose, maxAttempts = 5) {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `totp_fail:${purpose}:${verificationKey}`;
+  const count = parseInt(await client.get(key) || "0", 10);
+  return count >= maxAttempts;
+}
+
 module.exports = {
   redisConfig,
   initRedis,
@@ -1074,7 +1155,10 @@ module.exports = {
   verifyOTP,
   deleteOTP,
   rateLimitIP,
+  rateLimitIPCount,
+  getIPRateLimitTTL,
   rateLimitEmailCooldown,
+  rateLimitEmailCooldownTTL,
   deleteEmailCooldown,
   rateLimitEmailAttempts,
   deleteEmailAttempts,
@@ -1087,6 +1171,7 @@ module.exports = {
   getVerificationSession,
   updateConsentInSession,
   update2FAInSession,
+  updateTotp2FAInSession,
   deleteVerificationSession,
   getUserIdFromVerificationSession,
 
@@ -1121,4 +1206,7 @@ module.exports = {
   recordAdminTransferPasswordFailure,
   isAdminTransferPasswordLocked,
   clearAdminTransferPasswordFailures,
+
+  recordTotpFailureForKey,
+  isTotpLockedForKey,
 };

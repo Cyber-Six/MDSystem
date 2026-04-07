@@ -176,7 +176,7 @@ async function updateUserPasswordById(userId, newPassword) {
 
 async function getUserConsentStateByEmail(email) { // i add allow_email_2fa because im tired :(
   const sql = `
-    SELECT id, data_consent_version, data_consent, data_consent_agreed, allow_email_2fa
+    SELECT id, data_consent_version, data_consent, data_consent_agreed, allow_email_2fa, totp_enabled
     FROM "UserCredentials" WHERE email = $1 LIMIT 1;`;
 
   const params = [email];
@@ -398,6 +398,26 @@ async function isActiveMedicalPersonnel(userId) {
   }
 }
 
+async function getMedicalPersonnelStatus(userId) {
+  const sql = `
+    SELECT mp.is_active
+    FROM "MedicalPersonnel" mp
+    JOIN "UserCredentials" uc ON uc.id = mp.id
+    WHERE mp.id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    const result = await query(sql, [userId]);
+    if (result.rows.length === 0) return null; // not found
+
+    return result.rows[0].is_active; 
+  } catch (err) {
+    logger.error(`Error fetching medical status for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
 async function setSystemAuditLog({client=pool, eventType, actorId, actorType, targetId, action, details, changedBy}) {
   const result = await client.query(
     `INSERT INTO "SystemAuditLog"
@@ -407,6 +427,239 @@ async function setSystemAuditLog({client=pool, eventType, actorId, actorType, ta
     [eventType, actorId, actorType, targetId, action, details, changedBy]
   );
   return result.rows[0].id;
+}
+
+/**
+ * Verify multiple user IDs and return their identity information
+ * Checks if each ID exists, their role/identity, and status
+ * @param {Array<string|number>} userIds - Array of user IDs to verify
+ * @returns {Promise<Object>} { valid: [{id, identity, status}], invalid: [id] }
+ */
+async function verifyUserIdentities(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return { valid: [], invalid: [] };
+  }
+
+  const sql = `
+    SELECT
+      uc.id,
+      uc.identity,
+      uc.credentials_status AS status
+    FROM "UserCredentials" uc
+    WHERE uc.id = ANY($1)
+    ORDER BY uc.id;
+  `;
+
+  try {
+    const result = await query(sql, [userIds]);
+    const foundIds = new Set(result.rows.map(row => String(row.id)));
+
+    // Separate valid from invalid IDs
+    const valid = result.rows.map(row => ({
+      id: String(row.id),
+      identity: row.identity,
+      status: row.status
+    }));
+
+    const invalid = userIds.filter(id => !foundIds.has(String(id)));
+
+    logger.info(`[VERIFY_IDENTITIES] Valid: ${valid.length}, Invalid: ${invalid.length}`);
+
+    return {
+      valid,
+      invalid,
+      totalRequested: userIds.length,
+      totalValid: valid.length,
+      totalInvalid: invalid.length
+    };
+  } catch (err) {
+    logger.error(`Error verifying user identities:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Get detailed identity info for multiple user IDs
+ * Includes identity type, account status, and whether they're active staff
+ * @param {Array<string|number>} userIds - Array of user IDs
+ * @returns {Promise<Array>} Array of {id, identity, status, isMedicalPersonnel, isActive}
+ */
+async function getUserIdentitiesDetailed(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return [];
+  }
+
+  const sql = `
+    SELECT
+      uc.id,
+      uc.identity,
+      uc.credentials_status AS status,
+      CASE WHEN mp.id IS NOT NULL THEN true ELSE false END AS is_medical_personnel,
+      CASE WHEN mp.is_active = true THEN true ELSE false END AS is_active,
+      mp.designation AS branch
+    FROM "UserCredentials" uc
+    LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+    WHERE uc.id = ANY($1)
+    ORDER BY uc.id;
+  `;
+
+  try {
+    const result = await query(sql, [userIds]);
+    return result.rows.map(row => ({
+      id: String(row.id),
+      identity: row.identity,
+      status: row.status,
+      isMedicalPersonnel: row.is_medical_personnel,
+      isActive: row.is_active,
+      branch: row.branch
+    }));
+  } catch (err) {
+    logger.error(`Error fetching detailed identities:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Get branches for multiple patient user IDs
+ * @param {Array<string|number>} userIds - Array of user IDs
+ * @returns {Promise<Array>} Array of {userId, branch}
+ */
+async function getPatientBranches(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return [];
+  }
+
+  const sql = `
+    SELECT id AS "userId", branch
+    FROM "UsersPersonal"
+    WHERE id = ANY($1)
+    ORDER BY id;
+  `;
+
+  try {
+    const result = await query(sql, [userIds]);
+    return result.rows.map(row => ({
+      userId: String(row.userId),
+      branch: row.branch
+    }));
+  } catch (err) {
+    logger.error(`Error fetching patient branches:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Resolve union branch for multiple patients
+ * If all patients have the same branch, return that branch
+ * If branches differ, return 'Both' to indicate multi-branch scope
+ * @param {Array<{userId: string, branch: string}>} patientBranches - Array from getPatientBranches()
+ * @returns {string} Single branch name or 'Both'
+ */
+function resolveUnionBranch(patientBranches) {
+  if (!Array.isArray(patientBranches) || patientBranches.length === 0) {
+    return 'Both';
+  }
+
+  // Get unique branches
+  const branches = [...new Set(patientBranches.map(p => p.branch).filter(b => b))];
+
+  // If all patients have same branch, return it
+  if (branches.length === 1) {
+    return branches[0];
+  }
+
+  // If multiple different branches, return 'Both'
+  return 'Both';
+}
+
+// Auto-create UsersPreferences table if it doesn't exist.
+// Runs lazily on first preferences query, then skips.
+let _prefsTableReady = false;
+async function ensurePrefsTable() {
+  if (_prefsTableReady) return;
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS "UsersPreferences" (
+        id           INTEGER PRIMARY KEY REFERENCES "UserCredentials"(id) ON DELETE CASCADE,
+        appearance   JSONB NOT NULL DEFAULT '{}'::jsonb,
+        notification JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id)`);
+    _prefsTableReady = true;
+  } catch (err) {
+    logger.error('[PREFS] ensurePrefsTable failed:', err.message);
+  }
+}
+
+/**
+ * Get user preferences (appearance, notification settings)
+ * @param {string|number} userId
+ * @returns {Promise<{appearance: object, notification: object} | null>}
+ */
+async function getUserPreferences(userId) {
+  const sql = `
+    SELECT appearance, notification
+    FROM "UsersPreferences"
+    WHERE id = $1
+    LIMIT 1;
+  `;
+
+  try {
+    await ensurePrefsTable();
+    const result = await query(sql, [userId]);
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      appearance: row.appearance || {},
+      notification: row.notification || {}
+    };
+  } catch (err) {
+    logger.error(`Error fetching preferences for userId=${userId}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Create or update user preferences
+ * @param {string|number} userId
+ * @param {{appearance?: object, notification?: object}} updates
+ * @returns {Promise<{appearance: object, notification: object}>}
+ */
+async function setUserPreferences(userId, updates) {
+  const sql = `
+    INSERT INTO "UsersPreferences" (id, appearance, notification)
+    VALUES ($1, $2, $3)
+    ON CONFLICT(id) DO UPDATE SET
+      appearance   = COALESCE($2::jsonb, "UsersPreferences".appearance),
+      notification = COALESCE($3::jsonb, "UsersPreferences".notification),
+      updated_at   = NOW()
+    RETURNING appearance, notification;
+  `;
+
+  try {
+    await ensurePrefsTable();
+    const appearance   = updates.appearance   ? JSON.stringify(updates.appearance)   : null;
+    const notification = updates.notification ? JSON.stringify(updates.notification) : null;
+
+    const result = await query(sql, [userId, appearance, notification]);
+
+    if (result.rows.length === 0) {
+      throw new Error('Failed to set preferences');
+    }
+
+    const row = result.rows[0];
+    return {
+      appearance:   row.appearance   || {},
+      notification: row.notification || {}
+    };
+  } catch (err) {
+    logger.error(`Error setting preferences for userId=${userId}:`, err);
+    throw err;
+  }
 }
 
 module.exports = {
@@ -434,5 +687,12 @@ module.exports = {
     recordLoginAttempt,
     getUserPatientType,
     isActiveMedicalPersonnel,
-    setSystemAuditLog
+    getMedicalPersonnelStatus,
+    setSystemAuditLog,
+    verifyUserIdentities,
+    getUserIdentitiesDetailed,
+    getPatientBranches,
+    resolveUnionBranch,
+    getUserPreferences,
+    setUserPreferences
 };

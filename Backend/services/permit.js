@@ -27,6 +27,8 @@ const permissions = {
   consultation_allow_view: "ALLOW_TO_VIEW_CONSULTATION",
   consultation_allow_edit: "ALLOW_TO_EDIT_CONSULTATION",
 
+  notification_allow_send_to_patients: "ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS",
+
   inventory_allow_view: "ALLOW_TO_VIEW_INVENTORY",
   inventory_allow_dispense: "ALLOW_TO_DISPENSE_MEDICINE",
 
@@ -34,9 +36,9 @@ const permissions = {
   inventory_allow_edit: "ALLOW_TO_EDIT_INVENTORY",
   inventory_allow_manage_requests: "ALLOW_TO_MANAGE_MEDICINE_REQUESTS",
   inventory_allow_prescribe: "ALLOW_TO_PRESCRIBE",
+  inventory_allow_configure: "ALLOW_TO_CONFIGURE_INVENTORY",
 
   health_chat_allow_access: "ALLOW_TO_ACCESS_HEALTH_CHAT",
-  health_chat_allow_manage: "ALLOW_TO_MANAGE_HEALTH_CHAT",
 
   analytics_allow_view: "ALLOW_TO_VIEW_ANALYTICS",
   analytics_allow_export: "ALLOW_TO_EXPORT_ANALYTICS",
@@ -52,6 +54,10 @@ const ADMIN_ONLY_KEYS = new Set([
   'role_management_allow_access',
   'role_management_allow_edit',
 ]);
+
+async function isMedicalAdmin(userId) {
+  return await findMedicalPermit(userId, permissions.is_admin);;
+}
 
 async function getMedicalpermits(personnelId) {
   const result = await db.query(
@@ -139,8 +145,9 @@ async function unsetMedicalPermit({ personnelId, labels = [] }) {
 }
 
 
-async function clearMedicalPermits(personnelId) {
-  const result = await db.query(
+async function clearMedicalPermits(personnelId, client) {
+  const queryClient = client || db;
+  const result = await queryClient.query(
     `DELETE FROM "rolesMap"
      WHERE "personnelId" = $1
      RETURNING *;`,
@@ -196,8 +203,11 @@ async function getStaffPermissions(personnelId) {
  * @param {Array} params.permissionsList - Array of { key, enabled, branch? }
  * @param {number} params.assignedBy
  * @param {string} params.defaultBranch - Default branch if not specified per permission
+ * @param {Object} params.client - Optional database client for transaction support
  */
-async function setStaffPermissionsExtended({ personnelId, permissionsList, assignedBy, defaultBranch = 'Both' }) {
+async function setStaffPermissionsExtended({ personnelId, permissionsList, assignedBy, defaultBranch = 'Both', client }) {
+  const queryClient = client || db;
+
   const toInsert = [];  // Array of { label, branch }
   const toDelete = [];  // Array of labels
 
@@ -221,7 +231,7 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
 
   // Delete permissions set to false (removes records entirely)
   if (toDelete.length > 0) {
-    await db.query(
+    await queryClient.query(
       `DELETE FROM "rolesMap" rm
        USING "rolesTable" rt
        WHERE rm."rolesId" = rt.id
@@ -243,7 +253,7 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
       i += 2;
     }
 
-    await db.query(
+    await queryClient.query(
       `INSERT INTO "rolesMap" ("personnelId", "rolesId", branch, "assignedBy")
        SELECT $1, r.id, v.branch::"UserDesignation", $2
        FROM (VALUES ${values.join(",")}) AS v(label, branch)
@@ -269,8 +279,9 @@ async function setStaffPermissionsExtended({ personnelId, permissionsList, assig
  * @param {Array} params.permissionsList - Array of { key, enabled }
  * @param {number} params.assignedBy
  * @param {string} params.branch - Applied to ALL permissions
+ * @param {Object} params.client - Optional database client for transaction support
  */
-async function setStaffPermissionsStandard({ personnelId, permissionsList, assignedBy, branch = 'Both' }) {
+async function setStaffPermissionsStandard({ personnelId, permissionsList, assignedBy, branch = 'Both', client }) {
   // Convert standard format to extended format by adding branch to each permission
   const extendedPermissionsList = permissionsList.map(perm => ({
     ...perm,
@@ -282,53 +293,67 @@ async function setStaffPermissionsStandard({ personnelId, permissionsList, assig
     personnelId,
     permissionsList: extendedPermissionsList,
     assignedBy,
-    defaultBranch: branch  // Not used since all have explicit branch, but for safety
+    defaultBranch: branch,  // Not used since all have explicit branch, but for safety
+    client  // Pass through client
   });
 }
 
-async function isMedicalPermitted(userId, label, patientId) {
+async function isMedicalPermitted(userId, label) {
+  const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
+  if (isAdmin) {
+    logger.info(`Admin bypass granted for userId=${userId} on permission ${label}`);
+    return {permitted: true, branch: 'Both'};
+  } // Admin bypass
+
+  // Case: patientId null → skip patient join, only check if role exists
+  const result = await db.query(
+    `SELECT rm.branch
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1
+       AND rt.label = $2
+     LIMIT 1;`,
+    [userId, label]
+  );
+  
+
+  if (result.rows.length === 0) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without ${label} permission.`
+    );
+    return { permitted: false, branch: null };
+  }
+
+
+  return { permitted: true, branch: result.rows[0].branch };
+}
+
+
+async function isMedicalPermittedPatientBased(userId, label, patientId, strictSuperiority = true) {
   const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
   if (isAdmin) {
     logger.info(`Admin bypass granted for userId=${userId} on permission ${label}${patientId ? ` with patient context ${patientId}` : ""}`);
     return true;
   } // Admin bypass
 
-  let result;
-
-  if (patientId) {
-    // Case: patientId provided → join against patient branch using staff designation
-    // Branch matching uses MedicalPersonnel.designation (the admin-assigned branch)
-    // rather than per-permission branch for consistent, staff-level filtering.
-    result = await db.query(
-      `SELECT uc.identity
-       FROM "rolesMap" rm
-       JOIN "rolesTable" rt ON rm."rolesId" = rt.id
-       JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
-       JOIN "UsersPersonal" up ON up.id = $3
-       JOIN "UserCredentials" uc ON uc.id = up.id
-       WHERE rm."personnelId" = $1
-         AND rt.label = $2
-         AND (
-           mp.designation = 'Both'
-           OR up.branch = mp.designation
-           OR up.branch = 'Both'
-         )
-       LIMIT 1;`,
-      [userId, label, patientId]
-    );
-  } else {
-    // Case: patientId null → skip patient join, only check if role exists
-    result = await db.query(
-      `SELECT 1
-       FROM "rolesMap" rm
-       JOIN "rolesTable" rt ON rm."rolesId" = rt.id
-       WHERE rm."personnelId" = $1
-         AND rt.label = $2
-       LIMIT 1;`,
-      [userId, label]
-    );
-  }
-
+  const result = await db.query(
+    `SELECT uc.identity
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
+     JOIN "UsersPersonal" up ON up.id = $3
+     JOIN "UserCredentials" uc ON uc.id = up.id
+     WHERE rm."personnelId" = $1
+       AND rt.label = $2
+       AND (
+         rm.branch = 'Both' OR
+         up.branch = 'Both' OR
+         up.branch = rm.branch
+       )
+     LIMIT 1;`,
+    [userId, label, patientId]
+  );
+  
   if (result.rows.length === 0) {
     logger.warn(
       `Unauthorized access attempt by staff ${userId} without ${label} permission${patientId ? ` on patient ${patientId}` : ""}`
@@ -337,10 +362,9 @@ async function isMedicalPermitted(userId, label, patientId) {
   }
 
   // If patient is Superior, staff must have privileged permit
-  const { identity } = result.rows[0];
-  if (identity === "Superior" && patientId) {
-    const permitted = await findMedicalPermit(
-      userId,
+  const identity = result.rows[0].identity;
+  if (identity === "Superior" && strictSuperiority) {
+    const permitted = await findMedicalPermit(userId,
       permissions.privileged_to_perform_on_superior
     );
     if (!permitted) {
@@ -354,6 +378,83 @@ async function isMedicalPermitted(userId, label, patientId) {
   return true;
 }
 
+
+async function isMedicalPermittedLocationBased(userId, label, location) {
+  const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
+  if (isAdmin) {
+    logger.info(`Admin bypass granted for userId=${userId} on permission ${label} with location context ${location}`);
+    return true;
+  } // Admin bypass
+
+  let result = await db.query(
+    `SELECT 1
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1
+       AND rt.label = $2 
+       AND (rm.branch = 'Both' OR rm.branch = $3)
+     LIMIT 1;`,
+    [userId, label, location]
+  );
+
+  if (result.rows.length === 0) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without ${label} permission with location context ${location}`
+    );
+    return false;
+  }
+  return true;
+}
+
+async function isMedicalPermittedBranchBased(userId, label, branch) {
+  const isAdmin = await findMedicalPermit(userId, permissions.is_admin);
+  if (isAdmin) {
+    logger.info(`Admin bypass granted for userId=${userId} on permission ${label} with branch context ${branch}`);
+    return true;
+  } // Admin bypass
+
+  let result = await db.query(
+    `SELECT 1
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1 AND
+       rt.label = $2 AND (
+        rm.branch = 'Both' OR 
+        (rm.branch = 'Manila' AND $3::"LocationDesignation" IN ('Arlegui', 'Casal')) OR
+        (rm.branch = 'QuezonCity' AND $3::"LocationDesignation" = 'QuezonCity')
+       )
+     LIMIT 1;`,
+    [userId, label, branch]
+  );
+
+  if (result.rows.length === 0) {
+    logger.warn(
+      `Unauthorized access attempt by staff ${userId} without ${label} permission with branch context ${branch}`
+    );
+    return false;
+  }
+  return true;
+}
+
+async function getMedicalPermissionBranch(userId, label) {
+  const result = await db.query(
+    `SELECT rm.branch
+     FROM "rolesMap" rm
+     JOIN "rolesTable" rt ON rm."rolesId" = rt.id
+     WHERE rm."personnelId" = $1 AND rt.label = $2
+     LIMIT 1;`,
+    [userId, label]
+  );
+
+  if (result.rows.length === 0) {
+    logger.warn(
+      `Permission designation query: staff ${userId} does not have ${label} permission`
+    );
+    return null;
+  }
+
+  return result.rows[0].branch;
+}
 // ─── TEMPLATE PERMISSION FUNCTIONS ───────────────────────────────────────────
 
 /**
@@ -571,6 +672,23 @@ async function updatePermissionTemplate({ templateId, label, permissionsList, de
   try {
     await client.query('BEGIN');
 
+    // Check if template is the protected Admin template
+    const templateCheck = await client.query(
+      `SELECT label FROM "rolesTemplate" WHERE id = $1 LIMIT 1`,
+      [templateId]
+    );
+
+    if (templateCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new Error(`Template with id ${templateId} not found`);
+    }
+
+    const currentTemplate = templateCheck.rows[0];
+    if (currentTemplate.label === 'Admin') {
+      await client.query('ROLLBACK');
+      throw new Error('The Admin template is protected and cannot be modified');
+    }
+
     // Update label if provided
     if (label !== undefined && label !== null) {
       await client.query(
@@ -659,6 +777,23 @@ async function deletePermissionTemplate(templateId) {
   try {
     await client.query('BEGIN');
 
+    // Check if template is the protected Admin template
+    const templateCheck = await client.query(
+      `SELECT label FROM "rolesTemplate" WHERE id = $1 LIMIT 1`,
+      [templateId]
+    );
+
+    if (templateCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return false;  // Template doesn't exist
+    }
+
+    const template = templateCheck.rows[0];
+    if (template.label === 'Admin') {
+      await client.query('ROLLBACK');
+      throw new Error('The Admin template is protected and cannot be deleted');
+    }
+
     // Delete template permissions first (foreign key constraint)
     await client.query(
       `DELETE FROM "rolesTemplateMap"
@@ -698,9 +833,11 @@ async function deletePermissionTemplate(templateId) {
  * @param {number} params.personnelId - Staff user ID
  * @param {number} params.templateId - Template ID to apply
  * @param {number} params.assignedBy - Admin user ID applying the template
+ * @param {string} params.staffBranch - Staff's branch designation (Manila, QuezonCity, Both) - all permissions inherit this branch
+ * @param {Object} params.client - Optional database client for transaction support
  * @returns {Promise<Object>} Result with inserted permissions
  */
-async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
+async function applyTemplateToStaff({ personnelId, templateId, assignedBy, staffBranch, client }) {
   // Get template permissions
   const template = await getPermissionTemplate(templateId);
 
@@ -709,20 +846,22 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
   }
 
   // Filter only enabled permissions
+  // If staffBranch provided, all permissions inherit the staff's branch (override template's branches)
   const enabledPermissions = template.permissions
     .filter(p => p.enabled)
     .map(p => ({
       key: p.key,
       enabled: true,
-      branch: p.branch
+      branch: staffBranch || p.branch  // Use staff's branch if provided, otherwise use template's branch
     }));
 
-  // Apply permissions using existing function
+  // Apply permissions using existing function, passing client through
   await setStaffPermissionsExtended({
     personnelId: String(personnelId),
     permissionsList: enabledPermissions,
     assignedBy: String(assignedBy),
-    defaultBranch: 'Both'
+    defaultBranch: staffBranch || 'Both',
+    client  // Pass through client
   });
 
   logger.info(`Template applied to staff: templateId=${templateId}, personnelId=${personnelId}, by userId=${assignedBy}`);
@@ -742,9 +881,10 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy }) {
  * @param {number} params.templateId - The template that was updated
  * @param {string} params.roleLabel  - The role label to match staff against
  * @param {number} params.assignedBy - The admin user ID performing the update
+ * @param {Object} params.client - Optional database client for transaction support
  * @returns {Promise<{ affectedCount: number }>}
  */
-async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy }) {
+async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy, client }) {
   // Get the updated template for its current permissions
   const template = await getPermissionTemplate(templateId);
   if (!template) {
@@ -773,11 +913,14 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy 
     const branch = staff.designation || 'Both';
 
     // Clear existing permissions (clean slate)
-    await clearMedicalPermits(String(staff.id));
+    await clearMedicalPermits(String(staff.id), client);
 
-    // Build full permissions: template perms + is_staff with staff-specific branch
+    // Build full permissions: override template branches with staff's branch + is_staff with staff-specific branch
     const staffPermissions = [
-      ...enabledPermissions,
+      ...enabledPermissions.map(p => ({
+        ...p,
+        branch: branch  // Override template branch with staff's actual branch
+      })),
       { key: 'is_staff', enabled: true, branch }
     ];
 
@@ -786,7 +929,8 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy 
       personnelId: String(staff.id),
       permissionsList: staffPermissions,
       assignedBy: String(assignedBy),
-      defaultBranch: 'Both'
+      defaultBranch: branch,  // Use staff's branch as default
+      client  // Pass through client
     });
 
     affectedCount++;
@@ -843,7 +987,6 @@ const MODULE_PERMISSION_MAP = {
   ],
   healthChat: [
     'health_chat_allow_access',
-    'health_chat_allow_manage',
   ],
   analytics: [
     'analytics_allow_view',
@@ -970,9 +1113,13 @@ async function getStaffModulePermissions(personnelId) {
 }
 
 module.exports = {
+  isMedicalAdmin,
   setMedicalPermit,
   unsetMedicalPermit,
   isMedicalPermitted,
+  isMedicalPermittedPatientBased,
+  isMedicalPermittedLocationBased,
+  isMedicalPermittedBranchBased,
   clearMedicalPermits,
   getMedicalpermits,
   getStaffBranch,
@@ -995,4 +1142,5 @@ module.exports = {
   resolveModulePermissions,
   setStaffModulePermissions,
   getStaffModulePermissions,
+  getMedicalPermissionBranch,
 };

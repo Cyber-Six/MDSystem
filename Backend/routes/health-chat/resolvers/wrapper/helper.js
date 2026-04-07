@@ -1,29 +1,31 @@
 const db = require("../../../../config/query.js");
 
-// Chat expiry duration in days
+// Chat expiry duration in days (based on last activity / message)
 const CHAT_EXPIRY_DAYS = 3;
 
 /**
- * Calculate expiry date from session start
- * @param {Date|string} sessionStart - The session start timestamp
+ * Calculate expiry date from the last activity timestamp.
+ * Expiry is based on the most recent message (from either side),
+ * NOT on session_start.
+ * @param {Date|string} lastActivityAt - The last message / activity timestamp
  * @returns {Date} - The expiry date
  */
-function calculateExpiryDate(sessionStart) {
-  if (!sessionStart) return null;
-  const startDate = new Date(sessionStart);
+function calculateExpiryDate(lastActivityAt) {
+  if (!lastActivityAt) return null;
+  const startDate = new Date(lastActivityAt);
   const expiryDate = new Date(startDate);
   expiryDate.setDate(expiryDate.getDate() + CHAT_EXPIRY_DAYS);
   return expiryDate;
 }
 
 /**
- * Check if a chat has expired
- * @param {Date|string} sessionStart - The session start timestamp
- * @returns {boolean} - True if expired
+ * Check if a chat has expired based on the last activity timestamp.
+ * @param {Date|string} lastActivityAt - The last message / activity timestamp
+ * @returns {boolean} - True if expired (no activity for CHAT_EXPIRY_DAYS)
  */
-function isChatExpired(sessionStart) {
-  if (!sessionStart) return false;
-  const expiryDate = calculateExpiryDate(sessionStart);
+function isChatExpired(lastActivityAt) {
+  if (!lastActivityAt) return false;
+  const expiryDate = calculateExpiryDate(lastActivityAt);
   return new Date() > expiryDate;
 }
 
@@ -56,6 +58,18 @@ async function getParticipantInfo(userId) {
   if (result.rowCount === 0) return null;
 
   const row = result.rows[0];
+
+  // Safely format date_of_birth
+  let formattedDOB = null;
+  if (row.date_of_birth) {
+    if (row.date_of_birth instanceof Date) {
+      formattedDOB = row.date_of_birth.toISOString().split('T')[0];
+    } else if (typeof row.date_of_birth === 'string') {
+      // Already a string, just extract the date part if it's ISO format
+      formattedDOB = row.date_of_birth.split('T')[0];
+    }
+  }
+
   return {
     id: row.id,
     firstName: row.first_name || 'Unknown',
@@ -63,7 +77,7 @@ async function getParticipantInfo(userId) {
     email: row.email,
     identifier: row.identifier,
     branch: row.profile || row.branch || null,
-    dateOfBirth: row.date_of_birth ? row.date_of_birth.toISOString().split('T')[0] : null,
+    dateOfBirth: formattedDOB,
     sex: row.sex || null
   };
 }
@@ -103,7 +117,10 @@ async function verifyMedicalAssignedToChat(chatId, medicalId) {
  */
 async function checkChatStatus(chatId) {
   const result = await db.query(
-    `SELECT status, session_start FROM "HealthChat" WHERE id = $1`,
+    `SELECT hc.status, hc.session_start,
+            (SELECT MAX(p.stamp) FROM "HealthChatPrompt" p
+             WHERE p."consultationVirtualId" = hc.id) AS last_message_at
+     FROM "HealthChat" hc WHERE hc.id = $1`,
     [chatId]
   );
 
@@ -111,11 +128,15 @@ async function checkChatStatus(chatId) {
     return { isActive: false, status: null };
   }
 
-  const { status, session_start } = result.rows[0];
+  const { status, session_start, last_message_at } = result.rows[0];
 
-  // Check if expired by time even if status hasn't been updated
-  if (status === 'Ongoing' && isChatExpired(session_start)) {
-    return { isActive: false, status: 'Expired' };
+  // Check if expired by inactivity even if status hasn't been updated yet.
+  // Expiry is based on the last message, falling back to session_start.
+  if (status === 'Ongoing') {
+    const lastActivityAt = last_message_at || session_start;
+    if (lastActivityAt && isChatExpired(lastActivityAt)) {
+      return { isActive: false, status: 'Expired' };
+    }
   }
 
   const activeStatuses = ['Open', 'Ongoing'];
@@ -137,12 +158,17 @@ async function formatChatRecord(chat) {
     getLastMessageInfo(chat.id)
   ]);
 
+  // Compute expiry based on last message activity (only for Ongoing tickets).
+  // Falls back to session_start if no messages exist yet.
+  const lastActivityAt = lastMessageData?.lastMessageAt || chat.session_start;
+  const expiresAt = chat.status === 'Ongoing' ? calculateExpiryDate(lastActivityAt) : null;
+
   return {
     ...chat,
     patient,
     medical,
     closedBy: chat.closed_by_type || null,
-    expiresAt: calculateExpiryDate(chat.session_start),
+    expiresAt,
     lastMessage: lastMessageData?.lastMessage || null,
     lastMessageAt: lastMessageData?.lastMessageAt || null,
     unreadCount: lastMessageData?.unreadCount || 0
@@ -155,40 +181,48 @@ async function formatChatRecord(chat) {
  * @returns {Promise<{lastMessage: Object, lastMessageAt: Date, unreadCount: number}>}
  */
 async function getLastMessageInfo(chatId) {
-  // Get last message
-  const lastMsgResult = await db.query(
-    `SELECT * FROM "HealthChatPrompt"
-     WHERE "consultationVirtualId" = $1
-     ORDER BY stamp DESC
-     LIMIT 1`,
+  // Single query that returns the last message row and the unread count together.
+  // Uses a CTE to compute the last Medical stamp once, avoiding a correlated sub-select
+  // and reducing three sequential round-trips to one.
+  const result = await db.query(
+    `WITH last_msg AS (
+       SELECT *
+       FROM "HealthChatPrompt"
+       WHERE "consultationVirtualId" = $1
+       ORDER BY stamp DESC
+       LIMIT 1
+     ),
+     last_medical AS (
+       SELECT MAX(stamp) AS stamp
+       FROM "HealthChatPrompt"
+       WHERE "consultationVirtualId" = $1 AND "userType" = 'Medical'
+     ),
+     unread AS (
+       SELECT COUNT(*)::int AS cnt
+       FROM "HealthChatPrompt" p
+       CROSS JOIN last_medical lm
+       WHERE p."consultationVirtualId" = $1
+         AND p."userType" = 'Patient'
+         AND p.stamp > COALESCE(lm.stamp, '1970-01-01')
+     )
+     SELECT lm.*, u.cnt AS unread_count
+     FROM last_msg lm
+     CROSS JOIN unread u`,
     [chatId]
   );
 
-  if (lastMsgResult.rowCount === 0) {
+  if (result.rowCount === 0) {
     return { lastMessage: null, lastMessageAt: null, unreadCount: 0 };
   }
 
-  const lastMsg = lastMsgResult.rows[0];
-  const lastMessage = await formatMessage(lastMsg);
-
-  // Count unread messages (messages from patient that staff hasn't read)
-  // For simplicity, count messages from Patient after the last Medical message
-  const unreadResult = await db.query(
-    `SELECT COUNT(*)::int as count FROM "HealthChatPrompt"
-     WHERE "consultationVirtualId" = $1
-     AND "userType" = 'Patient'
-     AND stamp > COALESCE(
-       (SELECT MAX(stamp) FROM "HealthChatPrompt"
-        WHERE "consultationVirtualId" = $1 AND "userType" = 'Medical'),
-       '1970-01-01'
-     )`,
-    [chatId]
-  );
+  const row = result.rows[0];
+  // One participant lookup (null-safe for system messages with userId = null)
+  const sender = await getParticipantInfo(row.userId);
 
   return {
-    lastMessage,
-    lastMessageAt: lastMsg.stamp,
-    unreadCount: unreadResult.rows[0]?.count || 0
+    lastMessage: { ...row, sender },
+    lastMessageAt: row.stamp,
+    unreadCount: row.unread_count || 0
   };
 }
 
@@ -235,6 +269,17 @@ async function getParticipantInfoBatch(userIds) {
 
   const map = new Map();
   for (const row of result.rows) {
+    // Safely format date_of_birth
+    let formattedDOB = null;
+    if (row.date_of_birth) {
+      if (row.date_of_birth instanceof Date) {
+        formattedDOB = row.date_of_birth.toISOString().split('T')[0];
+      } else if (typeof row.date_of_birth === 'string') {
+        // Already a string, just extract the date part if it's ISO format
+        formattedDOB = row.date_of_birth.split('T')[0];
+      }
+    }
+
     map.set(row.id, {
       id: row.id,
       firstName: row.first_name || 'Unknown',
@@ -242,7 +287,7 @@ async function getParticipantInfoBatch(userIds) {
       email: row.email,
       identifier: row.identifier,
       branch: row.profile || row.branch || null,
-      dateOfBirth: row.date_of_birth ? row.date_of_birth.toISOString().split('T')[0] : null,
+      dateOfBirth: formattedDOB,
       sex: row.sex || null
     });
   }
@@ -267,19 +312,24 @@ async function getLastMessageInfoBatch(chatIds) {
     [chatIds]
   );
 
-  // Get unread counts per chat in a single query
+  // Get unread counts per chat in a single query.
+  // Pre-compute the last Medical message timestamp per chat using a CTE so the
+  // comparison is a plain JOIN instead of a correlated subquery (faster under load).
   const unreadResult = await db.query(
-    `SELECT
-       "consultationVirtualId" as chat_id,
-       COUNT(*)::int as count
-     FROM "HealthChatPrompt" p
-     WHERE p."consultationVirtualId" = ANY($1)
-     AND p."userType" = 'Patient'
-     AND p.stamp > COALESCE(
-       (SELECT MAX(p2.stamp) FROM "HealthChatPrompt" p2
-        WHERE p2."consultationVirtualId" = p."consultationVirtualId" AND p2."userType" = 'Medical'),
-       '1970-01-01'
+    `WITH LastMedicalMsg AS (
+       SELECT "consultationVirtualId", MAX(stamp) AS last_stamp
+       FROM "HealthChatPrompt"
+       WHERE "consultationVirtualId" = ANY($1) AND "userType" = 'Medical'
+       GROUP BY "consultationVirtualId"
      )
+     SELECT
+       p."consultationVirtualId" AS chat_id,
+       COUNT(*)::int AS count
+     FROM "HealthChatPrompt" p
+     LEFT JOIN LastMedicalMsg lm ON lm."consultationVirtualId" = p."consultationVirtualId"
+     WHERE p."consultationVirtualId" = ANY($1)
+       AND p."userType" = 'Patient'
+       AND p.stamp > COALESCE(lm.last_stamp, '1970-01-01')
      GROUP BY p."consultationVirtualId"`,
     [chatIds]
   );
@@ -334,12 +384,15 @@ async function formatChatRecordsBatch(chats) {
 
   return chats.map(chat => {
     const lastMessageData = lastMessageMap.get(chat.id) || {};
+    // Compute expiry based on last message activity (only for Ongoing tickets)
+    const lastActivityAt = lastMessageData.lastMessageAt || chat.session_start;
+    const expiresAt = chat.status === 'Ongoing' ? calculateExpiryDate(lastActivityAt) : null;
     return {
       ...chat,
       patient: participantMap.get(chat.patientId) || null,
       medical: participantMap.get(chat.medicalId) || null,
       closedBy: chat.closed_by_type || null,
-      expiresAt: calculateExpiryDate(chat.session_start),
+      expiresAt,
       lastMessage: lastMessageData.lastMessage || null,
       lastMessageAt: lastMessageData.lastMessageAt || null,
       unreadCount: lastMessageData.unreadCount || 0
@@ -348,9 +401,15 @@ async function formatChatRecordsBatch(chats) {
 }
 
 /**
- * Auto-expire tickets that have had no messages for CHAT_EXPIRY_DAYS.
- * Uses the last message timestamp as reference for inactivity.
- * Self-sufficient expiry check - no background process required.
+ * Auto-expire tickets that exceed CHAT_EXPIRY_DAYS of inactivity.
+ * Four cases are handled:
+ *   1. Ongoing tickets with no message activity for CHAT_EXPIRY_DAYS.
+ *      Uses MAX(stamp) from HealthChatPrompt, falling back to session_start.
+ *   2. Open tickets where the patient account is already Inactive in UserCredentials.
+ *   3. Stale Open tickets where the last message is older than CHAT_EXPIRY_DAYS
+ *      (every new ticket has a creation system message from _createTicket as the anchor).
+ *   4. Legacy Open tickets with zero messages (MAX(stamp) IS NULL skips step 3 in SQL).
+ * Self-sufficient check — no background process required.
  * Called on relevant queries to ensure data consistency.
  * @param {number|null} patientId - Optional patient ID filter
  * @returns {Promise<number>} Number of tickets expired
@@ -367,15 +426,97 @@ async function autoExpireTickets(patientId = null) {
   }
   if (!patientId) _lastAutoExpireRun = now;
 
-  // Find tickets where the last message was more than CHAT_EXPIRY_DAYS ago
-  // Use parameterized interval to avoid SQL injection
-  const params = [`${CHAT_EXPIRY_DAYS} days`];
-  let query = `
+  const interval = `${CHAT_EXPIRY_DAYS} days`;
+  let expiredCount = 0;
+
+  // ── 1. Expire Ongoing tickets with no activity for CHAT_EXPIRY_DAYS ─────────
+  // Uses the most recent message (MAX stamp) as the activity anchor.
+  // If no messages exist, falls back to session_start.
+  const ongoingParams = [interval];
+  let ongoingQuery = `
     UPDATE "HealthChat"
     SET status = 'Expired',
         session_end = NOW(),
         closed_by_type = 'System'
     WHERE status = 'Ongoing'
+    AND COALESCE(
+      (SELECT MAX(stamp) FROM "HealthChatPrompt"
+       WHERE "consultationVirtualId" = "HealthChat".id),
+      session_start
+    ) + CAST($1 AS INTERVAL) <= NOW()
+  `;
+
+  if (patientId) {
+    ongoingQuery += ` AND "patientId" = $2`;
+    ongoingParams.push(patientId);
+  }
+
+  ongoingQuery += ` RETURNING id`;
+
+  const ongoingResult = await db.query(ongoingQuery, ongoingParams);
+  expiredCount += ongoingResult.rowCount;
+
+  if (ongoingResult.rows.length > 0) {
+    const ongoingMsg = `This ticket has been automatically closed by the system after ${CHAT_EXPIRY_DAYS} days of inactivity.`;
+    const ongoingValues = ongoingResult.rows
+      .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
+      .join(', ');
+    await db.query(
+      `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ${ongoingValues}`,
+      [ongoingMsg, ...ongoingResult.rows.map(r => r.id)]
+    );
+  }
+
+  // ── 2. Expire Open tickets where the patient account is Inactive ──────
+  // Open tickets have no session_start so step 1 never catches them.
+  // Tie them to the patient's credential status for account-level expiry.
+  let openExpiredQuery = `
+    UPDATE "HealthChat" hc
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    FROM "UserCredentials" uc
+    WHERE hc."patientId" = uc.id
+    AND hc.status = 'Open'
+    AND uc.credentials_status = 'Inactive'
+  `;
+  const openExpiredParams = [];
+
+  if (patientId) {
+    openExpiredQuery += ` AND hc."patientId" = $1`;
+    openExpiredParams.push(patientId);
+  }
+
+  openExpiredQuery += ` RETURNING hc.id`;
+
+  const openExpiredResult = await db.query(openExpiredQuery, openExpiredParams);
+  expiredCount += openExpiredResult.rowCount;
+
+  if (openExpiredResult.rows.length > 0) {
+    const openExpiredMsg = 'This ticket has been automatically closed because the patient account is inactive.';
+    const openExpiredValues = openExpiredResult.rows
+      .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
+      .join(', ');
+    await db.query(
+      `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ${openExpiredValues}`,
+      [openExpiredMsg, ...openExpiredResult.rows.map(r => r.id)]
+    );
+  }
+
+  // ── 3. Expire stale Open tickets by inactivity ───────────────────────────────
+  // Uses MAX(stamp) from HealthChatPrompt as the activity anchor.
+  // _createTicket inserts a creation system message, so every new Open ticket has at
+  // least one stamp. Tickets with no messages are NOT matched here (MAX IS NULL makes
+  // the < comparison false in SQL) — handled by step 4.
+  const staleOpenParams = [interval];
+  let staleOpenQuery = `
+    UPDATE "HealthChat"
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    WHERE status = 'Open'
     AND (
       SELECT MAX(stamp) FROM "HealthChatPrompt"
       WHERE "consultationVirtualId" = "HealthChat".id
@@ -383,25 +524,67 @@ async function autoExpireTickets(patientId = null) {
   `;
 
   if (patientId) {
-    query += ` AND "HealthChat"."patientId" = $2`;
-    params.push(patientId);
+    staleOpenQuery += ` AND "HealthChat"."patientId" = $2`;
+    staleOpenParams.push(patientId);
   }
 
-  query += ` RETURNING id`;
+  staleOpenQuery += ` RETURNING id`;
 
-  const result = await db.query(query, params);
+  const staleOpenResult = await db.query(staleOpenQuery, staleOpenParams);
+  expiredCount += staleOpenResult.rowCount;
 
-  // Add system message to each expired chat
-  for (const row of result.rows) {
+  if (staleOpenResult.rows.length > 0) {
+    const staleMsg = `This consultation request was automatically closed by the system after ${CHAT_EXPIRY_DAYS} days without a staff response.`;
+    const staleValues = staleOpenResult.rows
+      .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
+      .join(', ');
     await db.query(
-      `INSERT INTO "HealthChatPrompt"
-       ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, $2, 'system', NULL, 'Medical')`,
-      [row.id, `This ticket has been automatically closed after ${CHAT_EXPIRY_DAYS} days of inactivity.`]
+      `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ${staleValues}`,
+      [staleMsg, ...staleOpenResult.rows.map(r => r.id)]
     );
   }
 
-  return result.rowCount;
+  // ── 4. Expire legacy Open tickets with zero messages ────────────────────────
+  // MAX(stamp) IS NULL causes step 3's < comparison to always be false in SQL.
+  // Any Open ticket with no HealthChatPrompt rows is stale by definition —
+  // new tickets always have a creation message from _createTicket.
+  const noMsgParams = [];
+  let noMsgQuery = `
+    UPDATE "HealthChat"
+    SET status = 'Expired',
+        session_end = NOW(),
+        closed_by_type = 'System'
+    WHERE status = 'Open'
+    AND NOT EXISTS (
+      SELECT 1 FROM "HealthChatPrompt"
+      WHERE "consultationVirtualId" = "HealthChat".id
+    )
+  `;
+
+  if (patientId) {
+    noMsgQuery += ` AND "HealthChat"."patientId" = $1`;
+    noMsgParams.push(patientId);
+  }
+
+  noMsgQuery += ` RETURNING id`;
+
+  const noMsgResult = await db.query(noMsgQuery, noMsgParams);
+  expiredCount += noMsgResult.rowCount;
+
+  if (noMsgResult.rows.length > 0) {
+    const noMsgMsg = 'This ticket has been automatically closed (no activity recorded).';
+    const noMsgValues = noMsgResult.rows
+      .map((_, i) => `($${i + 2}, $1, 'system', NULL, 'Medical')`)
+      .join(', ');
+    await db.query(
+      `INSERT INTO "HealthChatPrompt" ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ${noMsgValues}`,
+      [noMsgMsg, ...noMsgResult.rows.map(r => r.id)]
+    );
+  }
+
+  return expiredCount;
 }
 
 /**
@@ -424,6 +607,15 @@ async function hasActiveTicket(patientId) {
   return result.rowCount > 0;
 }
 
+async function getPatientIdFromChatId(chatId) {
+  const result = await db.query(
+    `SELECT "patientId" FROM "HealthChat"
+     WHERE id = $1`,
+    [chatId]
+  );
+  return result.rowCount > 0 ? result.rows[0].patientId : null;
+}
+
 module.exports = {
   CHAT_EXPIRY_DAYS,
   calculateExpiryDate,
@@ -438,5 +630,6 @@ module.exports = {
   formatMessage,
   hasActiveTicket,
   autoExpireTickets,
-  getLastMessageInfo
+  getLastMessageInfo,
+  getPatientIdFromChatId,
 };

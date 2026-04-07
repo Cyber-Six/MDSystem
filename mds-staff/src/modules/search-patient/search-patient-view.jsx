@@ -167,7 +167,10 @@ export default function SearchPatientView() {
               className="flex items-center gap-1.5 min-w-0 flex-1"
               title={`${tab.patientName} - ${tab.label}`}
             >
-              <span className="w-5 h-5 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+              <span
+                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                style={{ background: '#C9A01E' }}
+              >
                 {tab.patientName.charAt(0)}
               </span>
               <span className="truncate font-medium text-xs">

@@ -20,6 +20,10 @@ const consentRoutes = require('./routes/info/compliance/consent.js');
 
 const mediaRoutes = require('./routes/media/media.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
+const documentPatientRoutes = require('./routes/documents/document/document-patient.js');
+const settingsRoutes = require('./routes/settings/settings.js');
+const totpRoutes = require('./routes/settings/totp.js');
+const settingsPasswordRoutes = require('./routes/settings/password.js');
 
 const { initPatientEMRGraphQL, initMedicalEMRGraphQL } = require('./routes/emr/graphql.js');
 const { initStaffEMRGraphQL } = require('./routes/staff/emr/graphql.js');
@@ -94,6 +98,10 @@ app.use('/auth/push-token', pushTokenRoutes);
 app.use('/info/consent', consentRoutes);
 app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
+app.use('/documents', documentPatientRoutes);
+app.use('/settings', settingsRoutes);
+app.use('/settings/totp', totpRoutes);
+app.use('/settings/password', settingsPasswordRoutes);
 // ======================================
 
 // Serve static assets for the React app

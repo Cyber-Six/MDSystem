@@ -12,6 +12,7 @@ const MAX_FILE_SIZE = parseInt(process.env.MEDIA_SIZE_MB, 10) * 1024 * 1024 || 5
 const ALLOWED_MIME_TYPES = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
+  'image/webp': '.webp',
   'application/pdf': '.pdf',
   'video/mp4': '.mp4',
   'video/quicktime': '.mov',
@@ -24,6 +25,7 @@ const MEDIA_PATH = {
   appointmentRequirement: path.join(MEDIA_PATH_ENV, 'committed', 'appointment_requirements'),
   eConsultation: path.join(MEDIA_PATH_ENV, 'committed', 'e_consultation'), // Used for Health Chat feature
   announcement: path.join(MEDIA_PATH_ENV, 'committed', 'announcement'),
+  documents: path.join(MEDIA_PATH_ENV, 'committed', 'documents'),
 };
 
 // Ensure base directories exist
@@ -35,6 +37,7 @@ const MEDIA_PATH = {
     await fs.mkdir(MEDIA_PATH.appointmentRequirement, { recursive: true });
     await fs.mkdir(MEDIA_PATH.eConsultation, { recursive: true }); // Health Chat files
     await fs.mkdir(MEDIA_PATH.announcement, { recursive: true });
+    await fs.mkdir(MEDIA_PATH.documents, { recursive: true });
   } catch (err) {
     logger.error('Failed to create media directories', { error: err.message });
   }
@@ -142,7 +145,7 @@ async function checkFileByUuid(type, uuid) {
 }
 
 // Delete file from MEDIA_PATH[type] by UUID
-async function deleteFile(type, uuid) {
+async function deleteFile(type, uuid, throwNotFound = false) {
   // Validate type
   if (!MEDIA_PATH[type]) {
     throw new Error("INVALID_TYPE");
@@ -151,7 +154,7 @@ async function deleteFile(type, uuid) {
   const typeDir = MEDIA_PATH[type];
   const filename = await checkFileByUuid(type, uuid);
 
-  if (!filename) {
+  if (!filename && throwNotFound) {
     throw new Error("FILE_NOT_FOUND");
   }
 

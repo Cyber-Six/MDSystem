@@ -16,18 +16,24 @@ const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventor
 const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 const { initRoleManagementGraphQL } = require('./routes/role-management/graphql.js');
+const { initDashboardGraphQL } = require('./routes/dashboard/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
-const analyticsRoutes = require('./routes/documents/analytics.js');
+const analyticsRoutes = require('./routes/documents/analytics/analytics.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
 const staffRoutes = require('./routes/staff/staff.js');
-const dashboardRoutes = require('./routes/dashboard/dashboard.js');
+const dashboardRestRoutes = require('./routes/dashboard/rest-endpoint.js');
 const mediaRoutes = require('./routes/media/media.js');
-const documentRoutes = require('./routes/documents/documents.js');
+const documentStaffRoutes = require('./routes/documents/document/document-staff.js');
 const emailAuthRoutes = require('./routes/auth/email/emailauth.js');
+const settingsRoutes = require('./routes/settings/settings.js');
+const totpRoutes = require('./routes/settings/totp.js');
+const settingsPasswordRoutes = require('./routes/settings/password.js');
+const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
+
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
 const { jwtProtect } = require('./config/middleware/jwtProtect');
@@ -75,18 +81,24 @@ initMedicalMedicineRequestGraphQL(app);
 initPrescriptionGraphQL(app);
 initMedicalHealthChatGraphQL(app);
 initRoleManagementGraphQL(app);
+initDashboardGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/auth/email', emailAuthRoutes);
+app.use('/auth/refresh', refreshAuthRoutes);
+
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);
-app.use('/dashboard', dashboardRoutes);
+app.use('/dashboard/rest', dashboardRestRoutes);
 app.use('/media', mediaRoutes);
 app.use('/announcement', AnnouncementRoutes);
 app.use('/analytics', analyticsRoutes);
-app.use('/documents', documentRoutes);
+app.use('/documents', documentStaffRoutes);
+app.use('/settings/totp', totpRoutes);
+app.use('/settings/password', settingsPasswordRoutes);
+app.use('/settings', settingsRoutes);
 
 // ======================================
 // AI Medical Chatbot — proxied to MDS-Chatbot microservice

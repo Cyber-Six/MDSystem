@@ -1,6 +1,9 @@
 -- Medicine request rejection reason column (added post-initial build)
 ALTER TABLE "MedicineRequestLog" ADD COLUMN IF NOT EXISTS "rejection_reason" text;
 
+-- Appointment purpose column (added post-initial build)
+ALTER TABLE "patientSlot" ADD COLUMN IF NOT EXISTS "purpose" text;
+
 -- Role management: insert new permission labels (idempotent)
 CREATE INDEX ON "patientUpdateLog"("patientId", created_at DESC);
 CREATE INDEX ON "UsersPersonal"(branch);
@@ -26,6 +29,11 @@ ALTER TABLE "ScheduleDateEntity"
 ADD CONSTRAINT schedule_unique_slot_date
 UNIQUE ("slotId", "scheduledDate");
 
+-- TOTP 2FA columns (v0.8.1-dev)
+ALTER TABLE "UserCredentials"
+  ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(255) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false;
+
 ALTER TABLE "DomainTypeCatalog"
 ADD CONSTRAINT uniq_domain_name UNIQUE (domain, name);
 
@@ -41,6 +49,10 @@ ADD CONSTRAINT uniq_oral_appliance_name UNIQUE (name);
 ALTER TABLE "slotScheduler"
 ADD CONSTRAINT slot_label_location_unique
 UNIQUE (label, location);
+
+ALTER TABLE "SlotCustomDate"
+ADD CONSTRAINT "SlotCustomDate_slotScheduleId_scheduledDate_key"
+UNIQUE ("slotScheduleId", "scheduledDate");
 
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
@@ -284,12 +296,22 @@ VALUES
 ('ALLOW_TO_MANAGE_MEDICINE_REQUESTS', 'Permission to manage medicine requests'),
 ('ALLOW_TO_PRESCRIBE', 'Permission to prescribe medicines'),
 ('ALLOW_TO_APPROVE_MEDICINE_REQUEST', 'Permission to approve medicine requests'),
+('ALLOW_TO_CONFIGURE_INVENTORY', 'Permission to configure inventory settings and thresholds'),
 
 ('ALLOW_TO_ACCESS_HEALTH_CHAT', 'Permission to access health chat features'),
-('ALLOW_TO_MANAGE_HEALTH_CHAT', 'Permission to manage health chat sessions'),
 
 ('ALLOW_TO_VIEW_ANALYTICS', 'Permission to view analytics and reports'),
 ('ALLOW_TO_EXPORT_ANALYTICS', 'Permission to export analytics data'),
 
 ('ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'Permission to access role management panel'),
 ('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates');
+
+-- User preferences table (stores portal settings per user)
+CREATE TABLE IF NOT EXISTS "UsersPreferences" (
+  id           INTEGER PRIMARY KEY REFERENCES "UserCredentials"(id) ON DELETE CASCADE,
+  appearance   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  notification JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id);

@@ -1,7 +1,12 @@
 /**
  * Medicine Request Screen
  * Mirrors mds-patient medicine-request module
- * 
+ *
+ * Features ported from web:
+ * - Email-based location auto-detection (m-prefix → Arlegui/Casal, q-prefix → Quezon City)
+ * - Cancel-and-resubmit flow when a pending request already exists
+ * - In-app notification banner for approved/rejected requests
+ *
  * Uses backend queries: getAvailableMedicine, getMedicineStatus, createMedicineRequest
  * Branches: Casal, Arlegui, Quezon City (LocationDesignation enum)
  */
@@ -16,10 +21,15 @@ import {
   ActivityIndicator,
   StyleSheet,
   RefreshControl,
+  Modal,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useBanner } from '../../context/BannerContext';
+import { getPatientProfile } from '../../services/profile-service';
 import {
   BRANCHES,
   getAvailableMedicine,
@@ -30,6 +40,8 @@ import {
   type MedicineRequest,
   type LocationDesignation,
 } from '../../services/medicine-service';
+
+const DISMISSED_KEY = 'dismissedMedicalNotifications';
 
 interface GroupedMedicine {
   item_code: string;
@@ -56,6 +68,11 @@ export const MedicineRequestScreen: React.FC = () => {
   // Views
   const [view, setView] = useState<'form' | 'status'>('form');
 
+  // Email-based location detection (mirrors mds-patient)
+  const [emailPrefix, setEmailPrefix] = useState<string>('');
+  const [allowedBranches, setAllowedBranches] = useState(BRANCHES);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+
   // Form state
   const [purpose, setPurpose] = useState('');
   const [location, setLocation] = useState<LocationDesignation | ''>('');
@@ -65,7 +82,14 @@ export const MedicineRequestScreen: React.FC = () => {
   const [loadingMeds, setLoadingMeds] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+
+  // Cancel-and-resubmit flow
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [pendingItems, setPendingItems] = useState<Array<{ batchId: number; quantity: number }>>([]);
+
+  // In-app notification for approved/rejected requests
+  const [notificationRequest, setNotificationRequest] = useState<MedicineRequest | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
   // Status state
   const [requests, setRequests] = useState<MedicineRequest[]>([]);
@@ -73,14 +97,63 @@ export const MedicineRequestScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
-  // Load status on mount so we can check pending before submit
+  // ── Load profile & detect location access ──────────────────────────────
   useEffect(() => {
-    getMedicineStatus()
-      .then(setRequests)
+    getPatientProfile()
+      .then((profile) => {
+        const email = profile?.email?.toLowerCase()?.trim() || '';
+        const prefix = email.charAt(0);
+        setEmailPrefix(prefix);
+
+        if (prefix === 'q') {
+          // Quezon City campus — auto-assign, no choice needed
+          setAllowedBranches(BRANCHES.filter((b) => b.value === 'QuezonCity'));
+          setLocation('QuezonCity');
+        } else if (prefix === 'm') {
+          // Main campus — can choose Arlegui or Casal
+          setAllowedBranches(BRANCHES.filter((b) => b.value !== 'QuezonCity'));
+        }
+        // else: unknown prefix → show all branches
+      })
+      .catch(() => {})
+      .finally(() => setIsProfileLoading(false));
+  }, []);
+
+  // ── Load dismissed notifications from storage ──────────────────────────
+  useEffect(() => {
+    AsyncStorage.getItem(DISMISSED_KEY)
+      .then((raw) => {
+        if (raw) setDismissedIds(JSON.parse(raw));
+      })
       .catch(() => {});
   }, []);
 
-  // Load medicines when location changes
+  // ── Compute which request (if any) needs a notification banner ─────────
+  useEffect(() => {
+    if (!requests.length) { setNotificationRequest(null); return; }
+
+    const notifiable = requests
+      .filter((r) => {
+        const s = r.status?.toLowerCase();
+        return s === 'approved' || s === 'rejected';
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const toShow = notifiable.find((r) => !dismissedIds.includes(String(r.id)));
+    setNotificationRequest(toShow ?? null);
+  }, [requests, dismissedIds]);
+
+  const handleDismissNotification = useCallback(async () => {
+    if (!notificationRequest) return;
+    const newIds = [...dismissedIds, String(notificationRequest.id)];
+    setDismissedIds(newIds);
+    setNotificationRequest(null);
+    try {
+      await AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify(newIds));
+    } catch {}
+  }, [notificationRequest, dismissedIds]);
+
+  // ── Load medicines when location changes ──────────────────────────────
   useEffect(() => {
     if (!location) {
       setMedicines([]);
@@ -116,7 +189,7 @@ export const MedicineRequestScreen: React.FC = () => {
     load();
   }, [location]);
 
-  // Load request history
+  // ── Load request history ───────────────────────────────────────────────
   const loadHistory = useCallback(async () => {
     setLoadingStatus(true);
     try {
@@ -130,28 +203,16 @@ export const MedicineRequestScreen: React.FC = () => {
     }
   }, []);
 
+  // Load on mount and when switching to status view
+  useEffect(() => {
+    loadHistory();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (view === 'status') loadHistory();
   }, [view, loadHistory]);
 
-  // Toggle medicine by item_code
-  const toggleMedicine = (code: string) => {
-    setSelectedCodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(code)) {
-        next.delete(code);
-      } else {
-        if (next.size >= 2) {
-          setError('You can select a maximum of 2 medicines per request.');
-          return prev;
-        }
-        next.add(code);
-      }
-      return next;
-    });
-  };
-
-  // Submit
+  // ── Submit (with cancel-and-resubmit gate) ────────────────────────────
   const handleSubmit = async () => {
     setError(null);
     if (!purpose.trim()) { setError('Please enter the purpose of your request.'); return; }
@@ -169,20 +230,25 @@ export const MedicineRequestScreen: React.FC = () => {
       items.push({ batchId: parseInt(group.batches[0].id, 10), quantity: 1 });
     }
 
-    // Check for pending request
+    // If there's a pending request, offer cancel-and-resubmit (mirrors web)
     const hasPending = requests.some((r) => r.status?.toLowerCase() === 'pending');
     if (hasPending) {
-      setError('You already have a pending request. Please cancel it first or wait for it to be processed.');
+      setPendingItems(items);
+      setShowCancelConfirm(true);
       return;
     }
 
+    await doSubmit(items);
+  };
+
+  const doSubmit = async (items: Array<{ batchId: number; quantity: number }>) => {
     setSubmitting(true);
     try {
-      const result = await createMedicineRequest(purpose.trim(), location, items);
+      const result = await createMedicineRequest(purpose.trim(), location as LocationDesignation, items);
       setRequests((prev) => [result, ...prev]);
       showBanner({ type: 'success', message: 'Medicine request submitted successfully!' });
       setPurpose('');
-      setLocation('');
+      if (emailPrefix !== 'q') setLocation('');
       setSelectedCodes(new Set());
       setMedicines([]);
       setGrouped([]);
@@ -193,6 +259,46 @@ export const MedicineRequestScreen: React.FC = () => {
     }
   };
 
+  const cancelPendingAndResubmit = async () => {
+    setShowCancelConfirm(false);
+    setSubmitting(true);
+    setError(null);
+    try {
+      await cancelMedicineRequest();
+      // Update local state immediately
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.status?.toLowerCase() === 'pending' ? { ...r, status: 'Cancelled' } : r
+        )
+      );
+      await doSubmit(pendingItems);
+    } catch (err: any) {
+      setError(
+        err.message ||
+          'Unable to cancel your existing request. Please contact clinic staff.',
+      );
+      setSubmitting(false);
+    }
+  };
+
+  // ── Toggle medicine by item_code ──────────────────────────────────────
+  const toggleMedicine = (code: string) => {
+    setSelectedCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) {
+        next.delete(code);
+      } else {
+        if (next.size >= 2) {
+          setError('You can select a maximum of 2 medicines per request.');
+          return prev;
+        }
+        next.add(code);
+      }
+      return next;
+    });
+  };
+
+  // ── Cancel a single pending request ──────────────────────────────────
   const handleCancel = async () => {
     setCancelling(true);
     try {
@@ -211,7 +317,35 @@ export const MedicineRequestScreen: React.FC = () => {
       style={[styles.container, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}
       edges={['top']}
     >
-      {/* Tab bar */}
+      {/* ── Cancel-and-Resubmit Confirmation Modal ─────────────────────── */}
+      <Modal transparent visible={showCancelConfirm} animationType="fade" onRequestClose={() => setShowCancelConfirm(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
+            <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+              Pending Request Exists
+            </Text>
+            <Text style={[styles.modalBody, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
+              You already have a pending medicine request. Would you like to cancel it and submit this new request instead?
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                onPress={() => setShowCancelConfirm(false)}
+              >
+                <Text style={{ color: isDark ? colors.neutral[300] : colors.neutral[700], fontWeight: '600' }}>Keep Pending</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.error[500] }]}
+                onPress={cancelPendingAndResubmit}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Cancel & Resubmit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
       <View style={[styles.tabBar, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <TouchableOpacity
           style={[styles.tab, view === 'form' && styles.activeTab, view === 'form' && { borderBottomColor: colors.primary[500] }]}
@@ -241,7 +375,7 @@ export const MedicineRequestScreen: React.FC = () => {
                 setRefreshing(true);
                 if (location) {
                   try {
-                    const meds = await getAvailableMedicine(location);
+                    const meds = await getAvailableMedicine(location as LocationDesignation);
                     setMedicines(meds);
                     const groupMap: Record<string, GroupedMedicine> = {};
                     meds.forEach((m) => {
@@ -263,27 +397,19 @@ export const MedicineRequestScreen: React.FC = () => {
         >
           {/* Header */}
           <View style={[styles.headerBanner, { backgroundColor: colors.success[500] }]}>
-            <Text style={styles.headerIcon}>💊</Text>
+            <MaterialCommunityIcons name="pill" size={28} color="#FFFFFF" style={styles.headerIcon} />
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>Medicine Request</Text>
               <Text style={styles.headerSubtitle}>Request medicines from the clinic</Text>
             </View>
           </View>
 
-          {/* Error / Success */}
+          {/* Error */}
           {error && (
             <View style={[styles.alertBox, { backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50], borderColor: colors.error[400] }]}>
               <Text style={{ color: colors.error[500], flex: 1 }}>{error}</Text>
               <TouchableOpacity onPress={() => setError(null)}>
-                <Text style={{ color: colors.error[500], fontWeight: 'bold', fontSize: 18 }}>×</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {success && (
-            <View style={[styles.alertBox, { backgroundColor: isDark ? 'rgba(34,197,94,0.15)' : colors.success[50], borderColor: colors.success[400] }]}>
-              <Text style={{ color: colors.success[500], flex: 1 }}>{success}</Text>
-              <TouchableOpacity onPress={() => setSuccess(null)}>
-                <Text style={{ color: colors.success[500], fontWeight: 'bold', fontSize: 18 }}>×</Text>
+                <Ionicons name="close" size={18} color={colors.error[500]} />
               </TouchableOpacity>
             </View>
           )}
@@ -312,41 +438,47 @@ export const MedicineRequestScreen: React.FC = () => {
             />
           </View>
 
-          {/* Branch Selection */}
+          {/* Branch Selection — uses allowedBranches from email detection */}
           <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
             <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
               Branch <Text style={{ color: colors.error[500] }}>*</Text>
             </Text>
-            <View style={styles.branchRow}>
-              {BRANCHES.map((b) => (
-                <TouchableOpacity
-                  key={b.value}
-                  style={[
-                    styles.branchChip,
-                    {
-                      backgroundColor: location === b.value
-                        ? (isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50])
-                        : (isDark ? colors.neutral[700] : colors.neutral[100]),
-                      borderColor: location === b.value ? colors.primary[500] : (isDark ? colors.neutral[600] : colors.neutral[200]),
-                    },
-                  ]}
-                  onPress={() => setLocation(b.value)}
-                >
-                  <Text
+            {isProfileLoading ? (
+              <ActivityIndicator size="small" color={colors.primary[500]} />
+            ) : (
+              <View style={styles.branchRow}>
+                {allowedBranches.map((b) => (
+                  <TouchableOpacity
+                    key={b.value}
+                    disabled={emailPrefix === 'q'}
                     style={[
-                      styles.branchText,
+                      styles.branchChip,
                       {
-                        color: location === b.value
-                          ? (isDark ? colors.primary[300] : colors.primary[700])
-                          : (isDark ? colors.neutral[300] : colors.neutral[600]),
+                        backgroundColor: location === b.value
+                          ? (isDark ? 'rgba(241,197,38,0.15)' : colors.primary[50])
+                          : (isDark ? colors.neutral[700] : colors.neutral[100]),
+                        borderColor: location === b.value ? colors.primary[500] : (isDark ? colors.neutral[600] : colors.neutral[200]),
                       },
                     ]}
+                    onPress={() => setLocation(b.value)}
                   >
-                    {b.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text
+                      style={[
+                        styles.branchText,
+                        {
+                          color: location === b.value
+                            ? (isDark ? colors.primary[300] : colors.primary[700])
+                            : (isDark ? colors.neutral[300] : colors.neutral[600]),
+                        },
+                      ]}
+                    >
+                      {b.label}
+                      {emailPrefix === 'q' ? ' (Auto)' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Medicines */}
@@ -372,7 +504,7 @@ export const MedicineRequestScreen: React.FC = () => {
                 </View>
               ) : grouped.length === 0 ? (
                 <View style={[styles.emptyState, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
-                  <Text style={styles.emptyIcon}>💊</Text>
+                  <MaterialCommunityIcons name="pill" size={36} color={isDark ? colors.neutral[400] : colors.neutral[500]} style={styles.emptyIcon} />
                   <Text style={[styles.emptyText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
                     No medicines available for this branch.
                   </Text>
@@ -408,7 +540,7 @@ export const MedicineRequestScreen: React.FC = () => {
                       </View>
                       {isSelected && (
                         <View style={[styles.selectedBadge, { backgroundColor: colors.primary[500] }]}>
-                          <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '600' }}>✓</Text>
+                          <Ionicons name="checkmark" size={11} color="#FFFFFF" />
                         </View>
                       )}
                     </TouchableOpacity>
@@ -443,6 +575,41 @@ export const MedicineRequestScreen: React.FC = () => {
             />
           }
         >
+          {/* In-app notification banner for approved/rejected requests */}
+          {notificationRequest && (
+            <View
+              style={[
+                styles.notifBanner,
+                {
+                  backgroundColor: notificationRequest.status?.toLowerCase() === 'approved'
+                    ? (isDark ? 'rgba(34,197,94,0.15)' : colors.success[50])
+                    : (isDark ? 'rgba(239,68,68,0.15)' : colors.error[50]),
+                  borderColor: notificationRequest.status?.toLowerCase() === 'approved'
+                    ? colors.success[400]
+                    : colors.error[400],
+                },
+              ]}
+            >
+              <Ionicons
+                name={notificationRequest.status?.toLowerCase() === 'approved' ? 'checkmark-circle' : 'close-circle'}
+                size={20}
+                color={notificationRequest.status?.toLowerCase() === 'approved' ? colors.success[500] : colors.error[500]}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.notifTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+                  Request {notificationRequest.status}
+                </Text>
+                {notificationRequest.notes ? (
+                  <Text style={[styles.notifBody, { color: isDark ? colors.neutral[400] : colors.neutral[600] }]}>
+                    {notificationRequest.notes}
+                  </Text>
+                ) : null}
+              </View>
+              <TouchableOpacity onPress={handleDismissNotification} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                <Ionicons name="close" size={18} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
+              </TouchableOpacity>
+            </View>
+          )}
           {loadingStatus && !refreshing ? (
             <View style={styles.centeredLoader}>
               <ActivityIndicator size="large" color={colors.primary[500]} />
@@ -452,7 +619,7 @@ export const MedicineRequestScreen: React.FC = () => {
             </View>
           ) : requests.length === 0 ? (
             <View style={[styles.emptyState, styles.emptyStateCenter, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
-              <Text style={styles.emptyIcon}>📋</Text>
+              <Ionicons name="clipboard" size={36} color={isDark ? colors.neutral[400] : colors.neutral[500]} style={styles.emptyIcon} />
               <Text style={[styles.emptyTitle, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
                 No Requests Yet
               </Text>
@@ -568,7 +735,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 14,
   },
-  headerIcon: { fontSize: 28 },
+  headerIcon: { marginTop: 1 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
 
@@ -653,7 +820,7 @@ const styles = StyleSheet.create({
   loadingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 20 },
   emptyState: { padding: 32, borderRadius: 12, alignItems: 'center' },
   emptyStateCenter: { marginTop: 40 },
-  emptyIcon: { fontSize: 36, marginBottom: 12 },
+  emptyIcon: { marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
   emptyText: { fontSize: 14, textAlign: 'center' },
   primaryButton: {
@@ -674,6 +841,42 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   cancelButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
+
+  // Cancel-and-resubmit modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 24,
+    gap: 16,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
+  modalBody: { fontSize: 14, lineHeight: 22 },
+  modalActions: { flexDirection: 'row', gap: 12, justifyContent: 'flex-end' },
+  modalBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+
+  // Notification banner
+  notifBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  notifTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  notifBody: { fontSize: 13 },
 });
 
 export default MedicineRequestScreen;

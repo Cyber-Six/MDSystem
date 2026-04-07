@@ -15,9 +15,12 @@ import {
 
 import { useTheme, colors } from '../../context/ThemeContext';
 import { getPatientProfile, PatientProfile } from '../../services/profile-service';
+import { Ionicons } from '@expo/vector-icons';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const ProfileField: React.FC<{
-  icon: string;
+  icon: IoniconName;
   label: string;
   value: string;
   isDark: boolean;
@@ -30,8 +33,8 @@ const ProfileField: React.FC<{
       },
     ]}
   >
-    <View style={styles.fieldIcon}>
-      <Text style={{ fontSize: 18 }}>{icon}</Text>
+    <View style={[styles.fieldIcon, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}>
+      <Ionicons name={icon} size={18} color={isDark ? colors.neutral[300] : colors.secondary[600]} />
     </View>
     <View style={{ flex: 1 }}>
       <Text
@@ -134,21 +137,21 @@ export const ProfileScreen: React.FC = () => {
             Personal Information
           </Text>
 
-          <ProfileField icon="📧" label="Email" value={profile?.email || '—'} isDark={isDark} />
-          <ProfileField icon="📞" label="Contact Number" value={profile?.contactNumber || '—'} isDark={isDark} />
+          <ProfileField icon="mail" label="Email" value={profile?.email || '—'} isDark={isDark} />
+          <ProfileField icon="call" label="Contact Number" value={profile?.contactNumber || '—'} isDark={isDark} />
           <ProfileField
-            icon="🆘"
+            icon="alert-circle"
             label="Emergency Contact 1"
             value={profile?.firstEmergencyContactNumber || '—'}
             isDark={isDark}
           />
           <ProfileField
-            icon="🆘"
+            icon="alert-circle"
             label="Emergency Contact 2"
             value={profile?.secondEmergencyContactNumber || '—'}
             isDark={isDark}
           />
-          <ProfileField icon="🪪" label="Student ID" value={profile?.identifier || '—'} isDark={isDark} />
+          <ProfileField icon="card" label="Student ID" value={profile?.identifier || '—'} isDark={isDark} />
         </View>
 
         <Text

@@ -17,26 +17,32 @@ import { useAuth } from '../../context/AuthContext';
 import { logout, axiosRequest } from '../../core';
 import { unregisterPushToken } from '../../services/notification-service';
 import { getPatientProfile } from '../../services/profile-service';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface MoreMenuScreenProps {
   navigation: any;
 }
 
 interface MenuItem {
-  icon: string;
+  iconName: string;
+  iconLib?: 'Ionicons' | 'MCI';
   label: string;
   screen: string;
   description?: string;
 }
 
 const menuItems: MenuItem[] = [
-  { icon: '👤', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
-  { icon: '💊', label: 'Medicine Request', screen: 'MedicineRequest', description: 'Request medicines from the clinic' },
-  { icon: '📋', label: 'Medical Record', screen: 'InitialRecordForm', description: 'View or fill your record' },
-  { icon: '🔑', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
-  { icon: '📜', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
-  { icon: '❓', label: 'FAQs', screen: 'FAQs', description: 'Common questions' },
-  { icon: '⚙️', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
+  { iconName: 'person', label: 'Profile', screen: 'Profile', description: 'View your personal info' },
+  { iconName: 'pill', iconLib: 'MCI', label: 'Medicine Request', screen: 'MedicineRequest', description: 'Request medicines from the clinic' },
+  { iconName: 'clipboard', label: 'Medical Record', screen: 'InitialRecordForm', description: 'View or fill your record' },
+  { iconName: 'create', label: 'Update Record', screen: 'UpdateRecordChoice', description: 'Update your medical or dental record' },
+  { iconName: 'folder-open', label: 'My Documents', screen: 'MyDocuments', description: 'View your prescriptions & certificates' },
+  { iconName: 'key', label: 'Change Password', screen: 'ChangePassword', description: 'Update your password' },
+  { iconName: 'document-text', label: 'Login Activity', screen: 'LoginActivity', description: 'Recent sessions' },
+  { iconName: 'megaphone', label: 'Announcements', screen: 'Announcements', description: 'Clinic news and announcements' },
+  { iconName: 'help-circle', label: 'FAQs', screen: 'FAQs', description: 'Common questions' },
+  { iconName: 'settings', label: 'Settings', screen: 'Settings', description: 'Theme & preferences' },
 ];
 
 export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) => {
@@ -143,7 +149,13 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
               onPress={() => navigation.navigate(item.screen)}
               activeOpacity={0.6}
             >
-              <Text style={styles.menuIcon}>{item.icon}</Text>
+              <View style={[styles.menuIconContainer, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}>
+                {item.iconLib === 'MCI' ? (
+                  <MaterialCommunityIcons name={item.iconName as any} size={20} color={isDark ? colors.neutral[300] : colors.secondary[700]} />
+                ) : (
+                  <Ionicons name={item.iconName as any} size={20} color={isDark ? colors.neutral[300] : colors.secondary[700]} />
+                )}
+              </View>
               <View style={styles.menuTextContainer}>
                 <Text
                   style={[
@@ -190,7 +202,7 @@ export const MoreMenuScreen: React.FC<MoreMenuScreenProps> = ({ navigation }) =>
           onPress={handleLogout}
           activeOpacity={0.7}
         >
-          <Text style={styles.signOutIcon}>🚪</Text>
+          <Ionicons name="log-out" size={20} color={colors.error[500]} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
@@ -261,7 +273,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 14,
   },
-  menuIcon: { fontSize: 22 },
+  menuIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   menuTextContainer: { flex: 1 },
   menuLabel: { fontSize: 15, fontWeight: '500' },
   menuDescription: { fontSize: 12, marginTop: 1 },
@@ -276,7 +294,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
-  signOutIcon: { fontSize: 18 },
   signOutText: {
     fontSize: 15,
     fontWeight: '600',

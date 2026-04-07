@@ -61,6 +61,34 @@ function branchFilter(branch, alias = 'up', paramIndex = 3) {
 }
 
 // ============================================================
+// DATE GROUPING HELPER
+// ============================================================
+
+const VALID_GROUP_BY = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'];
+
+/**
+ * Returns SQL expression and alias for date grouping.
+ * @param {string} groupBy - 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+ * @param {string} dateColumn - The date column to group by
+ * @returns {{ expr: string, alias: string }}
+ */
+function dateGroupExpr(groupBy, dateColumn) {
+  switch (groupBy) {
+    case 'daily':
+      return { expr: `TO_CHAR(${dateColumn}, 'YYYY-MM-DD')`, alias: 'period' };
+    case 'weekly':
+      return { expr: `TO_CHAR(date_trunc('week', ${dateColumn}), 'YYYY-"W"IW')`, alias: 'period' };
+    case 'quarterly':
+      return { expr: `TO_CHAR(${dateColumn}, 'YYYY-"Q"Q')`, alias: 'period' };
+    case 'yearly':
+      return { expr: `TO_CHAR(${dateColumn}, 'YYYY')`, alias: 'period' };
+    case 'monthly':
+    default:
+      return { expr: `TO_CHAR(${dateColumn}, 'YYYY-MM')`, alias: 'period' };
+  }
+}
+
+// ============================================================
 // QUERY FUNCTIONS - Add your custom queries here
 // ============================================================
 
@@ -85,20 +113,20 @@ async function consultationsByType(branch, startDate, endDate) {
 }
 
 /**
- * Consultations by Status
+ * Consultations by Mode (Onsite vs Virtual)
  */
-async function consultationsByStatus(branch, startDate, endDate) {
+async function consultationsByMode(branch, startDate, endDate) {
   const bf = branchFilter(branch);
   const result = await db.query(`
-    SELECT c.status, COUNT(*) as count
+    SELECT c.mode, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
-    GROUP BY c.status ORDER BY count DESC
+    GROUP BY c.mode ORDER BY count DESC
   `, [startDate, endDate, ...bf.params]);
 
-  const labels = result.rows.map(r => r.status);
+  const labels = result.rows.map(r => r.mode);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
   return { labels, values, total };
@@ -150,51 +178,55 @@ async function diagnosesByType(branch, startDate, endDate) {
 }
 
 /**
- * BMI Trends Over Time (Monthly)
+ * BMI Trends Over Time (supports daily/weekly/monthly/quarterly/yearly grouping)
  */
-async function bmiTrends(branch, startDate, endDate) {
+async function bmiTrends(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
+  const dg = dateGroupExpr(groupBy, 'vs.created_at');
   const result = await db.query(`
-    SELECT TO_CHAR(vs.recorded_at, 'YYYY-MM') as month,
+    SELECT ${dg.expr} as ${dg.alias},
       ROUND(AVG(vs.weight_kg / POWER(vs.height_cm / 100, 2))::numeric, 2) as avg_bmi,
       COUNT(*) as sample_count
     FROM "VitalSigns" vs
-    INNER JOIN "Consultation" c ON vs.id = c."vitalSignsId"
-    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "Patients" p ON vs."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE vs.recorded_at BETWEEN $1 AND $2 AND vs.height_cm > 0 AND vs.weight_kg > 0 ${bf.clause}
-    GROUP BY TO_CHAR(vs.recorded_at, 'YYYY-MM') ORDER BY month
+    WHERE vs.created_at BETWEEN $1 AND $2 AND vs.height_cm > 0 AND vs.weight_kg > 0 ${bf.clause}
+    GROUP BY ${dg.expr} ORDER BY ${dg.alias}
   `, [startDate, endDate, ...bf.params]);
 
-  const labels = result.rows.map(r => r.month);
+  const labels = result.rows.map(r => r.period);
   const values = result.rows.map(r => parseFloat(r.avg_bmi));
   const total = result.rows.reduce((sum, r) => sum + parseInt(r.sample_count), 0);
-  return { labels, values, total };
+  return { labels, values, total, groupBy };
 }
 
 /**
- * Blood Pressure Trends Over Time (Monthly - Average Systolic)
+ * Blood Pressure Trends Over Time (supports daily/weekly/monthly/quarterly/yearly grouping)
+ * Parses BP format "systolic/diastolic" (e.g. "120/80") and returns both averages.
  */
-async function bloodPressureTrends(branch, startDate, endDate) {
+async function bloodPressureTrends(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
+  const dg = dateGroupExpr(groupBy, 'vs.created_at');
   const result = await db.query(`
-    SELECT TO_CHAR(vs.recorded_at, 'YYYY-MM') as month,
+    SELECT ${dg.expr} as ${dg.alias},
       ROUND(AVG(CAST(SPLIT_PART(vs.blood_pressure, '/', 1) AS INTEGER))::numeric, 1) as avg_systolic,
       ROUND(AVG(CAST(SPLIT_PART(vs.blood_pressure, '/', 2) AS INTEGER))::numeric, 1) as avg_diastolic,
       COUNT(*) as sample_count
     FROM "VitalSigns" vs
-    INNER JOIN "Consultation" c ON vs.id = c."vitalSignsId"
-    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "Patients" p ON vs."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
-    WHERE vs.recorded_at BETWEEN $1 AND $2 AND vs.blood_pressure IS NOT NULL
+    WHERE vs.created_at BETWEEN $1 AND $2 AND vs.blood_pressure IS NOT NULL
     AND vs.blood_pressure ~ '^[0-9]+/[0-9]+$' ${bf.clause}
-    GROUP BY TO_CHAR(vs.recorded_at, 'YYYY-MM') ORDER BY month
+    GROUP BY ${dg.expr} ORDER BY ${dg.alias}
   `, [startDate, endDate, ...bf.params]);
 
-  const labels = result.rows.map(r => r.month);
+  const labels = result.rows.map(r => r.period);
   const values = result.rows.map(r => parseFloat(r.avg_systolic));
+  const diastolicValues = result.rows.map(r => parseFloat(r.avg_diastolic));
   const total = result.rows.reduce((sum, r) => sum + parseInt(r.sample_count), 0);
-  return { labels, values, total };
+  return { labels, values, diastolicValues, total, groupBy };
 }
 
 /**
@@ -378,23 +410,25 @@ async function appointmentsBySession(branch, startDate, endDate) {
 }
 
 /**
- * Monthly Consultation Trends
+ * Consultation Trends (supports daily/weekly/monthly/quarterly/yearly grouping)
  */
-async function consultationTrends(branch, startDate, endDate) {
+async function consultationTrends(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
+  const groupBy = VALID_GROUP_BY.includes(options.groupBy) ? options.groupBy : 'monthly';
+  const dg = dateGroupExpr(groupBy, 'c."createdAt"');
   const result = await db.query(`
-    SELECT TO_CHAR(c."createdAt", 'YYYY-MM') as month, COUNT(*) as count
+    SELECT ${dg.expr} as ${dg.alias}, COUNT(*) as count
     FROM "Consultation" c
     INNER JOIN "Patients" p ON c."patientId" = p.id
     INNER JOIN "UsersPersonal" up ON p.id = up.id
     WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
-    GROUP BY TO_CHAR(c."createdAt", 'YYYY-MM') ORDER BY month
+    GROUP BY ${dg.expr} ORDER BY ${dg.alias}
   `, [startDate, endDate, ...bf.params]);
 
-  const labels = result.rows.map(r => r.month);
+  const labels = result.rows.map(r => r.period);
   const values = result.rows.map(r => parseInt(r.count));
   const total = values.reduce((sum, val) => sum + val, 0);
-  return { labels, values, total };
+  return { labels, values, total, groupBy };
 }
 
 // ============================================================
@@ -410,9 +444,9 @@ const QUERY_HANDLERS = {
     handler: consultationsByType,
     description: 'Consultations grouped by Medical/Dental type',
   },
-  'consultations-by-status': {
-    handler: consultationsByStatus,
-    description: 'Consultations grouped by status (Open, Completed, etc.)',
+  'consultations-by-mode': {
+    handler: consultationsByMode,
+    description: 'Consultations grouped by mode (Onsite, Virtual)',
   },
   'consultation-trends': {
     handler: consultationTrends,
@@ -530,20 +564,26 @@ function getAvailableReports() {
 
 /**
  * Execute a query by dataType (with Redis caching)
+ * @param {string} dataType
+ * @param {string} branch
+ * @param {string} startDate
+ * @param {string} endDate
+ * @param {object} [options] - Extra options (e.g. { groupBy: 'weekly' })
  */
-async function executeQuery(dataType, branch, startDate, endDate) {
+async function executeQuery(dataType, branch, startDate, endDate, options = {}) {
   const config = QUERY_HANDLERS[dataType];
   if (!config) {
     throw new Error(`Unknown query type: ${dataType}`);
   }
 
-  // Check cache first
-  const cacheKey = getCacheKey(dataType, branch, startDate, endDate);
+  // Include groupBy in cache key when present
+  const groupSuffix = options.groupBy ? `:g=${options.groupBy}` : '';
+  const cacheKey = getCacheKey(dataType, branch, startDate, endDate) + groupSuffix;
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
-  logger.debug(`Executing query: ${dataType}`, { branch, startDate, endDate });
-  const result = await config.handler(branch, startDate, endDate);
+  logger.debug(`Executing query: ${dataType}`, { branch, startDate, endDate, options });
+  const result = await config.handler(branch, startDate, endDate, options);
 
   // Store in cache
   await setCachedResult(cacheKey, result);
@@ -553,12 +593,17 @@ async function executeQuery(dataType, branch, startDate, endDate) {
 
 /**
  * Execute multiple queries in parallel (batch endpoint optimization)
+ * @param {string[]} dataTypes
+ * @param {string} branch
+ * @param {string} startDate
+ * @param {string} endDate
+ * @param {object} [options] - Extra options (e.g. { groupBy: 'weekly' })
  */
-async function executeBatchQueries(dataTypes, branch, startDate, endDate) {
+async function executeBatchQueries(dataTypes, branch, startDate, endDate, options = {}) {
   const results = {};
   const promises = dataTypes.map(async (dataType) => {
     try {
-      const data = await executeQuery(dataType, branch, startDate, endDate);
+      const data = await executeQuery(dataType, branch, startDate, endDate, options);
       results[dataType] = { success: true, data };
     } catch (err) {
       results[dataType] = { success: false, error: err.message };
@@ -605,6 +650,7 @@ module.exports = {
   // Registry access
   QUERY_HANDLERS,
   REPORT_HANDLERS,
+  VALID_GROUP_BY,
 
   // List available types
   getAvailableQueries,

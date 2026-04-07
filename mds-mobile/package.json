@@ -7,14 +7,14 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch --passWithNoTests",
+    "test:coverage": "jest --coverage --passWithNoTests"
   },
   "jest": {
     "preset": "jest-expo",
     "setupFilesAfterEnv": [
-      "<rootDir>/__tests__/setup.ts"
+      "<rootDir>/jest.setup.ts"
     ],
     "moduleNameMapper": {
       "^expo/src/winter(.*)$": "<rootDir>/__mocks__/expo-winter.js",
@@ -28,34 +28,38 @@
   "dependencies": {
     "@mdsystem/core": "file:../packages/core",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/bottom-tabs": "^7.3.0",
     "@react-navigation/native": "^7.1.0",
     "@react-navigation/native-stack": "^7.3.0",
-    "axios": "^1.13.2",
+    "axios": "^1.14.0",
     "babel-preset-expo": "^54.0.9",
     "expo": "~54.0.30",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
     "expo-document-picker": "~14.0.8",
+    "expo-file-system": "~19.0.21",
     "expo-image-picker": "~17.0.10",
     "expo-notifications": "~0.32.16",
+    "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",
     "nativewind": "^4.2.2",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "react-native": "0.81.5",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.16.0",
     "react-native-web": "^0.21.0",
+    "socket.io-client": "^4.8.3",
     "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
-    "@testing-library/jest-native": "^5.4.3",
     "@testing-library/react-native": "^13.3.3",
-    "@types/jest": "^30.0.0",
+    "@types/jest": "^29.5.14",
     "@types/react": "~19.1.0",
-    "jest": "^30.3.0",
-    "jest-expo": "^55.0.11",
+    "jest": "^29.7.0",
+    "jest-expo": "^54.0.17",
     "typescript": "~5.9.2"
   },
   "expo": {

@@ -123,6 +123,14 @@ function generateDomainCodes(names, domain) {
   });
 }
 
+function ValidateLocationDesignation(branch) {
+  const validBranches = ["Manila", "QuezonCity", "Both"];
+  if (!branch || typeof branch !== "string") {
+    return false;
+  }
+  return validBranches.includes(branch);
+}
+
 function ValidateBranchbyUserBranch(userBranch, location) {
   const valid =
     (userBranch === "Manila" && ["Arlegui", "Casal"].includes(location)) ||
@@ -157,6 +165,7 @@ module.exports = {
   normalizeName,
   normalizeNumber,
   generateDomainCodes,
+  ValidateLocationDesignation,
   ValidateBranchbyUserBranch,
   ValidateUserBranchbyUserBranch
 };

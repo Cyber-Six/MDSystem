@@ -1,0 +1,250 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../../config/query.js');
+const { jwtProtect } = require('../../config/middleware/jwtProtect');
+const logger = require('../../utils/logger');
+
+// ── Dashboard Stats (REST) ──────────────────────────────────────────────────
+// DEPRECATED: Use GraphQL endpoint instead
+// Kept for backward compatibility
+
+/**
+ * GET /dashboard/stats
+ * Returns aggregated dashboard statistics for the staff portal.
+ * All counts are scoped to the requesting user's branch.
+ *
+ * @deprecated Use GraphQL endpoint POST /dashboard instead
+ */
+router.get('/stats', jwtProtect("medical"), async (req, res) => {
+    try {
+        const userBranch = await db.getUserBranch(req.user.id);
+
+        // Run all stat queries in parallel for efficiency
+        const [
+            pendingEmrResult,
+            pendingAppointmentsResult,
+            pendingMedicineResult,
+            activeConsultationsResult,
+            lowStockResult,
+            todayAppointmentsResult,
+            tomorrowSlotsResult,
+            recentPatientsResult,
+            pendingRequestsResult,
+        ] = await Promise.all([
+            // 1. Pending EMR update tickets
+            db.query(`
+                SELECT COUNT(DISTINCT pul."patientId")::int AS count
+                FROM "patientUpdateLog" pul
+                JOIN "UsersPersonal" up ON up.id = pul."patientId"
+                WHERE pul.status::text IN ('Pending', 'InProgress', 'Revision', 'RevisionSubmitted')
+                  AND ($1 = 'Both' OR up.branch::text = $1 OR up.branch = 'Both')
+            `, [userBranch]),
+
+            // 2. Pending appointment requests
+            db.query(`
+                SELECT COUNT(*)::int AS count
+                FROM "patientSlot" ps
+                WHERE ps.status::text = 'Pending'
+            `),
+
+            // 3. Pending medicine requests
+            db.query(`
+                SELECT COUNT(*)::int AS count
+                FROM "MedicineRequestLog" mrl
+                WHERE mrl.status::text = 'Pending'
+                  AND ($1 = 'Both' OR mrl.location::text = $1)
+            `, [userBranch]),
+
+            // 4. Active consultations (Open, ReOpen, Created)
+            db.query(`
+                SELECT COUNT(*)::int AS count
+                FROM "Consultation" c
+                JOIN "UsersPersonal" up ON up.id = c."patientId"
+                WHERE c.status::text IN ('Open', 'ReOpen', 'Created')
+                  AND ($1 = 'Both' OR up.branch::text = $1 OR up.branch = 'Both')
+            `, [userBranch]),
+
+            // 5. Low stock items
+            db.query(`
+                SELECT COUNT(*)::int AS count FROM (
+                    SELECT DISTINCT mi.id
+                    FROM "MedicalItems" mi
+                    WHERE mi.active = true AND mi.category::text = 'Medicine'
+                      AND EXISTS (
+                          SELECT 1 FROM (
+                              SELECT mb.location,
+                                     COALESCE(SUM(CASE WHEN me."transactionId" IS NULL THEN 1 ELSE 0 END), 0) AS branch_stock
+                              FROM "MedicineBatch" mb
+                              LEFT JOIN "MedicineEntity" me ON me."batchId" = mb.id
+                              WHERE mb."medicalItemId" = mi.id
+                                AND (mb."expiryDate" IS NULL OR mb."expiryDate" > NOW())
+                              GROUP BY mb.location
+                          ) bs WHERE bs.branch_stock <= 10
+                      )
+                    UNION
+                    SELECT DISTINCT mi.id
+                    FROM "MedicalItems" mi
+                    WHERE mi.active = true AND mi.category::text = 'Supply'
+                      AND EXISTS (
+                          SELECT 1 FROM (
+                              SELECT sb.location,
+                                     COALESCE(SUM(CASE WHEN se."transactionId" IS NULL THEN 1 ELSE 0 END), 0) AS branch_stock
+                              FROM "SupplyBatch" sb
+                              LEFT JOIN "SupplyEntity" se ON se."batchId" = sb.id
+                              WHERE sb."supplyItemId" = mi.id
+                                AND (sb."expiryDate" IS NULL OR sb."expiryDate" > NOW())
+                              GROUP BY sb.location
+                          ) bs WHERE bs.branch_stock <= 10
+                      )
+                ) low_items
+            `),
+
+            // 6. Today's appointments
+            db.query(`
+                SELECT
+                    COUNT(*)::int AS total,
+                    COUNT(*) FILTER (WHERE ps.status::text = 'Scheduled' AND ps.arrived_at IS NULL)::int AS remaining
+                FROM "patientSlot" ps
+                JOIN "ScheduleDateEntity" sde ON ps."slotEntityId" = sde.id
+                WHERE sde."scheduledDate" = CURRENT_DATE
+                  AND ps.status::text IN ('Scheduled', 'InProgress', 'Completed')
+            `),
+
+            // 7. Tomorrow's slot availability
+            db.query(`
+                SELECT
+                    ss.id AS "schedulerId",
+                    ss.label,
+                    ss.location,
+                    COALESCE(sde."morningAllowed", ss."morningAllowed") AS "morningAllowed",
+                    COALESCE(sde."afternoonAllowed", ss."afternoonAllowed") AS "afternoonAllowed",
+                    COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status::text IN ('Scheduled','InProgress','Completed','Pending') THEN 1 ELSE 0 END), 0)::int AS "morningBooked",
+                    COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status::text IN ('Scheduled','InProgress','Completed','Pending') THEN 1 ELSE 0 END), 0)::int AS "afternoonBooked"
+                FROM "slotScheduler" ss
+                LEFT JOIN "ScheduleDateEntity" sde ON sde."slotId" = ss.id AND sde."scheduledDate" = CURRENT_DATE + INTERVAL '1 day'
+                LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
+                WHERE ss."isActive" = true
+                GROUP BY ss.id, ss.label, ss.location, sde."morningAllowed", sde."afternoonAllowed"
+                ORDER BY ss.location, ss.label
+            `),
+
+            // 8. Recent patients
+            db.query(`
+                SELECT * FROM (
+                    SELECT DISTINCT ON (up.id)
+                        up.id,
+                        CONCAT(up.first_name, ' ', up.last_name) AS name,
+                        up.identifier,
+                        p.profile,
+                        ps.arrived_at AS "lastVisit"
+                    FROM "patientSlot" ps
+                    JOIN "UsersPersonal" up ON up.id = ps."patientId"
+                    LEFT JOIN "Patients" p ON p.id = up.id
+                    WHERE ps.arrived_at IS NOT NULL
+                      AND ($1 = 'Both' OR up.branch::text = $1 OR up.branch = 'Both')
+                    ORDER BY up.id, ps.arrived_at DESC
+                ) recent
+                ORDER BY "lastVisit" DESC
+                LIMIT 5
+            `, [userBranch]),
+
+            // 9. Pending requests
+            db.query(`
+                (
+                    SELECT
+                        pul.id::text AS id,
+                        CONCAT(COALESCE(up.first_name, ''), ' ', COALESCE(up.last_name, '')) AS name,
+                        'EMR Update' AS type,
+                        pul.status::text AS status,
+                        pul.created_at AS submitted
+                    FROM "patientUpdateLog" pul
+                    JOIN "UsersPersonal" up ON up.id = pul."patientId"
+                    WHERE pul.status::text IN ('Pending', 'Revision', 'RevisionSubmitted')
+                      AND ($1 = 'Both' OR up.branch::text = $1 OR up.branch = 'Both')
+                    ORDER BY pul.created_at DESC
+                    LIMIT 5
+                )
+                UNION ALL
+                (
+                    SELECT
+                        ps.id::text AS id,
+                        CONCAT(COALESCE(up.first_name, ''), ' ', COALESCE(up.last_name, '')) AS name,
+                        'Appointment' AS type,
+                        ps.status::text AS status,
+                        ps.created_at AS submitted
+                    FROM "patientSlot" ps
+                    LEFT JOIN "UsersPersonal" up ON up.id = ps."patientId"
+                    WHERE ps.status::text = 'Pending'
+                    ORDER BY ps.created_at DESC
+                    LIMIT 5
+                )
+                ORDER BY submitted DESC
+                LIMIT 5
+            `, [userBranch]),
+        ]);
+
+        // Aggregate pending request counts
+        const pendingEmr = pendingEmrResult.rows[0]?.count || 0;
+        const pendingAppointments = pendingAppointmentsResult.rows[0]?.count || 0;
+        const pendingMedicine = pendingMedicineResult.rows[0]?.count || 0;
+        const totalPending = pendingEmr + pendingAppointments + pendingMedicine;
+
+        // Today's appointment stats
+        const todayStats = todayAppointmentsResult.rows[0] || { total: 0, remaining: 0 };
+
+        // Active consultations
+        const activeConsultations = activeConsultationsResult.rows[0]?.count || 0;
+
+        // Low stock
+        const lowStockCount = lowStockResult.rows[0]?.count || 0;
+
+        // Tomorrow's slots
+        const tomorrowSlots = tomorrowSlotsResult.rows;
+        const tomorrowAvailability = {};
+        for (const slot of tomorrowSlots) {
+            const key = slot.label || slot.location || 'Other';
+            const totalAllowed = (parseInt(slot.morningAllowed) || 0) + (parseInt(slot.afternoonAllowed) || 0);
+            const totalBooked = (parseInt(slot.morningBooked) || 0) + (parseInt(slot.afternoonBooked) || 0);
+            if (!tomorrowAvailability[key]) {
+                tomorrowAvailability[key] = { open: 0, total: 0 };
+            }
+            tomorrowAvailability[key].total += totalAllowed;
+            tomorrowAvailability[key].open += Math.max(0, totalAllowed - totalBooked);
+        }
+
+        res.json({
+            stats: {
+                pendingRequests: totalPending,
+                pendingBreakdown: {
+                    emr: pendingEmr,
+                    appointments: pendingAppointments,
+                    medicine: pendingMedicine,
+                },
+                todayAppointments: todayStats.total,
+                todayRemaining: todayStats.remaining,
+                activeConsultations,
+                lowStockItems: lowStockCount,
+            },
+            tomorrowAvailability,
+            recentPatients: recentPatientsResult.rows.map(r => ({
+                id: r.id,
+                name: r.name?.trim(),
+                identifier: r.identifier,
+                program: r.profile || '—',
+                lastVisit: r.lastVisit,
+            })),
+            pendingRequests: pendingRequestsResult.rows.map(r => ({
+                id: r.id,
+                name: r.name?.trim(),
+                type: r.type,
+                status: r.status,
+                submitted: r.submitted,
+            })),
+        });
+    } catch (error) {
+        logger.error('Error fetching dashboard stats:', error);
+        res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
+    }
+});
+
+module.exports = router;

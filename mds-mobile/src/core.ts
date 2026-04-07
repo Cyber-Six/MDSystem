@@ -29,6 +29,14 @@ export const setNavigationRef = (ref: any): void => {
 
 export const getNavigationRef = (): any => navigationRef;
 
+// Session-expired callback — registered by AuthContext to react to forced logouts
+type SessionExpiredCallback = () => void;
+let _sessionExpiredCallback: SessionExpiredCallback | null = null;
+
+export const registerSessionExpiredCallback = (cb: SessionExpiredCallback): void => {
+  _sessionExpiredCallback = cb;
+};
+
 // ── Backend Configuration ──
 // React Native has no proxy — always use the absolute backend URL.
 // Reads from EXPO_PUBLIC_API_URL in .env; falls back to production URL.
@@ -59,8 +67,10 @@ export const tokenService = createTokenService({
   storage: AsyncStorage,
   navigator: {
     navigate: (_path: string) => {
-      if (navigationRef) {
-        navigationRef.navigate('Auth');
+      // Notify AuthContext — flips isAuthenticated to false, which unmounts
+      // the NavigationContainer and renders AuthScreen.
+      if (_sessionExpiredCallback) {
+        _sessionExpiredCallback();
       }
     },
   },

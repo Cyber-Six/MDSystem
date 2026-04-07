@@ -44,7 +44,7 @@ const TicketStatusBanner = ({ status, onCancel, isLoading }) => {
         return {
           icon: AlertCircle,
           text: 'Chat Expired',
-          description: 'This conversation has expired after 3 days.',
+          description: 'This conversation has expired due to inactivity.',
           bgColor: 'bg-neutral-50 dark:bg-neutral-800',
           borderColor: 'border-neutral-200 dark:border-neutral-700',
           iconColor: 'text-neutral-500',

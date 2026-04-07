@@ -11,9 +11,11 @@ const Login = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showTwoFactor, setShowTwoFactor] = useState(false);
+  const [showTotpVerify, setShowTotpVerify] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
   const [verificationKey, setVerificationKey] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [totpCode, setTotpCode] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   
   const navigate = useNavigate();
@@ -48,11 +50,16 @@ const Login = () => {
         const loginKey = response.data.LoginKey;
         setVerificationKey(loginKey);
         
-        if (response.data.requires2FA) {
+        const needsTotp = response.data.requiresTotp;
+        const needsEmail2FA = response.data.requires2FA;
+
+        if (needsTotp) {
+          // TOTP is preferred; email OTP is the fallback (sent only if user requests it)
+          setShowTotpVerify(true);
+        } else {
+          // Email OTP only — send immediately
           await handleSend2FA();
           setShowTwoFactor(true);
-        } else {
-          setShowConsent(true);
         }
       }
     } catch (err) {
@@ -156,6 +163,55 @@ const Login = () => {
     }
   };
 
+  // TOTP verification handler
+  const handleTotpVerification = async (e) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const response = await axiosRequest.post('/settings/totp/validate', {
+        token: totpCode,
+        verificationKey,
+        email,
+      });
+
+      if (response.data.ok) {
+        setShowTotpVerify(false);
+        setTotpCode('');
+        // TOTP verified — proceed to consent (email OTP not needed)
+        setShowConsent(true);
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'TOTP verification failed.';
+      const errorCode = err.response?.data?.error;
+
+      switch (errorCode) {
+        case 'INVALID_TOTP_CODE':
+          setError('Invalid authenticator code. Please try again.');
+          break;
+        case 'INVALID_SESSION':
+          setError('Login session expired. Please start over.');
+          setShowTotpVerify(false);
+          setVerificationKey('');
+          break;
+        default:
+          setError(errorMsg);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Switch from TOTP to email OTP instead
+  const handleUseEmailInstead = async () => {
+    setError('');
+    setTotpCode('');
+    setShowTotpVerify(false);
+    await handleSend2FA();
+    setShowTwoFactor(true);
+  };
+
   // Core login-complete call, accepts key directly to avoid stale-state issues
   const completeLoginWithKey = async (key) => {
     setError('');
@@ -187,10 +243,11 @@ const Login = () => {
           setError('Login session is invalid or expired. Please try again.');
           setShowConsent(false);
           setShowTwoFactor(false);
+          setShowTotpVerify(false);
           setVerificationKey('');
           break;
         case '2FA_NOT_VERIFIED':
-          setError('Email 2FA has not been verified.');
+          setError('2FA has not been verified.');
           setShowConsent(false);
           setShowTwoFactor(true);
           break;
@@ -228,7 +285,7 @@ const Login = () => {
   };
 
   // Initial login form
-  if (!showTwoFactor) {
+  if (!showTwoFactor && !showTotpVerify) {
     return (
       <>
         <div className="w-full max-w-md mx-auto">
@@ -255,8 +312,8 @@ const Login = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isLoading}
-              className="w-full px-4 py-3 bg-neutral-50 
-                       text-secondary-900 
+              className="w-full px-4 py-3 bg-neutral-50
+                       text-secondary-900
                        border border-neutral-300 
                        rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
                        placeholder:text-neutral-400
@@ -278,11 +335,11 @@ const Login = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
-                className="w-full px-4 py-3 bg-neutral-50 
-                         text-secondary-900 
-                         border border-neutral-300 
+                className="w-full px-4 py-3 bg-neutral-50
+                         text-secondary-900
+                         border border-neutral-300
                          rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                         placeholder:text-neutral-400 
+                         placeholder:text-neutral-400
                          transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
                          pr-10"
               />
@@ -336,7 +393,7 @@ const Login = () => {
             <button 
               type="button" 
               onClick={() => setShowForgotPassword(true)}
-              className="text-accent-600 hover:text-accent-700 
+              className="text-accent-600 hover:text-accent-700
                        font-medium text-sm transition-colors hover:underline"
             >
               Forgot your password?
@@ -378,7 +435,110 @@ const Login = () => {
     );
   }
 
-  // Two-factor authentication form
+  // TOTP authenticator verification form
+  if (showTotpVerify) {
+    return (
+      <div className="w-full max-w-md mx-auto">
+        <div className="text-center mb-8">
+          <div className="bg-primary-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
+            <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-secondary-900 mb-3">
+            Authenticator Verification
+          </h2>
+          <p className="text-sm text-neutral-600 leading-relaxed">
+            Enter the 6-digit code from your<br />
+            authenticator app
+          </p>
+        </div>
+        
+        {error && (
+          <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
+            <p className="text-error-600 text-sm text-center">
+              {error}
+            </p>
+          </div>
+        )}
+        
+        <form onSubmit={handleTotpVerification} className="space-y-5">
+          <div>
+            <label htmlFor="totp" className="block text-sm font-medium text-secondary-700 mb-2 text-center">
+              Authenticator Code
+            </label>
+            <input 
+              id="totp"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="000000" 
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+              maxLength={6}
+              required
+              disabled={isLoading}
+              autoFocus
+              className="w-full px-4 py-4 bg-neutral-50
+                       text-secondary-900 text-center text-2xl font-mono tracking-widest
+                       border-2 border-neutral-300
+                       rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                       placeholder:text-neutral-400 placeholder:text-xl
+                       transition-all duration-200 disabled:opacity-50"
+            />
+          </div>
+          
+          <button 
+            type="submit" 
+            disabled={isLoading || totpCode.length !== 6}
+            className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
+                     text-white font-semibold py-3.5 rounded-lg
+                     transition-all duration-200 
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     flex items-center justify-center shadow-md hover:shadow-lg"
+          >
+            {isLoading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Verifying...
+              </>
+            ) : 'Verify Code'}
+          </button>
+          
+          <div className="pt-2 space-y-2">
+            <button 
+              type="button" 
+              onClick={() => {
+                setShowTotpVerify(false);
+                setVerificationKey('');
+                setTotpCode('');
+                setError('');
+              }}
+              className="w-full bg-white hover:bg-neutral-50
+                       text-secondary-700 font-medium py-3 rounded-lg 
+                       border border-neutral-300
+                       transition-all duration-200 text-sm"
+            >
+              Go Back
+            </button>
+            <button
+              type="button"
+              onClick={handleUseEmailInstead}
+              disabled={isLoading}
+              className="w-full text-sm text-accent-600 dark:text-accent-400 hover:underline py-1 transition-colors"
+            >
+              Use email code instead
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // Two-factor authentication form (email OTP)
   if (showTwoFactor) {
     return (
       <div className="w-full max-w-md mx-auto">
@@ -419,9 +579,9 @@ const Login = () => {
               maxLength={6}
               required
               disabled={isLoading}
-              className="w-full px-4 py-4 bg-neutral-50 
+              className="w-full px-4 py-4 bg-neutral-50
                        text-secondary-900 text-center text-2xl font-mono tracking-widest
-                       border-2 border-neutral-300 
+                       border-2 border-neutral-300
                        rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
                        placeholder:text-neutral-400 placeholder:text-xl
                        transition-all duration-200 disabled:opacity-50"

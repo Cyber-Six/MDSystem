@@ -154,7 +154,11 @@ const Query = {
 };
 
 const Mutation = {
-  _createMedicineRequest: async (_, { patientId, input }, { res }) => {
+  _createMedicineRequest: async (_, { patientId, input }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     if (!Array.isArray(input.items) || input.items.length === 0) {
       throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
     }
@@ -213,65 +217,88 @@ const Mutation = {
     }
   },
 
-  _setStatusMedicineRequest: async (_, { requestId, status, approvedBy, notes }, { res }) => {
+  _setStatusMedicineRequest: async (_, { requestId, status, approvedBy, notes }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     const validStatuses = ["Approved", "Rejected", "Cancelled", "Completed"];
     if (!validStatuses.includes(status)) {
       throwGraphQLError(res).message("Invalid status. Must be Approved, Rejected, Cancelled, or Completed").status(400).throw();
     }
 
-    const current = await db.query(
-      `SELECT * FROM "MedicineRequestLog" WHERE id = $1 LIMIT 1`,
-      [requestId],
-    );
-    if (current.rows.length === 0) {
-      throwGraphQLError(res).message("Medicine request not found").status(404).throw();
-    }
-    
-    // Allow transitions: Pending -> Approved/Rejected/Cancelled, Approved -> Completed
-    const currentStatus = current.rows[0].status;
-    const allowedTransitions = {
-      "Pending": ["Approved", "Rejected", "Cancelled"],
-      "Approved": ["Completed", "Rejected"],
-    };
-    
-    if (!allowedTransitions[currentStatus]?.includes(status)) {
-      throwGraphQLError(res).message(`Cannot transition from ${currentStatus} to ${status}`).status(400).throw();
-    }
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    // Build update query based on whether approvedBy is provided
-    let updateSql;
-    let params;
-    
-    if (approvedBy !== null && approvedBy !== undefined) {
-      // Update with approvedBy
-      updateSql = `
-        UPDATE "MedicineRequestLog"
-        SET status = $1, approved_by = $2, notes = COALESCE($3, notes)
-        WHERE id = $4
-        RETURNING *
-      `;
-      params = [status, approvedBy, notes, requestId];
-    } else {
-      // Update without approvedBy (for patient self-cancellation)
-      updateSql = `
-        UPDATE "MedicineRequestLog"
-        SET status = $1, notes = COALESCE($2, notes)
-        WHERE id = $3
-        RETURNING *
-      `;
-      params = [status, notes, requestId];
-    }
-    
-    const result = await db.query(updateSql, params);
-    
-    // Fetch items with medicine names
-    result.rows[0].items = await getItemsWithNames(requestId);
+      // Lock the request row to prevent concurrent status changes
+      const current = await client.query(
+        `SELECT * FROM "MedicineRequestLog" WHERE id = $1 LIMIT 1 FOR UPDATE`,
+        [requestId],
+      );
+      if (current.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Medicine request not found").status(404).throw();
+      }
 
-    return result.rows[0];
+      // Allow transitions: Pending -> Approved/Rejected/Cancelled, Approved -> Completed
+      const currentStatus = current.rows[0].status;
+      const allowedTransitions = {
+        "Pending": ["Approved", "Rejected", "Cancelled"],
+        "Approved": ["Completed", "Rejected"],
+      };
+
+      if (!allowedTransitions[currentStatus]?.includes(status)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message(`Cannot transition from ${currentStatus} to ${status}`).status(400).throw();
+      }
+
+      // Build update query based on whether approvedBy is provided
+      let updateSql;
+      let params;
+
+      if (approvedBy !== null && approvedBy !== undefined) {
+        // Update with approvedBy
+        updateSql = `
+          UPDATE "MedicineRequestLog"
+          SET status = $1, approved_by = $2, notes = COALESCE($3, notes)
+          WHERE id = $4
+          RETURNING *
+        `;
+        params = [status, approvedBy, notes, requestId];
+      } else {
+        // Update without approvedBy (for patient self-cancellation)
+        updateSql = `
+          UPDATE "MedicineRequestLog"
+          SET status = $1, notes = COALESCE($2, notes)
+          WHERE id = $3
+          RETURNING *
+        `;
+        params = [status, notes, requestId];
+      }
+
+      const result = await client.query(updateSql, params);
+      await client.query('COMMIT');
+
+      // Fetch items with medicine names
+      result.rows[0].items = await getItemsWithNames(requestId);
+
+      return result.rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _setStatusMedicineRequest:", err);
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
+    }
   },
 
   // ✅ PART 2: Add medicine to existing request
-  _addMedicineToRequest: async (_, { requestId, items }, { res }) => {
+  _addMedicineToRequest: async (_, { requestId, items }, { res, user }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
     if (!Array.isArray(items) || items.length === 0) {
       throwGraphQLError(res).message("At least one medicine item is required").status(400).throw();
     }

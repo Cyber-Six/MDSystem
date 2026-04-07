@@ -2,6 +2,7 @@ const db = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
 const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
+const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
 const {
   calculateExpiryDate,
   isChatExpired,
@@ -111,15 +112,18 @@ const Query = {
       [chatId, limit || 50, offset || 0]
     );
 
-    return await Promise.all(result.rows.map(formatMessage));
+    // Batch-fetch all sender info in one query to avoid N+1
+    const senderIds = result.rows.map(r => r.userId).filter(Boolean);
+    const senderMap = await getParticipantInfoBatch(senderIds);
+    return result.rows.map(row => ({ ...row, sender: senderMap.get(row.userId) || null }));
   },
 
   // ==================== MEDICAL QUERIES ====================
 
   /**
-   * Get pending tickets awaiting approval
+   * Get pending tickets awaiting approval, filtered by location
    */
-  _getPendingTickets: async (_, { offset, limit }, { user, res }) => {
+  _getPendingTickets: async (_, { location = 'Both', offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -127,17 +131,35 @@ const Query = {
     // Auto-expire any expired ongoing tickets
     await autoExpireTickets();
 
-    const result = await db.query(
-      `SELECT * FROM "HealthChat"
-       WHERE status = 'Open'
-       ORDER BY id ASC
-       LIMIT $1 OFFSET $2`,
-      [limit || 10, offset || 0]
-    );
+    let query = `SELECT * FROM "HealthChat" WHERE status = 'Open'`;
+    const params = [];
 
-    const countResult = await db.query(
-      `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Open'`
-    );
+    // Filter by location if not 'Both'
+    if (location && location !== 'Both') {
+      query += ` AND "patientId" IN (
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $1
+      )`;
+      params.push(location);
+    }
+
+    query += ` ORDER BY id ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit || 10, offset || 0);
+
+    const result = await db.query(query, params);
+
+    // Get count
+    let countQuery = `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Open'`;
+    const countParams = [];
+    if (location && location !== 'Both') {
+      countQuery += ` AND "patientId" IN (
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $1
+      )`;
+      countParams.push(location);
+    }
+
+    const countResult = await db.query(countQuery, countParams);
 
     const chats = await formatChatRecordsBatch(result.rows);
 
@@ -148,9 +170,9 @@ const Query = {
   },
 
   /**
-   * Get active (ongoing) tickets assigned to any medical staff
+   * Get active (ongoing) tickets assigned to any medical staff, filtered by location
    */
-  _getActiveTickets: async (_, { offset, limit }, { user, res }) => {
+  _getActiveTickets: async (_, { location = 'Both', offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -158,17 +180,35 @@ const Query = {
     // Auto-expire any expired ongoing tickets (critical for this query)
     await autoExpireTickets();
 
-    const result = await db.query(
-      `SELECT * FROM "HealthChat"
-       WHERE status = 'Ongoing'
-       ORDER BY session_start DESC
-       LIMIT $1 OFFSET $2`,
-      [limit || 10, offset || 0]
-    );
+    let query = `SELECT * FROM "HealthChat" WHERE status = 'Ongoing'`;
+    const params = [];
 
-    const countResult = await db.query(
-      `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Ongoing'`
-    );
+    // Filter by location if not 'Both'
+    if (location && location !== 'Both') {
+      query += ` AND "patientId" IN (
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $1
+      )`;
+      params.push(location);
+    }
+
+    query += ` ORDER BY session_start DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit || 10, offset || 0);
+
+    const result = await db.query(query, params);
+
+    // Get count
+    let countQuery = `SELECT COUNT(*)::int AS total FROM "HealthChat" WHERE status = 'Ongoing'`;
+    const countParams = [];
+    if (location && location !== 'Both') {
+      countQuery += ` AND "patientId" IN (
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $1
+      )`;
+      countParams.push(location);
+    }
+
+    const countResult = await db.query(countQuery, countParams);
 
     const chats = await formatChatRecordsBatch(result.rows);
 
@@ -179,9 +219,9 @@ const Query = {
   },
 
   /**
-   * Get all tickets with optional status filter
+   * Get all tickets with optional status and location filter
    */
-  _getAllTickets: async (_, { status, offset, limit }, { user, res }) => {
+  _getAllTickets: async (_, { location = 'Both', status, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -191,10 +231,24 @@ const Query = {
 
     let query = `SELECT * FROM "HealthChat"`;
     const params = [];
+    const conditions = [];
 
     if (status) {
-      query += ` WHERE status = $1`;
+      conditions.push(`status = $${params.length + 1}`);
       params.push(status);
+    }
+
+    // Filter by location if not 'Both'
+    if (location && location !== 'Both') {
+      conditions.push(`"patientId" IN (
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $${params.length + 1}
+      )`);
+      params.push(location);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
     query += ` ORDER BY id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -205,10 +259,25 @@ const Query = {
     // Get total count
     let countQuery = `SELECT COUNT(*)::int AS total FROM "HealthChat"`;
     const countParams = [];
+    const countConditions = [];
+
     if (status) {
-      countQuery += ` WHERE status = $1`;
+      countConditions.push(`status = $${countParams.length + 1}`);
       countParams.push(status);
     }
+
+    if (location && location !== 'Both') {
+      countConditions.push(`"patientId" IN (
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $${countParams.length + 1}
+      )`);
+      countParams.push(location);
+    }
+
+    if (countConditions.length > 0) {
+      countQuery += ` WHERE ${countConditions.join(' AND ')}`;
+    }
+
     const countResult = await db.query(countQuery, countParams);
 
     const chats = await formatChatRecordsBatch(result.rows);
@@ -258,14 +327,17 @@ const Query = {
       [chatId, limit || 50, offset || 0]
     );
 
-    return await Promise.all(result.rows.map(formatMessage));
+    // Batch-fetch all sender info in one query to avoid N+1
+    const senderIds = result.rows.map(r => r.userId).filter(Boolean);
+    const senderMap = await getParticipantInfoBatch(senderIds);
+    return result.rows.map(row => ({ ...row, sender: senderMap.get(row.userId) || null }));
   },
 
   /**
-   * Get conversations grouped by patient (1 row per patient)
+   * Get conversations grouped by patient (1 row per patient), filtered by location
    * Returns patients with their latest ticket and last message info
    */
-  _getPatientConversations: async (_, { statuses, offset, limit }, { user, res }) => {
+  _getPatientConversations: async (_, { location = 'Both', statuses, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -279,6 +351,23 @@ const Query = {
     if (statuses && statuses.length > 0) {
         statusFilter = `WHERE status = ANY($1)`;
       params.push(statuses);
+    }
+
+    // Build location filter
+    let locationFilter = '';
+    if (location && location !== 'Both') {
+      if (statusFilter) {
+        locationFilter = ` AND "patientId" IN (
+          SELECT up.id FROM "UsersPersonal" up
+          WHERE up.branch = $${params.length + 1}
+        )`;
+      } else {
+        locationFilter = ` WHERE "patientId" IN (
+          SELECT up.id FROM "UsersPersonal" up
+          WHERE up.branch = $${params.length + 1}
+        )`;
+      }
+      params.push(location);
     }
 
     // Get unique patients with their latest ticket
@@ -299,7 +388,7 @@ const Query = {
               id DESC
           ) as rn
         FROM "HealthChat"
-        ${statusFilter}
+        ${statusFilter}${locationFilter}
       ),
       LatestTickets AS (
         SELECT * FROM RankedTickets WHERE rn = 1
@@ -310,7 +399,7 @@ const Query = {
           COUNT(*) FILTER (WHERE status IN ('Open', 'Ongoing')) as active_count,
           COUNT(*) as total_count
         FROM "HealthChat"
-        ${statusFilter}
+        ${statusFilter}${locationFilter}
         GROUP BY "patientId"
       )
       SELECT
@@ -336,12 +425,12 @@ const Query = {
       const result = await db.query(query, params);
 
       // Get count of unique patients
-      const countQuery = `
+      let countQuery = `
         SELECT COUNT(DISTINCT "patientId")::int as total
         FROM "HealthChat"
-        ${statusFilter}
+        ${statusFilter}${locationFilter}
       `;
-      const countResult = await db.query(countQuery, statuses && statuses.length > 0 ? [statuses] : []);
+      const countResult = await db.query(countQuery, params.slice(0, -2));
 
       // Format conversations using batch lookups to avoid N+1 queries
       // 1. Batch-format the latest tickets from the main query
@@ -351,12 +440,16 @@ const Query = {
       // This ensures the frontend has complete ticket history for dividers and
       // initial-context (purposeSynth) even when archive filter is off.
       const patientIds = result.rows.map(r => r.patientId);
-      const allTicketsResult = await db.query(
-        `SELECT * FROM "HealthChat"
-         WHERE "patientId" = ANY($1)
-         ORDER BY id DESC`,
-        [patientIds]
-      );
+      let allTicketsQuery = `SELECT * FROM "HealthChat"
+         WHERE "patientId" = ANY($1)`;
+      const allTicketsParams = [patientIds];
+
+      // patientIds already come from the location-filtered main query,
+      // so no secondary location filter is needed here.
+
+      allTicketsQuery += ` ORDER BY id DESC`;
+
+      const allTicketsResult = await db.query(allTicketsQuery, allTicketsParams);
       const allTicketsFormatted = await formatChatRecordsBatch(allTicketsResult.rows);
 
       // Group tickets by patientId
@@ -449,16 +542,19 @@ const Query = {
       );
     }
 
-    return await Promise.all(result.rows.map(async (row) => {
-      const message = await formatMessage(row);
+    // Batch-fetch all sender info in one query to avoid N+1 (one query per message).
+    // System messages have userId=null, getParticipantInfoBatch skips null IDs.
+    const senderIds = result.rows.map(r => r.userId).filter(Boolean);
+    const senderMap = await getParticipantInfoBatch(senderIds);
+
+    return result.rows.map(row => ({
+      ...row,
+      sender: senderMap.get(row.userId) || null,
       // Include ticket info for divider rendering
-      return {
-        ...message,
-        ticketPurpose: row.ticket_purpose,
-        ticketStatus: row.ticket_status,
-        ticketSessionEnd: row.ticket_session_end,
-        ticketClosedBy: row.ticket_closed_by
-      };
+      ticketPurpose: row.ticket_purpose,
+      ticketStatus: row.ticket_status,
+      ticketSessionEnd: row.ticket_session_end,
+      ticketClosedBy: row.ticket_closed_by
     }));
   }
 };
@@ -493,6 +589,18 @@ const Mutation = {
     if (result.rowCount === 0) {
       throwGraphQLError(res).message("Failed to create ticket").status(500).throw();
     }
+
+    const chatId = result.rows[0].id;
+
+    // Insert a creation system message so the ticket has an inactivity timestamp anchor.
+    // autoExpireTickets uses MAX(stamp) to detect stale Open tickets; without this
+    // message a pending ticket with no chat activity would never be auto-expired.
+    await db.query(
+      `INSERT INTO "HealthChatPrompt"
+       ("consultationVirtualId", "text", "promptType", "userId", "userType")
+       VALUES ($1, 'Consultation request submitted. Waiting for staff response.', 'system', NULL, 'Medical')`,
+      [chatId]
+    );
 
     const chat = await formatChatRecord(result.rows[0]);
 
@@ -611,13 +719,13 @@ const Mutation = {
        SET status = 'Closed',
            session_end = NOW(),
            closed_by_type = 'Patient'
-       WHERE id = $1 AND "patientId" = $2
+       WHERE id = $1 AND "patientId" = $2 AND status IN ('Open', 'Ongoing')
        RETURNING *`,
       [chatId, user.id]
     );
 
     if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to close ticket").status(500).throw();
+      throwGraphQLError(res).message("Cannot close this ticket. It may already be closed or expired.").status(400).throw();
     }
 
     // Add system message
@@ -702,7 +810,7 @@ const Mutation = {
     await db.query(
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, 'Staff has approved this consultation. Chat session started. Session expires in ${CHAT_EXPIRY_DAYS} days.', 'system', $2, 'Medical')`,
+       VALUES ($1, 'Staff has approved this consultation. Chat session started. Session will expire after ${CHAT_EXPIRY_DAYS} days of inactivity.', 'system', $2, 'Medical')`,
       [chatId, user.id]
     );
 
@@ -716,6 +824,7 @@ const Mutation = {
     // Notify all medical staff about ticket status change (so other staff can update their UI)
     emitToRole('medical', 'healthchat:ticket-status-changed', {
       chatId: chat.id,
+      patientId: chat.patientId,
       status: 'Ongoing',
       approvedBy: user.id
     });
@@ -757,6 +866,7 @@ const Mutation = {
        SET status = 'Closed',
            "medicalId" = $1,
            notes = $2,
+           session_end = NOW(),
            closed_by_type = 'Staff'
        WHERE id = $3
        RETURNING *`,
@@ -788,6 +898,7 @@ const Mutation = {
     // Notify all medical staff about ticket status change (so other staff can update their UI)
     emitToRole('medical', 'healthchat:ticket-status-changed', {
       chatId: chat.id,
+      patientId: chat.patientId,
       status: 'Closed',
       rejectedBy: user.id,
       reason: reason || 'Not specified'
@@ -903,13 +1014,13 @@ const Mutation = {
            session_end = NOW(),
            notes = COALESCE($1, notes),
            closed_by_type = 'Staff'
-       WHERE id = $2
+       WHERE id = $2 AND status IN ('Open', 'Ongoing')
        RETURNING *`,
       [notes, chatId]
     );
 
     if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Ticket not found").status(404).throw();
+      throwGraphQLError(res).message("Ticket not found or already closed/expired").status(400).throw();
     }
 
     // Add system message
@@ -953,11 +1064,9 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
-
     // Check if user is admin
-    const isAdmin = await isMedicalPermitted(user.id, medPermissions.is_admin, null);
-    if (!isAdmin) {
+    const { permitted } = await isMedicalPermitted(user.id, medPermissions.is_admin);
+    if (!permitted) {
       throwGraphQLError(res).message("Only administrators can delete archived tickets").status(403).throw();
     }
 
@@ -995,10 +1104,125 @@ const Mutation = {
     };
   },
 
+  _transferTicket: async (_, { chatId, toMedicalId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Verify the chat exists and is ongoing
+    const chatResult = await db.query(
+      `SELECT * FROM "HealthChat" WHERE id = $1 AND status = 'Ongoing'`,
+      [chatId]
+    );
+
+    if (chatResult.rowCount === 0) {
+      throwGraphQLError(res).message("Active chat session not found").status(404).throw();
+    }
+
+    const chat = chatResult.rows[0];
+
+    if (Number(chat.medicalId) !== Number(user.id)) {
+      throwGraphQLError(res).message(`You are not the assigned medical staff for this ticket`).status(403).throw();
+    }
+
+    // Update the medicalId to the new medical staff
+    const result = await db.query(
+      `UPDATE "HealthChat"
+       SET "medicalId" = $1
+       WHERE id = $2 AND status = 'Ongoing'
+       RETURNING *`,
+      [toMedicalId, chatId]
+    );
+
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to transfer ticket").status(500).throw();
+    }
+
+    const updatedChat = await formatChatRecord(result.rows[0]);
+
+    // Notify the entire chat room about the transfer
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-transferred', {
+      chatId,
+      toMedicalId,
+      chat: updatedChat
+    });
+
+    // Also notify the patient if they're offline
+    if (updatedChat.patientId) {
+      notifyUser(String(updatedChat.patientId), 'healthchat:ticket-transferred', {
+        chatId,
+        toMedicalId,
+        chat: updatedChat
+      });
+    }
+
+    return {
+      success: true,
+      chat: updatedChat,
+      message: "Ticket transferred successfully."
+    };
+  },
+
+  _takeoverOngoingTicket: async (_, { chatId }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    
+    // Verify the chat exists and is ongoing
+    const chatResult = await db.query(
+      `SELECT * FROM "HealthChat" WHERE id = $1 AND status = 'Ongoing'`,
+      [chatId]
+    );
+
+    if (chatResult.rowCount === 0) {
+      throwGraphQLError(res).message("Active chat session not found").status(404).throw();
+    }
+
+    const chat = chatResult.rows[0];
+
+    // Update the medicalId to the current user
+    const result = await db.query(
+      `UPDATE "HealthChat"
+       SET "medicalId" = $1
+       WHERE id = $2 AND status = 'Ongoing'
+       RETURNING *`,
+      [user.id, chatId]
+    );
+
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to take over ticket").status(500).throw();
+    }
+
+    const updatedChat = await formatChatRecord(result.rows[0]);
+
+    // Notify the entire chat room about the takeover
+    emitToRoom(`healthchat:${chatId}`, 'healthchat:ticket-taken-over', {
+      chatId,
+      toMedicalId: user.id,
+      chat: updatedChat
+    });
+
+    // Also notify the patient if they're offline
+    if (updatedChat.patientId) {
+      notifyUser(String(updatedChat.patientId), 'healthchat:ticket-taken-over', {
+        chatId,
+        toMedicalId: user.id,
+        chat: updatedChat
+      });
+    }
+
+    return {
+      success: true,
+      chat: updatedChat,
+      message: "You have taken over this ticket."
+    };
+  },
+
   /**
-   * Extend the session by 1 day
-   * Available to both patient (owns the chat) and medical staff (assigned to chat)
-   * Guards: session must be Ongoing AND expiring within 48 hours
+   * Extend the session by resetting the inactivity timer.
+   * Inserts a system message which becomes the new "last activity" anchor.
+   * Available to both patient (owns the chat) and medical staff (assigned to chat).
+   * Guards: session must be Ongoing AND expiring within 48 hours.
    */
   _extendSession: async (_, { chatId }, { user, res }) => {
     if (!user) {
@@ -1023,8 +1247,15 @@ const Mutation = {
       throwGraphQLError(res).message("Not authorized to extend this session").status(403).throw();
     }
 
+    // Get last message time for inactivity-based expiry calculation
+    const lastMsgResult = await db.query(
+      `SELECT MAX(stamp) AS last_stamp FROM "HealthChatPrompt" WHERE "consultationVirtualId" = $1`,
+      [chatId]
+    );
+    const lastActivityAt = lastMsgResult.rows[0]?.last_stamp || chat.session_start;
+    const expiryDate = calculateExpiryDate(lastActivityAt);
+
     // Guard: only allow extension when session is within 48 hours of expiry
-    const expiryDate = calculateExpiryDate(chat.session_start);
     const msUntilExpiry = new Date(expiryDate) - new Date();
     if (msUntilExpiry > 48 * 60 * 60 * 1000) {
       throwGraphQLError(res)
@@ -1035,28 +1266,17 @@ const Mutation = {
       throwGraphQLError(res).message("Session has already expired").status(400).throw();
     }
 
-    // Push session_start forward by 1 day — expiresAt moves forward accordingly
-    const result = await db.query(
-      `UPDATE "HealthChat"
-       SET session_start = session_start + INTERVAL '1 day'
-       WHERE id = $1 AND status = 'Ongoing'
-       RETURNING *`,
-      [chatId]
-    );
-
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to extend session").status(500).throw();
-    }
-
+    // Insert a system message — this resets the inactivity timer since
+    // expiry is now based on the most recent message timestamp.
     const extenderUserType = isPatient ? 'Patient' : 'Medical';
     await db.query(
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, 'Chat session extended by 1 day.', 'system', $2, $3)`,
+       VALUES ($1, 'Chat session extended. Inactivity timer has been reset.', 'system', $2, $3)`,
       [chatId, user.id, extenderUserType]
     );
 
-    const updatedChat = await formatChatRecord(result.rows[0]);
+    const updatedChat = await formatChatRecord(chat);
 
     // Notify the entire chat room (real-time update for both sides)
     emitToRoom(`healthchat:${chatId}`, 'healthchat:session-extended', {
@@ -1086,7 +1306,7 @@ const Mutation = {
     return {
       success: true,
       chat: updatedChat,
-      message: "Session extended by 1 day."
+      message: "Session extended. Inactivity timer has been reset."
     };
   },
 

@@ -288,42 +288,63 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const queryResult = await db.query(`
-      SELECT c.status, co."recordedBy"
-      FROM "Consultation" c
-      INNER JOIN "ConsultationOutcome" co ON co."consultationId" = c.id
-      WHERE c.id = $1
-      ORDER BY co."recordedAt" DESC
-      LIMIT 1;
-    `, [consultationId]);
-
-    if (queryResult.rows.length === 0) {
-      throwGraphQLError(res).message("Consultation not found").status(404).throw();
-    } // protect against submitting consultation without an outcome, as consultation without an outcome should not be submitted
-
-    if (["Created", "Completed", "Referred", "Monitored"].includes(queryResult.rows[0].status)) {
-      throwGraphQLError(res).message("Consultation cannot be submitted in its current status").status(400).throw();
-    } // protect against submitting consultation without an outcome, as consultation without an outcome should not be submitted
-
-    if (queryResult.rows[0].recordedBy !== Number(user.id)) {
-      throwGraphQLError(res).message("Only the medical personnel who created the outcome can submit the consultation").status(403).throw();
-    } // protect against other medical personnel submitting the consultation outcome created by another personnel
-
+    const client = await db.connect();
     try {
-    const result =  await db.query(`
-      UPDATE "Consultation"
-      SET status = $1
-      WHERE id = $2
-      RETURNING *;
-    `, [status, consultationId]);
+      await client.query('BEGIN');
 
-      if (result.rows.length === 0) {
+      // Lock the consultation and outcome rows
+      const queryResult = await client.query(
+        `SELECT c.status, co."recordedBy"
+         FROM "Consultation" c
+         INNER JOIN "ConsultationOutcome" co ON co."consultationId" = c.id
+         WHERE c.id = $1
+         ORDER BY co."recordedAt" DESC
+         LIMIT 1
+         FOR UPDATE OF c, co;`,
+        [consultationId]
+      );
+
+      if (queryResult.rows.length === 0) {
+        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Consultation not found").status(404).throw();
       }
+
+      const currentStatus = queryResult.rows[0].status;
+      const recordedBy = queryResult.rows[0].recordedBy;
+
+      // Protect against submitting consultation without an outcome or invalid status
+      if (!["Created", "Completed", "Referred", "Monitored"].includes(currentStatus)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Consultation cannot be submitted in its current status").status(400).throw();
+      }
+
+      // Protect against other medical personnel submitting the consultation outcome created by another personnel
+      if (recordedBy !== Number(user.id)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Only the medical personnel who created the outcome can submit the consultation").status(403).throw();
+      }
+
+      const result = await client.query(
+        `UPDATE "Consultation"
+         SET status = $1
+         WHERE id = $2
+         RETURNING *;`,
+        [status, consultationId]
+      );
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Consultation not found").status(404).throw();
+      }
+
+      await client.query('COMMIT');
       return true;
-    } catch (error) {
-      logger.error(`Error submitting consultation: ${error.message}`);
-      throwGraphQLError(res).message("Failed to submit consultation").status(500).throw();
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error(`Error submitting consultation: ${err.message}`);
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -332,36 +353,47 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const queryResult = await db.query(`
-      SELECT status
-      FROM "Consultation"
-      WHERE id = $1
-      LIMIT 1;
-    `, [consultationId]);
-
-    if (queryResult.rows.length === 0) {
-      throwGraphQLError(res).message("Consultation not found").status(404).throw();
-    }
-
-    if (["Created", "Completed", "Referred", "Monitored"].includes(queryResult.rows[0].status)) {
-      throwGraphQLError(res).message("Consultation notes cannot be updated in its current status").status(400).throw();
-    } // protect against updating consultation notes when consultation is already submitted, as consultation notes should not be updated after submission
-
+    const client = await db.connect();
     try {
-      const result = await db.query(`
-        UPDATE "Consultation"
-        SET notes = $1
-        WHERE id = $2
-        RETURNING *;
-      `, [notes, consultationId]);
+      await client.query('BEGIN');
 
-      if (result.rows.length === 0) {
+      // Lock the consultation row
+      const queryResult = await client.query(
+        `SELECT status FROM "Consultation" WHERE id = $1 FOR UPDATE;`,
+        [consultationId]
+      );
+
+      if (queryResult.rows.length === 0) {
+        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Consultation not found").status(404).throw();
       }
+
+      if (["Created", "Completed", "Referred", "Monitored"].includes(queryResult.rows[0].status)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Consultation notes cannot be updated in its current status").status(400).throw();
+      }
+
+      const result = await client.query(
+        `UPDATE "Consultation"
+         SET notes = $1
+         WHERE id = $2
+         RETURNING *;`,
+        [notes, consultationId]
+      );
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Consultation not found").status(404).throw();
+      }
+
+      await client.query('COMMIT');
       return true;
     } catch (error) {
+      await client.query('ROLLBACK');
       logger.error(`Error updating consultation notes: ${error.message}`);
-      throwGraphQLError(res).message("Failed to update consultation notes").status(500).throw();
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -370,36 +402,47 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    const queryResult = await db.query(`
-      SELECT status
-      FROM "Consultation"
-      WHERE id = $1
-      LIMIT 1;
-    `, [consultationId]);
-
-    if (queryResult.rows.length === 0) {
-      throwGraphQLError(res).message("Consultation not found").status(404).throw();
-    }
-
-    if (["Created", "Completed", "Referred", "Monitored"].includes(queryResult.rows[0].status)) {
-      throwGraphQLError(res).message("Consultation follow-up ID cannot be updated in its current status").status(400).throw();
-    } // protect against updating consultation follow-up ID when consultation is already submitted, as consultation follow-up ID should not be updated after submission
-
+    const client = await db.connect();
     try {
-      const result = await db.query(`
-        UPDATE "Consultation"
-        SET "followUpId" = $1
-        WHERE id = $2
-        RETURNING *;
-      `, [followUpId, consultationId]);
+      await client.query('BEGIN');
 
-      if (result.rows.length === 0) {
+      // Lock the consultation row
+      const queryResult = await client.query(
+        `SELECT status FROM "Consultation" WHERE id = $1 FOR UPDATE;`,
+        [consultationId]
+      );
+
+      if (queryResult.rows.length === 0) {
+        await client.query('ROLLBACK');
         throwGraphQLError(res).message("Consultation not found").status(404).throw();
       }
+
+      if (["Created", "Completed", "Referred", "Monitored"].includes(queryResult.rows[0].status)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Consultation follow-up ID cannot be updated in its current status").status(400).throw();
+      }
+
+      const result = await client.query(
+        `UPDATE "Consultation"
+         SET "followUpId" = $1
+         WHERE id = $2
+         RETURNING *;`,
+        [followUpId, consultationId]
+      );
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Consultation not found").status(404).throw();
+      }
+
+      await client.query('COMMIT');
       return true;
     } catch (error) {
+      await client.query('ROLLBACK');
       logger.error(`Error updating consultation follow-up ID: ${error.message}`);
-      throwGraphQLError(res).message("Failed to update consultation follow-up ID").status(500).throw();
+      throwGraphQLError(res).message("Database error").status(500).throw();
+    } finally {
+      client.release();
     }
   },
 

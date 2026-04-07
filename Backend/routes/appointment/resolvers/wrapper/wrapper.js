@@ -64,7 +64,7 @@ const Query = {
     return result.rows;
   },
 
-  _listAllOpenAppointments: async (_, { offset, limit }, { user, res }) => {
+  _listAllOpenAppointments: async (_, { location, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -72,11 +72,13 @@ const Query = {
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
+      WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
       ORDER BY ss.created_at ASC
-      LIMIT $1 OFFSET $2;
+      LIMIT $2 OFFSET $3;
     `;
 
     const result = await db.query(query, [
+      location,
       limit || 10,
       offset || 0
     ]);
@@ -90,9 +92,18 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+    // LEFT JOIN ScheduleDateEntity so morningAllowed/afternoonAllowed overrides are visible
     const query = `
-      SELECT scd."scheduledDate"
+      SELECT
+        scd.id,
+        scd."slotScheduleId",
+        scd."scheduledDate",
+        scd.created_at,
+        sde."morningAllowed",
+        sde."afternoonAllowed"
       FROM "SlotCustomDate" scd
+      LEFT JOIN "ScheduleDateEntity" sde
+        ON sde."slotId" = $1 AND sde."scheduledDate" = scd."scheduledDate"
       WHERE scd."slotScheduleId" = $1
       ORDER BY scd."scheduledDate" ASC
       LIMIT $2 OFFSET $3;
@@ -100,11 +111,11 @@ const Query = {
 
     const result = await db.query(query, [
       schedulerId,
-      limit || 10,
+      limit || 500,
       offset || 0
     ]);
-    
-    return result.rows.map(row => row.scheduledDate);
+
+    return result.rows;
   },
 
   _listAppointmentSchedule: async (_, { schedulerId, date, skipTimeframe }, { user, res }) => {
@@ -124,10 +135,12 @@ const Query = {
         .throw();
     }
 
-    // Scheduler/date validation
-    const isValidDate = await validateSchedulerDate(schedulerId, date);
-    if (!isValidDate) {
-      throwGraphQLError(res).message("Invalid date for scheduler").status(400).throw();
+    // Scheduler/date validation (skipped for medical/staff callers)
+    if (!skipTimeframe) {
+      const isValidDate = await validateSchedulerDate(schedulerId, date);
+      if (!isValidDate) {
+        throwGraphQLError(res).message("Invalid date for scheduler").status(400).throw();
+      }
     }
 
     // Step 1: Try to fetch existing schedule (respect staff edits)
@@ -158,19 +171,25 @@ const Query = {
 
     const { morningAllowed, afternoonAllowed } = schedulerResult.rows[0];
 
-    // Step 3: Insert new schedule with defaults
+    // Step 3: Insert new schedule with defaults (WHERE NOT EXISTS guards against race conditions)
     const newScheduleResult = await db.query(
       `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
-       VALUES ($1, $2, $3, $4)
+       SELECT $1, $2, $3, $4
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "ScheduleDateEntity"
+         WHERE "slotId" = $1 AND "scheduledDate" = $2
+       )
        RETURNING *;`,
       [schedulerId, date, morningAllowed, afternoonAllowed]
     );
 
-    if (newScheduleResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to create schedule for the date").status(500).throw();
-    }
-
-    const newSchedule = newScheduleResult.rows[0];
+    // If insert returned nothing, another request created it first — fetch it
+    const newSchedule = newScheduleResult.rowCount > 0
+      ? newScheduleResult.rows[0]
+      : (await db.query(
+          `SELECT * FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2;`,
+          [schedulerId, date]
+        )).rows[0];
 
     // Step 4: Return with zero counts for a fresh schedule
     return {
@@ -200,7 +219,7 @@ const Query = {
       schedulerId,
       limit || 10,
       offset || 0,
-      isActive // can be true, false, or null
+      isActive, // can be true, false, or null
     ]);
     return result.rows;
   },
@@ -282,19 +301,7 @@ const Query = {
     return result.rows[0].status;
   },
 
-  _resolvePatientByIdentifier: async (_, { identifier }, { user, res }) => {
-    if (!user) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    const result = await db.query(
-      `SELECT id FROM "UsersPersonal" WHERE identifier = $1 LIMIT 1;`,
-      [identifier]
-    );
-    if (result.rowCount === 0) return null;
-    return String(result.rows[0].id);
-  },
-
-  _searchAppointmentStatuses: async (_, { status, offset, limit }, { user, res }) => {
+  _searchAppointmentStatuses: async (_, { status, location, date, schedulerId, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -314,11 +321,16 @@ const Query = {
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
 
       WHERE ps.status = $1
-      ORDER BY ps.id DESC
+      AND ss.location = COALESCE($4::"LocationDesignation", ss.location)
+      AND ($5::date IS NULL OR sde."scheduledDate"::date = $5::date)
+      AND ($6::integer IS NULL OR ss.id = $6::integer)
+      ORDER BY sde."scheduledDate" ASC, ps.id DESC
       LIMIT $2 OFFSET $3;
     `;
 
-    const result = await db.query(query, [status, limit || 10, offset || 0]);
+    const result = await db.query(query,
+      [status, limit || 10,
+       offset || 0, location, date || null, schedulerId ? parseInt(schedulerId, 10) : null]);
     const slots = result.rows;
 
     if (slots.length === 0) return slots;
@@ -338,16 +350,21 @@ const Query = {
     return slots.map(s => ({ ...s, requirements: reqBySlot[s.id] || [] }));
   },
 
-  _getAppointmentStatusCounts: async (_, _args, { user, res }) => {
+  _getAppointmentStatusCounts: async (_, { location, schedulerId, date }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
     const result = await db.query(`
-      SELECT status, COUNT(*)::int AS count
-      FROM "patientSlot"
-      GROUP BY status;
-    `);
+      SELECT ps.status, COUNT(*)::int AS count
+      FROM "patientSlot" ps
+      JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+      JOIN "slotScheduler" ss ON ss.id = sde."slotId"
+      WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
+        AND ($2::integer IS NULL OR ss.id = $2::integer)
+        AND ($3::date IS NULL OR sde."scheduledDate"::date = $3::date)
+      GROUP BY ps.status;
+    `, [location || null, schedulerId ? parseInt(schedulerId, 10) : null, date || null]);
 
     return result.rows;
   },
@@ -371,75 +388,228 @@ const Query = {
     `;
     const result = await db.query(query, [schedulerId, limit || 50, offset || 0]);
     return result.rows;
+  },
+
+  _listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Step 1: Ensure all SlotCustomDate records have corresponding ScheduleDateEntity entries
+      // (in case any were created before the recent fixes and not yet synced)
+      const schedulerDefaults = await client.query(
+        `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+        [schedulerId]
+      );
+
+      if (schedulerDefaults.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+      }
+
+      const { morningAllowed, afternoonAllowed } = schedulerDefaults.rows[0];
+
+      // Insert missing ScheduleDateEntity entries for any SlotCustomDate that doesn't have one
+      await client.query(
+        `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+         SELECT
+           scd."slotScheduleId",
+           scd."scheduledDate",
+           $2,
+           $3
+         FROM "SlotCustomDate" scd
+         WHERE scd."slotScheduleId" = $1
+           AND scd."scheduledDate" >= $4
+           AND scd."scheduledDate" <= $5
+           AND NOT EXISTS (
+             SELECT 1 FROM "ScheduleDateEntity" sde
+             WHERE sde."slotId" = scd."slotScheduleId"
+               AND sde."scheduledDate" = scd."scheduledDate"
+           );`,
+        [schedulerId, morningAllowed, afternoonAllowed, startDate, endDate]
+      );
+
+      // Step 2: Fetch all ScheduleDateEntity records in the date range with counts.
+      // Runs in the same transaction so the SELECT sees the just-inserted rows and
+      // no concurrent writes can slip in between the INSERT and the read.
+      const result = await client.query(
+        `SELECT
+           sde.*,
+           COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "morningRegistered",
+           COALESCE(SUM(CASE WHEN ps."session" = 'Morning' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "morningPending",
+           COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status IN ('Scheduled','InProgress','Completed') THEN 1 ELSE 0 END), 0)::int AS "afternoonRegistered",
+           COALESCE(SUM(CASE WHEN ps."session" = 'Afternoon' AND ps.status = 'Pending' THEN 1 ELSE 0 END), 0)::int AS "afternoonPending"
+         FROM "ScheduleDateEntity" sde
+         LEFT JOIN "patientSlot" ps ON ps."slotEntityId" = sde.id
+         WHERE sde."slotId" = $1
+           AND sde."scheduledDate" >= $2
+           AND sde."scheduledDate" <= $3
+         GROUP BY sde.id
+         ORDER BY sde."scheduledDate" ASC;`,
+        [schedulerId, startDate, endDate]
+      );
+
+      await client.query('COMMIT');
+      return result.rows;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _listMonthAvailability:", err);
+      throwGraphQLError(res)
+        .message(`Failed to list month availability: ${err.message}`)
+        .status(500)
+        .throw();
+    } finally {
+      client.release();
+    }
+  },
+
+  // -- Returns active appointment count for a given scheduler + date (for pre-action checks) --
+  _checkDateOccupancy: async (_, { schedulerId, date }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const result = await db.query(
+      `SELECT COUNT(*)::int AS count
+       FROM "patientSlot" ps
+       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+       WHERE sde."slotId" = $1
+         AND sde."scheduledDate"::date = $2::date
+         AND ps.status IN ('Pending', 'Scheduled', 'InProgress');`,
+      [schedulerId, date]
+    );
+
+    return { count: result.rows[0]?.count ?? 0 };
   }
 };
 
 const Mutation = {
-  _submitAppointment: async (_, { schedulerId, date, session, requirements }, { user, res }) => {
+  _submitAppointment: async (_, { schedulerId, date, session, requirements, purpose }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
+    }
 
     let allowedScheduler;
-    let scheduleData;
 
-    try {  // validation block with detailed error handling
+    try {
       allowedScheduler = await Query._listOpenAppointments(_, { offset: 0, limit: 1, schedulerId }, { user, res });
       if (allowedScheduler.length === 0) {
         throwGraphQLError(res).message("Scheduler not found or not allowed.").status(404).throw();
       }
 
-      // 1. Validate scheduler/date and session availability
-      scheduleData = await Query._listAppointmentSchedule(_, { schedulerId, date }, { user, res });
-      if (session === "Morning" && scheduleData.morningAllowed <= (scheduleData.morningRegistered + scheduleData.morningPending)) {
-        throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
-      } else if (session === "Afternoon" && scheduleData.afternoonAllowed <= (scheduleData.afternoonRegistered + scheduleData.afternoonPending)) {
-        throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
+      // Validate scheduler/date
+      const isValidDate = await validateSchedulerDate(schedulerId, date);
+      if (!isValidDate) {
+        throwGraphQLError(res).message("Invalid date for scheduler").status(400).throw();
       }
 
-      // 2. Ensure requirements are satisfied
+      // Validate timeframe (patients cannot book beyond MAX_SCHEDULING_DAYS)
+      if (!isWithinFutureTimeframe(date, MAX_SCHEDULING_DAYS)) {
+        const today = new Date();
+        const latestAllowed = new Date(today);
+        latestAllowed.setDate(today.getDate() + MAX_SCHEDULING_DAYS);
+        throwGraphQLError(res)
+          .message(`Scheduling is only allowed from ${today.toISOString().split("T")[0]} up to ${latestAllowed.toISOString().split("T")[0]}`)
+          .status(400)
+          .throw();
+      }
+
+      // Ensure requirements are satisfied
       await validateSatisfiedAllRequirements(schedulerId, requirements, res);
-    } catch (err) { 
+    } catch (err) {
       logger.error("Error validating appointment submission:", err);
       throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();
     }
 
-    try { // main logic block with cleanup on failure
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Get or create schedule within transaction with lock
+      let scheduleData = await client.query(
+        `SELECT sde.* FROM "ScheduleDateEntity" sde
+         WHERE sde."slotId" = $1 AND sde."scheduledDate" = $2
+         LIMIT 1 FOR UPDATE;`,
+        [schedulerId, date]
+      );
+
+      if (scheduleData.rowCount === 0) {
+        // Fetch defaults to create new schedule
+        const schedulerResult = await client.query(
+          `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+          [schedulerId]
+        );
+
+        if (schedulerResult.rowCount === 0) {
+          await client.query('ROLLBACK');
+          throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+        }
+
+        const { morningAllowed, afternoonAllowed } = schedulerResult.rows[0];
+
+        scheduleData = await client.query(
+          `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+           VALUES ($1, $2, $3, $4)
+           RETURNING *;`,
+          [schedulerId, date, morningAllowed, afternoonAllowed]
+        );
+      }
+
+      const schedule = scheduleData.rows[0];
+
+      // Check availability (atomic within transaction)
+      const countResult = await client.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE "session" = 'Morning' AND "status" IN ('Pending', 'Scheduled', 'InProgress', 'Completed')) AS "morningUsed",
+           COUNT(*) FILTER (WHERE "session" = 'Afternoon' AND "status" IN ('Pending', 'Scheduled', 'InProgress', 'Completed')) AS "afternoonUsed"
+         FROM "patientSlot" WHERE "slotEntityId" = $1;`,
+        [schedule.id]
+      );
+
+      const { morningUsed, afternoonUsed } = countResult.rows[0];
+
+      if (session === "Morning" && schedule.morningAllowed <= morningUsed) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Morning session already full for the selected date").status(400).throw();
+      } else if (session === "Afternoon" && schedule.afternoonAllowed <= afternoonUsed) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Afternoon session already full for the selected date").status(400).throw();
+      }
+
+      // Promote files before we commit
       for (const requirement of requirements) {
         if (requirement.filename) {
           requirement.filename = await promoteFile(user.id, requirement.filename, "appointmentRequirement");
         }
       }
-      // 3. Create patientSlot row
-      const psResult = await db.query(
-        `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session")
-         VALUES ($1, $2, 'Pending', $3)
-         RETURNING *;`,
-        [user.id, scheduleData.id, session]
-      );
 
-      if (psResult.rowCount === 0) {
-        throwGraphQLError(res).message("Failed to create appointment").status(500).throw();
-      }
+      // Create patientSlot row
+      const psResult = await client.query(
+        `INSERT INTO "patientSlot" ("patientId", "slotEntityId", "status", "session", "purpose")
+         VALUES ($1, $2, 'Pending', $3, $4)
+         RETURNING *;`,
+        [user.id, schedule.id, session, purpose || null]
+      );
 
       const patientSlotId = psResult.rows[0].id;
 
-      // 4. Insert patientScheduleRequirement rows (one per requirement)
+      // Insert patientScheduleRequirement rows
       if (requirements && requirements.length > 0) {
         const values = [];
         const placeholders = requirements.map((req, i) => {
           if (!req.scheduleRequirementId) {
-            throwGraphQLError(res)
-              .message(`Requirement at index ${i} missing scheduleRequirementId`)
-              .status(400)
-              .throw();
+            throw new Error(`Requirement at index ${i} missing scheduleRequirementId`);
           }
           const offset = i * 3;
           values.push(patientSlotId, req.scheduleRequirementId, req.filename || null);
           return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
         });
 
-        await db.query(
+        await client.query(
           `INSERT INTO "patientScheduleRequirement" ("patientSlotId", "scheduleRequirementId", "filename")
            VALUES ${placeholders.join(", ")}
            RETURNING *;`,
@@ -447,7 +617,9 @@ const Mutation = {
         );
       }
 
-      // 5. Fetch inserted requirements to attach to the slot
+      await client.query('COMMIT');
+
+      // Fetch inserted requirements to attach to the slot
       const reqResult = await db.query(
         `SELECT psr.* FROM "patientScheduleRequirement" psr WHERE psr."patientSlotId" = $1;`,
         [patientSlotId]
@@ -455,16 +627,23 @@ const Mutation = {
 
       return { ...psResult.rows[0], requirements: reqResult.rows, location: allowedScheduler[0].location };
     } catch (err) {
-      // On any error, attempt to clean up any promoted files for this request
+      await client.query('ROLLBACK');
+      // Attempt to clean up promoted files
       if (requirements && requirements.length > 0) {
         for (const requirement of requirements) {
           if (requirement.filename) {
-            await deleteFile("appointmentRequirement", requirement.filename);
+            try {
+              await deleteFile("appointmentRequirement", requirement.filename);
+            } catch (cleanupErr) {
+              logger.warn("Failed to cleanup file:", cleanupErr.message);
+            }
           }
         }
       }
       logger.error("Error submitting appointment:", err);
-      throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();  
+      throwGraphQLError(res).message(err.message || "Failed to submit appointment").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -472,20 +651,63 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    // 1. Decide cancellation status
-    const newStatus = patientId === cancelledBy ? "CancelledByPatient" : "CancelledByMedical";
 
-    // 2. Get the latest appointment record for this patient
-    const updateResult = await db.query(
-      `UPDATE "patientSlot" SET status = $1 WHERE id = $2;`,
-      [newStatus, slotId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (updateResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to cancel appointment").status(500).throw();
+      // Verify the appointment exists and belongs to the patient
+      const slotResult = await client.query(
+        `SELECT "patientId", status FROM "patientSlot" WHERE id = $1 FOR UPDATE;`,
+        [slotId]
+      );
+
+      if (slotResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Appointment not found").status(404).throw();
+      }
+
+      const appointment = slotResult.rows[0];
+
+      // Verify patient matches (authorization check)
+      if (appointment.patientId !== parseInt(patientId)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Unauthorized: appointment does not belong to this patient").status(403).throw();
+      }
+
+      // Verify the appointment is in a cancellable state
+      const cancellableStatuses = ["Pending", "Scheduled", "InProgress"];
+      if (!cancellableStatuses.includes(appointment.status)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message(`Cannot cancel appointment with status "${appointment.status}". Only ${cancellableStatuses.join(", ")} appointments can be cancelled.`)
+          .status(400)
+          .throw();
+      }
+
+      // Decide cancellation status based on who is cancelling
+      const newStatus = parseInt(cancelledBy) === parseInt(patientId) ? "CancelledByPatient" : "CancelledByMedical";
+
+      // Update the appointment
+      const updateResult = await client.query(
+        `UPDATE "patientSlot" SET status = $1 WHERE id = $2;`,
+        [newStatus, slotId]
+      );
+
+      await client.query('COMMIT');
+
+      if (updateResult.rowCount === 0) {
+        throwGraphQLError(res).message("Failed to cancel appointment").status(500).throw();
+      }
+
+      return { success: true };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _cancelAppointment:", err);
+      throwGraphQLError(res).message(err.message || "Failed to cancel appointment").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
-
-    return { success: true };
   },
 
   _respondAppointment: async (_, { slotId, status, notes }, { user, res }) => {
@@ -494,52 +716,63 @@ const Mutation = {
     }
 
     // Valid state transitions per appointment state machine
-    // NoShow is system-only (not a manual staff action)
     const validTransitions = {
       Pending: ["Scheduled", "Rejected"],
       Scheduled: ["CancelledByMedical"],
       InProgress: ["Completed", "CancelledByMedical"],
     };
 
-    // Step 1: Check current slot status
-    const { rows } = await db.query(
-      `SELECT status FROM "patientSlot" WHERE id = $1;`,
-      [slotId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (rows.length === 0) {
-      throwGraphQLError(res).message("Slot not found").status(404).throw();
+      // Lock the slot row to prevent concurrent status changes
+      const { rows } = await client.query(
+        `SELECT status FROM "patientSlot" WHERE id = $1 FOR UPDATE;`,
+        [slotId]
+      );
+
+      if (rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Slot not found").status(404).throw();
+      }
+
+      const currentStatus = rows[0].status;
+      const allowed = validTransitions[currentStatus];
+
+      if (!allowed || !allowed.includes(status)) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message(`Cannot transition from "${currentStatus}" to "${status}". Allowed: ${(allowed || []).join(", ") || "none"}`)
+          .status(400)
+          .throw();
+      }
+
+      // Perform update within transaction
+      const updateResult = await client.query(
+        `UPDATE "patientSlot" SET status = $1, notes = $2, "approvedBy" = $3 WHERE id = $4 RETURNING *;`,
+        [status, notes || null, user.id, slotId]
+      );
+
+      await client.query('COMMIT');
+
+      // Resolve approver name (outside transaction)
+      const staffResult = await db.query(
+        `SELECT CONCAT(first_name, ' ', last_name) AS name FROM "UsersPersonal" WHERE id = $1 LIMIT 1;`,
+        [user.id]
+      );
+
+      const row = updateResult.rows[0];
+      row.approvedBy = staffResult.rows[0]?.name || String(user.id);
+
+      return { ...row, requirements: [] };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _respondAppointment:", err);
+      throwGraphQLError(res).message(err.message || "Failed to update slot status").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
-
-    const currentStatus = rows[0].status;
-    const allowed = validTransitions[currentStatus];
-
-    if (!allowed || !allowed.includes(status)) {
-      throwGraphQLError(res)
-        .message(`Cannot transition from "${currentStatus}" to "${status}". Allowed: ${(allowed || []).join(", ") || "none"}`)
-        .status(400)
-        .throw();
-    }
-
-    // Step 2: Perform update and resolve the approver name
-    const updateResult = await db.query(
-      `UPDATE "patientSlot" SET status = $1, notes = $2, "approvedBy" = $3 WHERE id = $4 RETURNING *;`,
-      [status, notes || null, user.id, slotId]
-    );
-
-    if (updateResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to update slot status").status(500).throw();
-    }
-
-    // Resolve approver name
-    const staffResult = await db.query(
-      `SELECT CONCAT(first_name, ' ', last_name) AS name FROM "UsersPersonal" WHERE id = $1 LIMIT 1;`,
-      [user.id]
-    );
-    const row = updateResult.rows[0];
-    row.approvedBy = staffResult.rows[0]?.name || String(user.id);
-
-    return { ...row, requirements: [] };
   },
 
   _recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
@@ -547,34 +780,45 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Step 1: Check current slot status
-    const { rows } = await db.query(
-      `SELECT status FROM "patientSlot" WHERE id = $1;`,
-      [slotId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (rows.length === 0) {
-      throwGraphQLError(res).message("Slot not found").status(404).throw();
+      // Lock the slot row to prevent concurrent status changes
+      const { rows } = await client.query(
+        `SELECT status FROM "patientSlot" WHERE id = $1 FOR UPDATE;`,
+        [slotId]
+      );
+
+      if (rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Slot not found").status(404).throw();
+      }
+
+      if (rows[0].status !== "Scheduled") {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message("Slot status must be Scheduled to record attendance")
+          .status(400)
+          .throw();
+      }
+
+      // Perform update within transaction
+      const updateResult = await client.query(
+        `UPDATE "patientSlot" SET status = 'InProgress', arrived_at = $1 WHERE id = $2 RETURNING *;`,
+        [arrived_at, slotId]
+      );
+
+      await client.query('COMMIT');
+
+      return { ...updateResult.rows[0], requirements: [] };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _recordAppointmentAttendance:", err);
+      throwGraphQLError(res).message(err.message || "Failed to record attendance").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
-
-    if (rows[0].status !== "Scheduled") {
-      throwGraphQLError(res)
-        .message("Slot status must be Scheduled to record attendance")
-        .status(400)
-        .throw();
-    }
-    
-    // Step 2: Perform update
-    const updateResult = await db.query(
-      `UPDATE "patientSlot" SET status = 'InProgress', arrived_at = $1 WHERE id = $2 RETURNING *;`,
-      [arrived_at, slotId]
-    );
-
-    if (updateResult.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to record attendance").status(500).throw();
-    }
-
-    return { ...updateResult.rows[0], requirements: [] };
   },
 
   _createScheduler: async (_, { input }, { user, res }) => {
@@ -593,8 +837,8 @@ const Mutation = {
 
       const result = await client.query(
         `INSERT INTO "slotScheduler"
-          (label, location, "patientType", "scheduleFlags", "morningAllowed", "afternoonAllowed", "whitelistOnly", "containsCustomDates", notes)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          (label, location, "patientType", "scheduleFlags", "morningAllowed", "afternoonAllowed", "whitelistOnly", "containsCustomDates", "purposeRequired", notes)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           RETURNING *;`,
         [
           input.label,
@@ -605,6 +849,7 @@ const Mutation = {
           input.afternoonAllowed,
           input.whitelistOnly || false,
           input.slotCustomDates.length > 0,
+          input.purposeRequired || false,
           input.notes || null,
         ]
       );
@@ -618,6 +863,17 @@ const Mutation = {
       // Use the same client inside transaction (skip if empty)
       if (input.slotCustomDates && input.slotCustomDates.length > 0) {
         await insertSlotCustomDates(schedulerId, input.slotCustomDates, client);
+        // Initialize ScheduleDateEntity for each custom date with scheduler defaults
+        for (const scheduledDate of input.slotCustomDates) {
+          await client.query(
+            `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+             SELECT $1, $2, $3, $4
+             WHERE NOT EXISTS (
+               SELECT 1 FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2
+             );`,
+            [schedulerId, scheduledDate, input.morningAllowed, input.afternoonAllowed]
+          );
+        }
       }
       if (input.whiteLists && input.whiteLists.length > 0) {
         await insertSchedulerWhitelist(schedulerId, input.whiteLists, client);
@@ -692,6 +948,11 @@ const Mutation = {
       values.push(input.isActive);
     }
 
+    if (input.purposeRequired !== undefined && input.purposeRequired !== null) {
+      fields.push(`"purposeRequired" = $${idx++}`);
+      values.push(input.purposeRequired);
+    }
+
     if (input.notes !== undefined) {
       fields.push(`notes = $${idx++}`);
       values.push(input.notes);
@@ -726,34 +987,59 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Refuse deletion if any appointment records reference this scheduler's date entities
-    const slotCheck = await db.query(
-      `SELECT 1 FROM "patientSlot" ps
-       INNER JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
-       WHERE sde."slotId" = $1
-       LIMIT 1;`,
-      [schedulerId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (slotCheck.rowCount > 0) {
-      throwGraphQLError(res)
-        .message("Cannot delete scheduler: it has associated appointment records. Deactivate it instead.")
-        .status(400)
-        .throw();
+      // Lock the scheduler row to prevent concurrent deletes and appointments
+      const schedulerCheck = await client.query(
+        `SELECT id FROM "slotScheduler" WHERE id = $1 FOR UPDATE;`,
+        [schedulerId]
+      );
+
+      if (schedulerCheck.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+      }
+
+      // Check if any appointment records reference this scheduler's date entities
+      const slotCheck = await client.query(
+        `SELECT 1 FROM "patientSlot" ps
+         INNER JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
+         WHERE sde."slotId" = $1
+         LIMIT 1;`,
+        [schedulerId]
+      );
+
+      if (slotCheck.rowCount > 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message("Cannot delete scheduler: it has associated appointment records. Deactivate it instead.")
+          .status(400)
+          .throw();
+      }
+
+      // Cascade delete child records in FK-safe order (all within transaction)
+      await client.query(`DELETE FROM "schedulerWhitelist" WHERE "slotSchedulerId" = $1;`, [schedulerId]);
+      await client.query(`DELETE FROM "scheduleRequirement" WHERE "slotId" = $1;`, [schedulerId]);
+      await client.query(`DELETE FROM "SlotCustomDate" WHERE "slotScheduleId" = $1;`, [schedulerId]);
+      await client.query(`DELETE FROM "ScheduleDateEntity" WHERE "slotId" = $1;`, [schedulerId]);
+
+      const result = await client.query(
+        `DELETE FROM "slotScheduler" WHERE id = $1;`,
+        [schedulerId]
+      );
+
+      await client.query('COMMIT');
+
+      return result.rowCount > 0;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _deleteScheduler:", err);
+      throwGraphQLError(res).message(err.message || "Failed to delete scheduler").status(err.status || 500).throw();
+    } finally {
+      client.release();
     }
-
-    // Cascade delete child records in FK-safe order before deleting the scheduler
-    await db.query(`DELETE FROM "schedulerWhitelist" WHERE "slotSchedulerId" = $1;`, [schedulerId]);
-    await db.query(`DELETE FROM "scheduleRequirement" WHERE "slotId" = $1;`, [schedulerId]);
-    await db.query(`DELETE FROM "SlotCustomDate" WHERE "slotScheduleId" = $1;`, [schedulerId]);
-    await db.query(`DELETE FROM "ScheduleDateEntity" WHERE "slotId" = $1;`, [schedulerId]);
-
-    const result = await db.query(
-      `DELETE FROM "slotScheduler" WHERE id = $1;`,
-      [schedulerId]
-    );
-
-    return result.rowCount > 0;
   },
 
   _updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
@@ -863,35 +1149,112 @@ const Mutation = {
         .throw();
     }
 
-    // Build placeholders and values for batch insert
-    const values = [];
-    const placeholders = dates.map((date, i) => {
-      const offset = i * 2;
-      values.push(schedulerId, date);
-      return `($${offset + 1}, $${offset + 2})`;
-    });
-
-    const query = `
-      INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
-      VALUES ${placeholders.join(", ")}
-      RETURNING "scheduledDate";
-    `;
-
+    const client = await db.connect();
     try {
-      const result = await db.query(query, values);
+      await client.query('BEGIN');
 
-      // Keep containsCustomDates flag in sync
-      await db.query(
-        `UPDATE "slotScheduler" SET "containsCustomDates" = true WHERE id = $1;`,
+      // Fetch scheduler defaults for slot count fallback
+      const schedulerResult = await client.query(
+        `SELECT "morningAllowed", "afternoonAllowed", "containsCustomDates" FROM "slotScheduler" WHERE id = $1;`,
         [schedulerId]
       );
+      if (schedulerResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+      }
+      const defaults = schedulerResult.rows[0];
 
-      return result.rows.map(r => r.scheduledDate);
+      // Insert date markers into SlotCustomDate — skip any that already exist
+      // (can't use ON CONFLICT without a unique constraint; use WHERE NOT EXISTS instead)
+      const values = [];
+      const selectParts = dates.map((dateEntry, i) => {
+        const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
+        const offset = i * 2;
+        values.push(schedulerId, scheduledDate);
+        return `($${offset + 1}::integer, $${offset + 2}::date)`;
+      });
+
+      await client.query(
+        `INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
+         SELECT v."slotScheduleId", v."scheduledDate"
+         FROM (VALUES ${selectParts.join(", ")}) AS v("slotScheduleId", "scheduledDate")
+         WHERE NOT EXISTS (
+           SELECT 1 FROM "SlotCustomDate" scd
+           WHERE scd."slotScheduleId" = v."slotScheduleId"
+             AND scd."scheduledDate" = v."scheduledDate"
+         );`,
+        values
+      );
+
+      // Always initialize/upsert ScheduleDateEntity for every custom date
+      for (const dateEntry of dates) {
+        const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
+        const morning = (typeof dateEntry === 'object' && dateEntry.morningAllowed != null)
+          ? dateEntry.morningAllowed
+          : defaults.morningAllowed;
+        const afternoon = (typeof dateEntry === 'object' && dateEntry.afternoonAllowed != null)
+          ? dateEntry.afternoonAllowed
+          : defaults.afternoonAllowed;
+
+        const existing = await client.query(
+          `SELECT id FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2 LIMIT 1;`,
+          [schedulerId, scheduledDate]
+        );
+
+        if (existing.rowCount > 0) {
+          await client.query(
+            `UPDATE "ScheduleDateEntity"
+             SET "morningAllowed" = $1, "afternoonAllowed" = $2
+             WHERE "slotId" = $3 AND "scheduledDate" = $4;`,
+            [morning, afternoon, schedulerId, scheduledDate]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+             VALUES ($1, $2, $3, $4);`,
+            [schedulerId, scheduledDate, morning, afternoon]
+          );
+        }
+      }
+
+      // Step 1: If containsCustomDates is currently false, set it to true
+      if (!defaults.containsCustomDates) {
+        await client.query(
+          `UPDATE "slotScheduler" SET "containsCustomDates" = true WHERE id = $1;`,
+          [schedulerId]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      // Return full SlotCustomDateEntry objects (with slot counts from ScheduleDateEntity)
+      const scheduledDates = dates.map(d => (typeof d === 'string' ? d : d.scheduledDate));
+      const finalResult = await db.query(
+        `SELECT
+           scd.id,
+           scd."slotScheduleId",
+           scd."scheduledDate",
+           scd.created_at,
+           sde."morningAllowed",
+           sde."afternoonAllowed"
+         FROM "SlotCustomDate" scd
+         LEFT JOIN "ScheduleDateEntity" sde
+           ON sde."slotId" = $1 AND sde."scheduledDate" = scd."scheduledDate"
+         WHERE scd."slotScheduleId" = $1
+           AND scd."scheduledDate" = ANY($2)
+         ORDER BY scd."scheduledDate" ASC;`,
+        [schedulerId, scheduledDates]
+      );
+      return finalResult.rows;
     } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _setCustomDates:", err);
       throwGraphQLError(res)
         .message(`Failed to set custom dates: ${err.message}`)
         .status(500)
         .throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -907,39 +1270,98 @@ const Mutation = {
         .throw();
     }
 
+    // Fetch scheduler defaults and scheduleFlags before opening the transaction
+    const schedulerResult = await db.query(
+      `SELECT "scheduleFlags", "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+      [schedulerId]
+    );
+    if (schedulerResult.rowCount === 0) {
+      throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+    }
+    const { scheduleFlags, morningAllowed: defMorning, afternoonAllowed: defAfternoon } = schedulerResult.rows[0];
+
+    const client = await db.connect();
     try {
-      const result = await db.query(
+      await client.query('BEGIN');
+
+      // Normalize dates to plain DATE strings and cast in query to avoid type mismatch
+      const normalizedDates = dates.map(d => (typeof d === 'string' ? d.split('T')[0] : d));
+
+      const result = await client.query(
         `DELETE FROM "SlotCustomDate"
          WHERE "slotScheduleId" = $1
-         AND "scheduledDate" = ANY($2)
-         RETURNING "scheduledDate";`,
-        [schedulerId, dates]
+         AND "scheduledDate"::date = ANY($2::date[])
+         RETURNING "scheduledDate"::date::text AS "scheduledDate";`,
+        [schedulerId, normalizedDates]
       );
 
       if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
         throwGraphQLError(res)
           .message("No matching custom dates found to unset")
           .status(404)
           .throw();
       }
 
-      // Keep containsCustomDates flag in sync
-      const remaining = await db.query(
+      const deletedDates = result.rows.map(r => r.scheduledDate);
+
+      // For each deleted date:
+      // - If the day is still in the default weekly schedule (scheduleFlags) → reset ScheduleDateEntity to defaults
+      // - If not → delete ScheduleDateEntity (only if no appointments reference it)
+      //
+      // DOW mapping: Sun=0→64, Mon=1→1, Tue=2→2, Wed=3→4, Thu=4→8, Fri=5→16, Sat=6→32
+      for (const dateStr of deletedDates) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dow = new Date(y, m - 1, d).getDay(); // 0=Sun
+        const flagMap = [64, 1, 2, 4, 8, 16, 32]; // index by DOW
+        const dayFlag = flagMap[dow];
+        const isDefaultScheduled = (scheduleFlags & dayFlag) > 0;
+
+        if (isDefaultScheduled) {
+          // Reset to scheduler defaults rather than deleting
+          await client.query(
+            `UPDATE "ScheduleDateEntity"
+             SET "morningAllowed" = $1, "afternoonAllowed" = $2
+             WHERE "slotId" = $3 AND "scheduledDate"::date = $4::date;`,
+            [defMorning, defAfternoon, schedulerId, dateStr]
+          );
+        } else {
+          // Delete if no appointments reference this entity
+          await client.query(
+            `DELETE FROM "ScheduleDateEntity" sde
+             WHERE sde."slotId" = $1
+               AND sde."scheduledDate"::date = $2::date
+               AND NOT EXISTS (
+                 SELECT 1 FROM "patientSlot" ps
+                 WHERE ps."slotEntityId" = sde.id
+               );`,
+            [schedulerId, dateStr]
+          );
+        }
+      }
+
+      // Keep containsCustomDates flag in sync (atomic within transaction)
+      const remaining = await client.query(
         `SELECT 1 FROM "SlotCustomDate" WHERE "slotScheduleId" = $1 LIMIT 1;`,
         [schedulerId]
       );
-      await db.query(
+      await client.query(
         `UPDATE "slotScheduler" SET "containsCustomDates" = $1 WHERE id = $2;`,
         [remaining.rowCount > 0, schedulerId]
       );
 
-      // Return the list of dates that were actually deleted
-      return result.rows.map(r => r.scheduledDate);
+      await client.query('COMMIT');
+
+      return deletedDates;
     } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _unsetCustomDates:", err);
       throwGraphQLError(res)
         .message(`Failed to unset custom dates: ${err.message}`)
         .status(500)
         .throw();
+    } finally {
+      client.release();
     }
   },
 
@@ -1073,13 +1495,35 @@ const Mutation = {
         RETURNING *;
       `;
 
-      const result = await db.query(query, values);
+      let result = await db.query(query, values);
 
+      // If no entity exists yet, create one with scheduler defaults then retry
       if (result.rowCount === 0) {
-        throwGraphQLError(res)
-          .message("No matching schedule date entity found to update")
-          .status(404)
-          .throw();
+        const schedulerDefaults = await db.query(
+          `SELECT "morningAllowed", "afternoonAllowed" FROM "slotScheduler" WHERE id = $1;`,
+          [schedulerId]
+        );
+        if (schedulerDefaults.rowCount === 0) {
+          throwGraphQLError(res).message("Scheduler not found").status(404).throw();
+        }
+        const { morningAllowed: defMorning, afternoonAllowed: defAfternoon } = schedulerDefaults.rows[0];
+
+        await db.query(
+          `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
+           SELECT $1, $2, $3, $4
+           WHERE NOT EXISTS (
+             SELECT 1 FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2
+           );`,
+          [schedulerId, date, defMorning, defAfternoon]
+        );
+
+        result = await db.query(query, values);
+        if (result.rowCount === 0) {
+          throwGraphQLError(res)
+            .message("Failed to create and update schedule date entity")
+            .status(500)
+            .throw();
+        }
       }
 
       // Attach computed counts so GraphQL can resolve morningRegistered, etc.
@@ -1092,9 +1536,50 @@ const Mutation = {
         .status(500)
         .throw();
     }
+  },
+
+  // -- Bulk-reject all active appointments for a scheduler + date --
+  // Used when staff force-deletes/disables a date with existing bookings.
+  _cancelDateAppointments: async (_, { schedulerId, date, reason }, { user, res }) => {
+    if (!user) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    const cancelReason = reason || 'This appointment date is no longer available. We apologize for the inconvenience. Please rebook at your earliest convenience.';
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Reject all Pending/Scheduled/InProgress slots for this date
+      const result = await client.query(
+        `UPDATE "patientSlot" ps
+         SET status = 'Rejected', notes = $1, "approvedBy" = $2
+         FROM "ScheduleDateEntity" sde
+         WHERE sde.id = ps."slotEntityId"
+           AND sde."slotId" = $3
+           AND sde."scheduledDate"::date = $4::date
+           AND ps.status IN ('Pending', 'Scheduled', 'InProgress')
+         RETURNING ps.id, ps."patientId";`,
+        [cancelReason, user.id, schedulerId, date]
+      );
+
+      await client.query('COMMIT');
+
+      return result.rowCount;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error("Error in _cancelDateAppointments:", err);
+      throwGraphQLError(res)
+        .message(`Failed to cancel appointments: ${err.message}`)
+        .status(500)
+        .throw();
+    } finally {
+      client.release();
+    }
   }
 
-};  
+};
 
 
 module.exports = { Query, Mutation };

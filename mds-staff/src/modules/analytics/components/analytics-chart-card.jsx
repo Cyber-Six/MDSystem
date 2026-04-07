@@ -1,13 +1,26 @@
-import React, { memo } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import { AnalyticsBarChart, AnalyticsLineChart, AnalyticsPieChart } from './analytics-charts';
-import { CHART_TYPE_MAP } from '../analytics-service';
+import { CHART_TYPE_MAP, exportSingleMetric } from '../analytics-service';
 
 /**
  * Analytics Chart Card
  * Consistent card wrapper for each analytics chart with title, total, and loading states.
  */
-const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark }) => {
+const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, branch, startDate, endDate, groupBy }) => {
   const chartType = CHART_TYPE_MAP[dataType] || 'bar';
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    if (!branch || !startDate || !endDate) return;
+    setExporting(true);
+    try {
+      await exportSingleMetric(dataType, { branch, startDate, endDate, groupBy });
+    } catch {
+      // silent — user will see no file downloaded
+    } finally {
+      setExporting(false);
+    }
+  }, [dataType, branch, startDate, endDate, groupBy]);
 
   // Transform {labels, values} -> [{name, value}]
   const chartData = data?.data
@@ -22,22 +35,34 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark }
   return (
     <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
       {/* Card Header */}
-      <div className="px-4 py-3 border-b border-neutral-100 dark:border-neutral-700/50 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-secondary-800 dark:text-white leading-tight">{title}</h3>
-          {!loading && !error && (
-            <p className="text-[11px] text-secondary-400 dark:text-neutral-500 mt-0.5">
-              Total: {total.toLocaleString()}
-            </p>
-          )}
+      <div className="px-3 py-2 border-b border-neutral-100 dark:border-neutral-700/50 flex items-center justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-xs font-semibold text-secondary-800 dark:text-white leading-none truncate">{title}</h3>
+            {!loading && !error && (
+              <span className="text-[10px] text-secondary-400 dark:text-neutral-500 flex-shrink-0">
+                {total.toLocaleString()}
+              </span>
+            )}
+          </div>
         </div>
-        <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full uppercase tracking-wide ${
-          chartType === 'bar' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' :
-          chartType === 'line' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' :
-          'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
-        }`}>
-          {chartType === 'doughnut' ? 'pie' : chartType}
-        </span>
+        {/* Per-card export (single metric PDF) */}
+        {!loading && !error && data?.data && (
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            title="Export as PDF"
+            className="ml-2 p-0.5 text-secondary-400 hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400 rounded transition-colors disabled:opacity-50 flex-shrink-0"
+          >
+            {exporting ? (
+              <span className="animate-spin block h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full" />
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Card Body */}

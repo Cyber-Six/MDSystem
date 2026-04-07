@@ -22,6 +22,9 @@ const AnnouncementManagement = () => {
   const [stagedFileId, setStagedFileId] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [existingPubmat, setExistingPubmat] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, label }
+  const fileInputRef = React.useRef(null);
 
   const [formData, setFormData] = useState({
     label: '',
@@ -64,8 +67,7 @@ const AnnouncementManagement = () => {
     }));
   };
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
+  const processFile = async (file) => {
     if (!file) return;
 
     // Show local preview immediately
@@ -82,10 +84,39 @@ const AnnouncementManagement = () => {
     } catch (err) {
       setError('Failed to upload image. Please try again.');
       setImagePreview(null);
-      e.target.value = '';
     } finally {
       setIsUploadingFile(false);
     }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    await processFile(file);
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.type === 'image/jpeg' || file.type === 'image/png')) {
+      await processFile(file);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const removeImage = () => {
+    setImagePreview(null);
+    setStagedFileId(null);
+    setExistingPubmat(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const resetForm = () => {
@@ -143,10 +174,14 @@ const AnnouncementManagement = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this announcement?')) {
-      return;
-    }
+    const announcement = announcements.find((a) => a.id === id);
+    setDeleteConfirm({ id, label: announcement?.label || 'this announcement' });
+  };
 
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    const { id } = deleteConfirm;
+    setDeleteConfirm(null);
     try {
       setIsSaving(true);
       await deleteAnnouncement(id);
@@ -250,33 +285,80 @@ const AnnouncementManagement = () => {
               <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
                 Image / Pubmat (Optional)
               </label>
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                onChange={handleFileChange}
-                disabled={isUploadingFile}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
-              />
-              {isUploadingFile && (
-                <p className="text-xs text-primary-500 mt-1 flex items-center gap-1">
-                  <span className="animate-spin inline-block w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full"></span>
-                  Uploading image...
-                </p>
-              )}
-              {imagePreview && !isUploadingFile && (
-                <div className="mt-2">
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="max-h-40 rounded border border-neutral-200 dark:border-neutral-600 object-contain"
+
+              {/* Drag-and-drop zone */}
+              {!imagePreview && !existingPubmat ? (
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onClick={() => !isUploadingFile && fileInputRef.current?.click()}
+                  className={`relative flex flex-col items-center justify-center gap-2 w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors
+                    ${isDragging
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                      : 'border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/40 hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/10'
+                    }
+                    ${isUploadingFile ? 'pointer-events-none opacity-60' : ''}
+                  `}
+                >
+                  {isUploadingFile ? (
+                    <span className="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full" />
+                  ) : (
+                    <svg className="w-8 h-8 text-neutral-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                  <span className="text-xs text-secondary-500 dark:text-neutral-400">
+                    {isUploadingFile ? 'Uploading…' : 'Drag & drop or click to upload'}
+                  </span>
+                  <span className="text-xs text-neutral-400 dark:text-neutral-500">PNG, JPG accepted</span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    onChange={handleFileChange}
+                    disabled={isUploadingFile}
+                    className="hidden"
                   />
-                  <p className="text-xs text-success-600 dark:text-success-400 mt-1">Image ready</p>
                 </div>
-              )}
-              {!imagePreview && existingPubmat && (
-                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                  Current image: {existingPubmat} — upload a new file to replace it
-                </p>
+              ) : (
+                <div className="relative mt-1 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-600">
+                  {imagePreview ? (
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="w-full max-h-48 object-contain bg-neutral-100 dark:bg-neutral-700"
+                    />
+                  ) : (
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400 p-3">
+                      Current image: {existingPubmat} — upload a new file to replace it
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="absolute top-2 right-2 p-1 bg-neutral-900/60 hover:bg-neutral-900/80 text-white rounded-full transition-colors"
+                    title="Remove image"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  {imagePreview && !isUploadingFile && (
+                    <p className="text-xs text-success-600 dark:text-success-400 px-3 py-1 bg-success-50 dark:bg-success-900/20 border-t border-neutral-200 dark:border-neutral-600">
+                      Image ready to save
+                    </p>
+                  )}
+                  {/* Hidden input for re-upload */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    onChange={handleFileChange}
+                    disabled={isUploadingFile}
+                    className="hidden"
+                  />
+                </div>
               )}
             </div>
 
@@ -420,6 +502,56 @@ const AnnouncementManagement = () => {
           </div>
         )}
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setDeleteConfirm(null)}
+          />
+          {/* Dialog */}
+          <div className="relative bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-sm p-6 flex flex-col items-center gap-4">
+            {/* Icon */}
+            <div className="w-14 h-14 rounded-full bg-error-100 dark:bg-error-900/30 flex items-center justify-center">
+              <svg className="w-7 h-7 text-error-600 dark:text-error-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            {/* Text */}
+            <div className="text-center">
+              <h3 className="text-base font-semibold text-secondary-800 dark:text-white mb-1">
+                Delete Announcement
+              </h3>
+              <p className="text-sm text-secondary-500 dark:text-neutral-400">
+                Are you sure you want to delete{' '}
+                <span className="font-medium text-secondary-700 dark:text-neutral-300">
+                  "{deleteConfirm.label}"
+                </span>
+                ? This action cannot be undone.
+              </p>
+            </div>
+            {/* Actions */}
+            <div className="flex gap-3 w-full">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 border border-neutral-300 dark:border-neutral-600 text-secondary-700 dark:text-neutral-300 text-sm font-medium rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="flex-1 px-4 py-2 bg-error-600 hover:bg-error-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,9 +1,16 @@
 // Server/utils/db.js
 
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 const { db: dbConfig } = require('./config');
 const logger = require('../utils/logger.js');
-//console.log('DB Config:', dbConfig); // Debugging line
+
+// By default pg-types parses DATE (OID 1082) as `new Date(year, month-1, day)`
+// which is LOCAL midnight. On non-UTC servers this shifts the date back one day
+// when the Date is serialized to a UTC ISO string (e.g. "2026-04-04T16:00:00.000Z"
+// for a date stored as 2026-04-05 on a UTC+8 server). Keep it as a plain
+// YYYY-MM-DD string so all date comparisons on the frontend are timezone-safe.
+types.setTypeParser(1082, val => val);
+
 // Set up a PostgreSQL connection pool using config.js
 const pool = new Pool({
   host: dbConfig.host,

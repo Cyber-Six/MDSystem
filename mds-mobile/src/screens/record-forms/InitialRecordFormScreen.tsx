@@ -6,9 +6,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, StyleSheet,
+  KeyboardAvoidingView, Platform, StyleSheet, Dimensions,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useRecordStatus } from '../../context/RecordStatusContext';
 import { ProgressStepper } from '../../components/ui/ProgressStepper';
@@ -51,6 +52,7 @@ const InitialRecordFormScreen: React.FC = () => {
     catalogsLoading: true,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   // Load catalogs on mount
   useEffect(() => {
@@ -143,22 +145,27 @@ const InitialRecordFormScreen: React.FC = () => {
     const errors: string[] = [];
     const pi = formData.personalInfo;
 
-    // Personal Info — always validated
-    if (!pi.surname?.trim()) errors.push('Surname is required');
-    if (!pi.firstName?.trim()) errors.push('First name is required');
-    if (!pi.birthday) errors.push('Birthday is required');
-    if (!pi.gender) errors.push('Gender is required');
-    if (!pi.civilStatus) errors.push('Civil status is required');
-    if (!pi.nationality?.trim()) errors.push('Nationality is required');
-    if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
-    else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
-    if (!pi.address?.trim()) errors.push('Present address is required');
+    // Personal Info — only validate initial-record fields when NOT updating
+    if (!isUpdate) {
+      if (!pi.surname?.trim()) errors.push('Surname is required');
+      if (!pi.firstName?.trim()) errors.push('First name is required');
+      if (!pi.birthday) errors.push('Birthday is required');
+      if (!pi.gender) errors.push('Gender is required');
+      if (!pi.civilStatus) errors.push('Civil status is required');
+      if (!pi.nationality?.trim()) errors.push('Nationality is required');
+      if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
+      else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
+      if (!pi.address?.trim()) errors.push('Present address is required');
+      if (!pi.studentNumber?.trim()) errors.push('Student number is required');
+      if (!pi.studentCategory) errors.push('Student category is required');
+    }
+
+    // Program & student category — always validated (shown in both modes)
     if (!pi.program) errors.push('Program is required');
     if (pi.program === 'Other' && !pi.programOther?.trim()) errors.push('Please specify your program');
-    if (!pi.studentNumber?.trim()) errors.push('Student number is required');
-    if (!pi.studentCategory) errors.push('Student category is required');
+    if (isUpdate && !pi.studentCategory) errors.push('Student category is required');
 
-    // Emergency contacts
+    // Emergency contacts — always validated
     const c1 = pi.emergencyContacts?.[0];
     const c2 = pi.emergencyContacts?.[1];
     if (!c1?.name?.trim()) errors.push('1st emergency contact name is required');
@@ -195,7 +202,7 @@ const InitialRecordFormScreen: React.FC = () => {
     if (isFemale && showMedical && !formData.obgyne?.lastMenstrualPeriod) errors.push('Last menstrual period is required');
 
     // Certification
-    if (!formData.certification?.verified) errors.push('You must certify the information');
+    if (!formData.certification?.verified) errors.push('You must check the certification checkbox before submitting');
 
     return errors;
   };
@@ -228,10 +235,21 @@ const InitialRecordFormScreen: React.FC = () => {
                 await createInitialMedicalRecord(formData, { isRevision });
               }
               await refreshRecordStatus();
+              setIsSubmitted(true);
+              setFormData(createEmptyFormData());
+              setCurrentStep(0);
               Alert.alert(
                 'Success!',
                 'Your medical record has been submitted successfully.',
-                [{ text: 'OK', onPress: () => navigation.goBack() }]
+                [{
+                  text: 'OK',
+                  onPress: () => {
+                    // Pop back to the parent screen and reset state
+                    if (navigation.canGoBack()) {
+                      navigation.goBack();
+                    }
+                  },
+                }]
               );
             } catch (error: any) {
               const msg = error?.message || 'An unexpected error occurred. Please try again.';
@@ -290,7 +308,7 @@ const InitialRecordFormScreen: React.FC = () => {
 
     switch (actualStep) {
       case 0:
-        return <PersonalInfoStep formData={formData} onUpdate={updatePersonalInfo} isDark={isDark} errors={{}} />;
+        return <PersonalInfoStep formData={formData} onUpdate={updatePersonalInfo} isDark={isDark} errors={{}} isUpdate={isUpdate} />;
       case 1:
         return <MedicalHistoryStep formData={formData} onUpdate={(_section: string, data: any) => updateMedicalHistory(data)} isDark={isDark} catalogs={catalogs} />;
       case 2:
@@ -300,27 +318,45 @@ const InitialRecordFormScreen: React.FC = () => {
       case 4:
         return <ObGyneStep formData={formData} onUpdate={updateObgyne} isDark={isDark} />;
       case 5:
-        return <ReviewStep formData={formData} catalogs={catalogs} onEdit={handleEdit} isDark={isDark} />;
+        return (
+          <ReviewStep
+            formData={formData}
+            catalogs={catalogs}
+            onEdit={handleEdit}
+            isDark={isDark}
+            onCertificationChange={updateCertification}
+          />
+        );
       default:
         return null;
     }
   };
 
   const isLastStep = currentStep === steps.length - 1;
+  const isCertified = formData.certification?.verified ?? false;
+
+  // If already submitted, show nothing (will navigate away)
+  if (isSubmitted) {
+    return (
+      <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50], justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary[500]} />
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]} edges={['bottom']}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
-          <Text style={{ color: colors.primary[500], fontSize: 16 }}>← Back</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={{ color: colors.primary[500], fontSize: 15, fontWeight: '600' }}>← Back</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+        <Text style={[styles.headerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]} numberOfLines={1}>
           {isUpdate
             ? `Update ${recordType === 'medical' ? 'Medical' : recordType === 'dental' ? 'Dental' : 'Medical & Dental'} Record`
             : isRevision ? 'Revise Medical Record' : 'Initial Medical Record'}
         </Text>
-        <View style={{ width: 60 }} />
+        <View style={{ width: 50 }} />
       </View>
 
       {/* Progress Stepper */}
@@ -329,8 +365,18 @@ const InitialRecordFormScreen: React.FC = () => {
       </View>
 
       {/* Step Content */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scrollRef} style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ flexGrow: 1 }}
+          showsVerticalScrollIndicator={false}
+        >
           {renderStepContent()}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -338,7 +384,7 @@ const InitialRecordFormScreen: React.FC = () => {
       {/* Bottom Nav Bar */}
       <View style={[styles.bottomBar, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <TouchableOpacity
-          style={[styles.navBtn, styles.navBtnOutline, currentStep === 0 && styles.navBtnDisabled]}
+          style={[styles.navBtn, styles.navBtnOutline, { borderColor: currentStep === 0 ? colors.neutral[300] : colors.primary[500] }, currentStep === 0 && styles.navBtnDisabled]}
           onPress={handleBack}
           disabled={currentStep === 0}
         >
@@ -351,18 +397,18 @@ const InitialRecordFormScreen: React.FC = () => {
 
         {isLastStep ? (
           <TouchableOpacity
-            style={[styles.navBtn, styles.navBtnPrimary, isSubmitting && styles.navBtnDisabled]}
-            onPress={() => {
-              updateCertification(true);
-              // Small delay to let state update, then submit
-              setTimeout(handleSubmit, 100);
-            }}
-            disabled={isSubmitting}
+            style={[
+              styles.navBtn,
+              styles.navBtnPrimary,
+              (!isCertified || isSubmitting) && styles.navBtnDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={!isCertified || isSubmitting}
           >
             {isSubmitting ? (
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
-              <Text style={[styles.navBtnText, { color: '#FFF' }]}>Submit ✓</Text>
+              <Text style={[styles.navBtnText, { color: '#FFF' }]}>Submit</Text>
             )}
           </TouchableOpacity>
         ) : (
@@ -371,25 +417,39 @@ const InitialRecordFormScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  headerBackBtn: { width: 60 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  headerBackBtn: { minWidth: 50 },
   headerTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', flex: 1 },
-  stepperContainer: { paddingHorizontal: 12, paddingVertical: 10 },
+  stepperContainer: { paddingHorizontal: 8, paddingVertical: 8 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80 },
   loadingText: { marginTop: 12, fontSize: 14 },
-  bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1 },
-  navBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  navBtnOutline: { borderWidth: 1, borderColor: colors.primary[500] },
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
+  navBtn: { paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, minWidth: 90, alignItems: 'center' },
+  navBtnOutline: { borderWidth: 1.5 },
   navBtnPrimary: { backgroundColor: colors.primary[500] },
   navBtnDisabled: { opacity: 0.4 },
   navBtnText: { fontSize: 14, fontWeight: '600' },
-  stepIndicator: { fontSize: 13 },
+  stepIndicator: { fontSize: 13, fontWeight: '500' },
 });
 
 export default InitialRecordFormScreen;

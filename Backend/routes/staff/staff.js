@@ -72,12 +72,56 @@ async function getUserIdViaEmail(email, branch) {
     return result.rows;
 }
 
+// Route: Get current staff's own profile info
+router.get('/me/profile', jwtProtect("medical"), async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT
+               uc.email,
+               up.first_name, up.middle_name, up.last_name,
+               mp.role AS personnel_role,
+               mp.designation AS branch,
+               mp.is_active
+             FROM "UserCredentials" uc
+             LEFT JOIN "UsersPersonal" up ON up.id = uc.id
+             LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+             WHERE uc.id = $1`,
+            [req.user.id]
+        );
+
+        // A valid JWT guarantees this user exists in UserCredentials
+        if (result.rows.length === 0) {
+            return res.status(500).json({ error: 'Unexpected: authenticated user not found in credentials' });
+        }
+
+        const row = result.rows[0];
+        const nameParts = [
+            row.first_name,
+            row.middle_name ? `${row.middle_name[0]}.` : null,
+            row.last_name,
+        ].filter(Boolean);
+
+        res.json({
+            email: row.email || null,
+            name: nameParts.length > 0 ? nameParts.join(' ') : null,
+            firstName: row.first_name || null,
+            lastName: row.last_name || null,
+            role: row.personnel_role || null,
+            branch: row.branch || null,
+            isActive: row.is_active ?? true,
+        });
+    } catch (error) {
+        logger.error('Error fetching own profile:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Route: Get current user's module permissions
 router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
     try {
         const { getStaffModulePermissions, isMedicalPermitted, permissions: permKeys } = require('../../services/permit.js');
         const modulePerms = await getStaffModulePermissions(req.user.id);
-        const isAdmin = await isMedicalPermitted(req.user.id, permKeys.is_admin, null);
+        const {permitted: isAdmin} = await isMedicalPermitted(req.user.id, permKeys.is_admin);
 
         res.json({
             modules: modulePerms.modules,
@@ -137,7 +181,7 @@ router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => 
 });
 
 // Route: Get user ID by email
-router.get('/id/email/:email/:branch', jwtProtect("patient"), async (req, res) => {
+router.get('/id/email/:email/:branch', jwtProtect("medical"), async (req, res) => {
     try {
         const { email, branch } = req.params;
 

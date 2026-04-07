@@ -125,17 +125,17 @@ const AuthSlides = ({ isPanelOpen, activeView }) => {
 
   return (
     <div 
-      className={`fixed top-0 left-0 w-full h-screen z-[1] transition-all duration-300 ${activeView === 'register' ? 'blur-sm' : ''}`}
-      style={{
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)'
-      }}
+      className={`fixed top-0 left-0 w-full h-screen z-[1] transition-all duration-300 bg-white ${activeView === 'register' ? 'blur-sm' : ''}`}
     >
       <div 
-        className="absolute top-0 left-0 w-full h-full"
-        style={{
-          background: 'radial-gradient(circle at 20% 50%, rgba(245, 158, 11, 0.1) 0%, transparent 50%)'
-        }}
+        className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100"
       >
+        <div 
+          className="absolute top-0 left-0 w-full h-full opacity-30"
+          style={{
+            background: 'radial-gradient(circle at 20% 50%, rgba(245, 158, 11, 0.2) 0%, transparent 50%)'
+          }}
+        />
         {/* Hero Slider */}
         <div 
           className="h-full flex items-center justify-center px-6 sm:px-8 lg:px-12 py-8"
@@ -163,14 +163,14 @@ const AuthSlides = ({ isPanelOpen, activeView }) => {
                       >
                         {/* Text Content - Left Side */}
                         <div className="flex-1 space-y-4">
-                          <h2 className={`font-heading font-bold text-white transition-all duration-300 animate-slide-in-left ${
+                          <h2 className={`font-heading font-bold text-secondary-900 transition-all duration-300 animate-slide-in-left ${
                             isPanelOpen 
                               ? 'text-2xl lg:text-3xl' 
                               : 'text-3xl lg:text-4xl'
                           }`}>
                             {slide.headline}
                           </h2>
-                          <p className={`text-neutral-300 leading-relaxed transition-all duration-300 animate-fade-in-up ${
+                          <p className={`text-secondary-700 leading-relaxed transition-all duration-300 animate-fade-in-up ${
                             isPanelOpen 
                               ? 'text-sm lg:text-base' 
                               : 'text-base lg:text-lg'
@@ -183,7 +183,7 @@ const AuthSlides = ({ isPanelOpen, activeView }) => {
                         <div className={`transition-all duration-300 ${
                           isPanelOpen ? 'hidden xl:flex' : 'flex'
                         } items-center justify-center flex-shrink-0`}>
-                          <div className={`bg-white/5 backdrop-blur-sm border border-white/10 rounded-3xl p-8 lg:p-12 transition-all duration-300 animate-scale-in ${
+                          <div className={`bg-white/5 backdrop-blur-sm border border-neutral-300 rounded-3xl p-8 lg:p-12 transition-all duration-300 animate-scale-in ${
                             isPanelOpen ? 'w-32 h-32 lg:w-40 lg:h-40' : 'w-48 h-48 lg:w-56 lg:h-56'
                           }`}>
                             <Icon className={`w-full h-full ${getIconColor(slide.color)} transition-all duration-300`} strokeWidth={1.5} />
@@ -211,16 +211,16 @@ const AuthSlides = ({ isPanelOpen, activeView }) => {
                         className="min-w-full flex flex-col items-center text-center space-y-6"
                       >
                         {/* Icon at Top */}
-                        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 w-32 h-32 animate-scale-in">
+                        <div className="bg-neutral-100 backdrop-blur-sm border border-neutral-300 rounded-2xl p-8 w-32 h-32 animate-scale-in">
                           <Icon className={`w-full h-full ${getIconColor(slide.color)}`} strokeWidth={1.5} />
                         </div>
 
                         {/* Text Content */}
                         <div className="space-y-3">
-                          <h2 className="font-heading font-bold text-white text-xl sm:text-2xl animate-fade-in-up">
+                          <h2 className="font-heading font-bold text-secondary-900 text-xl sm:text-2xl animate-fade-in-up">
                             {slide.headline}
                           </h2>
-                          <p className="text-neutral-300 leading-relaxed text-sm animate-fade-in-up">
+                          <p className="text-secondary-700 leading-relaxed text-sm animate-fade-in-up">
                             {slide.description}
                           </p>
                         </div>
@@ -244,7 +244,7 @@ const AuthSlides = ({ isPanelOpen, activeView }) => {
                     <div className={`transition-all duration-300 rounded-full ${
                       currentSlide === index 
                         ? 'bg-primary-500 w-8 h-2' 
-                        : 'bg-white/30 hover:bg-white/50 w-2 h-2'
+                        : 'bg-neutral-400/60 hover:bg-neutral-500/70 w-2 h-2'
                     }`} />
                     {currentSlide === index && (
                       <div 
@@ -255,14 +255,14 @@ const AuthSlides = ({ isPanelOpen, activeView }) => {
                   </button>
                 ))}
               </div>
-              <div className="text-neutral-400 text-xs">
+              <div className="text-neutral-500 text-xs">
                 {currentSlide + 1} / {slides.length}
               </div>
             </div>
           </div>
 
           {/* Touch Swipe Indicator (Mobile Only) */}
-          <div className="md:hidden absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-neutral-400 text-xs">
+          <div className="md:hidden absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-neutral-500 text-xs">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
             </svg>

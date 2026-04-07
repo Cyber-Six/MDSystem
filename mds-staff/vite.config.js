@@ -48,10 +48,11 @@ export default defineConfig(({ mode }) => {
         '/auth': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
+          secure: BACKEND_URL.startsWith('https'),
           bypass: function(req) {
-            // Don't proxy GET requests (browser navigation) - let React Router handle them
-            if (req.method === 'GET') {
+            // API calls always include an Authorization header; browser navigation does not.
+            // Bypass for browser GET navigations so Vite serves index.html.
+            if (req.method === 'GET' && !req.headers.authorization) {
               return '/index.html';
             }
           },
@@ -61,10 +62,16 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
         },
-        '/dashboard/stats': {
+        '/dashboard': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
+          secure: BACKEND_URL.startsWith('https'),
+          bypass: function(req) {
+            // API calls always include an Authorization header; browser navigation does not.
+            if (req.method === 'GET' && !req.headers.authorization) {
+              return '/index.html';
+            }
+          },
         },
         '/medical-update': {
           target: BACKEND_URL,
@@ -79,10 +86,10 @@ export default defineConfig(({ mode }) => {
         '/appointment': {
           target: BACKEND_URL,
           changeOrigin: true,
-          secure: BACKEND_URL.startsWith('https'),  // Only use secure for HTTPS backends
+          secure: BACKEND_URL.startsWith('https'),
           bypass: function(req) {
-            // Don't proxy GET requests (browser navigation) - let React Router handle them
-            if (req.method === 'GET') {
+            // API calls always include an Authorization header; browser navigation does not.
+            if (req.method === 'GET' && !req.headers.authorization) {
               return '/index.html';
             }
           },
@@ -143,8 +150,8 @@ export default defineConfig(({ mode }) => {
           secure: BACKEND_URL.startsWith('https'),
           bypass: function(req) {
             // Don't proxy GET requests to /analytics (browser navigation) - let React Router handle them
-            // Only proxy API calls (POST, or GET with /analytics/query/ or /analytics/queries path)
-            if (req.method === 'GET' && !req.url.startsWith('/analytics/query') && !req.url.startsWith('/analytics/queries')) {
+            // Only proxy API calls (POST, or GET with API path prefixes)
+            if (req.method === 'GET' && !req.url.startsWith('/analytics/query') && !req.url.startsWith('/analytics/queries') && !req.url.startsWith('/analytics/export') && !req.url.startsWith('/analytics/report')) {
               return '/index.html';
             }
           },
@@ -157,6 +164,19 @@ export default defineConfig(({ mode }) => {
             // Only let React Router handle /announcements (the SPA page, plural).
             // API calls to /announcement (singular) must be proxied to the backend.
             if (req.method === 'GET' && req.url.startsWith('/announcements')) {
+              return '/index.html';
+            }
+          },
+        },
+        '/settings': {
+          target: BACKEND_URL,
+          changeOrigin: true,
+          secure: BACKEND_URL.startsWith('https'),
+          bypass: function(req) {
+            // API calls always include an Authorization header; browser navigation does not.
+            // Bypass the proxy for browser GET navigations so Vite serves index.html
+            // and React Router handles the /settings route client-side.
+            if (req.method === 'GET' && !req.headers.authorization) {
               return '/index.html';
             }
           },

@@ -66,16 +66,22 @@ export const fetchPatientMedicineRequests = async (patientId, offset = 0, limit 
 };
 
 /**
- * Fetch all medicine requests (optionally filtered by status).
- * @param {'Pending'|'Approved'|'Rejected'|'Cancelled'} [status]
+ * Fetch all medicine requests (optionally filtered by status and location).
+ * @param {'Pending'|'Approved'|'Rejected'|'Cancelled'|'InProgress'|'Completed'|'Revision'|'RevisionSubmitted'|'Expired'} [status]
+ * @param {string|null} [location] - LocationDesignation: 'Arlegui' | 'Casal' | 'QuezonCity'
  * @param {number} [offset=0]
  * @param {number} [limit=50]
  * @returns {Promise<Array>} MedicineRequest[]
  */
-export const fetchAllMedicineRequests = async (status = null, offset = 0, limit = 50) => {
+export const fetchAllMedicineRequests = async (status = null, location = null, offset = 0, limit = 50) => {
+  // Build variables object, only including non-null values
+  const variables = { offset, limit };
+  if (status !== null) variables.status = status;
+  if (location !== null) variables.location = location;
+
   const data = await sendGraphQL(
-    `query GetAllMedicineRequests($status: RequestStatus, $offset: Int, $limit: Int) {
-      getAllMedicineRequests(status: $status, offset: $offset, limit: $limit) {
+    `query GetAllMedicineRequests($status: RequestStatus, $location: LocationDesignation, $offset: Int, $limit: Int) {
+      getAllMedicineRequests(status: $status, location: $location, offset: $offset, limit: $limit) {
         id
         patientId
         status
@@ -92,7 +98,7 @@ export const fetchAllMedicineRequests = async (status = null, offset = 0, limit 
         }
       }
     }`,
-    { status, offset, limit },
+    variables,
   );
   return data.getAllMedicineRequests ?? [];
 };

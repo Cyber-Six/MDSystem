@@ -1,4 +1,4 @@
-import React, { useEffect, useContext } from 'react';
+import React, { useContext } from 'react';
 import { RefreshCw, Stethoscope } from 'lucide-react';
 import { HealthChatProvider, useHealthChat } from './context/health-chat-context';
 import { useHealthChatSocket } from './hooks/use-health-chat-socket';
@@ -9,35 +9,13 @@ import { SidebarContext } from '../../components/layout/StaffLayout';
 
 const HealthChatContent = () => {
   const { isConnected, emitTyping } = useHealthChatSocket();
-  const { socketError, selectedChatId, selectedTicket, refreshMessages } = useHealthChat();
+  const { socketError, refreshMessages } = useHealthChat();
 
   const connStatus = socketError
     ? { dot: '#F59E0B', label: 'Manual refresh' }
     : isConnected
     ? { dot: '#10B981', label: 'Connected' }
     : { dot: '#F59E0B', label: 'Connecting…' };
-
-  // Poll for new messages when socket is disconnected (fallback mechanism)
-  useEffect(() => {
-    // Only poll when socket is disconnected or has error, and a chat is selected and active
-    if (!selectedChatId || selectedTicket?.status !== 'Ongoing') return;
-    if (isConnected && !socketError) return; // Socket is working, no need to poll
-
-    console.log('[HealthChat Staff] Socket disconnected - starting message polling for chat:', selectedChatId);
-
-    const pollInterval = setInterval(async () => {
-      try {
-        await refreshMessages();
-      } catch (err) {
-        console.error('[HealthChat Staff] Message polling failed:', err);
-      }
-    }, 15000); // Poll every 15 seconds
-
-    return () => {
-      console.log('[HealthChat Staff] Stopping message polling');
-      clearInterval(pollInterval);
-    };
-  }, [selectedChatId, selectedTicket?.status, isConnected, socketError, refreshMessages]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="bg-neutral-100 dark:bg-neutral-800">

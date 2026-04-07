@@ -426,6 +426,117 @@ export const deleteArchivedTicket = async (chatId) => {
   return data.deleteArchivedTicket;
 };
 
+// ==================== TRANSFER & TAKEOVER ====================
+
+/**
+ * Transfer an ongoing ticket to another staff member
+ */
+export const transferTicket = async (chatId, toMedicalId) => {
+  const mutation = `
+    mutation TransferTicket($chatId: ID!, $toMedicalId: Int!) {
+      transferTicket(chatId: $chatId, toMedicalId: $toMedicalId) {
+        success
+        message
+        chat {
+          id
+          patientId
+          medicalId
+          status
+          purpose
+          session_start
+          expiresAt
+          patient {
+            id
+            firstName
+            lastName
+            email
+            identifier
+            branch
+          }
+          medical {
+            id
+            firstName
+            lastName
+            email
+            role
+          }
+        }
+      }
+    }
+  `;
+
+  const data = await sendGraphQL(mutation, { chatId, toMedicalId: Number(toMedicalId) });
+  return data.transferTicket;
+};
+
+/**
+ * Admin takeover: assume control of an ongoing ticket
+ */
+export const takeoverOngoingTicket = async (chatId) => {
+  const mutation = `
+    mutation TakeoverOngoingTicket($chatId: ID!) {
+      takeoverOngoingTicket(chatId: $chatId) {
+        success
+        message
+        chat {
+          id
+          patientId
+          medicalId
+          status
+          purpose
+          session_start
+          expiresAt
+          patient {
+            id
+            firstName
+            lastName
+            email
+            identifier
+            branch
+          }
+          medical {
+            id
+            firstName
+            lastName
+            email
+            role
+          }
+        }
+      }
+    }
+  `;
+
+  const data = await sendGraphQL(mutation, { chatId });
+  return data.takeoverOngoingTicket;
+};
+
+/**
+ * Get staff accounts for transfer dropdown
+ * Reuses the role-management listStaffAccounts query
+ */
+export const getHealthChatStaff = async () => {
+  const query = `
+    query ListStaffAccounts {
+      listStaffAccounts {
+        staff {
+          id
+          name
+          email
+          role
+          branch
+        }
+        count
+      }
+    }
+  `;
+
+  const response = await axiosRequest.post('/rolemanagement/admin', { query });
+  if (response.data.errors) {
+    throw new Error(response.data.errors[0]?.message || 'Failed to load staff list');
+  }
+  return response.data.data.listStaffAccounts.staff || [];
+};
+
 // ==================== FILE HANDLING ====================
 
 /**
@@ -483,6 +594,13 @@ export const getPatientConversations = async (statuses = null, offset = 0, limit
             archived_at
             expiresAt
             closedBy
+            medical {
+              id
+              firstName
+              lastName
+              email
+              role
+            }
           }
           lastMessage {
             id

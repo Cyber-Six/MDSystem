@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "setup:totp-key": "node -e \"const fs=require('fs'),crypto=require('crypto'),path=require('path');const envPath=path.resolve(__dirname,'.env');const key=crypto.randomBytes(32).toString('hex');const line='\\nTOTP_ENCRYPTION_KEY='+key+'\\n';if(fs.existsSync(envPath)){const contents=fs.readFileSync(envPath,'utf8');if(contents.includes('TOTP_ENCRYPTION_KEY=')){console.log('TOTP_ENCRYPTION_KEY already set in .env — skipping.\\nTo rotate, manually delete the old line and re-run.');process.exit(0);}fs.appendFileSync(envPath,line);}else{fs.writeFileSync(envPath,line);}console.log('✅ TOTP_ENCRYPTION_KEY written to .env');console.log('⚠  Back up this key — losing it means all TOTP secrets will be unreadable.');\""
   },
   "keywords": [],
   "author": "",
@@ -21,6 +22,7 @@
     "compression": "^1.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
     "expo-server-sdk": "^6.1.0",
     "express": "^5.2.1",
     "express-graphql": "^0.12.0",
@@ -34,6 +36,7 @@
     "nodemailer": "^8.0.4",
     "pdfkit": "^0.15.2",
     "pg": "^8.16.3",
+    "qrcode": "^1.5.4",
     "redis": "^5.9.0",
     "socket.io": "^4.8.1",
     "uuid": "^13.0.0",

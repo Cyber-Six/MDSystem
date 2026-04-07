@@ -6,14 +6,19 @@
 
 // ─── Module → Granular Key Mapping ───────────────────────────────────────
 export const MODULE_PERMISSION_MAP = {
-  patientSearch: ['profile_allow_view', 'emr_allow_view'],
+  patientSearch: ['profile_allow_view', 'emr_allow_view', 'profile_allow_update_email_identifier'],
   pendingRequests: ['emr_allow_approval', 'profile_allow_approval', 'appointment_allow_approval', 'medicine_request_allow_approve'],
-  medicalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_edit_catalogs', 'consultation_allow_view', 'consultation_allow_edit', 'profile_allow_view', 'profile_allow_edit'],
+  medicalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_edit_catalogs', 'emr_allow_set_vital_sign', 'consultation_allow_view', 'consultation_allow_edit', 'profile_allow_view', 'profile_allow_edit'],
   dentalRecords: ['emr_allow_view', 'emr_allow_edit', 'emr_allow_set_dental_record', 'consultation_allow_view', 'consultation_allow_edit'],
   appointments: ['appointment_allow_approval', 'appointment_allow_view_records', 'appointment_allow_view_configuration', 'appointment_allow_edit_configuration'],
-  inventory: ['inventory_allow_view', 'inventory_allow_edit', 'inventory_allow_dispense', 'inventory_allow_manage_requests', 'inventory_allow_prescribe'],
-  healthChat: ['health_chat_allow_access', 'health_chat_allow_manage'],
+  inventory: ['inventory_allow_view', 'inventory_allow_edit', 'inventory_allow_dispense', 'inventory_allow_manage_requests', 'inventory_allow_prescribe', 'inventory_allow_configure'],
+  announcements: ['announcement_allow_crud'],
+  healthChat: ['health_chat_allow_access'],
+  sendNotification: ['notification_allow_send_to_patients'],
   analytics: ['analytics_allow_view', 'analytics_allow_export'],
+  // superiorAccess tracked here so the key is included in template CRUD operations
+  // Rendered as a Major Permission Switch in the UI (not a regular expandable module)
+  superiorAccess: ['privileged_to_perform_on_superior'],
   // roleManagement excluded — admin-only via is_admin, not assignable via templates
 };
 
@@ -40,23 +45,45 @@ export const PERMISSION_KEY_LABELS = {
   inventory_allow_prescribe: 'Prescribe Medicine',
   medicine_request_allow_approve: 'Approve Medicine Requests',
   health_chat_allow_access: 'Access Health Chat',
-  health_chat_allow_manage: 'Manage Health Chat',
   analytics_allow_view: 'View Analytics',
   analytics_allow_export: 'Export Analytics',
+  // Keys now in their respective modules
+  emr_allow_set_vital_sign: 'Set Vital Signs',
+  notification_allow_send_to_patients: 'Send Notification to Patients',
+  announcement_allow_crud: 'Manage Announcements',
+  inventory_allow_configure: 'Configure Inventory',
+  profile_allow_update_email_identifier: 'Update Email Identifier',
+  privileged_to_perform_on_superior: 'Access Superior Accounts',
   // role_management keys excluded — admin-only
 };
 
 // ─── Module Definitions (for UI layout) ──────────────────────────────────
 export const PERMISSION_MODULES = [
-  { id: 'patientSearch', label: 'Search Patient', description: 'Search and view patient profiles', icon: 'search' },
+  { id: 'patientSearch', label: 'Search Patient', description: 'Search and view patient profiles and medical identifiers', icon: 'search' },
   { id: 'pendingRequests', label: 'Pending Requests', description: 'Approve or reject appointment, medicine, and record update requests', icon: 'pending' },
-  { id: 'medicalRecords', label: 'Medical Records', description: 'View, edit, and add consultation notes to medical records', icon: 'medical' },
+  { id: 'medicalRecords', label: 'Medical Records', description: 'View, edit, add consultation notes and set vital signs', icon: 'medical' },
   { id: 'dentalRecords', label: 'Dental Records', description: 'View, edit, and add notes to dental records', icon: 'dental' },
   { id: 'appointments', label: 'Appointments', description: 'Queue, confirm, cancel, no-show, and complete appointments', icon: 'calendar' },
-  { id: 'inventory', label: 'Inventory', description: 'View stock, add/restock items, and dispense medicine', icon: 'inventory' },
+  { id: 'inventory', label: 'Inventory', description: 'View stock, add/restock items, dispense and configure medicine', icon: 'inventory' },
+  { id: 'announcements', label: 'Announcements', description: 'Create, edit, and delete announcements visible to all users', icon: 'bell' },
   { id: 'healthChat', label: 'Health Chat', description: 'Access health chat consultation and messaging features', icon: 'chat' },
+  { id: 'sendNotification', label: 'Send Notification', description: 'Send push notifications and alerts directly to patients', icon: 'notification' },
   { id: 'analytics', label: 'Analytics', description: 'View reports, dashboards, and system analytics', icon: 'chart' },
+  // superiorAccess excluded here — rendered as a Major Permission Switch instead
   // roleManagement excluded — admin-only access
+];
+
+// ─── Major Permission Switches ────────────────────────────────────────────
+// Cross-cutting permissions rendered as prominent standalone toggles in the
+// PermissionMatrix, separate from the regular module list.
+export const MAJOR_PERMISSION_SWITCHES = [
+  {
+    id: 'superiorAccess',
+    key: 'privileged_to_perform_on_superior',
+    label: 'Superior Account Access',
+    description: 'Allow performing medical actions on patients with Superior identity (e.g. administrators, executives). Grant with caution.',
+    icon: 'shield',
+  },
 ];
 
 // ─── Collect all unique mapped keys ──────────────────────────────────────
@@ -131,7 +158,8 @@ export const DEFAULT_ROLE_TEMPLATES = [
     permissions: expandModulePermissions({
       patientSearch: true, pendingRequests: true, medicalRecords: true,
       dentalRecords: false, appointments: true, inventory: false,
-      healthChat: false, analytics: false,
+      announcements: false, healthChat: false, sendNotification: false, analytics: false,
+      superiorAccess: false,
     }),
   },
   {
@@ -143,7 +171,8 @@ export const DEFAULT_ROLE_TEMPLATES = [
     permissions: expandModulePermissions({
       patientSearch: true, pendingRequests: true, medicalRecords: false,
       dentalRecords: true, appointments: true, inventory: false,
-      healthChat: false, analytics: false,
+      announcements: false, healthChat: false, sendNotification: false, analytics: false,
+      superiorAccess: false,
     }),
   },
   {
@@ -155,7 +184,8 @@ export const DEFAULT_ROLE_TEMPLATES = [
     permissions: expandModulePermissions({
       patientSearch: true, pendingRequests: true, medicalRecords: true,
       dentalRecords: false, appointments: true, inventory: true,
-      healthChat: false, analytics: false,
+      announcements: false, healthChat: false, sendNotification: false, analytics: false,
+      superiorAccess: false,
     }),
   },
 ];

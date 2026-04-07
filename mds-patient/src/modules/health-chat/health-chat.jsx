@@ -55,6 +55,10 @@ const HealthChat = () => {
     setMessages(prev => [...prev, newMessage]);
     // Clear typing indicator when message received
     setIsStaffTyping(false);
+    // Reset expiry timer: each new message resets the 3-day inactivity clock
+    const newExpiry = new Date();
+    newExpiry.setDate(newExpiry.getDate() + 3);
+    setTicket(prev => prev && prev.status === 'Ongoing' ? { ...prev, expiresAt: newExpiry.toISOString() } : prev);
   }, []);
 
   // Handle typing indicator from socket
@@ -82,10 +86,14 @@ const HealthChat = () => {
       if (data?.chat) {
         return { ...prev, ...data.chat };
       }
+      const closedBy = data?.closedBy || prev.closedBy || null;
+      const isExpired =
+        closedBy === 'System' ||
+        (prev.expiresAt && new Date(prev.expiresAt) < new Date());
       return {
         ...prev,
-        status: 'Closed',
-        closedBy: data?.closedBy || prev.closedBy || null,
+        status: isExpired ? 'Expired' : 'Closed',
+        closedBy,
         session_end: prev.session_end || new Date().toISOString(),
       };
     });
@@ -103,11 +111,18 @@ const HealthChat = () => {
       return {
         ...prev,
         expiresAt: data.expiresAt || prev.expiresAt,
-        session_start: data.chat?.session_start || prev.session_start,
       };
     });
     if (data?.chatId) loadMessages(data.chatId);
   }, [loadMessages]);
+
+  // Handle staff change (transfer/takeover) — update ticket medical info for header
+  const handleStaffChanged = useCallback((newMedical) => {
+    setTicket(prev => {
+      if (!prev) return prev;
+      return { ...prev, medical: newMedical, medicalId: newMedical.id };
+    });
+  }, []);
 
   // Socket hook
   const { isConnected: isSocketConnected, socketError, emitTyping } = useHealthChatSocket({
@@ -117,7 +132,8 @@ const HealthChat = () => {
     onTyping: handleTypingIndicator,
     onTicketApproved: handleTicketApproved,
     onTicketClosed: handleTicketClosed,
-    onSessionExtended: handleSessionExtended
+    onSessionExtended: handleSessionExtended,
+    onStaffChanged: handleStaffChanged,
   });
 
   const scrollToBottom = useCallback(() => {
@@ -149,8 +165,16 @@ const HealthChat = () => {
     const pollInterval = setInterval(async () => {
       try {
         const updatedTicket = await getCurrentActiveTicket();
-        if (updatedTicket && updatedTicket.status !== 'Open') {
-          // Ticket status changed! Update local state
+        if (!updatedTicket) {
+          // Previously-open ticket is no longer active — it was auto-expired or closed.
+          // Load the most recent ticket so the UI shows the closed/expired state and
+          // the patient can create a new conversation instead of being stuck.
+          console.log('[HealthChat] Polling: active ticket gone, loading most recent.');
+          const mostRecent = await getMostRecentTicket();
+          setTicket(mostRecent);
+          if (mostRecent?.id) await loadMessages(mostRecent.id);
+        } else if (updatedTicket.status !== 'Open') {
+          // Ticket status changed (e.g. Approved → Ongoing)
           console.log('[HealthChat] Polling detected status change:', updatedTicket.status);
           setTicket(updatedTicket);
           if (updatedTicket.id) {
@@ -302,14 +326,22 @@ const HealthChat = () => {
       emitTyping(false);
       if (hasFile) {
         const result = await sendMessage(ticket.id, null, attachedFile.fileId, 'file');
-        if (result.success && result.message) setMessages(prev => [...prev, result.message]);
-        setAttachedFile(null);
+        if (result.success && result.message) {
+          setMessages(prev => [...prev, result.message]);
+          setAttachedFile(null);
+        }
       }
       if (hasText) {
         const result = await sendMessage(ticket.id, inputValue.trim(), null, 'text');
-        if (result.success && result.message) setMessages(prev => [...prev, result.message]);
-        setInputValue('');
+        if (result.success && result.message) {
+          setMessages(prev => [...prev, result.message]);
+          setInputValue('');
+        }
       }
+      // Recalculate expiresAt client-side: expiry resets from now (3 days of inactivity)
+      const newExpiry = new Date();
+      newExpiry.setDate(newExpiry.getDate() + 3);
+      setTicket(prev => prev ? { ...prev, expiresAt: newExpiry.toISOString() } : null);
     } catch (err) {
       // If the session expired server-side, update local state so the UI freezes
       if (err.message && /expired/i.test(err.message)) {
@@ -356,7 +388,6 @@ const HealthChat = () => {
         setTicket(prev => prev ? {
           ...prev,
           expiresAt: result.chat.expiresAt,
-          session_start: result.chat.session_start,
         } : null);
         await loadMessages(ticket.id);
       } else {
@@ -511,8 +542,9 @@ const HealthChat = () => {
                   <div ref={previousConversationEndRef} />
                 </div>
                 <TicketDivider
-                  closedAt={ticket.session_end}
+                  closedAt={ticket.session_end || ticket.archived_at || ticket.expiresAt}
                   closedBy={ticket.closedBy || (ticket.status === 'Expired' ? 'System' : 'Unknown')}
+                  ticketStatus={ticket.status}
                 />
               </div>
             )}
@@ -682,6 +714,10 @@ const HealthChat = () => {
                 ticketStatus={ticket.status}
                 ticketPurpose={ticket.purpose}
                 ticketCreatedAt={ticket.session_start}
+                staffName={ticket.medical?.firstName
+                  ? `${ticket.medical.firstName}${ticket.medical.lastName ? ' ' + ticket.medical.lastName : ''}`
+                  : null}
+                staffRole={ticket.medical?.role || null}
                 isStaffTyping={isStaffTyping}
                 attachedFile={attachedFile}
                 onFileStaged={setAttachedFile}

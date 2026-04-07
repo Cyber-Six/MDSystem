@@ -62,24 +62,23 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
     return getNavigationRef()?.getCurrentRoute()?.name === 'HealthChat';
   };
 
-  /** Decides what to do when a notable socket event arrives */
+  /** Decides what to do when a notable socket event arrives.
+   * @param suppressOnHealthChat - Only suppress when user is on HealthChat (for chat-specific events).
+   *   Set to false for appointment/medicine/record events that should always notify. */
   const handleEvent = async (
     notifTitle: string,
     notifBody: string,
     notifData: Record<string, unknown>,
+    suppressOnHealthChat = false,
   ) => {
     const isActive = appStateRef.current === 'active';
 
-    if (isActive && isOnHealthChat()) {
-      return; // User already sees it live — nothing to do
+    if (isActive && suppressOnHealthChat && isOnHealthChat()) {
+      return; // User already sees it live — only skip for health-chat events
     }
 
-    // Show notification in all other cases:
-    //   - App active but on a different tab → banner on screen + badge
-    //   - App backgrounded / inactive → lock-screen notification
     await showHealthChatNotification(notifTitle, notifBody, notifData);
 
-    // Additionally bump the tab badge so user sees the count even after dismissing banner
     if (isActive) {
       incrementBadge();
     }
@@ -99,15 +98,23 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
       }
     })();
 
-    // Navigate to HealthChat when user taps a notification
+    // Navigate to the correct tab when user taps a notification
     const cleanup = onNotificationResponse((response) => {
       const data = response.notification.request.content.data;
-      if (data?.type === 'health-chat') {
-        try {
-          getNavigationRef()?.navigate('HealthChat');
-        } catch {
-          // Navigation may not be ready
+      try {
+        const nav = getNavigationRef();
+        if (!nav) return;
+        if (data?.type === 'health-chat') {
+          nav.navigate('HealthChat');
+        } else if (data?.type === 'appointment') {
+          nav.navigate('Appointments');
+        } else if (data?.type === 'medicine') {
+          nav.navigate('Medicine');
+        } else if (data?.type === 'record' || data?.type === 'staff') {
+          nav.navigate('More');
         }
+      } catch {
+        // Navigation may not be ready
       }
     });
 
@@ -159,18 +166,19 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
           if (data?.senderType === 'Medical' && data?.message) {
             const msg = data.message;
             const body = msg.content_type === 'file'
-              ? '📎 Sent an image'
+              ? 'Sent an image'
               : (msg.content || 'New message');
-            await handleEvent('💬 Health Chat', body, { type: 'health-chat', chatId: data.chatId });
+            await handleEvent('Health Chat', body, { type: 'health-chat', chatId: data.chatId }, true);
           }
         });
 
         // Listen for ticket approval
         socketService.on('healthchat:ticket-approved', async (data: any) => {
           await handleEvent(
-            '✅ Health Chat Approved',
+            'Health Chat Approved',
             'Your health chat request has been approved. A staff member is ready to assist you.',
             { type: 'health-chat', chatId: data?.chat?.id },
+            true,
           );
         });
 
@@ -180,16 +188,104 @@ export const HealthChatNotificationProvider: React.FC<{ children: React.ReactNod
             'Health Chat Ended',
             'Your health chat session has been closed.',
             { type: 'health-chat', chatId: data?.chatId },
+            true,
           );
         });
 
         // Listen for ticket rejection
         socketService.on('healthchat:ticket-rejected', async (data: any) => {
           await handleEvent(
-            '❌ Health Chat Declined',
+            'Health Chat Declined',
             'Your health chat request was not approved. You may try again later.',
             { type: 'health-chat', chatId: data?.chat?.id },
+            true,
           );
+        });
+
+        // ── Appointment events ──────────────────────────────────────────────
+
+        socketService.on('appointment:responded', async (data: any) => {
+          const status = data?.status ?? 'Updated';
+          const verb = status === 'Approved' ? 'confirmed' : status.toLowerCase();
+          const body = data?.notes
+            ? `Your appointment has been ${verb}. Note: ${data.notes}`
+            : `Your appointment has been ${verb}.`;
+          await handleEvent(`Appointment ${status}`, body, { type: 'appointment' });
+        });
+
+        socketService.on('appointment:attendance-recorded', async () => {
+          await handleEvent(
+            'Attendance Recorded',
+            'Your clinic visit has been recorded.',
+            { type: 'appointment' },
+          );
+        });
+
+        // ── Medicine events ─────────────────────────────────────────────────
+
+        socketService.on('medicine:request:approved', async () => {
+          await handleEvent(
+            'Medicine Request Approved',
+            'Your medicine request has been approved.',
+            { type: 'medicine' },
+          );
+        });
+
+        socketService.on('medicine:request:rejected', async () => {
+          await handleEvent(
+            'Medicine Request Declined',
+            'Your medicine request was declined.',
+            { type: 'medicine' },
+          );
+        });
+
+        socketService.on('medicine:request:pending', async () => {
+          await handleEvent(
+            'Medicine Request Received',
+            'Your medicine request is being processed.',
+            { type: 'medicine' },
+          );
+        });
+
+        socketService.on('medicine:prescription:issued', async () => {
+          await handleEvent(
+            'Prescription Ready',
+            'A new prescription has been issued for you.',
+            { type: 'medicine' },
+          );
+        });
+
+        // ── Update ticket events ────────────────────────────────────────────
+
+        socketService.on('updateTicket:statusChanged', async (data: any) => {
+          const newStatus = data?.newStatus ?? 'Updated';
+          const body = data?.message ?? `Your record update request has been ${newStatus.toLowerCase()}.`;
+          await handleEvent(`Record Update ${newStatus}`, body, { type: 'record' });
+        });
+
+        // ── Staff announcements ─────────────────────────────────────────────
+
+        socketService.on('staff:notification', async (data: any) => {
+          let title = 'Message from Staff';
+          let body = '';
+
+          if (data?.message) {
+            if (typeof data.message === 'string' && data.message.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(data.message);
+                title = parsed.title ?? title;
+                body = parsed.body ?? '';
+              } catch {
+                body = data.message;
+              }
+            } else {
+              body = data.message;
+            }
+          }
+
+          if (body) {
+            await handleEvent(title, body, { type: 'staff' });
+          }
         });
 
       } catch (err: any) {

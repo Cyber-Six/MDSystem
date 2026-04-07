@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { useTheme, colors } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 
 const FAQ_DATA = [
   {
@@ -59,7 +60,7 @@ export const FAQsScreen: React.FC = () => {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={[styles.headerBanner, { backgroundColor: colors.accent[500] }]}>
-          <Text style={styles.headerIcon}>❓</Text>
+          <Ionicons name="help-circle" size={28} color="#FFFFFF" />
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Frequently Asked Questions</Text>
             <Text style={styles.headerSubtitle}>Find answers to common questions</Text>
@@ -96,14 +97,7 @@ export const FAQsScreen: React.FC = () => {
                 >
                   {item.q}
                 </Text>
-                <Text
-                  style={{
-                    color: isDark ? colors.neutral[400] : colors.neutral[500],
-                    fontSize: 16,
-                  }}
-                >
-                  {isOpen ? '▲' : '▼'}
-                </Text>
+                <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
               </View>
               {isOpen && (
                 <Text

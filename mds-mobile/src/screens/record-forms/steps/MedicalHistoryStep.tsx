@@ -3,7 +3,8 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData, CatalogItem } from '../../../services/emr-service';
 
@@ -34,11 +35,11 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
   };
 
   const checkedMap = tab === 'self' ? mh.self : mh.family;
-  const inputBg = isDark ? colors.neutral[700] : colors.neutral[50];
+  const inputBg = isDark ? colors.neutral[700] : '#FFF';
   const inputColor = isDark ? colors.neutral[100] : colors.neutral[900];
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <Text style={[styles.title, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Medical History</Text>
       <Text style={[styles.subtitle, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
         Select conditions that apply to you or your family.
@@ -70,7 +71,7 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
               activeOpacity={0.7}
             >
               <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
               </View>
               <Text style={[styles.conditionName, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>
                 {cond.name}
@@ -106,13 +107,13 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
           multiline
         />
       </View>
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
+  title: { fontSize: 17, fontWeight: '700', marginBottom: 4 },
   subtitle: { fontSize: 14, marginBottom: 16 },
   tabRow: { flexDirection: 'row', marginBottom: 16, gap: 8 },
   tab: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
@@ -121,15 +122,15 @@ const styles = StyleSheet.create({
   checkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 12 },
   checkbox: {
     width: 22, height: 22, borderRadius: 6, borderWidth: 2,
-    borderColor: colors.neutral[400], alignItems: 'center', justifyContent: 'center',
+    borderColor: colors.neutral[400], alignItems: 'center' as const, justifyContent: 'center' as const,
   },
   checkboxChecked: { backgroundColor: colors.primary[500], borderColor: colors.primary[500] },
   checkmark: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
   conditionName: { fontSize: 14, flex: 1 },
-  whoInput: { marginLeft: 34, marginBottom: 8, borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 13 },
+  whoInput: { marginLeft: 34, marginBottom: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 13 },
   otherSection: { marginTop: 20 },
   otherLabel: { fontSize: 14, fontWeight: '500', marginBottom: 6 },
-  otherInput: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 14, minHeight: 60, textAlignVertical: 'top' },
+  otherInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, minHeight: 60, textAlignVertical: 'top' as const },
 });
 
 export default MedicalHistoryStep;

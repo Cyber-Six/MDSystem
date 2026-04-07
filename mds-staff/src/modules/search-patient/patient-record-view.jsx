@@ -47,6 +47,7 @@ const PatientObgyneTab = lazy(() => import('./components/obgyne-tab'));
 const PatientDentalGradeHistoryTab = lazy(() => import('./components/dental-grade-history-tab'));
 const PatientMedicalRecordHistoryTab = lazy(() => import('./components/medical-record-history-tab'));
 const VitalSignsTab = lazy(() => import('./components/vital-signs-tab'));
+const DentalGradingTab = lazy(() => import('./components/dental-grading-tab'));
 
 function LoadingBlock({ label }) {
   return (
@@ -73,14 +74,42 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
   const obgynData = data?.getUserObgynHistory?.[0] || null;
   const emergencyData = data?.getUserEmergencyContact?.[0] || null;
   const medicationData = data?.getUserMedicationProfile?.[0] || null;
-  const dentalHistory = data?.getUserDentalHistory?.[0] || null;
-  const dentalRecord = data?.getUserDentalRecord?.[0] || null;
-  const applianceData = data?.getUserOralApplianceProfile?.[0] || null;
-  const procedureData = data?.getUserDentalProcedureProfile?.[0] || null;
+  const dentalHistory = (data?.getUserDentalHistory || []).find(r => r.status === 'Approved') || null;
+  const applianceData = (data?.getUserOralApplianceProfile || []).find(r => r.status === 'Approved') || null;
+  const procedureData = (data?.getUserDentalProcedureProfile || []).find(r => r.status === 'Approved') || null;
+  const dentalPhotoData = (data?.getUserDentalPhotoRecord || []).find(r => r.status === 'Approved') || null;
+
+  // Find the latest approved-visit submission timestamp so we can detect a stale
+  // dental grade (one the staff created for a previous visit but never updated for
+  // the newly-approved submission).
+  const _latestApprovedVisitTs = [
+    dentalHistory?.created_at,
+    applianceData?.created_at,
+    procedureData?.created_at,
+    dentalPhotoData?.created_at,
+  ].filter(Boolean).reduce((max, ts) => (new Date(ts) > new Date(max) ? ts : max), null);
+
+  // Use the same offset logic as the Dental Record History sub-tab: skip standalone
+  // grades (created from the Dental Grading tab) so the Dental Record tab always
+  // displays the most recent visit-linked dental record, not a standalone grade.
+  const _allDentalRecords = data?.getUserDentalRecord || [];
+  const _dentalVisitMaxCount = Math.max(
+    (data?.getUserDentalHistory || []).filter(r => r.status === 'Approved').length,
+    (data?.getUserDentalProcedureProfile || []).filter(r => r.status === 'Approved').length,
+    (data?.getUserOralApplianceProfile || []).filter(r => r.status === 'Approved').length,
+    (data?.getUserDentalPhotoRecord || []).filter(r => r.status === 'Approved').length,
+  );
+  const _dentalOffset = Math.max(0, _allDentalRecords.length - _dentalVisitMaxCount);
+  const _candidateDentalRecord = _allDentalRecords[_dentalOffset] || _allDentalRecords[0] || null;
+  // If the candidate dental grade was created BEFORE the most recent approved visit
+  // submission, the staff hasn't graded this new record yet — don't show stale data.
+  const dentalRecord = (_candidateDentalRecord && _latestApprovedVisitTs &&
+    new Date(_candidateDentalRecord.created_at) < new Date(_latestApprovedVisitTs))
+    ? null
+    : _candidateDentalRecord;
   const visionData = data?.getUserVisualAcuityProfile?.[0] || null;
   const hospData = data?.getUserHospitalizationProfile?.[0] || null;
   const opData = data?.getUserOperationProfile?.[0] || null;
-  const dentalPhotoData = data?.getUserDentalPhotoRecord?.[0] || null;
 
   const profile = profileData?.getUserPersonalRecord || null;
 
@@ -303,6 +332,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [searchParams] = useSearchParams();
   const initialTab = initialTabProp || searchParams.get('tab') || 'personal';
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [dentalSubTab, setDentalSubTab] = useState('dental-grade-history');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
@@ -355,7 +385,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           }),
           axiosRequest.post('/staff/emr', {
             query: `query GetStaffDentalData($patientId: ID!) {
-              getPatientDentalRecord(patientId: $patientId, limit: 1) {
+              getPatientDentalRecord(patientId: $patientId, limit: 50) {
                 id notes created_at
                 ToothPlacements { id toothIndex legend }
                 oralFindings { oralFindingId status }
@@ -620,7 +650,33 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       case 'dental':
         return <PatientDentalRecordTab patient={patient} />;
       case 'dental-grade-history':
-        return <PatientDentalGradeHistoryTab patient={patient} />;
+        return (
+          <div>
+            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
+              {[
+                { id: 'dental-grade-history', label: 'Dental Record History' },
+                { id: 'dental-grading', label: 'Dental Grading' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setDentalSubTab(sub.id)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    dentalSubTab === sub.id
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+            <Suspense fallback={<LoadingBlock label="Loading..." />}>
+              {dentalSubTab === 'dental-grade-history'
+                ? <PatientDentalGradeHistoryTab patient={patient} />
+                : <DentalGradingTab patient={patient} />}
+            </Suspense>
+          </div>
+        );
       case 'consultation':
         return (
           <PatientConsultationTab
@@ -636,7 +692,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       case 'medicines':
         return <PatientMedicineRequestsTab patient={patient} />;
       case 'documents':
-        return <PatientDocumentsTab />;
+        return <PatientDocumentsTab patient={patient} />;
       case 'obgyne':
         return <PatientObgyneTab patient={patient} />;
       default:
@@ -676,21 +732,31 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       <section className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 text-white font-semibold flex items-center justify-center shrink-0">
+            <div
+              className="w-12 h-12 rounded-full text-white font-semibold flex items-center justify-center shrink-0"
+              style={{ background: '#C9A01E' }}
+            >
               {initials}
             </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
-                {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id} · {patient.program || patient.department || 'N/A'} · {patient.year || 'N/A'}
-              </p>
-              <div className="mt-1 flex items-center gap-1.5">
-                {['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(patient.status) && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status}</span>
+            <div className="min-w-0 flex flex-col gap-0.5">
+              <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id ? (
+                  <span className="text-xs font-mono text-secondary-500 dark:text-neutral-400">
+                    {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id}
+                  </span>
+                ) : null}
+                {(patient.program || patient.department) && (
+                  <span className="text-xs text-secondary-500 dark:text-neutral-400 truncate">
+                    {patient.program || patient.department}{patient.year ? ` · ${patient.year}` : ''}
+                  </span>
                 )}
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">{patient.type}</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">{patient.type}</span>
+                {['InProgress', 'Pending', 'Revision', 'RevisionSubmitted'].includes(patient.status) && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400">{patient.status}</span>
+                )}
                 {isMockPatient && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">Mock Mode</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">Mock Mode</span>
                 )}
               </div>
             </div>

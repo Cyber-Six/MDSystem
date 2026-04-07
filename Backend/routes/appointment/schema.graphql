@@ -39,6 +39,7 @@ type SlotScheduler {
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
+  purposeRequired: Boolean
   isActive: Boolean!
   containsCustomDates: Boolean!
   whitelistOnly: Boolean
@@ -68,6 +69,7 @@ input SlotSchedulerInput {
   morningAllowed: Int!
   afternoonAllowed: Int!
   notes: String
+  purposeRequired: Boolean
   slotCustomDates: [Date!]!
   whiteLists: [ID!]!
   whitelistOnly: Boolean!
@@ -81,6 +83,7 @@ input SlotSchedulerUpdateInput {
   morningAllowed: Int
   afternoonAllowed: Int
   notes: String
+  purposeRequired: Boolean
   isActive: Boolean
   whitelistOnly: Boolean
 }
@@ -136,6 +139,10 @@ type ScheduleRequirement {
   notes: String
   isDigital: Boolean!
   isActive: Boolean!
+}
+
+type DateOccupancy {
+  count: Int!
 }
 
 input ScheduleRequirementInput {
@@ -200,15 +207,15 @@ type Query {
   getUserAppointmentStatus(userId: ID!): SCHEDULING_STATUS
 
   getUserAppointmentRecords(userId: ID!, offset: Int, limit: Int): [patientSlot!]
-  resolvePatientByIdentifier(identifier: Int!): ID
 
-  listAllOpenAppointments(offset: Int, limit: Int): [SlotScheduler!]
+  listAllOpenAppointments(location: LOCATION_DESIGNATION, offset: Int, limit: Int): [SlotScheduler!]
   listAllAppointmentRequirements(schedulerId: ID!, offset: Int, limit: Int): [ScheduleRequirement!]
   listMonthAvailability(schedulerId: ID!, startDate: Date!, endDate: Date!): [ScheduleDateEntity!]
 
-  searchAppointmentStatuses(status: SCHEDULING_STATUS!, offset: Int, limit: Int): [patientSlot!]
-  getAppointmentStatusCounts: [StatusCount!]
+  searchAppointmentStatuses(status: SCHEDULING_STATUS!, location: LOCATION_DESIGNATION, date: Date, schedulerId: ID, offset: Int, limit: Int): [patientSlot!]
+  getAppointmentStatusCounts(location: LOCATION_DESIGNATION, schedulerId: ID, date: Date): [StatusCount!]
   listSchedulerWhitelist(schedulerId: ID!, offset: Int, limit: Int): [WhitelistEntry!]
+  checkDateOccupancy(schedulerId: ID!, date: Date!): DateOccupancy!
 }
 
 # Mutations
@@ -234,4 +241,5 @@ type Mutation {
   removeEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]
 
   updateDateIdentity(schedulerId: ID!, date: Date!, input: ScheduleDateEntityUpdate!): ScheduleDateEntity
+  cancelDateAppointments(schedulerId: ID!, date: Date!, reason: String): Int!
 }

@@ -15,6 +15,7 @@ import {
 
 import { useTheme, colors } from '../../context/ThemeContext';
 import { axiosRequest } from '../../core';
+import { Ionicons } from '@expo/vector-icons';
 
 interface LoginRecord {
   id: string;
@@ -82,13 +83,14 @@ export const LoginActivityScreen: React.FC = () => {
         {/* Info banner */}
         <View style={[styles.infoBanner, { backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : colors.accent[50] }]}>
           <Text style={{ color: colors.accent[500], fontSize: 14 }}>
-            ℹ️ Review your recent login sessions. If you see unfamiliar activity, change your password immediately.
+          <Ionicons name="information-circle" size={16} color={colors.accent[500]} style={{ marginRight: 6 }} />
+            Review your recent login sessions. If you see unfamiliar activity, change your password immediately.
           </Text>
         </View>
 
         {records.length === 0 ? (
           <View style={[styles.emptyState, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
-            <Text style={styles.emptyIcon}>📱</Text>
+            <Ionicons name="phone-portrait" size={36} color={isDark ? colors.neutral[600] : colors.neutral[300]} style={{ marginBottom: 12 }} />
             <Text style={[styles.emptyText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
               No login activity found.
             </Text>
@@ -108,9 +110,11 @@ export const LoginActivityScreen: React.FC = () => {
               ]}
             >
               <View style={styles.recordHeader}>
-                <Text style={{ fontSize: 20 }}>
-                  {record.wasSuccessful ? '✅' : '❌'}
-                </Text>
+                <Ionicons
+                  name={record.wasSuccessful ? 'checkmark-circle' : 'close-circle'}
+                  size={22}
+                  color={record.wasSuccessful ? colors.success[500] : colors.error[500]}
+                />
                 <View style={{ flex: 1 }}>
                   <View style={styles.deviceRow}>
                     <Text style={[styles.deviceText, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>

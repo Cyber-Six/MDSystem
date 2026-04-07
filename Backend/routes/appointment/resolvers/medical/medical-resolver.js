@@ -4,7 +4,7 @@ const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const permit = require("../../../../services/permit.js");
 const { notifyUser } = require('../../../../config/sockets/socket-emitter');
-
+const { getBranchFromShedulerId, getPatientIdFromSlotId } = require("../wrapper/helper.js");
 const db = require("../../../../config/query.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
@@ -14,7 +14,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 const Query = {
   getUserAppointmentStatus: async (_, { userId }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, userId);
+    const permitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_view_records, userId, false);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -22,90 +22,97 @@ const Query = {
   },
 
   getUserAppointmentRecords: async (_, { userId, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, userId);
+    const permitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_view_records, userId, false);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Query._getUserAppointmentRecords(_, { userId, offset, limit }, { user, res });
   },
 
-  resolvePatientByIdentifier: async (_, { identifier }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, null);
+  listAllOpenAppointments: async (_, { location, offset, limit }, { user, res }) => {
+    const permitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, location);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._resolvePatientByIdentifier(_, { identifier }, { user, res });
-  },
-
-  listAllOpenAppointments: async (_, { offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
-    if (!permitted) {
-      throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    }
-    return await Wrapper.Query._listAllOpenAppointments(_, { offset, limit }, { user, res });
+    return await Wrapper.Query._listAllOpenAppointments(_, { location, offset, limit }, { user, res });
   },
 
   listCustomDates: async (_, { schedulerId, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Query._listCustomDates(_, { schedulerId, offset, limit }, { user, res });
   },
 
   listAllAppointmentRequirements: async (_, { schedulerId, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Query._listAllAppointmentRequirements(_, { schedulerId, offset, limit, isActive: null }, { user, res });
   },
 
-  searchAppointmentStatuses: async (_, { status, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, null);
-    if (!permitted) {
+  searchAppointmentStatuses: async (_, { status, location, date, schedulerId, offset, limit }, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_records, location);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._searchAppointmentStatuses(_, { status, offset, limit }, { user, res });
+    return await Wrapper.Query._searchAppointmentStatuses(_, { status, location, date, schedulerId, offset, limit }, { user, res });
   },
 
-  getAppointmentStatusCounts: async (_, _args, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records, null);
-    if (!permitted) {
+  getAppointmentStatusCounts: async (_, { location, schedulerId, date }, { user, res }) => {
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_records, location);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getAppointmentStatusCounts(_, _args, { user, res });
+    return await Wrapper.Query._getAppointmentStatusCounts(_, { location, schedulerId, date }, { user, res });
   },
 
   listAppointmentSchedule: async (_, { schedulerId, date }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Query._listAppointmentSchedule(_, { schedulerId, date, skipTimeframe: true }, { user, res });
   },
 
   listMonthAvailability: async (_, { schedulerId, startDate, endDate }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Query._listMonthAvailability(_, { schedulerId, startDate, endDate }, { user, res });
   },
 
   listSchedulerWhitelist: async (_, { schedulerId, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     return await Wrapper.Query._listSchedulerWhitelist(_, { schedulerId, offset, limit }, { user, res });
+  },
+
+  checkDateOccupancy: async (_, { schedulerId, date }, { user, res }) => {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, scheduleBranch);
+    if (!isPermitted) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._checkDateOccupancy(_, { schedulerId, date }, { user, res });
   },
 };
 
 const Mutation = {
   respondAppointment: async (_, { userId, slotId, status, notes }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval, null);
-    if (!permitted) {
+    const patientId = userId || await getPatientIdFromSlotId(slotId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_approval, patientId, false);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -140,8 +147,9 @@ const Mutation = {
   },
 
   recordAppointmentAttendance: async (_, { slotId, arrived_at }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_approval, null);
-    if (!permitted) {
+    const patientId = await getPatientIdFromSlotId(slotId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.appointment_allow_approval, patientId, false);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -149,11 +157,11 @@ const Mutation = {
     
     // Notify user of attendance record
     await notifyUser(
-      result.userId,
+      result.patientId,
       'appointment:attendance-recorded',
       { slotId, arrived_at },
       {
-        email: await db.findEmailByUserId(result.userId),
+        email: await db.findEmailByUserId(result.patientId),
         title: 'Attendance Recorded',
         message: 'Your appointment attendance has been recorded.',
       }
@@ -163,8 +171,8 @@ const Mutation = {
   },
 
   createScheduler: async (_, { input }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, input.location);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -172,8 +180,9 @@ const Mutation = {
   },
 
   updateScheduler: async (_, { schedulerId, input }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -181,8 +190,9 @@ const Mutation = {
   },
 
   deleteScheduler: async (_, { schedulerId }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -190,8 +200,9 @@ const Mutation = {
   },
 
   updateSchedulerRequirement: async (_, { schedulerId, input }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -199,8 +210,9 @@ const Mutation = {
   },
 
   deleteSchedulerRequirement: async (_, { schedulerId, label }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -208,8 +220,9 @@ const Mutation = {
   },
 
   setCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -217,8 +230,9 @@ const Mutation = {
   },
 
   unsetCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -226,8 +240,9 @@ const Mutation = {
   },
 
   addEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -235,8 +250,9 @@ const Mutation = {
   },
 
   removeEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
@@ -244,12 +260,22 @@ const Mutation = {
   },
 
   updateDateIdentity: async (_, { schedulerId, date, input }, { user, res }) => {
-    const permitted = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_edit_configuration, null);
-    if (!permitted) {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
     return await Wrapper.Mutation._updateDateIdentity(_, { schedulerId, date, input }, { user, res });
+  },
+
+  cancelDateAppointments: async (_, { schedulerId, date, reason }, { user, res }) => {
+    const scheduleBranch = await getBranchFromShedulerId(schedulerId);
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
+    if (!isPermitted) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Mutation._cancelDateAppointments(_, { schedulerId, date, reason }, { user, res });
   }
 };
 

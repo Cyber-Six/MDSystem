@@ -73,10 +73,10 @@ const sendGraphQL = async (query, variables = {}) => {
  * @param {number} [limit=20]
  * @returns {Promise<Array>} patientSlot[]
  */
-export const searchByStatus = async (status, offset = 0, limit = 20) => {
+export const searchByStatus = async (status, offset = 0, limit = 20, { date, schedulerId, location } = {}) => {
   const data = await sendGraphQL(`
-    query SearchAppointmentStatuses($status: SCHEDULING_STATUS!, $offset: Int, $limit: Int) {
-      searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit) {
+    query SearchAppointmentStatuses($status: SCHEDULING_STATUS!, $offset: Int, $limit: Int, $date: Date, $schedulerId: ID, $location: LOCATION_DESIGNATION) {
+      searchAppointmentStatuses(status: $status, offset: $offset, limit: $limit, date: $date, schedulerId: $schedulerId, location: $location) {
         id
         patientId
         patientIdentifier
@@ -88,6 +88,7 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
         scheduledDate
         schedulerLabel
         approvedBy
+        purpose
         notes
         arrived_at
         created_at
@@ -99,23 +100,24 @@ export const searchByStatus = async (status, offset = 0, limit = 20) => {
         }
       }
     }
-  `, { status, offset, limit });
+  `, { status, offset, limit, date: date || null, schedulerId: schedulerId || null, location: location || null });
   return data.searchAppointmentStatuses;
 };
 
 /**
- * Get appointment counts grouped by status (single query).
+ * Get appointment counts grouped by status, optionally filtered.
+ * @param {{ schedulerId?: string, date?: string }} [filters]
  * @returns {Promise<Object>} e.g. { Pending: 5, Scheduled: 10, ... }
  */
-export const getStatusCounts = async () => {
+export const getStatusCounts = async ({ schedulerId, date, location } = {}) => {
   const data = await sendGraphQL(`
-    query GetAppointmentStatusCounts {
-      getAppointmentStatusCounts {
+    query GetAppointmentStatusCounts($schedulerId: ID, $date: Date, $location: LOCATION_DESIGNATION) {
+      getAppointmentStatusCounts(schedulerId: $schedulerId, date: $date, location: $location) {
         status
         count
       }
     }
-  `);
+  `, { schedulerId: schedulerId || null, date: date || null, location: location || null });
   const counts = {};
   for (const { status, count } of data.getAppointmentStatusCounts) {
     counts[status] = count;
@@ -124,24 +126,73 @@ export const getStatusCounts = async () => {
 };
 
 /**
+ * Load the queue's initial data in a single GraphQL request:
+ *   - status counts (tab badges)
+ *   - scheduler list (filter dropdown)
+ *   - first page of appointments for the given status
+ *
+ * Reduces 3 separate HTTP round-trips to 1.
+ *
+ * @param {string} status - Active tab's SCHEDULING_STATUS
+ * @param {number} [limit=15]
+ * @param {{ date?: string, schedulerId?: string, location?: string }} [filters]
+ * @returns {Promise<{ appointments: Array, counts: Object, schedulers: Array }>}
+ */
+export const loadInitialQueueData = async (status, limit = 15, { date, schedulerId, location } = {}) => {
+  const data = await sendGraphQL(`
+    query LoadInitialQueue(
+      $status: SCHEDULING_STATUS!, $limit: Int,
+      $date: Date, $schedulerId: ID, $location: LOCATION_DESIGNATION
+    ) {
+      appointments: searchAppointmentStatuses(
+        status: $status, offset: 0, limit: $limit,
+        date: $date, schedulerId: $schedulerId, location: $location
+      ) {
+        id
+        patientId
+        patientIdentifier
+        patientName
+        patientEmail
+        slotEntityId
+        status
+        session
+        scheduledDate
+        schedulerLabel
+        approvedBy
+        purpose
+        notes
+        arrived_at
+        created_at
+        requirements {
+          id
+          scheduleRequirementId
+          filename
+          created_at
+        }
+      }
+      counts: getAppointmentStatusCounts(date: $date, schedulerId: $schedulerId, location: $location) {
+        status
+        count
+      }
+    }
+  `, { status, limit, date: date || null, schedulerId: schedulerId || null, location: location || null });
+
+  const counts = {};
+  for (const { status: s, count } of data.counts) {
+    counts[s] = count;
+  }
+
+  return {
+    appointments: data.appointments || [],
+    counts,
+  };
+};
+
+/**
  * Get a specific patient's current appointment status.
  * @param {string} userId
  * @returns {Promise<string|null>}
  */
-/**
- * Resolve a patient's internal userId from their student/employee identifier.
- * @param {number} identifier - Student or employee ID number
- * @returns {Promise<string|null>}
- */
-export const resolvePatientByIdentifier = async (identifier) => {
-  const data = await sendGraphQL(`
-    query ResolvePatientByIdentifier($identifier: Int!) {
-      resolvePatientByIdentifier(identifier: $identifier)
-    }
-  `, { identifier: Number(identifier) });
-  return data.resolvePatientByIdentifier;
-};
-
 export const getPatientStatus = async (userId) => {
   const data = await sendGraphQL(`
     query GetUserAppointmentStatus($userId: ID!) {
@@ -170,6 +221,7 @@ export const getPatientRecords = async (userId, offset = 0, limit = 20) => {
         status
         session
         approvedBy
+        purpose
         notes
         arrived_at
         created_at
@@ -586,4 +638,37 @@ export const updateDateIdentity = async (schedulerId, date, input) => {
     }
   `, { schedulerId, date, input });
   return data.updateDateIdentity;
+};
+
+/**
+ * Check how many active (Pending/Scheduled/InProgress) appointments exist for a date.
+ * @param {string} schedulerId
+ * @param {string} date - YYYY-MM-DD
+ * @returns {Promise<{ count: number }>}
+ */
+export const checkDateOccupancy = async (schedulerId, date) => {
+  const data = await sendGraphQL(`
+    query CheckDateOccupancy($schedulerId: ID!, $date: Date!) {
+      checkDateOccupancy(schedulerId: $schedulerId, date: $date) {
+        count
+      }
+    }
+  `, { schedulerId, date });
+  return data.checkDateOccupancy;
+};
+
+/**
+ * Bulk-reject all active appointments for a scheduler + date.
+ * @param {string} schedulerId
+ * @param {string} date - YYYY-MM-DD
+ * @param {string} [reason]
+ * @returns {Promise<number>} count of cancelled appointments
+ */
+export const cancelDateAppointments = async (schedulerId, date, reason) => {
+  const data = await sendGraphQL(`
+    mutation CancelDateAppointments($schedulerId: ID!, $date: Date!, $reason: String) {
+      cancelDateAppointments(schedulerId: $schedulerId, date: $date, reason: $reason)
+    }
+  `, { schedulerId, date, reason });
+  return data.cancelDateAppointments;
 };

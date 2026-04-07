@@ -34,7 +34,8 @@ const {
   clearAdminTransferPasswordFailures,
 } = require('../../../../config/redis.js');
 const { enqueueAdminTransferEmail } = require('../../../../services/emailservice.js');
-const { generateOTP, verifyPassword, delayRandom } = require('../../../../utils/security.js');
+const { generateOTP, verifyPassword, 
+  delayRandom, generateUUID } = require('../../../../utils/security.js');
 const crypto = require('crypto');
 const logger = require('../../../../utils/logger.js');
 const { throwGraphQLError } = require('../../../../utils/graphql-helper.js');
@@ -562,6 +563,14 @@ const Mutation = {
     // Role is now a free-form string - no validation needed
     // It can match a template label or be any custom role name
 
+    // ⚠️ SECURITY: Block direct Admin role assignment - only transfers allowed
+    if (role === 'Admin') {
+      throwGraphQLError(res)
+        .message('Cannot directly assign Admin role. Admin privileges can only be granted through Admin Transfer.')
+        .status(403)
+        .throw();
+    }
+
     // Validate that role matches an existing template label
     const templatesResult = await listPermissionTemplates();
     const matchingTemplate = templatesResult.templates.find(t => t.label === role);
@@ -575,78 +584,93 @@ const Mutation = {
     // If no templateId provided, auto-select the matching template
     const effectiveTemplateId = templateId || matchingTemplate?.id;
 
-    // Verify user exists and has Employee identity
-    const userResult = await db.query(
-      `SELECT uc.id, md.id AS "medicalId", uc.identity FROM "UserCredentials" uc
-      LEFT JOIN "MedicalPersonnel" md ON md.id = uc.id
-      WHERE uc.id = $1
-      LIMIT 1`,
-      [userId]
-    );
+    // Use client for transaction
+    const client = await db.db().connect();
+    try {
+      await client.query('BEGIN');
 
-    if (userResult.rows.length === 0) {
-      throwGraphQLError(res).message('User not found.').status(404).throw();
-    }
+      // Verify user exists and has Employee identity
+      const userResult = await client.query(
+        `SELECT uc.id, md.id AS "medicalId", uc.identity FROM "UserCredentials" uc
+        LEFT JOIN "MedicalPersonnel" md ON md.id = uc.id
+        WHERE uc.id = $1
+        LIMIT 1`,
+        [userId]
+      );
 
-    const targetUser = userResult.rows[0];
-    if (targetUser.identity !== 'Employee') {
-      throwGraphQLError(res)
-        .message('Only Employee accounts can be elevated to Staff. Students and other identities are not eligible.')
-        .status(409)
-        .throw();
-    }
+      if (userResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message('User not found.').status(404).throw();
+      }
 
-    if (targetUser.medicalId) {
-      throwGraphQLError(res).message('MedicalPersonnel record already exists for this user.').status(409).throw();
-    }
+      const targetUser = userResult.rows[0];
+      if (targetUser.identity !== 'Employee') {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res)
+          .message('Only Employee accounts can be elevated to Staff. Students and other identities are not eligible.')
+          .status(409)
+          .throw();
+      }
 
-    // Insert MedicalPersonnel record
-    const insertResult = await db.query(
-      `INSERT INTO "MedicalPersonnel" (id, role, title, designation, is_active)
-       VALUES ($1, $2, $3, $4, true)
-       RETURNING *`,
-      [userId, role, title, designation]
-    );
+      if (targetUser.medicalId) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message('MedicalPersonnel record already exists for this user.').status(409).throw();
+      }
 
-    const personnel = insertResult.rows[0];
+      // Insert MedicalPersonnel record
+      const insertResult = await client.query(
+        `INSERT INTO "MedicalPersonnel" (id, role, title, designation, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         RETURNING *`,
+        [userId, role, title, designation]
+      );
 
-    // Grant is_staff permission
-    await setStaffPermissionsExtended({
-      personnelId: String(userId),
-      permissionsList: [{ key: 'is_staff', enabled: true }],
-      assignedBy: String(user.id),
-      defaultBranch: designation,
-    });
+      const personnel = insertResult.rows[0];
 
-    // If template provided, apply permissions from template
-    if (effectiveTemplateId) {
-      try {
+      // Grant is_staff permission
+      await setStaffPermissionsExtended({
+        personnelId: String(userId),
+        permissionsList: [{ key: 'is_staff', enabled: true }],
+        assignedBy: String(user.id),
+        defaultBranch: designation,
+        client  // Pass client for transaction participation
+      });
+
+      // If template provided, apply permissions from template
+      if (effectiveTemplateId) {
         await applyTemplateToStaff({
           personnelId: userId,
           templateId: effectiveTemplateId,
-          assignedBy: user.id
+          assignedBy: user.id,
+          staffBranch: designation,  // Staff's branch - all permissions inherit this
+          client  // Pass client for transaction participation
         });
-        logger.info(`Template ${effectiveTemplateId} applied to new medical personnel: userId=${userId}`);
-      } catch (error) {
-        logger.error(`Failed to apply template during creation: ${error.message}`);
-        // Continue - personnel created but template not applied
+        logger.info(`Template ${effectiveTemplateId} applied to new medical personnel: userId=${userId}, staffBranch=${designation}`);
       }
+
+      await client.query('COMMIT');
+
+      logger.info(`MedicalPersonnel record created: userId=${userId}, role=${role}, by adminId=${user.id}`);
+
+      return {
+        ok: true,
+        message: 'MedicalPersonnel record created successfully.',
+        personnel: {
+          id: personnel.id,
+          role: personnel.role,
+          title: personnel.title,
+          designation: personnel.designation,
+          isActive: personnel.is_active,
+          user: null
+        }
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error(`Error creating MedicalPersonnel: ${error.message}`);
+      throwGraphQLError(res).message(error.message || 'Failed to create MedicalPersonnel record.').status(500).throw();
+    } finally {
+      client.release();
     }
-
-    logger.info(`MedicalPersonnel record created: userId=${userId}, role=${role}, by adminId=${user.id}`);
-
-    return {
-      ok: true,
-      message: 'MedicalPersonnel record created successfully.',
-      personnel: {
-        id: personnel.id,
-        role: personnel.role,
-        title: personnel.title,
-        designation: personnel.designation,
-        isActive: personnel.is_active,
-        user: null
-      }
-    };
   },
 
   _updateMedicalPersonnel: async (_, { userId, input }, { user, res }) => {
@@ -720,15 +744,27 @@ const Mutation = {
     const updateResult = await db.query(updateQuery, params);
     const personnel = updateResult.rows[0];
 
+    // If designation changed, update branch in all existing permissions
+    if (designation !== undefined) {
+      await db.query(
+        `UPDATE "rolesMap"
+         SET branch = $1::"UserDesignation"
+         WHERE "personnelId" = $2`,
+        [designation, userId]
+      );
+      logger.info(`Updated branch to "${designation}" for all permissions of userId=${userId}`);
+    }
+
     // If template provided, apply permissions from template
     if (templateId !== undefined) {
       try {
         await applyTemplateToStaff({
           personnelId: userId,
           templateId,
-          assignedBy: user.id
+          assignedBy: user.id,
+          staffBranch: personnel.designation  // Use the staff's branch - all permissions inherit this
         });
-        logger.info(`Template ${templateId} applied to medical personnel: userId=${userId}`);
+        logger.info(`Template ${templateId} applied to medical personnel: userId=${userId}, staffBranch=${personnel.designation}`);
       } catch (error) {
         logger.error(`Failed to apply template during update: ${error.message}`);
         // Continue - personnel updated but template not applied
@@ -752,40 +788,54 @@ const Mutation = {
   },
 
   _deleteMedicalPersonnel: async (_, { userId, revertIdentity = true }, { user, res }) => {
-    // Verify MedicalPersonnel record exists
-    const existingResult = await db.query(
-      `SELECT id FROM "MedicalPersonnel" WHERE id = $1`,
-      [userId]
-    );
+    const client = await db.db().connect();
+    try {
+      await client.query('BEGIN');
 
-    if (existingResult.rows.length === 0) {
-      throwGraphQLError(res).message('MedicalPersonnel record not found.').status(404).throw();
-    }
-
-    // Delete all permissions (rolesMap entries) for this staff
-    await clearMedicalPermits(String(userId));
-
-    // Delete MedicalPersonnel record
-    await db.query(
-      `DELETE FROM "MedicalPersonnel" WHERE id = $1`,
-      [userId]
-    );
-
-    // Revert identity to Employee
-    if (revertIdentity) {
-      await db.query(
-        `UPDATE "UserCredentials" SET identity = 'Employee' WHERE id = $1`,
+      // Verify MedicalPersonnel record exists
+      const existingResult = await client.query(
+        `SELECT id FROM "MedicalPersonnel" WHERE id = $1`,
         [userId]
       );
+
+      if (existingResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throwGraphQLError(res).message('MedicalPersonnel record not found.').status(404).throw();
+      }
+
+      // Delete all permissions (rolesMap entries) for this staff
+      await clearMedicalPermits(String(userId), client);
+
+      // Delete MedicalPersonnel record
+      await client.query(
+        `DELETE FROM "MedicalPersonnel" WHERE id = $1`,
+        [userId]
+      );
+
+      // Revert identity to Employee
+      if (revertIdentity) {
+        await client.query(
+          `UPDATE "UserCredentials" SET identity = 'Employee' WHERE id = $1`,
+          [userId]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      logger.info(`MedicalPersonnel record deleted: userId=${userId}, identityReverted=${revertIdentity}, by adminId=${user.id}`);
+
+      return {
+        ok: true,
+        message: 'MedicalPersonnel record deleted successfully.',
+        identityReverted: revertIdentity
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error(`Error deleting MedicalPersonnel: ${error.message}`);
+      throwGraphQLError(res).message(error.message || 'Failed to delete MedicalPersonnel record.').status(500).throw();
+    } finally {
+      client.release();
     }
-
-    logger.info(`MedicalPersonnel record deleted: userId=${userId}, identityReverted=${revertIdentity}, by adminId=${user.id}`);
-
-    return {
-      ok: true,
-      message: 'MedicalPersonnel record deleted successfully.',
-      identityReverted: revertIdentity
-    };
   },
 
   _setStaffPermissionsStandard: async (_, { userId, permissions: permissionsList, branch }, { user, res }) => {
@@ -793,6 +843,16 @@ const Mutation = {
     const validBranches = ['Manila', 'QuezonCity', 'Both'];
     if (!validBranches.includes(branch)) {
       throwGraphQLError(res).message('branch must be Manila, QuezonCity, or Both.').status(400).throw();
+    }
+
+    // ⚠️ SECURITY: Block IS_ADMIN assignment - only transfers allowed
+    for (const perm of permissionsList) {
+      if (perm.key === 'is_admin' && perm.enabled) {
+        throwGraphQLError(res)
+          .message('Cannot directly assign IS_ADMIN permission. Admin privileges can only be granted through Admin Transfer.')
+          .status(403)
+          .throw();
+      }
     }
 
     await setStaffPermissionsStandard({
@@ -819,6 +879,14 @@ const Mutation = {
 
     // Validate each permission's branch if provided
     for (const perm of permissionsList) {
+      // ⚠️ SECURITY: Block IS_ADMIN assignment - only transfers allowed
+      if (perm.key === 'is_admin' && perm.enabled) {
+        throwGraphQLError(res)
+          .message('Cannot directly assign IS_ADMIN permission. Admin privileges can only be granted through Admin Transfer.')
+          .status(403)
+          .throw();
+      }
+
       if (perm.branch && !validBranches.includes(perm.branch)) {
         throwGraphQLError(res)
           .message(`Invalid branch "${perm.branch}" for permission "${perm.key}". Must be Manila, QuezonCity, or Both.`)
@@ -859,10 +927,13 @@ const Mutation = {
       }
     }
 
-    // Warn if roleManagement module is being enabled
+    // ⚠️ SECURITY: Block roleManagement module assignment - only transfers allowed
     const rmModule = modules.find(m => m.moduleId === 'roleManagement');
     if (rmModule && rmModule.enabled) {
-      logger.warn(`⚠️ Admin privilege being granted to userId=${userId} by adminId=${user.id}`);
+      throwGraphQLError(res)
+        .message('Cannot directly assign Admin/roleManagement privileges. Admin privileges can only be granted through Admin Transfer.')
+        .status(403)
+        .throw();
     }
 
     try {
@@ -918,13 +989,23 @@ const Mutation = {
     const targetUser = userResult.rows[0];
     const branch = targetUser.designation || 'Both';
 
-    // Handle role change
+    // Perform all validations BEFORE starting transaction
+
+    // Handle role change validations
     if (role) {
       // Admin accounts cannot have their role changed (only via admin transfer)
-      const adminCheck = await isMedicalPermitted(userId, permissions.is_admin, null);
-      if (adminCheck) {
+      const { permitted } = await isMedicalPermitted(userId, permissions.is_admin);
+      if (permitted) {
         throwGraphQLError(res)
           .message('Admin role cannot be changed directly. Use Admin Transfer instead.')
+          .status(403)
+          .throw();
+      }
+
+      // ⚠️ SECURITY: Block direct Admin role assignment - only transfers allowed
+      if (role === 'Admin') {
+        throwGraphQLError(res)
+          .message('Cannot directly assign Admin role. Admin privileges can only be granted through Admin Transfer.')
           .status(403)
           .throw();
       }
@@ -938,42 +1019,13 @@ const Mutation = {
           .status(400)
           .throw();
       }
-
-      // Update MedicalPersonnel.role
-      await db.query(
-        `UPDATE "MedicalPersonnel" SET role = $1 WHERE id = $2`,
-        [role, userId]
-      );
-
-      // Clear existing permissions (clean slate for new role)
-      await clearMedicalPermits(String(userId));
-
-      // Apply template permissions
-      const effectiveTemplateId = templateId || matchingTemplate?.id;
-      if (effectiveTemplateId) {
-        await applyTemplateToStaff({
-          personnelId: userId,
-          templateId: effectiveTemplateId,
-          assignedBy: user.id,
-        });
-      }
-
-      // Always ensure is_staff permission is set
-      await setStaffPermissionsExtended({
-        personnelId: String(userId),
-        permissionsList: [{ key: 'is_staff', enabled: true }],
-        assignedBy: String(user.id),
-        defaultBranch: branch,
-      });
-
-      logger.info(`Staff role changed to "${role}" for userId=${userId} by adminId=${user.id}`);
     }
 
-    // Handle status change (Active ↔ Suspended)
+    // Handle status change validations
     if (status) {
       // Admin accounts cannot be deactivated — only admin transfer can change admin control
-      const adminStatusCheck = await isMedicalPermitted(userId, permissions.is_admin, null);
-      if (adminStatusCheck && status === 'Suspended') {
+      const { permitted } = await isMedicalPermitted(userId, permissions.is_admin);
+      if (permitted && status === 'Suspended') {
         throwGraphQLError(res)
           .message('Admin account cannot be deactivated. Use Admin Transfer to change admin control.')
           .status(403)
@@ -987,23 +1039,9 @@ const Mutation = {
           .status(400)
           .throw();
       }
-
-      if (status === 'Active' && !targetUser.is_active) {
-        await db.query(
-          `UPDATE "MedicalPersonnel" SET is_active = true WHERE id = $1`,
-          [userId]
-        );
-        logger.info(`Staff account activated: userId=${userId} by adminId=${user.id}`);
-      } else if (status === 'Suspended' && targetUser.is_active) {
-        await db.query(
-          `UPDATE "MedicalPersonnel" SET is_active = false WHERE id = $1`,
-          [userId]
-        );
-        logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
-      }
     }
 
-    // Handle designation (branch) change
+    // Handle designation validation
     if (designation) {
       const validDesignations = ['Manila', 'QuezonCity', 'Both'];
       if (!validDesignations.includes(designation)) {
@@ -1012,25 +1050,110 @@ const Mutation = {
           .status(400)
           .throw();
       }
-
-      await db.query(
-        `UPDATE "MedicalPersonnel" SET designation = $1 WHERE id = $2`,
-        [designation, userId]
-      );
-
-      logger.info(`Staff branch changed to "${designation}" for userId=${userId} by adminId=${user.id}`);
     }
 
-    logger.info(`Staff account updated: userId=${userId}, by adminId=${user.id}`);
+    // START TRANSACTION FOR ALL DATABASE UPDATES
+    const client = await db.db().connect();
+    try {
+      await client.query('BEGIN');
 
-    // Fetch and return the updated staff account to avoid a round-trip on the frontend
-    const updatedStaff = await Query._getStaffAccount(_, { userId }, { user, res });
+      // Handle role change
+      if (role) {
+        // Update MedicalPersonnel.role
+        await client.query(
+          `UPDATE "MedicalPersonnel" SET role = $1 WHERE id = $2`,
+          [role, userId]
+        );
 
-    return {
-      ok: true,
-      message: 'Staff account updated successfully.',
-      staff: updatedStaff,
-    };
+        // Clear existing permissions (clean slate for new role)
+        await clearMedicalPermits(String(userId), client);
+
+        // Apply template permissions
+        const effectiveTemplateId = templateId || (await listPermissionTemplates()).templates.find(t => t.label === role)?.id;
+        if (effectiveTemplateId) {
+          await applyTemplateToStaff({
+            personnelId: userId,
+            templateId: effectiveTemplateId,
+            assignedBy: user.id,
+            staffBranch: branch,  // Use staff's current branch - all permissions inherit this
+            client  // Pass client for transaction participation
+          });
+        }
+
+        // Always ensure is_staff permission is set
+        await setStaffPermissionsExtended({
+          personnelId: String(userId),
+          permissionsList: [{ key: 'is_staff', enabled: true }],
+          assignedBy: String(user.id),
+          defaultBranch: branch,
+          client  // Pass client for transaction participation
+        });
+
+        logger.info(`Staff role changed to "${role}" for userId=${userId} by adminId=${user.id}`);
+      }
+
+      // Handle status change (Active ↔ Suspended)
+      if (status) {
+        if (status === 'Active' && !targetUser.is_active) {
+          await client.query(
+            `UPDATE "MedicalPersonnel" SET is_active = true WHERE id = $1`,
+            [userId]
+          );
+          logger.info(`Staff account activated: userId=${userId} by adminId=${user.id}`);
+        } else if (status === 'Suspended' && targetUser.is_active) {
+          await client.query(
+            `UPDATE "MedicalPersonnel" SET is_active = false WHERE id = $1`,
+            [userId]
+          );
+
+          // Save new anchor in Redis AFTER transaction commits (non-critical)
+          // Will be done in finally or after COMMIT
+          logger.info(`Staff account suspended: userId=${userId} by adminId=${user.id}`);
+        }
+      }
+
+      // Handle designation (branch) change
+      if (designation) {
+        await client.query(
+          `UPDATE "MedicalPersonnel" SET designation = $1 WHERE id = $2`,
+          [designation, userId]
+        );
+
+        // Update branch in all existing permissions
+        await client.query(
+          `UPDATE "rolesMap"
+           SET branch = $1::"UserDesignation"
+           WHERE "personnelId" = $2`,
+          [designation, userId]
+        );
+
+        logger.info(`Staff branch changed to "${designation}" for userId=${userId} by adminId=${user.id}`);
+      }
+
+      await client.query('COMMIT');
+
+      // If status was Suspended, save new anchor AFTER successful transaction
+      if (status === 'Suspended' && targetUser.is_active) {
+        await saveStaffAnchor(userId, generateUUID());
+      }
+
+      logger.info(`Staff account updated: userId=${userId}, by adminId=${user.id}`);
+
+      // Fetch and return the updated staff account to avoid a round-trip on the frontend
+      const updatedStaff = await Query._getStaffAccount(_, { userId }, { user, res });
+
+      return {
+        ok: true,
+        message: 'Staff account updated successfully.',
+        staff: updatedStaff,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error(`Error updating staff account: ${error.message}`);
+      throwGraphQLError(res).message(error.message || 'Failed to update staff account.').status(500).throw();
+    } finally {
+      client.release();
+    }
   },
 
   _rotateStaffAnchor: async (_, { userId }, { user, res }) => {
@@ -1038,7 +1161,7 @@ const Mutation = {
     const targetResult = await db.query(
       `SELECT uc.id, uc.identity, uc.credentials_status, mp.id AS "medicalId"
        FROM "UserCredentials" uc
-       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id 
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        WHERE uc.id = $1`,
       [userId]
     );
@@ -1060,21 +1183,32 @@ const Mutation = {
     const sessions = await listUserSessions(userId);
     const sessionCount = sessions.length;
 
-    // Generate new anchor and save it
-    const REFRESH_EXP = parseInt(process.env.JWT_REFRESH_EXPIRATION, 10) || 604800;
-    const newAnchor = crypto.randomUUID();
-    await saveStaffAnchor(userId, newAnchor, REFRESH_EXP);
+    const client = await db.db().connect();
+    try {
+      await client.query('BEGIN');
 
-    // Delete all refresh sessions for this user
-    await deleteAllUserSessions(userId);
+      // Save new anchor in transaction context
+      await saveStaffAnchor(userId, generateUUID());
 
-    logger.warn(`Staff anchor rotated: userId=${userId}, sessionsInvalidated=${sessionCount}, by adminId=${user.id}`);
+      // Delete all refresh sessions for this user (also needs to be atomic with anchor save)
+      await deleteAllUserSessions(userId);
 
-    return {
-      ok: true,
-      message: 'Staff anchor rotated successfully. All devices have been logged out.',
-      sessionsInvalidated: sessionCount,
-    };
+      await client.query('COMMIT');
+
+      logger.warn(`Staff anchor rotated: userId=${userId}, sessionsInvalidated=${sessionCount}, by adminId=${user.id}`);
+
+      return {
+        ok: true,
+        message: 'Staff anchor rotated successfully. All devices have been logged out.',
+        sessionsInvalidated: sessionCount,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error(`Error rotating staff anchor: ${error.message}`);
+      throwGraphQLError(res).message(error.message || 'Failed to rotate staff anchor.').status(500).throw();
+    } finally {
+      client.release();
+    }
   },
 
   _createPermissionTemplate: async (_, { input }, { user, res }) => {
@@ -1133,6 +1267,7 @@ const Mutation = {
     }
 
     try {
+      // Update template (this has its own transaction inside permit.js)
       const template = await updatePermissionTemplate({
         templateId,
         label,
@@ -1140,38 +1275,52 @@ const Mutation = {
         defaultBranch
       });
 
-      // ── Propagate changes to all staff with this role ──────────────
-      let affectedStaffCount = 0;
+      // ── Propagate changes to all staff with this role (in transaction) ──
 
-      // If label changed, update MedicalPersonnel.role for all linked staff first
-      if (label !== undefined && label !== null && label !== existingTemplate.label) {
-        await db.query(
-          `UPDATE "MedicalPersonnel" SET role = $1 WHERE role = $2`,
-          [label, existingTemplate.label]
-        );
-        logger.info(`Staff roles renamed from "${existingTemplate.label}" to "${label}"`);
+      const client = await db.db().connect();
+      try {
+        await client.query('BEGIN');
+
+        let affectedStaffCount = 0;
+
+        // If label changed, update MedicalPersonnel.role for all linked staff first
+        if (label !== undefined && label !== null && label !== existingTemplate.label) {
+          await client.query(
+            `UPDATE "MedicalPersonnel" SET role = $1 WHERE role = $2`,
+            [label, existingTemplate.label]
+          );
+          logger.info(`Staff roles renamed from "${existingTemplate.label}" to "${label}"`);
+        }
+
+        // If permissions changed, propagate to all staff with this role
+        if (permissionsList && permissionsList.length > 0) {
+          const roleLabel = label || existingTemplate.label;
+          const propagation = await propagateTemplatePermissions({
+            templateId,
+            roleLabel,
+            assignedBy: user.id,
+            client  // Pass client for transaction participation
+          });
+          affectedStaffCount = propagation.affectedCount;
+        }
+
+        await client.query('COMMIT');
+
+        logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}, affectedStaff=${affectedStaffCount}`);
+
+        return {
+          ok: true,
+          message: affectedStaffCount > 0
+            ? `Permission template updated successfully. Permissions propagated to ${affectedStaffCount} staff member(s).`
+            : 'Permission template updated successfully.',
+          template
+        };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-
-      // If permissions changed, propagate to all staff with this role
-      if (permissionsList && permissionsList.length > 0) {
-        const roleLabel = label || existingTemplate.label;
-        const propagation = await propagateTemplatePermissions({
-          templateId,
-          roleLabel,
-          assignedBy: user.id,
-        });
-        affectedStaffCount = propagation.affectedCount;
-      }
-
-      logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}, affectedStaff=${affectedStaffCount}`);
-
-      return {
-        ok: true,
-        message: affectedStaffCount > 0
-          ? `Permission template updated successfully. Permissions propagated to ${affectedStaffCount} staff member(s).`
-          : 'Permission template updated successfully.',
-        template
-      };
     } catch (error) {
       logger.error(`Failed to update permission template: ${error.message}`);
       throwGraphQLError(res)
@@ -1212,9 +1361,9 @@ const Mutation = {
   },
 
   _applyTemplateToStaff: async (_, { userId, templateId }, { user, res }) => {
-    // Verify user exists and is Medical staff
+    // Verify user exists and is Medical staff - also get their branch designation
     const userResult = await db.query(
-      `SELECT uc.id, uc.identity, mp.id AS "medicalId"
+      `SELECT uc.id, uc.identity, mp.id AS "medicalId", mp.designation AS branch
        FROM "UserCredentials" uc
        LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        WHERE uc.id = $1
@@ -1247,10 +1396,11 @@ const Mutation = {
       const result = await applyTemplateToStaff({
         personnelId: userId,
         templateId,
-        assignedBy: user.id
+        assignedBy: user.id,
+        staffBranch: targetUser.branch  // Use the staff's branch - all permissions inherit this
       });
 
-      logger.info(`Template applied to staff: userId=${userId}, templateId=${templateId}, by adminId=${user.id}`);
+      logger.info(`Template applied to staff: userId=${userId}, templateId=${templateId}, staffBranch=${targetUser.branch}, by adminId=${user.id}`);
 
       return {
         ok: true,
@@ -1451,7 +1601,7 @@ const Mutation = {
       await clearAdminTransferPasswordFailures(oldAdminId);
 
       // Validate that new admin user exists and is different from current admin
-      if (oldAdminId === newAdminUserId) {
+      if (String(oldAdminId) === String(newAdminUserId)) {
         // Log failed attempt
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
@@ -1541,35 +1691,52 @@ const Mutation = {
           .throw();
       }
 
+      const allowBootstrapAdmin = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
+
+      // Check if new admin has 2FA enabled (bypass in bootstrap mode)
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 11: getUserConsentStateByEmail(newAdminUser)');
       const newAdminData = await db.getUserConsentStateByEmail(newAdminUser);
-      if (!newAdminData?.allow_email_2fa) {
-        await db.setSystemAuditLog({
-          eventType: 'ADMIN_TRANSFER_FAILED',
-          actorId: oldAdminId,
-          actorType: 'Staff',
-          targetId: newAdminUserId,
-          action: 'INITIATE_ADMIN_TRANSFER',
-          details: JSON.stringify({
-            reason: 'Target user 2FA not enabled',
-            timestamp: new Date().toISOString(),
-          }),
-          changedBy: 'Medical',
-        });
+      if (!newAdminData?.allow_email_2fa && !newAdminData?.totp_enabled) {
+        if (allowBootstrapAdmin) {
+          logger.warn(`[BOOTSTRAP_BYPASS] Target user 2FA check bypassed for newAdminId=${newAdminUserId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
+          await db.setSystemAuditLog({
+            eventType: 'ADMIN_TRANSFER_BOOTSTRAP_BYPASS',
+            actorId: oldAdminId,
+            actorType: 'Staff',
+            targetId: newAdminUserId,
+            action: 'INITIATE_ADMIN_TRANSFER',
+            details: JSON.stringify({
+              reason: 'Bootstrap mode: Target user 2FA check bypassed (ALLOW_BOOTSTRAP_ADMIN=true)',
+              timestamp: new Date().toISOString(),
+            }),
+            changedBy: 'Medical',
+          });
+        } else {
+          await db.setSystemAuditLog({
+            eventType: 'ADMIN_TRANSFER_FAILED',
+            actorId: oldAdminId,
+            actorType: 'Staff',
+            targetId: newAdminUserId,
+            action: 'INITIATE_ADMIN_TRANSFER',
+            details: JSON.stringify({
+              reason: 'Target user has no 2FA enabled (email 2FA or authenticator app required)',
+              timestamp: new Date().toISOString(),
+            }),
+            changedBy: 'Medical',
+          });
 
-        throwGraphQLError(res)
-          .message('Target user must have 2FA enabled before becoming admin.')
-          .status(400)
-          .throw();
+          throwGraphQLError(res)
+            .message('Target user must have 2FA enabled (email 2FA or authenticator app) before becoming admin.')
+            .status(400)
+            .throw();
+        }
       }
 
-      // Check if current admin has 2FA enabled
+      // Check if current admin has 2FA enabled (bypass in bootstrap mode)
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 12: getUserConsentStateByEmail(oldAdminEmail)');
       const oldAdminData = await db.getUserConsentStateByEmail(oldAdminEmail);
 
-      const allowBootstrapAdmin = process.env.ALLOW_BOOTSTRAP_ADMIN === 'true';
-
-      if (!oldAdminData?.allow_email_2fa) {
+      if (!oldAdminData?.allow_email_2fa && !oldAdminData?.totp_enabled) {
         // Allow bypass if ALLOW_BOOTSTRAP_ADMIN is enabled (for initial admin bootstrap)
         if (allowBootstrapAdmin) {
           logger.warn(`[BOOTSTRAP_BYPASS] Admin 2FA check bypassed for adminId=${oldAdminId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
@@ -1593,7 +1760,7 @@ const Mutation = {
             targetId: newAdminUserId,
             action: 'INITIATE_ADMIN_TRANSFER',
             details: JSON.stringify({
-              reason: 'Current admin 2FA not enabled',
+              reason: 'Current admin has no 2FA enabled (email 2FA or authenticator app required)',
               timestamp: new Date().toISOString(),
             }),
             changedBy: 'Medical',
@@ -1601,7 +1768,7 @@ const Mutation = {
 
           logger.warn(`Admin ${oldAdminId} attempted transfer without 2FA enabled`);
           throwGraphQLError(res)
-            .message('Current admin must have 2FA enabled to transfer privileges.')
+            .message('Current admin must have 2FA enabled (email 2FA or authenticator app) to transfer privileges.')
             .status(400)
             .throw();
         }
@@ -1722,7 +1889,7 @@ const Mutation = {
       }
 
       // Verify that the current user is the old admin
-      if (currentUserId !== parseInt(oldAdminId, 10)) {
+      if (String(currentUserId) !== String(oldAdminId)) {
         await db.setSystemAuditLog({
           eventType: 'ADMIN_TRANSFER_FAILED',
           actorId: currentUserId,
@@ -1745,10 +1912,9 @@ const Mutation = {
       }
 
       // Verify that the old admin still has admin privileges
-      const isCurrentlyAdmin = await isMedicalPermitted(
+      const {permitted: isCurrentlyAdmin} = await isMedicalPermitted(
         oldAdminId,
-        permissions.is_admin,
-        null
+        permissions.is_admin
       );
 
       if (!isCurrentlyAdmin) {
@@ -1819,7 +1985,7 @@ const Mutation = {
 
       const newAdminEmail = await db.findEmailByUserId(newAdminId);
       const newAdminData = await db.getUserConsentStateByEmail(newAdminEmail);
-      if (!newAdminData?.allow_email_2fa) {
+      if (!newAdminData?.allow_email_2fa && !newAdminData?.totp_enabled) {
         // Allow bypass in bootstrap mode
         if (isBootstrapMode && isBootstrapToken) {
           logger.warn(`[BOOTSTRAP_BYPASS] Target user 2FA check bypassed for newAdminId=${newAdminId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
@@ -1844,14 +2010,14 @@ const Mutation = {
             targetId: newAdminId,
             action: 'CONFIRM_ADMIN_TRANSFER',
             details: JSON.stringify({
-              reason: 'Target user 2FA no longer enabled',
+              reason: 'Target user no longer has 2FA enabled (email 2FA or authenticator app required)',
               timestamp: new Date().toISOString(),
             }),
             changedBy: 'Medical',
           });
 
           throwGraphQLError(res)
-            .message('Target user no longer has 2FA enabled.')
+            .message('Target user no longer has 2FA enabled (email 2FA or authenticator app required).')
             .status(400)
             .throw();
         }
@@ -1882,6 +2048,24 @@ const Mutation = {
         [oldAdminId, permissions.is_admin]
       );
 
+      // Update designations: new admin gets Both, old admin defaults to Manila
+      await client.query(
+        `UPDATE "MedicalPersonnel" SET designation = 'Both'::"UserDesignation" WHERE id = $1`,
+        [newAdminId]
+      );
+      await client.query(
+        `UPDATE "MedicalPersonnel" SET designation = NULL WHERE id = $1`,
+        [oldAdminId]
+      );
+
+      // Update roles: new admin gets Admin role, old admin reverts to their previous role (or Staff)
+      await client.query(
+        `UPDATE "MedicalPersonnel" SET role = 'Admin' WHERE id = $1`,
+        [newAdminId]
+      );
+      // Old admin keeps their role (don't change it) - they may have been a Doctor, Nurse, etc.
+      // Only change designation, not role
+
       // Log audit trail within transaction
       await db.setSystemAuditLog({
         client: client,
@@ -1906,6 +2090,38 @@ const Mutation = {
 
       // Delete the transfer session
       await deleteAdminTransferSession(verificationToken);
+
+      // Assign default staff role to old admin after losing admin privileges
+      try {
+        const templatesResult = await listPermissionTemplates();
+        if (templatesResult.templates && templatesResult.templates.length > 0) {
+          const defaultTemplate = templatesResult.templates[0];
+
+          // Update old admin's role to match the default template
+          await client.query(
+            `UPDATE "MedicalPersonnel" SET role = $1 WHERE id = $2`,
+            [defaultTemplate.label, oldAdminId]
+          );
+
+          await applyTemplateToStaff({
+            personnelId: oldAdminId,
+            templateId: defaultTemplate.id,
+            assignedBy: newAdminId,
+          });
+          logger.info(`Default template "${defaultTemplate.label}" applied to past admin: userId=${oldAdminId}`);
+        }
+        // Always ensure is_staff is set regardless of template availability
+        await setStaffPermissionsExtended({
+          personnelId: String(oldAdminId),
+          permissionsList: [{ key: 'is_staff', enabled: true }],
+          assignedBy: String(newAdminId),
+          defaultBranch: 'Both',
+        });
+        logger.info(`is_staff permission ensured for past admin: userId=${oldAdminId}`);
+      } catch (defaultRoleError) {
+        logger.error(`Failed to assign default staff role to past admin ${oldAdminId}: ${defaultRoleError.message}`);
+        // Non-critical — transfer already completed successfully
+      }
 
       logger.info(`Admin transfer completed successfully: oldAdminId=${oldAdminId}, newAdminId=${newAdminId}, bootstrapMode=${isBootstrapMode && isBootstrapToken}`);
 

@@ -89,27 +89,37 @@ export interface FormData {
   };
   medicalBackground: {
     immunizations: Record<string, boolean>;
+    immunizationDetails: Record<string, { date: string; doseNumber: string }>;
     immunizationOther: string;
     hasAllergies: string;
-    allergies: Record<string, { checked: boolean; severity: string } | boolean>;
+    allergies: Record<string, { checked: boolean; severity: string; status: string } | boolean>;
     allergyOther: string;
+    allergyNotes: string;
     hasHospitalization: string;
     hospitalizationConditions: Record<string, boolean>;
+    hospitalizationDates: Record<string, { admissionDate: string; dischargeDate: string }>;
     hospitalizationDate: string;
+    hospitalizationDischargeDate: string;
     hospitalizationNotes: string;
     hasOperation: string;
     operationConditions: Record<string, boolean>;
+    operationDates: Record<string, string>;
     operationDate: string;
     operationNotes: string;
     hasMedications: string;
     selectedMedications: Record<string, boolean>;
     medicationReason: string;
     medicationNotes: string;
+    medicationDescription: string;
     smoker: string;
     smokerSticksPerDay: string;
     smokerYears: string;
     alcoholDrinker: string;
     alcoholFrequency: string;
+    vaper: string;
+    vapeType: string;
+    vapeFrequency: string;
+    yearsVaping: string;
     eyeglasses: boolean;
     contactLenses: boolean;
     gradeOD: string;
@@ -120,11 +130,13 @@ export interface FormData {
     firstTimeDentist: string;
     lastDentalConsultation: string;
     lastDentalCleaning: string;
+    purpose: string;
     hasIntraOralAppliance: string;
-    intraOralAppliances: Record<string, { checked: boolean; arch: string } | boolean>;
+    intraOralAppliances: Record<string, { checked: boolean; arch: string; status: string; dateIssued: string } | boolean>;
     applianceOther: string;
     applianceLocation: string;
     selectedDentalProcedures: Record<string, boolean>;
+    procedureDates: Record<string, string>;
     upperTeethPhoto: { uri: string; name: string; type: string; id?: string } | null;
     lowerTeethPhoto: { uri: string; name: string; type: string; id?: string } | null;
   };
@@ -159,19 +171,21 @@ export const createEmptyFormData = (): FormData => ({
   },
   medicalHistory: { self: {}, family: {}, familyWhoHasIt: {} },
   medicalBackground: {
-    immunizations: {}, immunizationOther: '',
-    hasAllergies: '', allergies: {}, allergyOther: '',
-    hasHospitalization: '', hospitalizationConditions: {}, hospitalizationDate: '', hospitalizationNotes: '',
-    hasOperation: '', operationConditions: {}, operationDate: '', operationNotes: '',
-    hasMedications: '', selectedMedications: {}, medicationReason: '', medicationNotes: '',
+    immunizations: {}, immunizationDetails: {}, immunizationOther: '',
+    hasAllergies: '', allergies: {}, allergyOther: '', allergyNotes: '',
+    hasHospitalization: '', hospitalizationConditions: {}, hospitalizationDates: {}, hospitalizationDate: '', hospitalizationDischargeDate: '', hospitalizationNotes: '',
+    hasOperation: '', operationConditions: {}, operationDates: {}, operationDate: '', operationNotes: '',
+    hasMedications: '', selectedMedications: {}, medicationReason: '', medicationNotes: '', medicationDescription: '',
     smoker: '', smokerSticksPerDay: '', smokerYears: '',
     alcoholDrinker: '', alcoholFrequency: '',
+    vaper: '', vapeType: '', vapeFrequency: '', yearsVaping: '',
     eyeglasses: false, contactLenses: false, gradeOD: '', gradeOS: '', visualAcuityDate: '',
   },
   dentalHistory: {
     firstTimeDentist: '', lastDentalConsultation: '', lastDentalCleaning: '',
+    purpose: '',
     hasIntraOralAppliance: '', intraOralAppliances: {}, applianceOther: '',
-    applianceLocation: '', selectedDentalProcedures: {},
+    applianceLocation: '', selectedDentalProcedures: {}, procedureDates: {},
     upperTeethPhoto: null, lowerTeethPhoto: null,
   },
   obgyne: {
@@ -187,6 +201,18 @@ const fetchCurrentUpdateTicket = async () => {
   try {
     const data = await sendGraphQLRequest(
       `query GetCurrentUpdateTicket { getUpdateTicket { id status scope } }`, {}
+    );
+    return data.getUpdateTicket ?? null;
+  } catch { return null; }
+};
+
+/** Public helper — returns the current update ticket including revision notes. */
+export const getUpdateTicketStatus = async (): Promise<{
+  id: string; status: string; scope: string; notes?: string;
+} | null> => {
+  try {
+    const data = await sendGraphQLRequest(
+      `query GetUpdateTicketFull { getUpdateTicket { id status scope notes } }`, {}
     );
     return data.getUpdateTicket ?? null;
   } catch { return null; }
@@ -360,36 +386,46 @@ const buildAllergyRecords = (bg: FormData['medicalBackground']) => {
     .filter(([, val]) => (typeof val === 'object' ? val?.checked : val))
     .map(([id, val]) => ({
       allergenCatalogId: id,
-      status: 'Active',
+      status: (typeof val === 'object' && val?.status) ? val.status : 'Active',
       severity: (typeof val === 'object' && val?.severity) ? val.severity : 'Unknown',
       notes: null,
       date_identified: null,
     }));
   if (bg.allergyOther) notes.push(`Other: ${bg.allergyOther}`);
+  if (bg.allergyNotes) notes.push(bg.allergyNotes);
   return { allergies, notes: notes.length ? notes.join('; ') : null };
 };
 
 const buildHospitalizationRecords = (bg: FormData['medicalBackground']) => {
   if (bg?.hasHospitalization !== 'Yes') return { hospitalizations: [], notes: null };
   const today = new Date().toISOString().split('T')[0];
-  const admissionDate = bg.hospitalizationDate
-    ? new Date(bg.hospitalizationDate).toISOString().split('T')[0]
-    : today;
   const hospitalizations = Object.entries(bg.hospitalizationConditions || {})
     .filter(([, checked]) => checked)
-    .map(([id]) => ({ conditionId: id, admissionDate, dischargeDate: null, notes: bg.hospitalizationNotes || null }));
+    .map(([id]) => {
+      const perItem = bg.hospitalizationDates?.[id];
+      const admissionDate = perItem?.admissionDate
+        ? new Date(perItem.admissionDate).toISOString().split('T')[0]
+        : (bg.hospitalizationDate ? new Date(bg.hospitalizationDate).toISOString().split('T')[0] : today);
+      const dischargeDate = perItem?.dischargeDate
+        ? new Date(perItem.dischargeDate).toISOString().split('T')[0]
+        : (bg.hospitalizationDischargeDate ? new Date(bg.hospitalizationDischargeDate).toISOString().split('T')[0] : null);
+      return { conditionId: id, admissionDate, dischargeDate, notes: bg.hospitalizationNotes || null };
+    });
   return { hospitalizations, notes: bg.hospitalizationNotes || null };
 };
 
 const buildOperationRecords = (bg: FormData['medicalBackground']) => {
   if (bg?.hasOperation !== 'Yes') return { operations: [], notes: null };
   const today = new Date().toISOString().split('T')[0];
-  const operationDate = bg.operationDate
-    ? new Date(bg.operationDate).toISOString().split('T')[0]
-    : today;
   const operations = Object.entries(bg.operationConditions || {})
     .filter(([, checked]) => checked)
-    .map(([id]) => ({ procedureId: id, operationDate, notes: bg.operationNotes || null }));
+    .map(([id]) => {
+      const perItemDate = bg.operationDates?.[id];
+      const operationDate = perItemDate
+        ? new Date(perItemDate).toISOString().split('T')[0]
+        : (bg.operationDate ? new Date(bg.operationDate).toISOString().split('T')[0] : today);
+      return { procedureId: id, operationDate, notes: bg.operationNotes || null };
+    });
   return { operations, notes: bg.operationNotes || null };
 };
 
@@ -397,7 +433,7 @@ const buildMedicationRecords = (bg: FormData['medicalBackground']) => {
   if (bg?.hasMedications !== 'Yes') return { medications: [], notes: null };
   const medications = Object.entries(bg.selectedMedications || {})
     .filter(([, checked]) => checked)
-    .map(([id]) => ({ medicineId: id, description: bg.medicationReason || null }));
+    .map(([id]) => ({ medicineId: id, description: bg.medicationDescription || bg.medicationReason || null }));
   return { medications, notes: bg.medicationNotes || null };
 };
 
@@ -409,7 +445,12 @@ const buildImmunizationRecords = (bg: FormData['medicalBackground'], catalog: Ca
     .filter(([, checked]) => checked)
     .flatMap(([id]) => {
       if (!validIds.has(id)) { noteParts.push(id); return []; }
-      return [{ vaccineTypeId: id, immunizationDate: today, doseNumber: 1 }];
+      const details = bg?.immunizationDetails?.[id];
+      const immunizationDate = details?.date
+        ? new Date(details.date).toISOString().split('T')[0]
+        : today;
+      const doseNumber = details?.doseNumber ? parseInt(details.doseNumber) || 1 : 1;
+      return [{ vaccineTypeId: id, immunizationDate, doseNumber }];
     });
   if (bg?.immunizationOther?.trim()) noteParts.push(`Other: ${bg.immunizationOther.trim()}`);
   return { immunizationRecords, immunizationNotes: noteParts.length ? noteParts.join('; ') : null };
@@ -423,7 +464,9 @@ const buildOralApplianceRecords = (dh: FormData['dentalHistory'], catalog: OralA
     .flatMap(([id, val]) => {
       if (!validIds.has(id)) return [];
       const itemArch = (typeof val === 'object' && val?.arch) ? val.arch : 'None';
-      return [{ tagId: id, status: 'Active', dateIssued: today, arch: itemArch }];
+      const itemStatus = (typeof val === 'object' && val?.status) ? val.status : 'Active';
+      const itemDate = (typeof val === 'object' && val?.dateIssued) ? val.dateIssued : today;
+      return [{ tagId: id, status: itemStatus, dateIssued: itemDate, arch: itemArch }];
     });
   return { appliances, notes: dh?.applianceOther || null };
 };
@@ -436,7 +479,7 @@ const mapYearLevel = (category: string): string => {
     'Transferee': 'Sophomore', 'Graduate studies (New student)': 'Masteral',
     'Graduate studies (Old student)': 'Masteral', 'Returnee': 'Sophomore', 'Old Student': 'Junior',
   };
-  return mapping[category] || 'Freshman';
+  return mapping[category] || category || 'Freshman';
 };
 
 const mapDentalCleaningRange = (frontendValue: string): string => {
@@ -518,6 +561,13 @@ const buildBatchInputs = (
     alcoholConsumer: formData.medicalBackground.alcoholDrinker === 'yes',
     frequencyOfAlcoholConsumption: formData.medicalBackground.alcoholDrinker === 'yes'
       ? formData.medicalBackground.alcoholFrequency || null : null,
+    vapeUser: formData.medicalBackground.vaper === 'yes',
+    vapeType: formData.medicalBackground.vaper === 'yes'
+      ? formData.medicalBackground.vapeType || null : null,
+    vapeFrequency: formData.medicalBackground.vaper === 'yes'
+      ? formData.medicalBackground.vapeFrequency || null : null,
+    yearsVaping: formData.medicalBackground.vaper === 'yes'
+      ? parseInt(formData.medicalBackground.yearsVaping) || null : null,
     notes: null,
   };
 
@@ -543,7 +593,7 @@ const buildBatchInputs = (
   inputs.dentalHistory = {
     seenByDentist: formData.dentalHistory.firstTimeDentist === 'no',
     lastDentalCleaning: mapDentalCleaningRange(formData.dentalHistory.lastDentalCleaning),
-    purpose: null,
+    purpose: formData.dentalHistory.purpose || null,
     lastVisitDate: formData.dentalHistory.lastDentalConsultation
       ? new Date(formData.dentalHistory.lastDentalConsultation + '-01').toISOString().split('T')[0]
       : null,
@@ -554,7 +604,12 @@ const buildBatchInputs = (
   const validProcIds = new Set(allCatalogs.dentalProcedureCatalog.map(c => c.id));
   const dentalProcedures = Object.entries(formData.dentalHistory.selectedDentalProcedures || {})
     .filter(([id, checked]) => checked && validProcIds.has(id))
-    .map(([id]) => ({ procedureTypeId: id, procedureDate: today }));
+    .map(([id]) => ({
+      procedureTypeId: id,
+      procedureDate: formData.dentalHistory.procedureDates?.[id]
+        ? new Date(formData.dentalHistory.procedureDates[id]).toISOString().split('T')[0]
+        : today,
+    }));
   inputs.dentalProcedureProfile = { procedures: dentalProcedures, notes: null };
 
   // Oral appliances
@@ -724,35 +779,112 @@ export const submitUpdateRecord = async (
       ticketCreated = true;
     }
 
-    // Step 2: Upload dental photos only when scope includes dental
+    // Step 2: Build all inputs
+    const allCatalogs = await fetchAllCatalogs();
+
+    // Upload dental photos before building inputs (need photo IDs for dentalPhotoRecord)
     const showDental = recordType === 'dental' || recordType === 'both';
     if (showDental) {
-      // For new photos (have uri): upload them
-      // For revision-prefilled photos (have id but no new uri): reuse existing UUID
       const upperPhoto = formData.dentalHistory?.upperTeethPhoto;
       const lowerPhoto = formData.dentalHistory?.lowerTeethPhoto;
 
       if (upperPhoto?.uri && !upperPhoto?.id) {
-        const result = await uploadMediaFile(upperPhoto);
-        upperTeethFileId = result;
+        upperTeethFileId = await uploadMediaFile(upperPhoto);
       } else if (upperPhoto?.id) {
         upperTeethFileId = upperPhoto.id;
       }
 
       if (lowerPhoto?.uri && !lowerPhoto?.id) {
-        const result = await uploadMediaFile(lowerPhoto);
-        lowerTeethFileId = result;
+        lowerTeethFileId = await uploadMediaFile(lowerPhoto);
       } else if (lowerPhoto?.id) {
         lowerTeethFileId = lowerPhoto.id;
       }
     }
 
-    // Step 3: Build inputs and send scope-filtered batch
-    const allCatalogs = await fetchAllCatalogs();
     const allInputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
-    const batchResult = await sendScopedUpdateMutations(allInputs, formData, recordType);
 
-    return { success: true, data: { ticketId, ...batchResult } };
+    // Step 3: Personal info — sequential like mds-patient
+    if (allInputs.studentProfile) {
+      await sendGraphQLRequest(
+        `mutation CreateStudentProfile($input: StudentProfileInput!) { createStudentProfile(input: $input) { id } }`,
+        { input: allInputs.studentProfile },
+      );
+    }
+    if (allInputs.emergencyContact) {
+      await sendGraphQLRequest(
+        `mutation CreateEmergencyContact($input: EmergencyContactInput!) { createEmergencyContact(input: $input) { id } }`,
+        { input: allInputs.emergencyContact },
+      );
+    }
+
+    // Step 4: Medical mutations — sequential, only when scope includes medical
+    if (recordType === 'medical' || recordType === 'both') {
+      await sendGraphQLRequest(
+        `mutation CreateMedicalHistory($input: MedicalHistoryInput!) { createMedicalHistory(input: $input) { id } }`,
+        { input: allInputs.medicalHistory },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateAllergyProfile($input: AllergyProfileInput!) { createAllergyProfile(input: $input) { id } }`,
+        { input: allInputs.allergyProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateHospitalizationProfile($input: HospitalizationProfileInput!) { createHospitalizationProfile(input: $input) { id } }`,
+        { input: allInputs.hospitalizationProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateOperationProfile($input: OperationProfileInput!) { createOperationProfile(input: $input) { id } }`,
+        { input: allInputs.operationProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateMedicationProfile($input: MedicationProfileInput!) { createMedicationProfile(input: $input) { id } }`,
+        { input: allInputs.medicationProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateImmunizationProfile($input: ImmunizationProfileInput!) { createImmunizationProfile(input: $input) { id } }`,
+        { input: allInputs.immunizationProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateLifestyle($input: LifestyleInput!) { createLifestyle(input: $input) { id } }`,
+        { input: allInputs.lifestyle },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateVisualAcuityProfile($input: VisualAcuityProfileInput!) { createVisualAcuityProfile(input: $input) { id } }`,
+        { input: allInputs.visualAcuityProfile },
+      );
+      if (allInputs.obgynHistory) {
+        await sendGraphQLRequest(
+          `mutation CreateObgynHistory($input: ObgynHistoryInput!) { createObgynHistory(input: $input) { id } }`,
+          { input: allInputs.obgynHistory },
+        );
+      }
+    }
+
+    // Step 5: Dental mutations — sequential, only when scope includes dental
+    if (showDental) {
+      await sendGraphQLRequest(
+        `mutation CreateDentalHistory($input: DentalHistoryInput!) { createDentalHistory(input: $input) { id } }`,
+        { input: allInputs.dentalHistory },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateDentalProcedureProfile($input: DentalProcedureProfileInput!) { createDentalProcedureProfile(input: $input) { id } }`,
+        { input: allInputs.dentalProcedureProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateOralApplianceProfile($input: OralApplianceProfileInput!) { createOralApplianceProfile(input: $input) { id } }`,
+        { input: allInputs.oralApplianceProfile },
+      );
+      if (allInputs.dentalPhotoRecord) {
+        await sendGraphQLRequest(
+          `mutation CreateDentalPhotoRecord($input: DentalPhotoRecordInput!) { createDentalPhotoRecord(input: $input) { id } }`,
+          { input: allInputs.dentalPhotoRecord },
+        );
+      }
+    }
+
+    // Step 6: Submit the ticket for review — separate call like mds-patient
+    await submitUpdateTicket();
+
+    return { success: true, data: { ticketId } };
   } catch (error) {
     if (upperTeethFileId || lowerTeethFileId) {
       await Promise.all([unstageMediaFile(upperTeethFileId), unstageMediaFile(lowerTeethFileId)]);
@@ -920,7 +1052,10 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
           date_of_birth sex civil_status nationality religion
           contactNumber present_address province_address
         }
-        branchId: getBranchIdentifier { identifier }
+        branchId: getPersonalRecord {
+          branch
+          identifier
+        }
       }`, {}, { endpoint: '/profile/patient' }
     ),
     sendGraphQLRequest(
@@ -931,14 +1066,15 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
           secondContact { contactName relationship contactNumber address }
         }
         medicalHistory: getMedicalHistory { conditions { conditionId relationship } notes }
-        allergyProfile: getAllergyProfile { allergies { allergenCatalogId status } notes }
-        hospitalizationProfile: getHospitalizationProfile { hospitalizations { conditionId admissionDate notes } notes }
+        allergyProfile: getAllergyProfile { allergies { allergenCatalogId status severity } notes }
+        hospitalizationProfile: getHospitalizationProfile { hospitalizations { conditionId admissionDate dischargeDate notes } notes }
         operationProfile: getOperationProfile { operations { procedureId operationDate notes } notes }
         medicationProfile: getMedicationProfile { medications { medicineId description } notes }
-        immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId } notes }
-        lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption }
+        immunizationProfile: getImmunizationProfile { immunizations { vaccineTypeId immunizationDate } notes }
+        lifestyle: getLifestyle { smoker numberOfCigarettesPerDay yearsSmoked alcoholConsumer frequencyOfAlcoholConsumption vapeUser vapeType vapeFrequency }
         visualAcuity: getVisualAcuityProfile { notes acuity { left_eye right_eye recorded_at } }
         dentalHistory: getDentalHistory { seenByDentist lastDentalCleaning lastVisitDate }
+        dentalProcedureProfile: getDentalProcedureProfile { procedures { procedureTypeId } }
         dentalPhotoRecord: getDentalPhotoRecord { upperTeeth lowerTeeth }
         oralAppliance: getOralApplianceProfile { appliances { tagId arch } }
         obgyne: getObgynHistory { lastMenstrualPeriod hasDysmenorrhea notes }
@@ -993,7 +1129,7 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
   const ls = emr?.lifestyle || {};
 
   base.medicalBackground.hasAllergies = allergies.length > 0 ? 'Yes' : 'No';
-  for (const a of allergies) base.medicalBackground.allergies[a.allergenCatalogId] = true;
+  for (const a of allergies) base.medicalBackground.allergies[a.allergenCatalogId] = { checked: true, severity: a.severity || 'Unknown', status: a.status || 'Active' };
   base.medicalBackground.hasHospitalization = hosps.length > 0 ? 'Yes' : 'No';
   for (const h of hosps) base.medicalBackground.hospitalizationConditions[h.conditionId] = true;
   base.medicalBackground.hasOperation = ops.length > 0 ? 'Yes' : 'No';
@@ -1007,14 +1143,31 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
   base.medicalBackground.alcoholDrinker = ls.alcoholConsumer ? 'yes' : 'no';
   base.medicalBackground.alcoholFrequency = ls.frequencyOfAlcoholConsumption || '';
 
+  // Visual acuity
+  const va = emr?.visualAcuity;
+  if (va?.acuity) {
+    // Parse eyeglasses/contactLenses from the stored notes ("Eyeglasses: Yes, Contact Lenses: No")
+    const vaNotes = (va.notes || '').toLowerCase();
+    base.medicalBackground.eyeglasses = vaNotes.includes('eyeglasses: yes');
+    base.medicalBackground.contactLenses = vaNotes.includes('contact lenses: yes');
+    // Fallback: if no parseable notes but acuity data exists, assume eyeglasses
+    if (!vaNotes && va.acuity) base.medicalBackground.eyeglasses = true;
+    base.medicalBackground.gradeOD = va.acuity.right_eye || '';
+    base.medicalBackground.gradeOS = va.acuity.left_eye || '';
+    base.medicalBackground.visualAcuityDate = va.acuity.recorded_at
+      ? new Date(va.acuity.recorded_at).toISOString().split('T')[0] : '';
+  }
+
   // Dental
   const dh = emr?.dentalHistory || {};
   const oaAppliances = emr?.oralAppliance?.appliances || [];
+  const dentalProcs = emr?.dentalProcedureProfile?.procedures || [];
   base.dentalHistory.firstTimeDentist = dh.seenByDentist === true ? 'no' : dh.seenByDentist === false ? 'yes' : '';
   base.dentalHistory.lastDentalConsultation = dh.lastVisitDate ? String(dh.lastVisitDate).slice(0, 7) : '';
   base.dentalHistory.lastDentalCleaning = reverseMapDentalCleaningRange(dh.lastDentalCleaning || '');
   base.dentalHistory.hasIntraOralAppliance = oaAppliances.length > 0 ? 'yes' : 'no';
-  for (const a of oaAppliances) base.dentalHistory.intraOralAppliances[a.tagId] = true;
+  for (const a of oaAppliances) base.dentalHistory.intraOralAppliances[a.tagId] = { checked: true, arch: a.arch || 'None', status: a.status || '', dateIssued: a.dateIssued || '' };
+  for (const p of dentalProcs) base.dentalHistory.selectedDentalProcedures[p.procedureTypeId] = true;
 
   // Dental photos — preserve existing UUIDs so updates can reuse them
   const dpr = emr?.dentalPhotoRecord;

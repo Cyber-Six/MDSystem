@@ -3,14 +3,23 @@ import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check,
 
 /**
  * Normalize a date value (string, Date, or number) to YYYY-MM-DD format.
+ * Uses LOCAL date getters so UTC-offset ISO timestamps (e.g. "2026-04-07T16:00:00.000Z"
+ * from a UTC+8 server) resolve to the correct local calendar date ("2026-04-08").
  */
 const normalizeDate = (val) => {
   if (!val) return '';
-  if (typeof val === 'string') return val.split('T')[0];
+  if (typeof val === 'string') {
+    // Pure date string "YYYY-MM-DD" — return as-is
+    if (!val.includes('T') && !val.endsWith('Z')) return val;
+    // ISO timestamp — parse and use LOCAL date parts to avoid UTC offset shifting the date
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val.split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
   if (val instanceof Date || typeof val === 'number') {
     const d = new Date(val);
     if (isNaN(d.getTime())) return '';
-    return d.toISOString().split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
   return '';
 };
@@ -18,6 +27,7 @@ import AvailabilityCalendar from './availability-calendar';
 import EventModal from './event-modal';
 import WhitelistManager from './whitelist-manager';
 import DaySlotEditor from './day-slot-editor';
+import DateOccupancyModal from './date-occupancy-modal';
 import {
   listAllSchedulers,
   createScheduler,
@@ -33,6 +43,8 @@ import {
   listCustomDates,
   setCustomDates as setCustomDatesAPI,
   unsetCustomDates as unsetCustomDatesAPI,
+  checkDateOccupancy,
+  cancelDateAppointments,
 } from '../staff-appointment-service';
 
 // Include Sunday in the days list - Sunday disabled by default, only enabled via custom dates
@@ -91,6 +103,9 @@ const AvailabilityManager = () => {
     useCustomSlots: false,
   });
 
+  // Date occupancy modal — shown when a date being disabled/removed still has active bookings
+  const [occupancyModal, setOccupancyModal] = useState(null); // null | { date, count, actionLabel, onKeep, onCancelAll }
+
   // Month availability state (real booking data for calendar)
   const [monthAvailability, setMonthAvailability] = useState({});
   const [currentMonthRange, setCurrentMonthRange] = useState(null); // { startDate, endDate }
@@ -129,18 +144,24 @@ const AvailabilityManager = () => {
     loadSchedulers();
   }, [loadSchedulers]);
 
-  // Update edit form when scheduler changes
+  // Update edit form and reload data when active scheduler ID changes.
+  // Use activeScheduler?.id (not the full object) so optimistic updates
+  // (e.g. containsCustomDates toggling) don't trigger a redundant reload.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeScheduler && !isCreatingNew) {
       setEditForm({ ...activeScheduler });
-      // Load requirements for this scheduler
+      setMonthAvailability({});
       loadRequirements(activeScheduler.id);
-      // Load whitelist count
       loadWhitelistCount(activeScheduler.id);
-      // Load custom dates
       loadCustomDates(activeScheduler.id);
+      // Reload month availability for the current calendar range
+      // (currentMonthRange is intentionally read from closure, not in deps)
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+      }
     }
-  }, [activeScheduler, isCreatingNew]);
+  }, [activeScheduler?.id, isCreatingNew]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load custom dates for a scheduler
   const loadCustomDates = async (schedulerId) => {
@@ -160,10 +181,8 @@ const AvailabilityManager = () => {
       const data = await getMonthAvailability(schedulerId, startDate, endDate);
       const lookup = {};
       for (const entry of (data || [])) {
-        const dateStr = typeof entry.scheduledDate === 'string'
-          ? entry.scheduledDate.split('T')[0]
-          : entry.scheduledDate;
-        lookup[dateStr] = entry;
+        const dateStr = normalizeDate(entry.scheduledDate);
+        if (dateStr) lookup[dateStr] = entry;
       }
       setMonthAvailability(lookup);
     } catch (err) {
@@ -189,34 +208,24 @@ const AvailabilityManager = () => {
     }
   };
 
-  // Handle calendar date selection - load day-specific data (allow all dates)
-  const handleDateSelect = async (dateStr, isAvailable = true) => {
+  // Handle calendar date selection — read-only, never creates DB rows
+  const handleDateSelect = (dateStr) => {
     setSelectedCalendarDate(dateStr);
     if (!activeScheduler?.id || !dateStr) {
       setDayOverrideData(null);
       return;
     }
 
-    // Only load override data if the date is available
-    if (isAvailable) {
-      setLoadingDayData(true);
-      try {
-        const data = await getScheduleAvailability(activeScheduler.id, dateStr);
-        setDayOverrideData(data);
-        // Refresh month availability since getScheduleAvailability may create a new ScheduleDateEntity
-        if (currentMonthRange) {
-          loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-        }
-      } catch (err) {
-        console.error('Failed to load day data:', err);
-        setDayOverrideData(null);
-      } finally {
-        setLoadingDayData(false);
-      }
-    } else {
-      // For unavailable dates, clear override data
+    // For closed dates: show the "Add as custom date" prompt
+    if (!isDateAvailable(dateStr)) {
       setDayOverrideData(null);
+      return;
     }
+
+    // Use already-loaded monthAvailability data (no API call = no ScheduleDateEntity creation)
+    // For dates without an entity yet, dayOverrideData stays null and DaySlotEditor
+    // falls back to scheduler defaults.
+    setDayOverrideData(monthAvailability[dateStr] || null);
   };
 
   // Check if a specific date is available (in schedule or custom dates)
@@ -246,6 +255,9 @@ const AvailabilityManager = () => {
         afternoonAllowed: afternoon,
       }]);
       await loadCustomDates(activeScheduler.id);
+      // Sync containsCustomDates flag locally
+      setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: true } : prev);
+      setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: true } : s));
       // Now load the day data
       const data = await getScheduleAvailability(activeScheduler.id, dateStr);
       setDayOverrideData(data);
@@ -261,18 +273,26 @@ const AvailabilityManager = () => {
   // Handle removing a custom date from DaySlotEditor
   const handleRemoveCustomDateFromEditor = async (dateStr) => {
     if (!activeScheduler?.id) return;
-    try {
-      const normalized = normalizeDate(dateStr);
-      await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
-      await loadCustomDates(activeScheduler.id);
-      setDayOverrideData(null);
-      // Refresh month availability
-      if (currentMonthRange) {
-        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to remove custom date');
-    }
+    const normalized = normalizeDate(dateStr);
+    await _withOccupancyCheck(
+      normalized,
+      'Remove this custom date',
+      async () => {
+        try {
+          await _doUnsetCustomDate(normalized);
+        } catch (err) {
+          setError(err.message || 'Failed to remove custom date');
+        }
+      },
+      async () => {
+        try {
+          await cancelDateAppointments(activeScheduler.id, normalized);
+          await _doUnsetCustomDate(normalized);
+        } catch (err) {
+          setError(err.message || 'Failed to cancel appointments and remove custom date');
+        }
+      },
+    );
   };
 
   // Handle saving day override
@@ -298,11 +318,10 @@ const AvailabilityManager = () => {
       const input = session === 'morning'
         ? { morningAllowed: value }
         : { afternoonAllowed: value };
-      await updateDateIdentity(activeScheduler.id, dateStr, input);
-      // If this is the currently selected date, refresh the day data
+      const result = await updateDateIdentity(activeScheduler.id, dateStr, input);
+      // Update the day slot editor if this is the currently selected date
       if (dateStr === selectedCalendarDate) {
-        const data = await getScheduleAvailability(activeScheduler.id, dateStr);
-        setDayOverrideData(data);
+        setDayOverrideData(result);
       }
       // Refresh month availability to update calendar view
       if (currentMonthRange) {
@@ -314,6 +333,86 @@ const AvailabilityManager = () => {
     }
   };
 
+  // Core helper: execute a disable/remove action, optionally after pre-cancelling bookings
+  const _doDisableDate = async (dateStr) => {
+    const result = await updateDateIdentity(activeScheduler.id, dateStr, {
+      morningAllowed: 0,
+      afternoonAllowed: 0,
+    });
+    setDayOverrideData(result);
+    if (currentMonthRange) {
+      loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+    }
+  };
+
+  const _doUnsetCustomDate = async (normalized) => {
+    await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
+    const remaining = await listCustomDates(activeScheduler.id, 0, 1);
+    const stillHas = (remaining?.length || 0) > 0;
+    setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
+    setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: stillHas } : prev);
+    setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: stillHas } : s));
+    setDayOverrideData(null);
+    if (currentMonthRange) {
+      loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+    }
+  };
+
+  // Shared: show the occupancy modal if the date has active bookings, else run immediately
+  const _withOccupancyCheck = async (dateStr, actionLabel, onKeep, onCancelAll) => {
+    try {
+      const { count } = await checkDateOccupancy(activeScheduler.id, dateStr);
+      if (count > 0) {
+        setOccupancyModal({ date: dateStr, count, actionLabel, onKeep, onCancelAll });
+      } else {
+        await onKeep(); // No bookings — proceed silently with the "keep" path (safe no-op)
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to check date occupancy');
+    }
+  };
+
+  // Handle disabling a date (set both sessions to 0)
+  const handleDisableDate = async (dateStr) => {
+    if (!activeScheduler?.id || !dateStr) return;
+    await _withOccupancyCheck(
+      dateStr,
+      'Disable this date',
+      async () => {
+        try {
+          await _doDisableDate(dateStr);
+        } catch (err) {
+          setError(err.message || 'Failed to disable date');
+        }
+      },
+      async () => {
+        try {
+          await cancelDateAppointments(activeScheduler.id, dateStr);
+          await _doDisableDate(dateStr);
+        } catch (err) {
+          setError(err.message || 'Failed to cancel appointments and disable date');
+        }
+      },
+    );
+  };
+
+  // Handle re-enabling a disabled date (reset to scheduler defaults)
+  const handleResetDate = async (dateStr) => {
+    if (!activeScheduler?.id || !dateStr) return;
+    try {
+      const result = await updateDateIdentity(activeScheduler.id, dateStr, {
+        morningAllowed: activeScheduler.morningAllowed,
+        afternoonAllowed: activeScheduler.afternoonAllowed,
+      });
+      setDayOverrideData(result);
+      if (currentMonthRange) {
+        loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to reset date');
+    }
+  };
+
   const handleSelectScheduler = (sched) => {
     setActiveScheduler(sched);
     setEditForm({ ...sched });
@@ -322,6 +421,14 @@ const AvailabilityManager = () => {
     // Clear day slot editor state
     setSelectedCalendarDate(null);
     setDayOverrideData(null);
+    // Immediately clear stale data from previous scheduler so calendar shows clean state
+    setMonthAvailability({});
+    setCustomDates([]);
+    // Load fresh data for the newly selected scheduler
+    loadCustomDates(sched.id);
+    if (currentMonthRange) {
+      loadMonthAvailability(sched.id, currentMonthRange.startDate, currentMonthRange.endDate);
+    }
     // Clear custom date picker state
     setShowCustomDatePicker(false);
     setCustomDateInput({
@@ -356,6 +463,7 @@ const AvailabilityManager = () => {
       notes: '',
       isActive: true,
       whitelistOnly: false,
+      purposeRequired: false,
     });
     setRequirements([]);
     setPendingRequirements([]);
@@ -386,6 +494,13 @@ const AvailabilityManager = () => {
         setSaving(true);
         await setCustomDatesAPI(activeScheduler.id, [dateEntry]);
         await loadCustomDates(activeScheduler.id);
+        // Sync containsCustomDates flag locally
+        setActiveScheduler(prev => prev ? { ...prev, containsCustomDates: true } : prev);
+        setSchedulers(prev => prev.map(s => s.id === activeScheduler.id ? { ...s, containsCustomDates: true } : s));
+        // Refresh calendar to reflect the new ScheduleDateEntity entries
+        if (currentMonthRange) {
+          loadMonthAvailability(activeScheduler.id, currentMonthRange.startDate, currentMonthRange.endDate);
+        }
       } catch (err) {
         setError(err.message || 'Failed to add custom date');
       } finally {
@@ -407,19 +522,34 @@ const AvailabilityManager = () => {
   const handleRemoveCustomDate = async (dateStr) => {
     const normalized = normalizeDate(dateStr);
     if (isCreatingNew) {
-      // For new scheduler, just remove from local state
+      // For new scheduler, just remove from local state (no bookings possible)
       setCustomDates(prev => prev.filter(d => normalizeDate(d.scheduledDate) !== normalized));
     } else if (activeScheduler?.id) {
-      // For existing scheduler, remove from backend
-      try {
-        setSaving(true);
-        await unsetCustomDatesAPI(activeScheduler.id, [normalized]);
-        await loadCustomDates(activeScheduler.id);
-      } catch (err) {
-        setError(err.message || 'Failed to remove custom date');
-      } finally {
-        setSaving(false);
-      }
+      await _withOccupancyCheck(
+        normalized,
+        'Remove this custom date',
+        async () => {
+          try {
+            setSaving(true);
+            await _doUnsetCustomDate(normalized);
+          } catch (err) {
+            setError(err.message || 'Failed to remove custom date');
+          } finally {
+            setSaving(false);
+          }
+        },
+        async () => {
+          try {
+            setSaving(true);
+            await cancelDateAppointments(activeScheduler.id, normalized);
+            await _doUnsetCustomDate(normalized);
+          } catch (err) {
+            setError(err.message || 'Failed to cancel appointments and remove custom date');
+          } finally {
+            setSaving(false);
+          }
+        },
+      );
     }
   };
 
@@ -445,6 +575,7 @@ const AvailabilityManager = () => {
           notes: editForm.notes || null,
           isActive: editForm.isActive,
           whitelistOnly: editForm.whitelistOnly,
+          purposeRequired: editForm.purposeRequired ?? false,
         });
         await loadSchedulers(updated?.id ?? editForm.id);
       } else {
@@ -458,6 +589,7 @@ const AvailabilityManager = () => {
           afternoonAllowed: editForm.afternoonAllowed,
           notes: editForm.notes || null,
           whitelistOnly: editForm.whitelistOnly ?? false,
+          purposeRequired: editForm.purposeRequired ?? false,
           slotCustomDates: [],
           whiteLists: [],
         });
@@ -626,7 +758,7 @@ const AvailabilityManager = () => {
       <div className="flex items-center justify-center py-12">
         <div className="flex flex-col items-center gap-3">
           <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-          <p className="text-sm text-secondary-500 dark:text-neutral-400">Loading schedulers...</p>
+          <p className="text-base text-secondary-500 dark:text-neutral-400">Loading schedulers...</p>
         </div>
       </div>
     );
@@ -639,7 +771,7 @@ const AvailabilityManager = () => {
     <div className="space-y-4">
       {/* Error */}
       {error && (
-        <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-xs rounded-lg flex justify-between items-center">
+        <div className="px-3 py-2 bg-error-50 dark:bg-error-900/30 border border-error-200 dark:border-error-800 text-error-700 dark:text-error-400 text-sm rounded-lg flex justify-between items-center">
           <span>{error}</span>
           <button onClick={() => setError('')} className="ml-2 font-bold">&times;</button>
         </div>
@@ -656,12 +788,12 @@ const AvailabilityManager = () => {
             {activeScheduler ? (
               <>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${activeScheduler.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
-                <span className="text-sm font-medium text-secondary-900 dark:text-white truncate">
+                <span className="text-base font-medium text-secondary-900 dark:text-white truncate">
                   {activeScheduler.label}
                 </span>
               </>
             ) : (
-              <span className="text-sm text-secondary-500 dark:text-neutral-400">Select scheduler...</span>
+              <span className="text-base text-secondary-500 dark:text-neutral-400">Select scheduler...</span>
             )}
             <ChevronDown className={`w-4 h-4 text-secondary-400 ml-auto transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
           </button>
@@ -683,11 +815,11 @@ const AvailabilityManager = () => {
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sched.isActive ? 'bg-success-500' : 'bg-neutral-400'}`} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-sm font-medium truncate ${isSelected ? 'text-primary-700 dark:text-primary-400' : 'text-secondary-800 dark:text-white'}`}>
+                          <span className={`text-base font-medium truncate ${isSelected ? 'text-primary-700 dark:text-primary-400' : 'text-secondary-800 dark:text-white'}`}>
                             {sched.label}
                           </span>
                           {sched.patientType && (
-                            <span className={`px-1 py-0.5 text-[9px] font-medium rounded ${
+                            <span className={`px-1 py-0.5 text-xs font-medium rounded ${
                               sched.patientType === 'Employee'
                                 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
                                 : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
@@ -696,7 +828,7 @@ const AvailabilityManager = () => {
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-secondary-500 dark:text-neutral-400 mt-0.5">
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
                           {sched.location} • AM {sched.morningAllowed} • PM {sched.afternoonAllowed}
                         </p>
                       </div>
@@ -705,7 +837,7 @@ const AvailabilityManager = () => {
                   );
                 })
               ) : (
-                <div className="px-3 py-4 text-center text-sm text-secondary-500 dark:text-neutral-400">
+                <div className="px-3 py-4 text-center text-base text-secondary-500 dark:text-neutral-400">
                   No schedulers yet
                 </div>
               )}
@@ -716,7 +848,7 @@ const AvailabilityManager = () => {
         {/* Create New Scheduler Button - Always visible */}
         <button
           onClick={handleCreateNew}
-          className="flex items-center gap-2 px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+          className="flex items-center gap-2 px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white text-base font-medium rounded-lg transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">New Scheduler</span>
@@ -727,11 +859,11 @@ const AvailabilityManager = () => {
       {!activeScheduler && schedulers.length === 0 && !isCreatingNew && (
         <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 text-center">
           <Calendar className="w-12 h-12 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" />
-          <h3 className="text-lg font-semibold text-secondary-700 dark:text-neutral-300 mb-2">No Schedulers</h3>
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 mb-4">Create a scheduler to start managing appointments</p>
+          <h3 className="text-xl font-semibold text-secondary-700 dark:text-neutral-300 mb-2">No Schedulers</h3>
+          <p className="text-base text-secondary-500 dark:text-neutral-400 mb-4">Create a scheduler to start managing appointments</p>
           <button
             onClick={handleCreateNew}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+            className="px-4 py-2 text-base font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
           >
             Create Scheduler
           </button>
@@ -756,6 +888,8 @@ const AvailabilityManager = () => {
                 isDateAvailable={selectedCalendarDate ? isDateAvailable(selectedCalendarDate) : false}
                 onAddCustomDate={handleAddCustomDateFromEditor}
                 onRemoveCustomDate={handleRemoveCustomDateFromEditor}
+                onDisableDate={handleDisableDate}
+                onResetDate={handleResetDate}
               />
             )}
 
@@ -778,7 +912,7 @@ const AvailabilityManager = () => {
               ) : (
                 <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-8 text-center text-secondary-500 dark:text-neutral-400">
                   <Calendar className="w-10 h-10 mx-auto mb-3 text-neutral-300 dark:text-neutral-600" />
-                  <p className="text-sm">Save the scheduler to view calendar</p>
+                  <p className="text-base">Save the scheduler to view calendar</p>
                 </div>
               )}
             </div>
@@ -791,12 +925,12 @@ const AvailabilityManager = () => {
               <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Settings className="w-4 h-4 text-secondary-500 dark:text-neutral-400" />
-                  <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
+                  <h3 className="text-base font-semibold text-secondary-800 dark:text-white">
                     {isCreatingNew ? 'New Scheduler' : 'Scheduler Settings'}
                   </h3>
                 </div>
                 {hasChanges && !isCreatingNew && (
-                  <span className="px-2 py-0.5 text-[10px] font-medium bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 rounded">
+                  <span className="px-2 py-0.5 text-xs font-medium bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400 rounded">
                     Unsaved changes
                   </span>
                 )}
@@ -807,7 +941,7 @@ const AvailabilityManager = () => {
                 <div className="p-4 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
                   {/* Name */}
                   <div>
-                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
                       Scheduler Name *
                     </label>
                     <input
@@ -815,21 +949,21 @@ const AvailabilityManager = () => {
                       value={editForm.label || ''}
                       onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
                       placeholder="e.g., General Consultation"
-                      className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
                   </div>
 
                   {/* Location & Patient Type */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                      <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
                         <MapPin className="w-3.5 h-3.5 inline mr-1.5" />
                         Location
                       </label>
                       <select
                         value={editForm.location || 'Arlegui'}
                         onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
                       >
                         <option value="Arlegui">Arlegui</option>
                         <option value="Casal">Casal</option>
@@ -837,14 +971,14 @@ const AvailabilityManager = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                      <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
                         <Users className="w-3.5 h-3.5 inline mr-1.5" />
                         Patient Type
                       </label>
                       <select
                         value={editForm.patientType || ''}
                         onChange={(e) => setEditForm({ ...editForm, patientType: e.target.value || null })}
-                        className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
                       >
                         <option value="">All Types</option>
                         <option value="Student">Student</option>
@@ -855,14 +989,14 @@ const AvailabilityManager = () => {
 
                   {/* Slots - Compact Horizontal Layout */}
                   <div>
-                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
                       Available Slots per Session
                     </label>
                     <div className="flex gap-4">
                       {/* Morning */}
                       <div className="flex items-center gap-2">
                         <Sun className="w-4 h-4 text-accent-600 dark:text-accent-400" />
-                        <span className="text-xs font-medium text-secondary-600 dark:text-neutral-400">Morning</span>
+                        <span className="text-sm font-medium text-secondary-600 dark:text-neutral-400">Morning</span>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -878,13 +1012,13 @@ const AvailabilityManager = () => {
                               setEditForm({ ...editForm, morningAllowed: 0 });
                             }
                           }}
-                          className="w-16 px-2 py-1.5 text-center text-sm font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          className="w-16 px-2 py-1.5 text-center text-base font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
                       </div>
                       {/* Afternoon */}
                       <div className="flex items-center gap-2">
                         <Moon className="w-4 h-4 text-warning-600 dark:text-warning-400" />
-                        <span className="text-xs font-medium text-secondary-600 dark:text-neutral-400">Afternoon</span>
+                        <span className="text-sm font-medium text-secondary-600 dark:text-neutral-400">Afternoon</span>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -900,7 +1034,7 @@ const AvailabilityManager = () => {
                               setEditForm({ ...editForm, afternoonAllowed: 0 });
                             }
                           }}
-                          className="w-16 px-2 py-1.5 text-center text-sm font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          className="w-16 px-2 py-1.5 text-center text-base font-semibold bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
                       </div>
                     </div>
@@ -908,7 +1042,7 @@ const AvailabilityManager = () => {
 
                   {/* Available Days */}
                   <div>
-                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
                       Available Days
                     </label>
                     <div className="flex flex-wrap gap-1.5">
@@ -921,7 +1055,7 @@ const AvailabilityManager = () => {
                             type="button"
                             onClick={() => toggleDay(day)}
                             title={isSunday && !isActive ? 'Sunday is disabled by default. Enable it or use Custom Dates below.' : ''}
-                            className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                            className={`px-2.5 py-1.5 text-sm font-medium rounded-lg transition-all ${
                               isActive
                                 ? 'bg-primary-500 text-white shadow-sm'
                                 : isSunday
@@ -934,7 +1068,7 @@ const AvailabilityManager = () => {
                         );
                       })}
                     </div>
-                    <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1.5">
+                    <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1.5">
                       Sunday is disabled by default. Use Custom Dates for specific Sundays.
                     </p>
                   </div>
@@ -943,19 +1077,19 @@ const AvailabilityManager = () => {
                   {!isCreatingNew && activeScheduler?.id && (
                     <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
                       <div className="flex items-center justify-between mb-2">
-                        <label className="text-sm font-semibold text-secondary-700 dark:text-neutral-300">
+                        <label className="text-base font-semibold text-secondary-700 dark:text-neutral-300">
                           <Calendar className="w-4 h-4 inline mr-1" />
                           Custom Dates
                         </label>
                         <button
                           type="button"
                           onClick={() => setShowCustomDatePicker(!showCustomDatePicker)}
-                          className="text-xs text-primary-500 hover:text-primary-600 font-medium"
+                          className="text-sm text-primary-500 hover:text-primary-600 font-medium"
                         >
                           {showCustomDatePicker ? 'Cancel' : '+ Add Date'}
                         </button>
                       </div>
-                      <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mb-2">
+                      <p className="text-xs text-secondary-400 dark:text-neutral-500 mb-2">
                         Add specific dates to accept appointments, regardless of available days
                       </p>
 
@@ -966,9 +1100,9 @@ const AvailabilityManager = () => {
                             type="date"
                             value={customDateInput.scheduledDate}
                             onChange={(e) => setCustomDateInput({ ...customDateInput, scheduledDate: e.target.value })}
-                            className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
                           />
-                          <label className="flex items-center gap-2 text-xs text-secondary-600 dark:text-neutral-400">
+                          <label className="flex items-center gap-2 text-sm text-secondary-600 dark:text-neutral-400">
                             <input
                               type="checkbox"
                               checked={customDateInput.useCustomSlots}
@@ -980,7 +1114,7 @@ const AvailabilityManager = () => {
                           {customDateInput.useCustomSlots && (
                             <div className="flex gap-2">
                               <div className="flex-1">
-                                <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block">
+                                <label className="text-xs text-secondary-500 dark:text-neutral-400 mb-1 block">
                                   <Sun className="w-3 h-3 inline mr-0.5" /> Morning
                                 </label>
                                 <input
@@ -994,11 +1128,11 @@ const AvailabilityManager = () => {
                                     const num = parseInt(val, 10);
                                     if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, morningAllowed: num });
                                   }}
-                                  className="w-full px-2 py-1.5 text-sm text-center border border-neutral-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                                  className="w-full px-2 py-1.5 text-base text-center border border-neutral-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
                                 />
                               </div>
                               <div className="flex-1">
-                                <label className="text-[10px] text-secondary-500 dark:text-neutral-400 mb-1 block">
+                                <label className="text-xs text-secondary-500 dark:text-neutral-400 mb-1 block">
                                   <Moon className="w-3 h-3 inline mr-0.5" /> Afternoon
                                 </label>
                                 <input
@@ -1012,7 +1146,7 @@ const AvailabilityManager = () => {
                                     const num = parseInt(val, 10);
                                     if (!isNaN(num) && num >= 0) setCustomDateInput({ ...customDateInput, afternoonAllowed: num });
                                   }}
-                                  className="w-full px-2 py-1.5 text-sm text-center border border-neutral-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                                  className="w-full px-2 py-1.5 text-base text-center border border-neutral-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
                                 />
                               </div>
                             </div>
@@ -1021,7 +1155,7 @@ const AvailabilityManager = () => {
                             type="button"
                             onClick={handleAddCustomDate}
                             disabled={!customDateInput.scheduledDate || saving}
-                            className="w-full px-3 py-2 text-xs font-medium text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                            className="w-full px-3 py-2 text-sm font-medium text-white bg-violet-500 hover:bg-violet-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             Add Custom Date
@@ -1041,7 +1175,7 @@ const AvailabilityManager = () => {
                             return (
                               <div
                                 key={cd.id || normalized}
-                                className="flex items-center justify-between px-2 py-1.5 bg-violet-50 dark:bg-violet-900/20 rounded text-xs"
+                                className="flex items-center justify-between px-2 py-1.5 bg-violet-50 dark:bg-violet-900/20 rounded text-sm"
                               >
                                 <div>
                                   <span className="font-medium text-violet-700 dark:text-violet-400">
@@ -1065,7 +1199,7 @@ const AvailabilityManager = () => {
                           })}
                         </div>
                       ) : (
-                        <p className="text-[10px] text-secondary-400 dark:text-neutral-500 italic">
+                        <p className="text-xs text-secondary-400 dark:text-neutral-500 italic">
                           No custom dates configured
                         </p>
                       )}
@@ -1082,8 +1216,20 @@ const AvailabilityManager = () => {
                         className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
                       />
                       <div>
-                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Active</p>
-                        <p className="text-[8px] text-secondary-500 dark:text-neutral-400 leading-tight">Accepting appointments</p>
+                        <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Active</p>
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Open and accepting appointments</p>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={editForm.purposeRequired ?? false}
+                        onChange={(e) => setEditForm({ ...editForm, purposeRequired: e.target.checked })}
+                        className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Require Purpose</p>
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Patients must provide a reason for their visit</p>
                       </div>
                     </label>
                     <label className="flex items-center gap-2 p-1 bg-neutral-50 dark:bg-neutral-700/50 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors">
@@ -1094,8 +1240,8 @@ const AvailabilityManager = () => {
                         className="w-3.5 h-3.5 text-primary-500 border-neutral-300 dark:border-neutral-600 rounded focus:ring-primary-500"
                       />
                       <div>
-                        <p className="text-xs font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Whitelist Only</p>
-                        <p className="text-[8px] text-secondary-500 dark:text-neutral-400 leading-tight">Only whitelisted patients</p>
+                        <p className="text-sm font-medium text-secondary-700 dark:text-neutral-300 leading-tight">Whitelist Only</p>
+                        <p className="text-xs text-secondary-500 dark:text-neutral-400 leading-tight">Only whitelisted can see this scheduler</p>
                       </div>
                     </label>
                     {/* Manage Whitelist Button */}
@@ -1103,7 +1249,7 @@ const AvailabilityManager = () => {
                       <button
                         type="button"
                         onClick={() => setShowWhitelistPanel(true)}
-                        className="mt-1 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                        className="mt-1 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
                       >
                         <Users className="w-3.5 h-3.5" />
                         Manage Whitelist ({whitelistCount})
@@ -1113,7 +1259,7 @@ const AvailabilityManager = () => {
 
                   {/* Notes */}
                   <div>
-                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
+                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-2">
                       Notes (Optional)
                     </label>
                     <textarea
@@ -1121,13 +1267,13 @@ const AvailabilityManager = () => {
                       onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
                       placeholder="Internal notes about this scheduler..."
                       rows={2}
-                      className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 resize-none"
+                      className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500 resize-none"
                     />
                   </div>
 
                   {/* Requirements Section */}
                   <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
-                    <label className="block text-sm font-semibold text-secondary-700 dark:text-neutral-300 mb-3">
+                    <label className="block text-base font-semibold text-secondary-700 dark:text-neutral-300 mb-3">
                       <FileText className="w-4 h-4 inline mr-2" />
                       Required Documents
                     </label>
@@ -1140,12 +1286,12 @@ const AvailabilityManager = () => {
                           value={requirementForm.label}
                           onChange={(e) => setRequirementForm({ ...requirementForm, label: e.target.value })}
                           placeholder="e.g., Medical Certificate"
-                          className="flex-1 px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500"
+                          className="flex-1 px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-neutral-400 focus:ring-2 focus:ring-primary-500"
                         />
                         <button
                           onClick={handleSaveRequirement}
                           disabled={requirementSaving || !requirementForm.label.trim()}
-                          className="flex items-center gap-2 px-3 py-2 text-sm bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                          className="flex items-center gap-2 px-3 py-2 text-base bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                           title="Add requirement"
                         >
                           <Plus className="w-4 h-4" />
@@ -1156,7 +1302,7 @@ const AvailabilityManager = () => {
                       {/* Requirements List */}
                       <div className="space-y-2 max-h-48 overflow-y-auto">
                         {(isCreatingNew ? pendingRequirements : requirements).length === 0 ? (
-                          <p className="text-sm text-neutral-500 dark:text-neutral-400 py-2 text-center">
+                          <p className="text-base text-neutral-500 dark:text-neutral-400 py-2 text-center">
                             No requirements added yet
                           </p>
                         ) : (
@@ -1172,7 +1318,7 @@ const AvailabilityManager = () => {
                                   readOnly
                                   className="w-3.5 h-3.5 rounded"
                                 />
-                                <span className="text-sm text-secondary-700 dark:text-neutral-300 truncate">
+                                <span className="text-base text-secondary-700 dark:text-neutral-300 truncate">
                                   {req.label}
                                 </span>
                               </div>
@@ -1200,7 +1346,7 @@ const AvailabilityManager = () => {
                   <button
                     onClick={handleDeleteScheduler}
                     disabled={saving}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors disabled:opacity-50"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     Delete
@@ -1213,7 +1359,7 @@ const AvailabilityManager = () => {
                     <button
                       onClick={handleCancelEdit}
                       disabled={saving}
-                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-secondary-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg transition-colors disabled:opacity-50"
                     >
                       <X className="w-3.5 h-3.5" />
                       Cancel
@@ -1224,7 +1370,7 @@ const AvailabilityManager = () => {
                   <button
                     onClick={handleSaveScheduler}
                     disabled={saving || (!hasChanges && !isCreatingNew)}
-                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {saving ? (
                       <>
@@ -1262,7 +1408,7 @@ const AvailabilityManager = () => {
               <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
                 <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
               </div>
-              <h3 className="text-lg font-semibold text-secondary-900 dark:text-white">
+              <h3 className="text-xl font-semibold text-secondary-900 dark:text-white">
                 Confirm Deletion
               </h3>
             </div>
@@ -1279,14 +1425,14 @@ const AvailabilityManager = () => {
                   setDeleteTarget(null);
                 }}
                 disabled={saving}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-secondary-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 text-base font-medium text-secondary-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={saving}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2.5 text-base font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {saving ? (
                   <>
@@ -1312,6 +1458,19 @@ const AvailabilityManager = () => {
         onClose={() => setShowWhitelistPanel(false)}
         onUpdate={() => loadWhitelistCount(activeScheduler?.id)}
       />
+
+      {/* Date occupancy modal — shown when disabling/removing a date that still has active bookings */}
+      {occupancyModal && (
+        <DateOccupancyModal
+          isOpen
+          onClose={() => setOccupancyModal(null)}
+          date={occupancyModal.date}
+          count={occupancyModal.count}
+          actionLabel={occupancyModal.actionLabel}
+          onKeep={occupancyModal.onKeep}
+          onCancelAll={occupancyModal.onCancelAll}
+        />
+      )}
     </div>
   );
 };

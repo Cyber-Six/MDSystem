@@ -169,35 +169,88 @@ class StaffReportTemplate extends BaseTemplate {
     if (!sections?.length) return;
 
     for (const section of sections) {
-      // Check if we need a new page
-      if (this.doc.y > 450) {
+      // Add page if section heading + table (min 60pt) + chart (240pt) won't fit
+      const sectionNeeds = 310;
+      const pageContentBottom = this.doc.page.height - this.doc.page.margins.bottom - 20;
+      if (this.doc.y + sectionNeeds > pageContentBottom) {
         this.doc.addPage();
       }
 
       pdf.addSectionHeading(this.doc, section.title);
 
-      // Generate chart
+      // ── Data Table (ranked, before chart) ──────────────
+      if (section.labels?.length > 0) {
+        if (section.isBP && section.diastolicValues) {
+          // Blood Pressure: show Systolic, Diastolic, Combined
+          // Column widths sum to 468 (standard doc width 612 - 72*2 margins)
+          const headers = ['#', 'Period', 'Systolic', 'Diastolic', 'Avg BP'];
+          const rows = section.labels.map((label, i) => [
+            String(i + 1),
+            label,
+            String(section.values[i] || 0),
+            String(section.diastolicValues[i] || 0),
+            `${section.values[i] || 0}/${section.diastolicValues[i] || 0}`,
+          ]);
+          pdf.addTable(this.doc, headers, rows, {
+            columnWidths: [28, 180, 90, 90, 80],
+          });
+        } else if (section.isTrend) {
+          const headers = ['#', 'Period', section.yAxis || 'Value'];
+          const rows = section.labels.map((label, i) => [
+            String(i + 1),
+            label,
+            String(section.values[i] || 0),
+          ]);
+          pdf.addTable(this.doc, headers, rows, {
+            columnWidths: [28, 300, 140],
+          });
+        } else {
+          const headers = ['#', section.xAxis || 'Item', section.yAxis || 'Count', '%'];
+          const rows = section.labels.map((label, i) => {
+            const pct = section.total > 0
+              ? ((section.values[i] / section.total) * 100).toFixed(1) + '%'
+              : '0%';
+            return [String(i + 1), label, String(section.values[i] || 0), pct];
+          });
+          pdf.addTable(this.doc, headers, rows, {
+            columnWidths: [28, 280, 90, 70],
+          });
+        }
+        this.doc.moveDown(0.3);
+      }
+
+      // ── Chart ──────────────────────────────────────────
       try {
         let chartBuffer;
         const chartOptions = {
-          width: 450,
-          height: 280,
+          width: 420,
+          height: 240,
           title: section.title,
         };
 
-        switch (section.chartType) {
-          case 'pie':
-            chartBuffer = await chart.generatePieChart(section.labels, section.values, chartOptions);
-            break;
-          case 'doughnut':
-            chartBuffer = await chart.generateDoughnutChart(section.labels, section.values, chartOptions);
-            break;
-          case 'line':
-            chartBuffer = await chart.generateLineChart(
-              section.labels,
-              [{
-                label: section.title,
-                data: section.values,
+        if (section.isBP && section.diastolicValues) {
+          chartBuffer = await chart.generateLineChart(
+            section.labels,
+            [
+              { label: 'Systolic', data: section.values, borderColor: '#F44336', fill: false },
+              { label: 'Diastolic', data: section.diastolicValues, borderColor: '#2196F3', fill: false },
+            ],
+            chartOptions
+          );
+        } else {
+          switch (section.chartType) {
+            case 'pie':
+              chartBuffer = await chart.generatePieChart(section.labels, section.values, chartOptions);
+              break;
+            case 'doughnut':
+              chartBuffer = await chart.generateDoughnutChart(section.labels, section.values, chartOptions);
+              break;
+            case 'line':
+              chartBuffer = await chart.generateLineChart(
+                section.labels,
+                [{
+                  label: section.title,
+                  data: section.values,
                 borderColor: '#2196F3',
                 fill: false,
               }],
@@ -216,18 +269,25 @@ class StaffReportTemplate extends BaseTemplate {
               chartOptions
             );
             break;
+          }
         }
 
-        // Center the chart
-        const chartX = (this.doc.page.width - 450) / 2;
+        // Add page if chart won't fit in remaining space
+        const chartNeeds = 250; // chart height + some padding
+        if (this.doc.y + chartNeeds > pageContentBottom) {
+          this.doc.addPage();
+        } else {
+          this.doc.moveDown(0.3);
+        }
+        const chartX = (this.doc.page.width - 420) / 2;
         pdf.embedImage(this.doc, chartBuffer, {
           x: chartX,
           y: this.doc.y,
-          width: 450,
-          height: 280,
+          width: 420,
+          height: 240,
         });
 
-        this.doc.y += 290;
+        this.doc.y += 250;
       } catch (err) {
         this.doc
           .fontSize(pdf.FONT_SIZES.small)
@@ -238,7 +298,7 @@ class StaffReportTemplate extends BaseTemplate {
       // Add summary if provided
       if (section.summary) {
         this.doc
-          .fontSize(pdf.FONT_SIZES.body)
+          .fontSize(pdf.FONT_SIZES.small)
           .font('Helvetica-Oblique')
           .fillColor(pdf.COLORS.secondary)
           .text(section.summary, { align: 'center' });

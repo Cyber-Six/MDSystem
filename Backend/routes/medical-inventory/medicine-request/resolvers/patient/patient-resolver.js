@@ -20,7 +20,7 @@ const Query = {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
     try {
       logger.info("Fetching available medicines for location:", args.location);
-      const result = await Wrapper.Query._getAvailableMedicine(_, args, { res });
+      const result = await Wrapper.Query._getAvailableMedicine(_, args, { user, res });
       logger.info("Medicines fetched:", result?.length || 0);
       return result;
     } catch (error) {
@@ -31,12 +31,12 @@ const Query = {
 
   getMedicineStatus: async (_, __, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return await Wrapper.Query._getMedicineStatus(_, { patientId: user.id }, { res });
+    return await Wrapper.Query._getMedicineStatus(_, { patientId: user.id }, { user, res });
   },
 
   getMedicineRequestById: async (_, { requestId }, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    return await Wrapper.Query._getMedicineRequestById(_, { requestId }, { res });
+    return await Wrapper.Query._getMedicineRequestById(_, { requestId }, { user, res });
   },
 
   getMedicineRequests: async (_, { patientId, offset, limit }, { user, res }) => {
@@ -45,7 +45,7 @@ const Query = {
     if (user.id !== Number(patientId)) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getMedicineRequests(_, { patientId, offset, limit }, { res });
+    return await Wrapper.Query._getMedicineRequests(_, { patientId, offset, limit }, { user, res });
   },
 
   getAllMedicineRequests: async (_, __, { user, res }) => {
@@ -56,6 +56,7 @@ const Query = {
 
 const Mutation = {
   createMedicineRequest: async (_, { input }, { user, res }) => {
+    console.log('[MEDICINE_REQUEST] 🔥 createMedicineRequest called by user:', user?.id);
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
 
     const hasPending = await hasActiveRequest(user.id, res);
@@ -78,7 +79,7 @@ const Mutation = {
       }, new Map()).entries()
     ).map(([batchId, quantity]) => ({ batchId, quantity }));
 
-    await validateBatchesWithQuantity(mergedItems, res);
+    await validateBatchesWithQuantity(mergedItems, input.location, res);
     /*
     // Combine duplicate batch entries before validation to avoid undercount checks.
     const mergedItems = Array.from(
@@ -94,24 +95,42 @@ const Mutation = {
     await validateBatchesWithQuantity(mergedItems, res);
     */
 
-    const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { res });
+    const result = await Wrapper.Mutation._createMedicineRequest(_, { patientId: user.id, input }, { user, res });
 
-    // Notify medical staff on the branch channel for the location of the first batch
+    console.log('[MEDICINE_REQUEST] ✅ Request created, ID:', result.id);
+
+    // Notify medical staff at the patient's assigned branch only
     try {
-      const batch = await db.query(
-        `SELECT location FROM "MedicineBatch" WHERE id = $1 LIMIT 1`,
-        [input.items[0].batchId ?? input.items[0].medicineId],
-      );
-      if (batch.rows.length > 0) {
-        const { location } = batch.rows[0];
+      const patientBranch = await db.getUserBranch(user.id);
+      
+      if (!patientBranch) {
+        console.warn('[MEDICINE_REQUEST] ⚠️  No branch assigned to patient:', user.id);
+        return result;
+      }
+
+      // Map branch to its locations
+      const BRANCH_TO_LOCATIONS = {
+        Manila: ['Arlegui', 'Casal'],
+        QuezonCity: ['QuezonCity'],
+        Both: ['Arlegui', 'Casal', 'QuezonCity'],
+      };
+
+      const locations = BRANCH_TO_LOCATIONS[patientBranch] || [patientBranch];
+      
+      console.log(`[MEDICINE_REQUEST] 🔍 Broadcasting to patient's branch (${patientBranch}): ${locations.join(', ')}`);
+      
+      locations.forEach(location => {
+        console.log(`[MEDICINE_REQUEST] Emitting to branch:${location}`);
         emitToRoom(`branch:${location}`, 'medicine:request:new', {
           requestId: result.id,
           patientId: user.id,
           location,
         });
-      }
+      });
+      
+      console.log('[MEDICINE_REQUEST] ✅ Broadcast complete');
     } catch (notifErr) {
-      logger.error("Failed to emit new medicine request to branch channel:", notifErr);
+      console.error('[MEDICINE_REQUEST] ❌ Broadcast failed:', notifErr);
     }
 
     return result;
@@ -137,7 +156,7 @@ const Mutation = {
     return await Wrapper.Mutation._setStatusMedicineRequest(
       _,
       { requestId: pendingResult.rows[0].id, status: 'Cancelled', approvedBy: null, notes: null },
-      { res },
+      { user, res },
     );
   },
 

@@ -17,6 +17,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { getPatientProfile, clearProfileCache } from '../../services/profile-service';
 import { fetchActiveAnnouncements, Announcement } from '../../services/announcement-service';
@@ -30,8 +32,10 @@ interface DashboardHomeScreenProps {
   navigation: any;
 }
 
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
 const StatCard: React.FC<{
-  icon: string;
+  icon: IoniconName;
   label: string;
   value: string;
   color: string;
@@ -44,7 +48,7 @@ const StatCard: React.FC<{
     ]}
   >
     <View style={[styles.statIcon, { backgroundColor: color }]}>
-      <Text style={styles.statIconText}>{icon}</Text>
+      <Ionicons name={icon} size={20} color="#FFFFFF" />
     </View>
     <Text
       style={[
@@ -67,16 +71,21 @@ const StatCard: React.FC<{
 
 const QuickActionButton: React.FC<{
   icon: string;
+  iconLib?: 'Ionicons' | 'MCI';
   label: string;
   color: string;
   onPress: () => void;
-}> = ({ icon, label, color, onPress }) => (
+}> = ({ icon, iconLib = 'Ionicons', label, color, onPress }) => (
   <TouchableOpacity
     style={[styles.quickAction, { backgroundColor: color }]}
     onPress={onPress}
     activeOpacity={0.8}
   >
-    <Text style={styles.quickActionIcon}>{icon}</Text>
+    {iconLib === 'MCI' ? (
+      <MaterialCommunityIcons name={icon as any} size={26} color="#FFFFFF" style={styles.quickActionIcon} />
+    ) : (
+      <Ionicons name={icon as IoniconName} size={26} color="#FFFFFF" style={styles.quickActionIcon} />
+    )}
     <Text style={styles.quickActionLabel}>{label}</Text>
   </TouchableOpacity>
 );
@@ -206,21 +215,21 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
         {/* Stats Row */}
         <View style={styles.statsRow}>
           <StatCard
-            icon="📅"
+            icon="calendar"
             label="Appointment"
             value={appointmentStatus || '—'}
             color={colors.accent[500]}
             isDark={isDark}
           />
           <StatCard
-            icon="💬"
+            icon="chatbubbles"
             label="Health Chat"
             value={chatStatus || '—'}
             color={colors.primary[500]}
             isDark={isDark}
           />
           <StatCard
-            icon="📋"
+            icon="clipboard"
             label="Records"
             value={recordStatus?.needsInitialRecord ? 'Required' : recordStatus?.status || 'Complete'}
             color={colors.success[500]}
@@ -244,7 +253,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
             })}
             activeOpacity={0.7}
           >
-            <Text style={styles.recordBannerIcon}>📋</Text>
+            <Ionicons name="clipboard" size={22} color={colors.primary[500]} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.recordBannerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
                 {recordStatus?.status === 'revision_requested' ? 'Revision Requested' : 'Medical Record Required'}
@@ -299,7 +308,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
               ]}
               activeOpacity={0.7}
             >
-              <Text style={styles.announcementIcon}>📢</Text>
+              <Ionicons name="megaphone" size={22} color={colors.primary[500]} />
               <View style={styles.announcementTextContainer}>
                 <Text
                   style={[
@@ -308,7 +317,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                   ]}
                   numberOfLines={1}
                 >
-                  {announcements[announcementIndex]?.title}
+                  {announcements[announcementIndex]?.label}
                 </Text>
                 <Text
                   style={[
@@ -367,25 +376,26 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
           </Text>
           <View style={styles.actionsGrid}>
             <QuickActionButton
-              icon="📅"
+              icon="calendar"
               label="Book Appointment"
               color={colors.accent[500]}
               onPress={() => navigation.navigate('Appointments')}
             />
             <QuickActionButton
-              icon="💬"
+              icon="chatbubbles"
               label="Health Chat"
               color={colors.primary[500]}
               onPress={() => navigation.navigate('HealthChat')}
             />
             <QuickActionButton
-              icon="💊"
+              icon="pill"
+              iconLib="MCI"
               label="Medicine Request"
               color={colors.success[500]}
               onPress={() => navigation.navigate('Medicine')}
             />
             <QuickActionButton
-              icon="👤"
+              icon="person"
               label="My Profile"
               color={colors.secondary[600]}
               onPress={() =>
@@ -420,7 +430,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                 })}
                 activeOpacity={0.8}
               >
-                <Text style={styles.updateIcon}>🏥</Text>
+                <Ionicons name="medkit" size={22} color="#FFFFFF" style={styles.updateIcon} />
                 <Text style={styles.updateLabel}>Medical</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -431,7 +441,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                 })}
                 activeOpacity={0.8}
               >
-                <Text style={styles.updateIcon}>🦷</Text>
+                <MaterialCommunityIcons name="tooth" size={22} color="#FFFFFF" style={styles.updateIcon} />
                 <Text style={styles.updateLabel}>Dental</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -442,7 +452,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                 })}
                 activeOpacity={0.8}
               >
-                <Text style={styles.updateIcon}>📋</Text>
+                <Ionicons name="clipboard" size={22} color="#FFFFFF" style={styles.updateIcon} />
                 <Text style={styles.updateLabel}>Both</Text>
               </TouchableOpacity>
             </View>
@@ -482,7 +492,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                 onPress={() => navigation.navigate('Appointments')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.statusRowIcon}>📅</Text>
+                <Ionicons name="calendar" size={22} color={colors.accent[500]} />
                 <View style={{ flex: 1 }}>
                   <Text
                     style={[
@@ -526,7 +536,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                 onPress={() => navigation.navigate('HealthChat')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.statusRowIcon}>💬</Text>
+                <Ionicons name="chatbubbles" size={22} color={colors.primary[500]} />
                 <View style={{ flex: 1 }}>
                   <Text
                     style={[
@@ -579,7 +589,7 @@ export const DashboardHomeScreen: React.FC<DashboardHomeScreenProps> = ({
                 },
               ]}
             >
-              <Text style={styles.emptyIcon}>📭</Text>
+              <Ionicons name="mail-open-outline" size={36} color={isDark ? colors.neutral[600] : colors.neutral[300]} style={{ marginBottom: 8 }} />
               <Text
                 style={[
                   styles.emptyText,
@@ -650,7 +660,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 8,
   },
-  statIconText: { fontSize: 20 },
   statValue: { fontSize: 14, fontWeight: 'bold' },
   statLabel: { fontSize: 11, marginTop: 2 },
   card: {
@@ -675,7 +684,7 @@ const styles = StyleSheet.create({
     padding: 18,
     alignItems: 'center',
   },
-  quickActionIcon: { fontSize: 28, marginBottom: 8 },
+  quickActionIcon: { marginBottom: 8 },
   quickActionLabel: {
     color: '#FFFFFF',
     fontWeight: '600',
@@ -693,7 +702,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  updateIcon: { fontSize: 24, marginBottom: 4 },
+  updateIcon: { marginBottom: 4 },
   updateLabel: {
     color: '#FFFFFF',
     fontWeight: '600',
@@ -704,7 +713,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  emptyIcon: { fontSize: 32, marginBottom: 8 },
   emptyText: { fontSize: 14 },
   // Announcements
   cardHeaderRow: {
@@ -722,7 +730,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
   },
-  announcementIcon: { fontSize: 22 },
+  announcementIcon: { marginRight: 2 },
   announcementTextContainer: { flex: 1 },
   announcementTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
   announcementDesc: { fontSize: 12, lineHeight: 17 },
@@ -742,7 +750,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
   },
-  statusRowIcon: { fontSize: 22 },
   statusRowLabel: { fontSize: 14, fontWeight: '600' },
   statusRowValue: { fontSize: 12, marginTop: 2 },
   recordBanner: {

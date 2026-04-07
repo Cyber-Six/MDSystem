@@ -11,8 +11,11 @@ import {
   sendMessage as sendMessageService,
   closeTicket as closeTicketService,
   deleteArchivedTicket as deleteArchivedTicketService,
-  extendSession as extendSessionService
+  extendSession as extendSessionService,
+  transferTicket as transferTicketService,
+  takeoverOngoingTicket as takeoverOngoingTicketService
 } from '../health-chat-service';
+import { usePermissions } from '../../../context/permissions-context';
 
 const HealthChatContext = createContext(null);
 
@@ -35,6 +38,9 @@ function getEffectiveSortTime(status, lastMessageAt, sessionStart, sessionEnd, a
  * Uses patient-grouped conversations (1 patient = 1 row in the list)
  */
 export function HealthChatProvider({ children }) {
+  // Admin status from permissions context
+  const { isAdmin } = usePermissions();
+
   // Conversations state (patient-grouped)
   const [conversations, setConversations] = useState([]);
   const [conversationsTotal, setConversationsTotal] = useState(0);
@@ -247,6 +253,8 @@ export function HealthChatProvider({ children }) {
             patient: conv.patient,
             purpose: conv.latestTicket?.purpose,
             status: effectiveStatus,
+            medicalId: conv.latestTicket?.medicalId,
+            medical: conv.latestTicket?.medical,
             session_start: conv.latestTicket?.session_start,
             session_end: conv.latestTicket?.session_end,
             archived_at: conv.latestTicket?.archived_at,
@@ -522,6 +530,13 @@ export function HealthChatProvider({ children }) {
         lastMessageAt: message.stamp
       };
 
+      // Reset inactivity expiry timer since a new message counts as activity
+      if (ticket.status === 'Ongoing') {
+        const newExpiry = new Date();
+        newExpiry.setDate(newExpiry.getDate() + 3);
+        updated.expiresAt = newExpiry.toISOString();
+      }
+
       // Increment unread count only if this is a Patient message and staff is NOT viewing this patient
       if (senderType === 'Patient' && !isCurrentlySelected) {
         updated.unreadCount = (ticket.unreadCount || 0) + 1;
@@ -611,6 +626,17 @@ export function HealthChatProvider({ children }) {
       });
 
       return newArr;
+    });
+
+    // Also update selectedTicket's expiresAt if the message is for the active ticket
+    setSelectedTicket(prev => {
+      if (!prev || prev.status !== 'Ongoing') return prev;
+      const matchesChat = String(prev.id) === String(chatId) ||
+        prev.tickets?.some(sub => String(sub.id) === String(chatId));
+      if (!matchesChat) return prev;
+      const newExpiry = new Date();
+      newExpiry.setDate(newExpiry.getDate() + 3);
+      return { ...prev, expiresAt: newExpiry.toISOString() };
     });
   }, [selectedPatientId, markNeedsReply, markConversationAsRead]);
 
@@ -875,6 +901,22 @@ export function HealthChatProvider({ children }) {
   }, [removeTicket]);
 
   /**
+   * Update the expiresAt for a ticket (called on healthchat:session-extended socket event)
+   */
+  const updateTicketExpiresAt = useCallback((chatId, expiresAt) => {
+    const id = String(chatId);
+    // Update legacy tickets list
+    setTickets(prev => prev.map(t => String(t.id) === id ? { ...t, expiresAt } : t));
+    // Update conversations (nested tickets array)
+    setConversations(prev => prev.map(conv => ({
+      ...conv,
+      tickets: conv.tickets?.map(t => String(t.id) === id ? { ...t, expiresAt } : t),
+    })));
+    // Update selectedTicket if it's the same chat
+    setSelectedTicket(prev => prev && String(prev.id) === id ? { ...prev, expiresAt } : prev);
+  }, []);
+
+  /**
    * Send a message
    */
   const sendMessage = useCallback(async (chatId, text, filename = null, promptType = 'text') => {
@@ -886,13 +928,18 @@ export function HealthChatProvider({ children }) {
         if (selectedPatientId) {
           markNeedsReply(selectedPatientId, false);
         }
+        // Reset inactivity expiry timer client-side (server computes from last message)
+        const newExpiry = new Date();
+        newExpiry.setDate(newExpiry.getDate() + 3);
+        const expiresAt = newExpiry.toISOString();
+        updateTicketExpiresAt(chatId, expiresAt);
       }
       return result;
     } catch (err) {
       console.error('[HealthChatContext] Failed to send message:', err);
       throw err;
     }
-  }, [addMessage, selectedPatientId, markNeedsReply]);
+  }, [addMessage, selectedPatientId, markNeedsReply, updateTicketExpiresAt]);
 
   /**
    * Close a ticket
@@ -955,22 +1002,6 @@ export function HealthChatProvider({ children }) {
   }, [removeTicket, selectedChatId]);
 
   /**
-   * Update the expiresAt for a ticket (called on healthchat:session-extended socket event)
-   */
-  const updateTicketExpiresAt = useCallback((chatId, expiresAt) => {
-    const id = String(chatId);
-    // Update legacy tickets list
-    setTickets(prev => prev.map(t => String(t.id) === id ? { ...t, expiresAt } : t));
-    // Update conversations (nested tickets array)
-    setConversations(prev => prev.map(conv => ({
-      ...conv,
-      tickets: conv.tickets?.map(t => String(t.id) === id ? { ...t, expiresAt } : t),
-    })));
-    // Update selectedTicket if it's the same chat
-    setSelectedTicket(prev => prev && String(prev.id) === id ? { ...prev, expiresAt } : prev);
-  }, []);
-
-  /**
    * Extend session for a ticket (+1 day)
    */
   const extendSessionChat = useCallback(async (chatId) => {
@@ -1001,6 +1032,87 @@ export function HealthChatProvider({ children }) {
       setIsExtendingSession(false);
     }
   }, [isExtendingSession, updateTicketExpiresAt, selectedPatientId, selectedChatId]);
+
+  /**
+   * Remove a conversation from the list (e.g., after transfer/takeover removes it from this staff)
+   * Supports slide-out animation via a removing flag
+   */
+  const [removingPatientIds, setRemovingPatientIds] = useState(new Set());
+
+  const removeConversation = useCallback((patientId) => {
+    // Trigger slide-out animation first
+    setRemovingPatientIds(prev => new Set([...prev, String(patientId)]));
+
+    // After animation completes, actually remove from list
+    setTimeout(() => {
+      setTickets(prev => prev.filter(t => String(t.patientId) !== String(patientId)));
+      setConversations(prev => prev.filter(c => String(c.patientId) !== String(patientId)));
+      setRemovingPatientIds(prev => {
+        const next = new Set(prev);
+        next.delete(String(patientId));
+        return next;
+      });
+
+      // If the removed conversation is currently selected, deselect
+      if (String(selectedPatientId) === String(patientId)) {
+        setSelectedPatientId(null);
+        setSelectedChatId(null);
+        setSelectedTicket(null);
+        setSelectedConversation(null);
+        setActiveTicketId(null);
+        setMessages([]);
+      }
+    }, 300); // Match CSS animation duration
+  }, [selectedPatientId]);
+
+  /**
+   * Transfer an ongoing ticket to another staff member
+   */
+  const transferTicket = useCallback(async (chatId, toMedicalId) => {
+    try {
+      const result = await transferTicketService(chatId, toMedicalId);
+      if (result.success) {
+        // If current user is no longer the assignee, remove the conversation
+        // (The socket event will also trigger this for the previous staff)
+        // Refresh to reflect the change
+        await refreshMultipleFilters(selectedFilters);
+        // Reload messages to show the system message
+        if (selectedPatientId) {
+          const fetchedMessages = await getPatientMessages(Number(selectedPatientId), { limit: 50 });
+          setMessages(fetchedMessages || []);
+        }
+      }
+      return result;
+    } catch (err) {
+      console.error('[HealthChatContext] Failed to transfer ticket:', err);
+      throw err;
+    }
+  }, [selectedFilters, refreshMultipleFilters, selectedPatientId]);
+
+  /**
+   * Admin takeover: assume control of an ongoing ticket
+   */
+  const takeoverTicket = useCallback(async (chatId) => {
+    try {
+      const result = await takeoverOngoingTicketService(chatId);
+      if (result.success && result.chat) {
+        // Update the ticket locally to reflect new ownership
+        const updatedChat = result.chat;
+        setSelectedTicket(prev => prev ? { ...prev, medicalId: updatedChat.medicalId, medical: updatedChat.medical } : prev);
+
+        // Refresh conversations and messages
+        await refreshMultipleFilters(selectedFilters);
+        if (selectedPatientId) {
+          const fetchedMessages = await getPatientMessages(Number(selectedPatientId), { limit: 50 });
+          setMessages(fetchedMessages || []);
+        }
+      }
+      return result;
+    } catch (err) {
+      console.error('[HealthChatContext] Failed to takeover ticket:', err);
+      throw err;
+    }
+  }, [selectedFilters, refreshMultipleFilters, selectedPatientId]);
 
   /**
    * Get filtered tickets by search term
@@ -1052,6 +1164,8 @@ export function HealthChatProvider({ children }) {
     addMessage,
     addTicket,
     removeTicket,
+    removeConversation,
+    removingPatientIds,
     updateTicketStatus,
     updateConversationForNewMessage,
     approveTicket,
@@ -1059,9 +1173,14 @@ export function HealthChatProvider({ children }) {
     sendMessage,
     closeTicket,
     deleteTicket,
+    transferTicket,
+    takeoverTicket,
     extendSessionChat,
     isExtendingSession,
     updateTicketExpiresAt,
+
+    // Admin & ownership
+    isAdmin,
 
     // Filter
     filter,

@@ -148,3 +148,6 @@ Backend/config/data/initialadmin.sql
 MDS-Chatbot
 
 use_case.md
+
+*temp/
+*.db-temp/

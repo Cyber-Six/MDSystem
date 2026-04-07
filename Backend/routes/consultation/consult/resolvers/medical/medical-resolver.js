@@ -3,7 +3,7 @@ const dotenv = require("dotenv");
 const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const permit = require("../../../../../services/permit.js");
-
+const { getPatientIdFromConsultationId, getPatientIdFromOutcomeId } = require("../wrapper/helper.js");
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 // creating of updateTicket
@@ -16,7 +16,7 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_view, patientId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_view, patientId);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to access medical data").status(403).throw();
     }
@@ -28,8 +28,9 @@ const Query = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_view);
+
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_view, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to access medical data").status(403).throw();
     }
@@ -42,7 +43,8 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_view);
+    const patientId = await getPatientIdFromOutcomeId(outcomeId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_view, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to access medical data").status(403).throw();
     }
@@ -55,7 +57,8 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_view);
+    const patientId = await getPatientIdFromOutcomeId(outcomeId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_view, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to access medical data").status(403).throw();
     }
@@ -68,7 +71,8 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_view);
+    const patientId = await getPatientIdFromOutcomeId(outcomeId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_view, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to access medical data").status(403).throw();
     }
@@ -81,7 +85,8 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_view);
+    const patientId = await getPatientIdFromOutcomeId(outcomeId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_view, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to access medical data").status(403).throw();
     }
@@ -119,7 +124,7 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, input.patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -131,8 +136,8 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -145,7 +150,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -158,7 +164,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -171,7 +178,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -184,7 +192,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -197,7 +206,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -210,7 +220,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -223,7 +234,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -236,7 +248,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }
@@ -249,7 +262,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     
-    const isPermitted = await permit.isMedicalPermitted(user.id, permit.permissions.consultation_allow_edit);
+    const patientId = await getPatientIdFromConsultationId(consultationId);
+    const isPermitted = await permit.isMedicalPermittedPatientBased(user.id, permit.permissions.consultation_allow_edit, patientId, true);
     if (!isPermitted) {
       throwGraphQLError(res).message("Not permitted to modify medical data").status(403).throw();
     }

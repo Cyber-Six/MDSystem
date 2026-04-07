@@ -64,18 +64,6 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
-  // ✅ Check if account type matches portal
-  if (account_type === "medical") {
-    const isMedical = await query.isActiveMedicalPersonnel(user.id);
-    if (!isMedical) {
-      const count = await incrementLoginFailure(email, account_type);
-      return res.status(400).json({
-        error: "INVALID_CREDENTIALS",
-        message: `Email or password is incorrect. ${count} failed attempts.`
-      });
-      }
-  }
-
   // ✅ Check password
   const passwordValid = await verifyPassword(password, user.password_hash);
   if (!passwordValid) {
@@ -87,13 +75,34 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
+  // ✅ Check if account type matches portal
+  if (account_type === "medical") {
+    const count = await incrementLoginFailure(email, account_type);
+    const isMedical = await query.isActiveMedicalPersonnel(user.id);
+
+    if (!isMedical) {
+      const isActive = await query.getMedicalPersonnelStatus(user.id);
+      if (isActive === false) {
+        return res.status(403).json({
+          error: "STAFF_ACCOUNT_SUSPENDED",
+          message: "Your staff account has been suspended.",
+        });
+      }
+      return res.status(400).json({
+        error: "INVALID_CREDENTIALS",
+        message: `Email or password is incorrect. ${count} failed attempts.`
+      });
+    }
+  }
+
   // ✅ Create login verification session (always the same purpose)
   const verificationKey = await createVerificationSession(email, VERIFICATIONKEY_PURPOSE, account_type);
 
-  // ✅ If 2FA is disabled → mark validated inside Redis and return
+  // ✅ Email OTP is always required; TOTP is the preferred alternative when enabled
   return res.status(200).json({
     ok: true,
-    requires2FA: user.allow_email_2fa,
+    requires2FA: true,
+    requiresTotp: user.totp_enabled || false,
     LoginKey: verificationKey,
     });
   });
@@ -119,10 +128,14 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
-  if (session.allow_email_2fa === "true" && session.email_2fa_verified !== "true") {
+  // Email OTP is always required; TOTP is accepted as an alternative.
+  // At least one factor (email OTP or TOTP) must be verified.
+  const emailVerified = session.email_2fa_verified === "true";
+  const totpVerified = session.totp_2fa_verified === "true";
+  if (!emailVerified && !totpVerified) {
     return res.status(400).json({
       error: "2FA_NOT_VERIFIED",
-      message: "Email 2FA has not been verified."
+      message: "Two-factor authentication has not been completed."
     });
   }
 
@@ -141,7 +154,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
       });
   }
 
-  deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
+  await deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
 
   // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
   const portal = detectPortalFromSubdomain(req);

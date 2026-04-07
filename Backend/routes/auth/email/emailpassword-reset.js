@@ -1,25 +1,26 @@
 const express = require("express");
 const router = express.Router();
 
-const { portalBasedIpRateLimiter } = require('../../../config/middleware/ratelimiter.js');
+const { ipRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const logger = require('../../../utils/logger.js');
-const { isValidEmail } = require('../../../utils/validator.js');
+const { isValidEmail, validatePassword } = require('../../../utils/validator.js');
 const { detectPortalFromSubdomain } = require('../../../utils/portal.js');
-const { rateLimitEmailCooldown, rateLimitEmailAttempts, getUserIdFromVerificationSession, deleteVerificationSession } = require('../../../config/redis.js');
-const query = require('../../../config/query.js');
-
-const { recordResetPwFailure, clearResetPwFailures, isResetPwLocked} = require('../../../config/redis.js');
+const { rateLimitEmailCooldown, rateLimitEmailAttempts, rateLimitEmailCooldownTTL,
+  deleteVerificationSession, getVerificationSession,
+  recordResetPwFailure, clearResetPwFailures, isResetPwLocked } = require('../../../config/redis.js');
 const { rateLimitMatrix } = require('../../../config/data/matrix.js');
+const query = require('../../../config/query.js');
 const { enqueueResetPassword } = require('../../../services/emailservice.js');
+const { delayRandom } = require('../../../utils/security.js');
 
-
-router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => {
+router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res) => {
   const ip = req.ip;
   try {
 
     // ✅ 0. Check if this IP is locked from resetpw attempts
     if (await isResetPwLocked(ip)) {
-      return res.status(429).json({
+      await delayRandom(200, 500);
+      return res.status(429).set("Retry-After", 3).json({
         error: "LOCKED_OUT",
         message: "Too many invalid attempts. Try again later."
       });
@@ -29,6 +30,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
 
     // ✅ 1. Required fields
     if (!email || !recaptchaToken) {
+      await delayRandom(200, 500);
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "MISSING_FIELDS",
@@ -38,6 +40,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
 
     // ✅ 2. Institutional email validation
     if (!isValidEmail(email)) {
+      await delayRandom(200, 500);
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "INVALID_INSTITUTION_EMAIL",
@@ -49,6 +52,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
     const { verifyRecaptcha } = require('../../../services/recaptcha.js');
     const recaptchaValid = await verifyRecaptcha(recaptchaToken);
     if (!recaptchaValid) {
+      await delayRandom(200, 500);
       await recordResetPwFailure(ip);
       return res.status(400).json({
         error: "INVALID_RECAPTCHA",
@@ -64,9 +68,11 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
 
     const cooldownActive = await rateLimitEmailCooldown(email, portal, purpose, profile.emailCooldown_resetpw);
     if (cooldownActive) {
+      const ttl = await rateLimitEmailCooldownTTL(email, portal, purpose);
       return res.status(429).json({
         error: "EMAIL_COOLDOWN_ACTIVE",
-        message: "Too many attempts. Please try again later."
+        message: `Too many attempts. Please try again in ${ttl} seconds.`,
+        retryAfterSeconds: ttl
       });
     }
 
@@ -76,6 +82,7 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
       profile.penaltyCooldown_resetpw );
 
     if (attemptsExceeded) {
+      await delayRandom(200, 500);
       return res.status(429).json({
         error: "EMAIL_ATTEMPT_LIMIT_REACHED",
         message: "Too many attempts. Please try again later."
@@ -110,7 +117,29 @@ router.post("/forget-password", portalBasedIpRateLimiter(), async (req, res) => 
   }
 });
 
-router.post("/reset-password/:verificationKey", portalBasedIpRateLimiter(), async (req, res) => {
+router.get("/reset-password/check/:verificationKey", ipRateLimiter("strictLimiter"), async (req, res) => {
+  try {
+    const { verificationKey } = req.params;
+    const purpose = "resetpassword";
+
+    const session = await getVerificationSession(verificationKey, purpose);
+    if (!session || !session.user_id) {
+      return res.status(400).json({
+        error: "INVALID_OR_EXPIRED_KEY",
+        message: "The verification key is invalid or has expired."
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+    });
+  } catch (err) {
+    logger.error("Reset password check error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "An unexpected error occurred." });
+  }
+});
+
+router.post("/reset-password/:verificationKey", ipRateLimiter("strictLimiter"), async (req, res) => {
   try {
     const { newPassword } = req.body;
     const verificationKey = req.params.verificationKey;
@@ -119,40 +148,51 @@ router.post("/reset-password/:verificationKey", portalBasedIpRateLimiter(), asyn
 
     // ✅ 1. Required fields
     if (!verificationKey || !newPassword) {
+      await delayRandom(200, 500);
       return res.status(400).json({
         error: "MISSING_FIELDS",
         message: "Verification key and new password are required."
       });
     }
 
+    if (!validatePassword(newPassword)) {
+      await delayRandom(200, 500);
+      return res.status(400).json({
+        error: "INVALID_PASSWORD",
+        message: "Password must be 8–64 characters long."
+      });
+    }
+
     // ✅ 2. Check if IP is locked out
     if (await isResetPwLocked(ip)) {
+      await delayRandom(200, 500);
       return res.status(429).json({
         error: "LOCKED_OUT",
         message: "Too many invalid attempts. Try again later."
       });
     }
 
-    // ✅ 3. Fetch userId from verification session
-    const userId = await getUserIdFromVerificationSession(verificationKey, purpose);
+    // ✅ 3. Fetch full session to check TOTP requirement
+    const session = await getVerificationSession(verificationKey, purpose);
 
-    if (!userId) {
-      // ❗ Record failure for invalid or expired key
+    if (!session || !session.user_id) {
       await recordResetPwFailure(ip);
-
+      await delayRandom(200, 500);
       return res.status(400).json({
         error: "INVALID_OR_EXPIRED_KEY",
         message: "The verification key is invalid or has expired."
       });
     }
 
+    const userId = session.user_id;
+
     // ✅ 4. Update password in DB
     await query.updateUserPasswordById(userId, newPassword);
 
-    // ✅ 5. Cleanup verification session
+    // ✅ 6. Cleanup verification session
     await deleteVerificationSession(verificationKey, purpose);
 
-    // ✅ 6. Clear IP failures on success
+    // ✅ 7. Clear IP failures on success
     await clearResetPwFailures(ip);
 
     return res.status(200).json({

@@ -90,16 +90,18 @@ const AnalyticsSummaryCards = memo(({ results }) => {
   };
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {summaries.map((stat, idx) => (
-        <div key={idx} className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className={`p-1.5 rounded-md ${colorClasses[stat.color]}`}>
+        <div key={idx} className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 px-4 py-6">
+          <div className="flex items-start gap-2.5">
+            <div className={`w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0 ${colorClasses[stat.color]}`}>
               {icons[stat.icon]}
-            </span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-bold text-secondary-800 dark:text-white leading-none m-0">{stat.value.toLocaleString()}</p>
+              <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 truncate leading-tight m-0">{stat.label}</p>
+            </div>
           </div>
-          <p className="text-2xl font-bold text-secondary-800 dark:text-white">{stat.value.toLocaleString()}</p>
-          <p className="text-xs text-secondary-500 dark:text-neutral-400">{stat.label}</p>
         </div>
       ))}
     </div>

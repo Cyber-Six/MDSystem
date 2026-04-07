@@ -54,7 +54,7 @@ const ExpiryWarningBanner = ({ expiresAt, isExtending, onExtend }) => {
         <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
         <p className="flex-1 text-xs text-amber-800 dark:text-amber-300 leading-snug">
           <span className="font-semibold">Session expires in {timeLeft}.</span>{' '}
-          Extend to keep this conversation active.
+          Send a message or extend to keep this conversation active.
         </p>
         <button
           onClick={() => setShowModal(true)}
@@ -67,7 +67,7 @@ const ExpiryWarningBanner = ({ expiresAt, isExtending, onExtend }) => {
             ? <RefreshCw className="w-3 h-3 animate-spin" />
             : <RefreshCw className="w-3 h-3" />
           }
-          {isExtending ? 'Extending…' : '+1 day'}
+          {isExtending ? 'Extending…' : 'Extend'}
         </button>
         <button
           onClick={() => setDismissed(true)}
@@ -108,8 +108,9 @@ const ExpiryWarningBanner = ({ expiresAt, isExtending, onExtend }) => {
 
             <div className="p-6">
               <p className="text-sm text-neutral-600 dark:text-neutral-300 leading-relaxed">
-                Extending adds <strong>1 more day</strong> before this session expires. A system message
-                will be posted to the chat confirming the extension.
+                Extending resets the inactivity timer. The session will remain
+                active for <strong>3 more days</strong> from now, or until there is no activity
+                from either side for 3 days.
               </p>
             </div>
 
@@ -128,7 +129,7 @@ const ExpiryWarningBanner = ({ expiresAt, isExtending, onExtend }) => {
                 className="px-4 py-2 text-sm font-semibold rounded-lg transition-colors
                            bg-amber-500 hover:bg-amber-600 text-white"
               >
-                Extend by 1 day
+                Extend session
               </button>
             </div>
           </div>
