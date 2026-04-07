@@ -52,4 +52,9 @@ module.exports = ({ config }) => ({
     appVersion: process.env.EXPO_PUBLIC_APP_VERSION ?? version,
     apiUrl:    process.env.EXPO_PUBLIC_API_URL     ?? 'https://www.mdsystemtip.space',
   },
+
+  // ── Plugins ──────────────────────────────────────────────────────────────
+  plugins: [
+    '@react-native-community/datetimepicker',
+  ],
 });
