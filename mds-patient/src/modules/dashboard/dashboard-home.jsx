@@ -188,10 +188,18 @@ const AppointmentEntry = ({ appointment }) => {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+const REQUEST_TABS = [
+  { key: 'all',        label: 'All'            },
+  { key: 'Appointment',  label: 'Appointments'   },
+  { key: 'Medicine Req.', label: 'Med Requests'  },
+  { key: 'Record Update', label: 'Record Update' },
+];
+
 const DashboardHome = ({ firstName }) => {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [requestTab, setRequestTab] = useState('all');
 
   useEffect(() => {
     let mounted = true;
@@ -306,10 +314,51 @@ const DashboardHome = ({ firstName }) => {
 
           {/* Activity — pending requests */}
           <div className="rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+            {/* header */}
             <div className="px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300">Recent Requests</h2>
-              <span className="text-xs text-neutral-400 dark:text-neutral-500">{loading ? '…' : `${pendingList.length} item${pendingList.length !== 1 ? 's' : ''}`}</span>
+              <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                {loading ? '…' : (() => {
+                  const filtered = requestTab === 'all' ? pendingList : pendingList.filter(r => r.type === requestTab);
+                  return `${filtered.length} item${filtered.length !== 1 ? 's' : ''}`;
+                })()}
+              </span>
             </div>
+
+            {/* subtabs */}
+            <div className="flex gap-0 border-b border-neutral-200 dark:border-neutral-800 overflow-x-auto scrollbar-none">
+              {REQUEST_TABS.map(tab => {
+                const count = tab.key === 'all'
+                  ? pendingList.length
+                  : pendingList.filter(r => r.type === tab.key).length;
+                const active = requestTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setRequestTab(tab.key)}
+                    className={`relative flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                      active
+                        ? 'text-primary-600 dark:text-primary-400'
+                        : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                    }`}
+                  >
+                    {tab.label}
+                    {!loading && count > 0 && (
+                      <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-bold px-1 ${
+                        active
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400'
+                      }`}>{count}</span>
+                    )}
+                    {active && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* list */}
             <div className="px-2 py-2">
               {loading ? (
                 <div className="space-y-3 px-3 py-2">
@@ -324,13 +373,16 @@ const DashboardHome = ({ firstName }) => {
                     </div>
                   ))}
                 </div>
-              ) : pendingList.length === 0 ? (
-                <p className="text-center text-neutral-400 dark:text-neutral-500 text-sm py-8">No recent requests</p>
-              ) : (
-                pendingList.map(item => (
-                  <RequestRow key={item.key} {...item} />
-                ))
-              )}
+              ) : (() => {
+                const filtered = requestTab === 'all' ? pendingList : pendingList.filter(r => r.type === requestTab);
+                return filtered.length === 0 ? (
+                  <p className="text-center text-neutral-400 dark:text-neutral-500 text-sm py-8">
+                    {requestTab === 'all' ? 'No recent requests' : `No ${REQUEST_TABS.find(t => t.key === requestTab)?.label ?? requestTab}`}
+                  </p>
+                ) : (
+                  filtered.map(item => <RequestRow key={item.key} {...item} />)
+                );
+              })()}
             </div>
           </div>
 
