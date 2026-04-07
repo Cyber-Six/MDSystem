@@ -296,8 +296,8 @@ const Login = () => {
         <div className="w-full max-w-md mx-auto">
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
-              <p className="text-error-600 text-sm text-center">
+            <div className="mb-6 p-4 bg-error-50 dark:bg-red-900/30 border border-error-300 dark:border-red-700 rounded-lg">
+              <p className="text-error-600 dark:text-red-400 text-sm text-center">
                 {error}
               </p>
             </div>
@@ -306,7 +306,7 @@ const Login = () => {
           <form onSubmit={handleInitialLogin} className="space-y-5">
           {/* Email Input */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-secondary-700 mb-2">
+            <label htmlFor="email" className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-2">
               Email Address
             </label>
             <input 
@@ -317,18 +317,18 @@ const Login = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isLoading}
-              className="w-full px-4 py-3 bg-neutral-50 
-                       text-secondary-900 
-                       border border-neutral-300 
+              className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900
+                       text-secondary-900 dark:text-white
+                       border border-neutral-300 dark:border-neutral-600 
                        rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       placeholder:text-neutral-400
+                       placeholder:text-neutral-400 dark:placeholder:text-neutral-500
                        transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
           
           {/* Password Input */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-secondary-700 mb-2">
+            <label htmlFor="password" className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-2">
               Password
             </label>
             <div className="relative">
@@ -340,18 +340,18 @@ const Login = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
-                className="w-full px-4 py-3 bg-neutral-50 
-                         text-secondary-900 
-                         border border-neutral-300 
+                className="w-full px-4 py-3 bg-neutral-50 dark:bg-neutral-900
+                         text-secondary-900 dark:text-white
+                         border border-neutral-300 dark:border-neutral-600
                          rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                         placeholder:text-neutral-400 
+                         placeholder:text-neutral-400 dark:placeholder:text-neutral-500
                          transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
                          pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary-500 hover:text-secondary-700 transition-colors disabled:opacity-50"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300 transition-colors disabled:opacity-50"
                 disabled={isLoading}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
@@ -398,7 +398,7 @@ const Login = () => {
             <button 
               type="button" 
               onClick={() => setShowForgotPassword(true)}
-              className="text-accent-600 hover:text-accent-700 
+              className="text-accent-600 dark:text-accent-400 hover:text-accent-700 dark:hover:text-accent-300
                        font-medium text-sm transition-colors hover:underline"
             >
               Forgot your password?
@@ -417,7 +417,7 @@ const Login = () => {
             />
             
             {/* Modal Card */}
-            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl">
+            <div className="relative w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl">
               <div className="px-8 md:px-6 sm:px-5 py-8 md:py-6">
                 {/* Forgot Password Component */}
                 <ForgetPassword
@@ -445,23 +445,23 @@ const Login = () => {
     return (
       <div className="w-full max-w-md mx-auto">
         <div className="text-center mb-8">
-          <div className="bg-primary-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-primary-100 dark:bg-primary-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
+            <svg className="w-10 h-10 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-secondary-900 mb-3">
+          <h2 className="text-2xl font-bold text-secondary-900 dark:text-white mb-3">
             Authenticator Verification
           </h2>
-          <p className="text-sm text-neutral-600 leading-relaxed">
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
             Enter the 6-digit code from your<br />
             authenticator app
           </p>
         </div>
         
         {error && (
-          <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
-            <p className="text-error-600 text-sm text-center">
+          <div className="mb-6 p-4 bg-error-50 dark:bg-red-900/30 border border-error-300 dark:border-red-700 rounded-lg">
+            <p className="text-error-600 dark:text-red-400 text-sm text-center">
               {error}
             </p>
           </div>
@@ -469,7 +469,7 @@ const Login = () => {
         
         <form onSubmit={handleTotpVerification} className="space-y-5">
           <div>
-            <label htmlFor="totp" className="block text-sm font-medium text-secondary-700 mb-2 text-center">
+            <label htmlFor="totp" className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-2 text-center">
               Authenticator Code
             </label>
             <input 
@@ -523,9 +523,9 @@ const Login = () => {
                 setPendingEmail2FA(false);
                 setError('');
               }}
-              className="w-full bg-white hover:bg-neutral-50
-                       text-secondary-700 font-medium py-3 rounded-lg 
-                       border border-neutral-300
+              className="w-full bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700
+                       text-secondary-700 dark:text-neutral-300 font-medium py-3 rounded-lg 
+                       border border-neutral-300 dark:border-neutral-600
                        transition-all duration-200 text-sm"
             >
               Go Back
@@ -541,23 +541,23 @@ const Login = () => {
     return (
       <div className="w-full max-w-md mx-auto">
         <div className="text-center mb-8">
-          <div className="bg-primary-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
-            <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-primary-100 dark:bg-primary-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
+            <svg className="w-10 h-10 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-secondary-900 mb-3">
+          <h2 className="text-2xl font-bold text-secondary-900 dark:text-white mb-3">
             Verify Your Email
           </h2>
-          <p className="text-sm text-neutral-600 leading-relaxed">
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
             We've sent a 6-digit code to<br />
-            <span className="font-semibold text-secondary-900">{email}</span>
+            <span className="font-semibold text-secondary-900 dark:text-white">{email}</span>
           </p>
         </div>
         
         {error && (
-          <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
-            <p className="text-error-600 text-sm text-center">
+          <div className="mb-6 p-4 bg-error-50 dark:bg-red-900/30 border border-error-300 dark:border-red-700 rounded-lg">
+            <p className="text-error-600 dark:text-red-400 text-sm text-center">
               {error}
             </p>
           </div>
@@ -565,7 +565,7 @@ const Login = () => {
         
         <form onSubmit={handleTwoFactorVerification} className="space-y-5">
           <div>
-            <label htmlFor="otp" className="block text-sm font-medium text-secondary-700 mb-2 text-center">
+            <label htmlFor="otp" className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-2 text-center">
               Verification Code
             </label>
             <input 
@@ -577,11 +577,11 @@ const Login = () => {
               maxLength={6}
               required
               disabled={isLoading}
-              className="w-full px-4 py-4 bg-neutral-50 
-                       text-secondary-900 text-center text-2xl font-mono tracking-widest
-                       border-2 border-neutral-300 
+              className="w-full px-4 py-4 bg-neutral-50 dark:bg-neutral-900
+                       text-secondary-900 dark:text-white text-center text-2xl font-mono tracking-widest
+                       border-2 border-neutral-300 dark:border-neutral-600
                        rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                       placeholder:text-neutral-400 placeholder:text-xl
+                       placeholder:text-neutral-400 dark:placeholder:text-neutral-500 placeholder:text-xl
                        transition-all duration-200 disabled:opacity-50"
             />
           </div>
@@ -604,9 +604,9 @@ const Login = () => {
               type="button" 
               onClick={handleResend2FA}
               disabled={isLoading}
-              className="flex-1 bg-neutral-100 hover:bg-neutral-200
-                       text-secondary-700 font-medium py-3 rounded-lg 
-                       border border-neutral-300
+              className="flex-1 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700
+                       text-secondary-700 dark:text-neutral-300 font-medium py-3 rounded-lg 
+                       border border-neutral-300 dark:border-neutral-600
                        transition-all duration-200 disabled:opacity-50 text-sm"
             >
               Resend Code
@@ -619,9 +619,9 @@ const Login = () => {
                 setVerificationKey('');
                 setTwoFactorCode('');
               }}
-              className="flex-1 bg-white hover:bg-neutral-50
-                       text-secondary-700 font-medium py-3 rounded-lg 
-                       border border-neutral-300
+              className="flex-1 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700
+                       text-secondary-700 dark:text-neutral-300 font-medium py-3 rounded-lg 
+                       border border-neutral-300 dark:border-neutral-600
                        transition-all duration-200 text-sm"
             >
               Go Back

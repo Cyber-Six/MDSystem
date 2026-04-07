@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../../context/settings-context';
 import TotpSettings from './totp-settings';
+import ChangePasswordSettings from './change-password-settings';
 
 /**
  * Unsaved-changes guard dialog
@@ -417,6 +418,7 @@ const StaffSettings = () => {
         description="Manage two-factor authentication for your account"
       >
         <TotpSettings />
+        <ChangePasswordSettings />
       </Section>
 
       {/* ── Appearance ── */}

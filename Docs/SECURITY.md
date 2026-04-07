@@ -10,12 +10,13 @@ This document outlines the comprehensive security architecture implemented for t
 
 1. [Security Layers](#security-layers)
 2. [Authentication & Authorization](#authentication--authorization)
-3. [Rate Limiting & Abuse Prevention](#rate-limiting--abuse-prevention)
-4. [Email Verification](#email-verification)
-5. [Database Transaction Security](#database-transaction-security)
-6. [Audit Logging](#audit-logging)
-7. [Threat Model & Mitigations](#threat-model--mitigations)
-8. [Security Configuration](#security-configuration)
+3. [Two-Factor Authentication (2FA)](#two-factor-authentication-2fa)
+4. [Rate Limiting & Abuse Prevention](#rate-limiting--abuse-prevention)
+5. [Email Verification](#email-verification)
+6. [Database Transaction Security](#database-transaction-security)
+7. [Audit Logging](#audit-logging)
+8. [Threat Model & Mitigations](#threat-model--mitigations)
+9. [Security Configuration](#security-configuration)
 
 ---
 
@@ -157,6 +158,57 @@ if (!passwordValid) {
 - Bcrypt hash comparison (computationally expensive)
 - Progressive delay prevents timing attacks
 - Automatic lockout after threshold
+
+---
+
+## Two-Factor Authentication (2FA)
+
+> For the complete TOTP implementation reference, see [2FA_TOTP_IMPLEMENTATION.md](./2FA_TOTP_IMPLEMENTATION.md).
+
+MDSystem implements 2FA at two layers depending on the user type:
+
+| User Type | Mechanism | Description |
+|-----------|-----------|-------------|
+| **Staff** | TOTP (Authenticator App) | RFC 6238 — Google Authenticator, Authy, etc. |
+| **Patient / Mobile** | Email OTP | 6-digit code sent to registered email |
+
+### TOTP for Staff
+
+Staff accounts can enable **Time-based One-Time Password (TOTP)** via Settings → Security. When enabled, the login flow adds a mandatory verification step after credentials are accepted.
+
+**Setup flow**: `POST /settings/totp/setup` → scan QR code → `POST /settings/totp/verify`
+
+**Login flow**:
+```
+POST /auth/login           → { LoginKey, requiresTotp: true }
+POST /settings/totp/validate  → marks session verified
+POST /auth/login/complete  → issues JWT (blocks if TOTP not verified)
+```
+
+**Security properties**:
+- Secrets stored encrypted (AES-256-GCM) — plaintext never persisted
+- `crypto.timingSafeEqual` for all comparisons — timing-attack safe
+- ±1 window (30s clock drift tolerance)
+- Per-session brute-force lock: 5 failures → session destroyed
+- Disabling 2FA requires a valid authenticator code — not a password
+
+### Email 2FA for Patients
+
+Patient login (web + mobile) can require a 6-digit code sent to the registered email before the data consent step. Controlled by `allow_email_2fa` in `UserCredentials`.
+
+### 2FA Enforcement on Admin Transfer
+
+The admin privilege transfer system **requires the target user to have 2FA enabled** before the transfer can be initiated. See [Layer 5: Business Logic Validation](#security-layers).
+
+### Threat Coverage
+
+| Threat | 2FA Protection |
+|--------|---------------|
+| Stolen JWT token | TOTP required again at login — JWT alone insufficient |
+| Phished password | Attacker also needs physical authenticator device |
+| Brute-forced TOTP | Per-session lock after 5 failures; IP rate limiting |
+| Secret database leak | AES-256-GCM encryption — key stored separately |
+| Token replay | 30-second window prevents reuse |
 
 ---
 
@@ -548,6 +600,10 @@ All security-relevant events are logged to `SystemAuditLog`:
 | **Race Condition** | Concurrent transfers | Duplicate check + Redis lock | Layer 4 |
 | **Audit Tampering** | Log deletion | Logged within transaction | Layer 7 |
 | **Social Engineering** | Phishing admin | Email warnings + no clickable links | Layer 6 |
+| **TOTP Brute Force** | Guessing 6-digit codes | Per-session lock after 5 failures; session destroyed | TOTP |
+| **TOTP Secret Leak** | DB breach | AES-256-GCM encryption; key in env only | TOTP |
+| **Timing Attack on Token** | Code timing oracle | `crypto.timingSafeEqual` comparison | TOTP |
+| **2FA Disable Attack** | Compromised session | Disable requires valid authenticator code | TOTP |
 
 ---
 
@@ -566,6 +622,18 @@ ADMIN_TRANSFER_COOLDOWN=300              # 5 minutes
 ADMIN_TRANSFER_PASSWORD_FAIL_THRESHOLD=3 # attempts
 ADMIN_TRANSFER_PASSWORD_FAIL_LOCKOUT=1800 # 30 minutes
 ADMIN_TRANSFER_EXPIRATION=600            # 10 minutes
+```
+
+**2FA / TOTP**:
+```bash
+# TOTP secret encryption — 64-char hex (32 bytes). Generate with: npm run setup:totp-key
+TOTP_ENCRYPTION_KEY=<generated>
+
+# Login session TTL — TOTP must be verified within this window
+VERIFICATION_SESSION_EXPIRATION=900      # 15 minutes
+
+# Email 2FA settings (patient portal)
+EMAIL_2FA_EXPIRATION=300                 # 5 minutes
 ```
 
 **Email**:
@@ -598,6 +666,8 @@ REDIS_DATABASE=0
 - [ ] Audit logs backed up regularly
 - [ ] Session timeout configured
 - [ ] GraphiQL disabled in production
+- [ ] `TOTP_ENCRYPTION_KEY` backed up securely (loss = all TOTP secrets unreadable)
+- [ ] Target admin users have TOTP enabled before admin transfers
 
 ---
 

@@ -112,7 +112,10 @@ const Query = {
       [chatId, limit || 50, offset || 0]
     );
 
-    return await Promise.all(result.rows.map(formatMessage));
+    // Batch-fetch all sender info in one query to avoid N+1
+    const senderIds = result.rows.map(r => r.userId).filter(Boolean);
+    const senderMap = await getParticipantInfoBatch(senderIds);
+    return result.rows.map(row => ({ ...row, sender: senderMap.get(row.userId) || null }));
   },
 
   // ==================== MEDICAL QUERIES ====================
@@ -134,8 +137,8 @@ const Query = {
     // Filter by location if not 'Both'
     if (location && location !== 'Both') {
       query += ` AND "patientId" IN (
-        SELECT p.id FROM "Patient" p
-        WHERE p.branch = $1
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $1
       )`;
       params.push(location);
     }
@@ -150,8 +153,8 @@ const Query = {
     const countParams = [];
     if (location && location !== 'Both') {
       countQuery += ` AND "patientId" IN (
-        SELECT p.id FROM "Patient" p
-        WHERE p.branch = $1
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $1
       )`;
       countParams.push(location);
     }
@@ -183,8 +186,8 @@ const Query = {
     // Filter by location if not 'Both'
     if (location && location !== 'Both') {
       query += ` AND "patientId" IN (
-        SELECT p.id FROM "Patient" p
-        WHERE p.branch = $1
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $1
       )`;
       params.push(location);
     }
@@ -199,8 +202,8 @@ const Query = {
     const countParams = [];
     if (location && location !== 'Both') {
       countQuery += ` AND "patientId" IN (
-        SELECT p.id FROM "Patient" p
-        WHERE p.branch = $1
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $1
       )`;
       countParams.push(location);
     }
@@ -238,8 +241,8 @@ const Query = {
     // Filter by location if not 'Both'
     if (location && location !== 'Both') {
       conditions.push(`"patientId" IN (
-        SELECT p.id FROM "Patient" p
-        WHERE p.branch = $${params.length + 1}
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $${params.length + 1}
       )`);
       params.push(location);
     }
@@ -265,8 +268,8 @@ const Query = {
 
     if (location && location !== 'Both') {
       countConditions.push(`"patientId" IN (
-        SELECT p.id FROM "Patient" p
-        WHERE p.branch = $${countParams.length + 1}
+        SELECT up.id FROM "UsersPersonal" up
+        WHERE up.branch = $${countParams.length + 1}
       )`);
       countParams.push(location);
     }
@@ -324,7 +327,10 @@ const Query = {
       [chatId, limit || 50, offset || 0]
     );
 
-    return await Promise.all(result.rows.map(formatMessage));
+    // Batch-fetch all sender info in one query to avoid N+1
+    const senderIds = result.rows.map(r => r.userId).filter(Boolean);
+    const senderMap = await getParticipantInfoBatch(senderIds);
+    return result.rows.map(row => ({ ...row, sender: senderMap.get(row.userId) || null }));
   },
 
   /**
