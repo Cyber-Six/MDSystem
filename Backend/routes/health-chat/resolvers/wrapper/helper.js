@@ -304,19 +304,24 @@ async function getLastMessageInfoBatch(chatIds) {
     [chatIds]
   );
 
-  // Get unread counts per chat in a single query
+  // Get unread counts per chat in a single query.
+  // Pre-compute the last Medical message timestamp per chat using a CTE so the
+  // comparison is a plain JOIN instead of a correlated subquery (faster under load).
   const unreadResult = await db.query(
-    `SELECT
-       "consultationVirtualId" as chat_id,
-       COUNT(*)::int as count
-     FROM "HealthChatPrompt" p
-     WHERE p."consultationVirtualId" = ANY($1)
-     AND p."userType" = 'Patient'
-     AND p.stamp > COALESCE(
-       (SELECT MAX(p2.stamp) FROM "HealthChatPrompt" p2
-        WHERE p2."consultationVirtualId" = p."consultationVirtualId" AND p2."userType" = 'Medical'),
-       '1970-01-01'
+    `WITH LastMedicalMsg AS (
+       SELECT "consultationVirtualId", MAX(stamp) AS last_stamp
+       FROM "HealthChatPrompt"
+       WHERE "consultationVirtualId" = ANY($1) AND "userType" = 'Medical'
+       GROUP BY "consultationVirtualId"
      )
+     SELECT
+       p."consultationVirtualId" AS chat_id,
+       COUNT(*)::int AS count
+     FROM "HealthChatPrompt" p
+     LEFT JOIN LastMedicalMsg lm ON lm."consultationVirtualId" = p."consultationVirtualId"
+     WHERE p."consultationVirtualId" = ANY($1)
+       AND p."userType" = 'Patient'
+       AND p.stamp > COALESCE(lm.last_stamp, '1970-01-01')
      GROUP BY p."consultationVirtualId"`,
     [chatIds]
   );

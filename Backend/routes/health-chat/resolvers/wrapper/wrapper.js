@@ -2,6 +2,7 @@ const db = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
 const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
+const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
 const {
   calculateExpiryDate,
   isChatExpired,
@@ -351,13 +352,13 @@ const Query = {
     if (location && location !== 'Both') {
       if (statusFilter) {
         locationFilter = ` AND "patientId" IN (
-          SELECT p.id FROM "Patient" p
-          WHERE p.branch = $${params.length + 1}
+          SELECT up.id FROM "UsersPersonal" up
+          WHERE up.branch = $${params.length + 1}
         )`;
       } else {
         locationFilter = ` WHERE "patientId" IN (
-          SELECT p.id FROM "Patient" p
-          WHERE p.branch = $${params.length + 1}
+          SELECT up.id FROM "UsersPersonal" up
+          WHERE up.branch = $${params.length + 1}
         )`;
       }
       params.push(location);
@@ -437,14 +438,8 @@ const Query = {
          WHERE "patientId" = ANY($1)`;
       const allTicketsParams = [patientIds];
 
-      // Also respect location filter for all tickets
-      if (location && location !== 'Both') {
-        allTicketsQuery += ` AND "patientId" IN (
-          SELECT p.id FROM "Patient" p
-          WHERE p.branch = $2
-        )`;
-        allTicketsParams.push(location);
-      }
+      // patientIds already come from the location-filtered main query,
+      // so no secondary location filter is needed here.
 
       allTicketsQuery += ` ORDER BY id DESC`;
 
@@ -541,16 +536,19 @@ const Query = {
       );
     }
 
-    return await Promise.all(result.rows.map(async (row) => {
-      const message = await formatMessage(row);
+    // Batch-fetch all sender info in one query to avoid N+1 (one query per message).
+    // System messages have userId=null, getParticipantInfoBatch skips null IDs.
+    const senderIds = result.rows.map(r => r.userId).filter(Boolean);
+    const senderMap = await getParticipantInfoBatch(senderIds);
+
+    return result.rows.map(row => ({
+      ...row,
+      sender: senderMap.get(row.userId) || null,
       // Include ticket info for divider rendering
-      return {
-        ...message,
-        ticketPurpose: row.ticket_purpose,
-        ticketStatus: row.ticket_status,
-        ticketSessionEnd: row.ticket_session_end,
-        ticketClosedBy: row.ticket_closed_by
-      };
+      ticketPurpose: row.ticket_purpose,
+      ticketStatus: row.ticket_status,
+      ticketSessionEnd: row.ticket_session_end,
+      ticketClosedBy: row.ticket_closed_by
     }));
   }
 };
@@ -1059,8 +1057,6 @@ const Mutation = {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-
-    const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
 
     // Check if user is admin
     const { permitted } = await isMedicalPermitted(user.id, medPermissions.is_admin);
