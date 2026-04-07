@@ -232,9 +232,8 @@ export default function MyDocumentsPage() {
       return requestedDocs.filter(d => d.submission?.status === 'Pending');
     }
     if (filter === 'recorded') {
-      return requestedDocs.filter(d => 
-        d.submission?.status === 'Recorded' || d.submission?.status === 'Rejected'
-      );
+      // Only approved documents
+      return requestedDocs.filter(d => d.submission?.status === 'Recorded');
     }
     return requestedDocs;
   };
@@ -242,9 +241,7 @@ export default function MyDocumentsPage() {
   const filteredRequested = getFilteredRequestedDocs();
   const requestedCount = requestedDocs.filter(d => d.submission?.status === 'Requested').length;
   const pendingCount = requestedDocs.filter(d => d.submission?.status === 'Pending').length;
-  const recordedCount = requestedDocs.filter(d => 
-    d.submission?.status === 'Recorded' || d.submission?.status === 'Rejected'
-  ).length;
+  const recordedCount = requestedDocs.filter(d => d.submission?.status === 'Recorded').length;
 
   // For the "My Documents" section, show all documents (issued documents)
   const filtered = documents;
