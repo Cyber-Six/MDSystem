@@ -247,13 +247,13 @@ export default function MyDocumentsPage() {
   const filtered = documents;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">Requested Documents</h1>
-          <p className="text-sm text-secondary-500 dark:text-neutral-400 mt-1">
-            Manage your healthcare provider's document requests
+          <h1 className="text-3xl font-bold text-secondary-900 dark:text-white mb-2">Document Requests</h1>
+          <p className="text-base text-secondary-600 dark:text-neutral-400">
+            Track and manage your healthcare provider's document requests
           </p>
         </div>
         <button
@@ -270,68 +270,71 @@ export default function MyDocumentsPage() {
 
       {/* Tab Navigation */}
       {requestedDocs.length > 0 && (
-        <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl overflow-hidden">
-          <div className="border-b border-neutral-200 dark:border-neutral-700">
+        <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden shadow-sm">
+          <div className="border-b border-neutral-100 dark:border-neutral-700/50">
             <div className="px-6 py-0 flex items-center gap-0">
               <button
                 onClick={() => setFilter('requested')}
-                className={`relative px-4 py-3.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`relative px-3 py-4 text-sm font-semibold transition-all whitespace-nowrap ${
                   filter === 'requested'
-                    ? 'text-primary-600 dark:text-primary-400'
-                    : 'text-secondary-600 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                    ? 'text-primary-700 dark:text-primary-300'
+                    : 'text-secondary-500 dark:text-neutral-500 hover:text-secondary-700 dark:hover:text-neutral-300'
                 }`}
               >
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2.5">
+                  <span className={`w-1 h-1 rounded-full transition-all ${filter === 'requested' ? 'bg-primary-600 dark:bg-primary-400 w-2' : 'bg-neutral-300 dark:bg-neutral-600'}`}></span>
                   Requested
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
+                  <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-md bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
                     {requestedCount}
                   </span>
                 </span>
                 {filter === 'requested' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400" />
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-500 dark:from-primary-400 dark:to-primary-300" />
                 )}
               </button>
               <button
                 onClick={() => setFilter('pending')}
-                className={`relative px-4 py-3.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`relative px-3 py-4 text-sm font-semibold transition-all whitespace-nowrap ${
                   filter === 'pending'
-                    ? 'text-primary-600 dark:text-primary-400'
-                    : 'text-secondary-600 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                    ? 'text-primary-700 dark:text-primary-300'
+                    : 'text-secondary-500 dark:text-neutral-500 hover:text-secondary-700 dark:hover:text-neutral-300'
                 }`}
               >
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2.5">
+                  <span className={`w-1 h-1 rounded-full transition-all ${filter === 'pending' ? 'bg-primary-600 dark:bg-primary-400 w-2' : 'bg-neutral-300 dark:bg-neutral-600'}`}></span>
                   Pending
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
+                  <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-md bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
                     {pendingCount}
                   </span>
                 </span>
                 {filter === 'pending' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400" />
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-500 dark:from-primary-400 dark:to-primary-300" />
                 )}
               </button>
               <button
                 onClick={() => setFilter('recorded')}
-                className={`relative px-4 py-3.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`relative px-3 py-4 text-sm font-semibold transition-all whitespace-nowrap ${
                   filter === 'recorded'
-                    ? 'text-primary-600 dark:text-primary-400'
-                    : 'text-secondary-600 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                    ? 'text-primary-700 dark:text-primary-300'
+                    : 'text-secondary-500 dark:text-neutral-500 hover:text-secondary-700 dark:hover:text-neutral-300'
                 }`}
               >
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2.5">
+                  <span className={`w-1 h-1 rounded-full transition-all ${filter === 'recorded' ? 'bg-primary-600 dark:bg-primary-400 w-2' : 'bg-neutral-300 dark:bg-neutral-600'}`}></span>
                   Recorded
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
+                  <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-md bg-neutral-100 dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300">
                     {recordedCount}
                   </span>
                 </span>
                 {filter === 'recorded' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400" />
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-600 to-primary-500 dark:from-primary-400 dark:to-primary-300" />
                 )}
               </button>
             </div>
           </div>
 
           {/* Documents List */}
-          <div className="p-6">
+          <div className="p-6 space-y-4">
             {loadingRequests ? (
               <div className="py-12 text-center">
                 <svg className="w-8 h-8 mx-auto text-primary-500 animate-spin mb-3" fill="none" viewBox="0 0 24 24">
@@ -366,38 +369,38 @@ export default function MyDocumentsPage() {
               return (
                 <div
                   key={doc.id}
-                  className={`border-2 rounded-xl p-4 transition-all ${
-                    isApproved ? 'border-success-300 dark:border-success-700/50 bg-success-50/30 dark:bg-success-900/10' :
-                    needsReview ? 'border-warning-300 dark:border-warning-700/50 bg-warning-50/30 dark:bg-warning-900/10' :
-                    'border-primary-300 dark:border-primary-700/50 bg-primary-50/30 dark:bg-primary-900/10'
+                  className={`rounded-lg p-5 transition-all shadow-sm hover:shadow-md border ${
+                    isApproved ? 'border-success-200 dark:border-success-700 bg-success-50/50 dark:bg-success-900/15' :
+                    needsReview ? 'border-warning-200 dark:border-warning-700 bg-warning-50/50 dark:bg-warning-900/15' :
+                    'border-primary-200 dark:border-primary-700 bg-primary-50/50 dark:bg-primary-900/15'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-start gap-3 flex-1">
-                      <div className={`w-9 h-9 rounded flex items-center justify-center flex-shrink-0 ${
-                        isApproved ? 'bg-success-100 dark:bg-success-900/20' :
-                        needsReview ? 'bg-warning-100 dark:bg-warning-900/20' :
-                        'bg-warning-100 dark:bg-warning-900/20'
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        isApproved ? 'bg-success-100/80 dark:bg-success-900/30' :
+                        needsReview ? 'bg-warning-100/80 dark:bg-warning-900/30' :
+                        'bg-primary-100/80 dark:bg-primary-900/30'
                       }`}>
-                        <svg className={`w-4 h-4 ${
-                          isApproved ? 'text-success-600 dark:text-success-400' :
-                          needsReview ? 'text-warning-600 dark:text-warning-400' :
-                          'text-warning-600 dark:text-warning-400'
-                        }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className={`w-5 h-5 ${
+                          isApproved ? 'text-success-700 dark:text-success-400' :
+                          needsReview ? 'text-warning-700 dark:text-warning-400' :
+                          'text-primary-700 dark:text-primary-400'
+                        }`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                           {isApproved ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           )}
                         </svg>
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-sm font-semibold text-secondary-900 dark:text-white mb-1">
+                        <h3 className="text-base font-bold text-secondary-900 dark:text-white mb-1">
                           {doc.label}
                         </h3>
                         {doc.submission?.recordedBy && (
-                          <p className="text-xs text-secondary-500 dark:text-neutral-400">
-                            Requested by: {doc.submission.recordedBy.name}
+                          <p className="text-xs text-secondary-600 dark:text-neutral-400 font-medium">
+                            Requested by {doc.submission.recordedBy.name}
                           </p>
                         )}
                         {doc.submission?.submittedAt && needsReview && (
@@ -412,24 +415,24 @@ export default function MyDocumentsPage() {
 
                   {/* Notes - show when staff added notes (for any status) */}
                   {doc.submission?.notes && (
-                    <div className={`mb-3 p-3 rounded border text-xs ${
-                      status === 'Requested' ? 'bg-primary-50 dark:bg-primary-900/10 border-primary-200 dark:border-primary-800' :
-                      isApproved ? 'bg-success-50 dark:bg-success-900/10 border-success-200 dark:border-success-800' :
-                      'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
+                    <div className={`mt-4 p-4 rounded-md border-l-4 text-sm ${
+                      status === 'Requested' ? 'bg-primary-50 dark:bg-primary-900/20 border-l-primary-400 dark:border-l-primary-500' :
+                      isApproved ? 'bg-success-50 dark:bg-success-900/20 border-l-success-400 dark:border-l-success-500' :
+                      'bg-neutral-50 dark:bg-neutral-800 border-l-neutral-400 dark:border-l-neutral-500'
                     }`}>
-                      <p className={`font-medium mb-1 ${
-                        status === 'Requested' ? 'text-primary-700 dark:text-primary-400' :
-                        isApproved ? 'text-success-700 dark:text-success-400' : 
-                        'text-secondary-700 dark:text-neutral-400'
+                      <p className={`font-semibold mb-2 ${
+                        status === 'Requested' ? 'text-primary-800 dark:text-primary-300' :
+                        isApproved ? 'text-success-800 dark:text-success-300' : 
+                        'text-secondary-800 dark:text-neutral-300'
                       }`}>
-                        {status === 'Requested' ? 'Request Note' :
-                         isApproved ? 'Approval Note' : 
-                         'Note:'}
+                        {status === 'Requested' ? 'Request Details' :
+                         isApproved ? 'Staff Notes' : 
+                         'Additional Notes'}
                       </p>
-                      <p className={`${
-                        status === 'Requested' ? 'text-secondary-700 dark:text-neutral-300' :
-                        isApproved ? 'text-success-600 dark:text-success-300' : 
-                        'text-secondary-700 dark:text-neutral-300'
+                      <p className={`leading-relaxed ${
+                        status === 'Requested' ? 'text-primary-700 dark:text-primary-200' :
+                        isApproved ? 'text-success-700 dark:text-success-200' : 
+                        'text-secondary-700 dark:text-neutral-200'
                       }`}>
                         {doc.submission.notes}
                       </p>
@@ -438,13 +441,13 @@ export default function MyDocumentsPage() {
 
                   {/* Status Messages - only show if no notes */}
                   {needsReview && !doc.submission?.notes && (
-                    <div className="mb-3 p-2 bg-warning-50 dark:bg-warning-900/10 border border-warning-200 dark:border-warning-700 rounded text-xs text-warning-700 dark:text-warning-300">
-                      Your document is being reviewed by staff. You'll be notified once it's approved.
+                    <div className="mt-4 p-4 bg-warning-50/70 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-700/50 rounded-md text-sm text-warning-800 dark:text-warning-200 font-medium">
+                      Under review — you'll be notified once approved
                     </div>
                   )}
                   {isApproved && !doc.submission?.notes && (
-                    <div className="mb-3 p-2 bg-success-50 dark:bg-success-900/10 border border-success-200 dark:border-success-700 rounded text-xs text-success-700 dark:text-success-300">
-                      This document has been approved by staff. No further action needed.
+                    <div className="mt-4 p-4 bg-success-50/70 dark:bg-success-900/20 border border-success-200 dark:border-success-700/50 rounded-md text-sm text-success-800 dark:text-success-200 font-medium">
+                      Approved and recorded — no action required
                     </div>
                   )}
 
@@ -514,10 +517,10 @@ export default function MyDocumentsPage() {
                           />
                           <label
                             htmlFor={`file-upload-${doc.id}`}
-                            className={`block w-full px-4 py-6 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${
+                            className={`block w-full px-6 py-8 border-2 border-dashed rounded-lg text-center cursor-pointer transition-all ${
                               isUploading
-                                ? 'border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/30 cursor-not-allowed'
-                                : 'border-primary-300 dark:border-primary-700 bg-primary-50/50 dark:bg-primary-900/10 hover:bg-primary-100 dark:hover:bg-primary-900/20 hover:border-primary-400 dark:hover:border-primary-600'
+                                ? 'border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/20 cursor-not-allowed opacity-60'
+                                : 'border-primary-300 dark:border-primary-700 bg-white dark:bg-neutral-700/50 hover:bg-primary-50/40 dark:hover:bg-primary-900/20 hover:border-primary-400 dark:hover:border-primary-600 hover:shadow-sm'
                             }`}
                           >
                             {isUploading ? (
@@ -531,16 +534,18 @@ export default function MyDocumentsPage() {
                                 </p>
                               </div>
                             ) : (
-                              <div className="space-y-2">
-                                <svg className="w-8 h-8 mx-auto text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              <div className="space-y-3">
+                                <svg className="w-10 h-10 mx-auto text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
-                                <p className="text-sm font-medium text-primary-700 dark:text-primary-400">
-                                  Click to select a file
-                                </p>
-                                <p className="text-xs text-secondary-500 dark:text-neutral-400">
-                                  PDF or image files accepted
-                                </p>
+                                <div>
+                                  <p className="text-sm font-bold text-secondary-900 dark:text-white">
+                                    Upload your document
+                                  </p>
+                                  <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                                    or drag and drop — PDF or image
+                                  </p>
+                                </div>
                               </div>
                             )}
                           </label>
