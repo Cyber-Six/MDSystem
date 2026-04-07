@@ -5,28 +5,12 @@ const { jwtProtect } = require("../../config/middleware/jwtProtect.js");
 const { ipRateLimiter } = require("../../config/middleware/ratelimiter.js");
 const query = require("../../config/query.js");
 const logger = require("../../utils/logger.js");
-const { totpGenerateSecret, totpVerify, totpKeyUri } = require("../../utils/totp.js");
+const { totpGenerateSecret, totpVerify, totpKeyUri,
+        encryptTotpSecret, decryptTotpSecret } = require("../../utils/totp.js");
 
 const router = express.Router();
 
 const TOTP_ISSUER = "MDSystem";
-
-// ========================================
-// Auto-create TOTP columns if missing
-// ========================================
-async function ensureTotpColumns() {
-  try {
-    await query.query(`
-      ALTER TABLE "UserCredentials"
-        ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(255) DEFAULT NULL,
-        ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false
-    `);
-    logger.info("[TOTP] TOTP columns ready");
-  } catch (err) {
-    logger.error("[TOTP] Failed to ensure TOTP columns:", err.message);
-  }
-}
-ensureTotpColumns();
 
 // ========================================
 // GET /settings/totp/status
@@ -89,13 +73,16 @@ router.post("/setup", jwtProtect("medical"), async (req, res) => {
     // Generate new secret
     const secret = totpGenerateSecret();
 
-    // Store secret in DB (not yet enabled — user must verify first)
+    // Encrypt secret before storing
+    const encryptedSecret = encryptTotpSecret(secret);
+
+    // Store encrypted secret in DB (not yet enabled — user must verify first)
     await query.query(
       `UPDATE "UserCredentials" SET totp_secret = $1, totp_enabled = false WHERE id = $2`,
-      [secret, userId]
+      [encryptedSecret, userId]
     );
 
-    // Build otpauth URI
+    // Build otpauth URI using plain secret (for QR code only — not returned in response)
     const otpauthUrl = totpKeyUri(email, secret);
 
     // Generate QR code as data URL
@@ -111,7 +98,6 @@ router.post("/setup", jwtProtect("medical"), async (req, res) => {
       ok: true,
       secret,
       qrCode: qrCodeDataUrl,
-      otpauthUrl,
       message: "Scan the QR code with your authenticator app, then verify with a code.",
     });
   } catch (err) {
@@ -162,8 +148,9 @@ router.post("/verify", jwtProtect("medical"), ipRateLimiter("strictLimiter"), as
       });
     }
 
-    // Verify the token with a 1 step window (30s before + 30s after)
-    const isValid = totpVerify(token, totp_secret);
+    // Decrypt secret and verify the token with a 1 step window (30s before + 30s after)
+    const plainSecret = decryptTotpSecret(totp_secret);
+    const isValid = totpVerify(token, plainSecret);
 
     if (!isValid) {
       logger.warn(`[TOTP] Invalid verification code userId=${userId}`);
@@ -226,8 +213,9 @@ router.post("/disable", jwtProtect("medical"), ipRateLimiter("strictLimiter"), a
       });
     }
 
-    // Verify the current authenticator code
-    const isValid = totpVerify(token, totp_secret);
+    // Decrypt secret and verify the current authenticator code
+    const plainSecret = decryptTotpSecret(totp_secret);
+    const isValid = totpVerify(token, plainSecret);
     if (!isValid) {
       logger.warn(`[TOTP] Invalid code for disable userId=${userId}`);
       return res.status(400).json({
@@ -327,8 +315,9 @@ router.post("/validate", ipRateLimiter("strictLimiter"), async (req, res) => {
       });
     }
 
-    // Verify the TOTP code
-    const isValid = totpVerify(token, totp_secret);
+    // Decrypt secret and verify the TOTP code
+    const plainSecret = decryptTotpSecret(totp_secret);
+    const isValid = totpVerify(token, plainSecret);
 
     if (!isValid) {
       const locked = await recordTotpFailureForKey(verificationKey, "2fa");
