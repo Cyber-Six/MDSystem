@@ -1,5 +1,5 @@
 const express = require("express");
-const { authenticator } = require("otplib");
+const crypto = require("crypto");
 const QRCode = require("qrcode");
 
 const { jwtProtect } = require("../../config/middleware/jwtProtect.js");
@@ -10,6 +10,81 @@ const logger = require("../../utils/logger.js");
 const router = express.Router();
 
 const TOTP_ISSUER = "MDSystem";
+
+// ========================================
+// TOTP helpers using native crypto (RFC 6238)
+// ========================================
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+function base32Encode(buffer) {
+  let bits = 0, value = 0, output = "";
+  for (const byte of buffer) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 0x1f];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) output += BASE32_ALPHABET[(value << (5 - bits)) & 0x1f];
+  return output;
+}
+
+function base32Decode(encoded) {
+  const clean = encoded.toUpperCase().replace(/=+$/, "");
+  let bits = 0, value = 0;
+  const output = [];
+  for (const char of clean) {
+    const idx = BASE32_ALPHABET.indexOf(char);
+    if (idx === -1) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(output);
+}
+
+function totpGenerateSecret() {
+  return base32Encode(crypto.randomBytes(20));
+}
+
+function totpGetToken(secret, timestamp = Date.now()) {
+  const counter = Math.floor(timestamp / 1000 / 30);
+  const counterBuf = Buffer.alloc(8);
+  let c = counter;
+  for (let i = 7; i >= 0; i--) {
+    counterBuf[i] = c & 0xff;
+    c = Math.floor(c / 256);
+  }
+  const key = base32Decode(secret);
+  const hmac = crypto.createHmac("sha1", key);
+  hmac.update(counterBuf);
+  const digest = hmac.digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const code =
+    (((digest[offset] & 0x7f) << 24) |
+      ((digest[offset + 1] & 0xff) << 16) |
+      ((digest[offset + 2] & 0xff) << 8) |
+      (digest[offset + 3] & 0xff)) %
+    1000000;
+  return code.toString().padStart(6, "0");
+}
+
+function totpVerify(token, secret, window = 1) {
+  const now = Date.now();
+  for (let i = -window; i <= window; i++) {
+    if (totpGetToken(secret, now + i * 30000) === token) return true;
+  }
+  return false;
+}
+
+function totpKeyUri(account, secret) {
+  const label = encodeURIComponent(`${TOTP_ISSUER}:${account}`);
+  return `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(TOTP_ISSUER)}&algorithm=SHA1&digits=6&period=30`;
+}
 
 // ========================================
 // Auto-create TOTP columns if missing
@@ -87,7 +162,7 @@ router.post("/setup", jwtProtect("medical"), async (req, res) => {
     const email = existing.rows[0].email;
 
     // Generate new secret
-    const secret = authenticator.generateSecret();
+    const secret = totpGenerateSecret();
 
     // Store secret in DB (not yet enabled — user must verify first)
     await query.query(
@@ -96,7 +171,7 @@ router.post("/setup", jwtProtect("medical"), async (req, res) => {
     );
 
     // Build otpauth URI
-    const otpauthUrl = authenticator.keyuri(email, TOTP_ISSUER, secret);
+    const otpauthUrl = totpKeyUri(email, secret);
 
     // Generate QR code as data URL
     const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl, {
@@ -163,7 +238,7 @@ router.post("/verify", jwtProtect("medical"), async (req, res) => {
     }
 
     // Verify the token with a 1 step window (30s before + 30s after)
-    const isValid = authenticator.check(token, totp_secret);
+    const isValid = totpVerify(token, totp_secret);
 
     if (!isValid) {
       logger.warn(`[TOTP] Invalid verification code userId=${userId}`);
@@ -317,7 +392,7 @@ router.post("/validate", async (req, res) => {
     }
 
     // Verify the TOTP code
-    const isValid = authenticator.check(token, totp_secret);
+    const isValid = totpVerify(token, totp_secret);
 
     if (!isValid) {
       return res.status(400).json({
