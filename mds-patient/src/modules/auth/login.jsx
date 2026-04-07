@@ -12,9 +12,12 @@ const Login = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showTwoFactor, setShowTwoFactor] = useState(false);
+  const [showTotpVerify, setShowTotpVerify] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
   const [verificationKey, setVerificationKey] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [pendingEmail2FA, setPendingEmail2FA] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   
   const navigate = useNavigate();
@@ -49,7 +52,13 @@ const Login = () => {
         const loginKey = response.data.LoginKey;
         setVerificationKey(loginKey);
         
-        if (response.data.requires2FA) {
+        const needsTotp = response.data.requiresTotp;
+        const needsEmail2FA = response.data.requires2FA;
+
+        if (needsTotp) {
+          setPendingEmail2FA(needsEmail2FA);
+          setShowTotpVerify(true);
+        } else if (needsEmail2FA) {
           await handleSend2FA();
           setShowTwoFactor(true);
         } else {
@@ -75,6 +84,51 @@ const Login = () => {
           break;
         case 'INVALID_CREDENTIALS':
           setError('Email or password is incorrect.');
+          break;
+        default:
+          setError(errorMsg);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // TOTP verification handler
+  const handleTotpVerification = async (e) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const response = await axiosRequest.post('/settings/totp/validate', {
+        token: totpCode,
+        verificationKey,
+        email,
+      });
+
+      if (response.data.ok) {
+        setShowTotpVerify(false);
+        setTotpCode('');
+
+        if (pendingEmail2FA) {
+          await handleSend2FA();
+          setShowTwoFactor(true);
+        } else {
+          setShowConsent(true);
+        }
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'TOTP verification failed.';
+      const errorCode = err.response?.data?.error;
+
+      switch (errorCode) {
+        case 'INVALID_TOTP_CODE':
+          setError('Invalid authenticator code. Please try again.');
+          break;
+        case 'INVALID_SESSION':
+          setError('Login session expired. Please start over.');
+          setShowTotpVerify(false);
+          setVerificationKey('');
           break;
         default:
           setError(errorMsg);
@@ -193,12 +247,18 @@ const Login = () => {
           setError('Login session is invalid or expired. Please try again.');
           setShowConsent(false);
           setShowTwoFactor(false);
+          setShowTotpVerify(false);
           setVerificationKey('');
           break;
         case '2FA_NOT_VERIFIED':
           setError('Email 2FA has not been verified.');
           setShowConsent(false);
           setShowTwoFactor(true);
+          break;
+        case 'TOTP_NOT_VERIFIED':
+          setError('Authenticator 2FA has not been verified.');
+          setShowConsent(false);
+          setShowTotpVerify(true);
           break;
         case 'DATA_CONSENT_REQUIRED':
           setError('You must agree to the data consent policy to login.');
@@ -226,7 +286,7 @@ const Login = () => {
   };
 
   // Initial login form
-  if (!showTwoFactor) {
+  if (!showTwoFactor && !showTotpVerify) {
     return (
       <>
         <div className="w-full max-w-md mx-auto">
@@ -374,6 +434,102 @@ const Login = () => {
           onCancel={handleConsentCancel}
         />
       </>
+    );
+  }
+
+  // TOTP authenticator verification form
+  if (showTotpVerify) {
+    return (
+      <div className="w-full max-w-md mx-auto">
+        <div className="text-center mb-8">
+          <div className="bg-primary-100 dark:bg-primary-900/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
+            <svg className="w-10 h-10 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-secondary-900 dark:text-white mb-3">
+            Authenticator Verification
+          </h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
+            Enter the 6-digit code from your<br />
+            authenticator app
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-error-50 dark:bg-red-900/30 border border-error-300 dark:border-red-700 rounded-lg">
+            <p className="text-error-600 dark:text-red-400 text-sm text-center">
+              {error}
+            </p>
+          </div>
+        )}
+
+        <form onSubmit={handleTotpVerification} className="space-y-5">
+          <div>
+            <label htmlFor="totp" className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-2 text-center">
+              Authenticator Code
+            </label>
+            <input
+              id="totp"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="000000"
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+              maxLength={6}
+              required
+              disabled={isLoading}
+              autoFocus
+              className="w-full px-4 py-4 bg-neutral-50 dark:bg-neutral-900
+                       text-secondary-900 dark:text-white text-center text-2xl font-mono tracking-widest
+                       border-2 border-neutral-300 dark:border-neutral-600
+                       rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                       placeholder:text-neutral-400 dark:placeholder:text-neutral-500 placeholder:text-xl
+                       transition-all duration-200 disabled:opacity-50"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading || totpCode.length !== 6}
+            className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
+                     text-white font-semibold py-3.5 rounded-lg
+                     transition-all duration-200
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     flex items-center justify-center shadow-md hover:shadow-lg"
+          >
+            {isLoading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Verifying...
+              </>
+            ) : 'Verify Code'}
+          </button>
+
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowTotpVerify(false);
+                setVerificationKey('');
+                setTotpCode('');
+                setPendingEmail2FA(false);
+                setError('');
+              }}
+              className="w-full bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700
+                       text-secondary-700 dark:text-neutral-300 font-medium py-3 rounded-lg
+                       border border-neutral-300 dark:border-neutral-600
+                       transition-all duration-200 text-sm"
+            >
+              Go Back
+            </button>
+          </div>
+        </form>
+      </div>
     );
   }
 
