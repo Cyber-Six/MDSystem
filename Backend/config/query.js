@@ -176,7 +176,7 @@ async function updateUserPasswordById(userId, newPassword) {
 
 async function getUserConsentStateByEmail(email) { // i add allow_email_2fa because im tired :(
   const sql = `
-    SELECT id, data_consent_version, data_consent, data_consent_agreed, allow_email_2fa
+    SELECT id, data_consent_version, data_consent, data_consent_agreed, allow_email_2fa, totp_enabled
     FROM "UserCredentials" WHERE email = $1 LIMIT 1;`;
 
   const params = [email];

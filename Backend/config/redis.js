@@ -376,7 +376,9 @@ async function createVerificationSession(email, purpose, account_type = "patient
   if (user) { // account do exist
     await client.hSet(key, {
       allow_email_2fa: user.allow_email_2fa ? "true" : "false",
+      totp_enabled: user.totp_enabled ? "true" : "false",
       email_2fa_verified: "false",
+      totp_2fa_verified: "false",
       user_exists: "true",
       user_id: user.id.toString(),       // ✅ internal only
       email,
@@ -463,6 +465,26 @@ async function update2FAInSession(token, email, purpose) {
   // ✅ 3. Mark 2FA as verified
   await client.hSet(key, {
     email_2fa_verified: "true"
+  });
+
+  return true;
+}
+
+async function updateTotp2FAInSession(token, email, purpose) {
+  if (!client) throw new Error("Redis client not initialized");
+
+  const key = `verify:${purpose}:${token}`;
+
+  const exists = await client.exists(key);
+  if (!exists) return false;
+
+  const storedEmail = await client.hGet(key, "email");
+  if (!storedEmail || storedEmail.toLowerCase() !== email.toLowerCase()) {
+    return false;
+  }
+
+  await client.hSet(key, {
+    totp_2fa_verified: "true"
   });
 
   return true;
@@ -1079,6 +1101,36 @@ function getClient() {
   return client;
 }
 
+/**
+ * Track TOTP failures per verification key to prevent per-key brute-forcing.
+ * Uses a counter key with TTL matching the verification session (default 15 min).
+ *
+ * @param {string} verificationKey - The random session token
+ * @param {string} purpose - e.g. "2fa", "resetpassword"
+ * @param {number} maxAttempts - Lock after this many failures (default 5)
+ * @returns {Promise<boolean>} true if the limit has been reached (caller should block)
+ */
+async function recordTotpFailureForKey(verificationKey, purpose, maxAttempts = 5) {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `totp_fail:${purpose}:${verificationKey}`;
+  const count = await client.incr(key);
+  if (count === 1) {
+    await client.expire(key, Number(process.env.VERIFICATION_SESSION_EXPIRATION) || 900);
+  }
+  return count >= maxAttempts;
+}
+
+/**
+ * Check if the per-key TOTP failure limit has already been reached.
+ * @returns {Promise<boolean>} true if locked
+ */
+async function isTotpLockedForKey(verificationKey, purpose, maxAttempts = 5) {
+  if (!client) throw new Error("Redis client not initialized");
+  const key = `totp_fail:${purpose}:${verificationKey}`;
+  const count = parseInt(await client.get(key) || "0", 10);
+  return count >= maxAttempts;
+}
+
 module.exports = {
   redisConfig,
   initRedis,
@@ -1115,6 +1167,7 @@ module.exports = {
   getVerificationSession,
   updateConsentInSession,
   update2FAInSession,
+  updateTotp2FAInSession,
   deleteVerificationSession,
   getUserIdFromVerificationSession,
 
@@ -1149,4 +1202,7 @@ module.exports = {
   recordAdminTransferPasswordFailure,
   isAdminTransferPasswordLocked,
   clearAdminTransferPasswordFailures,
+
+  recordTotpFailureForKey,
+  isTotpLockedForKey,
 };

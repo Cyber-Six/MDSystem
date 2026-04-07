@@ -102,6 +102,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   return res.status(200).json({
     ok: true,
     requires2FA: user.allow_email_2fa,
+    requiresTotp: user.totp_enabled || false,
     LoginKey: verificationKey,
     });
   });
@@ -134,6 +135,13 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
+  if (session.totp_enabled === "true" && session.totp_2fa_verified !== "true") {
+    return res.status(400).json({
+      error: "TOTP_NOT_VERIFIED",
+      message: "Authenticator 2FA has not been verified."
+    });
+  }
+
 
   if (session.data_consent !== "true") {
       return res.status(400).json({
@@ -149,7 +157,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
       });
   }
 
-  deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
+  await deleteVerificationSession(verificationKey, VERIFICATIONKEY_PURPOSE);
 
   // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
   const portal = detectPortalFromSubdomain(req);
