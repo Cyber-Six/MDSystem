@@ -2,8 +2,8 @@
  * Personal Info Step — Step 0 of the initial record form
  */
 
-import React from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, Modal, FlatList, StyleSheet, Pressable } from 'react-native';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData } from '../../../services/emr-service';
 
@@ -12,29 +12,60 @@ interface Props {
   onUpdate: (data: Partial<FormData['personalInfo']>) => void;
   isDark: boolean;
   errors: Record<string, string>;
+  isUpdate?: boolean;
 }
 
 const PROGRAMS = [
-  'ARCHITECTURE (CEA)', 'BS ACCOUNTANCY (CBE)', 'BS MATHEMATICS',
-  'CIVIL ENGINEERING (CEA)', 'CHEMICAL ENGINEERING (CEA)', 'COMPUTER ENGINEERING (CEA)',
-  'COMPUTER SCIENCE (CCS)', 'DATA SCIENCE (CCS)', 'ELECTRICAL ENGINEERING (CEA)',
-  'ELECTRONICS AND COMMUNICATION ENGINEERING (CEA)',
-  'INDUSTRIAL ENGINEERING (CEA)', 'INFORMATION SYSTEM (CCS)',
-  'INFORMATION TECHNOLOGY (CCS)', 'MECHANICAL ENGINEERING (CEA)',
-  'GRADUATE PROGRAM', 'Other',
+  'BS Architecture',
+  'BS Chemical Engineering',
+  'BS Civil Engineering',
+  'BS Computer Engineering',
+  'BS Electrical Engineering',
+  'BS Electronics Engineering',
+  'BS Industrial Engineering',
+  'BS Mechanical Engineering',
+  'BS Environmental and Sanitary Engineering',
+  'BS Computer Science',
+  'BS Data Science and Analytics',
+  'BS Entertainment and Multimedia Computing',
+  'BS Information Technology',
+  'BS Information Systems',
+  'BS Accountancy',
+  'BS Accounting Information Systems',
+  'BSBA Financial Management',
+  'BSBA Human Resource Management',
+  'BSBA Logistics and Supply Chain Management',
+  'BSBA Marketing Management',
+  'Bachelor of Arts in English Language',
+  'Bachelor of Arts in Political Science',
+  'Bachelor of Secondary Education Major in English',
+  'Bachelor of Secondary Education Major in Mathematics',
+  'Bachelor of Secondary Education Major in Sciences',
+  'Bachelor of Special Needs Education',
+  'Teaching Certificate Program',
+  'Graduate Program',
+  'Other',
 ];
 
-const STUDENT_CATEGORIES = [
-  'Freshmen', 'Freshmen - New student', 'Old Student',
-  'Transferee', 'Returnee', 'Graduate studies (New student)',
-  'Graduate studies (Old student)',
+const STUDENT_CATEGORIES: { value: string; label: string }[] = [
+  { value: 'Grade11', label: 'Grade 11' },
+  { value: 'Grade12', label: 'Grade 12' },
+  { value: 'Freshman', label: 'Freshman' },
+  { value: 'Sophomore', label: 'Sophomore' },
+  { value: 'Junior', label: 'Junior' },
+  { value: 'Senior', label: 'Senior' },
+  { value: 'Masteral', label: 'Masteral' },
+  { value: 'Doctorate', label: 'Doctorate' },
 ];
 
 const CIVIL_STATUSES = ['Single', 'Married', 'Widowed', 'Separated'];
 const GENDERS = ['Male', 'Female'];
 
-export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, errors }) => {
+export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, errors, isUpdate = false }) => {
   const pi = formData.personalInfo;
+  const [programOpen, setProgramOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
+
   const inputStyle = [styles.input, {
     backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
     color: isDark ? colors.neutral[100] : colors.neutral[900],
@@ -105,67 +136,139 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
 
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-      <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-        Personal Information
+      {!isUpdate && (
+        <>
+          <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+            Personal Information
+          </Text>
+
+          {renderField('Surname', 'surname', 'Enter surname')}
+          {renderField('First Name', 'firstName', 'Enter first name')}
+          {renderField('Middle Name', 'middleName', 'Enter middle name')}
+
+          <View style={styles.fieldGroup}>
+            <Text style={labelStyle}>Birthday *</Text>
+            <TextInput
+              style={inputStyle}
+              value={pi.birthday}
+              onChangeText={(val) => onUpdate({ birthday: val })}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+            />
+          </View>
+
+          {renderSelectField('Gender', 'gender', GENDERS)}
+          {renderSelectField('Civil Status', 'civilStatus', CIVIL_STATUSES)}
+
+          {renderField('Nationality', 'nationality', 'Enter nationality')}
+          {renderField('Religion', 'religion', 'Enter religion')}
+          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX')}
+          {renderField('Present Address', 'address', 'Enter present address')}
+          {renderField('Province Address', 'provinceAddress', 'Enter province address')}
+          {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
+        </>
+      )}
+
+      <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900], marginTop: isUpdate ? 0 : 24 }]}>
+        School Information
       </Text>
 
-      {renderField('Surname', 'surname', 'Enter surname')}
-      {renderField('First Name', 'firstName', 'Enter first name')}
-      {renderField('Middle Name', 'middleName', 'Enter middle name')}
-
-      <View style={styles.fieldGroup}>
-        <Text style={labelStyle}>Birthday *</Text>
-        <TextInput
-          style={inputStyle}
-          value={pi.birthday}
-          onChangeText={(val) => onUpdate({ birthday: val })}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
-        />
-      </View>
-
-      {renderSelectField('Gender', 'gender', GENDERS)}
-      {renderSelectField('Civil Status', 'civilStatus', CIVIL_STATUSES)}
-
-      {renderField('Nationality', 'nationality', 'Enter nationality')}
-      {renderField('Religion', 'religion', 'Enter religion')}
-      {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX')}
-      {renderField('Present Address', 'address', 'Enter present address')}
-      {renderField('Province Address', 'provinceAddress', 'Enter province address')}
-      {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
-
+      {/* Program — dropdown select */}
       <View style={styles.fieldGroup}>
         <Text style={labelStyle}>Program *</Text>
-        <View style={styles.optionsRow}>
-          {PROGRAMS.map(p => {
-            const isSelected = pi.program === p;
-            return (
-              <Text key={p} onPress={() => onUpdate({ program: p })} style={[styles.optionChip, { backgroundColor: isSelected ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100], color: isSelected ? '#FFFFFF' : isDark ? colors.neutral[300] : colors.neutral[700] }]}>
-                {p}
-              </Text>
-            );
-          })}
-        </View>
+        <TouchableOpacity
+          style={[styles.selectTrigger, {
+            backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+            borderColor: errors.program ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
+          }]}
+          onPress={() => setProgramOpen(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={{ flex: 1, fontSize: 15, color: pi.program ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
+            {pi.program || 'Select program...'}
+          </Text>
+          <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], fontSize: 12 }}>▼</Text>
+        </TouchableOpacity>
+        {errors.program && <Text style={styles.errorText}>{errors.program}</Text>}
         {pi.program === 'Other' && (
           <TextInput style={[...inputStyle, { marginTop: 8 }]} value={pi.programOther || ''} onChangeText={v => onUpdate({ programOther: v })} placeholder="Specify program" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
         )}
+        <Modal visible={programOpen} transparent animationType="slide">
+          <Pressable style={styles.modalOverlay} onPress={() => setProgramOpen(false)}>
+            <Pressable style={[styles.modalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Program</Text>
+                <TouchableOpacity onPress={() => setProgramOpen(false)}>
+                  <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={PROGRAMS}
+                keyExtractor={item => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                    onPress={() => { onUpdate({ program: item }); setProgramOpen(false); }}
+                  >
+                    <Text style={{ flex: 1, fontSize: 15, color: item === pi.program ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item === pi.program ? '600' : '400' }}>
+                      {item}
+                    </Text>
+                    {item === pi.program && <Text style={{ color: colors.primary[500], fontSize: 16 }}>✓</Text>}
+                  </TouchableOpacity>
+                )}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
 
+      {/* Student Category — dropdown select */}
       <View style={styles.fieldGroup}>
         <Text style={labelStyle}>Student Category *</Text>
-        <View style={styles.optionsRow}>
-          {STUDENT_CATEGORIES.map(c => {
-            const isSelected = pi.studentCategory === c;
-            return (
-              <Text key={c} onPress={() => onUpdate({ studentCategory: c })} style={[styles.optionChip, { backgroundColor: isSelected ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100], color: isSelected ? '#FFFFFF' : isDark ? colors.neutral[300] : colors.neutral[700] }]}>
-                {c}
-              </Text>
-            );
-          })}
-        </View>
+        <TouchableOpacity
+          style={[styles.selectTrigger, {
+            backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+            borderColor: errors.studentCategory ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
+          }]}
+          onPress={() => setCategoryOpen(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={{ flex: 1, fontSize: 15, color: pi.studentCategory ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
+            {STUDENT_CATEGORIES.find(c => c.value === pi.studentCategory)?.label || pi.studentCategory || 'Select category...'}
+          </Text>
+          <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], fontSize: 12 }}>▼</Text>
+        </TouchableOpacity>
+        {errors.studentCategory && <Text style={styles.errorText}>{errors.studentCategory}</Text>}
+        <Modal visible={categoryOpen} transparent animationType="slide">
+          <Pressable style={styles.modalOverlay} onPress={() => setCategoryOpen(false)}>
+            <Pressable style={[styles.modalContent, { backgroundColor: isDark ? colors.neutral[800] : '#FFF' }]} onPress={() => {}}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Select Student Category</Text>
+                <TouchableOpacity onPress={() => setCategoryOpen(false)}>
+                  <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 15 }}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={STUDENT_CATEGORIES}
+                keyExtractor={item => item.value}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.optionItem, { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}
+                    onPress={() => { onUpdate({ studentCategory: item.value }); setCategoryOpen(false); }}
+                  >
+                    <Text style={{ flex: 1, fontSize: 15, color: item.value === pi.studentCategory ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.value === pi.studentCategory ? '600' : '400' }}>
+                      {item.label}
+                    </Text>
+                    {item.value === pi.studentCategory && <Text style={{ color: colors.primary[500], fontSize: 16 }}>✓</Text>}
+                  </TouchableOpacity>
+                )}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
 
-      {renderSelectField('Drug Test Done', 'drugTestDone', ['Yes', 'No'])}
+      {!isUpdate && renderSelectField('Drug Test Done', 'drugTestDone', ['Yes', 'No'])}
 
       <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900], marginTop: 24 }]}>
         Emergency Contacts
@@ -188,6 +291,12 @@ const styles = StyleSheet.create({
   optionChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, fontSize: 13, overflow: 'hidden' },
   contactCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 12 },
   contactTitle: { fontSize: 15, fontWeight: '600', marginBottom: 10 },
+  selectTrigger: { borderWidth: 1, borderRadius: 10, padding: 12, flexDirection: 'row', alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { maxHeight: '60%', borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.1)' },
+  modalTitle: { fontSize: 17, fontWeight: '700' },
+  optionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1 },
 });
 
 export default PersonalInfoStep;

@@ -448,7 +448,7 @@ const mapYearLevel = (category: string): string => {
     'Transferee': 'Sophomore', 'Graduate studies (New student)': 'Masteral',
     'Graduate studies (Old student)': 'Masteral', 'Returnee': 'Sophomore', 'Old Student': 'Junior',
   };
-  return mapping[category] || 'Freshman';
+  return mapping[category] || category || 'Freshman';
 };
 
 const mapDentalCleaningRange = (frontendValue: string): string => {
@@ -736,35 +736,112 @@ export const submitUpdateRecord = async (
       ticketCreated = true;
     }
 
-    // Step 2: Upload dental photos only when scope includes dental
+    // Step 2: Build all inputs
+    const allCatalogs = await fetchAllCatalogs();
+
+    // Upload dental photos before building inputs (need photo IDs for dentalPhotoRecord)
     const showDental = recordType === 'dental' || recordType === 'both';
     if (showDental) {
-      // For new photos (have uri): upload them
-      // For revision-prefilled photos (have id but no new uri): reuse existing UUID
       const upperPhoto = formData.dentalHistory?.upperTeethPhoto;
       const lowerPhoto = formData.dentalHistory?.lowerTeethPhoto;
 
       if (upperPhoto?.uri && !upperPhoto?.id) {
-        const result = await uploadMediaFile(upperPhoto);
-        upperTeethFileId = result;
+        upperTeethFileId = await uploadMediaFile(upperPhoto);
       } else if (upperPhoto?.id) {
         upperTeethFileId = upperPhoto.id;
       }
 
       if (lowerPhoto?.uri && !lowerPhoto?.id) {
-        const result = await uploadMediaFile(lowerPhoto);
-        lowerTeethFileId = result;
+        lowerTeethFileId = await uploadMediaFile(lowerPhoto);
       } else if (lowerPhoto?.id) {
         lowerTeethFileId = lowerPhoto.id;
       }
     }
 
-    // Step 3: Build inputs and send scope-filtered batch
-    const allCatalogs = await fetchAllCatalogs();
     const allInputs = buildBatchInputs(formData, { upperTeethFileId, lowerTeethFileId }, allCatalogs);
-    const batchResult = await sendScopedUpdateMutations(allInputs, formData, recordType);
 
-    return { success: true, data: { ticketId, ...batchResult } };
+    // Step 3: Personal info — sequential like mds-patient
+    if (allInputs.studentProfile) {
+      await sendGraphQLRequest(
+        `mutation CreateStudentProfile($input: StudentProfileInput!) { createStudentProfile(input: $input) { id } }`,
+        { input: allInputs.studentProfile },
+      );
+    }
+    if (allInputs.emergencyContact) {
+      await sendGraphQLRequest(
+        `mutation CreateEmergencyContact($input: EmergencyContactInput!) { createEmergencyContact(input: $input) { id } }`,
+        { input: allInputs.emergencyContact },
+      );
+    }
+
+    // Step 4: Medical mutations — sequential, only when scope includes medical
+    if (recordType === 'medical' || recordType === 'both') {
+      await sendGraphQLRequest(
+        `mutation CreateMedicalHistory($input: MedicalHistoryInput!) { createMedicalHistory(input: $input) { id } }`,
+        { input: allInputs.medicalHistory },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateAllergyProfile($input: AllergyProfileInput!) { createAllergyProfile(input: $input) { id } }`,
+        { input: allInputs.allergyProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateHospitalizationProfile($input: HospitalizationProfileInput!) { createHospitalizationProfile(input: $input) { id } }`,
+        { input: allInputs.hospitalizationProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateOperationProfile($input: OperationProfileInput!) { createOperationProfile(input: $input) { id } }`,
+        { input: allInputs.operationProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateMedicationProfile($input: MedicationProfileInput!) { createMedicationProfile(input: $input) { id } }`,
+        { input: allInputs.medicationProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateImmunizationProfile($input: ImmunizationProfileInput!) { createImmunizationProfile(input: $input) { id } }`,
+        { input: allInputs.immunizationProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateLifestyle($input: LifestyleInput!) { createLifestyle(input: $input) { id } }`,
+        { input: allInputs.lifestyle },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateVisualAcuityProfile($input: VisualAcuityProfileInput!) { createVisualAcuityProfile(input: $input) { id } }`,
+        { input: allInputs.visualAcuityProfile },
+      );
+      if (allInputs.obgynHistory) {
+        await sendGraphQLRequest(
+          `mutation CreateObgynHistory($input: ObgynHistoryInput!) { createObgynHistory(input: $input) { id } }`,
+          { input: allInputs.obgynHistory },
+        );
+      }
+    }
+
+    // Step 5: Dental mutations — sequential, only when scope includes dental
+    if (showDental) {
+      await sendGraphQLRequest(
+        `mutation CreateDentalHistory($input: DentalHistoryInput!) { createDentalHistory(input: $input) { id } }`,
+        { input: allInputs.dentalHistory },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateDentalProcedureProfile($input: DentalProcedureProfileInput!) { createDentalProcedureProfile(input: $input) { id } }`,
+        { input: allInputs.dentalProcedureProfile },
+      );
+      await sendGraphQLRequest(
+        `mutation CreateOralApplianceProfile($input: OralApplianceProfileInput!) { createOralApplianceProfile(input: $input) { id } }`,
+        { input: allInputs.oralApplianceProfile },
+      );
+      if (allInputs.dentalPhotoRecord) {
+        await sendGraphQLRequest(
+          `mutation CreateDentalPhotoRecord($input: DentalPhotoRecordInput!) { createDentalPhotoRecord(input: $input) { id } }`,
+          { input: allInputs.dentalPhotoRecord },
+        );
+      }
+    }
+
+    // Step 6: Submit the ticket for review — separate call like mds-patient
+    await submitUpdateTicket();
+
+    return { success: true, data: { ticketId } };
   } catch (error) {
     if (upperTeethFileId || lowerTeethFileId) {
       await Promise.all([unstageMediaFile(upperTeethFileId), unstageMediaFile(lowerTeethFileId)]);
@@ -1009,7 +1086,7 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
   const ls = emr?.lifestyle || {};
 
   base.medicalBackground.hasAllergies = allergies.length > 0 ? 'Yes' : 'No';
-  for (const a of allergies) base.medicalBackground.allergies[a.allergenCatalogId] = true;
+  for (const a of allergies) base.medicalBackground.allergies[a.allergenCatalogId] = { checked: true, severity: a.severity || 'Unknown' };
   base.medicalBackground.hasHospitalization = hosps.length > 0 ? 'Yes' : 'No';
   for (const h of hosps) base.medicalBackground.hospitalizationConditions[h.conditionId] = true;
   base.medicalBackground.hasOperation = ops.length > 0 ? 'Yes' : 'No';
@@ -1023,14 +1100,31 @@ export const fetchRevisionPrefill = async (): Promise<FormData | null> => {
   base.medicalBackground.alcoholDrinker = ls.alcoholConsumer ? 'yes' : 'no';
   base.medicalBackground.alcoholFrequency = ls.frequencyOfAlcoholConsumption || '';
 
+  // Visual acuity
+  const va = emr?.visualAcuity;
+  if (va?.acuity) {
+    // Parse eyeglasses/contactLenses from the stored notes ("Eyeglasses: Yes, Contact Lenses: No")
+    const vaNotes = (va.notes || '').toLowerCase();
+    base.medicalBackground.eyeglasses = vaNotes.includes('eyeglasses: yes');
+    base.medicalBackground.contactLenses = vaNotes.includes('contact lenses: yes');
+    // Fallback: if no parseable notes but acuity data exists, assume eyeglasses
+    if (!vaNotes && va.acuity) base.medicalBackground.eyeglasses = true;
+    base.medicalBackground.gradeOD = va.acuity.right_eye || '';
+    base.medicalBackground.gradeOS = va.acuity.left_eye || '';
+    base.medicalBackground.visualAcuityDate = va.acuity.recorded_at
+      ? new Date(va.acuity.recorded_at).toISOString().split('T')[0] : '';
+  }
+
   // Dental
   const dh = emr?.dentalHistory || {};
   const oaAppliances = emr?.oralAppliance?.appliances || [];
+  const dentalProcs = emr?.dentalProcedureProfile?.procedures || [];
   base.dentalHistory.firstTimeDentist = dh.seenByDentist === true ? 'no' : dh.seenByDentist === false ? 'yes' : '';
   base.dentalHistory.lastDentalConsultation = dh.lastVisitDate ? String(dh.lastVisitDate).slice(0, 7) : '';
   base.dentalHistory.lastDentalCleaning = reverseMapDentalCleaningRange(dh.lastDentalCleaning || '');
   base.dentalHistory.hasIntraOralAppliance = oaAppliances.length > 0 ? 'yes' : 'no';
-  for (const a of oaAppliances) base.dentalHistory.intraOralAppliances[a.tagId] = true;
+  for (const a of oaAppliances) base.dentalHistory.intraOralAppliances[a.tagId] = { checked: true, arch: a.arch || 'None' };
+  for (const p of dentalProcs) base.dentalHistory.selectedDentalProcedures[p.procedureTypeId] = true;
 
   // Dental photos — preserve existing UUIDs so updates can reuse them
   const dpr = emr?.dentalPhotoRecord;

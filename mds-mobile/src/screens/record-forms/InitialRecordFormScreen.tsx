@@ -143,22 +143,27 @@ const InitialRecordFormScreen: React.FC = () => {
     const errors: string[] = [];
     const pi = formData.personalInfo;
 
-    // Personal Info — always validated
-    if (!pi.surname?.trim()) errors.push('Surname is required');
-    if (!pi.firstName?.trim()) errors.push('First name is required');
-    if (!pi.birthday) errors.push('Birthday is required');
-    if (!pi.gender) errors.push('Gender is required');
-    if (!pi.civilStatus) errors.push('Civil status is required');
-    if (!pi.nationality?.trim()) errors.push('Nationality is required');
-    if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
-    else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
-    if (!pi.address?.trim()) errors.push('Present address is required');
+    // Personal Info — only validate initial-record fields when NOT updating
+    if (!isUpdate) {
+      if (!pi.surname?.trim()) errors.push('Surname is required');
+      if (!pi.firstName?.trim()) errors.push('First name is required');
+      if (!pi.birthday) errors.push('Birthday is required');
+      if (!pi.gender) errors.push('Gender is required');
+      if (!pi.civilStatus) errors.push('Civil status is required');
+      if (!pi.nationality?.trim()) errors.push('Nationality is required');
+      if (!pi.contactNumber?.trim()) errors.push('Contact number is required');
+      else if (!isValidPhilippinePhone(pi.contactNumber.trim())) errors.push('Contact number must be a valid PH number (e.g. 09171234567)');
+      if (!pi.address?.trim()) errors.push('Present address is required');
+      if (!pi.studentNumber?.trim()) errors.push('Student number is required');
+      if (!pi.studentCategory) errors.push('Student category is required');
+    }
+
+    // Program & student category — always validated (shown in both modes)
     if (!pi.program) errors.push('Program is required');
     if (pi.program === 'Other' && !pi.programOther?.trim()) errors.push('Please specify your program');
-    if (!pi.studentNumber?.trim()) errors.push('Student number is required');
-    if (!pi.studentCategory) errors.push('Student category is required');
+    if (isUpdate && !pi.studentCategory) errors.push('Student category is required');
 
-    // Emergency contacts
+    // Emergency contacts — always validated
     const c1 = pi.emergencyContacts?.[0];
     const c2 = pi.emergencyContacts?.[1];
     if (!c1?.name?.trim()) errors.push('1st emergency contact name is required');
@@ -290,7 +295,7 @@ const InitialRecordFormScreen: React.FC = () => {
 
     switch (actualStep) {
       case 0:
-        return <PersonalInfoStep formData={formData} onUpdate={updatePersonalInfo} isDark={isDark} errors={{}} />;
+        return <PersonalInfoStep formData={formData} onUpdate={updatePersonalInfo} isDark={isDark} errors={{}} isUpdate={isUpdate} />;
       case 1:
         return <MedicalHistoryStep formData={formData} onUpdate={(_section: string, data: any) => updateMedicalHistory(data)} isDark={isDark} catalogs={catalogs} />;
       case 2:
