@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import { Input, Button, Alert, LinkButton } from '../../components/ui/FormComponents';
 import { axiosRequest } from '../../core';
 
@@ -89,7 +90,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
                 { backgroundColor: isDark ? colors.neutral[800] : colors.neutral[100] },
               ]}
             >
-              <Text style={styles.iconEmoji}>🔑</Text>
+              <Ionicons name="key" size={30} color={colors.primary[500]} />
             </View>
             <Text
               style={[
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 16,
   },
-  iconEmoji: { fontSize: 30 },
+  iconEmoji: { /* unused */ },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
   subtitle: { fontSize: 13, textAlign: 'center' },
   form: { gap: 16, marginBottom: 16 },

@@ -15,6 +15,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 
 interface CreateTicketFormProps {
@@ -51,7 +52,7 @@ const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
         >
           {/* Icon */}
           <View style={styles.iconCircle}>
-            <Text style={styles.icon}>📝</Text>
+            <Ionicons name="create" size={22} color={colors.primary[500]} />
           </View>
 
           <Text
@@ -82,7 +83,7 @@ const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
                 },
               ]}
             >
-              <Text style={styles.errorText}>⚠ {error}</Text>
+              <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
 
@@ -183,9 +184,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
     marginBottom: 16,
-  },
-  icon: {
-    fontSize: 24,
   },
   title: {
     fontSize: 17,

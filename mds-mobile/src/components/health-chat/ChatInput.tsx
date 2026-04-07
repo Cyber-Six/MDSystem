@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 
 interface ChatInputProps {
@@ -60,7 +61,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
             },
           ]}
         >
-          <Text style={{ fontSize: 14 }}>🔒</Text>
+          <Ionicons
+            name="lock-closed"
+            size={14}
+            color={isDark ? colors.neutral[400] : colors.neutral[500]}
+          />
           <Text
             style={[
               styles.frozenText,
@@ -140,7 +145,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
             onPress={onClearPendingImage}
             hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
           >
-            <Text style={{ fontSize: 18, color: isDark ? colors.neutral[400] : colors.neutral[500] }}>✕</Text>
+            <Ionicons
+              name="close"
+              size={18}
+              color={isDark ? colors.neutral[400] : colors.neutral[500]}
+            />
           </TouchableOpacity>
         </View>
       )}
@@ -160,7 +169,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
             disabled={!canSend}
             activeOpacity={0.7}
           >
-            <Text style={{ fontSize: 18 }}>📎</Text>
+            <Ionicons
+              name="attach"
+              size={18}
+              color={isDark ? colors.neutral[300] : colors.neutral[500]}
+            />
           </TouchableOpacity>
         )}
 
@@ -200,21 +213,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
           {isLoading || isUploading ? (
             <ActivityIndicator size="small" color={colors.secondary[900]} />
           ) : (
-            <Text
-              style={[
-                styles.sendIcon,
-                {
-                  color:
-                    canSend && hasPendingContent
-                      ? colors.secondary[900]
-                      : isDark
-                        ? colors.neutral[500]
-                        : colors.neutral[400],
-                },
-              ]}
-            >
-              ➤
-            </Text>
+            <Ionicons
+              name="send"
+              size={18}
+              color={
+                canSend && hasPendingContent
+                  ? colors.secondary[900]
+                  : isDark
+                    ? colors.neutral[500]
+                    : colors.neutral[400]
+              }
+            />
           )}
         </TouchableOpacity>
       </View>
@@ -222,8 +231,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
       {/* Connection warning */}
       {isActive && !isSocketConnected && (
         <View style={styles.connectionWarning}>
+          <Ionicons name="flash" size={13} color="#F59E0B" style={{ marginRight: 4 }} />
           <Text style={styles.warningText}>
-            ⚡ Reconnecting... Messages may be delayed
+            Reconnecting... Messages may be delayed
           </Text>
         </View>
       )}
@@ -326,6 +336,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
     paddingVertical: 4,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   warningText: {
     fontSize: 11,

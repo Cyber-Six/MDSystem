@@ -50,11 +50,13 @@ const BannerOverlay: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  if (banners.length === 0) return null;
+  const errorBanners = banners.filter((b) => b.type === 'error');
+
+  if (errorBanners.length === 0) return null;
 
   return (
     <View style={[appStyles.bannerOverlay, { top: insets.top + 4 }]}>
-      {banners.map((banner: any) => (
+      {errorBanners.map((banner: any) => (
         <BannerComponent
           key={banner.id}
           id={String(banner.id)}

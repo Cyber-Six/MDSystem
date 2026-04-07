@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useHealthChatBadge } from '../../context/HealthChatNotificationProvider';
 import {
@@ -569,7 +570,7 @@ export const HealthChatScreen: React.FC = () => {
                 },
               ]}
             >
-              <Text style={{ fontSize: 16 }}>⏰</Text>
+              <Ionicons name="time" size={16} color={isDark ? '#FBBF24' : '#92400E'} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.expiryTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
                   Session expiring soon

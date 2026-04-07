@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData, CatalogItem } from '../../../services/emr-service';
 
@@ -70,7 +71,7 @@ export const MedicalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark
               activeOpacity={0.7}
             >
               <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
               </View>
               <Text style={[styles.conditionName, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>
                 {cond.name}

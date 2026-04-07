@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Platform, Modal, Pressable, StyleSheet } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../context/ThemeContext';
 
 interface Props {
@@ -65,7 +66,7 @@ export const DatePickerInput: React.FC<Props> = ({
         <Text style={{ fontSize: 14, color: hasValue ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
           {displayText}
         </Text>
-        <Text style={{ fontSize: 16 }}>📅</Text>
+        <Ionicons name="calendar" size={16} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
       </TouchableOpacity>
 
       {show && Platform.OS === 'android' && (

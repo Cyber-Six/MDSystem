@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
 
@@ -261,7 +262,7 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
               },
             ]}
           >
-            {isCertified && <Text style={styles.certCheckmark}>✓</Text>}
+            {isCertified && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
           </View>
         </View>
         <Text style={[styles.certText, { color: subColor }]}>
@@ -274,7 +275,7 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
         )}
         {isCertified && (
           <View style={styles.certBadge}>
-            <Text style={styles.certBadgeText}>✓ Certified</Text>
+            <Text style={styles.certBadgeText}><Ionicons name="checkmark" size={14} color="#166534" /> Certified</Text>
           </View>
         )}
       </TouchableOpacity>

@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import type { Ticket, TicketMessage } from '../../services/health-chat-service';
 
@@ -154,7 +155,7 @@ const NewChatCTA: React.FC<NewChatCTAProps> = ({
         ]}
       >
         <View style={styles.ctaIconCircle}>
-          <Text style={styles.ctaIcon}>🩺</Text>
+          <MaterialCommunityIcons name="stethoscope" size={30} color={colors.primary[500]} />
         </View>
         <Text
           style={[
@@ -268,9 +269,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-  },
-  ctaIcon: {
-    fontSize: 30,
   },
   ctaTitle: {
     fontSize: 18,

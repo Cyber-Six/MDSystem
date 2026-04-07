@@ -14,6 +14,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { Input, Button, Alert, LinkButton, Checkbox } from '../../components/ui/FormComponents';
 import { DataConsent } from '../../components/auth/DataConsent';
@@ -379,7 +380,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
           styles.iconCircle,
           { backgroundColor: isDark ? 'rgba(241, 197, 38, 0.2)' : colors.primary[100] }
         ]}>
-          <Text style={styles.iconEmoji}>✅</Text>
+          <Ionicons name="checkmark-circle" size={40} color={colors.primary[500]} />
         </View>
 
         <Text style={[
@@ -439,7 +440,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         styles.iconCircle,
         { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.2)' : colors.accent[100] }
       ]}>
-        <Text style={styles.iconEmoji}>🛡️</Text>
+        <Ionicons name="shield-checkmark" size={40} color={colors.accent[500]} />
       </View>
 
       <Text style={[
@@ -474,7 +475,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         styles.successCircle,
         { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : colors.success[100] }
       ]}>
-        <Text style={styles.successCheckmark}>✓</Text>
+        <Ionicons name="checkmark" size={48} color={colors.success[500]} />
       </View>
 
       <Text style={[
@@ -531,7 +532,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
           {currentStep === 1 && (
             <View style={styles.header}>
               <View style={styles.logoContainer}>
-                <Text style={styles.logoEmoji}>🏥</Text>
+                <Ionicons name="medkit" size={40} color="#FFFFFF" />
               </View>
               <Text style={[
                 styles.title,
@@ -596,7 +597,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   logoEmoji: {
-    fontSize: 40,
+    // unused
   },
   title: {
     fontSize: 28,
@@ -659,7 +660,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   iconEmoji: {
-    fontSize: 40,
+    // unused
   },
   stepTitle: {
     fontSize: 24,
@@ -693,9 +694,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   successCheckmark: {
-    fontSize: 48,
-    color: colors.success[500],
-    fontWeight: 'bold',
+    // unused
   },
   successTitle: {
     fontSize: 28,

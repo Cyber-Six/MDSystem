@@ -25,6 +25,8 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useBanner } from '../../context/BannerContext';
 import { getPatientProfile } from '../../services/profile-service';
@@ -395,7 +397,7 @@ export const MedicineRequestScreen: React.FC = () => {
         >
           {/* Header */}
           <View style={[styles.headerBanner, { backgroundColor: colors.success[500] }]}>
-            <Text style={styles.headerIcon}>💊</Text>
+            <MaterialCommunityIcons name="pill" size={28} color="#FFFFFF" style={styles.headerIcon} />
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>Medicine Request</Text>
               <Text style={styles.headerSubtitle}>Request medicines from the clinic</Text>
@@ -407,7 +409,7 @@ export const MedicineRequestScreen: React.FC = () => {
             <View style={[styles.alertBox, { backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : colors.error[50], borderColor: colors.error[400] }]}>
               <Text style={{ color: colors.error[500], flex: 1 }}>{error}</Text>
               <TouchableOpacity onPress={() => setError(null)}>
-                <Text style={{ color: colors.error[500], fontWeight: 'bold', fontSize: 18 }}>×</Text>
+                <Ionicons name="close" size={18} color={colors.error[500]} />
               </TouchableOpacity>
             </View>
           )}
@@ -471,7 +473,7 @@ export const MedicineRequestScreen: React.FC = () => {
                       ]}
                     >
                       {b.label}
-                      {emailPrefix === 'q' ? '  ✓' : ''}
+                      {emailPrefix === 'q' ? ' (Auto)' : ''}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -502,7 +504,7 @@ export const MedicineRequestScreen: React.FC = () => {
                 </View>
               ) : grouped.length === 0 ? (
                 <View style={[styles.emptyState, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
-                  <Text style={styles.emptyIcon}>💊</Text>
+                  <MaterialCommunityIcons name="pill" size={36} color={isDark ? colors.neutral[400] : colors.neutral[500]} style={styles.emptyIcon} />
                   <Text style={[styles.emptyText, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
                     No medicines available for this branch.
                   </Text>
@@ -538,7 +540,7 @@ export const MedicineRequestScreen: React.FC = () => {
                       </View>
                       {isSelected && (
                         <View style={[styles.selectedBadge, { backgroundColor: colors.primary[500] }]}>
-                          <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '600' }}>✓</Text>
+                          <Ionicons name="checkmark" size={11} color="#FFFFFF" />
                         </View>
                       )}
                     </TouchableOpacity>
@@ -588,9 +590,11 @@ export const MedicineRequestScreen: React.FC = () => {
                 },
               ]}
             >
-              <Text style={{ fontSize: 20 }}>
-                {notificationRequest.status?.toLowerCase() === 'approved' ? '✅' : '❌'}
-              </Text>
+              <Ionicons
+                name={notificationRequest.status?.toLowerCase() === 'approved' ? 'checkmark-circle' : 'close-circle'}
+                size={20}
+                color={notificationRequest.status?.toLowerCase() === 'approved' ? colors.success[500] : colors.error[500]}
+              />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.notifTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
                   Request {notificationRequest.status}
@@ -602,7 +606,7 @@ export const MedicineRequestScreen: React.FC = () => {
                 ) : null}
               </View>
               <TouchableOpacity onPress={handleDismissNotification} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], fontSize: 18, fontWeight: '600' }}>×</Text>
+                <Ionicons name="close" size={18} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
               </TouchableOpacity>
             </View>
           )}
@@ -615,7 +619,7 @@ export const MedicineRequestScreen: React.FC = () => {
             </View>
           ) : requests.length === 0 ? (
             <View style={[styles.emptyState, styles.emptyStateCenter, { backgroundColor: isDark ? colors.neutral[800] : '#FFFFFF' }]}>
-              <Text style={styles.emptyIcon}>📋</Text>
+              <Ionicons name="clipboard" size={36} color={isDark ? colors.neutral[400] : colors.neutral[500]} style={styles.emptyIcon} />
               <Text style={[styles.emptyTitle, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
                 No Requests Yet
               </Text>
@@ -731,7 +735,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 14,
   },
-  headerIcon: { fontSize: 28 },
+  headerIcon: { marginTop: 1 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' },
   headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
 
@@ -816,7 +820,7 @@ const styles = StyleSheet.create({
   loadingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 20 },
   emptyState: { padding: 32, borderRadius: 12, alignItems: 'center' },
   emptyStateCenter: { marginTop: 40 },
-  emptyIcon: { fontSize: 36, marginBottom: 12 },
+  emptyIcon: { marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
   emptyText: { fontSize: 14, textAlign: 'center' },
   primaryButton: {

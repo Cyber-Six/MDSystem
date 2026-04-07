@@ -12,6 +12,8 @@ import {
   StyleSheet
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { TokenStorage, logout, bannerService } from '../../core';
@@ -117,7 +119,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
               style={[styles.actionButton, { backgroundColor: colors.primary[500] }]}
               activeOpacity={0.8}
             >
-              <Text style={styles.actionIcon}>📋</Text>
+              <Text style={styles.actionIcon}><Ionicons name="clipboard" size={24} color="#FFFFFF" /></Text>
               <Text style={styles.actionText}>Medical Records</Text>
             </TouchableOpacity>
             
@@ -125,7 +127,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
               style={[styles.actionButton, { backgroundColor: colors.accent[500] }]}
               activeOpacity={0.8}
             >
-              <Text style={styles.actionIcon}>📅</Text>
+              <Text style={styles.actionIcon}><Ionicons name="calendar" size={24} color="#FFFFFF" /></Text>
               <Text style={styles.actionText}>Appointments</Text>
             </TouchableOpacity>
             
@@ -133,7 +135,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
               style={[styles.actionButton, { backgroundColor: colors.success[500] }]}
               activeOpacity={0.8}
             >
-              <Text style={styles.actionIcon}>💊</Text>
+              <Text style={styles.actionIcon}><MaterialCommunityIcons name="pill" size={24} color="#FFFFFF" /></Text>
               <Text style={styles.actionText}>Prescriptions</Text>
             </TouchableOpacity>
             
@@ -141,7 +143,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
               style={[styles.actionButton, { backgroundColor: '#f59e0b' }]}
               activeOpacity={0.8}
             >
-              <Text style={styles.actionIcon}>📊</Text>
+              <Text style={styles.actionIcon}><Ionicons name="bar-chart" size={24} color="#FFFFFF" /></Text>
               <Text style={styles.actionText}>Health Stats</Text>
             </TouchableOpacity>
           </View>
@@ -188,7 +190,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
             styles.menuItem,
             { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }
           ]}>
-            <Text style={styles.menuIcon}>👤</Text>
+            <Text style={styles.menuIcon}><Ionicons name="person" size={22} color={isDark ? colors.neutral[400] : colors.neutral[500]} /></Text>
             <Text style={[
               styles.menuText,
               { color: isDark ? colors.neutral[100] : colors.secondary[900] }
@@ -203,7 +205,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
             styles.menuItem,
             { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }
           ]}>
-            <Text style={styles.menuIcon}>🔔</Text>
+            <Text style={styles.menuIcon}><Ionicons name="notifications" size={22} color={isDark ? colors.neutral[400] : colors.neutral[500]} /></Text>
             <Text style={[
               styles.menuText,
               { color: isDark ? colors.neutral[100] : colors.secondary[900] }
@@ -218,7 +220,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
             styles.menuItem,
             { borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }
           ]}>
-            <Text style={styles.menuIcon}>🔒</Text>
+            <Text style={styles.menuIcon}><Ionicons name="lock-closed" size={22} color={isDark ? colors.neutral[400] : colors.neutral[500]} /></Text>
             <Text style={[
               styles.menuText,
               { color: isDark ? colors.neutral[100] : colors.secondary[900] }
@@ -233,7 +235,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onLogout }) =>
             style={styles.logoutItem}
             onPress={handleLogout}
           >
-            <Text style={styles.menuIcon}>🚪</Text>
+            <Text style={styles.menuIcon}><Ionicons name="log-out" size={22} color={colors.error[500]} /></Text>
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
         </View>

@@ -19,13 +19,13 @@ import {
   TouchableOpacity,
   Pressable,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { axiosRequest, getApiBaseUrl } from '../../core';
-
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 interface Message {
   id: string;
@@ -53,6 +53,7 @@ interface AuthImageProps {
 }
 
 const AuthImage: React.FC<AuthImageProps> = ({ filename, isPatient, isDark }) => {
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const [uri, setUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -108,18 +109,25 @@ const AuthImage: React.FC<AuthImageProps> = ({ filename, isPatient, isDark }) =>
   if (hasError || !uri) {
     return (
       <View style={[styles.imagePlaceholder, { backgroundColor: placeholderBg }]}>
-        <Text
-          style={{
-            fontSize: 11,
-            color: isPatient
-              ? colors.secondary[700]
-              : isDark
-              ? colors.neutral[400]
-              : colors.neutral[500],
-          }}
-        >
-          ⚠ Image unavailable
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Ionicons
+            name="warning"
+            size={11}
+            color={isPatient ? colors.secondary[700] : isDark ? colors.neutral[400] : colors.neutral[500]}
+          />
+          <Text
+            style={{
+              fontSize: 11,
+              color: isPatient
+                ? colors.secondary[700]
+                : isDark
+                ? colors.neutral[400]
+                : colors.neutral[500],
+            }}
+          >
+            Image unavailable
+          </Text>
+        </View>
       </View>
     );
   }
@@ -138,13 +146,13 @@ const AuthImage: React.FC<AuthImageProps> = ({ filename, isPatient, isDark }) =>
         onRequestClose={() => setLightboxOpen(false)}
       >
         <Pressable style={styles.lightboxOverlay} onPress={() => setLightboxOpen(false)}>
-          <Image source={{ uri }} style={styles.lightboxImage} resizeMode="contain" />
+          <Image source={{ uri }} style={{ width: screenW, height: screenH * 0.78 }} resizeMode="contain" />
           <TouchableOpacity
             style={styles.lightboxClose}
             onPress={() => setLightboxOpen(false)}
             hitSlop={{ top: 12, left: 12, right: 12, bottom: 12 }}
           >
-            <Text style={styles.lightboxCloseText}>✕</Text>
+            <Ionicons name="close" size={16} color="#FFFFFF" />
           </TouchableOpacity>
         </Pressable>
       </Modal>
@@ -178,7 +186,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             },
           ]}
         >
-          <Text style={styles.systemIcon}>ℹ</Text>
+          <Ionicons
+            name="information-circle"
+            size={14}
+            color={isDark ? colors.neutral[400] : colors.neutral[500]}
+          />
           <Text
             style={[
               styles.systemText,
@@ -223,7 +235,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               { opacity: isLastInGroup ? 1 : 0 },
             ]}
           >
-            <Text style={styles.avatarText}>🩺</Text>
+            <MaterialCommunityIcons name="stethoscope" size={14} color={colors.primary[500]} />
           </View>
         )}
 
@@ -327,7 +339,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   systemIcon: {
-    fontSize: 11,
+    // kept for layout reference
   },
   systemText: {
     fontSize: 12,
@@ -357,7 +369,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 14,
+    // kept for layout reference
   },
   // Column
   bubbleColumn: {
@@ -434,10 +446,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  lightboxImage: {
-    width: SCREEN_W,
-    height: SCREEN_H * 0.78,
-  },
   lightboxClose: {
     position: 'absolute',
     top: 52,
@@ -452,7 +460,7 @@ const styles = StyleSheet.create({
   lightboxCloseText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: 'bold', // unused, kept for reference
   },
 });
 

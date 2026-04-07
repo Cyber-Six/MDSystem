@@ -16,6 +16,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { getUpdateTicketStatus } from '../../services/emr-service';
 
@@ -30,7 +32,8 @@ interface Choice {
   id: 'medical' | 'dental' | 'both';
   title: string;
   description: string;
-  icon: string;
+  iconName: string;
+  iconLib?: 'Ionicons' | 'MCI';
   color: string;
 }
 
@@ -39,21 +42,24 @@ const CHOICES: Choice[] = [
     id: 'medical',
     title: 'Medical Update',
     description: 'Update your medical history, background, and health information',
-    icon: '🩺',
+    iconName: 'stethoscope',
+    iconLib: 'MCI',
     color: colors.primary[500],
   },
   {
     id: 'dental',
     title: 'Dental Update',
     description: 'Update your dental history and oral health records',
-    icon: '🦷',
+    iconName: 'tooth',
+    iconLib: 'MCI',
     color: colors.success[500],
   },
   {
     id: 'both',
     title: 'Both',
     description: 'Update both medical and dental information at once',
-    icon: '📋',
+    iconName: 'clipboard',
+    iconLib: 'Ionicons',
     color: colors.accent[500],
   },
 ];
@@ -112,7 +118,7 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
         {/* Revision banner — staff has requested corrections */}
         {!isLoading && isRevision && (
           <View style={[styles.banner, styles.bannerRevision]}>
-            <Text style={styles.bannerIcon}>✏️</Text>
+            <Ionicons name="create" size={22} color="#92400E" style={styles.bannerIcon} />
             <View style={{ flex: 1 }}>
               <Text style={styles.bannerTitle}>Revision Requested</Text>
               <Text style={styles.bannerBody}>
@@ -127,7 +133,7 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
         {/* Pending banner — update awaiting review */}
         {!isLoading && isPending && (
           <View style={[styles.banner, styles.bannerPending]}>
-            <Text style={styles.bannerIcon}>⏳</Text>
+            <Ionicons name="time" size={22} color="#1D4ED8" style={styles.bannerIcon} />
             <View style={{ flex: 1 }}>
               <Text style={styles.bannerTitle}>Update Pending Review</Text>
               <Text style={styles.bannerBody}>
@@ -165,7 +171,11 @@ export const UpdateRecordChoiceScreen: React.FC<UpdateRecordChoiceScreenProps> =
               activeOpacity={disabled ? 1 : 0.75}
             >
               <View style={[styles.iconBox, { backgroundColor: `${choice.color}20` }]}>
-                <Text style={{ fontSize: 28 }}>{choice.icon}</Text>
+                {choice.iconLib === 'MCI' ? (
+                  <MaterialCommunityIcons name={choice.iconName as any} size={28} color={choice.color} />
+                ) : (
+                  <Ionicons name={choice.iconName as any} size={28} color={choice.color} />
+                )}
               </View>
               <View style={styles.cardBody}>
                 <Text style={[styles.cardTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
@@ -207,7 +217,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     borderColor: '#3B82F6',
   },
-  bannerIcon: { fontSize: 22, lineHeight: 26 },
+  bannerIcon: { marginTop: 1 },
   bannerTitle: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 2 },
   bannerBody: { fontSize: 13, color: '#475569', lineHeight: 18 },
 

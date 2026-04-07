@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Switch, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import { DatePickerInput } from '../../../components/ui/DatePickerInput';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
@@ -30,7 +31,7 @@ const AccordionSection: React.FC<{
   <View style={[styles.accordion, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
     <TouchableOpacity style={styles.accordionHeader} onPress={onToggle} activeOpacity={0.7}>
       <Text style={[styles.accordionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>{title}</Text>
-      <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], fontSize: 16 }}>{isOpen ? '▲' : '▼'}</Text>
+      <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
     </TouchableOpacity>
     {isOpen && <View style={styles.accordionBody}>{children}</View>}
   </View>
@@ -50,6 +51,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
     color: isDark ? colors.neutral[100] : colors.neutral[900],
     borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
   }];
+
 
   const renderYesNo = (label: string, value: string, onSelect: (v: string) => void) => (
     <View style={styles.yesNoContainer}>
@@ -147,7 +149,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
             <View key={vac.id}>
               <TouchableOpacity style={styles.checkRow} onPress={() => handleImmunizationToggle(vac.id)} activeOpacity={0.7}>
                 <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                  {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                  {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                 </View>
                 <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{vac.name}</Text>
               </TouchableOpacity>
@@ -198,7 +200,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
                 <View key={allergen.id}>
                   <TouchableOpacity style={styles.checkRow} onPress={() => handleAllergyToggle(allergen.id)} activeOpacity={0.7}>
                     <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                      {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                      {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                     </View>
                     <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>
                       {allergen.allergen} ({allergen.type})
@@ -241,7 +243,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
                     }
                   }} activeOpacity={0.7}>
                     <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                      {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                      {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                     </View>
                     <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{cond.name}</Text>
                   </TouchableOpacity>
@@ -303,7 +305,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
                     }
                   }} activeOpacity={0.7}>
                     <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                      {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                      {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                     </View>
                     <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{proc.name}</Text>
                   </TouchableOpacity>
@@ -337,7 +339,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
               return (
                 <TouchableOpacity key={med.id} style={styles.checkRow} onPress={() => onUpdateBg({ selectedMedications: { ...bg.selectedMedications, [med.id]: !isChecked } })} activeOpacity={0.7}>
                   <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                    {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                    {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                   </View>
                   <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{med.name}</Text>
                 </TouchableOpacity>

@@ -7,6 +7,7 @@ import {
   View, Text, TextInput, TouchableOpacity, Modal, FlatList,
   StyleSheet, Pressable, Platform, Keyboard,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import { DatePickerInput } from '../../../components/ui/DatePickerInput';
 import type { FormData } from '../../../services/emr-service';
@@ -246,7 +247,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           <Text style={{ flex: 1, fontSize: 15, color: pi.program ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
             {pi.program || 'Select program...'}
           </Text>
-          <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], fontSize: 12 }}>▼</Text>
+          <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
         </TouchableOpacity>
         {errors.program && <Text style={styles.errorText}>{errors.program}</Text>}
         {pi.program === 'Other' && (
@@ -272,7 +273,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
                     <Text style={{ flex: 1, fontSize: 15, color: item === pi.program ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item === pi.program ? '600' : '400' }}>
                       {item}
                     </Text>
-                    {item === pi.program && <Text style={{ color: colors.primary[500], fontSize: 16 }}>✓</Text>}
+                    {item === pi.program && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
                   </TouchableOpacity>
                 )}
               />
@@ -295,7 +296,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
           <Text style={{ flex: 1, fontSize: 15, color: pi.studentCategory ? (isDark ? colors.neutral[100] : colors.neutral[900]) : (isDark ? colors.neutral[500] : colors.neutral[400]) }}>
             {STUDENT_CATEGORIES.find(c => c.value === pi.studentCategory)?.label || pi.studentCategory || 'Select category...'}
           </Text>
-          <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], fontSize: 12 }}>▼</Text>
+          <Ionicons name="chevron-down" size={14} color={isDark ? colors.neutral[400] : colors.neutral[500]} />
         </TouchableOpacity>
         {errors.studentCategory && <Text style={styles.errorText}>{errors.studentCategory}</Text>}
         <Modal visible={categoryOpen} transparent animationType="slide">
@@ -318,7 +319,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
                     <Text style={{ flex: 1, fontSize: 15, color: item.value === pi.studentCategory ? colors.primary[500] : (isDark ? colors.neutral[200] : colors.neutral[800]), fontWeight: item.value === pi.studentCategory ? '600' : '400' }}>
                       {item.label}
                     </Text>
-                    {item.value === pi.studentCategory && <Text style={{ color: colors.primary[500], fontSize: 16 }}>✓</Text>}
+                    {item.value === pi.studentCategory && <Ionicons name="checkmark" size={16} color={colors.primary[500]} />}
                   </TouchableOpacity>
                 )}
               />

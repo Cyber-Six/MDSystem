@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 
 const SETTINGS_KEY = 'mds_mobile_settings';
 
@@ -88,7 +89,7 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <Text style={[styles.settingLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                {isDark ? '🌙' : '☀️'} Dark Mode
+                <Ionicons name={isDark ? 'moon' : 'sunny'} size={15} color={isDark ? colors.primary[400] : colors.primary[500]} /> Dark Mode
               </Text>
               <Text style={[styles.settingDesc, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
                 {isDark ? 'Currently using dark theme' : 'Currently using light theme'}
@@ -122,7 +123,7 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <Text style={[styles.settingLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                🔔 In-App Banners
+                <Ionicons name="notifications" size={15} color={isDark ? colors.neutral[300] : colors.secondary[600]} /> In-App Banners
               </Text>
               <Text style={[styles.settingDesc, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
                 Show banners for appointments, medicine, and chat events
@@ -139,7 +140,7 @@ export const SettingsScreen: React.FC = () => {
           <View style={[styles.settingRow, styles.settingRowBorder, { borderTopColor: isDark ? colors.neutral[700] : colors.neutral[100] }]}>
             <View style={styles.settingInfo}>
               <Text style={[styles.settingLabel, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
-                🔊 Notification Sound
+                <Ionicons name="volume-high" size={15} color={isDark ? colors.neutral[300] : colors.secondary[600]} /> Notification Sound
               </Text>
               <Text style={[styles.settingDesc, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
                 Play a sound when push notifications arrive
@@ -174,7 +175,7 @@ export const SettingsScreen: React.FC = () => {
               Version
             </Text>
             <Text style={[styles.aboutValue, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
-              1.0.0
+              {process.env.EXPO_PUBLIC_APP_VERSION ?? '1.0.0'}
             </Text>
           </View>
           <View style={styles.aboutRow}>

@@ -24,6 +24,8 @@ import {
   downloadAndOpenDocument,
   type PatientDocument,
 } from '../../services/documents-service';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -34,11 +36,13 @@ const TYPE_LABELS: Record<string, string> = {
   'staff-report': 'Staff Report',
 };
 
-const TYPE_ICON: Record<string, string> = {
-  prescription: '💊',
-  'medical-certificate': '🏥',
-  'diagnosis-report': '🔬',
-  'staff-report': '📋',
+type DocIconConfig = { lib: 'Ionicons'; name: React.ComponentProps<typeof Ionicons>['name'] } | { lib: 'MCI'; name: string };
+
+const TYPE_ICON: Record<string, DocIconConfig> = {
+  prescription: { lib: 'MCI', name: 'pill' },
+  'medical-certificate': { lib: 'Ionicons', name: 'medkit' },
+  'diagnosis-report': { lib: 'Ionicons', name: 'flask' },
+  'staff-report': { lib: 'Ionicons', name: 'document-text' },
 };
 
 const TYPE_COLOR: Record<string, string> = {
@@ -87,7 +91,7 @@ const DocumentCard: React.FC<{
   isDownloading?: boolean;
 }> = ({ doc, isDark, onView, isDownloading = false }) => {
   const label = TYPE_LABELS[doc.templateType] || doc.templateType;
-  const icon = TYPE_ICON[doc.templateType] || '📄';
+  const iconConfig: DocIconConfig = TYPE_ICON[doc.templateType] ?? { lib: 'Ionicons', name: 'document' };
   const badgeColor = TYPE_COLOR[doc.templateType] || colors.neutral[500];
 
   return (
@@ -111,7 +115,11 @@ const DocumentCard: React.FC<{
           },
         ]}
       >
-        <Text style={{ fontSize: 22 }}>{icon}</Text>
+        {iconConfig.lib === 'MCI' ? (
+          <MaterialCommunityIcons name={iconConfig.name as any} size={22} color={badgeColor} />
+        ) : (
+          <Ionicons name={iconConfig.name} size={22} color={badgeColor} />
+        )}
       </View>
 
       {/* Info */}
@@ -336,8 +344,9 @@ export const MyDocumentsScreen: React.FC<MyDocumentsScreenProps> = () => {
               },
             ]}
           >
-            <Text style={{ color: isDark ? '#F87171' : '#DC2626', fontSize: 13 }}>
-              ⚠ {error}
+            <Ionicons name="warning" size={16} color={isDark ? '#F87171' : '#DC2626'} style={{ marginRight: 4 }} />
+            <Text style={{ color: isDark ? '#F87171' : '#DC2626', fontSize: 13, flex: 1 }}>
+              {error}
             </Text>
           </View>
         )}
@@ -351,7 +360,7 @@ export const MyDocumentsScreen: React.FC<MyDocumentsScreenProps> = () => {
         ) : filtered.length === 0 && !error ? (
           /* Empty state */
           <View style={styles.centered}>
-            <Text style={{ fontSize: 48, marginBottom: 12 }}>📄</Text>
+            <Ionicons name="document" size={48} color={isDark ? colors.neutral[600] : colors.neutral[300]} style={{ marginBottom: 12 }} />
             <Text style={[styles.emptyTitle, { color: textPrimary }]}>No Documents</Text>
             <Text style={[styles.emptyDesc, { color: textMuted }]}>
               Documents issued by your healthcare provider will appear here.

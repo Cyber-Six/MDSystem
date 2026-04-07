@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Announcement, fetchActiveAnnouncements } from '../../services/announcement-service';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { axiosRequest } from '../../core';
+import { Ionicons } from '@expo/vector-icons';
 
 const formatDate = (iso: string): string => {
   try {
@@ -123,7 +124,7 @@ export const AnnouncementsScreen: React.FC<AnnouncementsScreenProps> = () => {
 
         {!error && announcements.length === 0 && (
           <View style={styles.centered}>
-            <Text style={{ fontSize: 40, marginBottom: 12 }}>📢</Text>
+            <Ionicons name="megaphone" size={40} color={isDark ? colors.neutral[600] : colors.neutral[300]} style={{ marginBottom: 12 }} />
             <Text style={[styles.emptyText, { color: textSecondary }]}>No announcements at this time.</Text>
           </View>
         )}

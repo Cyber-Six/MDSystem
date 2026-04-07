@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../context/ThemeContext';
 
 interface ProgressStepperProps {
@@ -30,9 +31,13 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({ steps, current
                 },
               ]}
             >
-              <Text style={[styles.circleText, !isCompleted && !isActive && { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
-                {isCompleted ? '✓' : String(i + 1)}
-              </Text>
+              {isCompleted ? (
+                <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+              ) : (
+                <Text style={[styles.circleText, !isCompleted && !isActive && { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}> 
+                  {String(i + 1)}
+                </Text>
+              )}
             </View>
             <Text
               style={[

@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import { DatePickerInput } from '../../../components/ui/DatePickerInput';
 import { axiosRequest, getApiBaseUrl } from '../../../core';
@@ -204,7 +205,7 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
           onPress={() => pickImage(field)}
           activeOpacity={0.7}
         >
-          <Text style={{ fontSize: 24, marginBottom: 4 }}>📷</Text>
+          <Ionicons name="camera" size={28} color={colors.primary[500]} style={{ marginBottom: 4 }} />
           <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 14 }}>Upload Photo</Text>
         </TouchableOpacity>
       )}
@@ -266,7 +267,7 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
                 <View key={app.id}>
                   <TouchableOpacity style={styles.checkRow} onPress={() => handleApplianceToggle(app.id)} activeOpacity={0.7}>
                     <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                      {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                      {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                     </View>
                     <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14, flex: 1 }}>{app.name}</Text>
                   </TouchableOpacity>
@@ -336,7 +337,7 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
             <View key={proc.id}>
               <TouchableOpacity style={styles.checkRow} onPress={() => handleProcedureToggle(proc.id)} activeOpacity={0.7}>
                 <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
-                  {isChecked && <Text style={styles.checkmark}>✓</Text>}
+                  {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
                 </View>
                 <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14, flex: 1 }}>{proc.name}</Text>
               </TouchableOpacity>

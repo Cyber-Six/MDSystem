@@ -6,6 +6,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme, colors } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface TicketStatusBannerProps {
   status: string;
@@ -23,7 +26,9 @@ const TicketStatusBanner: React.FC<TicketStatusBannerProps> = ({
   const { isDark } = useTheme();
 
   const configs: Record<string, {
-    icon: string;
+    icon: IoniconName;
+    iconColor: string;
+    iconColorDark: string;
     title: string;
     message: string;
     bgColor: string;
@@ -34,7 +39,9 @@ const TicketStatusBanner: React.FC<TicketStatusBannerProps> = ({
     titleColorDark: string;
   }> = {
     Open: {
-      icon: '⏳',
+      icon: 'time',
+      iconColor: '#92400E',
+      iconColorDark: '#FBBF24',
       title: 'Waiting for medical staff...',
       message: 'Your request is being reviewed. You will be connected soon.',
       bgColor: '#FFFBEB',
@@ -45,7 +52,9 @@ const TicketStatusBanner: React.FC<TicketStatusBannerProps> = ({
       titleColorDark: '#FBBF24',
     },
     Ongoing: {
-      icon: '✅',
+      icon: 'checkmark-circle' as IoniconName,
+      iconColor: '#166534',
+      iconColorDark: '#4ADE80',
       title: 'Connected with medical staff',
       message: purpose ? `Purpose: ${purpose}` : 'Your consultation is active.',
       bgColor: '#F0FDF4',
@@ -56,7 +65,9 @@ const TicketStatusBanner: React.FC<TicketStatusBannerProps> = ({
       titleColorDark: '#4ADE80',
     },
     Closed: {
-      icon: '✕',
+      icon: 'close-circle' as IoniconName,
+      iconColor: colors.neutral[500],
+      iconColorDark: colors.neutral[400],
       title: 'Conversation closed',
       message: 'This consultation has ended. You can start a new one anytime.',
       bgColor: colors.neutral[50],
@@ -67,7 +78,9 @@ const TicketStatusBanner: React.FC<TicketStatusBannerProps> = ({
       titleColorDark: colors.neutral[400],
     },
     Expired: {
-      icon: '⚠',
+      icon: 'warning' as IoniconName,
+      iconColor: '#991B1B',
+      iconColorDark: '#FCA5A5',
       title: 'Session expired',
       message: 'This consultation expired due to inactivity.',
       bgColor: '#FEF2F2',
@@ -93,7 +106,12 @@ const TicketStatusBanner: React.FC<TicketStatusBannerProps> = ({
       ]}
     >
       <View style={styles.content}>
-        <Text style={styles.icon}>{config.icon}</Text>
+        <Ionicons
+          name={config.icon}
+          size={20}
+          color={isDark ? config.iconColorDark : config.iconColor}
+          style={{ marginTop: 1 }}
+        />
         <View style={styles.textContainer}>
           <Text
             style={[
@@ -145,10 +163,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-  },
-  icon: {
-    fontSize: 20,
-    marginTop: 1,
   },
   textContainer: {
     flex: 1,
