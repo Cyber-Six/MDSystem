@@ -160,6 +160,13 @@ export const HealthChatScreen: React.FC = () => {
         if (prev.some((m) => String(m.id) === String(message.id))) return prev;
         return [...prev, message];
       });
+      // Recalculate expiresAt client-side: any new message resets the inactivity timer
+      const newExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+      setTicket((prev) =>
+        prev && prev.status === 'Ongoing'
+          ? { ...prev, expiresAt: newExpiry.toISOString() }
+          : prev,
+      );
     }, []),
     onTyping: useCallback((isTyping: boolean) => {
       setIsStaffTyping(isTyping);
@@ -285,12 +292,22 @@ export const HealthChatScreen: React.FC = () => {
           setMessages((prev) => [...prev, result.message!]);
           setPendingImage(null);
           setInputValue('');
+          // Recalculate expiresAt client-side: sending resets the inactivity timer
+          const newExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+          setTicket((prev) =>
+            prev ? { ...prev, expiresAt: newExpiry.toISOString() } : null,
+          );
         }
       } else {
         const result = await sendMessage(ticket.id, text, null, 'text');
         if (result.success && result.message) {
           setMessages((prev) => [...prev, result.message!]);
           setInputValue('');
+          // Recalculate expiresAt client-side: sending resets the inactivity timer
+          const newExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+          setTicket((prev) =>
+            prev ? { ...prev, expiresAt: newExpiry.toISOString() } : null,
+          );
         }
       }
     } catch (err: any) {

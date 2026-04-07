@@ -806,7 +806,7 @@ const Mutation = {
     await db.query(
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, 'Staff has approved this consultation. Chat session started. Session expires in ${CHAT_EXPIRY_DAYS} days.', 'system', $2, 'Medical')`,
+       VALUES ($1, 'Staff has approved this consultation. Chat session started. Session will expire after ${CHAT_EXPIRY_DAYS} days of inactivity.', 'system', $2, 'Medical')`,
       [chatId, user.id]
     );
 
@@ -1010,13 +1010,13 @@ const Mutation = {
            session_end = NOW(),
            notes = COALESCE($1, notes),
            closed_by_type = 'Staff'
-       WHERE id = $2
+       WHERE id = $2 AND status IN ('Open', 'Ongoing')
        RETURNING *`,
       [notes, chatId]
     );
 
     if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Ticket not found").status(404).throw();
+      throwGraphQLError(res).message("Ticket not found or already closed/expired").status(400).throw();
     }
 
     // Add system message
@@ -1217,9 +1217,10 @@ const Mutation = {
   },
 
   /**
-   * Extend the session by 1 day
-   * Available to both patient (owns the chat) and medical staff (assigned to chat)
-   * Guards: session must be Ongoing AND expiring within 48 hours
+   * Extend the session by resetting the inactivity timer.
+   * Inserts a system message which becomes the new "last activity" anchor.
+   * Available to both patient (owns the chat) and medical staff (assigned to chat).
+   * Guards: session must be Ongoing AND expiring within 48 hours.
    */
   _extendSession: async (_, { chatId }, { user, res }) => {
     if (!user) {
@@ -1244,8 +1245,15 @@ const Mutation = {
       throwGraphQLError(res).message("Not authorized to extend this session").status(403).throw();
     }
 
+    // Get last message time for inactivity-based expiry calculation
+    const lastMsgResult = await db.query(
+      `SELECT MAX(stamp) AS last_stamp FROM "HealthChatPrompt" WHERE "consultationVirtualId" = $1`,
+      [chatId]
+    );
+    const lastActivityAt = lastMsgResult.rows[0]?.last_stamp || chat.session_start;
+    const expiryDate = calculateExpiryDate(lastActivityAt);
+
     // Guard: only allow extension when session is within 48 hours of expiry
-    const expiryDate = calculateExpiryDate(chat.session_start);
     const msUntilExpiry = new Date(expiryDate) - new Date();
     if (msUntilExpiry > 48 * 60 * 60 * 1000) {
       throwGraphQLError(res)
@@ -1256,28 +1264,17 @@ const Mutation = {
       throwGraphQLError(res).message("Session has already expired").status(400).throw();
     }
 
-    // Push session_start forward by 1 day — expiresAt moves forward accordingly
-    const result = await db.query(
-      `UPDATE "HealthChat"
-       SET session_start = session_start + INTERVAL '1 day'
-       WHERE id = $1 AND status = 'Ongoing'
-       RETURNING *`,
-      [chatId]
-    );
-
-    if (result.rowCount === 0) {
-      throwGraphQLError(res).message("Failed to extend session").status(500).throw();
-    }
-
+    // Insert a system message — this resets the inactivity timer since
+    // expiry is now based on the most recent message timestamp.
     const extenderUserType = isPatient ? 'Patient' : 'Medical';
     await db.query(
       `INSERT INTO "HealthChatPrompt"
        ("consultationVirtualId", "text", "promptType", "userId", "userType")
-       VALUES ($1, 'Chat session extended by 1 day.', 'system', $2, $3)`,
+       VALUES ($1, 'Chat session extended. Inactivity timer has been reset.', 'system', $2, $3)`,
       [chatId, user.id, extenderUserType]
     );
 
-    const updatedChat = await formatChatRecord(result.rows[0]);
+    const updatedChat = await formatChatRecord(chat);
 
     // Notify the entire chat room (real-time update for both sides)
     emitToRoom(`healthchat:${chatId}`, 'healthchat:session-extended', {
@@ -1307,7 +1304,7 @@ const Mutation = {
     return {
       success: true,
       chat: updatedChat,
-      message: "Session extended by 1 day."
+      message: "Session extended. Inactivity timer has been reset."
     };
   },
 

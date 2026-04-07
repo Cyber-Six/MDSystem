@@ -69,7 +69,7 @@ const TicketStatusBanner: React.FC<TicketStatusBannerProps> = ({
     Expired: {
       icon: '⚠',
       title: 'Session expired',
-      message: 'This consultation expired after the inactivity period.',
+      message: 'This consultation expired due to inactivity.',
       bgColor: '#FEF2F2',
       bgColorDark: 'rgba(239,68,68,0.08)',
       borderColor: '#FECACA',
