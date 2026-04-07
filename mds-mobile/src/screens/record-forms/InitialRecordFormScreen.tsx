@@ -6,9 +6,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, StyleSheet,
+  KeyboardAvoidingView, Platform, StyleSheet, Dimensions,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, colors } from '../../context/ThemeContext';
 import { useRecordStatus } from '../../context/RecordStatusContext';
 import { ProgressStepper } from '../../components/ui/ProgressStepper';
@@ -51,6 +52,7 @@ const InitialRecordFormScreen: React.FC = () => {
     catalogsLoading: true,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   // Load catalogs on mount
   useEffect(() => {
@@ -200,7 +202,7 @@ const InitialRecordFormScreen: React.FC = () => {
     if (isFemale && showMedical && !formData.obgyne?.lastMenstrualPeriod) errors.push('Last menstrual period is required');
 
     // Certification
-    if (!formData.certification?.verified) errors.push('You must certify the information');
+    if (!formData.certification?.verified) errors.push('You must check the certification checkbox before submitting');
 
     return errors;
   };
@@ -233,10 +235,21 @@ const InitialRecordFormScreen: React.FC = () => {
                 await createInitialMedicalRecord(formData, { isRevision });
               }
               await refreshRecordStatus();
+              setIsSubmitted(true);
+              setFormData(createEmptyFormData());
+              setCurrentStep(0);
               Alert.alert(
                 'Success!',
                 'Your medical record has been submitted successfully.',
-                [{ text: 'OK', onPress: () => navigation.goBack() }]
+                [{
+                  text: 'OK',
+                  onPress: () => {
+                    // Pop back to the parent screen and reset state
+                    if (navigation.canGoBack()) {
+                      navigation.goBack();
+                    }
+                  },
+                }]
               );
             } catch (error: any) {
               const msg = error?.message || 'An unexpected error occurred. Please try again.';
@@ -305,27 +318,45 @@ const InitialRecordFormScreen: React.FC = () => {
       case 4:
         return <ObGyneStep formData={formData} onUpdate={updateObgyne} isDark={isDark} />;
       case 5:
-        return <ReviewStep formData={formData} catalogs={catalogs} onEdit={handleEdit} isDark={isDark} />;
+        return (
+          <ReviewStep
+            formData={formData}
+            catalogs={catalogs}
+            onEdit={handleEdit}
+            isDark={isDark}
+            onCertificationChange={updateCertification}
+          />
+        );
       default:
         return null;
     }
   };
 
   const isLastStep = currentStep === steps.length - 1;
+  const isCertified = formData.certification?.verified ?? false;
+
+  // If already submitted, show nothing (will navigate away)
+  if (isSubmitted) {
+    return (
+      <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50], justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary[500]} />
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: isDark ? colors.neutral[900] : colors.neutral[50] }]} edges={['bottom']}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderBottomColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn}>
-          <Text style={{ color: colors.primary[500], fontSize: 16 }}>← Back</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={{ color: colors.primary[500], fontSize: 15, fontWeight: '600' }}>← Back</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
+        <Text style={[styles.headerTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]} numberOfLines={1}>
           {isUpdate
             ? `Update ${recordType === 'medical' ? 'Medical' : recordType === 'dental' ? 'Dental' : 'Medical & Dental'} Record`
             : isRevision ? 'Revise Medical Record' : 'Initial Medical Record'}
         </Text>
-        <View style={{ width: 60 }} />
+        <View style={{ width: 50 }} />
       </View>
 
       {/* Progress Stepper */}
@@ -334,8 +365,18 @@ const InitialRecordFormScreen: React.FC = () => {
       </View>
 
       {/* Step Content */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scrollRef} style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ flexGrow: 1 }}
+          showsVerticalScrollIndicator={false}
+        >
           {renderStepContent()}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -343,7 +384,7 @@ const InitialRecordFormScreen: React.FC = () => {
       {/* Bottom Nav Bar */}
       <View style={[styles.bottomBar, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderTopColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <TouchableOpacity
-          style={[styles.navBtn, styles.navBtnOutline, currentStep === 0 && styles.navBtnDisabled]}
+          style={[styles.navBtn, styles.navBtnOutline, { borderColor: currentStep === 0 ? colors.neutral[300] : colors.primary[500] }, currentStep === 0 && styles.navBtnDisabled]}
           onPress={handleBack}
           disabled={currentStep === 0}
         >
@@ -356,13 +397,13 @@ const InitialRecordFormScreen: React.FC = () => {
 
         {isLastStep ? (
           <TouchableOpacity
-            style={[styles.navBtn, styles.navBtnPrimary, isSubmitting && styles.navBtnDisabled]}
-            onPress={() => {
-              updateCertification(true);
-              // Small delay to let state update, then submit
-              setTimeout(handleSubmit, 100);
-            }}
-            disabled={isSubmitting}
+            style={[
+              styles.navBtn,
+              styles.navBtnPrimary,
+              (!isCertified || isSubmitting) && styles.navBtnDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={!isCertified || isSubmitting}
           >
             {isSubmitting ? (
               <ActivityIndicator size="small" color="#FFF" />
@@ -376,25 +417,39 @@ const InitialRecordFormScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  headerBackBtn: { width: 60 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  headerBackBtn: { minWidth: 50 },
   headerTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', flex: 1 },
-  stepperContainer: { paddingHorizontal: 12, paddingVertical: 10 },
+  stepperContainer: { paddingHorizontal: 8, paddingVertical: 8 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80 },
   loadingText: { marginTop: 12, fontSize: 14 },
-  bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1 },
-  navBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  navBtnOutline: { borderWidth: 1, borderColor: colors.primary[500] },
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
+  navBtn: { paddingHorizontal: 18, paddingVertical: 11, borderRadius: 12, minWidth: 90, alignItems: 'center' },
+  navBtnOutline: { borderWidth: 1.5 },
   navBtnPrimary: { backgroundColor: colors.primary[500] },
   navBtnDisabled: { opacity: 0.4 },
   navBtnText: { fontSize: 14, fontWeight: '600' },
-  stepIndicator: { fontSize: 13 },
+  stepIndicator: { fontSize: 13, fontWeight: '500' },
 });
 
 export default InitialRecordFormScreen;

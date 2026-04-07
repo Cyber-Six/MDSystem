@@ -2,8 +2,11 @@
  * Personal Info Step — Step 0 of the initial record form
  */
 
-import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Modal, FlatList, StyleSheet, Pressable } from 'react-native';
+import React, { useState, useRef } from 'react';
+import {
+  View, Text, TextInput, TouchableOpacity, Modal, FlatList,
+  StyleSheet, Pressable, Platform, Keyboard,
+} from 'react-native';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData } from '../../../services/emr-service';
 
@@ -67,13 +70,19 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
   const [categoryOpen, setCategoryOpen] = useState(false);
 
   const inputStyle = [styles.input, {
-    backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+    backgroundColor: isDark ? colors.neutral[700] : '#FFF',
     color: isDark ? colors.neutral[100] : colors.neutral[900],
     borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
   }];
   const labelStyle = [styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }];
 
-  const renderField = (label: string, field: keyof typeof pi, placeholder: string, errorKey?: string) => (
+  const renderField = (
+    label: string,
+    field: keyof typeof pi,
+    placeholder: string,
+    errorKey?: string,
+    opts?: { keyboardType?: TextInput['props']['keyboardType'] },
+  ) => (
     <View style={styles.fieldGroup}>
       <Text style={labelStyle}>{label} *</Text>
       <TextInput
@@ -82,6 +91,8 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
         onChangeText={(val) => onUpdate({ [field]: val })}
         placeholder={placeholder}
         placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+        keyboardType={opts?.keyboardType}
+        returnKeyType="done"
       />
       {errors[errorKey || field] && <Text style={styles.errorText}>{errors[errorKey || field]}</Text>}
     </View>
@@ -94,19 +105,25 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
         {options.map(opt => {
           const isSelected = (pi as any)[field] === opt;
           return (
-            <Text
+            <TouchableOpacity
               key={opt}
               onPress={() => onUpdate({ [field]: opt })}
               style={[
                 styles.optionChip,
                 {
                   backgroundColor: isSelected ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100],
-                  color: isSelected ? '#FFFFFF' : isDark ? colors.neutral[300] : colors.neutral[700],
                 },
               ]}
+              activeOpacity={0.7}
             >
-              {opt}
-            </Text>
+              <Text style={{
+                color: isSelected ? '#FFFFFF' : isDark ? colors.neutral[300] : colors.neutral[700],
+                fontSize: 13,
+                fontWeight: isSelected ? '600' : '400',
+              }}>
+                {opt}
+              </Text>
+            </TouchableOpacity>
           );
         })}
       </View>
@@ -122,20 +139,59 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
       onUpdate({ emergencyContacts: updated });
     };
     return (
-      <View key={index} style={[styles.contactCard, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50], borderColor: isDark ? colors.neutral[600] : colors.neutral[200] }]}>
+      <View
+        key={index}
+        style={[
+          styles.contactCard,
+          {
+            backgroundColor: isDark ? colors.neutral[800] : '#FFF',
+            borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
+          },
+        ]}
+      >
         <Text style={[styles.contactTitle, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>
           Emergency Contact {index + 1} *
         </Text>
-        <TextInput style={inputStyle} value={contact.name} onChangeText={v => updateContact('name', v)} placeholder="Full Name" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
-        <TextInput style={[...inputStyle, { marginTop: 8 }]} value={contact.relationship} onChangeText={v => updateContact('relationship', v)} placeholder="Relationship" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
-        <TextInput style={[...inputStyle, { marginTop: 8 }]} value={contact.contactNumber} onChangeText={v => updateContact('contactNumber', v)} placeholder="Contact Number" keyboardType="phone-pad" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
-        <TextInput style={[...inputStyle, { marginTop: 8 }]} value={contact.address} onChangeText={v => updateContact('address', v)} placeholder="Address" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
+        <TextInput
+          style={inputStyle}
+          value={contact.name}
+          onChangeText={v => updateContact('name', v)}
+          placeholder="Full Name"
+          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+          returnKeyType="next"
+        />
+        <TextInput
+          style={[...inputStyle, { marginTop: 10 }]}
+          value={contact.relationship}
+          onChangeText={v => updateContact('relationship', v)}
+          placeholder="Relationship"
+          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+          returnKeyType="next"
+        />
+        <TextInput
+          style={[...inputStyle, { marginTop: 10 }]}
+          value={contact.contactNumber}
+          onChangeText={v => updateContact('contactNumber', v)}
+          placeholder="Contact Number (e.g. 09XXXXXXXXX)"
+          keyboardType="phone-pad"
+          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+          returnKeyType="done"
+          onSubmitEditing={() => Keyboard.dismiss()}
+        />
+        <TextInput
+          style={[...inputStyle, { marginTop: 10 }]}
+          value={contact.address}
+          onChangeText={v => updateContact('address', v)}
+          placeholder="Address"
+          placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]}
+          returnKeyType="done"
+        />
       </View>
     );
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       {!isUpdate && (
         <>
           <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>
@@ -162,7 +218,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
 
           {renderField('Nationality', 'nationality', 'Enter nationality')}
           {renderField('Religion', 'religion', 'Enter religion')}
-          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX')}
+          {renderField('Contact Number', 'contactNumber', '09XXXXXXXXX', undefined, { keyboardType: 'phone-pad' })}
           {renderField('Present Address', 'address', 'Enter present address')}
           {renderField('Province Address', 'provinceAddress', 'Enter province address')}
           {renderField('Student Number', 'studentNumber', 'e.g. 2022-12345')}
@@ -178,7 +234,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
         <Text style={labelStyle}>Program *</Text>
         <TouchableOpacity
           style={[styles.selectTrigger, {
-            backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+            backgroundColor: isDark ? colors.neutral[700] : '#FFF',
             borderColor: errors.program ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
           }]}
           onPress={() => setProgramOpen(true)}
@@ -227,7 +283,7 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
         <Text style={labelStyle}>Student Category *</Text>
         <TouchableOpacity
           style={[styles.selectTrigger, {
-            backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+            backgroundColor: isDark ? colors.neutral[700] : '#FFF',
             borderColor: errors.studentCategory ? colors.error[500] : isDark ? colors.neutral[600] : colors.neutral[200],
           }]}
           onPress={() => setCategoryOpen(true)}
@@ -275,25 +331,30 @@ export const PersonalInfoStep: React.FC<Props> = ({ formData, onUpdate, isDark, 
       </Text>
       {renderEmergencyContact(0)}
       {renderEmergencyContact(1)}
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 40 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  fieldGroup: { marginBottom: 14 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 16 },
+  fieldGroup: { marginBottom: 16 },
   label: { fontSize: 14, fontWeight: '500', marginBottom: 6 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 15 },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
   inputError: { borderColor: colors.error[500] },
   errorText: { color: colors.error[500], fontSize: 12, marginTop: 4 },
-  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  optionChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, fontSize: 13, overflow: 'hidden' },
-  contactCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 12 },
-  contactTitle: { fontSize: 15, fontWeight: '600', marginBottom: 10 },
-  selectTrigger: { borderWidth: 1, borderRadius: 10, padding: 12, flexDirection: 'row', alignItems: 'center' },
+  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  optionChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  contactCard: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 14 },
+  contactTitle: { fontSize: 15, fontWeight: '600', marginBottom: 12 },
+  selectTrigger: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { maxHeight: '60%', borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' },
+  modalContent: { maxHeight: '60%', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.1)' },
   modalTitle: { fontSize: 17, fontWeight: '700' },
   optionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1 },

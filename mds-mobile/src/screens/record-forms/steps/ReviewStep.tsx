@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Switch, TextInput, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
 
@@ -12,6 +12,7 @@ interface Props {
   catalogs: AllCatalogs;
   onEdit: (stepIndex: number) => void;
   isDark: boolean;
+  onCertificationChange?: (verified: boolean) => void;
 }
 
 const getCatalogName = (catalog: { id: string; name?: string; allergen?: string }[], id: string): string => {
@@ -27,16 +28,18 @@ const formatDate = (dateString?: string) => {
   } catch { return dateString; }
 };
 
-export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark }) => {
+export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark, onCertificationChange }) => {
   const textColor = isDark ? colors.neutral[100] : colors.secondary[900];
   const subColor = isDark ? colors.neutral[400] : colors.neutral[600];
   const cardBg = isDark ? colors.neutral[800] : '#FFF';
   const cardBorder = isDark ? colors.neutral[700] : colors.neutral[200];
 
+  const isCertified = formData.certification?.verified ?? false;
+
   const SectionHeader = ({ title, stepIndex }: { title: string; stepIndex: number }) => (
     <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, { color: textColor }]}>{title}</Text>
-      <TouchableOpacity onPress={() => onEdit(stepIndex)}>
+      <TouchableOpacity onPress={() => onEdit(stepIndex)} style={styles.editBtnWrap} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <Text style={[styles.editBtn, { color: colors.primary[500] }]}>Edit</Text>
       </TouchableOpacity>
     </View>
@@ -85,7 +88,7 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
   const dentalProcNames = Object.entries(dh.selectedDentalProcedures).filter(([, v]) => v).map(([id]) => getCatalogName(catalogs.dentalProcedureCatalog, id));
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <Text style={[styles.title, { color: textColor }]}>Review Your Information</Text>
       <Text style={[styles.subtitle, { color: subColor }]}>Please review all sections before submitting.</Text>
 
@@ -231,54 +234,108 @@ export const ReviewStep: React.FC<Props> = ({ formData, catalogs, onEdit, isDark
         </View>
       )}
 
-      {/* Certification */}
-      <View style={[styles.certCard, { backgroundColor: isDark ? 'rgba(37,99,235,0.1)' : '#EFF6FF', borderColor: isDark ? colors.primary[700] : colors.primary[300] }]}>
-        <Text style={[styles.certTitle, { color: textColor }]}>Certification</Text>
-        <Text style={[styles.certText, { color: subColor }]}>
-          By checking the box below, you certify that the above information is true and correct to the best of your knowledge.
-        </Text>
-        <View style={styles.certCheckRow}>
-          <Switch
-            value={formData.certification?.verified ?? false}
-            onValueChange={() => {}}
-            disabled
-          />
-          <Text style={[styles.certCheckLabel, { color: textColor }]}>
-            {formData.certification?.verified ? '✓ Certified' : 'Not yet certified (use Submit button)'}
-          </Text>
+      {/* Certification — interactive checkbox */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => onCertificationChange?.(!isCertified)}
+        style={[
+          styles.certCard,
+          {
+            backgroundColor: isCertified
+              ? (isDark ? 'rgba(34,197,94,0.1)' : '#F0FDF4')
+              : (isDark ? 'rgba(37,99,235,0.08)' : '#FFF'),
+            borderColor: isCertified
+              ? colors.success[500]
+              : (isDark ? colors.neutral[600] : colors.neutral[300]),
+          },
+        ]}
+      >
+        <View style={styles.certHeaderRow}>
+          <Text style={[styles.certTitle, { color: textColor }]}>Certification</Text>
+          <View
+            style={[
+              styles.certCheckbox,
+              {
+                backgroundColor: isCertified ? colors.success[500] : 'transparent',
+                borderColor: isCertified ? colors.success[500] : (isDark ? colors.neutral[500] : colors.neutral[400]),
+              },
+            ]}
+          >
+            {isCertified && <Text style={styles.certCheckmark}>✓</Text>}
+          </View>
         </View>
-      </View>
-    </ScrollView>
+        <Text style={[styles.certText, { color: subColor }]}>
+          By checking this box, I certify that the above information is true and correct to the best of my knowledge.
+        </Text>
+        {!isCertified && (
+          <Text style={[styles.certHint, { color: colors.primary[500] }]}>
+            Tap here to certify before submitting
+          </Text>
+        )}
+        {isCertified && (
+          <View style={styles.certBadge}>
+            <Text style={styles.certBadgeText}>✓ Certified</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 40 },
   title: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
-  subtitle: { fontSize: 13, marginBottom: 16 },
-  card: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 12 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'rgba(0,0,0,0.06)', paddingBottom: 8, marginBottom: 10 },
+  subtitle: { fontSize: 13, marginBottom: 16, lineHeight: 18 },
+  card: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 12 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    paddingBottom: 10,
+    marginBottom: 10,
+  },
   sectionTitle: { fontSize: 15, fontWeight: '700' },
+  editBtnWrap: { paddingVertical: 2, paddingHorizontal: 8 },
   editBtn: { fontSize: 13, fontWeight: '600' },
-  dataRow: { flexDirection: 'row', paddingVertical: 4 },
+  dataRow: { flexDirection: 'row', paddingVertical: 5 },
   dataLabel: { width: 120, fontSize: 13, fontWeight: '500' },
-  dataValue: { flex: 1, fontSize: 13 },
+  dataValue: { flex: 1, fontSize: 13, lineHeight: 18 },
   contactLabel: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
   subSection: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
   emptyText: { fontSize: 13, fontStyle: 'italic' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   chipText: { fontSize: 12, fontWeight: '500' },
   applianceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   photosRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   photoBlock: { flex: 1 },
   photoLabel: { fontSize: 12, fontWeight: '500', marginBottom: 4 },
-  photoThumb: { width: '100%', height: 100, borderRadius: 8 },
-  certCard: { borderWidth: 2, borderRadius: 12, padding: 16, marginBottom: 12 },
-  certTitle: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
-  certText: { fontSize: 13, lineHeight: 18, marginBottom: 12 },
-  certCheckRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  certCheckLabel: { fontSize: 14, fontWeight: '500', flex: 1 },
+  photoThumb: { width: '100%', height: 100, borderRadius: 10 },
+  certCard: { borderWidth: 2, borderRadius: 14, padding: 16, marginBottom: 12 },
+  certHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  certTitle: { fontSize: 16, fontWeight: '700' },
+  certCheckbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  certCheckmark: { color: '#FFF', fontSize: 14, fontWeight: '800' },
+  certText: { fontSize: 13, lineHeight: 19 },
+  certHint: { fontSize: 13, fontWeight: '600', marginTop: 10 },
+  certBadge: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: '#16A34A',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  certBadgeText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
 });
 
 export default ReviewStep;

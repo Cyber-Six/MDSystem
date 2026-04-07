@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Switch, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Switch, StyleSheet } from 'react-native';
 import { colors } from '../../../context/ThemeContext';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
 
@@ -39,7 +39,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
   const toggleSection = (key: SectionKey) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   const inputStyle = [styles.input, {
-    backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+    backgroundColor: isDark ? colors.neutral[700] : '#FFF',
     color: isDark ? colors.neutral[100] : colors.neutral[900],
     borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
   }];
@@ -62,16 +62,20 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
   );
 
   const renderYesNo = (label: string, value: string, onSelect: (v: string) => void) => (
-    <View style={styles.yesNoRow}>
+    <View style={styles.yesNoContainer}>
       <Text style={[styles.yesNoLabel, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>{label}</Text>
       <View style={styles.yesNoBtns}>
         {['Yes', 'No'].map(v => (
           <TouchableOpacity
             key={v}
-            style={[styles.yesNoBtn, value === v && styles.yesNoBtnSelected]}
+            style={[
+              styles.yesNoBtn,
+              { backgroundColor: value === v ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100] },
+            ]}
             onPress={() => onSelect(v)}
+            activeOpacity={0.7}
           >
-            <Text style={{ color: value === v ? '#FFF' : isDark ? colors.neutral[300] : colors.neutral[600], fontWeight: '600' }}>{v}</Text>
+            <Text style={{ color: value === v ? '#FFF' : isDark ? colors.neutral[300] : colors.neutral[600], fontWeight: '600', fontSize: 13 }}>{v}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -79,7 +83,7 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <Text style={[styles.title, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Medical Background</Text>
 
       {/* Immunizations */}
@@ -200,28 +204,27 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
           </>
         )}
       </AccordionSection>
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  accordion: { borderWidth: 1, borderRadius: 12, marginBottom: 10, overflow: 'hidden' },
+  title: { fontSize: 17, fontWeight: '700', marginBottom: 16 },
+  accordion: { borderWidth: 1, borderRadius: 14, marginBottom: 10, overflow: 'hidden' },
   accordionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 },
   accordionTitle: { fontSize: 15, fontWeight: '600' },
   accordionBody: { paddingHorizontal: 14, paddingBottom: 14 },
   checkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 10 },
-  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: colors.neutral[400], alignItems: 'center', justifyContent: 'center' },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.neutral[400], alignItems: 'center' as const, justifyContent: 'center' as const },
   checkboxChecked: { backgroundColor: colors.primary[500], borderColor: colors.primary[500] },
-  checkmark: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  checkmark: { color: '#FFF', fontSize: 13, fontWeight: '700' as const },
   itemText: { fontSize: 14, flex: 1 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 14 },
-  yesNoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  yesNoLabel: { fontSize: 14, fontWeight: '500', flex: 1 },
-  yesNoBtns: { flexDirection: 'row', gap: 6 },
-  yesNoBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.05)' },
-  yesNoBtnSelected: { backgroundColor: colors.primary[500] },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
+  yesNoContainer: { marginBottom: 10 },
+  yesNoLabel: { fontSize: 14, fontWeight: '500', marginBottom: 8 },
+  yesNoBtns: { flexDirection: 'row', gap: 8 },
+  yesNoBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
 });
 

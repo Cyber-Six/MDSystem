@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Image, StyleSheet, Alert, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../../context/ThemeContext';
 import { axiosRequest, getApiBaseUrl } from '../../../core';
@@ -55,18 +55,32 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
   const hasLowerPhoto = !!lowerDisplayUri || !!dh.lowerTeethPhoto?.id;
 
   const inputStyle = [styles.input, {
-    backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50],
+    backgroundColor: isDark ? colors.neutral[700] : '#FFF',
     color: isDark ? colors.neutral[100] : colors.neutral[900],
     borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
   }];
 
   const renderYesNo = (label: string, value: string, onSelect: (v: string) => void) => (
-    <View style={styles.yesNoRow}>
-      <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>{label}</Text>
+    <View style={styles.yesNoContainer}>
+      <Text style={[styles.yesNoLabel, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>{label}</Text>
       <View style={styles.yesNoBtns}>
         {['yes', 'no'].map(v => (
-          <TouchableOpacity key={v} style={[styles.yesNoBtn, value === v && styles.yesNoBtnSelected]} onPress={() => onSelect(v)}>
-            <Text style={{ color: value === v ? '#FFF' : isDark ? colors.neutral[300] : colors.neutral[600], fontWeight: '600', textTransform: 'capitalize' }}>{v}</Text>
+          <TouchableOpacity
+            key={v}
+            style={[
+              styles.yesNoBtn,
+              value === v && styles.yesNoBtnSelected,
+              { backgroundColor: value === v ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100] },
+            ]}
+            onPress={() => onSelect(v)}
+            activeOpacity={0.7}
+          >
+            <Text style={{
+              color: value === v ? '#FFF' : isDark ? colors.neutral[300] : colors.neutral[600],
+              fontWeight: '600',
+              fontSize: 13,
+              textTransform: 'capitalize',
+            }}>{v}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -125,12 +139,53 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
     }
   };
 
+  const renderPhotoSection = (
+    label: string,
+    field: 'upperTeethPhoto' | 'lowerTeethPhoto',
+    displayUri: string | null,
+    hasPhoto: boolean,
+    isLoading: boolean,
+  ) => (
+    <View style={styles.photoSection}>
+      <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>{label}</Text>
+      {isLoading ? (
+        <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}>
+          <ActivityIndicator color={colors.primary[500]} />
+          <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], marginTop: 6, fontSize: 12 }}>Loading photo...</Text>
+        </View>
+      ) : displayUri ? (
+        <View style={styles.photoPreview}>
+          <Image source={{ uri: displayUri }} style={styles.photoImage} resizeMode="cover" />
+          <TouchableOpacity style={styles.changeBtn} onPress={() => pickImage(field)} activeOpacity={0.7}>
+            <Text style={styles.changeBtnText}>Change Photo</Text>
+          </TouchableOpacity>
+        </View>
+      ) : hasPhoto ? (
+        <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}>
+          <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 13 }}>Photo from previous submission</Text>
+          <TouchableOpacity style={{ marginTop: 8 }} onPress={() => pickImage(field)}>
+            <Text style={{ color: colors.primary[500], textDecorationLine: 'underline', fontSize: 13 }}>Replace</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]}
+          onPress={() => pickImage(field)}
+          activeOpacity={0.7}
+        >
+          <Text style={{ fontSize: 24, marginBottom: 4 }}>📷</Text>
+          <Text style={{ color: colors.primary[500], fontWeight: '600', fontSize: 14 }}>Upload Photo</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <Text style={[styles.title, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Dental History</Text>
 
       {/* First time dentist */}
-      <View style={[styles.card, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+      <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Dental Visit History</Text>
         {renderYesNo('Is this your first time to be seen by a dentist?', dh.firstTimeDentist, v => onUpdate({ firstTimeDentist: v }))}
 
@@ -146,17 +201,17 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
           When was your last dental cleaning?
         </Text>
         {CLEANING_RANGES.map(r => (
-          <TouchableOpacity key={r} style={styles.radioRow} onPress={() => onUpdate({ lastDentalCleaning: r })}>
+          <TouchableOpacity key={r} style={styles.radioRow} onPress={() => onUpdate({ lastDentalCleaning: r })} activeOpacity={0.7}>
             <View style={[styles.radio, dh.lastDentalCleaning === r && styles.radioSelected]}>
               {dh.lastDentalCleaning === r && <View style={styles.radioDot} />}
             </View>
-            <Text style={{ color: isDark ? colors.neutral[200] : colors.neutral[800], fontSize: 14 }}>{r}</Text>
+            <Text style={{ color: isDark ? colors.neutral[200] : colors.neutral[800], fontSize: 14, flex: 1 }}>{r}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
       {/* Intra-Oral Appliances */}
-      <View style={[styles.card, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+      <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Intra-Oral Appliances</Text>
         {renderYesNo('Are you wearing any intra-oral appliance?', dh.hasIntraOralAppliance, v => onUpdate({ hasIntraOralAppliance: v }))}
 
@@ -168,16 +223,24 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
               const arch = typeof val === 'object' ? ((val as any)?.arch || '') : '';
               return (
                 <View key={app.id}>
-                  <TouchableOpacity style={styles.checkRow} onPress={() => handleApplianceToggle(app.id)}>
+                  <TouchableOpacity style={styles.checkRow} onPress={() => handleApplianceToggle(app.id)} activeOpacity={0.7}>
                     <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
                       {isChecked && <Text style={styles.checkmark}>✓</Text>}
                     </View>
-                    <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14 }}>{app.name}</Text>
+                    <Text style={{ color: isDark ? colors.neutral[100] : colors.neutral[800], fontSize: 14, flex: 1 }}>{app.name}</Text>
                   </TouchableOpacity>
                   {isChecked && (
                     <View style={styles.archRow}>
                       {['Upper', 'Lower', 'Both'].map(loc => (
-                        <TouchableOpacity key={loc} style={[styles.archBtn, arch === loc && styles.archBtnSelected]} onPress={() => handleApplianceArch(app.id, loc)}>
+                        <TouchableOpacity
+                          key={loc}
+                          style={[
+                            styles.archBtn,
+                            { backgroundColor: arch === loc ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100] },
+                          ]}
+                          onPress={() => handleApplianceArch(app.id, loc)}
+                          activeOpacity={0.7}
+                        >
                           <Text style={{ color: arch === loc ? '#FFF' : isDark ? colors.neutral[400] : colors.neutral[600], fontSize: 12, fontWeight: '600' }}>{loc}</Text>
                         </TouchableOpacity>
                       ))}
@@ -193,13 +256,13 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
       </View>
 
       {/* Dental Procedures */}
-      <View style={[styles.card, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+      <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Dental Procedures</Text>
         <Text style={[styles.sublabel, { color: isDark ? colors.neutral[400] : colors.neutral[500] }]}>
           Which procedures have you had in the past 24 months?
         </Text>
         {catalogs.dentalProcedureCatalog.map(proc => (
-          <TouchableOpacity key={proc.id} style={styles.checkRow} onPress={() => handleProcedureToggle(proc.id)}>
+          <TouchableOpacity key={proc.id} style={styles.checkRow} onPress={() => handleProcedureToggle(proc.id)} activeOpacity={0.7}>
             <View style={[styles.checkbox, dh.selectedDentalProcedures[proc.id] && styles.checkboxChecked]}>
               {dh.selectedDentalProcedures[proc.id] && <Text style={styles.checkmark}>✓</Text>}
             </View>
@@ -209,95 +272,53 @@ export const DentalHistoryStep: React.FC<Props> = ({ formData, onUpdate, isDark,
       </View>
 
       {/* Dental Photos */}
-      <View style={[styles.card, { borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
+      <View style={[styles.card, { backgroundColor: isDark ? colors.neutral[800] : '#FFF', borderColor: isDark ? colors.neutral[700] : colors.neutral[200] }]}>
         <Text style={[styles.sectionTitle, { color: isDark ? colors.neutral[100] : colors.secondary[900] }]}>Dental Photos</Text>
-
-        {/* Upper teeth */}
-        <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900] }]}>Upper Teeth Photo *</Text>
-        {loadingPreviews.upper ? (
-          <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], alignItems: 'center', justifyContent: 'center', height: 120 }]}>
-            <ActivityIndicator color={colors.primary[500]} />
-            <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], marginTop: 6, fontSize: 12 }}>Loading revision photo...</Text>
-          </View>
-        ) : upperDisplayUri ? (
-          <View style={styles.photoPreview}>
-            <Image source={{ uri: upperDisplayUri }} style={styles.photoImage} resizeMode="cover" />
-            <TouchableOpacity style={styles.changeBtn} onPress={() => pickImage('upperTeethPhoto')}>
-              <Text style={styles.changeBtnText}>Change</Text>
-            </TouchableOpacity>
-          </View>
-        ) : hasUpperPhoto ? (
-          <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], alignItems: 'center', justifyContent: 'center', height: 80 }]}>
-            <Text style={{ color: colors.primary[500], fontWeight: '600' }}>Photo from previous submission</Text>
-            <TouchableOpacity style={{ marginTop: 8 }} onPress={() => pickImage('upperTeethPhoto')}>
-              <Text style={{ color: colors.primary[500], textDecorationLine: 'underline' }}>Replace</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]} onPress={() => pickImage('upperTeethPhoto')}>
-            <Text style={{ color: colors.primary[500], fontWeight: '600' }}>+ Upload Photo</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Lower teeth */}
-        <Text style={[styles.label, { color: isDark ? colors.neutral[200] : colors.secondary[900], marginTop: 16 }]}>Lower Teeth Photo *</Text>
-        {loadingPreviews.lower ? (
-          <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], alignItems: 'center', justifyContent: 'center', height: 120 }]}>
-            <ActivityIndicator color={colors.primary[500]} />
-            <Text style={{ color: isDark ? colors.neutral[400] : colors.neutral[500], marginTop: 6, fontSize: 12 }}>Loading revision photo...</Text>
-          </View>
-        ) : lowerDisplayUri ? (
-          <View style={styles.photoPreview}>
-            <Image source={{ uri: lowerDisplayUri }} style={styles.photoImage} resizeMode="cover" />
-            <TouchableOpacity style={styles.changeBtn} onPress={() => pickImage('lowerTeethPhoto')}>
-              <Text style={styles.changeBtnText}>Change</Text>
-            </TouchableOpacity>
-          </View>
-        ) : hasLowerPhoto ? (
-          <View style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300], alignItems: 'center', justifyContent: 'center', height: 80 }]}>
-            <Text style={{ color: colors.primary[500], fontWeight: '600' }}>Photo from previous submission</Text>
-            <TouchableOpacity style={{ marginTop: 8 }} onPress={() => pickImage('lowerTeethPhoto')}>
-              <Text style={{ color: colors.primary[500], textDecorationLine: 'underline' }}>Replace</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={[styles.uploadBtn, { borderColor: isDark ? colors.neutral[600] : colors.neutral[300] }]} onPress={() => pickImage('lowerTeethPhoto')}>
-            <Text style={{ color: colors.primary[500], fontWeight: '600' }}>+ Upload Photo</Text>
-          </TouchableOpacity>
-        )}
+        {renderPhotoSection('Upper Teeth Photo *', 'upperTeethPhoto', upperDisplayUri, hasUpperPhoto, loadingPreviews.upper)}
+        {renderPhotoSection('Lower Teeth Photo *', 'lowerTeethPhoto', lowerDisplayUri, hasLowerPhoto, loadingPreviews.lower)}
       </View>
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  card: { borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 14 },
+  title: { fontSize: 17, fontWeight: '700', marginBottom: 16 },
+  card: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 14 },
   sectionTitle: { fontSize: 15, fontWeight: '600', marginBottom: 12 },
   label: { fontSize: 14, fontWeight: '500', marginBottom: 6 },
-  sublabel: { fontSize: 12, marginBottom: 10 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 14 },
-  yesNoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  yesNoBtns: { flexDirection: 'row', gap: 6 },
-  yesNoBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.05)' },
-  yesNoBtnSelected: { backgroundColor: colors.primary[500] },
-  radioRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingLeft: 8, gap: 10 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.neutral[400], alignItems: 'center', justifyContent: 'center' },
+  sublabel: { fontSize: 13, marginBottom: 10, lineHeight: 18 },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
+  yesNoContainer: { marginBottom: 10 },
+  yesNoLabel: { fontSize: 14, fontWeight: '500', marginBottom: 8 },
+  yesNoBtns: { flexDirection: 'row', gap: 8 },
+  yesNoBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+  yesNoBtnSelected: {},
+  radioRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingLeft: 4, gap: 10 },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.neutral[400], alignItems: 'center', justifyContent: 'center' },
   radioSelected: { borderColor: colors.primary[500] },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary[500] },
-  checkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 10 },
-  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: colors.neutral[400], alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary[500] },
+  checkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 10 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.neutral[400], alignItems: 'center', justifyContent: 'center' },
   checkboxChecked: { backgroundColor: colors.primary[500], borderColor: colors.primary[500] },
-  checkmark: { color: '#FFF', fontSize: 12, fontWeight: '700' },
-  archRow: { flexDirection: 'row', gap: 6, marginLeft: 30, marginBottom: 6 },
-  archBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.05)' },
-  archBtnSelected: { backgroundColor: colors.primary[500] },
-  photoPreview: { marginTop: 8, marginBottom: 12 },
-  photoImage: { width: '100%', height: 200, borderRadius: 10 },
-  changeBtn: { marginTop: 6, alignSelf: 'flex-start' },
+  checkmark: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  archRow: { flexDirection: 'row', gap: 8, marginLeft: 32, marginBottom: 8 },
+  archBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
+  photoSection: { marginBottom: 16 },
+  photoPreview: { marginTop: 8 },
+  photoImage: { width: '100%', height: 180, borderRadius: 12 },
+  changeBtn: { marginTop: 8, alignSelf: 'flex-start' },
   changeBtnText: { color: colors.primary[500], fontWeight: '600', fontSize: 13 },
-  uploadBtn: { borderWidth: 2, borderStyle: 'dashed', borderRadius: 10, paddingVertical: 28, alignItems: 'center', marginVertical: 8 },
+  uploadBtn: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    minHeight: 80,
+  },
 });
 
 export default DentalHistoryStep;
