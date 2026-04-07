@@ -54,7 +54,7 @@ const SetupModal = ({ qrCode, secret, onVerify, onCancel, error, isLoading }) =>
               </svg>
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Set Up Authenticator</h3>
+              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">Set Up Authenticator 2FA</h3>
               <p className="text-xs text-secondary-500 dark:text-neutral-400">Scan with Google Authenticator, Authy, or similar app</p>
             </div>
           </div>
@@ -374,7 +374,7 @@ const TotpSettings = () => {
     return (
       <div className="flex items-center justify-between gap-4 py-3">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-secondary-700 dark:text-neutral-200">Authenticator App (TOTP)</p>
+          <p className="text-sm font-medium text-secondary-700 dark:text-neutral-200">Authenticator 2FA</p>
           <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">Loading status...</p>
         </div>
         <div className="w-5 h-5 animate-spin rounded-full border-2 border-neutral-300 border-t-primary-500" />
@@ -386,7 +386,7 @@ const TotpSettings = () => {
     <>
       <div className="flex items-center justify-between gap-4 py-3">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-secondary-700 dark:text-neutral-200">Authenticator App (TOTP)</p>
+          <p className="text-sm font-medium text-secondary-700 dark:text-neutral-200">Authenticator 2FA</p>
           <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-0.5">
             {totpEnabled
               ? 'Your account is protected with an authenticator app'

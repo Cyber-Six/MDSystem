@@ -1696,7 +1696,7 @@ const Mutation = {
       // Check if new admin has 2FA enabled (bypass in bootstrap mode)
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 11: getUserConsentStateByEmail(newAdminUser)');
       const newAdminData = await db.getUserConsentStateByEmail(newAdminUser);
-      if (!newAdminData?.allow_email_2fa) {
+      if (!newAdminData?.allow_email_2fa && !newAdminData?.totp_enabled) {
         if (allowBootstrapAdmin) {
           logger.warn(`[BOOTSTRAP_BYPASS] Target user 2FA check bypassed for newAdminId=${newAdminUserId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
           await db.setSystemAuditLog({
@@ -1719,14 +1719,14 @@ const Mutation = {
             targetId: newAdminUserId,
             action: 'INITIATE_ADMIN_TRANSFER',
             details: JSON.stringify({
-              reason: 'Target user 2FA not enabled',
+              reason: 'Target user has no 2FA enabled (email 2FA or authenticator app required)',
               timestamp: new Date().toISOString(),
             }),
             changedBy: 'Medical',
           });
 
           throwGraphQLError(res)
-            .message('Target user must have 2FA enabled before becoming admin.')
+            .message('Target user must have 2FA enabled (email 2FA or authenticator app) before becoming admin.')
             .status(400)
             .throw();
         }
@@ -1736,7 +1736,7 @@ const Mutation = {
       logger.warn('[ADMIN_TRANSFER_DEBUG] Step 12: getUserConsentStateByEmail(oldAdminEmail)');
       const oldAdminData = await db.getUserConsentStateByEmail(oldAdminEmail);
 
-      if (!oldAdminData?.allow_email_2fa) {
+      if (!oldAdminData?.allow_email_2fa && !oldAdminData?.totp_enabled) {
         // Allow bypass if ALLOW_BOOTSTRAP_ADMIN is enabled (for initial admin bootstrap)
         if (allowBootstrapAdmin) {
           logger.warn(`[BOOTSTRAP_BYPASS] Admin 2FA check bypassed for adminId=${oldAdminId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
@@ -1760,7 +1760,7 @@ const Mutation = {
             targetId: newAdminUserId,
             action: 'INITIATE_ADMIN_TRANSFER',
             details: JSON.stringify({
-              reason: 'Current admin 2FA not enabled',
+              reason: 'Current admin has no 2FA enabled (email 2FA or authenticator app required)',
               timestamp: new Date().toISOString(),
             }),
             changedBy: 'Medical',
@@ -1768,7 +1768,7 @@ const Mutation = {
 
           logger.warn(`Admin ${oldAdminId} attempted transfer without 2FA enabled`);
           throwGraphQLError(res)
-            .message('Current admin must have 2FA enabled to transfer privileges.')
+            .message('Current admin must have 2FA enabled (email 2FA or authenticator app) to transfer privileges.')
             .status(400)
             .throw();
         }
@@ -1985,7 +1985,7 @@ const Mutation = {
 
       const newAdminEmail = await db.findEmailByUserId(newAdminId);
       const newAdminData = await db.getUserConsentStateByEmail(newAdminEmail);
-      if (!newAdminData?.allow_email_2fa) {
+      if (!newAdminData?.allow_email_2fa && !newAdminData?.totp_enabled) {
         // Allow bypass in bootstrap mode
         if (isBootstrapMode && isBootstrapToken) {
           logger.warn(`[BOOTSTRAP_BYPASS] Target user 2FA check bypassed for newAdminId=${newAdminId} (ALLOW_BOOTSTRAP_ADMIN=true)`);
@@ -2010,14 +2010,14 @@ const Mutation = {
             targetId: newAdminId,
             action: 'CONFIRM_ADMIN_TRANSFER',
             details: JSON.stringify({
-              reason: 'Target user 2FA no longer enabled',
+              reason: 'Target user no longer has 2FA enabled (email 2FA or authenticator app required)',
               timestamp: new Date().toISOString(),
             }),
             changedBy: 'Medical',
           });
 
           throwGraphQLError(res)
-            .message('Target user no longer has 2FA enabled.')
+            .message('Target user no longer has 2FA enabled (email 2FA or authenticator app required).')
             .status(400)
             .throw();
         }
