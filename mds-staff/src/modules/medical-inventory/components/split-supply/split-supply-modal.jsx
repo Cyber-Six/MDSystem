@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
-import { LOCATIONS } from '../../inventory-seed-data';
 
 /**
  * Split Supply Modal — transfer stock from one batch to another clinic.
  * Accepts allBatches to compute merged total (siblings with same batch#/location/item).
+ * @param {Object} batch - Source batch to split from
+ * @param {Array} allBatches - All batches for calculating totals
+ * @param {Array} allowedLocations - List of locations the user has access to
+ * @param {Function} onClose - Close modal handler
+ * @param {Function} onSplit - Split handler
  */
-const SplitSupplyModal = ({ batch, allBatches, onClose, onSplit }) => {
-  const otherClinics = LOCATIONS.filter((l) => l !== batch.location);
+const SplitSupplyModal = ({ batch, allBatches, allowedLocations = [], onClose, onSplit }) => {
+  // Filter to only show locations the user can transfer to (excluding current batch location)
+  const otherClinics = allowedLocations.filter((l) => l !== batch.location);
   const [toClinic, setToClinic] = useState(otherClinics[0] || '');
   const [quantity, setQuantity] = useState('');
   const [notes, setNotes] = useState('');

@@ -1,18 +1,34 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { STATUS_BADGES } from '../../inventory-seed-data';
 
 /**
  * Dispense Queue — shows pending doctor / student medicine requests.
  * Key feature: "QTY PENDING" badge when quantity is null (student self-request).
+ * @param {Array} requests - Medicine requests
+ * @param {Array} items - Medical items
+ * @param {Array} batches - Medicine batches
+ * @param {Array} allowedLocations - List of locations the user has access to
+ * @param {Function} onDispense - Dispense handler
+ * @param {Function} onApprove - Approve handler
+ * @param {Function} onReject - Reject handler
+ * @param {string|number} focusPatientId - Patient ID to focus on
+ * @param {Function} onClearFocus - Clear focus handler
  */
-const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReject, focusPatientId, onClearFocus }) => {
+const DispenseQueue = ({ requests, items, batches, allowedLocations = [], onDispense, onApprove, onReject, focusPatientId, onClearFocus }) => {
   const [search, setSearch] = useState('');
-  const [filterLocation, setFilterLocation] = useState('Casal');
+  const [filterLocation, setFilterLocation] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [selectedPurpose, setSelectedPurpose] = useState(null);
   const [selectedNotes, setSelectedNotes] = useState(null);
+
+  // Set default filter location when allowedLocations changes
+  useEffect(() => {
+    if (allowedLocations.length > 0 && !filterLocation) {
+      setFilterLocation(allowedLocations[0]);
+    }
+  }, [allowedLocations, filterLocation]);
 
   // Helper to format date safely
   const formatDate = (dateValue) => {
@@ -90,7 +106,7 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
     });
   }, [requests, search, filterLocation, filterStatus, itemMap, focusPatientId]);
   const statusOptions = ['All', 'Pending', 'Approved', 'Completed', 'Rejected', 'Cancelled'];
-  const locations = ['Casal', 'Arlegui', 'QuezonCity'];
+  const locations = allowedLocations;
 
   const getLocationDisplay = (loc) => {
     const map = { Casal: 'Casal', Arlegui: 'Arlegui', QuezonCity: 'Quezon City' };
@@ -209,8 +225,14 @@ const DispenseQueue = ({ requests, items, batches, onDispense, onApprove, onReje
                         }) || '—'}
                       </td>
                       <td className="px-3 py-1.5">
-                        {req.items?.length > 0 ? (
-                          <span className="text-xs font-medium text-secondary-800 dark:text-white">{req.items?.reduce((sum, i) => sum + (i.quantity || 0), 0)}</span>
+                        {req.items && req.items.length > 0 ? (
+                          <div className="space-y-1">
+                            {req.items.map((reqItem, idx) => (
+                              <div key={idx} className="text-xs font-medium text-secondary-800 dark:text-white">
+                                {reqItem.quantity || <span className="text-warning-600 dark:text-warning-400">pending</span>}
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">QTY PENDING</span>
                         )}

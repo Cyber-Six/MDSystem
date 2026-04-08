@@ -1,11 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { CATEGORIES, CATEGORY_COLORS, LOCATIONS } from '../../inventory-seed-data';
+import { CATEGORIES, CATEGORY_COLORS } from '../../inventory-seed-data';
 import { getDisplayLocation } from '../../medical-inventory-service';
 
 /**
  * Medical Items List — searchable, filterable table matching appointment-queue pattern.
+ * @param {Array} items - Medical items to display
+ * @param {boolean} loading - Loading state
+ * @param {string} error - Error message
+ * @param {Array} allowedLocations - List of locations the user has access to (for filtering)
+ * @param {Function} onSelectItem - Item selection handler
+ * @param {Function} onAddItem - Add item handler
+ * @param {Function} onAddSupply - Add supply handler
+ * @param {Function} onEditItem - Edit item handler
+ * @param {Function} onDeleteItem - Delete item handler
  */
-const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAddSupply, onEditItem, onDeleteItem }) => {
+const MedicalItemList = ({ items, loading, error, allowedLocations = [], onSelectItem, onAddItem, onAddSupply, onEditItem, onDeleteItem }) => {
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterLocation, setFilterLocation] = useState('all');
@@ -59,7 +68,7 @@ const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAdd
             <label className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 shrink-0">Clinic</label>
             <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className="px-2 py-1 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500">
               <option value="all">All</option>
-              {LOCATIONS.map((l) => <option key={l} value={l}>{getDisplayLocation(l)}</option>)}
+              {allowedLocations.map((l) => <option key={l} value={l}>{getDisplayLocation(l)}</option>)}
             </select>
           </div>
 
@@ -92,9 +101,16 @@ const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAdd
                 <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Code</th>
                 <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Item Name</th>
                 <th className="px-3 py-1.5 text-left text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Category</th>
-                <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Casal</th>
-                <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Arlegui</th>
-                <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Quezon City</th>
+                {/* Dynamic location columns based on user access */}
+                {allowedLocations.includes('Casal') && (
+                  <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Casal</th>
+                )}
+                {allowedLocations.includes('Arlegui') && (
+                  <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Arlegui</th>
+                )}
+                {allowedLocations.includes('QuezonCity') && (
+                  <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Quezon City</th>
+                )}
                 <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Total</th>
                 <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Batches</th>
                 <th className="px-3 py-1.5 text-center text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
@@ -105,7 +121,7 @@ const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAdd
               {loading && (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    {Array.from({ length: 10 }).map((__, j) => (
+                    {Array.from({ length: 7 + allowedLocations.length }).map((__, j) => (
                       <td key={j} className="px-3 py-2">
                         <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded w-3/4" />
                       </td>
@@ -115,14 +131,14 @@ const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAdd
               )}
               {!loading && error && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center">
+                  <td colSpan={7 + allowedLocations.length} className="px-4 py-8 text-center">
                     <p className="text-xs text-error-500 dark:text-error-400">{error}</p>
                   </td>
                 </tr>
               )}
               {!loading && !error && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center">
+                  <td colSpan={7 + allowedLocations.length} className="px-4 py-8 text-center">
                     <svg className="w-10 h-10 mx-auto text-secondary-300 dark:text-neutral-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
                     <p className="text-xs text-secondary-400 dark:text-neutral-500">No items match your filters</p>
                   </td>
@@ -138,9 +154,16 @@ const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAdd
                   <td className="px-3 py-1.5">
                     <span className={`inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded capitalize ${CATEGORY_COLORS[item.category?.toLowerCase()] || ''}`}>{item.category}</span>
                   </td>
-                  <td className="px-3 py-1.5 text-center text-xs text-secondary-700 dark:text-neutral-300">{item.casalStock}</td>
-                  <td className="px-3 py-1.5 text-center text-xs text-secondary-700 dark:text-neutral-300">{item.arlegui}</td>
-                  <td className="px-3 py-1.5 text-center text-xs text-secondary-700 dark:text-neutral-300">{item.quezonCity}</td>
+                  {/* Dynamic location columns based on user access */}
+                  {allowedLocations.includes('Casal') && (
+                    <td className="px-3 py-1.5 text-center text-xs text-secondary-700 dark:text-neutral-300">{item.casalStock}</td>
+                  )}
+                  {allowedLocations.includes('Arlegui') && (
+                    <td className="px-3 py-1.5 text-center text-xs text-secondary-700 dark:text-neutral-300">{item.arlegui}</td>
+                  )}
+                  {allowedLocations.includes('QuezonCity') && (
+                    <td className="px-3 py-1.5 text-center text-xs text-secondary-700 dark:text-neutral-300">{item.quezonCity}</td>
+                  )}
                   <td className="px-3 py-1.5 text-center text-xs font-medium text-secondary-800 dark:text-white">{item.totalStock}</td>
                   <td className="px-3 py-1.5 text-center text-xs text-secondary-500 dark:text-neutral-400">{item.batchCount}</td>
                   <td className="px-3 py-1.5 text-center">

@@ -42,7 +42,7 @@ const MedicalInventory = () => {
   const [activeSection, setActiveSection] = useState(
     routerLocation.state?.section ?? 'dashboard'
   );
-  const [directReleaseLocation, setDirectReleaseLocation] = useState('Casal');
+  const [directReleaseLocation, setDirectReleaseLocation] = useState(null); // Will be set based on user's allowed locations
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [itemsError, setItemsError] = useState('');
@@ -117,16 +117,20 @@ const MedicalInventory = () => {
     }
 
     // Check if user has permission to view patient information
-    // getPatientBasicInfo requires emr_allow_view permission, which is part of patientSearch or medicalRecords modules
+    // NOTE: getPatientBasicInfo uses /emr/medical endpoint which requires specific EMR permissions
+    // Being an admin or having inventory module doesn't grant EMR access
+    // Only fetch if user explicitly has patientSearch or medicalRecords modules
     const canViewPatientInfo = hasPermission('patientSearch') || hasPermission('medicalRecords');
 
+    // For inventory-only staff, use fallback (Patient #ID) without trying to fetch
+    // This prevents 401 errors for users who don't need patient names
     if (!canViewPatientInfo) {
-      // User doesn't have permission to view patient info, use fallback immediately
       const fallback = `Patient #${patientId}`;
       patientNameCacheRef.current[patientId] = fallback;
       return fallback;
     }
 
+    // Try to fetch patient info, but handle unauthorized gracefully
     try {
       const patient = await getPatientBasicInfo(patientId);
       if (patient) {
@@ -135,7 +139,15 @@ const MedicalInventory = () => {
         return name;
       }
     } catch (err) {
-      console.warn(`Failed to fetch patient info for ID ${patientId}:`, err);
+      // If unauthorized, cache fallback to avoid retrying
+      // This happens when frontend permissions don't match backend EMR access
+      if (err.message?.includes('Unauthorized') || err.response?.status === 401) {
+        const fallback = `Patient #${patientId}`;
+        patientNameCacheRef.current[patientId] = fallback;
+        return fallback;
+      }
+      // Log other errors but still use fallback
+      console.warn(`Failed to fetch patient info for ID ${patientId}:`, err.message);
     }
 
     // Fallback to ID if fetch fails
@@ -169,9 +181,10 @@ const MedicalInventory = () => {
   }, [getPatientNameCached]);
 
   // Helper function to get allowed locations based on user's branch
-  const getAllowedLocations = useCallback(() => {
+  // Returns array of location strings for UI filtering
+  const getAllowedLocationsList = useCallback(() => {
     if (!profile || !profile.branch) {
-      return ['Arlegui', 'Casal', 'QuezonCity']; // Default: try all locations
+      return []; // No profile yet - don't allow any locations until loaded
     }
 
     // Branch determines which locations a staff can access
@@ -181,57 +194,66 @@ const MedicalInventory = () => {
       case 'QuezonCity':
         return ['QuezonCity'];
       case 'Both':
-        return null; // null means query all locations without filter
+        return ['Arlegui', 'Casal', 'QuezonCity']; // User has access to all locations
       default:
-        return ['Arlegui', 'Casal', 'QuezonCity']; // Fallback: try all
+        console.warn(`Unknown branch value: ${profile.branch}`);
+        return []; // Unknown branch - no access
     }
   }, [profile]);
+
+  // Memoized list of allowed locations for UI components and API fetching
+  const allowedLocationsList = useMemo(() => getAllowedLocationsList(), [getAllowedLocationsList]);
+
+  // Set default directReleaseLocation based on user's allowed locations
+  useEffect(() => {
+    if (allowedLocationsList.length > 0 && directReleaseLocation === null) {
+      setDirectReleaseLocation(allowedLocationsList[0]);
+    }
+  }, [allowedLocationsList, directReleaseLocation]);
 
   // ── Fetch items from API ───────────────────────────────────────────────
   const loadItems = useCallback(async () => {
     setItemsLoading(true);
     setItemsError('');
     try {
+      // Wait for profile to load before making any requests
+      // If user has no access to any locations (empty array), don't fetch batches
+      if (allowedLocationsList.length === 0) {
+        console.log('⏳ Waiting for profile or no location access - skipping inventory fetch');
+        setItems([]);
+        setBatches([]);
+        setItemsLoading(false);
+        return;
+      }
+
+      console.log('📍 Fetching inventory for allowed locations:', allowedLocationsList);
+
       const data = await fetchMedicalItems();
       setItems(data);
 
-      const allowedLocations = getAllowedLocations();
-
       // Fetch batches for all items in parallel
+      // ALWAYS fetch with location filter to prevent unauthorized access errors
       const batchResults = await Promise.all(
         data.map(async (item) => {
           const isMedicine = item.category?.toLowerCase() === 'medicine';
 
-          // If allowedLocations is null (user has "Both" access), fetch all batches without filter
-          // Otherwise, fetch batches for each allowed location and combine them
-          let batches = [];
-
-          if (allowedLocations === null) {
-            // User has "Both" access - fetch all batches without location filter
-            if (isMedicine) {
-              batches = await fetchMedicineBatches(Number(item.id));
-            } else {
-              batches = await fetchSupplyBatches(Number(item.id));
-            }
-          } else {
-            // User has limited access - fetch batches for each allowed location
-            const locationBatches = await Promise.all(
-              allowedLocations.map(async (location) => {
-                try {
-                  if (isMedicine) {
-                    return await fetchMedicineBatches(Number(item.id), location);
-                  } else {
-                    return await fetchSupplyBatches(Number(item.id), location);
-                  }
-                } catch (err) {
-                  console.warn(`Failed to fetch batches for location ${location}:`, err);
-                  return [];
+          // Fetch batches for each allowed location and combine them
+          const locationBatches = await Promise.all(
+            allowedLocationsList.map(async (location) => {
+              try {
+                if (isMedicine) {
+                  return await fetchMedicineBatches(Number(item.id), location);
+                } else {
+                  return await fetchSupplyBatches(Number(item.id), location);
                 }
-              })
-            );
-            // Flatten the results from all locations
-            batches = locationBatches.flat();
-          }
+              } catch (err) {
+                console.warn(`Failed to fetch batches for item ${item.id} at location ${location}:`, err);
+                return [];
+              }
+            })
+          );
+          // Flatten the results from all locations
+          const batches = locationBatches.flat();
 
           // Normalize the batch data
           return batches.map((b) => {
@@ -275,7 +297,7 @@ const MedicalInventory = () => {
     } finally {
       setItemsLoading(false);
     }
-  }, [getAllowedLocations]);
+  }, [allowedLocationsList]);
 
   useEffect(() => {
     loadItems();
@@ -552,11 +574,39 @@ const MedicalInventory = () => {
   };
 
   // Auto-load all medicine requests on mount (all statuses)
+  // Fetches requests for each allowed location to prevent unauthorized errors
   const loadAllMedicineRequests = useCallback(async () => {
     setIsLoadingRequests(true);
     try {
-      const rawRequests = await fetchAllMedicineRequests(null);
-      const enrichedWithNames = await enrichRequestsWithPatientNames(rawRequests);
+      // Wait for profile to load
+      if (allowedLocationsList.length === 0) {
+        console.log('⏳ Waiting for profile - skipping medicine requests fetch');
+        setRequests([]);
+        setIsLoadingRequests(false);
+        return;
+      }
+
+      console.log('📍 Fetching medicine requests for allowed locations:', allowedLocationsList);
+      
+      // Fetch requests for each allowed location and combine them
+      const locationRequests = await Promise.all(
+        allowedLocationsList.map(async (location) => {
+          try {
+            return await fetchAllMedicineRequests(null, location);
+          } catch (err) {
+            console.warn(`Failed to fetch medicine requests for location ${location}:`, err);
+            return [];
+          }
+        })
+      );
+      
+      // Flatten and deduplicate by ID
+      const allRequests = locationRequests.flat();
+      const uniqueRequests = Array.from(
+        new Map(allRequests.map(req => [req.id, req])).values()
+      );
+      
+      const enrichedWithNames = await enrichRequestsWithPatientNames(uniqueRequests);
       const enriched = enrichedWithNames.map(req => ({
         ...req,
         items: enrichRequestItems(req.items || []),
@@ -567,7 +617,7 @@ const MedicalInventory = () => {
     } finally {
       setIsLoadingRequests(false);
     }
-  }, [enrichRequestItems, enrichRequestsWithPatientNames]);
+  }, [allowedLocationsList, enrichRequestItems, enrichRequestsWithPatientNames]);
 
   useEffect(() => {
     if (itemsLoading || hasLoadedRequestsRef.current) return;
@@ -840,32 +890,35 @@ const MedicalInventory = () => {
     setShowActionModal(true);
   };
 
-  const handleConfirmAction = async (request, notes, approvedQuantity, approvedBatchId) => {
+  const handleConfirmAction = async (request, notes, approvedQuantities, approvedBatchIds) => {
     const requestId = request?.id;
     if (!requestId) return;
 
     try {
       const isApprove = actionType === 'approve';
       const status = isApprove ? 'Approved' : 'Rejected';
-      
+
       // Call backend with notes parameter for both actions
       await setMedicineRequestStatus(requestId, status, notes || undefined);
-      
+
       // Update local state
-      setRequests(requests.map((r) => 
-        r.id === requestId 
-          ? { 
-              ...r, 
-              status, 
+      // For approval, store the full objects of quantities and batch IDs per item
+      // These will be used during dispense to prefill and lock fields
+      setRequests(requests.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              status,
               notes: notes || null,
-              // Store approved quantity and batch in frontend state for use during dispensing
-              approvedQuantity: isApprove ? approvedQuantity : null,
-              approvedBatchId: isApprove ? approvedBatchId : null
-            } 
+              // Store approved quantities and batches as objects mapping item index to value
+              // e.g., { 0: 5, 1: 10 } for two items with 5 and 10 units respectively
+              approvedQuantities: isApprove ? approvedQuantities : null,
+              approvedBatchIds: isApprove ? approvedBatchIds : null
+            }
           : r
       ));
-      
-      showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
+
+      showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved and ready for dispense' : 'rejected'}!`);
       setShowActionModal(false);
       setSelectedActionRequest(null);
       setActionType(null);
@@ -895,13 +948,16 @@ const MedicalInventory = () => {
     }
 
     try {
-      let fullRequest = request;
-      const hasUsableItems = Array.isArray(request.items) && request.items.length > 0;
+      // Get the CURRENT request from state to ensure we have the latest approved data
+      const freshRequest = requests.find(r => r.id === request.id) || request;
+      
+      let fullRequest = freshRequest;
+      const hasUsableItems = Array.isArray(freshRequest.items) && freshRequest.items.length > 0;
 
       if (!hasUsableItems) {
-        const fetched = await fetchMedicineRequestById(request.id);
+        const fetched = await fetchMedicineRequestById(freshRequest.id);
         if (fetched) {
-          fullRequest = { ...request, ...fetched };
+          fullRequest = { ...freshRequest, ...fetched };
         }
       }
 
@@ -1001,6 +1057,7 @@ const MedicalInventory = () => {
           batches={batches}
           requests={requests}
           transactions={transactions}
+          allowedLocations={allowedLocationsList}
           loading={itemsLoading}
           onNavigate={(section) => setActiveSection(section)}
           onSelectItem={handleSelectItem}
@@ -1012,6 +1069,7 @@ const MedicalInventory = () => {
           items={enrichedItems}
           loading={itemsLoading}
           error={itemsError}
+          allowedLocations={allowedLocationsList}
           onSelectItem={handleSelectItem}
           onAddItem={() => setShowAddItem(true)}
           onAddSupply={openAddSupply}
@@ -1040,6 +1098,7 @@ const MedicalInventory = () => {
             requests={requests}
             items={items}
             batches={batches}
+            allowedLocations={allowedLocationsList}
             onDispense={openDispense}
             onApprove={handleApprove}
             onReject={handleReject}
@@ -1052,46 +1111,57 @@ const MedicalInventory = () => {
       {activeSection === 'direct-release' && (
         <div className="space-y-3">
           <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+            {allowedLocationsList.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-neutral-500 dark:text-neutral-400">You do not have access to any inventory locations.</p>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Please contact your administrator to configure your branch access.</p>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
-                <select
-                  value={directReleaseLocation}
-                  onChange={(e) => setDirectReleaseLocation(e.target.value)}
-                  className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
-                >
-                  <option value="Casal">Casal</option>
-                  <option value="Arlegui">Arlegui</option>
-                  <option value="QuezonCity">Quezon City</option>
-                </select>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
+                    <select
+                      value={directReleaseLocation || ''}
+                      onChange={(e) => setDirectReleaseLocation(e.target.value)}
+                      className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
+                    >
+                      {allowedLocationsList.map((loc) => (
+                        <option key={loc} value={loc}>
+                          {loc === 'QuezonCity' ? 'Quezon City' : loc}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-            <DirectRelease
-              location={directReleaseLocation}
-              onRelease={(result) => {
-                loadAllMedicineRequests();
-                recordTransaction({
-                  action: 'direct_release',
-                  itemId: null,
-                  patientId: result.patientId,
-                  quantity: result.quantity,
-                  notes: result.notes,
-                });
-              }}
-              onShowSuccess={(title, message, details) => {
-                setSuccessModalData({ title, message, details });
-                setShowSuccessModal(true);
-              }}
-              onShowError={(errorMsg) => {
-                setError(errorMsg);
-                setTimeout(() => setError(''), 5000);
-              }}
-            />
+                <DirectRelease
+                  location={directReleaseLocation}
+                  onRelease={(result) => {
+                    loadAllMedicineRequests();
+                    recordTransaction({
+                      action: 'direct_release',
+                      itemId: null,
+                      patientId: result.patientId,
+                      quantity: result.quantity,
+                      notes: result.notes,
+                    });
+                  }}
+                  onShowSuccess={(title, message, details) => {
+                    setSuccessModalData({ title, message, details });
+                    setShowSuccessModal(true);
+                  }}
+                  onShowError={(errorMsg) => {
+                    setError(errorMsg);
+                    setTimeout(() => setError(''), 5000);
+                  }}
+                />
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1125,6 +1195,7 @@ const MedicalInventory = () => {
         <AddSupplyModal
           itemId={supplyContext?.itemId}
           items={items}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowAddSupply(false)}
           onSave={handleAddSupply}
         />
@@ -1134,6 +1205,7 @@ const MedicalInventory = () => {
         <SplitSupplyModal
           batch={splitContext.batch}
           allBatches={splitContext.allBatches}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowSplitSupply(false)}
           onSplit={handleSplit}
         />
@@ -1165,6 +1237,7 @@ const MedicalInventory = () => {
         <DispenseMedicineModal
           patientId={dispenseMedicineContext.patientId}
           patientName={dispenseMedicineContext.patientName}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowDispenseMedicine(false)}
           onSuccess={(result) => {
             showSuccess('Medicine Dispensed', `Dispensed medicine to ${dispenseMedicineContext.patientName}.`, `Transaction ID: ${result.id}`);

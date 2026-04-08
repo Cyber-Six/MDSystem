@@ -3,6 +3,7 @@ import { createSocketService } from '@mdsystem/core/services/socket-service';
 import { apiBaseUrlProvider, tokenService } from '../../packages-core-adapter';
 import { fetchMedicalItems, fetchMedicineBatches, fetchSupplyBatches } from '../medical-inventory/medical-inventory-service';
 import { computeItemStats } from '../medical-inventory/inventory-seed-data';
+import { useStaffProfile } from '../../hooks/use-staff-profile';
 
 /**
  * Staff notification events emitted by the backend.
@@ -227,7 +228,27 @@ function persistNotifications(notifications) {
 
 const NotificationContext = createContext(null);
 
+// Helper function to get allowed locations based on user's branch
+function getAllowedLocations(profile) {
+  if (!profile || !profile.branch) {
+    return []; // No profile yet - don't allow any locations
+  }
+
+  switch (profile.branch) {
+    case 'Manila':
+      return ['Arlegui', 'Casal'];
+    case 'QuezonCity':
+      return ['QuezonCity'];
+    case 'Both':
+      return ['Arlegui', 'Casal', 'QuezonCity'];
+    default:
+      console.warn(`[INVENTORY_ALERTS] Unknown branch value: ${profile.branch}`);
+      return [];
+  }
+}
+
 export function StaffNotificationProvider({ children }) {
+  const { profile } = useStaffProfile();
   const [notifications, setNotifications] = useState(() => loadPersistedNotifications());
   const [inventoryAlerts, setInventoryAlerts] = useState([]);
   const [seenInventoryIds, setSeenInventoryIds] = useState(() => loadSeenInventoryIds());
@@ -400,34 +421,56 @@ export function StaffNotificationProvider({ children }) {
 
     const fetchAndComputeAlerts = async () => {
       try {
-        console.log('[INVENTORY_ALERTS] Fetching items and batches...');
+        // Get allowed locations based on user's profile
+        const allowedLocations = getAllowedLocations(profile);
+        
+        // Wait for profile to load before making any requests
+        if (allowedLocations.length === 0) {
+          console.log('[INVENTORY_ALERTS] Waiting for profile or no location access - skipping fetch');
+          setInventoryAlerts([]);
+          return;
+        }
+
+        console.log('[INVENTORY_ALERTS] Fetching items and batches for locations:', allowedLocations);
         const items = await fetchMedicalItems(null, 0, 500);
+        
+        // Fetch batches with location filter to prevent unauthorized access
         const batchResults = await Promise.all(
-          items.map((item) => {
+          items.map(async (item) => {
             const isMedicine = item.category?.toLowerCase() === 'medicine';
-            if (isMedicine) {
-              return fetchMedicineBatches(Number(item.id)).then((bs) =>
-                bs.map((b) => ({
-                  id: b.id,
-                  medicalItemId: Number(b.medicalItemId),
-                  batchNumber: b.batchNumber,
-                  availableQuantity: Number(b.availableQuantity ?? 0),
-                  expiryDate: b.expiryDate,
-                  location: b.location,
-                }))
-              );
-            } else {
-              return fetchSupplyBatches(Number(item.id)).then((bs) =>
-                bs.map((b) => ({
-                  id: b.id,
-                  medicalItemId: Number(b.supplyItemId),
-                  batchNumber: b.batchNumber,
-                  availableQuantity: Number(b.currentQuantity ?? 0),
-                  expiryDate: b.expiryDate,
-                  location: b.location,
-                }))
-              );
-            }
+            
+            // Fetch batches for each allowed location and combine them
+            const locationBatches = await Promise.all(
+              allowedLocations.map(async (location) => {
+                try {
+                  if (isMedicine) {
+                    const bs = await fetchMedicineBatches(Number(item.id), location);
+                    return bs.map((b) => ({
+                      id: b.id,
+                      medicalItemId: Number(b.medicalItemId),
+                      batchNumber: b.batchNumber,
+                      availableQuantity: Number(b.availableQuantity ?? 0),
+                      expiryDate: b.expiryDate,
+                      location: b.location,
+                    }));
+                  } else {
+                    const bs = await fetchSupplyBatches(Number(item.id), location);
+                    return bs.map((b) => ({
+                      id: b.id,
+                      medicalItemId: Number(b.supplyItemId),
+                      batchNumber: b.batchNumber,
+                      availableQuantity: Number(b.currentQuantity ?? 0),
+                      expiryDate: b.expiryDate,
+                      location: b.location,
+                    }));
+                  }
+                } catch (err) {
+                  console.warn(`[INVENTORY_ALERTS] Failed to fetch batches for item ${item.id} at location ${location}:`, err);
+                  return [];
+                }
+              })
+            );
+            return locationBatches.flat();
           })
         );
         const flatBatches = batchResults.flat();
@@ -455,7 +498,7 @@ export function StaffNotificationProvider({ children }) {
       isMounted = false;
       fetchInventoryRef.current = null;
     };
-  }, []);
+  }, [profile]); // Re-run when profile loads/changes
 
   const refreshInventoryAlerts = useCallback(() => {
     if (fetchInventoryRef.current) fetchInventoryRef.current();

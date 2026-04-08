@@ -17,8 +17,13 @@ const formatDateDisplay = (dateValue) => {
 /**
  * Dispense Medicine Modal — issue medicine batch(es) to a patient.
  * Creates MedicineEntity assignments and transaction record with full audit trail.
+ * @param {string|number} patientId - Patient ID
+ * @param {string} patientName - Patient name for display
+ * @param {Array} allowedLocations - List of locations the user has access to
+ * @param {Function} onClose - Close modal handler
+ * @param {Function} onSuccess - Success handler
  */
-const DispenseMedicineModal = ({ patientId, patientName, onClose, onSuccess }) => {
+const DispenseMedicineModal = ({ patientId, patientName, allowedLocations = [], onClose, onSuccess }) => {
   const [medicines, setMedicines] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
   const [location, setLocation] = useState('All');
@@ -99,7 +104,7 @@ const DispenseMedicineModal = ({ patientId, patientName, onClose, onSuccess }) =
   };
 
   const selectedCount = selectedItems.length;
-  const locations = ['All', 'Arlegui', 'Casal', 'QuezonCity'];
+  const locations = ['All', ...allowedLocations];
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
