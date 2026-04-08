@@ -241,11 +241,11 @@ const Mutation = {
         throwGraphQLError(res).message("Medicine request not found").status(404).throw();
       }
 
-      // Allow transitions: Pending -> Approved/Rejected/Cancelled, Approved -> Completed
+      // Allow transitions: Pending -> Approved/Rejected/Cancelled, Approved -> Completed/Rejected/Cancelled
       const currentStatus = current.rows[0].status;
       const allowedTransitions = {
         "Pending": ["Approved", "Rejected", "Cancelled"],
-        "Approved": ["Completed", "Rejected"],
+        "Approved": ["Completed", "Rejected", "Cancelled"],
       };
 
       if (!allowedTransitions[currentStatus]?.includes(status)) {
