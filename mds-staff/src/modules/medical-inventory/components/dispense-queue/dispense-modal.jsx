@@ -133,38 +133,24 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 z-10">
-          <h2 className="text-sm font-bold text-secondary-900 dark:text-white">Dispense Medicine</h2>
-          <p className="text-[11px] text-secondary-500 dark:text-neutral-400 leading-none m-0 mt-1">
-            {request.approvedQuantities && requestItems.every((_, idx) => request.approvedQuantities?.[idx] !== undefined) ? (
-              <span className="text-success-600 dark:text-success-400">✓ All quantities and batches pre-approved — ready to complete</span>
-            ) : request.approvedQuantities ? (
-              <span className="text-accent-600 dark:text-accent-400">Some items pre-approved — review ALL items before completing</span>
-            ) : (
-              <span>FEFO allocation preview — {requestItems.length} item{requestItems.length !== 1 ? 's' : ''}</span>
-            )}
-          </p>
+        <div className="sticky top-0 bg-primary-500 dark:bg-primary-600 px-4 py-3 z-10">
+          <h2 className="text-sm font-bold text-white">Dispense Medicine</h2>
         </div>
 
-        <div className="p-4 space-y-3">
-          {/* Patient info */}
-          <div className="p-2 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg">
-            <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider m-0">Patient</p>
-            <p className="text-xs font-medium text-secondary-800 dark:text-white leading-none m-0">{request.patientName}</p>
-            {request.patientId && <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none m-0">{request.patientId}</p>}
+        <div className="p-4 space-y-4">
+          {/* Patient info - compact */}
+          <div className="text-sm">
+            <p>
+              <span className="font-medium text-neutral-900 dark:text-white">{request.patientName}</span>
+              {request.patientId && <span className="text-[11px] text-neutral-600 dark:text-neutral-300"> (ID: {request.patientId})</span>}
+            </p>
           </div>
 
-          {/* Requested by info */}
-          <div className="flex items-center gap-2 text-xs text-secondary-500 dark:text-neutral-400">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-            Requested by {request.patientType} patient on {formatDate(request.created_at ?? request.createdAt ?? request.requestDate)}
-          </div>
-
-          {/* Items and Quantities */}
+          {/* Items */}
           <div className="space-y-3 border-t border-neutral-200 dark:border-neutral-700 pt-3">
-            <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Items to Dispense *</p>
+            <p className="text-xs font-medium text-neutral-900 dark:text-white uppercase">Items</p>
             {requestItems.map((reqItem, idx) => {
               const isStudent = reqItem.quantity === null || reqItem.quantity === undefined;
               const qty = parseInt(manualQties[idx]) || 0;
@@ -174,191 +160,131 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
               const totalAvailable = batches
                 .filter(b => {
                   const sameItem = String(b.medicalItemId) === String(reqItem.itemId);
-                  const sameLocation = request?.location
-                    ? b.location === request.location
-                    : true; // If no request location specified, allow all locations
+                  const sameLocation = request?.location ? b.location === request.location : true;
                   return sameItem && sameLocation;
                 })
                 .reduce((s, b) => s + (b.availableQuantity || b.currentQuantity || 0), 0);
               
               return (
-                <div key={idx} className="p-3 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg border border-neutral-200 dark:border-neutral-600">
-                  <div className="grid grid-cols-2 gap-2 mb-2">
+                <div key={idx} className="bg-neutral-50 dark:bg-neutral-700/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider m-0">Item {idx + 1}</p>
-                      <p className="text-xs font-medium text-secondary-800 dark:text-white m-0">{reqItem.itemName || '—'}</p>
+                      <p className="text-xs font-medium text-neutral-900 dark:text-white">
+                        {reqItem.itemName || '—'}
+                      </p>
+                      <p className="text-[11px] text-neutral-600 dark:text-neutral-300">
+                        {totalAvailable} available
+                      </p>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider m-0">Available</p>
-                      <p className="text-xs font-medium text-secondary-800 dark:text-white m-0">{totalAvailable} units</p>
-                    </div>
+                    {request.approvedQuantities?.[idx] && (
+                      <span className="text-[10px] px-2 py-1 bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400 rounded font-medium">
+                        ✓ Approved
+                      </span>
+                    )}
                   </div>
-                  <label className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                    Quantity {isStudent && <span className="text-warning-500">(Not specified)</span>}
-                    {request.approvedQuantities?.[idx] && <span className="text-success-500"> ✓ Approved</span>}
-                  </label>
+
+                  {/* Qty input */}
                   <input
                     type="number"
                     min={1}
                     max={totalAvailable}
                     value={manualQties[idx]}
                     onChange={(e) => {
-                      // Only allow changes if this item doesn't have an approved quantity
                       if (!request.approvedQuantities?.[idx]) {
                         setManualQties({ ...manualQties, [idx]: e.target.value });
                       }
                     }}
                     readOnly={request.approvedQuantities?.[idx] !== undefined && request.approvedQuantities?.[idx] !== null}
                     placeholder={`Max: ${totalAvailable}`}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                    className={`w-full px-2 py-1.5 text-sm rounded border text-neutral-900 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 ${
                       request.approvedQuantities?.[idx]
-                        ? 'border-success-300 dark:border-success-600 bg-success-50 dark:bg-success-900/10 cursor-not-allowed'
+                        ? 'bg-success-50 dark:bg-success-900/10 border-success-300 dark:border-success-600 cursor-not-allowed'
                         : isStudent
-                        ? 'border-warning-400 dark:border-warning-600'
-                        : 'border-neutral-300 dark:border-neutral-600'
+                        ? 'border-warning-300 dark:border-warning-600 bg-white dark:bg-neutral-700'
+                        : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700'
                     }`}
                   />
-                  {request.approvedQuantities?.[idx] && (
-                    <p className="text-[10px] text-success-600 dark:text-success-400 mt-1">
-                      Approved in previous step. Quantity is locked to {request.approvedQuantities[idx]} unit{request.approvedQuantities[idx] > 1 ? 's' : ''}.
-                    </p>
-                  )}
-                  {qty > totalAvailable && (
-                    <p className="text-[10px] text-error-500 mt-1">Insufficient stock. Only {totalAvailable} available.</p>
-                  )}
-                  {qty > 0 && !isFullyAllocated && (
-                    <p className="text-[10px] text-error-500 mt-1">Not enough stock for requested quantity.</p>
-                  )}
-                  {qty > 0 && isFullyAllocated && (
-                    <p className="text-[10px] text-success-600 dark:text-success-400 mt-1">✓ Fully allocated ({allocated} units)</p>
+
+                  {/* Batch select - compact */}
+                  {qty > 0 && (
+                    <select
+                      value={manualBatchSelection[idx] || ''}
+                      onChange={(e) => {
+                        if (!request.approvedBatchIds?.[idx]) {
+                          setManualBatchSelection({ ...manualBatchSelection, [idx]: e.target.value });
+                        }
+                      }}
+                      disabled={request.approvedBatchIds?.[idx] !== undefined && request.approvedBatchIds?.[idx] !== null}
+                      className={`w-full px-2 py-1.5 text-sm rounded border text-neutral-900 dark:text-white ${
+                        request.approvedBatchIds?.[idx]
+                          ? 'bg-success-50 dark:bg-success-900/10 border-success-300 dark:border-success-600 cursor-not-allowed opacity-75'
+                          : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700'
+                      }`}
+                    >
+                      <option value="">Auto (FEFO)</option>
+                      {batches
+                        .filter((b) => {
+                          const available = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
+                          const sameItem = String(b.medicalItemId) === String(reqItem.itemId);
+                          const sameLocation = request?.location ? b.location === request.location : true;
+                          return sameItem && available > 0 && sameLocation;
+                        })
+                        .map((batch) => (
+                          <option key={batch.id} value={batch.id}>
+                            {batch.batchNumber} (Exp: {formatDate(batch.expiryDate)})
+                          </option>
+                        ))}
+                    </select>
                   )}
 
-                  {/* Batch Preference Selector */}
-                  {qty > 0 && (
-                    <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600">
-                      <label className="text-[10px] text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-                        Batch {request.approvedBatchIds?.[idx] ? <span className="text-success-500">✓ Locked</span> : <span className="text-secondary-400">(Optional)</span>}
-                      </label>
-                      <select
-                        value={manualBatchSelection[idx] || ''}
-                        onChange={(e) => {
-                          // Only allow changes if this item doesn't have an approved batch
-                          if (!request.approvedBatchIds?.[idx]) {
-                            setManualBatchSelection({ ...manualBatchSelection, [idx]: e.target.value });
-                          }
-                        }}
-                        disabled={request.approvedBatchIds?.[idx] !== undefined && request.approvedBatchIds?.[idx] !== null}
-                        className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                          request.approvedBatchIds?.[idx]
-                            ? 'border-success-300 dark:border-success-600 bg-success-50 dark:bg-success-900/10 cursor-not-allowed opacity-75'
-                            : 'border-neutral-300 dark:border-neutral-600'
-                        }`}
-                      >
-                        <option value="">Auto (FEFO)</option>
-                        {batches
-                          .filter((b) => {
-                            const available = Number(b.availableQuantity ?? b.currentQuantity ?? 0);
-                            const sameItem = String(b.medicalItemId) === String(reqItem.itemId);
-                            const sameLocation = request?.location ? b.location === request.location : true;
-                            return sameItem && available > 0 && sameLocation;
-                          })
-                          .map((batch) => (
-                            <option key={batch.id} value={batch.id}>
-                              {batch.batchNumber || batch.id} (Exp: {formatDate(batch.expiryDate)}) — {batch.availableQuantity || batch.currentQuantity || 0} avail
-                            </option>
-                          ))}
-                      </select>
-                      {request.approvedBatchIds?.[idx] && (
-                        <p className="text-[10px] text-success-600 dark:text-success-400 mt-1">
-                          Batch selected during approval. Click Complete to dispense.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  {/* Status */}
+                  {qty > 0 && isFullyAllocated ? (
+                    <p className="text-[11px] text-success-600 dark:text-success-400 font-medium">
+                      ✓ Fully allocated
+                    </p>
+                  ) : qty > 0 && !isFullyAllocated ? (
+                    <p className="text-[11px] text-error-600 dark:text-error-400">
+                      ✗ Not enough stock
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
           </div>
 
-          {/* Dispense Notes */}
-          <div>
-            <label className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
-              Dispense Notes
+          {/* Notes - simple */}
+          <div className="border-t border-neutral-200 dark:border-neutral-700 pt-3">
+            <label className="text-xs font-medium text-neutral-900 dark:text-white uppercase block mb-1">
+              Notes (optional)
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional: Add instructions or notes (e.g., dosage instructions, special requirements)…"
-              rows={3}
-              className="w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white placeholder-secondary-400 dark:placeholder-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+              placeholder="Add any notes…"
+              rows={2}
+              className="w-full px-2 py-1.5 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
-
-          {/* FEFO Allocation Preview */}
-          {allocation.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-2">FEFO Allocation Preview</p>
-              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-neutral-50 dark:bg-neutral-700/50">
-                      <th className="px-3 py-2 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Batch</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider text-right">Available</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider text-right">Allocate</th>
-                      <th className="px-3 py-2 text-[10px] font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider text-right">Remain</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-200 dark:divide-neutral-700">
-                    {allocation.map((a) => {
-                      const expStatus = getExpiryStatus(a.expiryDate);
-                      const expColor =
-                        expStatus === 'expired'
-                          ? 'text-error-600 dark:text-error-400'
-                          : expStatus === 'critical'
-                          ? 'text-warning-600 dark:text-warning-400'
-                          : 'text-secondary-600 dark:text-neutral-300';
-                      return (
-                        <tr key={a.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/50">
-                          <td className="px-3 py-2 text-xs font-mono text-secondary-700 dark:text-neutral-300">{a.batchNumber}</td>
-                          <td className={`px-3 py-2 text-xs ${expColor}`}>{formatDate(a.expiryDate)}</td>
-                          <td className="px-3 py-2 text-xs text-right text-secondary-600 dark:text-neutral-400">{a.availableQuantity || a.currentQuantity || 0}</td>
-                          <td className="px-3 py-2 text-xs text-right font-bold text-primary-600 dark:text-primary-400">{a.allocate}</td>
-                          <td className="px-3 py-2 text-xs text-right text-secondary-500 dark:text-neutral-400">{a.remainAfter}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Allocation summary */}
-              <div className="mt-2 flex items-center justify-between text-xs">
-                <span className="text-secondary-500 dark:text-neutral-400">
-                  Using {allocation.length} batch{allocation.length !== 1 ? 'es' : ''}
-                </span>
-                {allQtiesValid && (
-                  <span className="text-success-600 dark:text-success-400 font-medium flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                    Fully allocated
-                  </span>
-                )}
-                {!allQtiesValid && (
-                  <span className="text-error-500 font-medium">
-                    Not all items are fully allocated
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-neutral-50 dark:bg-neutral-800/50 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={!isValid} className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-1 ${isValid ? 'bg-primary-500 hover:bg-primary-600' : 'bg-neutral-300 dark:bg-neutral-600 cursor-not-allowed'}`}>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-            {request.approvedQuantities && requestItems.every((_, idx) => request.approvedQuantities?.[idx] !== undefined) ? 'Complete' : 'Confirm Dispense'}
+        {/* Footer - simple */}
+        <div className="sticky bottom-0 bg-neutral-50 dark:bg-neutral-800/50 px-4 py-3 border-t border-neutral-200 dark:border-neutral-700 flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 px-3 py-2 text-sm font-medium text-neutral-900 dark:text-white bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!isValid}
+            className={`flex-1 px-3 py-2 text-sm font-medium text-white rounded transition-colors ${
+              isValid
+                ? 'bg-primary-500 hover:bg-primary-600'
+                : 'bg-neutral-300 dark:bg-neutral-600 cursor-not-allowed'
+            }`}
+          >
+            Complete
           </button>
         </div>
       </div>

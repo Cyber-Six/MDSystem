@@ -948,13 +948,16 @@ const MedicalInventory = () => {
     }
 
     try {
-      let fullRequest = request;
-      const hasUsableItems = Array.isArray(request.items) && request.items.length > 0;
+      // Get the CURRENT request from state to ensure we have the latest approved data
+      const freshRequest = requests.find(r => r.id === request.id) || request;
+      
+      let fullRequest = freshRequest;
+      const hasUsableItems = Array.isArray(freshRequest.items) && freshRequest.items.length > 0;
 
       if (!hasUsableItems) {
-        const fetched = await fetchMedicineRequestById(request.id);
+        const fetched = await fetchMedicineRequestById(freshRequest.id);
         if (fetched) {
-          fullRequest = { ...request, ...fetched };
+          fullRequest = { ...freshRequest, ...fetched };
         }
       }
 
