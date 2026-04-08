@@ -184,32 +184,13 @@ const MedicalInventory = () => {
       case 'Both':
         return ['Arlegui', 'Casal', 'QuezonCity']; // User has access to all locations
       default:
+        console.warn(`Unknown branch value: ${profile.branch}`);
         return []; // Unknown branch - no access
     }
   }, [profile]);
 
-  // Memoized list of allowed locations for UI components
+  // Memoized list of allowed locations for UI components and API fetching
   const allowedLocationsList = useMemo(() => getAllowedLocationsList(), [getAllowedLocationsList]);
-
-  // Helper function to get allowed locations for API fetching
-  // Returns null for "Both" access (fetch all without filter), or array for filtered access
-  const getAllowedLocations = useCallback(() => {
-    if (!profile || !profile.branch) {
-      return []; // No profile yet - return empty array to prevent unauthorized requests
-    }
-
-    // Branch determines which locations a staff can access
-    switch (profile.branch) {
-      case 'Manila':
-        return ['Arlegui', 'Casal'];
-      case 'QuezonCity':
-        return ['QuezonCity'];
-      case 'Both':
-        return null; // null means query all locations without filter (for efficiency)
-      default:
-        return []; // Unknown branch - no access
-    }
-  }, [profile]);
 
   // Set default directReleaseLocation based on user's allowed locations
   useEffect(() => {
@@ -223,54 +204,44 @@ const MedicalInventory = () => {
     setItemsLoading(true);
     setItemsError('');
     try {
-      const allowedLocations = getAllowedLocations();
-
+      // Wait for profile to load before making any requests
       // If user has no access to any locations (empty array), don't fetch batches
-      if (Array.isArray(allowedLocations) && allowedLocations.length === 0) {
+      if (allowedLocationsList.length === 0) {
+        console.log('⏳ Waiting for profile or no location access - skipping inventory fetch');
         setItems([]);
         setBatches([]);
         setItemsLoading(false);
         return;
       }
 
+      console.log('📍 Fetching inventory for allowed locations:', allowedLocationsList);
+
       const data = await fetchMedicalItems();
       setItems(data);
 
       // Fetch batches for all items in parallel
+      // ALWAYS fetch with location filter to prevent unauthorized access errors
       const batchResults = await Promise.all(
         data.map(async (item) => {
           const isMedicine = item.category?.toLowerCase() === 'medicine';
 
-          // If allowedLocations is null (user has "Both" access), fetch all batches without filter
-          // Otherwise, fetch batches for each allowed location and combine them
-          let batches = [];
-
-          if (allowedLocations === null) {
-            // User has "Both" access - fetch all batches without location filter
-            if (isMedicine) {
-              batches = await fetchMedicineBatches(Number(item.id));
-            } else {
-              batches = await fetchSupplyBatches(Number(item.id));
-            }
-          } else {
-            // User has limited access - fetch batches for each allowed location
-            const locationBatches = await Promise.all(
-              allowedLocations.map(async (location) => {
-                try {
-                  if (isMedicine) {
-                    return await fetchMedicineBatches(Number(item.id), location);
-                  } else {
-                    return await fetchSupplyBatches(Number(item.id), location);
-                  }
-                } catch (err) {
-                  console.warn(`Failed to fetch batches for location ${location}:`, err);
-                  return [];
+          // Fetch batches for each allowed location and combine them
+          const locationBatches = await Promise.all(
+            allowedLocationsList.map(async (location) => {
+              try {
+                if (isMedicine) {
+                  return await fetchMedicineBatches(Number(item.id), location);
+                } else {
+                  return await fetchSupplyBatches(Number(item.id), location);
                 }
-              })
-            );
-            // Flatten the results from all locations
-            batches = locationBatches.flat();
-          }
+              } catch (err) {
+                console.warn(`Failed to fetch batches for item ${item.id} at location ${location}:`, err);
+                return [];
+              }
+            })
+          );
+          // Flatten the results from all locations
+          const batches = locationBatches.flat();
 
           // Normalize the batch data
           return batches.map((b) => {
@@ -314,7 +285,7 @@ const MedicalInventory = () => {
     } finally {
       setItemsLoading(false);
     }
-  }, [getAllowedLocations]);
+  }, [allowedLocationsList]);
 
   useEffect(() => {
     loadItems();
