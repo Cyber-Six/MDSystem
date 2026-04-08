@@ -29,6 +29,40 @@ import {
   computeItemStats, LOCATIONS,
 } from './inventory-seed-data';
 
+// ── Approval persistence helpers (localStorage) ───────────────────────────
+// The backend does not store approved quantities, so we persist them locally.
+// Each entry: { quantities: {0: 5, 1: 3}, approvedAt: <timestamp ms> }
+const APPROVAL_EXPIRY_DAYS = 7;
+const _approvalKey = (id) => `mds_inv_approved_${id}`;
+
+const saveApprovalToStorage = (requestId, quantities) => {
+  try {
+    localStorage.setItem(_approvalKey(requestId), JSON.stringify({ quantities, approvedAt: Date.now() }));
+  } catch { /* storage unavailable */ }
+};
+
+const loadApprovalFromStorage = (requestId) => {
+  try {
+    const raw = localStorage.getItem(_approvalKey(requestId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // backward-compat: old format was a plain quantities object
+    if (parsed && parsed.quantities !== undefined) return parsed;
+    return { quantities: parsed, approvedAt: null };
+  } catch { return null; }
+};
+
+const clearApprovalFromStorage = (requestId) => {
+  try { localStorage.removeItem(_approvalKey(requestId)); } catch { /* ignore */ }
+};
+
+const isApprovalExpired = (requestId) => {
+  const data = loadApprovalFromStorage(requestId);
+  if (!data?.approvedAt) return false;
+  return (Date.now() - data.approvedAt) > APPROVAL_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+};
+// ─────────────────────────────────────────────────────────────────────────
+
 
 /**
  * Medical Inventory Page
@@ -611,7 +645,49 @@ const MedicalInventory = () => {
         ...req,
         items: enrichRequestItems(req.items || []),
       }));
-      setRequests(enriched);
+
+      // Identify stale approved requests (approved > 7 days ago) BEFORE setState
+      // so we can fire backend cancellations after the state update
+      const staleRequestIds = enriched
+        .filter(req => (req.status === 'Approved' || req.status === 'InProgress') && isApprovalExpired(req.id))
+        .map(req => req.id);
+      staleRequestIds.forEach(id => clearApprovalFromStorage(id));
+
+      // Use functional update to preserve frontend-only approval data.
+      // Priority order: in-memory state → localStorage → backend item.quantity (original requested qty)
+      setRequests(prev => {
+        const prevMap = new Map(prev.map(r => [String(r.id), r]));
+        const staleSet = new Set(staleRequestIds.map(String));
+        return enriched.map(req => {
+          // Auto-expire stale approved requests in local state
+          if (staleSet.has(String(req.id))) {
+            return { ...req, status: 'Cancelled', approvedQuantities: null, approvedBatchIds: null };
+          }
+          if (req.status === 'Approved' || req.status === 'InProgress') {
+            const existing = prevMap.get(String(req.id));
+            const fromStorage = loadApprovalFromStorage(req.id);
+            const approvedQty = existing?.approvedQuantities || fromStorage?.quantities;
+            if (approvedQty) {
+              return {
+                ...req,
+                approvedQuantities: approvedQty,
+                approvedBatchIds: existing?.approvedBatchIds || null,
+                items: (req.items || []).map((item, idx) => ({
+                  ...item,
+                  quantity: approvedQty[idx] != null ? Number(approvedQty[idx]) : item.quantity,
+                })),
+              };
+            }
+          }
+          return req;
+        });
+      });
+
+      // Auto-cancel stale requests on the backend (fire-and-forget)
+      staleRequestIds.forEach(id => {
+        setMedicineRequestStatus(id, 'Cancelled', 'Auto-cancelled: not picked up within 7 days')
+          .catch(err => console.warn('Auto-cancel backend call failed for request', id, err));
+      });
     } catch (err) {
       setError(err.message || 'Failed to load medicine requests.');
     } finally {
@@ -659,11 +735,36 @@ const MedicalInventory = () => {
     }
   }, [enrichRequestItems, enrichRequestsWithPatientNames, loadAllMedicineRequests]);
 
+  // Handle real-time status changes (e.g., patient cancels a request)
+  // Updates local state immediately so reservation calculations stay accurate
+  const handleRequestStatusChange = useCallback(async (data) => {
+    console.log('🔔 Request status changed:', data);
+    const { requestId, status } = data || {};
+    if (!requestId) return;
+
+    // Update status while preserving all local-only fields
+    // If the request moves out of Approved/InProgress, clear the approval data
+    // so those quantities are no longer counted as reserved
+    const clearApproval = !['Approved', 'InProgress'].includes(status);
+    if (clearApproval) {
+      clearApprovalFromStorage(requestId);
+    }
+    setRequests(prev => prev.map(r =>
+      String(r.id) === String(requestId)
+        ? {
+            ...r,
+            status: status || r.status,
+            ...(clearApproval ? { approvedQuantities: null, approvedBatchIds: null } : {}),
+          }
+        : r
+    ));
+  }, []);
+
   // Connect to socket for real-time updates
   const { isConnected: isSocketConnected } = useMedicineRequestSocket(
     handleNewMedicineRequest,    // onNewRequest
     null,                         // onRequestUpdate (not used yet)
-    null                          // onRequestStatusChange (not used yet)
+    handleRequestStatusChange    // onRequestStatusChange — keeps reservation logic in sync
   );
 
   // Reload dispense queue when a patient submits a new medicine request via socket
@@ -837,13 +938,18 @@ const MedicalInventory = () => {
           dispensedByItemIdx[a.itemIdx] = (dispensedByItemIdx[a.itemIdx] || 0) + a.allocate;
         }
       });
-      
-      setRequests(requests.map((r) =>
+
+      // Clear localStorage — stock has been physically dispensed, no longer reserved
+      clearApprovalFromStorage(requestId);
+
+      setRequests(prev => prev.map((r) =>
         r.id === requestId
           ? {
               ...r,
               status: 'Completed',
               notes: notes || r.notes,
+              approvedQuantities: null,
+              approvedBatchIds: null,
               items: (r.items || []).map((item, idx) => ({
                 ...item,
                 quantity: dispensedByItemIdx[idx] || item.quantity,
@@ -890,6 +996,44 @@ const MedicalInventory = () => {
     setShowActionModal(true);
   };
 
+  // Cancel an already-approved request (staff action or auto-expire)
+  // Clears the reservation so the stock becomes available for other patients
+  const handleCancelRequest = useCallback(async (request) => {
+    const requestId = request?.id;
+    if (!requestId) return;
+
+    // Save previous approval data in case we need to revert
+    const prevApprovalData = loadApprovalFromStorage(requestId);
+
+    // Optimistic update: clear reservation immediately so the queue reflects it
+    clearApprovalFromStorage(requestId);
+    setRequests(prev => prev.map(r =>
+      r.id === requestId
+        ? { ...r, status: 'Cancelled', approvedQuantities: null, approvedBatchIds: null }
+        : r
+    ));
+
+    try {
+      await setMedicineRequestStatus(requestId, 'Cancelled', 'Cancelled by staff');
+    } catch (err) {
+      console.warn('Failed to cancel request on backend:', err);
+      // Revert optimistic update if backend call fails
+      if (prevApprovalData?.quantities) {
+        saveApprovalToStorage(requestId, prevApprovalData.quantities);
+      }
+      setRequests(prev => prev.map(r =>
+        r.id === requestId
+          ? {
+              ...r,
+              status: 'Approved',
+              approvedQuantities: prevApprovalData?.quantities || null,
+            }
+          : r
+      ));
+      setError('Failed to cancel the request. Please try again.');
+    }
+  }, []);
+
   const handleConfirmAction = async (request, notes, approvedQuantities, approvedBatchIds) => {
     const requestId = request?.id;
     if (!requestId) return;
@@ -901,19 +1045,34 @@ const MedicalInventory = () => {
       // Call backend with notes parameter for both actions
       await setMedicineRequestStatus(requestId, status, notes || undefined);
 
-      // Update local state
-      // For approval, store the full objects of quantities and batch IDs per item
-      // These will be used during dispense to prefill and lock fields
-      setRequests(requests.map((r) =>
+      // Persist approval data to localStorage so it survives page refresh.
+      // The backend does not store approved quantities, so this is the only
+      // way to keep reservation logic accurate across sessions.
+      if (isApprove && approvedQuantities) {
+        saveApprovalToStorage(requestId, approvedQuantities);
+      } else {
+        clearApprovalFromStorage(requestId);
+      }
+
+      // Update local state using functional update to avoid stale closure issues
+      // (the await above can cause socket events to update requests mid-flight)
+      setRequests(prev => prev.map((r) =>
         r.id === requestId
           ? {
               ...r,
               status,
               notes: notes || null,
-              // Store approved quantities and batches as objects mapping item index to value
-              // e.g., { 0: 5, 1: 10 } for two items with 5 and 10 units respectively
               approvedQuantities: isApprove ? approvedQuantities : null,
-              approvedBatchIds: isApprove ? approvedBatchIds : null
+              approvedBatchIds: isApprove ? approvedBatchIds : null,
+              // Write approved qty into item.quantity so the reservation fallback is correct
+              items: isApprove && approvedQuantities
+                ? (r.items || []).map((item, idx) => ({
+                    ...item,
+                    quantity: approvedQuantities[idx] != null
+                      ? Number(approvedQuantities[idx])
+                      : item.quantity,
+                  }))
+                : r.items,
             }
           : r
       ));
@@ -1102,6 +1261,7 @@ const MedicalInventory = () => {
             onDispense={openDispense}
             onApprove={handleApprove}
             onReject={handleReject}
+            onCancel={handleCancelRequest}
             focusPatientId={loadedPatientId}
             onClearFocus={() => { setLoadedPatientId(null); setPatientReqsMsg(''); setPatientLookupId(''); }}
           />
@@ -1141,6 +1301,7 @@ const MedicalInventory = () => {
 
                 <DirectRelease
                   location={directReleaseLocation}
+                  allRequests={requests}
                   onRelease={(result) => {
                     loadAllMedicineRequests();
                     recordTransaction({
@@ -1252,6 +1413,7 @@ const MedicalInventory = () => {
           action={actionType}
           batches={batches}
           items={items}
+          allRequests={requests}
           onConfirm={handleConfirmAction}
           onCancel={() => {
             setShowActionModal(false);

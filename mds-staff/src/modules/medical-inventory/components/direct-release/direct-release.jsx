@@ -13,7 +13,7 @@ import BatchSelectionModal from './batch-selection-modal';
  * - Medicine selection with quantity input
  * - Immediate release without patient request approval
  */
-const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
+const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allRequests = [] }) => {
   // Patient search state
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -112,6 +112,29 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
     setNotes('');
   };
 
+  // Compute total reserved quantity for a medicine item across all Approved/InProgress requests.
+  const getReservedQuantityForItem = useCallback((itemId) => {
+    if (!itemId) return 0;
+    const reservedStatuses = ['Approved', 'InProgress'];
+    return (allRequests || [])
+      .filter((r) =>
+        reservedStatuses.includes(r.status) &&
+        (!location || r.location === location)
+      )
+      .reduce((total, r) => {
+        return total + (r.items || []).reduce((itemTotal, item, idx) => {
+          const rItemId = String(item.itemId || item.medicineId || '');
+          if (rItemId === String(itemId)) {
+            const qty = r.approvedQuantities?.[idx] != null
+              ? Number(r.approvedQuantities[idx])
+              : Number(item.quantity || 0);
+            return itemTotal + qty;
+          }
+          return itemTotal;
+        }, 0);
+      }, 0);
+  }, [allRequests, location]);
+
   // Handle adding medicine to release
   const handleAddMedicine = (medicine) => {
     // Check if already added (any batch of this medicine)
@@ -121,16 +144,26 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError }) => {
       return;
     }
 
+    const reserved = getReservedQuantityForItem(medicine.id);
+
     // If multiple batches exist, show batch selection modal
     if (medicine.totalBatches > 1) {
+      // Pre-adjust batch quantities to reflect reservations
+      const adjustedBatches = medicine.allBatches.map((batch) => ({
+        ...batch,
+        availableQuantity: Math.max(0, (batch.availableQuantity || 0) - reserved),
+      }));
       setBatchModalData({
         medicine: medicine,
-        batches: medicine.allBatches, // Use the grouped batches
+        batches: adjustedBatches,
       });
       setShowBatchModal(true);
     } else {
-      // Single batch - add directly
-      addMedicineToRelease(medicine);
+      // Single batch - adjust for reservations, then add directly
+      addMedicineToRelease({
+        ...medicine,
+        availableQuantity: Math.max(0, (medicine.availableQuantity || 0) - reserved),
+      });
     }
   };
 
