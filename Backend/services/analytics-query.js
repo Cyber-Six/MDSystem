@@ -432,6 +432,451 @@ async function consultationTrends(branch, startDate, endDate, options = {}) {
 }
 
 // ============================================================
+// DEMOGRAPHIC QUERY FUNCTIONS
+// ============================================================
+
+// Shared age-bracket CASE expression (institutional brackets used throughout)
+const AGE_BRACKET_EXPR = `
+  CASE
+    WHEN DATE_PART('year', AGE(up.date_of_birth)) < 17  THEN 'Under 17'
+    WHEN DATE_PART('year', AGE(up.date_of_birth)) <= 20 THEN '17–20'
+    WHEN DATE_PART('year', AGE(up.date_of_birth)) <= 25 THEN '21–25'
+    WHEN DATE_PART('year', AGE(up.date_of_birth)) <= 30 THEN '26–30'
+    WHEN DATE_PART('year', AGE(up.date_of_birth)) <= 40 THEN '31–40'
+    ELSE '41+'
+  END
+`;
+
+const AGE_BRACKET_ORDER = `
+  CASE age_group
+    WHEN 'Under 17' THEN 1
+    WHEN '17–20'    THEN 2
+    WHEN '21–25'    THEN 3
+    WHEN '26–30'    THEN 4
+    WHEN '31–40'    THEN 5
+    WHEN '41+'      THEN 6
+    ELSE 9
+  END
+`;
+
+// ── A. SEX DISTRIBUTION ──────────────────────────────────────
+
+/**
+ * Patient population by sex
+ */
+async function patientsBySex(branch, startDate, endDate) {
+  const bf = branchFilter(branch, 'up', 1);
+  const result = await db.query(`
+    SELECT up.sex, COUNT(DISTINCT p.id) as count
+    FROM "Patients" p
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    WHERE up.date_of_birth IS NOT NULL ${bf.clause}
+    GROUP BY up.sex ORDER BY count DESC
+  `, [...bf.params]);
+
+  const labels = result.rows.map(r => r.sex || 'Unknown');
+  const values = result.rows.map(r => parseInt(r.count));
+  const total = values.reduce((sum, v) => sum + v, 0);
+  return { labels, values, total };
+}
+
+/**
+ * Consultation volume by patient sex
+ */
+async function consultationsBySex(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+  const result = await db.query(`
+    SELECT up.sex, COUNT(*) as count
+    FROM "Consultation" c
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY up.sex ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
+
+  const labels = result.rows.map(r => r.sex || 'Unknown');
+  const values = result.rows.map(r => parseInt(r.count));
+  const total = values.reduce((sum, v) => sum + v, 0);
+  return { labels, values, total };
+}
+
+/**
+ * Top 5 diagnoses per sex — returns matrix data for grouped bar
+ * Shape: labels (diagnoses), series: [{ sex, values }]
+ */
+async function topDiagnosesBySex(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+
+  // First get top 5 diagnoses overall
+  const topResult = await db.query(`
+    SELECT COALESCE(icd.title, cd."diagnosisName") as diagnosis, COUNT(*) as total
+    FROM "ConsultationDiagnosis" cd
+    INNER JOIN "ConsultationOutcome" co ON cd."outcomeId" = co.id
+    INNER JOIN "Consultation" c ON co."consultationId" = c.id
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    LEFT JOIN "ICDLookup" icd ON cd."icdId" = icd.id
+    WHERE co."recordedAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY diagnosis ORDER BY total DESC LIMIT 5
+  `, [startDate, endDate, ...bf.params]);
+
+  const topLabels = topResult.rows.map(r => r.diagnosis);
+  if (topLabels.length === 0) return { labels: [], values: [], series: [], total: 0, chartVariant: 'grouped-bar' };
+
+  // Then get count per (diagnosis, sex) for those top 5
+  const bf2 = branchFilter(branch, 'up', topLabels.length + 3);
+  const placeholders = topLabels.map((_, i) => `$${i + 3}`).join(', ');
+  const matrixResult = await db.query(`
+    SELECT COALESCE(icd.title, cd."diagnosisName") as diagnosis,
+           up.sex, COUNT(*) as count
+    FROM "ConsultationDiagnosis" cd
+    INNER JOIN "ConsultationOutcome" co ON cd."outcomeId" = co.id
+    INNER JOIN "Consultation" c ON co."consultationId" = c.id
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    LEFT JOIN "ICDLookup" icd ON cd."icdId" = icd.id
+    WHERE co."recordedAt" BETWEEN $1 AND $2
+      AND COALESCE(icd.title, cd."diagnosisName") IN (${placeholders})
+      ${bf2.clause}
+    GROUP BY diagnosis, up.sex
+  `, [startDate, endDate, ...topLabels, ...bf2.params]);
+
+  // Build series structure
+  const sexSet = [...new Set(matrixResult.rows.map(r => r.sex || 'Unknown'))].sort();
+  const matrixMap = {};
+  matrixResult.rows.forEach(r => {
+    const d = r.diagnosis;
+    const s = r.sex || 'Unknown';
+    if (!matrixMap[d]) matrixMap[d] = {};
+    matrixMap[d][s] = parseInt(r.count);
+  });
+
+  const series = sexSet.map(sex => ({
+    name: sex,
+    values: topLabels.map(label => matrixMap[label]?.[sex] || 0),
+  }));
+
+  const total = matrixResult.rows.reduce((sum, r) => sum + parseInt(r.count), 0);
+  return { labels: topLabels, values: series[0]?.values || [], series, total, chartVariant: 'grouped-bar' };
+}
+
+// ── B. AGE GROUP DISTRIBUTION ────────────────────────────────
+
+/**
+ * Patient population by institutional age bracket
+ */
+async function patientsByAgeGroup(branch, startDate, endDate) {
+  const bf = branchFilter(branch, 'up', 1);
+  const result = await db.query(`
+    SELECT (${AGE_BRACKET_EXPR}) as age_group, COUNT(DISTINCT p.id) as count
+    FROM "Patients" p
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    WHERE up.date_of_birth IS NOT NULL ${bf.clause}
+    GROUP BY 1
+    ORDER BY ${AGE_BRACKET_ORDER}
+  `, [...bf.params]);
+
+  const labels = result.rows.map(r => r.age_group);
+  const values = result.rows.map(r => parseInt(r.count));
+  const total = values.reduce((sum, v) => sum + v, 0);
+  return { labels, values, total };
+}
+
+/**
+ * Consultation volume by patient age group
+ */
+async function consultationsByAgeGroup(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+  const result = await db.query(`
+    SELECT ${AGE_BRACKET_EXPR} as age_group, COUNT(*) as count
+    FROM "Consultation" c
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    WHERE c."createdAt" BETWEEN $1 AND $2
+      AND up.date_of_birth IS NOT NULL
+      ${bf.clause}
+    GROUP BY 1
+    ORDER BY ${AGE_BRACKET_ORDER}
+  `, [startDate, endDate, ...bf.params]);
+
+  const labels = result.rows.map(r => r.age_group);
+  const values = result.rows.map(r => parseInt(r.count));
+  const total = values.reduce((sum, v) => sum + v, 0);
+  return { labels, values, total };
+}
+
+/**
+ * Average BMI per age group
+ */
+async function bmiByAgeGroup(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+  const result = await db.query(`
+    SELECT ${AGE_BRACKET_EXPR} as age_group,
+      ROUND(AVG(vs.weight_kg / POWER(vs.height_cm / 100, 2))::numeric, 2) as avg_bmi,
+      COUNT(*) as sample_count
+    FROM "VitalSigns" vs
+    INNER JOIN "Patients" p ON vs."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    WHERE vs.created_at BETWEEN $1 AND $2
+      AND vs.height_cm > 0 AND vs.weight_kg > 0
+      AND up.date_of_birth IS NOT NULL
+      ${bf.clause}
+    GROUP BY 1
+    ORDER BY ${AGE_BRACKET_ORDER}
+  `, [startDate, endDate, ...bf.params]);
+
+  const labels = result.rows.map(r => r.age_group);
+  const values = result.rows.map(r => parseFloat(r.avg_bmi));
+  const total = result.rows.reduce((sum, r) => sum + parseInt(r.sample_count), 0);
+  return { labels, values, total };
+}
+
+/**
+ * Top diagnoses by age group — matrix data (heatmap-ready)
+ * Shape: labels (age groups), series: [{ name: diagnosisName, values: [count per age group] }]
+ */
+async function diagnosesByAgeGroup(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+  const result = await db.query(`
+    SELECT ${AGE_BRACKET_EXPR} as age_group,
+           COALESCE(icd.title, cd."diagnosisName") as diagnosis,
+           COUNT(*) as count
+    FROM "ConsultationDiagnosis" cd
+    INNER JOIN "ConsultationOutcome" co ON cd."outcomeId" = co.id
+    INNER JOIN "Consultation" c ON co."consultationId" = c.id
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    LEFT JOIN "ICDLookup" icd ON cd."icdId" = icd.id
+    WHERE co."recordedAt" BETWEEN $1 AND $2
+      AND up.date_of_birth IS NOT NULL
+      ${bf.clause}
+    GROUP BY 1, 2
+    ORDER BY ${AGE_BRACKET_ORDER}, count DESC
+  `, [startDate, endDate, ...bf.params]);
+
+  const ageGroups = ['Under 17', '17–20', '21–25', '26–30', '31–40', '41+'].filter(ag =>
+    result.rows.some(r => r.age_group === ag)
+  );
+
+  // Get top 8 diagnoses by total count across age groups for readability
+  const totalByDiagnosis = {};
+  result.rows.forEach(r => {
+    totalByDiagnosis[r.diagnosis] = (totalByDiagnosis[r.diagnosis] || 0) + parseInt(r.count);
+  });
+  const topDiagnoses = Object.entries(totalByDiagnosis)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name]) => name);
+
+  const matrixMap = {};
+  result.rows.forEach(r => {
+    if (!topDiagnoses.includes(r.diagnosis)) return;
+    if (!matrixMap[r.diagnosis]) matrixMap[r.diagnosis] = {};
+    matrixMap[r.diagnosis][r.age_group] = parseInt(r.count);
+  });
+
+  const series = topDiagnoses.map(name => ({
+    name,
+    values: ageGroups.map(ag => matrixMap[name]?.[ag] || 0),
+  }));
+
+  const total = result.rows.reduce((sum, r) => sum + parseInt(r.count), 0);
+  return { labels: ageGroups, values: series[0]?.values || [], series, total, chartVariant: 'heatmap' };
+}
+
+// ── C. DEPARTMENT / PROGRAM ──────────────────────────────────
+
+/**
+ * Employee consultation volume per department
+ */
+async function consultationsByDepartment(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+  const result = await db.query(`
+    WITH patient_dept AS (
+      SELECT DISTINCT ON (pul."patientId") pul."patientId", ep.department
+      FROM "patientUpdateLog" pul
+      INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Employee'
+      INNER JOIN "employee_profile" ep ON ep."profileId" = pr.id
+      WHERE pul.status = 'Approved' AND ep.department IS NOT NULL
+      ORDER BY pul."patientId", pul.created_at DESC
+    )
+    SELECT pd.department, COUNT(*) as count
+    FROM "Consultation" c
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    INNER JOIN patient_dept pd ON pd."patientId" = p.id
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY pd.department ORDER BY count DESC LIMIT 15
+  `, [startDate, endDate, ...bf.params]);
+
+  const labels = result.rows.map(r => r.department);
+  const values = result.rows.map(r => parseInt(r.count));
+  const total = values.reduce((sum, v) => sum + v, 0);
+  return { labels, values, total };
+}
+
+/**
+ * Student consultation volume per program
+ */
+async function consultationsByProgram(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+  const result = await db.query(`
+    WITH patient_prog AS (
+      SELECT DISTINCT ON (pul."patientId") pul."patientId", sp.program
+      FROM "patientUpdateLog" pul
+      INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Student'
+      INNER JOIN "student_profile" sp ON sp."profileId" = pr.id
+      WHERE pul.status = 'Approved' AND sp.program IS NOT NULL
+      ORDER BY pul."patientId", pul.created_at DESC
+    )
+    SELECT pp.program, COUNT(*) as count
+    FROM "Consultation" c
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    INNER JOIN patient_prog pp ON pp."patientId" = p.id
+    WHERE c."createdAt" BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY pp.program ORDER BY count DESC LIMIT 15
+  `, [startDate, endDate, ...bf.params]);
+
+  const labels = result.rows.map(r => r.program);
+  const values = result.rows.map(r => parseInt(r.count));
+  const total = values.reduce((sum, v) => sum + v, 0);
+  return { labels, values, total };
+}
+
+/**
+ * Lifestyle risk factors per department (employees)
+ * Returns series data: [{ name: 'Smokers', values: [count per dept] }, ...]
+ */
+async function lifestyleRisksByDepartment(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+  const result = await db.query(`
+    WITH patient_dept AS (
+      SELECT DISTINCT ON (pul."patientId") pul."patientId", ep.department
+      FROM "patientUpdateLog" pul
+      INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Employee'
+      INNER JOIN "employee_profile" ep ON ep."profileId" = pr.id
+      WHERE pul.status = 'Approved' AND ep.department IS NOT NULL
+      ORDER BY pul."patientId", pul.created_at DESC
+    )
+    SELECT pd.department,
+      SUM(CASE WHEN l.smoker = true THEN 1 ELSE 0 END) as smokers,
+      SUM(CASE WHEN l."alcoholConsumer" = true THEN 1 ELSE 0 END) as alcohol,
+      SUM(CASE WHEN l."vapeUser" = true THEN 1 ELSE 0 END) as vape,
+      COUNT(*) as total_records
+    FROM "Lifestyle" l
+    INNER JOIN "patientUpdateLog" pul ON l.id = pul.id AND pul.status = 'Approved'
+    INNER JOIN "UsersPersonal" up ON pul."patientId" = up.id
+    INNER JOIN patient_dept pd ON pd."patientId" = pul."patientId"
+    WHERE pul.created_at BETWEEN $1 AND $2 ${bf.clause}
+    GROUP BY pd.department ORDER BY total_records DESC LIMIT 15
+  `, [startDate, endDate, ...bf.params]);
+
+  const labels = result.rows.map(r => r.department);
+  const series = [
+    { name: 'Smokers',   values: result.rows.map(r => parseInt(r.smokers)) },
+    { name: 'Alcohol',   values: result.rows.map(r => parseInt(r.alcohol)) },
+    { name: 'Vape Users', values: result.rows.map(r => parseInt(r.vape)) },
+  ];
+  const total = result.rows.reduce((sum, r) => sum + parseInt(r.total_records), 0);
+  return { labels, values: series[0].values, series, total, chartVariant: 'grouped-bar' };
+}
+
+// ── D. CROSS-DIMENSIONAL ─────────────────────────────────────
+
+/**
+ * Patient count matrix: sex × age group (heatmap)
+ * Shape: labels (age groups), series: [{ name: sex, values: [count per age group] }]
+ */
+async function sexAgeGroupMatrix(branch, startDate, endDate) {
+  const bf = branchFilter(branch, 'up', 1);
+  const result = await db.query(`
+    SELECT up.sex, (${AGE_BRACKET_EXPR}) as age_group, COUNT(DISTINCT p.id) as count
+    FROM "Patients" p
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    WHERE up.date_of_birth IS NOT NULL ${bf.clause}
+    GROUP BY 1, 2
+    ORDER BY up.sex, ${AGE_BRACKET_ORDER}
+  `, [...bf.params]);
+
+  const ageGroups = ['Under 17', '17–20', '21–25', '26–30', '31–40', '41+'].filter(ag =>
+    result.rows.some(r => r.age_group === ag)
+  );
+  const sexes = [...new Set(result.rows.map(r => r.sex || 'Unknown'))].sort();
+
+  const matrixMap = {};
+  result.rows.forEach(r => {
+    const s = r.sex || 'Unknown';
+    if (!matrixMap[s]) matrixMap[s] = {};
+    matrixMap[s][r.age_group] = parseInt(r.count);
+  });
+
+  const series = sexes.map(sex => ({
+    name: sex,
+    values: ageGroups.map(ag => matrixMap[sex]?.[ag] || 0),
+  }));
+
+  const total = result.rows.reduce((sum, r) => sum + parseInt(r.count), 0);
+  return { labels: ageGroups, values: series[0]?.values || [], series, total, chartVariant: 'heatmap' };
+}
+
+/**
+ * Top diagnoses cross-tabulated by sex and age group
+ * Shape: labels (diagnoses), series: [{name: 'Male 17–20', values}, ...]
+ */
+async function diagnosesBySexAndAge(branch, startDate, endDate) {
+  const bf = branchFilter(branch);
+  const result = await db.query(`
+    SELECT COALESCE(icd.title, cd."diagnosisName") as diagnosis,
+           up.sex,
+           ${AGE_BRACKET_EXPR} as age_group,
+           COUNT(*) as count
+    FROM "ConsultationDiagnosis" cd
+    INNER JOIN "ConsultationOutcome" co ON cd."outcomeId" = co.id
+    INNER JOIN "Consultation" c ON co."consultationId" = c.id
+    INNER JOIN "Patients" p ON c."patientId" = p.id
+    INNER JOIN "UsersPersonal" up ON p.id = up.id
+    LEFT JOIN "ICDLookup" icd ON cd."icdId" = icd.id
+    WHERE co."recordedAt" BETWEEN $1 AND $2
+      AND up.date_of_birth IS NOT NULL
+      ${bf.clause}
+    GROUP BY 1, up.sex, 3
+    ORDER BY count DESC
+  `, [startDate, endDate, ...bf.params]);
+
+  // Get top 6 diagnoses
+  const totalByDiag = {};
+  result.rows.forEach(r => {
+    totalByDiag[r.diagnosis] = (totalByDiag[r.diagnosis] || 0) + parseInt(r.count);
+  });
+  const topDiagnoses = Object.entries(totalByDiag)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name]) => name);
+
+  // Build series: one per unique sex+ageGroup combination
+  const combinations = [...new Set(
+    result.rows.map(r => `${r.sex || 'Unknown'} ${r.age_group}`)
+  )].sort();
+
+  const matrixMap = {};
+  result.rows.forEach(r => {
+    if (!topDiagnoses.includes(r.diagnosis)) return;
+    const key = `${r.sex || 'Unknown'} ${r.age_group}`;
+    if (!matrixMap[key]) matrixMap[key] = {};
+    matrixMap[key][r.diagnosis] = parseInt(r.count);
+  });
+
+  const series = combinations.map(combo => ({
+    name: combo,
+    values: topDiagnoses.map(d => matrixMap[combo]?.[d] || 0),
+  })).filter(s => s.values.some(v => v > 0));
+
+  const total = result.rows.reduce((sum, r) => sum + parseInt(r.count), 0);
+  return { labels: topDiagnoses, values: series[0]?.values || [], series, total, chartVariant: 'heatmap' };
+}
+
+// ============================================================
 // QUERY REGISTRY - Register your queries here
 // ============================================================
 
@@ -499,6 +944,57 @@ const QUERY_HANDLERS = {
   'appointments-by-session': {
     handler: appointmentsBySession,
     description: 'Appointments grouped by session (Morning/Afternoon)',
+  },
+
+  // ── DEMOGRAPHICS ──────────────────────────────────────────
+
+  'patients-by-sex': {
+    handler: patientsBySex,
+    description: 'Patient population distribution by sex',
+  },
+  'consultations-by-sex': {
+    handler: consultationsBySex,
+    description: 'Consultation volume broken down by patient sex',
+  },
+  'top-diagnoses-by-sex': {
+    handler: topDiagnosesBySex,
+    description: 'Top diagnoses grouped by patient sex (grouped bar)',
+  },
+  'patients-by-age-group': {
+    handler: patientsByAgeGroup,
+    description: 'Patient population by institutional age brackets (17–20, 21–25, 26–30, 31–40, 41+)',
+  },
+  'consultations-by-age-group': {
+    handler: consultationsByAgeGroup,
+    description: 'Consultation demand by age group',
+  },
+  'bmi-by-age-group': {
+    handler: bmiByAgeGroup,
+    description: 'Average BMI per age group',
+  },
+  'diagnoses-by-age-group': {
+    handler: diagnosesByAgeGroup,
+    description: 'Top diagnoses per age group (heatmap-ready matrix data)',
+  },
+  'consultations-by-department': {
+    handler: consultationsByDepartment,
+    description: 'Employee consultation volume per department',
+  },
+  'consultations-by-program': {
+    handler: consultationsByProgram,
+    description: 'Student consultation volume per college/program',
+  },
+  'lifestyle-risks-by-department': {
+    handler: lifestyleRisksByDepartment,
+    description: 'Lifestyle risk factors (smoking, alcohol, vaping) per department',
+  },
+  'sex-age-group-matrix': {
+    handler: sexAgeGroupMatrix,
+    description: 'Patient count by sex × age group matrix (heatmap)',
+  },
+  'diagnoses-sex-age': {
+    handler: diagnosesBySexAndAge,
+    description: 'Top diagnoses cross-tabulated by sex and age group',
   },
 };
 

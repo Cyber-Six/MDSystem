@@ -33,6 +33,15 @@ export const QUERY_CATEGORIES = {
     label: 'Lifestyle & Allergies',
     queries: ['lifestyle-risks', 'allergy-by-type', 'allergy-by-severity'],
   },
+  demographics: {
+    label: 'Demographics',
+    queries: [
+      'patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex',
+      'patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group',
+      'consultations-by-department', 'consultations-by-program', 'lifestyle-risks-by-department',
+      'sex-age-group-matrix', 'diagnoses-sex-age',
+    ],
+  },
 };
 
 // ── Chart Type Recommendations ───────────────────────────────────────────────
@@ -53,6 +62,19 @@ export const CHART_TYPE_MAP = {
   'appointments-by-category': 'pie',
   'appointments-by-status': 'doughnut',
   'appointments-by-session': 'pie',
+  // Demographics
+  'patients-by-sex': 'bar',
+  'consultations-by-sex': 'bar',
+  'top-diagnoses-by-sex': 'grouped-bar',
+  'patients-by-age-group': 'bar',
+  'consultations-by-age-group': 'bar',
+  'bmi-by-age-group': 'bar',
+  'diagnoses-by-age-group': 'heatmap',
+  'consultations-by-department': 'bar',
+  'consultations-by-program': 'bar',
+  'lifestyle-risks-by-department': 'grouped-bar',
+  'sex-age-group-matrix': 'heatmap',
+  'diagnoses-sex-age': 'heatmap',
 };
 
 // ── Period Preset Options ────────────────────────────────────────────────────
@@ -194,13 +216,14 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
 
 /** Export presets mirror – used to populate presets in the UI without an API call */
 export const EXPORT_PRESETS = {
-  'full-report':    { label: 'Full Analytics Report',       description: 'All 15 analytics metrics combined' },
+  'full-report':    { label: 'Full Analytics Report',       description: 'All analytics metrics combined' },
   'consultations':  { label: 'Consultations Report',        description: 'Consultation metrics: type, status, trends' },
   'diagnoses':      { label: 'Diagnoses Report',            description: 'Diagnosis metrics: top ICD-10, type distribution' },
   'vitals':         { label: 'Vital Signs Report',          description: 'BMI and blood pressure trend analysis' },
   'appointments':   { label: 'Appointments Report',         description: 'Appointment category, status, and session data' },
   'clinical':       { label: 'Clinical Data Report',        description: 'Immunization coverage and dental procedures' },
   'lifestyle':      { label: 'Lifestyle & Allergies Report', description: 'Lifestyle risk factors and allergy data' },
+  'demographics':   { label: 'Demographics Report',         description: 'Sex, age group, department, and program analytics' },
 };
 
 /**

@@ -1,10 +1,10 @@
 const express = require('express');
-const logger = require('../../../utils/logger.js');
-const { jwtProtect } = require('../../../config/middleware/jwtProtect.js');
-const query = require('../../../config/query.js');
-const analytics = require('../../../services/analytics-query.js');
-const docGen = require('../../../services/doc-generate-module/index.js');
-const analyticsExport = require('../../../services/analytics-export.js');
+const logger = require('../../utils/logger.js');
+const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
+const query = require('../../config/query.js');
+const analytics = require('../../services/analytics-query.js');
+const docGen = require('../../services/doc-generate-module/index.js');
+const analyticsExport = require('../../services/analytics-export.js');
 
 const router = express.Router();
 
@@ -218,7 +218,7 @@ router.get('/report/:reportType', jwtProtect('medical'), async (req, res) => {
     const reportData = await analytics.getReportData(reportType, branch, startDate, endDate);
 
     // Fetch physician info
-    const physicianResult = await require('../../../config/db.js').query(
+    const physicianResult = await require('../../config/db.js').query(
       `SELECT up.first_name, up.last_name, mp.title
        FROM "UsersPersonal" up
        LEFT JOIN "MedicalPersonnel" mp ON up.id = mp.id
@@ -400,7 +400,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
     // ── PDF ──────────────────────────────────────────────────
     if (format === 'pdf') {
       // Fetch physician info for PDF signature
-      const physicianResult = await require('../../../config/db.js').query(
+      const physicianResult = await require('../../config/db.js').query(
         `SELECT up.first_name, up.last_name, mp.title
          FROM "UsersPersonal" up
          LEFT JOIN "MedicalPersonnel" mp ON up.id = mp.id
@@ -484,7 +484,7 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
     }
 
     // Fetch physician info
-    const physicianResult = await require('../../../config/db.js').query(
+    const physicianResult = await require('../../config/db.js').query(
       `SELECT up.first_name, up.last_name, mp.title
        FROM "UsersPersonal" up
        LEFT JOIN "MedicalPersonnel" mp ON up.id = mp.id

@@ -29,6 +29,20 @@ const EXPORT_META = {
   'appointments-by-category': { label: 'Appointments by Category',    xAxis: 'Category',      yAxis: 'Count',   chartType: 'pie' },
   'appointments-by-status':   { label: 'Appointments by Status',      xAxis: 'Status',        yAxis: 'Count',   chartType: 'doughnut' },
   'appointments-by-session':  { label: 'Appointments by Session',     xAxis: 'Session',       yAxis: 'Count',   chartType: 'pie' },
+
+  // Demographics
+  'patients-by-sex':              { label: 'Patients by Sex',                xAxis: 'Sex',             yAxis: 'Patients', chartType: 'bar' },
+  'consultations-by-sex':         { label: 'Consultations by Sex',           xAxis: 'Sex',             yAxis: 'Count',    chartType: 'bar' },
+  'top-diagnoses-by-sex':         { label: 'Top Diagnoses by Sex',           xAxis: 'Diagnosis',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
+  'patients-by-age-group':        { label: 'Patients by Age Group',          xAxis: 'Age Group',       yAxis: 'Patients', chartType: 'bar' },
+  'consultations-by-age-group':   { label: 'Consultations by Age Group',     xAxis: 'Age Group',       yAxis: 'Count',    chartType: 'bar' },
+  'bmi-by-age-group':             { label: 'Average BMI by Age Group',       xAxis: 'Age Group',       yAxis: 'Avg BMI',  chartType: 'bar' },
+  'diagnoses-by-age-group':       { label: 'Diagnoses by Age Group',         xAxis: 'Age Group',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
+  'consultations-by-department':  { label: 'Consultations by Department',    xAxis: 'Department',      yAxis: 'Count',    chartType: 'bar' },
+  'consultations-by-program':     { label: 'Consultations by Program',       xAxis: 'Program',         yAxis: 'Count',    chartType: 'bar' },
+  'lifestyle-risks-by-department':{ label: 'Lifestyle Risks by Department',  xAxis: 'Department',      yAxis: 'Count',    chartType: 'bar', hasSeries: true },
+  'sex-age-group-matrix':         { label: 'Sex × Age Group Matrix',         xAxis: 'Age Group',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
+  'diagnoses-sex-age':            { label: 'Diagnoses by Sex & Age',         xAxis: 'Diagnosis',       yAxis: 'Count',    chartType: 'bar', hasSeries: true },
 };
 
 /**
@@ -37,7 +51,7 @@ const EXPORT_META = {
 const EXPORT_PRESETS = {
   'full-report': {
     label: 'Full Analytics Report',
-    description: 'All 15 analytics metrics combined',
+    description: 'All analytics metrics combined',
     dataTypes: Object.keys(EXPORT_META),
   },
   'consultations': {
@@ -69,6 +83,16 @@ const EXPORT_PRESETS = {
     label: 'Lifestyle & Allergies Report',
     description: 'Lifestyle risk factors and allergy data',
     dataTypes: ['lifestyle-risks', 'allergy-by-type', 'allergy-by-severity'],
+  },
+  'demographics': {
+    label: 'Demographics Report',
+    description: 'Sex, age group, department, and program distribution analytics',
+    dataTypes: [
+      'patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex',
+      'patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group',
+      'consultations-by-department', 'consultations-by-program', 'lifestyle-risks-by-department',
+      'sex-age-group-matrix', 'diagnoses-sex-age',
+    ],
   },
 };
 
@@ -165,11 +189,22 @@ function generateCSV(data, meta) {
     if (!meta_ || !result.labels) continue;
 
     lines.push(`# ${meta_.label}`);
-    lines.push(`${csvEscape(meta_.xAxis)},${csvEscape(meta_.yAxis)}`);
 
-    for (let i = 0; i < result.labels.length; i++) {
-      lines.push(`${csvEscape(result.labels[i])},${result.values[i] || 0}`);
+    if (meta_.hasSeries && result.series?.length) {
+      // Multi-series: one column per series
+      const seriesNames = result.series.map(s => csvEscape(s.name));
+      lines.push(`${csvEscape(meta_.xAxis)},${seriesNames.join(',')}`);
+      for (let i = 0; i < result.labels.length; i++) {
+        const vals = result.series.map(s => s.values[i] || 0).join(',');
+        lines.push(`${csvEscape(result.labels[i])},${vals}`);
+      }
+    } else {
+      lines.push(`${csvEscape(meta_.xAxis)},${csvEscape(meta_.yAxis)}`);
+      for (let i = 0; i < result.labels.length; i++) {
+        lines.push(`${csvEscape(result.labels[i])},${result.values[i] || 0}`);
+      }
     }
+
     lines.push(`Total,${result.total || 0}`);
     lines.push('');
   }
@@ -276,13 +311,21 @@ async function generateExcel(data, meta) {
 
     // Table header
     const hRow = sheet.getRow(4);
-    hRow.values = [meta_.xAxis, meta_.yAxis];
+    if (meta_.hasSeries && result.series?.length) {
+      hRow.values = [meta_.xAxis, ...result.series.map(s => s.name)];
+    } else {
+      hRow.values = [meta_.xAxis, meta_.yAxis];
+    }
     hRow.eachCell(cell => Object.assign(cell, headerStyle));
 
     // Data rows
     for (let i = 0; i < result.labels.length; i++) {
       const r = sheet.getRow(5 + i);
-      r.values = [result.labels[i], result.values[i] || 0];
+      if (meta_.hasSeries && result.series?.length) {
+        r.values = [result.labels[i], ...result.series.map(s => s.values[i] || 0)];
+      } else {
+        r.values = [result.labels[i], result.values[i] || 0];
+      }
       r.eachCell(cell => { cell.border = cellBorder; });
     }
 
@@ -294,9 +337,10 @@ async function generateExcel(data, meta) {
       cell.border = cellBorder;
     });
 
+    const colCount = (meta_.hasSeries && result.series?.length) ? 1 + result.series.length : 2;
     sheet.columns = [
       { width: 35 },
-      { width: 18 },
+      ...Array(colCount - 1).fill({ width: 18 }),
     ];
   }
 
