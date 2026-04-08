@@ -1,11 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { CATEGORIES, CATEGORY_COLORS, LOCATIONS } from '../../inventory-seed-data';
+import { CATEGORIES, CATEGORY_COLORS } from '../../inventory-seed-data';
 import { getDisplayLocation } from '../../medical-inventory-service';
 
 /**
  * Medical Items List — searchable, filterable table matching appointment-queue pattern.
+ * @param {Array} items - Medical items to display
+ * @param {boolean} loading - Loading state
+ * @param {string} error - Error message
+ * @param {Array} allowedLocations - List of locations the user has access to (for filtering)
+ * @param {Function} onSelectItem - Item selection handler
+ * @param {Function} onAddItem - Add item handler
+ * @param {Function} onAddSupply - Add supply handler
+ * @param {Function} onEditItem - Edit item handler
+ * @param {Function} onDeleteItem - Delete item handler
  */
-const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAddSupply, onEditItem, onDeleteItem }) => {
+const MedicalItemList = ({ items, loading, error, allowedLocations = [], onSelectItem, onAddItem, onAddSupply, onEditItem, onDeleteItem }) => {
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterLocation, setFilterLocation] = useState('all');
@@ -59,7 +68,7 @@ const MedicalItemList = ({ items, loading, error, onSelectItem, onAddItem, onAdd
             <label className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 shrink-0">Clinic</label>
             <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className="px-2 py-1 text-xs border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500">
               <option value="all">All</option>
-              {LOCATIONS.map((l) => <option key={l} value={l}>{getDisplayLocation(l)}</option>)}
+              {allowedLocations.map((l) => <option key={l} value={l}>{getDisplayLocation(l)}</option>)}
             </select>
           </div>
 

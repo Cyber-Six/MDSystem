@@ -1,12 +1,20 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { getExpiryStatus, CATEGORY_COLORS } from '../../inventory-seed-data';
 import ExpiringItemsModal from './expiring-items-modal';
+import { getDisplayLocation } from '../../medical-inventory-service';
 
 /**
  * Inventory Dashboard — overview cards + alerts.
  * Dynamic dashboard with animations, progress bars, status badges, and trend indicators.
+ * @param {Array} items - Medical items
+ * @param {Array} batches - Medicine/supply batches
+ * @param {Array} requests - Medicine requests
+ * @param {Array} transactions - Transaction history
+ * @param {Array} allowedLocations - List of locations the user has access to
+ * @param {Function} onNavigate - Navigation handler
+ * @param {Function} onSelectItem - Item selection handler
  */
-const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate, onSelectItem }) => {
+const InventoryDashboard = ({ items, batches, requests, transactions, allowedLocations = [], onNavigate, onSelectItem }) => {
   const pendingCount = requests.filter((r) => r.status === 'Approved').length; // Changed to Approved requests
   const totalItems = items.length;
   const getStock = (b) => b.availableQuantity ?? b.currentQuantity ?? 0;
@@ -106,9 +114,18 @@ const InventoryDashboard = ({ items, batches, requests, transactions, onNavigate
     return item && item.category !== 'medicine';
   });
 
-  const casalStock = batches.filter((b) => b.location === 'Casal').reduce((s, b) => s + getStock(b), 0);
-  const arlegui = batches.filter((b) => b.location === 'Arlegui').reduce((s, b) => s + getStock(b), 0);
-  const quezonCity = batches.filter((b) => b.location === 'QuezonCity').reduce((s, b) => s + getStock(b), 0);
+  const casalStock = allowedLocations.includes('Casal') ? batches.filter((b) => b.location === 'Casal').reduce((s, b) => s + getStock(b), 0) : null;
+  const arlegui = allowedLocations.includes('Arlegui') ? batches.filter((b) => b.location === 'Arlegui').reduce((s, b) => s + getStock(b), 0) : null;
+  const quezonCity = allowedLocations.includes('QuezonCity') ? batches.filter((b) => b.location === 'QuezonCity').reduce((s, b) => s + getStock(b), 0) : null;
+
+  // Compute stock per location dynamically (only for allowed locations)
+  const stockByLocation = useMemo(() => {
+    return allowedLocations.map((loc) => ({
+      location: loc,
+      displayName: getDisplayLocation(loc),
+      stock: batches.filter((b) => b.location === loc).reduce((s, b) => s + getStock(b), 0),
+    }));
+  }, [batches, allowedLocations]);
 
   // Calculate stock level percentage (assuming reasonable max inventory)
   const maxInventory = 10000;

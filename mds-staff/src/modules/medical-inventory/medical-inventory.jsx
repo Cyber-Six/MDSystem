@@ -42,7 +42,7 @@ const MedicalInventory = () => {
   const [activeSection, setActiveSection] = useState(
     routerLocation.state?.section ?? 'dashboard'
   );
-  const [directReleaseLocation, setDirectReleaseLocation] = useState('Casal');
+  const [directReleaseLocation, setDirectReleaseLocation] = useState(null); // Will be set based on user's allowed locations
   const [items, setItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [itemsError, setItemsError] = useState('');
@@ -169,9 +169,10 @@ const MedicalInventory = () => {
   }, [getPatientNameCached]);
 
   // Helper function to get allowed locations based on user's branch
-  const getAllowedLocations = useCallback(() => {
+  // Returns array of location strings for UI filtering
+  const getAllowedLocationsList = useCallback(() => {
     if (!profile || !profile.branch) {
-      return ['Arlegui', 'Casal', 'QuezonCity']; // Default: try all locations
+      return []; // No profile yet - don't allow any locations until loaded
     }
 
     // Branch determines which locations a staff can access
@@ -181,21 +182,59 @@ const MedicalInventory = () => {
       case 'QuezonCity':
         return ['QuezonCity'];
       case 'Both':
-        return null; // null means query all locations without filter
+        return ['Arlegui', 'Casal', 'QuezonCity']; // User has access to all locations
       default:
-        return ['Arlegui', 'Casal', 'QuezonCity']; // Fallback: try all
+        return []; // Unknown branch - no access
     }
   }, [profile]);
+
+  // Memoized list of allowed locations for UI components
+  const allowedLocationsList = useMemo(() => getAllowedLocationsList(), [getAllowedLocationsList]);
+
+  // Helper function to get allowed locations for API fetching
+  // Returns null for "Both" access (fetch all without filter), or array for filtered access
+  const getAllowedLocations = useCallback(() => {
+    if (!profile || !profile.branch) {
+      return []; // No profile yet - return empty array to prevent unauthorized requests
+    }
+
+    // Branch determines which locations a staff can access
+    switch (profile.branch) {
+      case 'Manila':
+        return ['Arlegui', 'Casal'];
+      case 'QuezonCity':
+        return ['QuezonCity'];
+      case 'Both':
+        return null; // null means query all locations without filter (for efficiency)
+      default:
+        return []; // Unknown branch - no access
+    }
+  }, [profile]);
+
+  // Set default directReleaseLocation based on user's allowed locations
+  useEffect(() => {
+    if (allowedLocationsList.length > 0 && directReleaseLocation === null) {
+      setDirectReleaseLocation(allowedLocationsList[0]);
+    }
+  }, [allowedLocationsList, directReleaseLocation]);
 
   // ── Fetch items from API ───────────────────────────────────────────────
   const loadItems = useCallback(async () => {
     setItemsLoading(true);
     setItemsError('');
     try {
+      const allowedLocations = getAllowedLocations();
+
+      // If user has no access to any locations (empty array), don't fetch batches
+      if (Array.isArray(allowedLocations) && allowedLocations.length === 0) {
+        setItems([]);
+        setBatches([]);
+        setItemsLoading(false);
+        return;
+      }
+
       const data = await fetchMedicalItems();
       setItems(data);
-
-      const allowedLocations = getAllowedLocations();
 
       // Fetch batches for all items in parallel
       const batchResults = await Promise.all(
@@ -1001,6 +1040,7 @@ const MedicalInventory = () => {
           batches={batches}
           requests={requests}
           transactions={transactions}
+          allowedLocations={allowedLocationsList}
           loading={itemsLoading}
           onNavigate={(section) => setActiveSection(section)}
           onSelectItem={handleSelectItem}
@@ -1012,6 +1052,7 @@ const MedicalInventory = () => {
           items={enrichedItems}
           loading={itemsLoading}
           error={itemsError}
+          allowedLocations={allowedLocationsList}
           onSelectItem={handleSelectItem}
           onAddItem={() => setShowAddItem(true)}
           onAddSupply={openAddSupply}
@@ -1040,6 +1081,7 @@ const MedicalInventory = () => {
             requests={requests}
             items={items}
             batches={batches}
+            allowedLocations={allowedLocationsList}
             onDispense={openDispense}
             onApprove={handleApprove}
             onReject={handleReject}
@@ -1052,46 +1094,57 @@ const MedicalInventory = () => {
       {activeSection === 'direct-release' && (
         <div className="space-y-3">
           <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+            {allowedLocationsList.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-neutral-500 dark:text-neutral-400">You do not have access to any inventory locations.</p>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Please contact your administrator to configure your branch access.</p>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
-                <select
-                  value={directReleaseLocation}
-                  onChange={(e) => setDirectReleaseLocation(e.target.value)}
-                  className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
-                >
-                  <option value="Casal">Casal</option>
-                  <option value="Arlegui">Arlegui</option>
-                  <option value="QuezonCity">Quezon City</option>
-                </select>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-secondary-800 dark:text-white">Dispense for Walk-in Patients</h2>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Release medicine to patients without prior request</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-secondary-700 dark:text-neutral-300">Location:</label>
+                    <select
+                      value={directReleaseLocation || ''}
+                      onChange={(e) => setDirectReleaseLocation(e.target.value)}
+                      className="px-2 py-1 border border-neutral-200 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white text-xs"
+                    >
+                      {allowedLocationsList.map((loc) => (
+                        <option key={loc} value={loc}>
+                          {loc === 'QuezonCity' ? 'Quezon City' : loc}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-            <DirectRelease
-              location={directReleaseLocation}
-              onRelease={(result) => {
-                loadAllMedicineRequests();
-                recordTransaction({
-                  action: 'direct_release',
-                  itemId: null,
-                  patientId: result.patientId,
-                  quantity: result.quantity,
-                  notes: result.notes,
-                });
-              }}
-              onShowSuccess={(title, message, details) => {
-                setSuccessModalData({ title, message, details });
-                setShowSuccessModal(true);
-              }}
-              onShowError={(errorMsg) => {
-                setError(errorMsg);
-                setTimeout(() => setError(''), 5000);
-              }}
-            />
+                <DirectRelease
+                  location={directReleaseLocation}
+                  onRelease={(result) => {
+                    loadAllMedicineRequests();
+                    recordTransaction({
+                      action: 'direct_release',
+                      itemId: null,
+                      patientId: result.patientId,
+                      quantity: result.quantity,
+                      notes: result.notes,
+                    });
+                  }}
+                  onShowSuccess={(title, message, details) => {
+                    setSuccessModalData({ title, message, details });
+                    setShowSuccessModal(true);
+                  }}
+                  onShowError={(errorMsg) => {
+                    setError(errorMsg);
+                    setTimeout(() => setError(''), 5000);
+                  }}
+                />
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1125,6 +1178,7 @@ const MedicalInventory = () => {
         <AddSupplyModal
           itemId={supplyContext?.itemId}
           items={items}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowAddSupply(false)}
           onSave={handleAddSupply}
         />
@@ -1134,6 +1188,7 @@ const MedicalInventory = () => {
         <SplitSupplyModal
           batch={splitContext.batch}
           allBatches={splitContext.allBatches}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowSplitSupply(false)}
           onSplit={handleSplit}
         />
@@ -1165,6 +1220,7 @@ const MedicalInventory = () => {
         <DispenseMedicineModal
           patientId={dispenseMedicineContext.patientId}
           patientName={dispenseMedicineContext.patientName}
+          allowedLocations={allowedLocationsList}
           onClose={() => setShowDispenseMedicine(false)}
           onSuccess={(result) => {
             showSuccess('Medicine Dispensed', `Dispensed medicine to ${dispenseMedicineContext.patientName}.`, `Transaction ID: ${result.id}`);
