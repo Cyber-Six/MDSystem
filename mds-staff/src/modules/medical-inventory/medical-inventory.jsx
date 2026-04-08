@@ -1301,6 +1301,7 @@ const MedicalInventory = () => {
 
                 <DirectRelease
                   location={directReleaseLocation}
+                  allRequests={requests}
                   onRelease={(result) => {
                     loadAllMedicineRequests();
                     recordTransaction({
