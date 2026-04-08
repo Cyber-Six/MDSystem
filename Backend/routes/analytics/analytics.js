@@ -23,6 +23,20 @@ router.get('/queries', jwtProtect('medical'), async (req, res) => {
 });
 
 /**
+ * GET /analytics/filter-options
+ * Returns distinct departments and programs for filter dropdowns
+ */
+router.get('/filter-options', jwtProtect('medical'), async (req, res) => {
+  try {
+    const data = await analytics.getFilterOptions();
+    res.json({ success: true, ...data });
+  } catch (err) {
+    logger.error('Error fetching filter options', { error: err.message });
+    res.status(500).json({ error: 'FETCH_FAILED' });
+  }
+});
+
+/**
  * GET /analytics/reports
  * List available report types
  */
@@ -117,13 +131,13 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
  */
 router.post('/batch', jwtProtect('medical'), async (req, res) => {
   try {
-    const { dataTypes, branch, startDate, endDate, groupBy } = req.body;
+    const { dataTypes, branch, startDate, endDate, groupBy, department, program } = req.body;
 
     if (!Array.isArray(dataTypes) || dataTypes.length === 0) {
       return res.status(400).json({ error: 'DATA_TYPES_REQUIRED' });
     }
-    if (dataTypes.length > 20) {
-      return res.status(400).json({ error: 'TOO_MANY_QUERIES', message: 'Maximum 20 queries per batch' });
+    if (dataTypes.length > 30) {
+      return res.status(400).json({ error: 'TOO_MANY_QUERIES', message: 'Maximum 30 queries per batch' });
     }
     if (!branch || !startDate || !endDate) {
       return res.status(400).json({ error: 'MISSING_PARAMS' });
@@ -160,7 +174,7 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
       userId: req.user.id,
     });
 
-    const results = await analytics.executeBatchQueries(dataTypes, branch, startDate, endDate, { groupBy });
+    const results = await analytics.executeBatchQueries(dataTypes, branch, startDate, endDate, { groupBy, department, program });
 
     res.json({
       success: true,
