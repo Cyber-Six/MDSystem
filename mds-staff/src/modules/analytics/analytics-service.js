@@ -139,6 +139,14 @@ export async function fetchAvailableQueries() {
 }
 
 /**
+ * Fetch distinct departments and programs for demographic filter dropdowns
+ */
+export async function fetchFilterOptions() {
+  const response = await axiosRequest.get('/analytics/filter-options');
+  return { departments: response.data.departments || [], programs: response.data.programs || [] };
+}
+
+/**
  * Fetch analytics data for a specific query type
  * @param {string} dataType - Query type key (e.g. 'consultations-by-type')
  * @param {string} branch - 'Manila' | 'QuezonCity' | 'Both'
@@ -161,9 +169,10 @@ export async function fetchQueryData(dataType, branch, startDate, endDate, group
  * @param {string} startDate
  * @param {string} endDate
  * @param {string} [groupBy] - 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+ * @param {object} [filters] - Optional { department, program } filters
  * @returns {Promise<Map<string, object>>} Map of dataType -> response data
  */
-export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate, groupBy) {
+export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate, groupBy, filters = {}) {
   const results = new Map();
 
   try {
@@ -173,6 +182,8 @@ export async function fetchMultipleQueries(dataTypes, branch, startDate, endDate
       startDate,
       endDate,
       groupBy,
+      ...(filters.department && { department: filters.department }),
+      ...(filters.program && { program: filters.program }),
     });
 
     if (response.data.success && response.data.results) {

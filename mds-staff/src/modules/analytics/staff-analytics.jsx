@@ -5,11 +5,11 @@ import AnalyticsSummaryCards from './components/analytics-summary-cards';
 import AnalyticsExportModal from './components/analytics-export-modal';
 import {
   fetchMultipleQueries,
-  fetchAvailableQueries,
+  fetchFilterOptions,
   QUERY_CATEGORIES,
   CHART_TYPE_MAP,
   getDateRangeForPeriod,
-} from './analytics-service';
+} from './analytics-service';       
 
 // ── Friendly display names ───────────────────────────────────────────────────
 
@@ -68,9 +68,25 @@ const DEMOGRAPHIC_DIMENSION_QUERIES = {
   matrix:     ['sex-age-group-matrix', 'diagnoses-sex-age'],
 };
 
+// ── Default tab (lightest load for RPi) ──────────────────────────────────────
+
+const DEFAULT_CATEGORY = 'consultations';
+
+/**
+ * Returns the query keys that need to be fetched for a given category + dimension.
+ */
+function getQueriesForCategory(category, demoDimension = 'all') {
+  if (category === 'all') return ALL_QUERY_KEYS;
+  if (category === 'demographics') {
+    return DEMOGRAPHIC_DIMENSION_QUERIES[demoDimension] || QUERY_CATEGORIES.demographics?.queries || [];
+  }
+  return QUERY_CATEGORIES[category]?.queries || [];
+}
+
 /**
  * Staff Analytics View
- * Main analytics page matching the staff portal design system.
+ * Lazy-loads analytics data per category tab to reduce server load.
+ * Results are cached — switching tabs does not re-fetch unless filters change.
  */
 const StaffAnalytics = () => {
   const defaults = getDateRangeForPeriod('monthly');
@@ -78,9 +94,18 @@ const StaffAnalytics = () => {
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [groupBy, setGroupBy] = useState('monthly');
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeCategory, setActiveCategory] = useState(DEFAULT_CATEGORY);
   const [demographicDimension, setDemographicDimension] = useState('all');
-  const [results, setResults] = useState(new Map());
+
+  // Department / program filter (demographics tab)
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [selectedProgram, setSelectedProgram] = useState('');
+  const [filterOptions, setFilterOptions] = useState({ departments: [], programs: [] });
+
+  // Cache: Map<queryKey, result> — persists across tab switches, cleared on filter change
+  const [cache, setCache] = useState(new Map());
+  // Track which categories have been fetched for the current filter combo
+  const [fetchedCategories, setFetchedCategories] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [exportOpen, setExportOpen] = useState(false);
@@ -98,43 +123,135 @@ const StaffAnalytics = () => {
     return () => observer.disconnect();
   }, []);
 
-  // Get filtered query keys based on active category (+ demographic sub-filter)
-  const visibleQueries = useMemo(() => {
-    if (activeCategory === 'all') return ALL_QUERY_KEYS;
-    if (activeCategory === 'demographics') {
-      return DEMOGRAPHIC_DIMENSION_QUERIES[demographicDimension] || QUERY_CATEGORIES.demographics?.queries || [];
+  // Load filter options for demographics (departments / programs)
+  useEffect(() => {
+    if (activeCategory === 'demographics' && filterOptions.departments.length === 0) {
+      fetchFilterOptions().then(setFilterOptions).catch(() => {});
     }
-    return QUERY_CATEGORIES[activeCategory]?.queries || ALL_QUERY_KEYS;
-  }, [activeCategory, demographicDimension]);
+  }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch data
-  const loadData = useCallback(async () => {
+  // Build filters object for demographic queries
+  const demoFilters = useMemo(() => {
+    if (activeCategory !== 'demographics') return {};
+    const f = {};
+    if (selectedDepartment) f.department = selectedDepartment;
+    if (selectedProgram) f.program = selectedProgram;
+    return f;
+  }, [activeCategory, selectedDepartment, selectedProgram]);
+
+  // Current visible queries based on active tab + dimension
+  const visibleQueries = useMemo(() =>
+    getQueriesForCategory(activeCategory, demographicDimension),
+    [activeCategory, demographicDimension]
+  );
+
+  /**
+   * Fetch only the missing queries for a given list of query keys.
+   * Merges results into the cache. Skips already-cached keys.
+   */
+  const fetchQueries = useCallback(async (queryKeys, opts = {}) => {
     const reqId = ++abortRef.current;
-    setLoading(true);
+    const missing = opts.force
+      ? queryKeys
+      : queryKeys.filter(k => !cache.has(k));
 
+    if (missing.length === 0) return; // all cached
+
+    setLoading(true);
     try {
-      const data = await fetchMultipleQueries(ALL_QUERY_KEYS, branch, startDate, endDate, groupBy);
-      if (reqId === abortRef.current) {
-        setResults(data);
-        setInitialLoad(false);
-      }
+      const data = await fetchMultipleQueries(missing, branch, startDate, endDate, groupBy, opts.filters);
+      if (reqId !== abortRef.current) return; // stale
+
+      setCache(prev => {
+        const next = new Map(prev);
+        for (const [key, value] of data.entries()) {
+          next.set(key, value);
+        }
+        return next;
+      });
+      setInitialLoad(false);
     } catch {
-      // Individual query errors are handled inside fetchMultipleQueries
+      // Individual errors handled in fetchMultipleQueries
     } finally {
-      if (reqId === abortRef.current) {
-        setLoading(false);
-      }
+      if (reqId === abortRef.current) setLoading(false);
     }
+  }, [branch, startDate, endDate, groupBy, cache]);
+
+  /**
+   * Fetch the active category's queries (lazy load on tab switch).
+   * Uses a category-level flag so we don't re-fetch when switching back.
+   */
+  const loadActiveCategory = useCallback(async (force = false) => {
+    const deptProg = activeCategory === 'demographics'
+      ? `:dept=${selectedDepartment}:prog=${selectedProgram}` : '';
+    const catKey = activeCategory === 'demographics'
+      ? `demographics:${demographicDimension}${deptProg}`
+      : activeCategory;
+
+    if (!force && fetchedCategories.has(catKey)) return;
+
+    const queries = getQueriesForCategory(activeCategory, demographicDimension);
+    const filters = activeCategory === 'demographics' ? demoFilters : {};
+    await fetchQueries(queries, { force, filters });
+
+    setFetchedCategories(prev => new Set(prev).add(catKey));
+  }, [activeCategory, demographicDimension, selectedDepartment, selectedProgram, demoFilters, fetchedCategories, fetchQueries]);
+
+  // Fetch on tab switch or initial mount
+  useEffect(() => {
+    loadActiveCategory();
+  }, [activeCategory, demographicDimension]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch demographics when dept/program filter changes
+  useEffect(() => {
+    if (activeCategory === 'demographics') {
+      // Clear demographic cache entries and re-fetch
+      setCache(prev => {
+        const next = new Map(prev);
+        const demoKeys = QUERY_CATEGORIES.demographics?.queries || [];
+        demoKeys.forEach(k => next.delete(k));
+        return next;
+      });
+      // Remove all demographics fetched keys so they re-load
+      setFetchedCategories(prev => {
+        const next = new Set();
+        for (const k of prev) { if (!k.startsWith('demographics:')) next.add(k); }
+        return next;
+      });
+      loadActiveCategory(true);
+    }
+  }, [selectedDepartment, selectedProgram]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear cache + re-fetch when filters change (branch, dates, groupBy)
+  const prevFiltersRef = useRef({ branch, startDate, endDate, groupBy });
+  useEffect(() => {
+    const prev = prevFiltersRef.current;
+    if (prev.branch === branch && prev.startDate === startDate && prev.endDate === endDate && prev.groupBy === groupBy) return;
+    prevFiltersRef.current = { branch, startDate, endDate, groupBy };
+
+    // Filters changed — clear everything and re-fetch active tab
+    setCache(new Map());
+    setFetchedCategories(new Set());
+    // loadActiveCategory with force will be triggered by the dependency change
   }, [branch, startDate, endDate, groupBy]);
 
-  // Initial load
+  // After cache/fetchedCategories are cleared by filter change, re-load active tab
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (cache.size === 0 && !initialLoad) {
+      loadActiveCategory(true);
+    }
+  }, [cache.size]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Manual refresh — force re-fetch active tab
+  const handleRefresh = useCallback(() => {
+    const queries = getQueriesForCategory(activeCategory, demographicDimension);
+    const filters = activeCategory === 'demographics' ? demoFilters : {};
+    fetchQueries(queries, { force: true, filters });
+  }, [activeCategory, demographicDimension, demoFilters, fetchQueries]);
 
   return (
     <div className="space-y-1.5">
-      {/* Page Header — title left, category tabs + export right (matches Appointments/Inventory) */}
+      {/* Page Header — title left, category tabs + export right */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-secondary-800 dark:text-white leading-none m-0">Analytics</h1>
@@ -199,7 +316,7 @@ const StaffAnalytics = () => {
             setEndDate(range.endDate);
           }
         }}
-        onRefresh={loadData}
+        onRefresh={handleRefresh}
         loading={loading}
       />
 
@@ -220,12 +337,43 @@ const StaffAnalytics = () => {
               {dim.label}
             </button>
           ))}
+
+          {/* Department filter dropdown */}
+          {filterOptions.departments.length > 0 && (
+            <>
+              <span className="text-[10px] text-neutral-300 dark:text-neutral-600 mx-1">|</span>
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="text-[11px] px-2 py-0.5 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              >
+                <option value="">All Departments</option>
+                {filterOptions.departments.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {/* Program filter dropdown */}
+          {filterOptions.programs.length > 0 && (
+            <select
+              value={selectedProgram}
+              onChange={(e) => setSelectedProgram(e.target.value)}
+              className="text-[11px] px-2 py-0.5 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            >
+              <option value="">All Programs</option>
+              {filterOptions.programs.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 
-      {/* Summary KPI Cards (only when 'all' category or initial view) */}
-      {activeCategory === 'all' && (
-        <AnalyticsSummaryCards results={results} />
+      {/* Summary KPI Cards (only when 'all' category and has data) */}
+      {activeCategory === 'all' && cache.size > 0 && (
+        <AnalyticsSummaryCards results={cache} />
       )}
 
       {/* Charts Grid */}
@@ -243,9 +391,9 @@ const StaffAnalytics = () => {
               key={queryKey}
               dataType={queryKey}
               title={QUERY_LABELS[queryKey] || queryKey}
-              data={results.get(queryKey)}
-              loading={loading && !results.has(queryKey)}
-              error={results.get(queryKey)?.error}
+              data={cache.get(queryKey)}
+              loading={loading && !cache.has(queryKey)}
+              error={cache.get(queryKey)?.error}
               dark={dark}
               branch={branch}
               startDate={startDate}
