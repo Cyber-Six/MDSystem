@@ -562,11 +562,39 @@ const MedicalInventory = () => {
   };
 
   // Auto-load all medicine requests on mount (all statuses)
+  // Fetches requests for each allowed location to prevent unauthorized errors
   const loadAllMedicineRequests = useCallback(async () => {
     setIsLoadingRequests(true);
     try {
-      const rawRequests = await fetchAllMedicineRequests(null);
-      const enrichedWithNames = await enrichRequestsWithPatientNames(rawRequests);
+      // Wait for profile to load
+      if (allowedLocationsList.length === 0) {
+        console.log('⏳ Waiting for profile - skipping medicine requests fetch');
+        setRequests([]);
+        setIsLoadingRequests(false);
+        return;
+      }
+
+      console.log('📍 Fetching medicine requests for allowed locations:', allowedLocationsList);
+      
+      // Fetch requests for each allowed location and combine them
+      const locationRequests = await Promise.all(
+        allowedLocationsList.map(async (location) => {
+          try {
+            return await fetchAllMedicineRequests(null, location);
+          } catch (err) {
+            console.warn(`Failed to fetch medicine requests for location ${location}:`, err);
+            return [];
+          }
+        })
+      );
+      
+      // Flatten and deduplicate by ID
+      const allRequests = locationRequests.flat();
+      const uniqueRequests = Array.from(
+        new Map(allRequests.map(req => [req.id, req])).values()
+      );
+      
+      const enrichedWithNames = await enrichRequestsWithPatientNames(uniqueRequests);
       const enriched = enrichedWithNames.map(req => ({
         ...req,
         items: enrichRequestItems(req.items || []),
@@ -577,7 +605,7 @@ const MedicalInventory = () => {
     } finally {
       setIsLoadingRequests(false);
     }
-  }, [enrichRequestItems, enrichRequestsWithPatientNames]);
+  }, [allowedLocationsList, enrichRequestItems, enrichRequestsWithPatientNames]);
 
   useEffect(() => {
     if (itemsLoading || hasLoadedRequestsRef.current) return;
