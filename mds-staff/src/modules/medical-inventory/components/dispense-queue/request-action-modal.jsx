@@ -1,11 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 
 /**
  * Request Action Modal
  * Reusable modal for approving or rejecting medicine requests with optional notes
  * Includes batch selection during approval for FEFO allocation
+ *
+ * Reservation Logic:
+ * - Approved-but-not-dispensed requests are treated as reserved stock
+ * - Available stock = physical stock − reserved (approved, not yet completed/cancelled)
+ * - Prevents over-allocation across concurrent approvals
  */
-const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = [], items = [] }) => {
+const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = [], items = [], allRequests = [] }) => {
   const [notes, setNotes] = useState('');
   // Initialize state for each item's quantity and batch selection
   const [approvedQuantities, setApprovedQuantities] = useState(() => {
@@ -49,6 +54,52 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = []
     }).sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
   };
 
+  // Compute total reserved quantity for a given medical item at the request's location.
+  // "Reserved" = approved requests that are NOT yet dispensed/completed/cancelled/rejected/expired.
+  // Excludes the current request being processed to avoid double-counting.
+  const getReservedQuantityForItem = (itemId) => {
+    if (!itemId) return 0;
+    const reservedStatuses = ['Approved', 'InProgress'];
+    return (allRequests || [])
+      .filter((r) =>
+        reservedStatuses.includes(r.status) &&
+        String(r.id) !== String(request?.id) &&
+        (!request?.location || r.location === request.location)
+      )
+      .reduce((total, r) => {
+        return total + (r.items || []).reduce((itemTotal, item, idx) => {
+          const rItemId = String(item.itemId || item.medicineId || '');
+          if (rItemId === String(itemId)) {
+            // Use approvedQuantities if available (set during this session's approval),
+            // otherwise fall back to the original requested quantity
+            const qty = r.approvedQuantities?.[idx] != null
+              ? Number(r.approvedQuantities[idx])
+              : Number(item.quantity || 0);
+            return itemTotal + qty;
+          }
+          return itemTotal;
+        }, 0);
+      }, 0);
+  };
+
+  // Compute available stock for an item: physical stock minus reserved
+  const getAvailableStockForItem = (requestedItem, selectedBatchId) => {
+    const availableBatches = getAvailableBatchesForItem(requestedItem);
+    const itemId = requestedItem?.itemId || requestedItem?.medicineId;
+    const reserved = getReservedQuantityForItem(itemId);
+
+    let physicalStock;
+    if (selectedBatchId) {
+      const selectedBatch = availableBatches.find(b => String(b.id) === String(selectedBatchId));
+      physicalStock = selectedBatch ? Number(selectedBatch.availableQuantity ?? selectedBatch.currentQuantity ?? 0) : 0;
+    } else {
+      physicalStock = availableBatches.reduce((sum, b) => sum + (Number(b.availableQuantity ?? b.currentQuantity ?? 0)), 0);
+    }
+
+    const available = Math.max(0, physicalStock - reserved);
+    return { physicalStock, reserved, available };
+  };
+
   const handleSubmit = async () => {
     // Validate quantities only for approval
     if (isApprove) {
@@ -61,20 +112,13 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = []
           errors[idx] = 'Quantity must be a positive number';
           hasErrors = true;
         } else {
-          // Check against available stock in the selected batch (or any available batch if not selected)
+          // Check against available stock minus reserved (approved-but-not-dispensed) quantities
           const selectedBatchId = approvedBatchIds[idx];
-          const availableBatches = getAvailableBatchesForItem(item);
+          const { available, reserved, physicalStock } = getAvailableStockForItem(item, selectedBatchId);
 
-          let maxAvailable = availableBatches.reduce((sum, b) => sum + (Number(b.availableQuantity ?? b.currentQuantity ?? 0)), 0);
-
-          if (selectedBatchId) {
-            // If a specific batch is selected, check only that batch
-            const selectedBatch = availableBatches.find(b => String(b.id) === String(selectedBatchId));
-            maxAvailable = selectedBatch ? Number(selectedBatch.availableQuantity ?? selectedBatch.currentQuantity ?? 0) : 0;
-          }
-
-          if (qty > maxAvailable) {
-            errors[idx] = `Quantity exceeds available stock (${maxAvailable} available)`;
+          if (qty > available) {
+            const reservedNote = reserved > 0 ? ` (${reserved} reserved by other approved requests)` : '';
+            errors[idx] = `Not enough stock. Only ${available} available out of ${physicalStock} total${reservedNote}`;
             hasErrors = true;
           }
         }
@@ -216,13 +260,7 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = []
                           </label>
                           {(() => {
                             const selectedBatchId = approvedBatchIds[idx];
-                            const availableBatches = getAvailableBatchesForItem(item);
-                            let maxAvailable = availableBatches.reduce((sum, b) => sum + (Number(b.availableQuantity ?? b.currentQuantity ?? 0)), 0);
-
-                            if (selectedBatchId) {
-                              const selectedBatch = availableBatches.find(b => String(b.id) === String(selectedBatchId));
-                              maxAvailable = selectedBatch ? Number(selectedBatch.availableQuantity ?? selectedBatch.currentQuantity ?? 0) : 0;
-                            }
+                            const { physicalStock, reserved, available: maxAvailable } = getAvailableStockForItem(item, selectedBatchId);
 
                             return (
                               <>
@@ -240,11 +278,12 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = []
                                       [idx]: val,
                                     });
 
-                                    // Real-time validation
+                                    // Real-time validation with reservation awareness
                                     if (val && numVal > maxAvailable) {
+                                      const reservedNote = reserved > 0 ? ` (${reserved} reserved)` : '';
                                       setQuantityErrors({
                                         ...quantityErrors,
-                                        [idx]: `Max ${maxAvailable} available${selectedBatchId ? ' in selected batch' : ''}`,
+                                        [idx]: `Only ${maxAvailable} available${selectedBatchId ? ' in selected batch' : ''}${reservedNote}`,
                                       });
                                     } else if (val && numVal <= 0) {
                                       setQuantityErrors({
@@ -265,9 +304,20 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = []
                                       : 'border-neutral-300 dark:border-neutral-600'
                                   }`}
                                 />
-                                <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">
-                                  {selectedBatchId ? `Limited to selected batch (${maxAvailable} available)` : `Total available across all batches: ${maxAvailable}`}
-                                </p>
+                                {/* Stock breakdown: total, reserved, available */}
+                                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                                  <span className="text-[10px] text-secondary-400 dark:text-neutral-500">
+                                    {selectedBatchId ? 'Batch' : 'Total'} stock: <span className="font-medium">{physicalStock}</span>
+                                  </span>
+                                  {reserved > 0 && (
+                                    <span className="text-[10px] text-warning-600 dark:text-warning-400">
+                                      Reserved: <span className="font-medium">{reserved}</span>
+                                    </span>
+                                  )}
+                                  <span className={`text-[10px] font-medium ${maxAvailable > 0 ? 'text-success-600 dark:text-success-400' : 'text-error-600 dark:text-error-400'}`}>
+                                    Available: {maxAvailable}
+                                  </span>
+                                </div>
                                 {quantityErrors[idx] && (
                                   <p className="text-xs text-error-600 dark:text-error-400 mt-1">{quantityErrors[idx]}</p>
                                 )}
@@ -296,16 +346,18 @@ const RequestActionModal = ({ request, action, onConfirm, onCancel, batches = []
                             <option value="">Auto (FEFO - Earliest Expiry First)</option>
                             {availableBatches.map((batch) => {
                               const expiry = batch.expiryDate ? new Date(batch.expiryDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
-                              const available = batch.availableQuantity ?? batch.currentQuantity ?? 0;
+                              const inStock = batch.availableQuantity ?? batch.currentQuantity ?? 0;
                               return (
                                 <option key={batch.id} value={batch.id}>
-                                  {batch.batchNumber || batch.id} — Expires {expiry} ({available} available)
+                                  {batch.batchNumber || batch.id} — Expires {expiry} ({inStock} in stock)
                                 </option>
                               );
                             })}
                           </select>
                           <p className="text-[10px] text-secondary-400 dark:text-neutral-500 mt-1">
-                            {approvedBatchIds[idx] ? 'Batch locked for dispense step' : 'Staff can adjust during dispense if needed'}
+                            {approvedBatchIds[idx]
+                              ? 'Batch locked for dispense step — see quantity input for effective available after reservations'
+                              : 'Staff can adjust during dispense if needed'}
                           </p>
                         </div>
                       )}

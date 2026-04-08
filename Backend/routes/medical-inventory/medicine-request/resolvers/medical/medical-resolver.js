@@ -61,8 +61,8 @@ const Mutation = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    if (!['Approved', 'Rejected'].includes(status)) {
-      throwGraphQLError(res).message("Invalid status. Must be Approved or Rejected").status(400).throw();
+    if (!['Approved', 'Rejected', 'Cancelled'].includes(status)) {
+      throwGraphQLError(res).message("Invalid status. Must be Approved, Rejected, or Cancelled").status(400).throw();
     }
 
     const result = await Wrapper.Mutation._setStatusMedicineRequest(_, { requestId, status, approvedBy: user.id, notes }, { user, res });
@@ -70,8 +70,7 @@ const Mutation = {
     // Notify patient: socket with ack, fall back to email if not acked or offline
     try {
       const patientId = result.patientId;
-      const approved = status === 'Approved';
-      
+
       console.log(`[MEDICINE_REQUEST] 📤 Attempting to notify patient ${patientId} about ${status}`);
 
       const acked = (await isConnectedAnywhere(patientId))
@@ -83,14 +82,18 @@ const Mutation = {
         console.log(`[MEDICINE_REQUEST] Patient not online or didn't acknowledge, sending email...`);
         const patientEmail = await findEmailByUserId(patientId);
         if (patientEmail) {
-          await enqueueNotificationEmail(
-            patientEmail,
-            approved ? 'Medicine Request Approved' : 'Medicine Request Rejected',
-            approved
+          const emailSubject =
+            status === 'Approved'  ? 'Medicine Request Approved' :
+            status === 'Cancelled' ? 'Medicine Request Cancelled' :
+                                     'Medicine Request Rejected';
+          const emailBody =
+            status === 'Approved'
               ? `Your medicine request <strong>#${requestId}</strong> has been <span style="color:green;font-weight:bold;">approved</span> by the medical staff. You may now proceed to the clinic to collect your medicine.`
-              : `Your medicine request <strong>#${requestId}</strong> has been <span style="color:red;font-weight:bold;">rejected</span> by the medical staff. Please contact the clinic if you believe this is an error or to submit a new request.`,
-            notes ?? null,
-          );
+              : status === 'Cancelled'
+              ? `Your medicine request <strong>#${requestId}</strong> has been <span style="color:orange;font-weight:bold;">cancelled</span> by the medical staff. The reserved stock has been released. Please contact the clinic if you have questions or submit a new request.`
+              : `Your medicine request <strong>#${requestId}</strong> has been <span style="color:red;font-weight:bold;">rejected</span> by the medical staff. Please contact the clinic if you believe this is an error or to submit a new request.`;
+
+          await enqueueNotificationEmail(patientEmail, emailSubject, emailBody, notes ?? null);
           console.log(`[MEDICINE_REQUEST] ✅ Email queued for ${patientEmail}`);
         } else {
           console.log(`[MEDICINE_REQUEST] ❌ No email found for patient ${patientId}`);
