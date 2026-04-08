@@ -20,7 +20,7 @@ const { initDashboardGraphQL } = require('./routes/dashboard/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
-const analyticsRoutes = require('./routes/documents/analytics/analytics.js');
+const analyticsRoutes = require('./routes/analytics/analytics.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');

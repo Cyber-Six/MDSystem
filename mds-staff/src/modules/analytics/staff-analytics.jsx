@@ -29,11 +29,44 @@ const QUERY_LABELS = {
   'appointments-by-category': 'By Category',
   'appointments-by-status': 'By Status',
   'appointments-by-session': 'By Session',
+  // Demographics
+  'patients-by-sex': 'Patients by Sex',
+  'consultations-by-sex': 'Consultations by Sex',
+  'top-diagnoses-by-sex': 'Top Diagnoses by Sex',
+  'patients-by-age-group': 'Patients by Age Group',
+  'consultations-by-age-group': 'Consultations by Age Group',
+  'bmi-by-age-group': 'BMI by Age Group',
+  'diagnoses-by-age-group': 'Diagnoses by Age Group',
+  'consultations-by-department': 'Consultations by Department',
+  'consultations-by-program': 'Consultations by Program',
+  'lifestyle-risks-by-department': 'Lifestyle Risks by Department',
+  'sex-age-group-matrix': 'Sex × Age Group Matrix',
+  'diagnoses-sex-age': 'Diagnoses by Sex & Age',
 };
 
 // ── All query keys ───────────────────────────────────────────────────────────
 
 const ALL_QUERY_KEYS = Object.keys(CHART_TYPE_MAP);
+
+// ── Demographics dimension sub-filter ────────────────────────────────────────
+
+const DEMOGRAPHIC_DIMENSIONS = [
+  { key: 'all',        label: 'All' },
+  { key: 'sex',        label: 'Sex' },
+  { key: 'age',        label: 'Age Groups' },
+  { key: 'department', label: 'Department' },
+  { key: 'program',    label: 'Program' },
+  { key: 'matrix',     label: 'Cross-dimensional' },
+];
+
+const DEMOGRAPHIC_DIMENSION_QUERIES = {
+  all:        QUERY_CATEGORIES.demographics?.queries || [],
+  sex:        ['patients-by-sex', 'consultations-by-sex', 'top-diagnoses-by-sex'],
+  age:        ['patients-by-age-group', 'consultations-by-age-group', 'bmi-by-age-group', 'diagnoses-by-age-group'],
+  department: ['consultations-by-department', 'lifestyle-risks-by-department'],
+  program:    ['consultations-by-program'],
+  matrix:     ['sex-age-group-matrix', 'diagnoses-sex-age'],
+};
 
 /**
  * Staff Analytics View
@@ -46,6 +79,7 @@ const StaffAnalytics = () => {
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [groupBy, setGroupBy] = useState('monthly');
   const [activeCategory, setActiveCategory] = useState('all');
+  const [demographicDimension, setDemographicDimension] = useState('all');
   const [results, setResults] = useState(new Map());
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
@@ -64,11 +98,14 @@ const StaffAnalytics = () => {
     return () => observer.disconnect();
   }, []);
 
-  // Get filtered query keys based on active category
+  // Get filtered query keys based on active category (+ demographic sub-filter)
   const visibleQueries = useMemo(() => {
     if (activeCategory === 'all') return ALL_QUERY_KEYS;
+    if (activeCategory === 'demographics') {
+      return DEMOGRAPHIC_DIMENSION_QUERIES[demographicDimension] || QUERY_CATEGORIES.demographics?.queries || [];
+    }
     return QUERY_CATEGORIES[activeCategory]?.queries || ALL_QUERY_KEYS;
-  }, [activeCategory]);
+  }, [activeCategory, demographicDimension]);
 
   // Fetch data
   const loadData = useCallback(async () => {
@@ -165,6 +202,26 @@ const StaffAnalytics = () => {
         onRefresh={loadData}
         loading={loading}
       />
+
+      {/* Demographics dimension sub-filter — only shown on Demographics tab */}
+      {activeCategory === 'demographics' && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-medium text-secondary-500 dark:text-neutral-400 mr-0.5">Dimension:</span>
+          {DEMOGRAPHIC_DIMENSIONS.map((dim) => (
+            <button
+              key={dim.key}
+              onClick={() => setDemographicDimension(dim.key)}
+              className={`px-2.5 py-0.5 text-[11px] font-medium rounded-full border transition-colors ${
+                demographicDimension === dim.key
+                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                  : 'bg-white dark:bg-neutral-700 border-neutral-200 dark:border-neutral-600 text-secondary-500 dark:text-neutral-400 hover:border-emerald-400 hover:text-emerald-600'
+              }`}
+            >
+              {dim.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Summary KPI Cards (only when 'all' category or initial view) */}
       {activeCategory === 'all' && (

@@ -1,5 +1,6 @@
 import React, { memo, useState, useCallback } from 'react';
 import { AnalyticsBarChart, AnalyticsLineChart, AnalyticsPieChart } from './analytics-charts';
+import AnalyticsHeatmap from './analytics-heatmap';
 import { CHART_TYPE_MAP, exportSingleMetric } from '../analytics-service';
 
 /**
@@ -82,6 +83,8 @@ const AnalyticsChartCard = memo(({ dataType, title, data, loading, error, dark, 
           <AnalyticsBarChart data={chartData} dark={dark} />
         ) : chartType === 'line' ? (
           <AnalyticsLineChart data={chartData} dark={dark} />
+        ) : chartType === 'heatmap' || chartType === 'grouped-bar' ? (
+          <AnalyticsHeatmap data={data?.data} />
         ) : (
           <AnalyticsPieChart data={chartData} isDoughnut={chartType === 'doughnut'} dark={dark} />
         )}
