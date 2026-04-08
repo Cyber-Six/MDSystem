@@ -117,16 +117,20 @@ const MedicalInventory = () => {
     }
 
     // Check if user has permission to view patient information
-    // getPatientBasicInfo requires emr_allow_view permission, which is part of patientSearch or medicalRecords modules
+    // NOTE: getPatientBasicInfo uses /emr/medical endpoint which requires specific EMR permissions
+    // Being an admin or having inventory module doesn't grant EMR access
+    // Only fetch if user explicitly has patientSearch or medicalRecords modules
     const canViewPatientInfo = hasPermission('patientSearch') || hasPermission('medicalRecords');
 
+    // For inventory-only staff, use fallback (Patient #ID) without trying to fetch
+    // This prevents 401 errors for users who don't need patient names
     if (!canViewPatientInfo) {
-      // User doesn't have permission to view patient info, use fallback immediately
       const fallback = `Patient #${patientId}`;
       patientNameCacheRef.current[patientId] = fallback;
       return fallback;
     }
 
+    // Try to fetch patient info, but handle unauthorized gracefully
     try {
       const patient = await getPatientBasicInfo(patientId);
       if (patient) {
@@ -135,7 +139,15 @@ const MedicalInventory = () => {
         return name;
       }
     } catch (err) {
-      console.warn(`Failed to fetch patient info for ID ${patientId}:`, err);
+      // If unauthorized, cache fallback to avoid retrying
+      // This happens when frontend permissions don't match backend EMR access
+      if (err.message?.includes('Unauthorized') || err.response?.status === 401) {
+        const fallback = `Patient #${patientId}`;
+        patientNameCacheRef.current[patientId] = fallback;
+        return fallback;
+      }
+      // Log other errors but still use fallback
+      console.warn(`Failed to fetch patient info for ID ${patientId}:`, err.message);
     }
 
     // Fallback to ID if fetch fails
@@ -878,32 +890,35 @@ const MedicalInventory = () => {
     setShowActionModal(true);
   };
 
-  const handleConfirmAction = async (request, notes, approvedQuantity, approvedBatchId) => {
+  const handleConfirmAction = async (request, notes, approvedQuantities, approvedBatchIds) => {
     const requestId = request?.id;
     if (!requestId) return;
 
     try {
       const isApprove = actionType === 'approve';
       const status = isApprove ? 'Approved' : 'Rejected';
-      
+
       // Call backend with notes parameter for both actions
       await setMedicineRequestStatus(requestId, status, notes || undefined);
-      
+
       // Update local state
-      setRequests(requests.map((r) => 
-        r.id === requestId 
-          ? { 
-              ...r, 
-              status, 
+      // For approval, store the full objects of quantities and batch IDs per item
+      // These will be used during dispense to prefill and lock fields
+      setRequests(requests.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              status,
               notes: notes || null,
-              // Store approved quantity and batch in frontend state for use during dispensing
-              approvedQuantity: isApprove ? approvedQuantity : null,
-              approvedBatchId: isApprove ? approvedBatchId : null
-            } 
+              // Store approved quantities and batches as objects mapping item index to value
+              // e.g., { 0: 5, 1: 10 } for two items with 5 and 10 units respectively
+              approvedQuantities: isApprove ? approvedQuantities : null,
+              approvedBatchIds: isApprove ? approvedBatchIds : null
+            }
           : r
       ));
-      
-      showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved' : 'rejected'}!`);
+
+      showSuccess('Request Updated', `Medicine request #${requestId} ${isApprove ? 'approved and ready for dispense' : 'rejected'}!`);
       setShowActionModal(false);
       setSelectedActionRequest(null);
       setActionType(null);

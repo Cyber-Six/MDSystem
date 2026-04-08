@@ -225,8 +225,14 @@ const DispenseQueue = ({ requests, items, batches, allowedLocations = [], onDisp
                         }) || '—'}
                       </td>
                       <td className="px-3 py-1.5">
-                        {req.items?.length > 0 ? (
-                          <span className="text-xs font-medium text-secondary-800 dark:text-white">{req.items?.reduce((sum, i) => sum + (i.quantity || 0), 0)}</span>
+                        {req.items && req.items.length > 0 ? (
+                          <div className="space-y-1">
+                            {req.items.map((reqItem, idx) => (
+                              <div key={idx} className="text-xs font-medium text-secondary-800 dark:text-white">
+                                {reqItem.quantity || <span className="text-warning-600 dark:text-warning-400">pending</span>}
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400">QTY PENDING</span>
                         )}
