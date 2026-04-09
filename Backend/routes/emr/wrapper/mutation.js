@@ -85,21 +85,20 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "student_profile" 
-        ("profileId", program, year)
+        ("profileId", programId, year)
        VALUES ($1, $2, $3)
        ON CONFLICT ("profileId") DO UPDATE
-         SET program = EXCLUDED.program,
-             year = EXCLUDED.year
+         SET programId = COALESCE(EXCLUDED.programId, "student_profile".programId),
+             year = COALESCE(EXCLUDED.year, "student_profile".year)
              RETURNING *;`,
       [
         recordId,
-        args.input.program,
+        args.input.programId,
         args.input.year
       ]
     );
     logger.debug("Upserted Student Profile:", result.rows[0]);
-    //return result.rows[0];
-    return {...(args.input), id: recordId, archived_at: null};
+    return {...result.rows[0], id: recordId, archived_at: null};
   },
 
   _EmployeeProfile: async (_, {args, recordId}, { user, res }) => {
