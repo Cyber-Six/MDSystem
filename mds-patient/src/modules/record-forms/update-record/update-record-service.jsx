@@ -366,11 +366,17 @@ async function mapRevisionDataToFormData(backendData) {
   console.log('[MapRevisionData] Hospitalization profile data:', backendData.hospitalizationProfile);
   if (backendData.hospitalizationProfile?.hospitalizations && Array.isArray(backendData.hospitalizationProfile.hospitalizations) && backendData.hospitalizationProfile.hospitalizations.length > 0) {
     formData.hasHospitalizations = 'yes';
-    const hosp = backendData.hospitalizationProfile.hospitalizations[0];
-    formData.hospitalizationCondition = hosp.conditionId || '';
-    // Convert ISO dates to yyyy-MM-dd format
-    formData.admissionDate = hosp.admissionDate ? hosp.admissionDate.split('T')[0] : '';
-    formData.dischargeDate = hosp.dischargeDate ? hosp.dischargeDate.split('T')[0] : '';
+    formData.hospitalizationConditions = {};
+    formData.hospitalizationDates = {};
+    for (const hosp of backendData.hospitalizationProfile.hospitalizations) {
+      if (hosp.conditionId) {
+        formData.hospitalizationConditions[hosp.conditionId] = true;
+        formData.hospitalizationDates[hosp.conditionId] = {
+          admissionDate: hosp.admissionDate ? hosp.admissionDate.split('T')[0] : '',
+          dischargeDate: hosp.dischargeDate ? hosp.dischargeDate.split('T')[0] : ''
+        };
+      }
+    }
   } else {
     formData.hasHospitalizations = 'no';
   }
@@ -379,10 +385,14 @@ async function mapRevisionDataToFormData(backendData) {
   console.log('[MapRevisionData] Operation profile data:', backendData.operationProfile);
   if (backendData.operationProfile?.operations && Array.isArray(backendData.operationProfile.operations) && backendData.operationProfile.operations.length > 0) {
     formData.hasSurgeries = 'yes';
-    const op = backendData.operationProfile.operations[0];
-    formData.surgeryType = op.procedureId || '';
-    // Convert ISO date to yyyy-MM-dd format
-    formData.operationDate = op.operationDate ? op.operationDate.split('T')[0] : '';
+    formData.operationConditions = {};
+    formData.operationDates = {};
+    for (const op of backendData.operationProfile.operations) {
+      if (op.procedureId) {
+        formData.operationConditions[op.procedureId] = true;
+        formData.operationDates[op.procedureId] = op.operationDate ? op.operationDate.split('T')[0] : '';
+      }
+    }
   } else {
     formData.hasSurgeries = 'no';
   }
@@ -391,10 +401,12 @@ async function mapRevisionDataToFormData(backendData) {
   console.log('[MapRevisionData] Medication profile data:', backendData.medicationProfile);
   if (backendData.medicationProfile?.medications && Array.isArray(backendData.medicationProfile.medications) && backendData.medicationProfile.medications.length > 0) {
     formData.hasMedications = 'yes';
-    formData.currentMedications = backendData.medicationProfile.medications.map(med => ({
-      medicineId: med.medicineId,
-      description: med.description || ''
-    }));
+    formData.selectedMedications = {};
+    for (const med of backendData.medicationProfile.medications) {
+      if (med.medicineId) {
+        formData.selectedMedications[med.medicineId] = true;
+      }
+    }
   } else {
     formData.hasMedications = 'no';
   }
@@ -1077,20 +1089,16 @@ export async function createHospitalizationProfile(formData) {
   const hospitalizationNotes = [];
   
   if (formData.hasHospitalizations === 'yes') {
-    if (formData.hospitalizationCondition) {
-      hospitalizations.push({
-        conditionId: parseInt(formData.hospitalizationCondition),
-        admissionDate: formData.admissionDate || null,
-        dischargeDate: formData.dischargeDate || null
-      });
-      hospitalizationNotes.push(`Condition: ${formData.hospitalizationCondition}`);
-    }
-    
-    if (formData.admissionDate) {
-      hospitalizationNotes.push(`Admission: ${formData.admissionDate}`);
-    }
-    if (formData.dischargeDate) {
-      hospitalizationNotes.push(`Discharge: ${formData.dischargeDate}`);
+    const conditions = formData.hospitalizationConditions || {};
+    const dates = formData.hospitalizationDates || {};
+    for (const [conditionId, checked] of Object.entries(conditions)) {
+      if (checked) {
+        hospitalizations.push({
+          conditionId: parseInt(conditionId),
+          admissionDate: dates[conditionId]?.admissionDate || null,
+          dischargeDate: dates[conditionId]?.dischargeDate || null
+        });
+      }
     }
     if (formData.hospitalizationNotes) {
       hospitalizationNotes.push(formData.hospitalizationNotes);
@@ -1130,16 +1138,15 @@ export async function createOperationProfile(formData) {
   const operationNotes = [];
   
   if (formData.hasSurgeries === 'yes') {
-    if (formData.surgeryType) {
-      operations.push({
-        procedureId: parseInt(formData.surgeryType),
-        operationDate: formData.operationDate || null
-      });
-      operationNotes.push(`Type: ${formData.surgeryType}`);
-    }
-    
-    if (formData.operationDate) {
-      operationNotes.push(`Date: ${formData.operationDate}`);
+    const conditions = formData.operationConditions || {};
+    const dates = formData.operationDates || {};
+    for (const [procedureId, checked] of Object.entries(conditions)) {
+      if (checked) {
+        operations.push({
+          procedureId: parseInt(procedureId),
+          operationDate: dates[procedureId] || null
+        });
+      }
     }
     if (formData.surgeryNotes) {
       operationNotes.push(formData.surgeryNotes);
@@ -1178,17 +1185,13 @@ export async function createMedicationProfile(formData) {
   const medications = [];
   const medicationNotes = [];
   
-  if (formData.hasMedications === 'yes' && (formData.currentMedications || []).length > 0) {
-    const meds = formData.currentMedications || [];
-    
-    for (let i = 0; i < meds.length; i++) {
-      const m = meds[i];
-      if (m.medicineId) {
+  if (formData.hasMedications === 'yes' && formData.selectedMedications) {
+    for (const [medicineId, checked] of Object.entries(formData.selectedMedications)) {
+      if (checked) {
         medications.push({
-          medicineId: parseInt(m.medicineId),
-          description: m.description || null
+          medicineId: parseInt(medicineId),
+          description: null
         });
-        medicationNotes.push(`#${i + 1}: ${m.medicineId}${m.description ? ' - ' + m.description : ''}`);
       }
     }
   }

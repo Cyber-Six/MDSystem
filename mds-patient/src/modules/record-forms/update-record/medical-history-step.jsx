@@ -306,7 +306,6 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
   });
 
   // Merge dynamic items with catalogs for lookups
-  const allImmunizations = [...immunizations, ...immunizationOthers.dynamicItems];
   const allAllergens = [...catalogs.allergens, ...allergenOthers.dynamicItems];
 
   return (
@@ -436,17 +435,36 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                           ).map((type) => (
                             <div key={type}>
                               <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-2">{type}</p>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 ml-2">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
                                 {catalogs.allergens
                                   .filter(a => a.type === type)
-                                  .map((allergen) => (
-                                    <Checkbox
-                                      key={allergen.id}
-                                      label={allergen.allergen}
-                                      checked={(formData.selectedAllergies || []).includes(allergen.id)}
-                                      onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
-                                    />
-                                  ))}
+                                  .map((allergen) => {
+                                    const isChecked = (formData.selectedAllergies || []).includes(allergen.id);
+                                    return (
+                                      <div key={allergen.id}>
+                                        <Checkbox
+                                          label={allergen.allergen}
+                                          checked={isChecked}
+                                          onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
+                                        />
+                                        {isChecked && (
+                                          <div className="ml-6 mt-1 mb-1 flex gap-2">
+                                            <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.severity || 'Unknown'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], severity: e.target.value }; handleInputChange('allergyDetails', details); }}>
+                                              <option value="Unknown">Severity: Unknown</option>
+                                              <option value="Mild">Severity: Mild</option>
+                                              <option value="Moderate">Severity: Moderate</option>
+                                              <option value="Severe">Severity: Severe</option>
+                                            </select>
+                                            <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.status || 'Active'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], status: e.target.value }; handleInputChange('allergyDetails', details); }}>
+                                              <option value="Active">Status: Active</option>
+                                              <option value="Resolved">Status: Resolved</option>
+                                              <option value="Suspected">Status: Suspected</option>
+                                            </select>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                               </div>
                             </div>
                           ))}
@@ -454,15 +472,34 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                           {allergenOthers.dynamicItems.length > 0 && (
                             <div>
                               <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide mb-2">Added by you</p>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 ml-2">
-                                {allergenOthers.dynamicItems.map((allergen) => (
-                                  <Checkbox
-                                    key={allergen.id}
-                                    label={`${allergen.allergen} (${allergen.type})`}
-                                    checked={(formData.selectedAllergies || []).includes(allergen.id)}
-                                    onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
-                                  />
-                                ))}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-2">
+                                {allergenOthers.dynamicItems.map((allergen) => {
+                                  const isChecked = (formData.selectedAllergies || []).includes(allergen.id);
+                                  return (
+                                    <div key={allergen.id}>
+                                      <Checkbox
+                                        label={`${allergen.allergen} (${allergen.type})`}
+                                        checked={isChecked}
+                                        onChange={(e) => handleCheckboxChange('selectedAllergies', allergen.id, e.target.checked)}
+                                      />
+                                      {isChecked && (
+                                        <div className="ml-6 mt-1 mb-1 flex gap-2">
+                                          <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.severity || 'Unknown'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], severity: e.target.value }; handleInputChange('allergyDetails', details); }}>
+                                            <option value="Unknown">Severity: Unknown</option>
+                                            <option value="Mild">Severity: Mild</option>
+                                            <option value="Moderate">Severity: Moderate</option>
+                                            <option value="Severe">Severity: Severe</option>
+                                          </select>
+                                          <select className="text-xs border border-neutral-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800 dark:text-white" value={formData.allergyDetails?.[allergen.id]?.status || 'Active'} onChange={(e) => { const details = { ...(formData.allergyDetails || {}) }; details[allergen.id] = { ...details[allergen.id], status: e.target.value }; handleInputChange('allergyDetails', details); }}>
+                                            <option value="Active">Status: Active</option>
+                                            <option value="Resolved">Status: Resolved</option>
+                                            <option value="Suspected">Status: Suspected</option>
+                                          </select>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
@@ -552,51 +589,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                               )}
                             </div>
                           </div>
-                          {(formData.selectedAllergies || []).length > 0 && (
-                            <div className="space-y-3">
-                              <h4 className="text-sm font-medium text-secondary-700">Allergy Details:</h4>
-                              {(formData.selectedAllergies || []).map((allergenId) => {
-                                const allergen = allAllergens.find(a => a.id === allergenId);
-                                return allergen ? (
-                                  <div key={allergenId} className="bg-neutral-50 p-3 rounded-lg">
-                                    <p className="text-sm font-medium mb-2">{allergen.allergen}</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                      <Select
-                                        label="Status"
-                                        required
-                                        options={[
-                                          { value: 'Active', label: 'Active' },
-                                          { value: 'Resolved', label: 'Resolved' },
-                                          { value: 'Suspected', label: 'Suspected' }
-                                        ]}
-                                        value={(formData.allergyDetails?.[allergenId]?.status) || ''}
-                                        onChange={(e) => {
-                                          const details = { ...(formData.allergyDetails || {}) };
-                                          details[allergenId] = { ...details[allergenId], status: e.target.value };
-                                          handleInputChange('allergyDetails', details);
-                                        }}
-                                      />
-                                      <Select
-                                        label="Severity"
-                                        required
-                                        options={[
-                                          { value: 'Mild', label: 'Mild' },
-                                          { value: 'Moderate', label: 'Moderate' },
-                                          { value: 'Severe', label: 'Severe' }
-                                        ]}
-                                        value={(formData.allergyDetails?.[allergenId]?.severity) || ''}
-                                        onChange={(e) => {
-                                          const details = { ...(formData.allergyDetails || {}) };
-                                          details[allergenId] = { ...details[allergenId], severity: e.target.value };
-                                          handleInputChange('allergyDetails', details);
-                                        }}
-                                      />
-                                    </div>
-                                  </div>
-                                ) : null;
-                              })}
-                            </div>
-                          )}
+
                         </div>
                       ) : (
                         <Textarea
@@ -791,27 +784,87 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
         >
           <div className="space-y-4">
             <p className="text-sm text-secondary-600 mb-4">Select vaccines you have received and provide details:</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {immunizations.map((vaccine) => (
-                <Checkbox
-                  key={vaccine.id}
-                  label={vaccine.name}
-                  checked={(formData.immunizations || []).includes(vaccine.id)}
-                  onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
-                />
-              ))}
+            <div className="space-y-2">
+              {immunizations.map((vaccine) => {
+                const isChecked = (formData.immunizations || []).includes(vaccine.id);
+                return (
+                  <div key={vaccine.id}>
+                    <Checkbox
+                      label={vaccine.name}
+                      checked={isChecked}
+                      onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
+                    />
+                    {isChecked && (
+                      <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <Input
+                          label="Date Received"
+                          type="date"
+                          value={formData.immunizationDetails?.[vaccine.id]?.date || ''}
+                          onChange={(e) => {
+                            const details = { ...(formData.immunizationDetails || {}) };
+                            details[vaccine.id] = { ...details[vaccine.id], date: e.target.value };
+                            handleInputChange('immunizationDetails', details);
+                          }}
+                        />
+                        <Input
+                          label="Dose Number"
+                          type="number"
+                          min="1"
+                          placeholder="1, 2, 3..."
+                          value={formData.immunizationDetails?.[vaccine.id]?.doseNumber || ''}
+                          onChange={(e) => {
+                            const details = { ...(formData.immunizationDetails || {}) };
+                            details[vaccine.id] = { ...details[vaccine.id], doseNumber: parseInt(e.target.value) || 1 };
+                            handleInputChange('immunizationDetails', details);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             {/* Dynamically added vaccines from search */}
             {immunizationOthers.dynamicItems.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-                {immunizationOthers.dynamicItems.map((vaccine) => (
-                  <Checkbox
-                    key={vaccine.id}
-                    label={vaccine.name}
-                    checked={(formData.immunizations || []).includes(vaccine.id)}
-                    onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
-                  />
-                ))}
+              <div className="space-y-2 mt-3">
+                {immunizationOthers.dynamicItems.map((vaccine) => {
+                  const isChecked = (formData.immunizations || []).includes(vaccine.id);
+                  return (
+                    <div key={vaccine.id}>
+                      <Checkbox
+                        label={vaccine.name}
+                        checked={isChecked}
+                        onChange={(e) => handleCheckboxChange('immunizations', vaccine.id, e.target.checked)}
+                      />
+                      {isChecked && (
+                        <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <Input
+                            label="Date Received"
+                            type="date"
+                            value={formData.immunizationDetails?.[vaccine.id]?.date || ''}
+                            onChange={(e) => {
+                              const details = { ...(formData.immunizationDetails || {}) };
+                              details[vaccine.id] = { ...details[vaccine.id], date: e.target.value };
+                              handleInputChange('immunizationDetails', details);
+                            }}
+                          />
+                          <Input
+                            label="Dose Number"
+                            type="number"
+                            min="1"
+                            placeholder="1, 2, 3..."
+                            value={formData.immunizationDetails?.[vaccine.id]?.doseNumber || ''}
+                            onChange={(e) => {
+                              const details = { ...(formData.immunizationDetails || {}) };
+                              details[vaccine.id] = { ...details[vaccine.id], doseNumber: parseInt(e.target.value) || 1 };
+                              handleInputChange('immunizationDetails', details);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {/* Search or add vaccines */}
@@ -870,45 +923,6 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                 )}
               </div>
             </div>
-            {(formData.immunizations || []).length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-secondary-700">Immunization Details:</h4>
-                {(formData.immunizations || []).map((vaccineId) => {
-                  const vaccine = allImmunizations.find(v => v.id === vaccineId);
-                  return vaccine ? (
-                    <div key={vaccineId} className="bg-neutral-50 p-3 rounded-lg">
-                      <p className="text-sm font-medium mb-2">{vaccine.name}</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <Input
-                          label="Date Received *"
-                          type="date"
-                          required
-                          value={(formData.immunizationDetails?.[vaccineId]?.date) || ''}
-                          onChange={(e) => {
-                            const details = { ...(formData.immunizationDetails || {}) };
-                            details[vaccineId] = { ...details[vaccineId], date: e.target.value };
-                            handleInputChange('immunizationDetails', details);
-                          }}
-                        />
-                        <Input
-                          label="Dose Number *"
-                          type="number"
-                          required
-                          min="1"
-                          placeholder="1, 2, 3..."
-                          value={(formData.immunizationDetails?.[vaccineId]?.doseNumber) || ''}
-                          onChange={(e) => {
-                            const details = { ...(formData.immunizationDetails || {}) };
-                            details[vaccineId] = { ...details[vaccineId], doseNumber: parseInt(e.target.value) || 1 };
-                            handleInputChange('immunizationDetails', details);
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ) : null;
-                })}
-              </div>
-            )}
             <Textarea
               label="Immunization Notes (Optional)"
               placeholder="Any additional information about your immunizations, dates, or reactions."
@@ -936,23 +950,69 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               <div className="space-y-4">
                 {catalogs.isLoading ? (
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
-                ) : catalogs.hospitalizations.length > 0 || hospitalizationOthers.dynamicItems.length > 0 ? (
-                  <Select
-                    label="Condition requiring hospitalization *"
-                    required
-                    options={[...catalogs.hospitalizations, ...hospitalizationOthers.dynamicItems].map(h => ({
-                      value: h.id,
-                      label: h.name
-                    }))}
-                    value={formData.hospitalizationCondition || ''}
-                    onChange={(e) => handleInputChange('hospitalizationCondition', e.target.value)}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-secondary-700">Condition requiring hospitalization *</label>
-                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                      Hospitalization catalog unavailable. Please try again later.
-                    </p>
+                ) : catalogs.hospitalizations.length > 0 ? (
+                  <div className="space-y-2">
+                    {catalogs.hospitalizations.map((condition) => {
+                      const isChecked = formData.hospitalizationConditions?.[condition.id] || false;
+                      return (
+                        <div key={condition.id}>
+                          <Checkbox
+                            label={condition.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [condition.id]: e.target.checked })}
+                          />
+                          {isChecked && (
+                            <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <Input
+                                label="Admission Date"
+                                type="date"
+                                value={formData.hospitalizationDates?.[condition.id]?.admissionDate || ''}
+                                onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), admissionDate: e.target.value } })}
+                              />
+                              <Input
+                                label="Discharge Date"
+                                type="date"
+                                value={formData.hospitalizationDates?.[condition.id]?.dischargeDate || ''}
+                                onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), dischargeDate: e.target.value } })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {hospitalizationOthers.dynamicItems.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
+                    {hospitalizationOthers.dynamicItems.map((condition) => {
+                      const isChecked = formData.hospitalizationConditions?.[condition.id] || false;
+                      return (
+                        <div key={condition.id}>
+                          <Checkbox
+                            label={condition.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [condition.id]: e.target.checked })}
+                          />
+                          {isChecked && (
+                            <div className="ml-6 mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <Input
+                                label="Admission Date"
+                                type="date"
+                                value={formData.hospitalizationDates?.[condition.id]?.admissionDate || ''}
+                                onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), admissionDate: e.target.value } })}
+                              />
+                              <Input
+                                label="Discharge Date"
+                                type="date"
+                                value={formData.hospitalizationDates?.[condition.id]?.dischargeDate || ''}
+                                onChange={(e) => handleInputChange('hospitalizationDates', { ...(formData.hospitalizationDates || {}), [condition.id]: { ...(formData.hospitalizationDates?.[condition.id] || {}), dischargeDate: e.target.value } })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {/* Search or add hospitalization conditions */}
@@ -980,10 +1040,10 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                                 key={result.id}
                                 type="button"
                                 className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                                onMouseDown={(e) => { e.preventDefault(); const item = hospitalizationOthers.selectItem(result); handleInputChange('hospitalizationCondition', item.id); }}
+                                onMouseDown={(e) => { e.preventDefault(); const item = hospitalizationOthers.selectItem(result); handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
                               >
                                 {result.name}
-                                {formData.hospitalizationCondition === result.id && (
+                                {formData.hospitalizationConditions?.[result.id] && (
                                   <span className="ml-2 text-xs text-primary-500 font-medium">✓ Selected</span>
                                 )}
                               </button>
@@ -992,7 +1052,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
                               disabled={hospitalizationOthers.creating}
-                              onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationCondition', item.id); }}
+                              onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
                             >
                               {hospitalizationOthers.creating ? 'Adding...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
                             </button>
@@ -1002,7 +1062,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
                             disabled={hospitalizationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationCondition', item.id); }}
+                            onMouseDown={async (e) => { e.preventDefault(); const item = await hospitalizationOthers.createItem(hospitalizationOthers.input.trim()); if (item) handleInputChange('hospitalizationConditions', { ...(formData.hospitalizationConditions || {}), [item.id]: true }); }}
                           >
                             {hospitalizationOthers.creating ? 'Adding...' : `+ Add "${hospitalizationOthers.input.trim()}" as a new condition`}
                           </button>
@@ -1010,21 +1070,6 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                       </div>
                     )}
                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Admission Date *"
-                    type="date"
-                    required
-                    value={formData.admissionDate || ''}
-                    onChange={(e) => handleInputChange('admissionDate', e.target.value)}
-                  />
-                  <Input
-                    label="Discharge Date"
-                    type="date"
-                    value={formData.dischargeDate || ''}
-                    onChange={(e) => handleInputChange('dischargeDate', e.target.value)}
-                  />
                 </div>
                 <Textarea
                   label="Hospitalization Notes (Optional)"
@@ -1055,23 +1100,57 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
               <div className="space-y-4">
                 {catalogs.isLoading ? (
                   <p className="text-sm text-secondary-500 italic">Loading...</p>
-                ) : catalogs.operations.length > 0 || operationOthers.dynamicItems.length > 0 ? (
-                  <Select
-                    label="Type of surgery/operation *"
-                    required
-                    options={[...catalogs.operations, ...operationOthers.dynamicItems].map(o => ({
-                      value: o.id,
-                      label: o.name
-                    }))}
-                    value={formData.surgeryType || ''}
-                    onChange={(e) => handleInputChange('surgeryType', e.target.value)}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-secondary-700">Type of surgery/operation *</label>
-                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                      Surgery catalog unavailable. Please try again later.
-                    </p>
+                ) : catalogs.operations.length > 0 ? (
+                  <div className="space-y-2">
+                    {catalogs.operations.map((procedure) => {
+                      const isChecked = formData.operationConditions?.[procedure.id] || false;
+                      return (
+                        <div key={procedure.id}>
+                          <Checkbox
+                            label={procedure.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [procedure.id]: e.target.checked })}
+                          />
+                          {isChecked && (
+                            <div className="ml-6 mt-1">
+                              <Input
+                                label="Date of Operation"
+                                type="date"
+                                value={formData.operationDates?.[procedure.id] || ''}
+                                onChange={(e) => handleInputChange('operationDates', { ...(formData.operationDates || {}), [procedure.id]: e.target.value })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {operationOthers.dynamicItems.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
+                    {operationOthers.dynamicItems.map((procedure) => {
+                      const isChecked = formData.operationConditions?.[procedure.id] || false;
+                      return (
+                        <div key={procedure.id}>
+                          <Checkbox
+                            label={procedure.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [procedure.id]: e.target.checked })}
+                          />
+                          {isChecked && (
+                            <div className="ml-6 mt-1">
+                              <Input
+                                label="Date of Operation"
+                                type="date"
+                                value={formData.operationDates?.[procedure.id] || ''}
+                                onChange={(e) => handleInputChange('operationDates', { ...(formData.operationDates || {}), [procedure.id]: e.target.value })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {/* Search or add operations */}
@@ -1099,10 +1178,10 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                                 key={result.id}
                                 type="button"
                                 className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                                onMouseDown={(e) => { e.preventDefault(); const item = operationOthers.selectItem(result); handleInputChange('surgeryType', item.id); }}
+                                onMouseDown={(e) => { e.preventDefault(); const item = operationOthers.selectItem(result); handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
                               >
                                 {result.name}
-                                {formData.surgeryType === result.id && (
+                                {formData.operationConditions?.[result.id] && (
                                   <span className="ml-2 text-xs text-primary-500 font-medium">✓ Selected</span>
                                 )}
                               </button>
@@ -1111,7 +1190,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
                               disabled={operationOthers.creating}
-                              onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('surgeryType', item.id); }}
+                              onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
                             >
                               {operationOthers.creating ? 'Adding...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
                             </button>
@@ -1121,7 +1200,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
                             disabled={operationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('surgeryType', item.id); }}
+                            onMouseDown={async (e) => { e.preventDefault(); const item = await operationOthers.createItem(operationOthers.input.trim()); if (item) handleInputChange('operationConditions', { ...(formData.operationConditions || {}), [item.id]: true }); }}
                           >
                             {operationOthers.creating ? 'Adding...' : `+ Add "${operationOthers.input.trim()}" as a new procedure`}
                           </button>
@@ -1130,13 +1209,6 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                     )}
                   </div>
                 </div>
-                <Input
-                  label="Operation Date *"
-                  type="date"
-                  required
-                  value={formData.operationDate || ''}
-                  onChange={(e) => handleInputChange('operationDate', e.target.value)}
-                />
                 <Textarea
                   label="Surgery Notes (Optional)"
                   placeholder="Any additional information about your surgeries."
@@ -1159,28 +1231,42 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
           <div className="space-y-4">
             <div className="flex items-center gap-6">
               <p className="text-sm text-secondary-700 dark:text-neutral-400 mr-4">Are you currently taking any medications?</p>
-              <RadioButton label="Yes" name="hasMedications" value="yes" checked={formData.hasMedications === 'yes'} onChange={() => onChange({ ...formData, hasMedications: 'yes', currentMedications: formData.currentMedications?.length ? formData.currentMedications : [{ medicineId: '', description: '' }] })} />
-              <RadioButton label="No" name="hasMedications" value="no" checked={formData.hasMedications === 'no'} onChange={() => onChange({ ...formData, hasMedications: 'no', currentMedications: [] })} />
+              <RadioButton label="Yes" name="hasMedications" value="yes" checked={formData.hasMedications === 'yes'} onChange={() => onChange({ ...formData, hasMedications: 'yes', selectedMedications: formData.selectedMedications || {} })} />
+              <RadioButton label="No" name="hasMedications" value="no" checked={formData.hasMedications === 'no'} onChange={() => onChange({ ...formData, hasMedications: 'no', selectedMedications: {} })} />
             </div>
             {formData.hasMedications === 'yes' && (
               <div className="space-y-4">
-                {catalogs.medications.length > 0 || medicationOthers.dynamicItems.length > 0 ? (
-                  <Select
-                    label="Medication *"
-                    required
-                    options={[...catalogs.medications, ...medicationOthers.dynamicItems].map(m => ({ value: m.id, label: m.name }))}
-                    value={formData.currentMedications?.[0]?.medicineId || ''}
-                    onChange={(e) => {
-                      const entry = { ...(formData.currentMedications?.[0] || {}), medicineId: e.target.value };
-                      handleInputChange('currentMedications', [entry]);
-                    }}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-sm font-medium text-secondary-700">Medication *</label>
-                    <p className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                      Medication catalog unavailable. Please try again later.
-                    </p>
+                {catalogs.medications.length > 0 ? (
+                  <div className="space-y-2">
+                    {catalogs.medications.map((medicine) => {
+                      const isChecked = formData.selectedMedications?.[medicine.id] || false;
+                      return (
+                        <div key={medicine.id}>
+                          <Checkbox
+                            label={medicine.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [medicine.id]: e.target.checked })}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {medicationOthers.dynamicItems.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Added by you</p>
+                    {medicationOthers.dynamicItems.map((medicine) => {
+                      const isChecked = formData.selectedMedications?.[medicine.id] || false;
+                      return (
+                        <div key={medicine.id}>
+                          <Checkbox
+                            label={medicine.name}
+                            checked={isChecked}
+                            onChange={(e) => handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [medicine.id]: e.target.checked })}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {/* Search or add medications */}
@@ -1208,11 +1294,11 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                                 key={result.id}
                                 type="button"
                                 className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
-                                onMouseDown={(e) => { e.preventDefault(); const item = medicationOthers.selectItem(result); const entry = { ...(formData.currentMedications?.[0] || {}), medicineId: item.id }; handleInputChange('currentMedications', [entry]); }}
+                                onMouseDown={(e) => { e.preventDefault(); const item = medicationOthers.selectItem(result); handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
                               >
                                 {result.name}
-                                {formData.currentMedications?.[0]?.medicineId === result.id && (
-                                  <span className="ml-2 text-xs text-primary-500 font-medium">✓ Selected</span>
+                                {formData.selectedMedications?.[result.id] && (
+                                  <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
                                 )}
                               </button>
                             ))}
@@ -1220,7 +1306,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                               type="button"
                               className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
                               disabled={medicationOthers.creating}
-                              onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) { const entry = { ...(formData.currentMedications?.[0] || {}), medicineId: item.id }; handleInputChange('currentMedications', [entry]); } }}
+                              onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
                             >
                               {medicationOthers.creating ? 'Adding...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
                             </button>
@@ -1230,7 +1316,7 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                             type="button"
                             className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
                             disabled={medicationOthers.creating}
-                            onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) { const entry = { ...(formData.currentMedications?.[0] || {}), medicineId: item.id }; handleInputChange('currentMedications', [entry]); } }}
+                            onMouseDown={async (e) => { e.preventDefault(); const item = await medicationOthers.createItem(medicationOthers.input.trim()); if (item) handleInputChange('selectedMedications', { ...(formData.selectedMedications || {}), [item.id]: true }); }}
                           >
                             {medicationOthers.creating ? 'Adding...' : `+ Add "${medicationOthers.input.trim()}" as a new medication`}
                           </button>
@@ -1239,15 +1325,6 @@ const MedicalHistoryStep = ({ formData, onChange }) => {
                     )}
                   </div>
                 </div>
-                <Textarea
-                  label="Description/Dosage"
-                  placeholder="e.g., 500mg twice daily for diabetes"
-                  value={formData.currentMedications?.[0]?.description || ''}
-                  onChange={(e) => {
-                    const entry = { ...(formData.currentMedications?.[0] || {}), description: e.target.value };
-                    handleInputChange('currentMedications', [entry]);
-                  }}
-                />
                 <Textarea
                   label="Medication Notes (Optional)"
                   placeholder="Any additional information about your medications."
