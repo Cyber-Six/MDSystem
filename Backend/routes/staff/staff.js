@@ -4,14 +4,15 @@ const db = require('../../config/query.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect');
 const logger = require('../../utils/logger');
 const notificationsRouter = require('./notifications');
+const { getStaffBranch } = require('../../services/permit.js');
 
 // Helper function to get user ID via identifier
 async function getUserIDViaIdentifier(identifier, branch) {
     const query = `
-        SELECT uc.id as "userId" 
+        SELECT uc.id as "userId", up.first_name, up.middle_name, up.last_name, up.identifier
         FROM "UserCredentials" uc
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE up.identifier = $1 AND 
+        WHERE up.identifier::text ILIKE '%' || $1 || '%' AND 
         (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both')
     `;
     const result = await db.query(query, [identifier, branch]);
@@ -46,6 +47,7 @@ async function getUserIdViaName(name, branch) {
 
     const query = `
         SELECT DISTINCT uc.id AS "userId",
+               up.first_name, up.middle_name, up.last_name, up.identifier,
                (${scoreClauses.join(' + ')}) AS score
         FROM "UserCredentials" uc
         JOIN "UsersPersonal" up ON uc.id = up.id
@@ -62,13 +64,35 @@ async function getUserIdViaName(name, branch) {
 // Helper function to get user ID via email
 async function getUserIdViaEmail(email, branch) {
     const query = `
-        SELECT uc.id as "userId" 
+        SELECT uc.id as "userId", uc.email, up.first_name, up.middle_name, up.last_name, up.identifier
         FROM "UserCredentials" uc
         LEFT JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE LOWER(uc.email) = LOWER($1) AND 
+        WHERE LOWER(uc.email) LIKE '%' || LOWER($1) || '%' AND 
         (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both' OR up.branch IS NULL)
     `;
     const result = await db.query(query, [email, branch]);
+    return result.rows;
+}
+
+// Unified patient search — name, identifier, and email in one query
+async function searchPatients(query, branch) {
+    const param = `%${query}%`;
+    const sql = `
+        SELECT DISTINCT uc.id AS "userId", uc.email,
+               up.first_name, up.middle_name, up.last_name, up.identifier
+        FROM "UserCredentials" uc
+        LEFT JOIN "UsersPersonal" up ON uc.id = up.id
+        WHERE (
+            up.first_name  ILIKE $1 OR
+            up.middle_name ILIKE $1 OR
+            up.last_name   ILIKE $1 OR
+            LOWER(uc.email) LIKE LOWER($1) OR
+            up.identifier::text ILIKE $1
+        )
+        AND (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both' OR up.branch IS NULL)
+        LIMIT 50
+    `;
+    const result = await db.query(sql, [param, branch]);
     return result.rows;
 }
 
@@ -133,24 +157,44 @@ router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
     }
 });
 
+// Route: Unified patient search by name, identifier, or email
+router.get('/id/search', jwtProtect("medical"), async (req, res) => {
+    try {
+        const { query, branch } = req.query;
+
+        if (!query || !branch) {
+            return res.status(400).json({ error: 'query and branch params are required' });
+        }
+
+        const medicalBranch = await getStaffBranch(req.user.id);
+        if (medicalBranch !== 'Both' && medicalBranch !== branch) {
+            return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
+        }
+
+        const users = await searchPatients(query, branch);
+
+        logger.info(`Unified patient search: "${query}" branch=${branch} → ${users.length} results`);
+        res.json({ users: users.map(u => ({ id: u.userId, email: u.email, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
+    } catch (error) {
+        logger.error('Error in unified patient search:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Route: Get user ID by identifier
 router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (req, res) => {
     try {
         const { identifier, branch } = req.params;
 
-        const medicalBranch = await db.getUserBranch(req.user.id);
+        const medicalBranch = await getStaffBranch(req.user.id);
         if (medicalBranch !== 'Both' && medicalBranch !== branch) {
             return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
         }
 
-        const users = await getUserIDViaIdentifier(parseInt(identifier), branch);
-        
-        if (users.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+        const users = await getUserIDViaIdentifier(identifier, branch);
         
         logger.info(`Retrieved user IDs by identifier: ${identifier}`);
-        res.json({ users: users.map(u => u.userId) });
+        res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by identifier:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -162,18 +206,15 @@ router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => 
     try {
         const { name, branch } = req.params;
 
-        const medicalBranch = await db.getUserBranch(req.user.id);
+        const medicalBranch = await getStaffBranch(req.user.id);
         if (medicalBranch !== 'Both' && medicalBranch !== branch) {
             return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
         }
 
         const users = await getUserIdViaName(name, branch);
-        if (users.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
         
         logger.info(`Retrieved user IDs by name: ${name}`);
-        res.json({ users: users.map(u => u.userId) });
+        res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by name:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -181,23 +222,22 @@ router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => 
 });
 
 // Route: Get user ID by email
-router.get('/id/email/:email/:branch', jwtProtect("medical"), async (req, res) => {
+router.get('/id/email', jwtProtect("medical"), async (req, res) => {
     try {
-        const { email, branch } = req.params;
+        const { email, branch } = req.query;
 
-        const medicalBranch = await db.getUserBranch(req.user.id);
+        if (!email || !branch) {
+            return res.status(400).json({ error: 'email and branch query params are required' });
+        }
+
+        const medicalBranch = await getStaffBranch(req.user.id);
         if (medicalBranch !== 'Both' && medicalBranch !== branch) {
-            console.log(req.user.id, branch);
             return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
         }
         const users = await getUserIdViaEmail(email, branch);
-
-        if (users.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
         
         logger.info(`Retrieved user IDs by email: ${email}`);
-        res.json({ userId: users[0].userId });
+        res.json({ users: users.map(u => ({ id: u.userId, email: u.email, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by email:', error);
         res.status(500).json({ error: 'Internal server error' });
