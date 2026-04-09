@@ -16,6 +16,7 @@ import {
   takeoverOngoingTicket as takeoverOngoingTicketService
 } from '../health-chat-service';
 import { usePermissions } from '../../../context/permissions-context';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
 
 const HealthChatContext = createContext(null);
 
@@ -38,8 +39,9 @@ function getEffectiveSortTime(status, lastMessageAt, sessionStart, sessionEnd, a
  * Uses patient-grouped conversations (1 patient = 1 row in the list)
  */
 export function HealthChatProvider({ children }) {
-  // Admin status from permissions context
+  // Admin status and staff profile
   const { isAdmin } = usePermissions();
+  const { profile } = useStaffProfile();
 
   // Conversations state (patient-grouped)
   const [conversations, setConversations] = useState([]);
@@ -139,17 +141,19 @@ export function HealthChatProvider({ children }) {
       setTicketsLoading(true);
       setError(null);
 
+      const location = profile?.branch || 'Both';
+
       let result;
       switch (filter) {
         case 'pending':
-          result = await getPendingTickets(0, 100);
+          result = await getPendingTickets(0, 100, location);
           break;
         case 'archive':
           result = await getArchivedTickets(0, 100);
           break;
         case 'active':
         default:
-          result = await getActiveTickets(0, 100);
+          result = await getActiveTickets(0, 100, location);
           break;
       }
 
@@ -161,7 +165,7 @@ export function HealthChatProvider({ children }) {
     } finally {
       setTicketsLoading(false);
     }
-  }, [filter]);
+  }, [filter, profile?.branch]);
 
   /**
    * Load patient conversations from multiple selected filters
@@ -181,6 +185,8 @@ export function HealthChatProvider({ children }) {
       setTicketsLoading(true);
       setError(null);
 
+      const location = profile?.branch || 'Both';
+
       // Map filter names to status values for the backend
       const statusMap = {
         'active': ['Ongoing'],
@@ -191,8 +197,8 @@ export function HealthChatProvider({ children }) {
       // Collect all statuses from selected filters
       const allStatuses = filters.flatMap(f => statusMap[f] || []);
 
-      // Fetch patient conversations with combined statuses
-      const result = await getPatientConversations(allStatuses, 0, 100);
+      // Fetch patient conversations with combined statuses and location
+      const result = await getPatientConversations(allStatuses, 0, 100, location);
 
       if (result?.conversations) {
         // Apply local read timestamps to compute effective unread count
@@ -280,7 +286,7 @@ export function HealthChatProvider({ children }) {
       setConversationsLoading(false);
       setTicketsLoading(false);
     }
-  }, []); // No deps — uses readTimestampsRef for stable identity
+  }, [profile?.branch]); // Re-fetch when staff location changes
 
   /**
    * Update selected filters and persist to localStorage

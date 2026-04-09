@@ -710,12 +710,16 @@ const Query = {
 
   _searchDomainCatalogs: async (_, { domain, filterIsValid, names }, { user, res }) => {
     const query = `
-      SELECT *
-      FROM "DomainTypeCatalog"
-      WHERE domain = COALESCE($1, domain)
-        AND name = ANY($2)
-        AND "isValid" = COALESCE($3, "isValid")
-      ORDER BY created_at ASC;
+    SELECT *
+    FROM "DomainTypeCatalog"
+    WHERE domain = COALESCE($1, domain)
+      AND EXISTS (
+        SELECT 1
+        FROM unnest($2::text[]) AS search_term
+        WHERE name ILIKE '%' || search_term || '%'
+      )
+      AND "isValid" = COALESCE($3, "isValid")
+    ORDER BY created_at ASC;
     `;
 
     const result = await db.query(query, [
