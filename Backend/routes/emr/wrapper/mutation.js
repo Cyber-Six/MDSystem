@@ -7,7 +7,7 @@ const remove = require("../query/delete.js");
 
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
-const { generateDomainCodes } = require("../../../utils/validator.js");
+const { generateDomainCodes, normalizeName } = require("../../../utils/validator.js");
 
 const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
     require("../../profile/resolvers/wrapper/wrapper.js");
@@ -850,6 +850,9 @@ const Mutation = {
       throwGraphQLError(res).status(403).message("Forbidden").throw();
     }
 
+    // Normalize names to Title Case before storing so display is consistent
+    const normalizedNames = (names || []).map(n => normalizeName(n));
+
     // Upsert that:
     // 1. Inserts with isValid = true so new entries appear in searches (filterIsValid: true)
     // 2. On case-insensitive duplicate (uniq_domain_name_lower), sets isValid = true on the
@@ -859,11 +862,12 @@ const Mutation = {
       INSERT INTO "DomainTypeCatalog" (domain, name, "isValid", created_by, code)
       SELECT $1, UNNEST($2::text[]), true, $3, UNNEST($4::text[])
       ON CONFLICT (domain, LOWER(name)) DO UPDATE
-        SET "isValid" = true
+        SET "isValid" = true,
+            name = EXCLUDED.name
       RETURNING *;
     `;
 
-    const result = await db.query(query, [domain, names || [], user.id, generateDomainCodes(names, domain)]);
+    const result = await db.query(query, [domain, normalizedNames, user.id, generateDomainCodes(normalizedNames, domain)]);
     logger.debug("Inserted DomainTypeCatalogs:", result.rows);
     return result.rows;
   },
