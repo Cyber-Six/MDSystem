@@ -1,32 +1,39 @@
 const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
-const { isMedicalPermitted, permissions, isMedicalPermittedLocationBased,
+const { isMedicalPermitted, permissions,
   isMedicalPermittedPatientBased, isMedicalAdmin } = require("../../../../services/permit.js");
 const { getPatientIdFromChatId } = require("../wrapper/helper.js");
 
+/** Clamp a requested location to the staff member's permission branch. */
+const clampLocation = (requested, permBranch) =>
+  (permBranch && permBranch !== 'Both') ? permBranch : (requested || 'Both');
+
 const Query = {
   getPendingTickets: async (_, { location='Both', offset, limit }, { user, res }) => {
-    const isPermitted = await isMedicalPermittedLocationBased(user.id, permissions.health_chat_allow_access, location);
-    if (!isPermitted) {
+    const { permitted, branch: permBranch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
+    if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
-    return await Wrapper.Query._getPendingTickets(_, { location, offset, limit }, { user, res });
+    const effectiveLoc = clampLocation(location, permBranch);
+    return await Wrapper.Query._getPendingTickets(_, { location: effectiveLoc, offset, limit }, { user, res });
   },
 
   getActiveTickets: async (_, { location='Both', offset, limit }, { user, res }) => {
-    const isPermitted = await isMedicalPermittedLocationBased(user.id, permissions.health_chat_allow_access, location);
-    if (!isPermitted) {
+    const { permitted, branch: permBranch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
+    if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
-    return await Wrapper.Query._getActiveTickets(_, { location, offset, limit }, { user, res });
+    const effectiveLoc = clampLocation(location, permBranch);
+    return await Wrapper.Query._getActiveTickets(_, { location: effectiveLoc, offset, limit }, { user, res });
   },
 
   getAllTickets: async (_, { location='Both', status, offset, limit }, { user, res }) => {
-    const isPermitted = await isMedicalPermittedLocationBased(user.id, permissions.health_chat_allow_access, location);
-    if (!isPermitted) {
+    const { permitted, branch: permBranch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
+    if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
-    return await Wrapper.Query._getAllTickets(_, { location, status, offset, limit }, { user, res });
+    const effectiveLoc = clampLocation(location, permBranch);
+    return await Wrapper.Query._getAllTickets(_, { location: effectiveLoc, status, offset, limit }, { user, res });
   },
 
   getTicket: async (_, { chatId }, { user, res }) => {
@@ -49,12 +56,12 @@ const Query = {
   },
 
   getPatientConversations: async (_, { location='Both', statuses, offset, limit}, { user, res }) => {
-    const isPermitted = await isMedicalPermittedLocationBased(user.id, permissions.health_chat_allow_access, location);
-    if (!isPermitted) {
+    const { permitted, branch: permBranch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
+    if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
-
-    return await Wrapper.Query._getPatientConversations(_, { location, statuses, offset, limit}, { user, res });
+    const effectiveLoc = clampLocation(location, permBranch);
+    return await Wrapper.Query._getPatientConversations(_, { location: effectiveLoc, statuses, offset, limit}, { user, res });
   },
 
   getPatientMessages: async (_, args, { user, res }) => {

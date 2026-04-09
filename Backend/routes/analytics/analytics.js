@@ -5,6 +5,7 @@ const query = require('../../config/query.js');
 const analytics = require('../../services/analytics-query.js');
 const docGen = require('../../services/doc-generate-module/index.js');
 const analyticsExport = require('../../services/analytics-export.js');
+const { getStaffBranch, isMedicalPermitted, permissions: permKeys } = require('../../services/permit.js');
 
 const router = express.Router();
 
@@ -94,7 +95,7 @@ router.get('/query/:dataType', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await query.getUserBranch(req.user.id);
+    const userBranch = await getStaffBranch(req.user.id);
     if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
@@ -161,7 +162,7 @@ router.post('/batch', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await query.getUserBranch(req.user.id);
+    const userBranch = await getStaffBranch(req.user.id);
     if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
@@ -223,7 +224,7 @@ router.get('/report/:reportType', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await query.getUserBranch(req.user.id);
+    const userBranch = await getStaffBranch(req.user.id);
     if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
@@ -364,7 +365,7 @@ router.post('/export', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await query.getUserBranch(req.user.id);
+    const userBranch = await getStaffBranch(req.user.id);
     if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }
@@ -476,7 +477,7 @@ router.post('/export/single', jwtProtect('medical'), async (req, res) => {
     }
 
     // Check user branch access
-    const userBranch = await query.getUserBranch(req.user.id);
+    const userBranch = await getStaffBranch(req.user.id);
     if (userBranch !== 'Both' && userBranch !== branch && branch !== 'Both') {
       return res.status(403).json({ error: 'BRANCH_ACCESS_DENIED' });
     }

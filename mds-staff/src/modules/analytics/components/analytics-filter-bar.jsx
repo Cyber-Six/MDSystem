@@ -10,6 +10,7 @@ const AnalyticsFilterBar = memo(({
   startDate,
   endDate,
   groupBy,
+  allowedBranches,
   onBranchChange,
   onStartDateChange,
   onEndDateChange,
@@ -20,15 +21,24 @@ const AnalyticsFilterBar = memo(({
   return (
     <div className="flex flex-wrap items-center gap-2">
         {/* Branch Selector */}
-        <select
-          value={branch}
-          onChange={(e) => onBranchChange(e.target.value)}
-          className="px-2 py-1 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
-        >
-          {BRANCHES.map((b) => (
-            <option key={b.value} value={b.value}>{b.label}</option>
-          ))}
-        </select>
+        {(() => {
+          const branchOptions = allowedBranches && allowedBranches.length > 0
+            ? BRANCHES.filter((b) => allowedBranches.includes(b.value))
+            : BRANCHES;
+          const isRestricted = branchOptions.length === 1;
+          return (
+            <select
+              value={branch}
+              onChange={(e) => onBranchChange(e.target.value)}
+              disabled={isRestricted}
+              className="px-2 py-1 text-xs rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {branchOptions.map((b) => (
+                <option key={b.value} value={b.value}>{b.label}</option>
+              ))}
+            </select>
+          );
+        })()}
 
         {/* Period Selector */}
         <select

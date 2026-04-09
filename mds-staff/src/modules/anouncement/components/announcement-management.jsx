@@ -7,6 +7,7 @@ import {
   uploadPubmat,
 } from '../announcement-service';
 import { axiosRequest } from '../../../packages-core-adapter';
+import { usePermissions } from '../../../context/permissions-context';
 
 /* Authenticated image loader — media endpoints require JWT */
 function AuthImage({ path, alt, className, onClick }) {
@@ -57,6 +58,7 @@ function ImageLightbox({ src, onClose }) {
  * Staff interface to manage announcements (CRUD)
  */
 const AnnouncementManagement = () => {
+  const { branch: staffBranch, isAdmin } = usePermissions();
   const [announcements, setAnnouncements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -71,13 +73,33 @@ const AnnouncementManagement = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, label }
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const fileInputRef = React.useRef(null);
+  const [permBranch, setPermBranch] = useState(null); // branch from backend permission
+
+  // Determine effective branch: use permission branch from backend, fall back to staff branch
+  const effectiveBranch = permBranch || staffBranch || 'Both';
+
+  // Compute allowed location options based on branch
+  const locationOptions = isAdmin || effectiveBranch === 'Both'
+    ? [{ value: 'Both', label: 'All Branches' }, { value: 'Manila', label: 'Manila (Arlegui & Casal)' }, { value: 'QuezonCity', label: 'Quezon City' }]
+    : effectiveBranch === 'Manila'
+      ? [{ value: 'Manila', label: 'Manila (Arlegui & Casal)' }]
+      : [{ value: 'QuezonCity', label: 'Quezon City' }];
+
+  const defaultLocation = isAdmin || effectiveBranch === 'Both' ? 'Both' : effectiveBranch;
 
   const [formData, setFormData] = useState({
     label: '',
     description: '',
     isActive: true,
-    location: 'Both',
+    location: defaultLocation,
   });
+
+  // Update form default location when branch info becomes available
+  useEffect(() => {
+    if (!editingId) {
+      setFormData((prev) => ({ ...prev, location: defaultLocation }));
+    }
+  }, [defaultLocation, editingId]);
 
   // Fetch announcements on mount
   useEffect(() => {
@@ -89,8 +111,9 @@ const AnnouncementManagement = () => {
   const loadAnnouncements = async () => {
     try {
       setIsLoading(true);
-      const data = await fetchAllAnnouncementsAdmin();
+      const { data, branch: responseBranch } = await fetchAllAnnouncementsAdmin();
       setAnnouncements(data);
+      setPermBranch(responseBranch);
       setError(null);
       setIsPermissionDenied(false);
     } catch (err) {
@@ -170,7 +193,7 @@ const AnnouncementManagement = () => {
       label: '',
       description: '',
       isActive: true,
-      location: 'Both',
+      location: defaultLocation,
     });
     setEditingId(null);
     setStagedFileId(null);
@@ -430,15 +453,23 @@ const AnnouncementManagement = () => {
                 name="location"
                 value={formData.location}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={locationOptions.length <= 1}
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <option value="Both">All Branches</option>
-                <option value="Manila">Manila (Arlegui &amp; Casal)</option>
-                <option value="QuezonCity">Quezon City</option>
+                {locationOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                Controls which branch patients can see this announcement.
-              </p>
+              {locationOptions.length <= 1 && (
+                <p className="text-xs text-warning-600 dark:text-warning-400 mt-1">
+                  Your permission is restricted to {effectiveBranch === 'Manila' ? 'Manila' : 'Quezon City'} branch only.
+                </p>
+              )}
+              {locationOptions.length > 1 && (
+                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                  Controls which branch patients can see this announcement.
+                </p>
+              )}
             </div>
 
             {/* Active Status */}
