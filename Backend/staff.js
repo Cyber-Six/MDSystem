@@ -48,7 +48,13 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const app = express();
 
 // Middleware
-app.use(cors());
+const corsOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',')
+  : [];
+app.use(cors({
+  origin: corsOrigins.length > 0 ? corsOrigins : false,
+  credentials: true,
+}));
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.set("trust proxy", true);
