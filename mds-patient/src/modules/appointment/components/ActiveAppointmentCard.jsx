@@ -75,7 +75,7 @@ const ActiveAppointmentCard = ({ appointment, onCancel, cancelling }) => {
       </div>
 
       <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg mb-4">
-        <p className="text-sm text-blue-700 dark:text-blue-300">
+        <p className="text-sm text-blue-700 dark:text-blue-300 mb-0">
           You currently have an active appointment. You cannot book another one until this is completed or cancelled.
         </p>
       </div>

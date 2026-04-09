@@ -106,7 +106,7 @@ const DocumentNotificationModal = ({ document, onDismiss }) => {
           {/* Additional Instructions */}
           {isApproved && (
             <div className="bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-900/50 rounded-lg p-3">
-              <p className="text-xs text-success-700 dark:text-success-300">
+              <p className="text-xs text-success-700 dark:text-success-300 mb-0">
                 Your document has been successfully recorded. You can view it anytime in your documents list.
               </p>
             </div>
@@ -114,7 +114,7 @@ const DocumentNotificationModal = ({ document, onDismiss }) => {
 
           {isRejected && (
             <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-900/50 rounded-lg p-3">
-              <p className="text-xs text-error-700 dark:text-error-300">
+              <p className="text-xs text-error-700 dark:text-error-300 mb-0">
                 Please review the rejection reason above and submit a corrected version if needed.
               </p>
             </div>

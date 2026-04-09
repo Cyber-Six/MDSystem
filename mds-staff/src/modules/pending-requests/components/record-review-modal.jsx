@@ -250,7 +250,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm text-error-700 dark:text-error-400">{fetchError}</p>
+              <p className="text-sm text-error-700 dark:text-error-400 mb-0">{fetchError}</p>
             </div>
           )}
 
@@ -366,7 +366,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                       <h4 className="text-sm font-semibold text-warning-900 dark:text-warning-400">
                         Staff Edits Pending
                       </h4>
-                      <p className="text-xs text-warning-700 dark:text-warning-500 mt-1">
+                      <p className="text-xs text-warning-700 dark:text-warning-500 mt-1 mb-0">
                         You have modified patient data. These changes will be logged per the Data Privacy Act.
                         Ensure all edit reasons are provided before approving.
                       </p>
@@ -397,7 +397,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
                       <h4 className="text-sm font-bold text-primary-900 dark:text-primary-300">
                         Confirm Staff Changes
                       </h4>
-                      <p className="text-xs text-primary-700 dark:text-primary-400 mt-1">
+                      <p className="text-xs text-primary-700 dark:text-primary-400 mt-1 mb-0">
                         You are about to approve this record with staff-modified fields.
                         By proceeding, you confirm that all edits are corrections of genuine
                         errors and that you are authorized to make these changes.
@@ -459,7 +459,7 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm text-error-700 dark:text-error-400">{actionError}</p>
+              <p className="text-sm text-error-700 dark:text-error-400 mb-0">{actionError}</p>
             </div>
           )}
         </div>

@@ -282,7 +282,7 @@ const RecordUpdateList = ({
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-sm text-error-700 dark:text-error-400">{error}</p>
+          <p className="text-sm text-error-700 dark:text-error-400 mb-0">{error}</p>
         </div>
       )}
 

@@ -218,7 +218,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
               <svg className="w-5 h-5 text-accent-600 dark:text-accent-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
               </svg>
-              <p className="text-sm text-accent-700 dark:text-accent-400">
+              <p className="text-sm text-accent-700 dark:text-accent-400 mb-0">
                 This patient revised their record after a previous revision request. Reviewing the updated submission before approving is recommended.
               </p>
             </div>
@@ -230,7 +230,7 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
               <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm text-error-700 dark:text-error-400">{error}</p>
+              <p className="text-sm text-error-700 dark:text-error-400 mb-0">{error}</p>
             </div>
           )}
 

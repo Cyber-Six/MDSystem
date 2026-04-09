@@ -190,7 +190,7 @@ const AdminTransfer = () => {
 
           {initiateError && (
             <div className="px-3 py-2 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
-              <p className="text-xs text-error-600 dark:text-error-400">{initiateError}</p>
+              <p className="text-xs text-error-600 dark:text-error-400 mb-0">{initiateError}</p>
             </div>
           )}
 
@@ -242,7 +242,7 @@ const AdminTransfer = () => {
 
           {confirmError && (
             <div className="px-3 py-2 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
-              <p className="text-xs text-error-600 dark:text-error-400">{confirmError}</p>
+              <p className="text-xs text-error-600 dark:text-error-400 mb-0">{confirmError}</p>
             </div>
           )}
 
@@ -302,7 +302,7 @@ const AdminTransfer = () => {
 
           {confirmError && (
             <div className="px-3 py-2 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
-              <p className="text-xs text-error-600 dark:text-error-400">{confirmError}</p>
+              <p className="text-xs text-error-600 dark:text-error-400 mb-0">{confirmError}</p>
             </div>
           )}
 
