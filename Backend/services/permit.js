@@ -392,7 +392,7 @@ async function isMedicalPermittedLocationBased(userId, label, location) {
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
      WHERE rm."personnelId" = $1
        AND rt.label = $2 
-       AND (rm.branch = 'Both' OR rm.branch = $3)
+       AND (rm.branch = 'Both' OR rm.branch = $3 OR $3 = 'Both')
      LIMIT 1;`,
     [userId, label, location]
   );
