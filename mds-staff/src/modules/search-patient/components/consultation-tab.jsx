@@ -527,16 +527,13 @@ export default function PatientConsultationTab({ patient, consultations = [], on
 
               <div className="space-y-3">
                 <div className="grid md:grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1 block">Clinical Notes</span>
-                    <textarea
-                      rows={3}
-                      value={form.notes}
-                      onChange={(e) => setField('notes', e.target.value)}
-                      placeholder="Consultation notes"
-                      className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
-                    />
-                  </label>
+                  <MultiInputField
+                    label="Chief Complaints"
+                    values={form.chiefComplaints}
+                    onChange={(values) => setField('chiefComplaints', values)}
+                    placeholder="Main reason for consultation"
+                    isTextarea={true}
+                  />
 
                   <MultiInputField
                     label="PE Findings"
@@ -548,13 +545,16 @@ export default function PatientConsultationTab({ patient, consultations = [], on
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-3">
-                  <MultiInputField
-                    label="Chief Complaints"
-                    values={form.chiefComplaints}
-                    onChange={(values) => setField('chiefComplaints', values)}
-                    placeholder="Main reason for consultation"
-                    isTextarea={true}
-                  />
+                  <label className="block">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1 block">Clinical Notes</span>
+                    <textarea
+                      rows={3}
+                      value={form.notes}
+                      onChange={(e) => setField('notes', e.target.value)}
+                      placeholder="Consultation notes"
+                      className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                  </label>
 
                   <MultiInputField
                     label="Treatment / Plan"
