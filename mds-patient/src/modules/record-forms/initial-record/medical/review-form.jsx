@@ -95,10 +95,7 @@ const ReviewForm = ({ formData, onEdit, certification, onCertificationChange, ca
         <dl className="space-y-1">
           <DataRow 
             label="Program" 
-            value={formData.personalInfo?.program === 'Other' 
-              ? formData.personalInfo?.programOther 
-              : formData.personalInfo?.program
-            } 
+            value={formData.personalInfo?.program} 
           />
           <DataRow label="Student Number" value={formData.personalInfo?.studentNumber} />
         </dl>

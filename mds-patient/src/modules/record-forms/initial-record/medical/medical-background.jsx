@@ -300,12 +300,19 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
                   />
                   {data.immunizations?.[vaccine.id] && (
-                    <div className="ml-6">
+                    <div className="ml-6 space-y-1">
                       <Input
                         label="Date of Immunization:"
                         type="date"
                         value={data.immunizationDates?.[vaccine.id] || ''}
                         onChange={(e) => onChange({ ...data, immunizationDates: { ...data.immunizationDates, [vaccine.id]: e.target.value } })}
+                      />
+                      <Input
+                        label="Dose Number:"
+                        type="number"
+                        min="1"
+                        value={data.immunizationDoses?.[vaccine.id] || 1}
+                        onChange={(e) => onChange({ ...data, immunizationDoses: { ...data.immunizationDoses, [vaccine.id]: parseInt(e.target.value, 10) || 1 } })}
                       />
                     </div>
                   )}
@@ -324,12 +331,19 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
                   />
                   {data.immunizations?.[vaccine.id] && (
-                    <div className="ml-6">
+                    <div className="ml-6 space-y-1">
                       <Input
                         label="Date of Immunization:"
                         type="date"
                         value={data.immunizationDates?.[vaccine.id] || ''}
                         onChange={(e) => onChange({ ...data, immunizationDates: { ...data.immunizationDates, [vaccine.id]: e.target.value } })}
+                      />
+                      <Input
+                        label="Dose Number:"
+                        type="number"
+                        min="1"
+                        value={data.immunizationDoses?.[vaccine.id] || 1}
+                        onChange={(e) => onChange({ ...data, immunizationDoses: { ...data.immunizationDoses, [vaccine.id]: parseInt(e.target.value, 10) || 1 } })}
                       />
                     </div>
                   )}

@@ -730,6 +730,28 @@ export const fetchAllCatalogs = async () => {
 };
 
 /**
+ * Search for student programs by label (used by the program search field in personal info).
+ * @param {string} query - The text the patient typed
+ * @returns {Promise<Array<{id, label}>>}
+ */
+export const searchStudentProgram = async (query) => {
+  const gql = `
+    query SearchStudentProgram($label: String) {
+      searchStudentProgram(label: $label, limit: 20) {
+        id label
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(gql, { label: query || '' });
+    return data.searchStudentProgram || [];
+  } catch (err) {
+    console.warn('[EMR Service] searchStudentProgram failed:', err.message);
+    return [];
+  }
+};
+
+/**
  * Search for immunization catalog entries by name (used by the "Others" vaccine search field).
  * Calls searchDomainCatalogs with the Immunization domain.
  * @param {string} query - The text the patient typed
@@ -966,7 +988,8 @@ const buildImmunizationRecords = (medicalBackground, catalog) => {
     .flatMap(([id]) => {
       if (!validIds.has(id)) { noteParts.push(id); return []; }
       const date = medicalBackground?.immunizationDates?.[id] || today;
-      return [{ vaccineTypeId: id, immunizationDate: date, doseNumber: 1 }];
+      const dose = medicalBackground?.immunizationDoses?.[id];
+      return [{ vaccineTypeId: id, immunizationDate: date, doseNumber: dose ? parseInt(dose, 10) : 1 }];
     });
   if (medicalBackground?.immunizationOther?.trim()) {
     noteParts.push(`Other: ${medicalBackground.immunizationOther.trim()}`);
@@ -1015,11 +1038,9 @@ const buildBatchInputs = (formData, photoIds = {}, allCatalogs = {}) => {
   const inputs = {};
 
   // Student Profile (conditional)
-  if (formData.personalInfo.program) {
+  if (formData.personalInfo.programId) {
     inputs.studentProfile = {
-      program: formData.personalInfo.program === 'Other' 
-        ? formData.personalInfo.programOther 
-        : formData.personalInfo.program,
+      programId: formData.personalInfo.programId,
       year: mapYearLevel(formData.personalInfo.studentCategory)
     };
   }
@@ -1626,7 +1647,6 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
 
   // ── Personal Info ──────────────────────────────────────────
   const rawProgram       = emr?.emrProfile?.program || '';
-  const isKnownProgram   = KNOWN_PROGRAMS.has(rawProgram);
   const ec               = emr?.emergencyContact || {};
 
   const personalInfo = {
@@ -1646,8 +1666,8 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
     provinceAddress:    pr.province_address  || '',
     contactNumber:      pr.contactNumber     || '',
     studentNumber:      bid?.identifier   || '',
-    program:            isKnownProgram ? rawProgram : (rawProgram ? 'Other' : ''),
-    programOther:       isKnownProgram ? '' : rawProgram,
+    program:            rawProgram,
+    programId:          '',   // resolved asynchronously in fetchRevisionPrefill
     studentCategory:    reverseMapYearLevel(emr?.emrProfile?.year || ''),
     drugTestDone:       '',   // not persisted
     lastSchoolAttended: '',   // not persisted
@@ -1696,7 +1716,7 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const ls           = emr?.lifestyle                        || {};
   const va           = emr?.visualAcuity                     || {};
 
-  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, { checked: true, severity: a.severity || 'Unknown' }]));
+  const allergyMap  = Object.fromEntries(allergies.map(a => [a.allergenCatalogId, { checked: true, severity: a.severity || 'Unknown', status: a.status || 'Active' }]));
   const hospMap         = Object.fromEntries(hosps.map(h => [h.conditionId, true]));
   const hospDatesMap    = Object.fromEntries(hosps.map(h => [h.conditionId, {
     admissionDate: h.admissionDate ? new Date(h.admissionDate).toISOString().split('T')[0] : '',
@@ -1711,11 +1731,13 @@ const mapRevisionDataToFormData = (profileData, emrData) => {
   const immunDatesMap   = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId,
     i.immunizationDate ? new Date(i.immunizationDate).toISOString().split('T')[0] : ''
   ]));
+  const immunDosesMap   = Object.fromEntries(immunizations.map(i => [i.vaccineTypeId, i.doseNumber || 1]));
 
   const vaNotesStr = va.notes || '';
   const medicalBackground = {
     immunizations:             immunMap,
     immunizationDates:         immunDatesMap,
+    immunizationDoses:         immunDosesMap,
     immunizationOther:         '',
     hasAllergies:              allergies.length > 0    ? 'Yes' : 'No',
     allergies:                 allergyMap,
@@ -1864,7 +1886,7 @@ export const fetchRevisionPrefill = async () => {
           notes
         }
         immunizationProfile: getImmunizationProfile {
-          immunizations { vaccineTypeId immunizationDate }
+          immunizations { vaccineTypeId immunizationDate doseNumber }
           notes
         }
         lifestyle: getLifestyle {
@@ -1918,6 +1940,22 @@ export const fetchRevisionPrefill = async () => {
   }
 
   const mapped = mapRevisionDataToFormData(profileData, emrData);
+
+  // Resolve the student programId from the label returned by the backend.
+  // StudentProfile.program is a label string; StudentProfileInput requires programId: ID!
+  const rawProgramLabel = emrData?.emrProfile?.program;
+  if (rawProgramLabel) {
+    try {
+      const programs = await searchStudentProgram(rawProgramLabel);
+      const match = programs.find(p => p.label === rawProgramLabel);
+      if (match) {
+        mapped.personalInfo.programId = match.id;
+        mapped.personalInfo.program   = match.label;
+      }
+    } catch (err) {
+      console.warn('[EMR Service] Could not resolve programId from label:', err.message);
+    }
+  }
 
   // Fetch previously submitted dental photos.
   // Store them as { file, preview } so uploadMediaFile() can re-stage the photo
