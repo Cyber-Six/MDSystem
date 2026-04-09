@@ -2,7 +2,7 @@ const express = require("express");
 const logger = require("../../../utils/logger.js");
 const { query, queryClient, queryControlled, getUserBranch, connect } = require("../../../config/query.js");
 const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
-const { isMedicalPermitted, isMedicalPermittedLocationBased, permissions } = require("../../../services/permit.js");
+const { isMedicalPermitted, isMedicalPermittedLocationBased, permissions, getStaffBranch } = require("../../../services/permit.js");
 const { promoteFile, deleteFile } = require("../../../config/multer.js");
 const { ValidateBranchbyUserBranch, ValidateLocationDesignation } = require("../../../utils/validator.js");
 const router = express.Router();
@@ -40,27 +40,32 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Check if user has announcement permission at all, and get their permission branch
-        const { permitted, branch: permBranch } = await isMedicalPermitted(userId, permissions.announcement_allow_crud);
+        // Check if user has announcement permission at all
+        const { permitted } = await isMedicalPermitted(userId, permissions.announcement_allow_crud);
         if (!permitted) {
             return res.status(403).json({ error: "FORBIDDEN", message: "Not authorized to manage announcements." });
         }
 
-        // Use explicit location query param, or fall back to the permission's branch
-        const location = req.query.location || permBranch || 'Both';
+        // Use MedicalPersonnel.designation as the authoritative staff branch
+        const staffBranch = await getStaffBranch(userId);
+
+        // Use explicit location query param, or fall back to the staff's actual branch
+        const requestedLocation = req.query.location;
+        const location = requestedLocation || staffBranch || 'Both';
 
         if (!ValidateLocationDesignation(location)) {
             return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
         }
 
-        // If a specific location was requested, verify the user has permission for it
-        if (req.query.location && req.query.location !== permBranch && permBranch !== 'Both') {
-            return res.status(403).json({ error: "FORBIDDEN", message: `Not authorized to view announcements for location: '${req.query.location}'.` });
+        // If a specific location was requested, verify the staff member's branch allows it
+        if (requestedLocation && requestedLocation !== 'Both' && staffBranch !== 'Both' && requestedLocation !== staffBranch) {
+            return res.status(403).json({ error: "FORBIDDEN", message: `Not authorized to view announcements for location: '${requestedLocation}'.` });
         }
 
-        // Build query: staff can only see announcements in locations where they have permission
-        // If their permission is 'Both', they see everything
-        // If their permission is 'Manila' or 'QuezonCity', they only see that location + 'Both' announcements
+        // Build query: staff can only see announcements for their branch (+ 'Both' announcements are always visible)
+        // If their branch is 'Both', they see everything
+        // If their branch is 'Manila', they see Manila + 'Both' announcements
+        // If their branch is 'QuezonCity', they see QuezonCity + 'Both' announcements
         const sql = `
             SELECT id, title as label, content as description, 
                 pubmat, "isActive", created_at, location
@@ -74,8 +79,8 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
             ORDER BY created_at DESC;
         `;
 
-        const result = await query(sql, [location || 'Both']);
-        return res.status(200).json({ success: true, data: result.rows, branch: permBranch });
+        const result = await query(sql, [staffBranch || 'Both']);
+        return res.status(200).json({ success: true, data: result.rows, branch: staffBranch });
     } catch (err) {
         logger.error("Failed to fetch all announcements:", err);
         return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to fetch announcements" });
