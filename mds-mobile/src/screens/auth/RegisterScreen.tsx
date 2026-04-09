@@ -36,6 +36,10 @@ const isValidTipEmail = (email: string): boolean => {
 
 const TOTAL_STEPS = 4;
 
+// Server-side secret exchanged instead of a reCAPTCHA browser token.
+// Mobile native apps cannot render v2 checkbox widgets.
+const MOBILE_RECAPTCHA_SECRET = process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || '';
+
 interface RegisterScreenProps {
   onNavigateToLogin: () => void;
   onRegisterSuccess: () => void;
@@ -126,7 +130,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         }
         // Auto-send OTP immediately after successful registration
         try {
-          const recaptchaToken = 'MOBILE_APP_TOKEN';
+          const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
           await axiosRequest.post('/auth/email/verification', {
             email: formData.email,
             recaptchaToken
@@ -197,7 +201,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     setLoading(true);
 
     try {
-      const recaptchaToken = 'MOBILE_APP_TOKEN';
+      const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
 
       const response = await axiosRequest.post('/auth/email/verification', {
         email: formData.email,
