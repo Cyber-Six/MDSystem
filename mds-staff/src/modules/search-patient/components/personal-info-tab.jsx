@@ -26,14 +26,30 @@ export default function PatientPersonalInfoTab({ patient }) {
     }
   };
 
+  const getBranchLabel = (branch) => {
+    if (!branch) return null;
+    const normalized = branch.toString().toLowerCase();
+    if (normalized === 'manila') return 'Manila';
+    if (normalized === 'quezon city' || normalized === 'qc') return 'Quezon City';
+    return branch;
+  };
+
   return (
     <div className="space-y-3">
       <PatientSectionCard title="Account Status">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-secondary-500 dark:text-neutral-400">Credential Status:</span>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getCredentialStatusColor(patient.credentialStatus)}`}>
-            {patient.credentialStatus || 'Unknown'}
-          </span>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-secondary-500 dark:text-neutral-400">Credential Status:</span>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getCredentialStatusColor(patient.credentialStatus)}`}>
+              {patient.credentialStatus || 'Unknown'}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-secondary-500 dark:text-neutral-400">Branch:</span>
+            <span className="text-sm font-semibold text-secondary-800 dark:text-white">
+              {getBranchLabel(patient.personal.branch) || <span className="text-secondary-300 dark:text-neutral-600 font-normal">N/A</span>}
+            </span>
+          </div>
         </div>
       </PatientSectionCard>
 
