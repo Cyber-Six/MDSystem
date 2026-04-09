@@ -1039,7 +1039,7 @@ const LoginFailureMatrix = {
     prefix: "login:staff",
     failTtl: Number(process.env.STAFF_LOGIN_FAIL_TTL) || 300,
     lockdownSeconds: Number(process.env.STAFF_LOGIN_FAIL_LOCKDOWN_SECONDS) || 300,
-    threshold: Number(process.env.STAFF_FAILED_LOGIN_THRESHOLD) || 3,
+    threshold: Number(process.env.STAFF_FAILED_LOGIN_THRESHOLD) || 5,
   },
 };
 
@@ -1103,6 +1103,17 @@ async function getLoginFailureCount(email, portal) {
 async function shouldRequireRecaptcha(email, portal) {
   const count = await getLoginFailureCount(email, portal);
   return count >= RECAPTCHA_FAIL_THRESHOLD;
+}
+
+/**
+ * Clear the failure counter after a fully-completed successful login.
+ * Prevents stale counts from requiring captcha on the next login session.
+ */
+async function resetLoginFailures(email, portal) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!LoginFailureMatrix[portal]) return; // unknown portal — no-op
+  const prefix = LoginFailureMatrix[portal].prefix;
+  await client.del(`${prefix}:fail:${email}`);
 }
 
 async function triggerExpiredMedical(supply, batchId) {
@@ -1195,6 +1206,7 @@ module.exports = {
   isLoginLocked,
   getLoginFailureCount,
   shouldRequireRecaptcha,
+  resetLoginFailures,
 
   createVerificationSession,
   getVerificationSession,

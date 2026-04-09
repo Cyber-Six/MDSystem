@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { axiosRequest } from '../../packages-core-adapter.js';
+
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '';
 
 const ForgetPassword = ({ onBackToLogin }) => {
   const [formData, setFormData] = useState({
@@ -9,6 +11,43 @@ const ForgetPassword = ({ onBackToLogin }) => {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [error, setError] = useState('');
+  const [recaptchaToken, setRecaptchaToken] = useState('');
+  const [recaptchaWidgetId, setRecaptchaWidgetId] = useState(null);
+  const recaptchaRef = useRef(null);
+
+  // ── reCAPTCHA v2 setup ────────────────────────────────────────────────
+  const renderRecaptcha = useCallback(() => {
+    if (!RECAPTCHA_SITE_KEY || !window.grecaptcha || !recaptchaRef.current) return;
+    if (recaptchaWidgetId !== null) return;
+
+    window.grecaptcha.ready(() => {
+      const id = window.grecaptcha.render(recaptchaRef.current, {
+        sitekey: RECAPTCHA_SITE_KEY,
+        callback: (token) => setRecaptchaToken(token),
+        'expired-callback': () => setRecaptchaToken(''),
+        'error-callback': () => setRecaptchaToken(''),
+      });
+      setRecaptchaWidgetId(id);
+    });
+  }, [recaptchaWidgetId]);
+
+  const resetRecaptcha = useCallback(() => {
+    setRecaptchaToken('');
+    if (recaptchaWidgetId !== null && window.grecaptcha) {
+      try { window.grecaptcha.reset(recaptchaWidgetId); } catch { /* noop */ }
+    }
+  }, [recaptchaWidgetId]);
+
+  useEffect(() => {
+    if (!RECAPTCHA_SITE_KEY) return;
+    const timer = setInterval(() => {
+      if (window.grecaptcha && recaptchaRef.current && recaptchaWidgetId === null) {
+        renderRecaptcha();
+        clearInterval(timer);
+      }
+    }, 200);
+    return () => clearInterval(timer);
+  }, [renderRecaptcha, recaptchaWidgetId]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -25,9 +64,13 @@ const ForgetPassword = ({ onBackToLogin }) => {
     setError('');
     setSuccessMessage('');
 
-    try {
-      const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
+    if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+      setError('Please complete the reCAPTCHA check.');
+      setLoading(false);
+      return;
+    }
 
+    try {
       await axiosRequest.post('/auth/password/forget-password', {
         email: formData.email,
         recaptchaToken,
@@ -47,6 +90,7 @@ const ForgetPassword = ({ onBackToLogin }) => {
       } else {
         setError(err.response?.data?.message || 'Failed to send reset link. Please try again.');
       }
+      resetRecaptcha();
     } finally {
       setLoading(false);
     }
@@ -106,6 +150,13 @@ const ForgetPassword = ({ onBackToLogin }) => {
                      transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
+
+        {/* reCAPTCHA widget */}
+        {RECAPTCHA_SITE_KEY && (
+          <div className="flex justify-center">
+            <div ref={recaptchaRef} />
+          </div>
+        )}
 
         {/* Buttons */}
         <div className="flex gap-3 pt-2">

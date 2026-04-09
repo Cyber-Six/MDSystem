@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const compression = require('compression');
+const helmet = require('helmet');
 const db = require('./config/db.js');
 const redis = require('./config/redis.js');
 const logger = require('./utils/logger.js');
@@ -48,7 +49,31 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const app = express();
 
 // Middleware
-app.use(cors());
+const corsOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',')
+  : [];
+app.use(cors({
+  origin: corsOrigins.length > 0 ? corsOrigins : false,
+  credentials: true,
+}));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:     ["'self'"],
+      scriptSrc:      ["'self'", "'unsafe-inline'", "https://www.google.com", "https://accounts.google.com", "https://www.gstatic.com"],
+      styleSrc:       ["'self'", "'unsafe-inline'"],
+      imgSrc:         ["'self'", "data:", "https:", "blob:"],
+      connectSrc:     ["'self'", "wss:", "ws:"],
+      frameSrc:       ["'self'", "https://www.google.com"],
+      fontSrc:        ["'self'", "data:"],
+      objectSrc:      ["'none'"],
+      baseUri:        ["'self'"],
+      formAction:     ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Required for Google Sign-In button
+}));
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.set("trust proxy", true);
