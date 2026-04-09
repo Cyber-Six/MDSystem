@@ -21,6 +21,8 @@ const Login = () => {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  // Adaptive reCAPTCHA — hidden until the server signals it's needed
+  const [captchaRequired, setCaptchaRequired] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState('');
   const [recaptchaWidgetId, setRecaptchaWidgetId] = useState(null);
   const recaptchaRef = useRef(null);
@@ -51,7 +53,9 @@ const Login = () => {
     }
   }, [recaptchaWidgetId]);
 
+  // Render the reCAPTCHA widget only when flagged as required
   useEffect(() => {
+    if (!captchaRequired || !RECAPTCHA_SITE_KEY) return;
     const timer = setInterval(() => {
       if (window.grecaptcha && recaptchaRef.current && recaptchaWidgetId === null) {
         renderRecaptcha();
@@ -59,7 +63,7 @@ const Login = () => {
       }
     }, 200);
     return () => clearInterval(timer);
-  }, [renderRecaptcha, recaptchaWidgetId]);
+  }, [captchaRequired, renderRecaptcha, recaptchaWidgetId]);
 
   // ── Google Sign-In setup ──────────────────────────────────────────────
   const handleGoogleCredential = useCallback(async (response) => {
@@ -68,7 +72,9 @@ const Login = () => {
     setIsLoading(true);
 
     try {
+      // OAuth always requires reCAPTCHA — show widget if not visible
       if (!recaptchaToken) {
+        setCaptchaRequired(true);
         setError('Please complete the "I am not a robot" check first.');
         setIsLoading(false);
         return;
@@ -164,7 +170,8 @@ const Login = () => {
     e.preventDefault();
     setError('');
 
-    if (!recaptchaToken) {
+    // Block only when the server has already flagged captcha as required
+    if (captchaRequired && RECAPTCHA_SITE_KEY && !recaptchaToken) {
       setError('Please complete the "I am not a robot" check.');
       return;
     }
@@ -172,11 +179,10 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const response = await axiosRequest.post('/auth/login', { 
-        email, 
-        password, 
-        recaptchaToken 
-      });
+      const payload = { email, password };
+      if (recaptchaToken) payload.recaptchaToken = recaptchaToken;
+
+      const response = await axiosRequest.post('/auth/login', payload);
       
       if (response.data.ok) {
         const loginKey = response.data.LoginKey;
@@ -197,8 +203,16 @@ const Login = () => {
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Login failed. Please try again.';
       const errorCode = err.response?.data?.error;
+
+      // Server tells us next request must include reCAPTCHA
+      if (err.response?.data?.requiresCaptcha) {
+        setCaptchaRequired(true);
+      }
       
       switch (errorCode) {
+        case 'RECAPTCHA_REQUIRED':
+          setError('Too many failed attempts. Please complete the reCAPTCHA check.');
+          break;
         case 'MISSING_FIELDS':
           setError('Please fill in all required fields.');
           break;
@@ -494,8 +508,8 @@ const Login = () => {
             </div>
           </div>
 
-          {/* reCAPTCHA v2 Widget */}
-          {RECAPTCHA_SITE_KEY && (
+          {/* reCAPTCHA v2 Widget — shown only after server flags it as required */}
+          {RECAPTCHA_SITE_KEY && captchaRequired && (
             <div className="flex justify-center [&>div]:scale-[0.85] [&>div]:origin-center sm:[&>div]:scale-100">
               <div ref={recaptchaRef} id="patient-recaptcha-container"></div>
             </div>
@@ -504,7 +518,7 @@ const Login = () => {
           {/* Login Button */}
           <button 
             type="submit" 
-            disabled={isLoading || (RECAPTCHA_SITE_KEY && !recaptchaToken)}
+            disabled={isLoading || (captchaRequired && RECAPTCHA_SITE_KEY && !recaptchaToken)}
             className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
                     
                      text-white font-semibold py-3.5 rounded-lg

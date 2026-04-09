@@ -2015,7 +2015,69 @@ Any instance can handle any request in the flow.
 
 ---
 
-**Document Version**: 2.0
-**Last Updated**: 2026-03-24
+## Adaptive reCAPTCHA
+
+MDSystem uses Google reCAPTCHA v2 (checkbox) with an **adaptive** enforcement model. The widget is hidden by default and only shown to users after consecutive failed login attempts.
+
+### Mechanism
+
+- A per-email failure counter is tracked in Redis (key: `login:{portal}:fail:{email}`).
+- After `RECAPTCHA_FAIL_THRESHOLD` (default: **2**) consecutive failures, the server returns `requiresCaptcha: true` in the error response.
+- The frontend dynamically renders the reCAPTCHA widget and blocks further submissions until the user completes the check.
+- The failure counter expires via Redis TTL (default: 300 seconds).
+
+### Benefits
+
+- **Reduced friction**: Legitimate users with correct passwords never see reCAPTCHA.
+- **Unpredictable**: Attackers cannot pre-determine when the check will be required since the threshold is configurable and not exposed.
+- **Defense-in-depth**: Works alongside IP rate limiting and account lockout.
+
+### Mobile Exception
+
+Mobile native apps bypass reCAPTCHA via a shared server-side secret (`RECAPTCHA_MOBILE_SECRET`). The secret is validated server-side without calling Google's API.
+
+### Related Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RECAPTCHA_FAIL_THRESHOLD` | `2` | Failures before reCAPTCHA is enforced |
+| `RECAPTCHA_SECRET_KEY` | — | Google reCAPTCHA v2 server secret |
+| `RECAPTCHA_MOBILE_SECRET` | — | Shared secret for mobile bypass |
+| `RECAPTCHA_TEST_MODE` | `false` | Skip verification in development |
+
+> Full details: [RECAPTCHA_AND_GOOGLE_OAUTH.md](RECAPTCHA_AND_GOOGLE_OAUTH.md)
+
+---
+
+## Google OAuth (Sign-In with Google)
+
+MDSystem supports Google OAuth as an alternative authentication method, restricted to **@tip.edu.ph** institutional accounts.
+
+### Security Layers
+
+1. **reCAPTCHA verification** — always required (email unknown until token decoded)
+2. **Google ID token verification** — signature, audience (`GOOGLE_CLIENT_ID`), `email_verified` claim
+3. **Domain enforcement** — `hd` claim must be `tip.edu.ph`
+4. **Existing user requirement** — no auto-registration; account must already exist
+5. **Login lockout** — shared Redis-based lockout applies
+6. **IP rate limiting** — portal-based
+
+### Flow
+
+After Google OAuth verification, the user follows the same 2FA → Data Consent → Login Complete flow as password-based login.
+
+### Related Files
+
+| File | Purpose |
+|---|---|
+| `Backend/services/google-oauth.js` | Google ID token verification (`google-auth-library`) |
+| `Backend/routes/auth/oauth/google.js` | OAuth login route |
+
+> Full details: [RECAPTCHA_AND_GOOGLE_OAUTH.md](RECAPTCHA_AND_GOOGLE_OAUTH.md)
+
+---
+
+**Document Version**: 3.0
+**Last Updated**: 2025-07-14
 **Maintained By**: MDSystem Security Team
 **Review Schedule**: Quarterly

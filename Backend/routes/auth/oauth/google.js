@@ -3,7 +3,7 @@ const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
 const { verifyRecaptcha } = require("../../../services/recaptcha.js");
 const { verifyGoogleToken } = require("../../../services/google-oauth.js");
-const { createVerificationSession, isLoginLocked } = require("../../../config/redis.js");
+const { createVerificationSession, isLoginLocked, shouldRequireRecaptcha } = require("../../../config/redis.js");
 const query = require("../../../config/query.js");
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
 const logger = require("../../../utils/logger.js");
@@ -21,12 +21,16 @@ const VERIFICATIONKEY_PURPOSE = "2fa";
  *
  * Security layers:
  *  1. IP rate limiting (portal-based)
- *  2. reCAPTCHA verification
+ *  2. reCAPTCHA verification (always required — email unknown until token decoded)
  *  3. Google ID token verification (signature + audience + hd claim)
  *  4. @tip.edu.ph domain enforcement
  *  5. Existing user requirement (no auto-registration)
  *  6. Login lockout check
  *  7. Portal-based account type validation
+ *
+ * Note: Unlike password login, reCAPTCHA is always required here because the
+ * user's email is not known until the Google token is verified, so we cannot
+ * look up a per-email failure count beforehand.
  *
  * The session then follows the same 2FA → consent → /login/complete flow.
  */
