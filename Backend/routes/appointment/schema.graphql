@@ -30,6 +30,11 @@ enum PATIENT_TYPE {
   Employee
 }
 
+enum SCHEDULER_CUSTOM_DATE_TYPE {
+  Include
+  Exclude
+}
+
 type SlotScheduler {
   id: ID!
   label: String!
@@ -50,16 +55,10 @@ type SlotCustomDateEntry {
   id: ID!
   slotScheduleId: ID!
   scheduledDate: Date!
-  morningAllowed: Int
-  afternoonAllowed: Int
+  type: SCHEDULER_CUSTOM_DATE_TYPE!
   created_at: Date
 }
 
-input SlotCustomDateInput {
-  scheduledDate: Date!
-  morningAllowed: Int
-  afternoonAllowed: Int
-}
 
 input SlotSchedulerInput {
   label: String!
@@ -70,7 +69,8 @@ input SlotSchedulerInput {
   afternoonAllowed: Int!
   notes: String
   purposeRequired: Boolean
-  slotCustomDates: [Date!]!
+  slotIncludedDates: [Date!]!
+  slotExcludedDates: [Date!]!
   whiteLists: [ID!]!
   whitelistOnly: Boolean!
 }
@@ -234,8 +234,8 @@ type Mutation {
   updateSchedulerRequirement(schedulerId: ID!, input: ScheduleRequirementInput!): ScheduleRequirement
   deleteSchedulerRequirement(schedulerId: ID!, label: String!): Boolean
 
-  setCustomDates(schedulerId: ID!, dates: [SlotCustomDateInput!]!): [SlotCustomDateEntry!]
-  unsetCustomDates(schedulerId: ID!, dates: [Date!]!): [Date!]
+  setCustomDates(schedulerId: ID!, type: SCHEDULER_CUSTOM_DATE_TYPE!, dates: [Date!]!): [Date!]
+  unsetCustomDates(schedulerId: ID!, type: SCHEDULER_CUSTOM_DATE_TYPE!, dates: [Date!]!): [Date!]
 
   addEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]
   removeEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]

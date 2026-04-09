@@ -60,6 +60,7 @@ async function validateSchedulerDate(schedulerId, date) {
   const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const dayName = DAYS_EN[new Date(y, m - 1, d).getDay()];
   console.log(`Validating scheduler date: Scheduler ID ${schedulerId}, Date ${date} (${dayName})`);
+  
   // First check weekly schedule flags
   const queryScheduler = `
     SELECT "scheduleFlags"
@@ -76,19 +77,39 @@ async function validateSchedulerDate(schedulerId, date) {
   // Example: ["Monday", "Wednesday", "Friday"]
   console.log(`Decoded schedule flags for scheduler ${schedulerId}: ${dayPerWeek.join(", ")}`);
 
-  if (dayPerWeek.includes(dayName)) {
-    return true; // matches weekly schedule
-  }
+  const isInWeeklySchedule = dayPerWeek.includes(dayName);
 
-  // If not in weekly schedule, check custom dates
+  // Check custom dates (Include/Exclude)
   const queryCustomDate = `
-    SELECT "scheduledDate"
+    SELECT "type"
     FROM "SlotCustomDate"
     WHERE "slotScheduleId" = $1 AND "scheduledDate" = $2;
   `;
   const resultCustomDate = await db.query(queryCustomDate, [schedulerId, date]);
 
-  return resultCustomDate.rowCount > 0;
+  if (resultCustomDate.rowCount > 0) {
+    const customDateType = resultCustomDate.rows[0].type;
+    console.log(`Custom date found for ${date}: type = ${customDateType}`);
+    
+    if (customDateType === 'Exclude') {
+      // Exclude: date is explicitly excluded (even if in weekly schedule)
+      console.log(`Date ${date} is excluded`);
+      return false;
+    } else if (customDateType === 'Include') {
+      // Include: date is explicitly included
+      console.log(`Date ${date} is explicitly included`);
+      return true;
+    }
+  }
+
+  // No custom date entry found, fall back to weekly schedule check
+  if (isInWeeklySchedule) {
+    console.log(`Date ${date} matches weekly schedule`);
+    return true;
+  }
+
+  console.log(`Date ${date} is not in weekly schedule and not explicitly included`);
+  return false;
 }
 
 async function getAppointmentCounts(schedulerId, date) {
@@ -183,19 +204,20 @@ async function insertSlotCustomDates(slotScheduleId, dates, db) {
     throw new Error("Dates array must not be empty");
   }
 
-  // Same WHERE NOT EXISTS approach to avoid needing a unique constraint on (slotScheduleId, scheduledDate)
+  // Support both string dates (default to 'Include') and objects with type
   const values = [];
   const selectParts = dates.map((dateEntry, i) => {
-    const offset = i * 2;
+    const offset = i * 3;
     const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
-    values.push(slotScheduleId, scheduledDate);
-    return `($${offset + 1}::integer, $${offset + 2}::date)`;
+    const type = typeof dateEntry === 'string' ? 'Include' : (dateEntry.type || 'Include');
+    values.push(slotScheduleId, scheduledDate, type);
+    return `($${offset + 1}::integer, $${offset + 2}::date, $${offset + 3}::"SlotCustomType")`;
   });
 
   const query = `
-    INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate")
-    SELECT v."slotScheduleId", v."scheduledDate"
-    FROM (VALUES ${selectParts.join(", ")}) AS v("slotScheduleId", "scheduledDate")
+    INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate", "type")
+    SELECT v."slotScheduleId", v."scheduledDate", v."type"
+    FROM (VALUES ${selectParts.join(", ")}) AS v("slotScheduleId", "scheduledDate", "type")
     WHERE NOT EXISTS (
       SELECT 1 FROM "SlotCustomDate" scd
       WHERE scd."slotScheduleId" = v."slotScheduleId"
