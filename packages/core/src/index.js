@@ -16,6 +16,8 @@ export { createApiBaseUrlProvider } from './services/api-base-url-provider.js';
 export { createTokenService } from './services/token-service.js';
 export { createAxiosRequestHandler } from './services/axios-request-handler.js';
 export { BannerService } from './services/banner-service.js';
+export { createRecaptchaService } from './services/recaptcha-service.js';
+export { createGoogleOAuthService } from './services/google-oauth-service.js';
 
 // Utility exports
 export { detectRoleFromHostname } from './utils/role-detection.js';

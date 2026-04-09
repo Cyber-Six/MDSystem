@@ -33,6 +33,7 @@ const settingsRoutes = require('./routes/settings/settings.js');
 const totpRoutes = require('./routes/settings/totp.js');
 const settingsPasswordRoutes = require('./routes/settings/password.js');
 const refreshAuthRoutes = require('./routes/auth/jwt/refresh.js');
+const googleOAuthRoutes = require('./routes/auth/oauth/google.js');
 
 
 const { chatbotProxy } = require('./config/middleware/chatbotProxy');
@@ -88,6 +89,7 @@ app.use('/auth/login', loginRoutes);
 app.use('/auth/password', passwordResetRoutes);
 app.use('/auth/email', emailAuthRoutes);
 app.use('/auth/refresh', refreshAuthRoutes);
+app.use('/auth/oauth', googleOAuthRoutes);
 
 app.use('/info/consent', consentRoutes);
 app.use('/staff', staffRoutes);

@@ -56,7 +56,7 @@ const Auth = () => {
       )}
 
       {/* Sliding Login Panel */}
-      <div className={`auth-panel fixed top-0 h-screen w-full max-w-[420px] bg-white shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen ? 'right-0' : '-right-full'}`}>
+      <div className={`auth-panel fixed top-0 h-[100dvh] w-full max-w-[420px] bg-white shadow-2xl z-10 overflow-y-auto transition-all duration-400 ease-out ${isPanelOpen ? 'right-0' : '-right-full'}`}>
         <div className="h-full flex flex-col px-5 sm:px-6 md:px-8 py-6 sm:py-8">
           {/* X Close Button */}
           <button
@@ -71,13 +71,13 @@ const Auth = () => {
 
           <div className="flex-1 flex flex-col">
             {/* Welcome Header */}
-            <div className="text-center mb-6 pt-8">
+            <div className="text-center mb-3 sm:mb-6 pt-4 sm:pt-8">
               <img 
                 src="/MDSystem.png" 
                 alt="MDSystem Logo" 
-                className="h-24 w-24 mx-auto mb-4"
+                className="h-16 w-16 sm:h-24 sm:w-24 mx-auto mb-2 sm:mb-4"
               />
-              <h1 className="text-2xl font-bold text-secondary-900 font-heading mb-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-secondary-900 font-heading mb-1">
                 Staff Portal
               </h1>
               <p className="text-xs text-neutral-600">
