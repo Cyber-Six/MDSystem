@@ -5,6 +5,7 @@ import ErrorBoundary from '../components/error-boundary.jsx';
 import { PatientTabsProvider } from '../context/patient-tabs-context.jsx';
 import { PermissionsProvider } from '../context/permissions-context.jsx';
 import PermissionRoute from '../components/guards/permission-route.jsx';
+import { StaffNotificationProvider } from '../modules/notification/notification-context.jsx';
 
 // Lazy-loaded route modules for code splitting
 const DashboardHome = lazy(() => import('../modules/dashboard/dashboard-home.jsx'));
@@ -35,6 +36,7 @@ const Dashboard = () => {
   return (
     <PatientTabsProvider>
       <PermissionsProvider>
+        <StaffNotificationProvider>
         <StaffLayout>
           <ErrorBoundary>
             <Suspense fallback={<RouteLoader />}>
@@ -56,6 +58,7 @@ const Dashboard = () => {
             </Suspense>
           </ErrorBoundary>
         </StaffLayout>
+        </StaffNotificationProvider>
       </PermissionsProvider>
     </PatientTabsProvider>
   );

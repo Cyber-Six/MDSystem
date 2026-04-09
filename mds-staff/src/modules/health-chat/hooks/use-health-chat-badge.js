@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPendingTickets } from '../health-chat-service';
 import { useStaffProfile } from '../../../hooks/use-staff-profile';
+import { usePermissions } from '../../../context/permissions-context';
 
 /**
  * Lightweight hook to track pending health chat ticket count.
@@ -10,8 +11,14 @@ import { useStaffProfile } from '../../../hooks/use-staff-profile';
 export function useHealthChatBadge() {
   const [count, setCount] = useState(0);
   const { profile } = useStaffProfile();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
 
   const fetchCount = useCallback(async () => {
+    // Don't request if permissions are still loading or staff lacks health chat access
+    if (permissionsLoading || !hasPermission('healthChat')) {
+      setCount(0);
+      return;
+    }
     try {
       // Pass staff member's branch to align with permissions
       const location = profile?.branch || 'Both';
@@ -20,7 +27,7 @@ export function useHealthChatBadge() {
     } catch {
       // Silently ignore — badge is non-critical
     }
-  }, [profile?.branch]);
+  }, [profile?.branch, hasPermission, permissionsLoading]);
 
   useEffect(() => {
     fetchCount();

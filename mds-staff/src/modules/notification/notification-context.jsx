@@ -4,6 +4,7 @@ import { apiBaseUrlProvider, tokenService } from '../../packages-core-adapter';
 import { fetchMedicalItems, fetchMedicineBatches, fetchSupplyBatches } from '../medical-inventory/medical-inventory-service';
 import { computeItemStats } from '../medical-inventory/inventory-seed-data';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
+import { usePermissions } from '../../context/permissions-context';
 
 /**
  * Staff notification events emitted by the backend.
@@ -249,6 +250,7 @@ function getAllowedLocations(profile) {
 
 export function StaffNotificationProvider({ children }) {
   const { profile } = useStaffProfile();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const [notifications, setNotifications] = useState(() => loadPersistedNotifications());
   const [inventoryAlerts, setInventoryAlerts] = useState([]);
   const [seenInventoryIds, setSeenInventoryIds] = useState(() => loadSeenInventoryIds());
@@ -421,6 +423,13 @@ export function StaffNotificationProvider({ children }) {
 
     const fetchAndComputeAlerts = async () => {
       try {
+        // Skip inventory fetch if permissions are still loading or staff lacks inventory access
+        if (permissionsLoading) return;
+        if (!hasPermission('inventory')) {
+          setInventoryAlerts([]);
+          return;
+        }
+
         // Get allowed locations based on user's profile
         const allowedLocations = getAllowedLocations(profile);
         
@@ -498,7 +507,7 @@ export function StaffNotificationProvider({ children }) {
       isMounted = false;
       fetchInventoryRef.current = null;
     };
-  }, [profile]); // Re-run when profile loads/changes
+  }, [profile, hasPermission, permissionsLoading]); // Re-run when profile, permissions, or loading state changes
 
   const refreshInventoryAlerts = useCallback(() => {
     if (fetchInventoryRef.current) fetchInventoryRef.current();
