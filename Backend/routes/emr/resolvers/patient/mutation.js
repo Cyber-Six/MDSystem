@@ -228,16 +228,12 @@ const Mutation = {
   },
 
   createDomainCatalogs: async (_, args, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res, allowedScope="Medical");
 
     const result = await Wrapper._DomainCatalog(_, args, { user, res });
     return result;
   },
 
   createAllergenCatalogs: async (_, args, { user, res }) => {
-    const record = await Query.getUpdateTicket(_, {}, { user, res });
-    assertActiveUpdateTicket(record, res, allowedScope="Medical");
 
     const result = await Wrapper._AllergenCatalogs(_, args, { user, res });
     return result;

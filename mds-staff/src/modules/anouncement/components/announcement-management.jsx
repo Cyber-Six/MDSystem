@@ -73,18 +73,18 @@ const AnnouncementManagement = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, label }
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const fileInputRef = React.useRef(null);
-  const [permBranch, setPermBranch] = useState(null); // branch from backend permission
+  // Use staffBranch from usePermissions() — already sourced from MedicalPersonnel.designation (authoritative)
+  const effectiveBranch = staffBranch || 'Both';
 
-  // Determine effective branch: use permission branch from backend, fall back to staff branch
-  const effectiveBranch = permBranch || staffBranch || 'Both';
-
-  // Compute allowed location options based on branch
+  // Compute allowed location options based on branch.
+  // Manila and QuezonCity staff can also create/manage 'All Branches' announcements.
   const locationOptions = isAdmin || effectiveBranch === 'Both'
     ? [{ value: 'Both', label: 'All Branches' }, { value: 'Manila', label: 'Manila (Arlegui & Casal)' }, { value: 'QuezonCity', label: 'Quezon City' }]
     : effectiveBranch === 'Manila'
-      ? [{ value: 'Manila', label: 'Manila (Arlegui & Casal)' }]
-      : [{ value: 'QuezonCity', label: 'Quezon City' }];
+      ? [{ value: 'Both', label: 'All Branches' }, { value: 'Manila', label: 'Manila (Arlegui & Casal)' }]
+      : [{ value: 'Both', label: 'All Branches' }, { value: 'QuezonCity', label: 'Quezon City' }];
 
+  // Default to staff's own branch when creating, not 'Both'
   const defaultLocation = isAdmin || effectiveBranch === 'Both' ? 'Both' : effectiveBranch;
 
   const [formData, setFormData] = useState({
@@ -113,7 +113,6 @@ const AnnouncementManagement = () => {
       setIsLoading(true);
       const { data, branch: responseBranch } = await fetchAllAnnouncementsAdmin();
       setAnnouncements(data);
-      setPermBranch(responseBranch);
       setError(null);
       setIsPermissionDenied(false);
     } catch (err) {
@@ -453,23 +452,15 @@ const AnnouncementManagement = () => {
                 name="location"
                 value={formData.location}
                 onChange={handleInputChange}
-                disabled={locationOptions.length <= 1}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 {locationOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
-              {locationOptions.length <= 1 && (
-                <p className="text-xs text-warning-600 dark:text-warning-400 mt-1">
-                  Your permission is restricted to {effectiveBranch === 'Manila' ? 'Manila' : 'Quezon City'} branch only.
-                </p>
-              )}
-              {locationOptions.length > 1 && (
-                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                  Controls which branch patients can see this announcement.
-                </p>
-              )}
+              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+                Controls which branch patients can see this announcement.
+              </p>
             </div>
 
             {/* Active Status */}
@@ -512,14 +503,20 @@ const AnnouncementManagement = () => {
       )}
 
       {/* Announcements List */}
+      {(() => {
+        // Client-side filter: Manila/QC staff see only their branch + 'Both' announcements
+        const visibleAnnouncements = (isAdmin || effectiveBranch === 'Both')
+          ? announcements
+          : announcements.filter(a => a.location === 'Both' || a.location === effectiveBranch);
+        return (
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-        {announcements.length === 0 ? (
+        {visibleAnnouncements.length === 0 ? (
           <div className="p-4 text-center text-secondary-500 dark:text-neutral-400 text-sm">
             No announcements yet
           </div>
         ) : (
           <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-            {announcements.map((announcement) => (
+            {visibleAnnouncements.map((announcement) => (
               <div
                 key={announcement.id}
                 className="p-4 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
@@ -592,6 +589,8 @@ const AnnouncementManagement = () => {
           </div>
         )}
       </div>
+        );
+      })()}
       
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (

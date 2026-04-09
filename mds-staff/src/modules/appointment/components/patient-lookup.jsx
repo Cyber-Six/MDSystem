@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getPatientStatus, getPatientRecords, respondToAppointment, recordAttendance, STATUS } from '../staff-appointment-service';
 import { searchPatients, formatPatientName, getProfileLabel } from '../../../services/patient-search-service';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
 import AppointmentDetailModal from './appointment-detail-modal';
 
 // ── Change this value to adjust the search debounce delay ───────────────────
@@ -21,7 +22,8 @@ const STATUS_COLORS = {
 };
 
 const PatientLookup = () => {
-  // ── Search state ───────────────────────────────────────────────────────────
+  // ── Search state ─────────────────────────────────────────────
+  const { profile } = useStaffProfile();
   const [searchInput, setSearchInput]       = useState('');
   const [searchResults, setSearchResults]   = useState([]);
   const [isSearching, setIsSearching]       = useState(false);
@@ -58,7 +60,7 @@ const PatientLookup = () => {
 
     const timer = setTimeout(async () => {
       try {
-        const data = await searchPatients(trimmed);
+        const data = await searchPatients(trimmed, 15, profile?.branch || null);
         setSearchResults(data);
       } catch (err) {
         setSearchError(err.message || 'Search failed');

@@ -6,6 +6,14 @@ const permit = require("../../../../services/permit.js");
 const { notifyUser } = require('../../../../config/sockets/socket-emitter');
 const { getBranchFromShedulerId, getPatientIdFromSlotId } = require("../wrapper/helper.js");
 const db = require("../../../../config/query.js");
+
+/** Returns true when the given LOCATION_DESIGNATION is accessible from the given staff branch. */
+function isLocationInBranch(staffBranch, location) {
+  if (staffBranch === 'Both') return true;
+  if (staffBranch === 'Manila') return ['Arlegui', 'Casal'].includes(location);
+  if (staffBranch === 'QuezonCity') return location === 'QuezonCity';
+  return false;
+}
 dotenv.config({ path: path.resolve(__dirname, "../../env") });
 
 // creating of updateTicket
@@ -30,11 +38,16 @@ const Query = {
   },
 
   listAllOpenAppointments: async (_, { location, offset, limit }, { user, res }) => {
-    const permitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_configuration, location);
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_configuration);
     if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._listAllOpenAppointments(_, { location, offset, limit }, { user, res });
+    const staffBranch = await permit.getStaffBranch(user.id);
+    // Reject if an explicit location is requested that falls outside the staff's branch
+    if (location && !isLocationInBranch(staffBranch, location)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._listAllOpenAppointments(_, { location, staffBranch, offset, limit }, { user, res });
   },
 
   listCustomDates: async (_, { schedulerId, offset, limit }, { user, res }) => {
@@ -56,19 +69,29 @@ const Query = {
   },
 
   searchAppointmentStatuses: async (_, { status, location, date, schedulerId, offset, limit }, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_records, location);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records);
+    if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._searchAppointmentStatuses(_, { status, location, date, schedulerId, offset, limit }, { user, res });
+    const staffBranch = await permit.getStaffBranch(user.id);
+    // Reject if an explicit cross-branch location is requested
+    if (location && !isLocationInBranch(staffBranch, location)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._searchAppointmentStatuses(_, { status, location, staffBranch, date, schedulerId, offset, limit }, { user, res });
   },
 
   getAppointmentStatusCounts: async (_, { location, schedulerId, date }, { user, res }) => {
-    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_view_records, location);
-    if (!isPermitted) {
+    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.appointment_allow_view_records);
+    if (!permitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getAppointmentStatusCounts(_, { location, schedulerId, date }, { user, res });
+    const staffBranch = await permit.getStaffBranch(user.id);
+    // Reject if an explicit cross-branch location is requested
+    if (location && !isLocationInBranch(staffBranch, location)) {
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    return await Wrapper.Query._getAppointmentStatusCounts(_, { location, staffBranch, schedulerId, date }, { user, res });
   },
 
   listAppointmentSchedule: async (_, { schedulerId, date }, { user, res }) => {
