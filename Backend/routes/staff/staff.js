@@ -74,6 +74,28 @@ async function getUserIdViaEmail(email, branch) {
     return result.rows;
 }
 
+// Unified patient search — name, identifier, and email in one query
+async function searchPatients(query, branch) {
+    const param = `%${query}%`;
+    const sql = `
+        SELECT DISTINCT uc.id AS "userId", uc.email,
+               up.first_name, up.middle_name, up.last_name, up.identifier
+        FROM "UserCredentials" uc
+        LEFT JOIN "UsersPersonal" up ON uc.id = up.id
+        WHERE (
+            up.first_name  ILIKE $1 OR
+            up.middle_name ILIKE $1 OR
+            up.last_name   ILIKE $1 OR
+            LOWER(uc.email) LIKE LOWER($1) OR
+            up.identifier::text ILIKE $1
+        )
+        AND (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both' OR up.branch IS NULL)
+        LIMIT 50
+    `;
+    const result = await db.query(sql, [param, branch]);
+    return result.rows;
+}
+
 // Route: Get current staff's own profile info
 router.get('/me/profile', jwtProtect("medical"), async (req, res) => {
     try {
@@ -131,6 +153,30 @@ router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
         });
     } catch (error) {
         logger.error('Error fetching own permissions:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Route: Unified patient search by name, identifier, or email
+router.get('/id/search', jwtProtect("medical"), async (req, res) => {
+    try {
+        const { query, branch } = req.query;
+
+        if (!query || !branch) {
+            return res.status(400).json({ error: 'query and branch params are required' });
+        }
+
+        const medicalBranch = await getStaffBranch(req.user.id);
+        if (medicalBranch !== 'Both' && medicalBranch !== branch) {
+            return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
+        }
+
+        const users = await searchPatients(query, branch);
+
+        logger.info(`Unified patient search: "${query}" branch=${branch} → ${users.length} results`);
+        res.json({ users: users.map(u => ({ id: u.userId, email: u.email, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
+    } catch (error) {
+        logger.error('Error in unified patient search:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
