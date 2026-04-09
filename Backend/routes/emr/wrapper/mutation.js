@@ -850,11 +850,29 @@ const Mutation = {
       throwGraphQLError(res).status(403).message("Forbidden").throw();
     }
 
+    // Use a CTE to:
+    // 1. Guard against case-insensitive duplicates (uniq_domain_name_lower) without a 500 error
+    // 2. Set isValid = true so new entries appear in searches filtered by filterIsValid: true
+    // 3. Return both newly inserted AND pre-existing case-insensitive matches so the
+    //    frontend can always use the entry (even if it was already in the catalog)
     const query = `
-      INSERT INTO "DomainTypeCatalog" (domain, name, created_by, code)
-      SELECT $1, UNNEST($2::text[]), $3, UNNEST($4::text[])
-      ON CONFLICT (domain, name) DO NOTHING
-      RETURNING *;
+      WITH target_data AS (
+        SELECT UNNEST($2::text[]) AS name, UNNEST($4::text[]) AS code
+      ),
+      inserted AS (
+        INSERT INTO "DomainTypeCatalog" (domain, name, "isValid", created_by, code)
+        SELECT $1, t.name, true, $3, t.code
+        FROM target_data t
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "DomainTypeCatalog" d
+          WHERE d.domain = $1 AND LOWER(d.name) = LOWER(t.name)
+        )
+        ON CONFLICT (domain, LOWER(name)) DO NOTHING
+        RETURNING id
+      )
+      SELECT * FROM "DomainTypeCatalog"
+      WHERE domain = $1
+        AND LOWER(name) = ANY(SELECT LOWER(name) FROM target_data);
     `;
 
     const result = await db.query(query, [domain, names || [], user.id, generateDomainCodes(names, domain)]);

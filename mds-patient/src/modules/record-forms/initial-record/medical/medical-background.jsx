@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Checkbox, Input, Textarea, AccordionSection, Select } from './form-elements';
+import { createImmunizationCatalog, searchImmunizationCatalog } from '@core/services/emr-service';
 
 const LIFESTYLE_FREQUENCY_OPTIONS = [
   { value: 'Daily',      label: 'Daily' },
@@ -48,6 +49,100 @@ const MedicalBackgroundForm = ({
   onClearFieldError = () => {},
 }) => {
   const [activeAccordion, setActiveAccordion] = useState('immunizations');
+
+  // Dynamic vaccines added via the "Others" search+create field
+  const [dynamicImmunizations, setDynamicImmunizations] = useState([]);
+  const [otherInput, setOtherInput] = useState('');
+  const [otherSuggestions, setOtherSuggestions] = useState([]);
+  const [otherCreating, setOtherCreating] = useState(false);
+  const [otherSearching, setOtherSearching] = useState(false);
+  const [otherFocused, setOtherFocused] = useState(false);
+  const otherWrapperRef = useRef(null);
+  const searchDebounceRef = useRef(null);
+
+  // Close suggestions when clicking outside the search wrapper
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (otherWrapperRef.current && !otherWrapperRef.current.contains(e.target)) {
+        setOtherFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleOtherInputChange = (value) => {
+    setOtherInput(value);
+    const trimmed = value.trim().toLowerCase();
+
+    if (!trimmed) {
+      setOtherSuggestions([]);
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      return;
+    }
+
+    // Immediate client-side filter from already-loaded catalog for instant feedback
+    const allLoaded = [...immunizationCatalog, ...dynamicImmunizations];
+    const seen = new Set();
+    const localMatches = allLoaded.filter((v) => {
+      if (seen.has(v.id)) return false;
+      seen.add(v.id);
+      return v.name.toLowerCase().includes(trimmed);
+    });
+    setOtherSuggestions(localMatches);
+
+    // Debounced backend search to catch items not in the loaded catalog
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(async () => {
+      setOtherSearching(true);
+      try {
+        const dbResults = await searchImmunizationCatalog(value.trim());
+        // Merge DB results with local matches, deduplicating by id
+        const mergedMap = new Map();
+        dbResults.forEach((v) => mergedMap.set(v.id, v));
+        localMatches.forEach((v) => { if (!mergedMap.has(v.id)) mergedMap.set(v.id, v); });
+        setOtherSuggestions(Array.from(mergedMap.values()));
+      } catch {
+        // Keep local matches on error
+      } finally {
+        setOtherSearching(false);
+      }
+    }, 300);
+  };
+
+  const handleSelectSuggestion = (vaccine) => {
+    // If it's not already in the main catalog grid, add it to dynamic list so a checkbox appears
+    const alreadyInMain = immunizationCatalog.some(v => v.id === vaccine.id);
+    const alreadyInDynamic = dynamicImmunizations.some(v => v.id === vaccine.id);
+    if (!alreadyInMain && !alreadyInDynamic) {
+      setDynamicImmunizations(prev => [...prev, vaccine]);
+    }
+    onChange({ ...data, immunizations: { ...data.immunizations, [vaccine.id]: true } });
+    setOtherInput('');
+    setOtherSuggestions([]);
+    setOtherFocused(false);
+  };
+
+  const handleCreateImmunization = async () => {
+    const name = otherInput.trim();
+    if (!name) return;
+    setOtherCreating(true);
+    try {
+      const created = await createImmunizationCatalog(name);
+      if (created.length > 0) {
+        const newVaccine = created[0];
+        setDynamicImmunizations(prev => [...prev, newVaccine]);
+        onChange({ ...data, immunizations: { ...data.immunizations, [newVaccine.id]: true } });
+        setOtherInput('');
+        setOtherSuggestions([]);
+        setOtherFocused(false);
+      }
+    } catch (err) {
+      console.error('[MedicalBackground] Failed to create immunization catalog entry:', err.message);
+    } finally {
+      setOtherCreating(false);
+    }
+  };
 
   const handleChange = (field, value) => {
     onClearFieldError(field);
@@ -132,7 +227,7 @@ const MedicalBackgroundForm = ({
           {catalogsLoading ? (
             <CatalogLoader />
           ) : immunizationCatalog.length === 0 ? (
-            <p className="text-sm text-secondary-400 italic">No vaccines available.</p>
+            <p className="text-sm text-secondary-400 italic">No predefined vaccines available from server.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
               {immunizationCatalog.map((vaccine) => (
@@ -156,13 +251,84 @@ const MedicalBackgroundForm = ({
               ))}
             </div>
           )}
+          {/* Dynamically added vaccines from "Others" search — always shown */}
+          {dynamicImmunizations.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              {dynamicImmunizations.map((vaccine) => (
+                <div key={vaccine.id} className="space-y-2">
+                  <Checkbox
+                    label={vaccine.name}
+                    checked={data.immunizations?.[vaccine.id] || false}
+                    onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
+                  />
+                  {data.immunizations?.[vaccine.id] && (
+                    <div className="ml-6">
+                      <Input
+                        label="Date of Immunization:"
+                        type="date"
+                        value={data.immunizationDates?.[vaccine.id] || ''}
+                        onChange={(e) => onChange({ ...data, immunizationDates: { ...data.immunizationDates, [vaccine.id]: e.target.value } })}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mt-4">
-            <Input
-              label="Other Vaccines (specify):"
-              placeholder="Enter any other vaccines received..."
-              value={data.immunizationOther || ''}
-              onChange={(e) => handleChange('immunizationOther', e.target.value)}
-            />
+            <label className="block text-sm font-medium text-secondary-700 mb-1">Other Vaccines (search or add):</label>
+            <div ref={otherWrapperRef}>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                placeholder="Type to search for a vaccine..."
+                value={otherInput}
+                autoComplete="off"
+                onFocus={() => setOtherFocused(true)}
+                onChange={(e) => handleOtherInputChange(e.target.value)}
+              />
+              {otherFocused && otherInput.trim() && (
+                <div className="mt-1 border border-neutral-200 rounded-lg bg-white shadow-sm">
+                  {otherSearching && (
+                    <div className="px-4 py-2 text-xs text-secondary-400 italic">Searching...</div>
+                  )}
+                  {otherSuggestions.length > 0 ? (
+                    <>
+                      {otherSuggestions.map(result => (
+                        <button
+                          key={result.id}
+                          type="button"
+                          className="w-full text-left px-4 py-2 text-sm text-secondary-800 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 last:border-0"
+                          onMouseDown={(e) => { e.preventDefault(); handleSelectSuggestion(result); }}
+                        >
+                          {result.name}
+                          {data.immunizations?.[result.id] && (
+                            <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
+                          )}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-b-lg border-t border-neutral-200 disabled:opacity-50"
+                        disabled={otherCreating}
+                        onMouseDown={(e) => { e.preventDefault(); handleCreateImmunization(); }}
+                      >
+                        {otherCreating ? 'Adding...' : `+ Add "${otherInput.trim()}" as a new vaccine`}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 focus:outline-none rounded-lg disabled:opacity-50"
+                      disabled={otherCreating}
+                      onMouseDown={(e) => { e.preventDefault(); handleCreateImmunization(); }}
+                    >
+                      {otherCreating ? 'Adding...' : `+ Add "${otherInput.trim()}" as a new vaccine`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </AccordionSection>
 
