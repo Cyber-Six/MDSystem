@@ -149,7 +149,7 @@ export function HealthChatProvider({ children }) {
           result = await getPendingTickets(0, 100, location);
           break;
         case 'archive':
-          result = await getArchivedTickets(0, 100);
+          result = await getArchivedTickets(0, 100, location);
           break;
         case 'active':
         default:

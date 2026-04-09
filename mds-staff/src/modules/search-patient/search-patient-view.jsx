@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { searchPatients } from '../../services/patient-search-service';
 import { usePatientTabs } from '../../context/patient-tabs-context';
+import { useStaffProfile } from '../../hooks/use-staff-profile';
 import SearchBar from './components/search-bar';
 import SearchResultsList from './components/search-results-list';
 
@@ -17,6 +18,7 @@ const TabLoader = () => (
 
 export default function SearchPatientView() {
   const { tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch, reorderTabs } = usePatientTabs();
+  const { profile } = useStaffProfile();
 
   // ── Search state ────────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,7 +59,7 @@ export default function SearchPatientView() {
 
     const timer = setTimeout(async () => {
       try {
-        const data = await searchPatients(trimmed);
+        const data = await searchPatients(trimmed, 15, profile?.branch || null);
         setResults(data);
       } catch (err) {
         setError(err.message || 'Search failed');
@@ -68,7 +70,7 @@ export default function SearchPatientView() {
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, profile?.branch]);
 
   // ── Filter by type locally ────────────────────────────────────────────────
   const filtered = results.filter((p) => {

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import { searchByStatus, getStatusCounts, listAllSchedulers, loadInitialQueueData } from '../staff-appointment-service';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
+import { getLocationsByBranch } from '../../../utils/branch-utils';
 
 /* ── constants ─────────────────────────────────────── */
 
@@ -43,6 +45,9 @@ const formatCount = (count) => {
 
 /* ── component ─────────────────────────────────────── */
 const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
+  const { profile } = useStaffProfile();
+  const allowedLocations = useMemo(() => getLocationsByBranch(profile?.branch), [profile?.branch]);
+
   const [activeTab,   setActiveTab]   = useState('Pending');
   const [search,      setSearch]      = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -147,18 +152,23 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
   /* Load scheduler list once on mount — independent of the batched query so a
      permission hiccup on one doesn't block the other. */
   useEffect(() => {
+    if (!allowedLocations.length) return;
     let cancelled = false;
     const load = async () => {
       try {
         const list = await listAllSchedulers(0, 200);
-        if (!cancelled) setSchedulers(list || []);
+        if (!cancelled) {
+          // Filter schedulers to only those in this staff member's allowed locations
+          const filtered = (list || []).filter(s => allowedLocations.includes(s.location));
+          setSchedulers(filtered);
+        }
       } catch (err) {
         console.error('Failed to load schedulers:', err);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [allowedLocations]);
 
   /* Initial load — combines counts + first-page appointments into a single
      HTTP request to minimise round-trips on a low-power server.
@@ -401,10 +411,10 @@ const AppointmentQueue = forwardRef(({ onViewDetails }, ref) => {
             onChange={(e) => setFilterLocation(e.target.value)}
             className="pl-8 pr-6 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 appearance-none"
           >
-            <option value="">All Locations</option>
-            <option value="Arlegui">Arlegui</option>
-            <option value="Casal">Casal</option>
-            <option value="QuezonCity">Quezon City</option>
+            {allowedLocations.length > 1 && <option value="">All Locations</option>}
+            {allowedLocations.includes('Arlegui') && <option value="Arlegui">Arlegui</option>}
+            {allowedLocations.includes('Casal') && <option value="Casal">Casal</option>}
+            {allowedLocations.includes('QuezonCity') && <option value="QuezonCity">Quezon City</option>}
           </select>
         </div>
 
