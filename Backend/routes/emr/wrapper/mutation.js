@@ -891,7 +891,8 @@ const Mutation = {
     const query = `
       INSERT INTO "AllergenCatalog" (allergen, type, created_by)
       VALUES ${values}
-      ON CONFLICT (allergen, type) DO NOTHING
+      ON CONFLICT (allergen, type) DO UPDATE
+        SET "isValid" = true
       RETURNING *;
     `;
 

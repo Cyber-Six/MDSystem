@@ -770,6 +770,87 @@ export const createImmunizationCatalog = async (name) => {
   return data.createDomainCatalogs || [];
 };
 
+/**
+ * Generic search for domain catalog entries by name (used by "Others" search fields).
+ * @param {string} domain - The domain type (e.g., "Hospitalization", "Operation", "Medication")
+ * @param {string} query - The text the patient typed
+ * @returns {Promise<Array<{id, name, code, domain, isValid}>>}
+ */
+export const searchDomainCatalog = async (domain, query) => {
+  const gql = `
+    query SearchDomainCatalog($domain: String, $names: [String!]!) {
+      searchDomainCatalogs(domain: $domain, filterIsValid: true, names: $names) {
+        id domain name code isValid
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(gql, { domain, names: [query] });
+    return data.searchDomainCatalogs || [];
+  } catch (err) {
+    console.warn(`[EMR Service] searchDomainCatalog(${domain}) failed:`, err.message);
+    return [];
+  }
+};
+
+/**
+ * Generic create for domain catalog entries (used by "Others" create buttons).
+ * @param {string} domain - The domain type enum value (e.g., "Hospitalization")
+ * @param {string} name - The entry name to create
+ * @returns {Promise<Array<{id, name, code, domain, isValid}>>}
+ */
+export const createDomainCatalog = async (domain, name) => {
+  const mutation = `
+    mutation CreateDomainCatalog($names: [String!]!) {
+      createDomainCatalogs(domain: ${domain}, names: $names) {
+        id domain name code isValid
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(mutation, { names: [name] });
+  return data.createDomainCatalogs || [];
+};
+
+/**
+ * Search allergen catalog entries by name (used by "Others" allergen search field).
+ * @param {string} query - The text the patient typed
+ * @returns {Promise<Array<{id, allergen, type, isValid}>>}
+ */
+export const searchAllergenCatalogByName = async (query) => {
+  const gql = `
+    query SearchAllergens($allergens: [String!]!) {
+      searchAllergenCatalogs(allergens: $allergens, filterIsValid: true) {
+        id allergen type isValid
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(gql, { allergens: [query] });
+    return data.searchAllergenCatalogs || [];
+  } catch (err) {
+    console.warn('[EMR Service] searchAllergenCatalogByName failed:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Create a new allergen catalog entry (used when patient types an allergen not in the system).
+ * @param {string} allergen - The allergen name
+ * @param {string} type - The allergen type (Food, Drug, Environmental, Insect, Chemical, Other)
+ * @returns {Promise<Array<{id, allergen, type, isValid}>>}
+ */
+export const createAllergenCatalogEntry = async (allergen, type = 'Other') => {
+  const mutation = `
+    mutation CreateAllergen($allergens: [AllergenCatalogInput!]!) {
+      createAllergenCatalogs(allergens: $allergens) {
+        id allergen type isValid
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(mutation, { allergens: [{ allergen, type }] });
+  return data.createAllergenCatalogs || [];
+};
+
 // ─── Record Builder Functions ─────────────────────────────────────────────────
 
 /**
