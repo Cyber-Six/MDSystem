@@ -93,13 +93,13 @@ const Auth = () => {
 
           <div className="flex-1 flex flex-col">
             {/* Welcome Header */}
-            <div className="text-center mb-6 pt-8">
+            <div className="text-center mb-3 sm:mb-6 pt-4 sm:pt-8">
               <img 
                 src="/MDSystem.png" 
                 alt="MDSystem Logo" 
-                className="h-24 w-24 mx-auto mb-4"
+                className="h-16 w-16 sm:h-24 sm:w-24 mx-auto mb-2 sm:mb-4"
               />
-              <h1 className="text-2xl font-bold text-secondary-900 font-heading mb-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-secondary-900 font-heading mb-1">
                 Welcome Back
               </h1>
               <p className="text-xs text-neutral-600">

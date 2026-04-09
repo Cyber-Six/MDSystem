@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { axiosRequest, TokenStorage } from '../../packages-core-adapter.js';
 import { detectRoleFromEmail } from '@mdsystem/core/validation/email-validation';
 import ForgetPassword from './forget-password.jsx';
 import DataConsent from './data-consent/data-consent.jsx';
+
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -18,15 +21,139 @@ const Login = () => {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState('');
+  const [recaptchaWidgetId, setRecaptchaWidgetId] = useState(null);
+  const recaptchaRef = useRef(null);
+  const googleBtnRef = useRef(null);
   
   const navigate = useNavigate();
 
+  // ── reCAPTCHA v2 setup ────────────────────────────────────────────────
+  const renderRecaptcha = useCallback(() => {
+    if (!RECAPTCHA_SITE_KEY || !window.grecaptcha || !recaptchaRef.current) return;
+    if (recaptchaWidgetId !== null) return;
+
+    window.grecaptcha.ready(() => {
+      const id = window.grecaptcha.render(recaptchaRef.current, {
+        sitekey: RECAPTCHA_SITE_KEY,
+        callback: (token) => setRecaptchaToken(token),
+        'expired-callback': () => setRecaptchaToken(''),
+        'error-callback': () => setRecaptchaToken(''),
+      });
+      setRecaptchaWidgetId(id);
+    });
+  }, [recaptchaWidgetId]);
+
+  const resetRecaptcha = useCallback(() => {
+    setRecaptchaToken('');
+    if (recaptchaWidgetId !== null && window.grecaptcha) {
+      try { window.grecaptcha.reset(recaptchaWidgetId); } catch { /* noop */ }
+    }
+  }, [recaptchaWidgetId]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (window.grecaptcha && recaptchaRef.current && recaptchaWidgetId === null) {
+        renderRecaptcha();
+        clearInterval(timer);
+      }
+    }, 200);
+    return () => clearInterval(timer);
+  }, [renderRecaptcha, recaptchaWidgetId]);
+
+  // ── Google Sign-In setup ──────────────────────────────────────────────
+  const handleGoogleCredential = useCallback(async (response) => {
+    if (!response.credential) return;
+    setError('');
+    setIsLoading(true);
+
+    try {
+      if (!recaptchaToken) {
+        setError('Please complete the "I am not a robot" check first.');
+        setIsLoading(false);
+        return;
+      }
+
+      const res = await axiosRequest.post('/auth/oauth/google', {
+        credential: response.credential,
+        recaptchaToken,
+      });
+
+      if (res.data.ok) {
+        const loginKey = res.data.LoginKey;
+        setVerificationKey(loginKey);
+        try {
+          const payload = JSON.parse(atob(response.credential.split('.')[1]));
+          setEmail(payload.email || '');
+        } catch { /* email will be empty — non-critical */ }
+
+        if (res.data.requiresTotp) {
+          setShowTotpVerify(true);
+        } else {
+          await handleSend2FA();
+          setShowTwoFactor(true);
+        }
+      }
+    } catch (err) {
+      const errorCode = err.response?.data?.error;
+      const errorMsg = err.response?.data?.message || 'Google sign-in failed.';
+      switch (errorCode) {
+        case 'INVALID_RECAPTCHA':
+          setError('reCAPTCHA verification failed. Please try again.');
+          resetRecaptcha();
+          break;
+        case 'INVALID_GOOGLE_TOKEN':
+          setError('Google authentication failed. Ensure you are using a @tip.edu.ph account.');
+          break;
+        case 'ACCOUNT_NOT_FOUND':
+          setError('No account found for this email. Please register first.');
+          break;
+        case 'ACCOUNT_LOCKED':
+          setError(errorMsg);
+          break;
+        default:
+          setError(errorMsg);
+      }
+    } finally {
+      setIsLoading(false);
+      resetRecaptcha();
+    }
+  }, [recaptchaToken, resetRecaptcha]);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !googleBtnRef.current) return;
+    const timer = setInterval(() => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredential,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          hosted_domain: 'tip.edu.ph',
+        });
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          shape: 'rectangular',
+          logo_alignment: 'left',
+          width: googleBtnRef.current.offsetWidth || 320,
+        });
+        clearInterval(timer);
+      }
+    }, 200);
+    return () => clearInterval(timer);
+  }, [handleGoogleCredential]);
+
+  // ── reCAPTCHA token helper ────────────────────────────────────────────
+  const getRecaptchaToken = () => recaptchaToken;
+
   const handleSend2FA = async () => {
     try {
-      const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
       await axiosRequest.post('/auth/email/2fa', { 
         email,
-        recaptchaToken 
+        recaptchaToken: getRecaptchaToken() || 'MOBILE_APP_TOKEN'
       });
     } catch (err) {
       console.error('Failed to send 2FA code:', err);
@@ -36,11 +163,15 @@ const Login = () => {
   const handleInitialLogin = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!recaptchaToken) {
+      setError('Please complete the "I am not a robot" check.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
-      
       const response = await axiosRequest.post('/auth/login', { 
         email, 
         password, 
@@ -88,6 +219,7 @@ const Login = () => {
       }
     } finally {
       setIsLoading(false);
+      resetRecaptcha();
     }
   };
 
@@ -176,10 +308,9 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const recaptchaToken = 'RECAPTCHA_TOKEN_HERE';
       const response = await axiosRequest.post('/auth/email/2fa', { 
         email,
-        recaptchaToken 
+        recaptchaToken: getRecaptchaToken() || 'MOBILE_APP_TOKEN'
       });
       
       if (response.data.ok) {
@@ -296,7 +427,7 @@ const Login = () => {
             </div>
           )}
           
-          <form onSubmit={handleInitialLogin} className="space-y-5">
+          <form onSubmit={handleInitialLogin} className="space-y-3 sm:space-y-5">
           {/* Email Input */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-secondary-700 mb-2">
@@ -362,11 +493,18 @@ const Login = () => {
               </button>
             </div>
           </div>
+
+          {/* reCAPTCHA v2 Widget */}
+          {RECAPTCHA_SITE_KEY && (
+            <div className="flex justify-center [&>div]:scale-[0.85] [&>div]:origin-center sm:[&>div]:scale-100">
+              <div ref={recaptchaRef} id="patient-recaptcha-container"></div>
+            </div>
+          )}
           
           {/* Login Button */}
           <button 
             type="submit" 
-            disabled={isLoading}
+            disabled={isLoading || (RECAPTCHA_SITE_KEY && !recaptchaToken)}
             className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
                     
                      text-white font-semibold py-3.5 rounded-lg
@@ -399,6 +537,23 @@ const Login = () => {
             </button>
           </div>
         </form>
+
+          {/* OAuth Divider */}
+          {GOOGLE_CLIENT_ID && (
+            <>
+              <div className="relative my-3 sm:my-5">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-neutral-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-white px-3 text-neutral-500">or</span>
+                </div>
+              </div>
+
+              {/* Google Sign-In Button */}
+              <div ref={googleBtnRef} className="flex justify-center w-full [&>div]:!w-full"></div>
+            </>
+          )}
         </div>
 
         {/* Forgot Password Modal */}
