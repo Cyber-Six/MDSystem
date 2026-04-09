@@ -85,10 +85,10 @@ const Mutation = {
 
     const result = await db.query(
       `INSERT INTO "student_profile" 
-        ("profileId", programId, year)
+        ("profileId", "programId", year)
        VALUES ($1, $2, $3)
        ON CONFLICT ("profileId") DO UPDATE
-         SET programId = COALESCE(EXCLUDED.programId, "student_profile".programId),
+         SET "programId" = COALESCE(EXCLUDED."programId", "student_profile".programId),
              year = COALESCE(EXCLUDED.year, "student_profile".year)
              RETURNING *;`,
       [
