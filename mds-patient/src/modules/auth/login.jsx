@@ -128,9 +128,13 @@ const Login = () => {
   }, [recaptchaToken, resetRecaptcha]);
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_ENABLED || !googleBtnRef.current) return;
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_ENABLED) {
+      if (window.google?.accounts?.id) window.google.accounts.id.disableAutoSelect();
+      return;
+    }
+
     const timer = setInterval(() => {
-      if (window.google?.accounts?.id) {
+      if (window.google?.accounts?.id && googleBtnRef.current) {
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
           callback: handleGoogleCredential,
@@ -150,6 +154,7 @@ const Login = () => {
         clearInterval(timer);
       }
     }, 200);
+
     return () => clearInterval(timer);
   }, [handleGoogleCredential]);
 
@@ -510,9 +515,28 @@ const Login = () => {
           </div>
 
           {/* reCAPTCHA v2 Widget — shown only after server flags it as required */}
-          {RECAPTCHA_SITE_KEY && captchaRequired && (
-            <div className="flex justify-center [&>div]:scale-[0.85] [&>div]:origin-center sm:[&>div]:scale-100">
+          {RECAPTCHA_SITE_KEY && captchaRequired ? (
+            <div className="flex justify-center">
               <div ref={recaptchaRef} id="patient-recaptcha-container"></div>
+            </div>
+          ) : (
+            <div className="flex justify-center">
+              <div className="border border-[#d3d3d3] rounded bg-[#f9f9f9] shadow-sm flex items-center gap-3 px-3 py-2.5 w-full max-w-[300px] select-none">
+                <div className="w-6 h-6 border-2 border-[#c1c1c1] rounded-sm flex-shrink-0 bg-white shadow-inner" />
+                <span className="flex-1 text-[13px] text-[#555] leading-tight">
+                  {captchaRequired ? 'reCAPTCHA unavailable' : "I'm not a robot"}
+                </span>
+                <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+                  <svg viewBox="0 0 46 52" className="w-8 h-8">
+                    <path fill="#4285F4" d="M23 1L2 10.5V26C2 39 11.5 49 23 52 34.5 49 44 39 44 26V10.5L23 1Z"/>
+                    <path fill="#34A853" d="M23 1V52C34.5 49 44 39 44 26V10.5L23 1Z"/>
+                    <circle cx="23" cy="26" r="10" fill="none" stroke="white" strokeWidth="2.5"/>
+                    <path fill="white" d="M23 15L27 21H19Z"/>
+                  </svg>
+                  <span className="text-[9px] font-medium leading-none text-[#777]">reCAPTCHA</span>
+                  <span className="text-[8px] leading-none text-[#aaa]">Privacy · Terms</span>
+                </div>
+              </div>
             </div>
           )}
           
@@ -554,7 +578,7 @@ const Login = () => {
         </form>
 
           {/* OAuth Divider */}
-          {GOOGLE_CLIENT_ID && GOOGLE_OAUTH_ENABLED && (
+          {GOOGLE_OAUTH_ENABLED && (
             <>
               <div className="relative my-3 sm:my-5">
                 <div className="absolute inset-0 flex items-center">
@@ -565,8 +589,25 @@ const Login = () => {
                 </div>
               </div>
 
-              {/* Google Sign-In Button */}
-              <div ref={googleBtnRef} className="flex justify-center w-full [&>div]:!w-full"></div>
+              {/* Google Sign-In Button — real GIS button when configured, mock for dev/test */}
+              {GOOGLE_CLIENT_ID ? (
+                <div ref={googleBtnRef} className="flex justify-center w-full [&>div]:!w-full"></div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => setError('Google OAuth is not available.')}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-neutral-200 rounded-lg bg-white hover:bg-neutral-50 active:bg-neutral-100 shadow-sm hover:shadow transition-all duration-150 text-sm font-medium text-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.14 0 5.95 1.08 8.17 2.86l6.09-6.09C34.46 3.09 29.53 1 24 1 14.82 1 7.02 6.7 3.77 14.7l7.08 5.5C12.6 13.48 17.85 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.52 24.5c0-1.64-.15-3.22-.42-4.74H24v8.98h12.67c-.55 2.94-2.21 5.43-4.71 7.1l7.34 5.7C43.43 37.22 46.52 31.32 46.52 24.5z"/>
+                    <path fill="#FBBC05" d="M10.85 28.2A14.56 14.56 0 0 1 10 24c0-1.45.25-2.85.85-4.2l-7.08-5.5A23.03 23.03 0 0 0 1 24c0 3.73.9 7.25 2.77 10.3l7.08-6.1z"/>
+                    <path fill="#34A853" d="M24 47c5.53 0 10.17-1.84 13.56-4.97l-7.34-5.7c-1.84 1.23-4.18 1.97-6.22 1.97-6.15 0-11.4-3.98-13.15-9.7l-7.08 6.1C7.02 41.3 14.82 47 24 47z"/>
+                  </svg>
+                  Sign in with Google
+                </button>
+              )}
             </>
           )}
         </div>
