@@ -64,7 +64,7 @@ const Query = {
     return result.rows;
   },
 
-  _listAllOpenAppointments: async (_, { location, offset, limit }, { user, res }) => {
+  _listAllOpenAppointments: async (_, { location, staffBranch = 'Both', offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -72,7 +72,12 @@ const Query = {
     const query = `
       SELECT ss.*
       FROM "slotScheduler" ss
-      WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
+      WHERE (
+        $4 = 'Both'
+        OR ($4 = 'Manila'      AND ss.location IN ('Arlegui', 'Casal'))
+        OR ($4 = 'QuezonCity'  AND ss.location = 'QuezonCity')
+      )
+      AND ss.location = COALESCE($1::"LocationDesignation", ss.location)
       ORDER BY ss.created_at ASC
       LIMIT $2 OFFSET $3;
     `;
@@ -80,7 +85,8 @@ const Query = {
     const result = await db.query(query, [
       location,
       limit || 10,
-      offset || 0
+      offset || 0,
+      staffBranch,
     ]);
     result.rows.forEach(row => {
       row.schedulePerWeek = decodeSchedulingFlags(row.scheduleFlags);
@@ -301,7 +307,7 @@ const Query = {
     return result.rows[0].status;
   },
 
-  _searchAppointmentStatuses: async (_, { status, location, date, schedulerId, offset, limit }, { user, res }) => {
+  _searchAppointmentStatuses: async (_, { status, location, staffBranch = 'Both', date, schedulerId, offset, limit }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -321,6 +327,11 @@ const Query = {
       LEFT JOIN "UsersPersonal" staff ON staff.id = ps."approvedBy"
 
       WHERE ps.status = $1
+      AND (
+        $7 = 'Both'
+        OR ($7 = 'Manila'      AND ss.location IN ('Arlegui', 'Casal'))
+        OR ($7 = 'QuezonCity'  AND ss.location = 'QuezonCity')
+      )
       AND ss.location = COALESCE($4::"LocationDesignation", ss.location)
       AND ($5::date IS NULL OR sde."scheduledDate"::date = $5::date)
       AND ($6::integer IS NULL OR ss.id = $6::integer)
@@ -330,7 +341,7 @@ const Query = {
 
     const result = await db.query(query,
       [status, limit || 10,
-       offset || 0, location, date || null, schedulerId ? parseInt(schedulerId, 10) : null]);
+       offset || 0, location, date || null, schedulerId ? parseInt(schedulerId, 10) : null, staffBranch]);
     const slots = result.rows;
 
     if (slots.length === 0) return slots;
@@ -350,7 +361,7 @@ const Query = {
     return slots.map(s => ({ ...s, requirements: reqBySlot[s.id] || [] }));
   },
 
-  _getAppointmentStatusCounts: async (_, { location, schedulerId, date }, { user, res }) => {
+  _getAppointmentStatusCounts: async (_, { location, staffBranch = 'Both', schedulerId, date }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
@@ -360,11 +371,16 @@ const Query = {
       FROM "patientSlot" ps
       JOIN "ScheduleDateEntity" sde ON sde.id = ps."slotEntityId"
       JOIN "slotScheduler" ss ON ss.id = sde."slotId"
-      WHERE ss.location = COALESCE($1::"LocationDesignation", ss.location)
+      WHERE (
+        $4 = 'Both'
+        OR ($4 = 'Manila'      AND ss.location IN ('Arlegui', 'Casal'))
+        OR ($4 = 'QuezonCity'  AND ss.location = 'QuezonCity')
+      )
+      AND ss.location = COALESCE($1::"LocationDesignation", ss.location)
         AND ($2::integer IS NULL OR ss.id = $2::integer)
         AND ($3::date IS NULL OR sde."scheduledDate"::date = $3::date)
       GROUP BY ps.status;
-    `, [location || null, schedulerId ? parseInt(schedulerId, 10) : null, date || null]);
+    `, [location || null, schedulerId ? parseInt(schedulerId, 10) : null, date || null, staffBranch]);
 
     return result.rows;
   },
