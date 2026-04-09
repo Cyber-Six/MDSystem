@@ -14,7 +14,7 @@ import BatchSelectionModal from './batch-selection-modal';
  * - Immediate release without patient request approval
  */
 const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allRequests = [] }) => {
-  const { profile } = useStaffProfile();
+  const { profile, isLoading: isProfileLoading } = useStaffProfile();
 
   // Patient search state
   const [searchInput, setSearchInput] = useState('');
@@ -61,10 +61,17 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
       return;
     }
 
+    // Profile must be loaded to know which branch the staff belongs to.
+    // Without it we cannot pass the correct branch param and the backend
+    // will return 403 regardless of what we send.
+    if (!profile?.branch) {
+      setSearchResults([]);
+      return;
+    }
+
     setIsSearching(true);
     try {
-      const branch = profile?.branch || 'Both';
-      const patients = await searchPatientsForInventory(query, branch);
+      const patients = await searchPatientsForInventory(query, profile.branch);
       const formatted = patients.map((p) => ({
         id: p.id,
         name: p.name,
@@ -444,13 +451,14 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search patient (min 2 characters)..."
+                  placeholder={isProfileLoading ? 'Loading profile...' : 'Search patient by name, email, or ID...'}
+                  disabled={isProfileLoading || !profile?.branch}
                   value={searchInput}
                   onChange={(e) => {
                     setSearchInput(e.target.value);
                     handlePatientSearch(e.target.value);
                   }}
-                  className="w-full pl-9 pr-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                  className="w-full pl-9 pr-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 

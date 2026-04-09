@@ -88,18 +88,21 @@ export async function searchPatientsForInventory(query, branch) {
   const trimmed = (query || '').trim();
   if (trimmed.length < 2) return [];
 
+  // branch is required — it must match the staff's own branch in UsersPersonal
+  // (verified server-side). Never default to 'Both'; callers must supply it.
+  if (!branch) return [];
+
   const type = detectSearchType(trimmed);
-  const safeBranch = branch || 'Both';
 
   try {
     switch (type) {
       case 'identifier':
-        return await searchByIdentifier(trimmed, safeBranch);
+        return await searchByIdentifier(trimmed, branch);
       case 'email':
-        return await searchByEmail(trimmed, safeBranch);
+        return await searchByEmail(trimmed, branch);
       case 'name':
       default:
-        return await searchByName(trimmed, safeBranch);
+        return await searchByName(trimmed, branch);
     }
   } catch (err) {
     // 404 = no results found, not an error
