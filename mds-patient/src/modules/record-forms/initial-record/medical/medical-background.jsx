@@ -311,7 +311,8 @@ const MedicalBackgroundForm = ({
                         label="Dose Number:"
                         type="number"
                         min="1"
-                        value={data.immunizationDoses?.[vaccine.id] || 1}
+                        value={data.immunizationDoses?.[vaccine.id] ?? 1}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => onChange({ ...data, immunizationDoses: { ...data.immunizationDoses, [vaccine.id]: parseInt(e.target.value, 10) || 1 } })}
                       />
                     </div>
@@ -342,7 +343,8 @@ const MedicalBackgroundForm = ({
                         label="Dose Number:"
                         type="number"
                         min="1"
-                        value={data.immunizationDoses?.[vaccine.id] || 1}
+                        value={data.immunizationDoses?.[vaccine.id] ?? 1}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => onChange({ ...data, immunizationDoses: { ...data.immunizationDoses, [vaccine.id]: parseInt(e.target.value, 10) || 1 } })}
                       />
                     </div>

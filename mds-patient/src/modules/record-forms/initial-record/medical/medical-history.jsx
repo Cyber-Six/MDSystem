@@ -1,5 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Checkbox, Input, Textarea } from './form-elements';
+import { searchDomainCatalog, createDomainCatalog } from '@core/services/emr-service';
+
+function useCatalogSearch({ catalog = [], searchFn, createFn, nameKey = 'name' }) {
+  const [dynamicItems, setDynamicItems] = useState([]);
+  const [input, setInput] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const wrapperRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleInputChange = (value) => {
+    setInput(value);
+    if (!value.trim()) { setSuggestions([]); return; }
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await searchFn(value.trim());
+        const allKnown = [...catalog, ...dynamicItems];
+        setSuggestions((results || []).filter(r => !allKnown.find(k => k.id === r.id)));
+      } catch { setSuggestions([]); }
+      setSearching(false);
+    }, 300);
+  };
+
+  const selectItem = (item) => {
+    setDynamicItems(prev => prev.find(i => i.id === item.id) ? prev : [...prev, item]);
+    setInput('');
+    setSuggestions([]);
+    setFocused(false);
+    return item;
+  };
+
+  const createItem = async (name, extra) => {
+    if (!name) return null;
+    setCreating(true);
+    try {
+      const item = await createFn(name, extra);
+      if (item) {
+        setDynamicItems(prev => prev.find(i => i.id === item.id) ? prev : [...prev, item]);
+        setInput('');
+        setSuggestions([]);
+        setFocused(false);
+      }
+      return item;
+    } catch { return null; }
+    finally { setCreating(false); }
+  };
+
+  return { dynamicItems, input, suggestions, creating, searching, focused, wrapperRef, setFocused, handleInputChange, selectItem, createItem };
+}
 
 /**
  * MedicalHistoryForm
@@ -26,6 +89,12 @@ const MedicalHistoryForm = ({
   catalogsLoading = false,
 }) => {
   const [activeTab, setActiveTab] = useState('self');
+
+  const conditionOthers = useCatalogSearch({
+    catalog: medicalConditionCatalog,
+    searchFn: (q) => searchDomainCatalog('MedicalCondition', q),
+    createFn: (name) => createDomainCatalog('MedicalCondition', name),
+  });
 
   const handleSelfConditionChange = (id, checked) => {
     const self = { ...data.self, [id]: checked };
@@ -129,6 +198,80 @@ const MedicalHistoryForm = ({
             </div>
           )}
 
+          {/* Dynamically added conditions from search */}
+          {conditionOthers.dynamicItems.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              {conditionOthers.dynamicItems.map((condition) => (
+                <div
+                  key={condition.id}
+                  className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
+                >
+                  <Checkbox
+                    label={condition.name}
+                    checked={data.self?.[condition.id] || false}
+                    onChange={(e) => handleSelfConditionChange(condition.id, e.target.checked)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Search or add conditions */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
+            <div ref={conditionOthers.wrapperRef}>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                placeholder="Type to search for a condition..."
+                value={conditionOthers.input}
+                autoComplete="off"
+                onFocus={() => conditionOthers.setFocused(true)}
+                onChange={(e) => conditionOthers.handleInputChange(e.target.value)}
+              />
+              {conditionOthers.focused && conditionOthers.input.trim() && (
+                <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                  {conditionOthers.searching && (
+                    <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                  )}
+                  {conditionOthers.suggestions.length > 0 ? (
+                    <>
+                      {conditionOthers.suggestions.map(result => (
+                        <button
+                          key={result.id}
+                          type="button"
+                          className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                          onMouseDown={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleSelfConditionChange(item.id, true); }}
+                        >
+                          {result.name}
+                          {data.self?.[result.id] && (
+                            <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
+                          )}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                        disabled={conditionOthers.creating}
+                        onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                      >
+                        {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                      disabled={conditionOthers.creating}
+                      onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleSelfConditionChange(item.id, true); }}
+                    >
+                      {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Other Option */}
           <div className="mt-6 border-2 border-neutral-300 rounded-lg p-4">
             <Checkbox
@@ -187,6 +330,90 @@ const MedicalHistoryForm = ({
               ))}
             </div>
           )}
+
+          {/* Dynamically added conditions from search */}
+          {conditionOthers.dynamicItems.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              {conditionOthers.dynamicItems.map((condition) => (
+                <div
+                  key={condition.id}
+                  className="border border-neutral-200 rounded-lg p-4 hover:border-primary-400 transition-colors"
+                >
+                  <Checkbox
+                    label={condition.name}
+                    checked={data.family?.[condition.id] || false}
+                    onChange={(e) => handleFamilyConditionChange(condition.id, e.target.checked)}
+                  />
+                  {data.family?.[condition.id] && (
+                    <div className="mt-2 ml-6">
+                      <Input
+                        placeholder="Who has this condition? (e.g., Mother, Father, Sibling)"
+                        value={data.familyWhoHasIt?.[condition.id] || ''}
+                        onChange={(e) => handleFamilyWhoHasItChange(condition.id, e.target.value)}
+                        className="text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Search or add conditions */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-secondary-700 dark:text-neutral-300 mb-1">Other Conditions (search or add):</label>
+            <div ref={conditionOthers.wrapperRef}>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg text-sm bg-white dark:bg-neutral-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                placeholder="Type to search for a condition..."
+                value={conditionOthers.input}
+                autoComplete="off"
+                onFocus={() => conditionOthers.setFocused(true)}
+                onChange={(e) => conditionOthers.handleInputChange(e.target.value)}
+              />
+              {conditionOthers.focused && conditionOthers.input.trim() && (
+                <div className="mt-1 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 shadow-sm max-h-60 overflow-y-auto">
+                  {conditionOthers.searching && (
+                    <div className="px-4 py-2 text-xs text-secondary-400 dark:text-neutral-500 italic">Searching...</div>
+                  )}
+                  {conditionOthers.suggestions.length > 0 ? (
+                    <>
+                      {conditionOthers.suggestions.map(result => (
+                        <button
+                          key={result.id}
+                          type="button"
+                          className="w-full text-left px-4 py-2 text-sm text-secondary-800 dark:text-neutral-200 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:bg-primary-50 focus:outline-none first:rounded-t-lg last:rounded-b-lg border-b border-neutral-100 dark:border-neutral-700 last:border-0"
+                          onMouseDown={(e) => { e.preventDefault(); const item = conditionOthers.selectItem(result); handleFamilyConditionChange(item.id, true); }}
+                        >
+                          {result.name}
+                          {data.family?.[result.id] && (
+                            <span className="ml-2 text-xs text-primary-500 font-medium">✓ Already selected</span>
+                          )}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-b-lg border-t border-neutral-200 dark:border-neutral-700 disabled:opacity-50"
+                        disabled={conditionOthers.creating}
+                        onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                      >
+                        {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="w-full text-left px-4 py-2 text-sm text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10 focus:outline-none rounded-lg disabled:opacity-50"
+                      disabled={conditionOthers.creating}
+                      onMouseDown={async (e) => { e.preventDefault(); const item = await conditionOthers.createItem(conditionOthers.input.trim()); if (item) handleFamilyConditionChange(item.id, true); }}
+                    >
+                      {conditionOthers.creating ? 'Adding...' : `+ Add "${conditionOthers.input.trim()}" as a new condition`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Other Option */}
           <div className="mt-6 border-2 border-neutral-300 rounded-lg p-4">
