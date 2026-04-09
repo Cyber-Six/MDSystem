@@ -3,10 +3,9 @@ const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
 const { verifyRecaptcha } = require("../../../services/recaptcha.js");
 const { verifyGoogleToken } = require("../../../services/google-oauth.js");
-const { createVerificationSession, isLoginLocked, incrementLoginFailure } = require("../../../config/redis.js");
+const { createVerificationSession, isLoginLocked } = require("../../../config/redis.js");
 const query = require("../../../config/query.js");
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
-const { generateRandomKey } = require("../../../utils/security.js");
 const logger = require("../../../utils/logger.js");
 
 const router = express.Router();

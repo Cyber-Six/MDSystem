@@ -4,8 +4,20 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const logger = require('../utils/logger.js');
 
+// Mobile native apps cannot render reCAPTCHA v2 checkbox widgets.
+// They send a hashed shared secret instead. The backend validates this
+// secret server-side rather than forwarding to Google's siteverify API.
+const MOBILE_APP_SECRET = process.env.RECAPTCHA_MOBILE_SECRET;
+
 async function verifyRecaptcha(token) {
     try {
+        // ── Mobile native app bypass ──────────────────────────────────────────
+        // Mobile clients (iOS/Android) cannot complete a reCAPTCHA v2 checkbox.
+        // They present a server-side shared secret. Validate it here.
+        if (MOBILE_APP_SECRET && token === MOBILE_APP_SECRET) {
+            return true;
+        }
+
         const secret = process.env.RECAPTCHA_SECRET_KEY;
 
         // `node-fetch` is an ES module in recent versions. Dynamically import it
@@ -20,7 +32,7 @@ async function verifyRecaptcha(token) {
         const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: `secret=${secret}&response=${token}`
+            body: `secret=${secret}&response=${encodeURIComponent(token)}`
         });
 
         const data = await response.json();

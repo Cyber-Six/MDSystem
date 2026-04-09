@@ -3,7 +3,7 @@
  * Matches the frontend login flow with dark mode support
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -27,6 +27,9 @@ import * as WebBrowser from 'expo-web-browser';
 WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
+// Server-side secret exchanged instead of a reCAPTCHA browser token.
+// Mobile native apps cannot render v2 checkbox widgets.
+const MOBILE_RECAPTCHA_SECRET = process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || 'MOBILE_APP_TOKEN';
 
 // Import validation functions from core package
 const validatePassword = (password: string): boolean => {
@@ -71,6 +74,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   // ── Google OAuth ──────────────────────────────────────────────────────
   const discovery = AuthSession.useAutoDiscovery('https://accounts.google.com');
+  // Generate nonce once per component mount to prevent request invalidation on re-renders
+  const nonceRef = useRef(Math.random().toString(36).substring(2));
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -80,7 +85,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       responseType: AuthSession.ResponseType.IdToken,
       extraParams: {
         hd: 'tip.edu.ph',
-        nonce: Math.random().toString(36).substring(2),
+        nonce: nonceRef.current,
       },
     },
     discovery
@@ -105,7 +110,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     try {
       const res = await axiosRequest.post('/auth/oauth/google', {
         credential: idToken,
-        recaptchaToken: 'MOBILE_APP_TOKEN',
+        recaptchaToken: MOBILE_RECAPTCHA_SECRET,
       });
 
       if (res.data.ok) {
@@ -154,7 +159,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   // Send 2FA code
   const handleSend2FA = async () => {
     try {
-      const recaptchaToken = 'MOBILE_APP_TOKEN';
+      const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
       await axiosRequest.post('/auth/email/2fa', { 
         email,
         recaptchaToken 
@@ -182,7 +187,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsLoading(true);
 
     try {
-      const recaptchaToken = 'MOBILE_APP_TOKEN';
+      const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
       
       const response = await axiosRequest.post('/auth/login', { 
         email, 
@@ -276,7 +281,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsLoading(true);
 
     try {
-      const recaptchaToken = 'MOBILE_APP_TOKEN';
+      const recaptchaToken = MOBILE_RECAPTCHA_SECRET;
       await axiosRequest.post('/auth/email/2fa', { 
         email,
         recaptchaToken 
