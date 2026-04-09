@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { fetchAvailableMedicineWithQuantities } from '../../prescription-service';
 import { issuePrescription } from '../../prescription-service';
-import { searchPatients } from '../../../../services/patient-search-service';
-import { getProfileLabel } from '../../../../services/patient-search-service';
+import { searchPatientsForInventory } from '../../services/inventory-patient-search';
+import { useStaffProfile } from '../../../../hooks/use-staff-profile';
 import BatchSelectionModal from './batch-selection-modal';
 
 /**
@@ -14,6 +14,8 @@ import BatchSelectionModal from './batch-selection-modal';
  * - Immediate release without patient request approval
  */
 const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allRequests = [] }) => {
+  const { profile, isLoading: isProfileLoading } = useStaffProfile();
+
   // Patient search state
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -52,27 +54,29 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
   // Notes viewing modal state
   const [viewNotesData, setViewNotesData] = useState(null); // { notes, medicineName, patientName }
 
-  // Patient search function
+  // Patient search function — uses staff REST endpoints (no EMR permission needed)
   const handlePatientSearch = useCallback(async (query) => {
     if (!query || query.length < 2) {
       setSearchResults([]);
       return;
     }
 
+    // Profile must be loaded to know which branch the staff belongs to.
+    // Without it we cannot pass the correct branch param and the backend
+    // will return 403 regardless of what we send.
+    if (!profile?.branch) {
+      setSearchResults([]);
+      return;
+    }
+
     setIsSearching(true);
     try {
-      const patients = await searchPatients(query, 15);
+      const patients = await searchPatientsForInventory(query, profile.branch);
       const formatted = patients.map((p) => ({
         id: p.id,
-        name: `${p.last_name}, ${p.first_name}${p.middle_name ? ' ' + p.middle_name[0] + '.' : ''}`,
+        name: p.name,
         identifier: p.identifier,
         email: p.email,
-        profile_type: p.profile_type,
-        program: p.program,
-        year: p.year,
-        department: p.department,
-        role: p.role,
-        profileLabel: getProfileLabel(p),
       }));
       setSearchResults(formatted);
     } catch (err) {
@@ -81,7 +85,7 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
     } finally {
       setIsSearching(false);
     }
-  }, []);
+  }, [profile?.branch]);
 
   // Load medicines for the current location
   useEffect(() => {
@@ -446,13 +450,14 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search patient (min 2 characters)..."
+                  placeholder={isProfileLoading ? 'Loading profile...' : 'Search patient by name, email, or ID...'}
+                  disabled={isProfileLoading || !profile?.branch}
                   value={searchInput}
                   onChange={(e) => {
                     setSearchInput(e.target.value);
                     handlePatientSearch(e.target.value);
                   }}
-                  className="w-full pl-9 pr-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                  className="w-full pl-9 pr-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white placeholder-neutral-500 dark:placeholder-neutral-400 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
