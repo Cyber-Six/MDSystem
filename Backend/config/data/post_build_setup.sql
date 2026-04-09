@@ -304,7 +304,8 @@ VALUES
 ('ALLOW_TO_EXPORT_ANALYTICS', 'Permission to export analytics data'),
 
 ('ALLOW_TO_ACCESS_ROLE_MANAGEMENT', 'Permission to access role management panel'),
-('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates');
+('ALLOW_TO_EDIT_ROLE_MANAGEMENT', 'Permission to edit roles and templates')
+ON CONFLICT (label) DO NOTHING;
 
 -- User preferences table (stores portal settings per user)
 CREATE TABLE IF NOT EXISTS "UsersPreferences" (
@@ -315,3 +316,10 @@ CREATE TABLE IF NOT EXISTS "UsersPreferences" (
   updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_users_preferences_id ON "UsersPreferences"(id);
+
+-- Missing rolesTable entries (idempotent — safe to re-run)
+INSERT INTO "rolesTable" (label, data) VALUES
+('ALLOW_TO_SET_VITAL_SIGN',                'Permission to set vital signs'),
+('ALLOW_TO_CONFIGURE_INVENTORY',           'Permission to configure inventory settings and thresholds'),
+('ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS', 'Permission to send push notifications and alerts to patients')
+ON CONFLICT (label) DO NOTHING;
