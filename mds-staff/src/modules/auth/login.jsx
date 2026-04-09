@@ -6,6 +6,7 @@ import DataConsent from './data-consent/data-consent.jsx';
 
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const GOOGLE_OAUTH_ENABLED = import.meta.env.VITE_GOOGLE_OAUTH_ENABLED !== 'false';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -127,7 +128,7 @@ const Login = () => {
   }, [recaptchaToken, resetRecaptcha]);
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || !googleBtnRef.current) return;
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_ENABLED || !googleBtnRef.current) return;
     const timer = setInterval(() => {
       if (window.google?.accounts?.id) {
         window.google.accounts.id.initialize({
@@ -553,7 +554,7 @@ const Login = () => {
         </form>
 
           {/* OAuth Divider */}
-          {GOOGLE_CLIENT_ID && (
+          {GOOGLE_CLIENT_ID && GOOGLE_OAUTH_ENABLED && (
             <>
               <div className="relative my-3 sm:my-5">
                 <div className="absolute inset-0 flex items-center">

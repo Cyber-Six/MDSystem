@@ -10,6 +10,7 @@ const logger = require("../../../utils/logger.js");
 
 const router = express.Router();
 
+const GOOGLE_OAUTH_ENABLED = process.env.GOOGLE_OAUTH_ENABLED !== 'false';
 const VERIFICATIONKEY_PURPOSE = "2fa";
 
 /**
@@ -35,6 +36,14 @@ const VERIFICATIONKEY_PURPOSE = "2fa";
  * The session then follows the same 2FA → consent → /login/complete flow.
  */
 router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
+  // ✅ Feature flag — set GOOGLE_OAUTH_ENABLED=false to disable
+  if (!GOOGLE_OAUTH_ENABLED) {
+    return res.status(503).json({
+      error: "OAUTH_DISABLED",
+      message: "Google OAuth is currently disabled.",
+    });
+  }
+
   const { credential, recaptchaToken } = req.body;
   const account_type = detectPortalFromSubdomain(req);
 
