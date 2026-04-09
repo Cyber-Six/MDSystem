@@ -3,6 +3,13 @@ const db  = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 
 function assertActiveUpdateTicket(record, res, allowedScope = "Both") {
+  if (!record) {
+    throwGraphQLError(res)
+      .status(404)
+      .message("No update ticket found.")
+      .throw();
+  }
+
   if (record.status !== "InProgress" && record.status !== "Revision") {
     if (record.status === "Pending" || record.status === "RevisionSubmitted") { // still pending
       throwGraphQLError(res)
