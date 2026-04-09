@@ -7,7 +7,7 @@ const remove = require("../query/delete.js");
 
 const { throwGraphQLError } = require("../../../utils/graphql-helper.js");
 const logger = require("../../../utils/logger.js");
-const { generateDomainCodes } = require("../../../utils/validator.js");
+const { generateDomainCodes, normalizeName } = require("../../../utils/validator.js");
 
 const { Mutation: { _reloadCredentialStatus: reloadCredentialStatus } } = 
     require("../../profile/resolvers/wrapper/wrapper.js");
@@ -77,52 +77,28 @@ const Mutation = {
         .throw();
       }
     
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      await db.queryClient(
-        client,
-        `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
-          ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,
-        [recordId, identity]
-      );
+    await db.query(
+      `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
+        ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,
+      [recordId, identity]
+    );
 
-      const result = await db.queryControlledClient(
-        client,
-        `INSERT INTO "student_profile" 
-          ("profileId", programId, year)
-         VALUES ($1, $2, $3)
-         ON CONFLICT ("profileId") DO UPDATE
-           SET programId = COALESCE(EXCLUDED.programId, "student_profile".programId),
-               year = COALESCE(EXCLUDED.year, "student_profile".year)
-               RETURNING *;`,
-        [
-          recordId,
-          args.input.programId,
-          args.input.year
-        ]
-      );
-      
-      await client.query('COMMIT');
-      logger.debug("Upserted Student Profile:", result.rows[0]);
-      return {...result.rows[0], id: recordId, archived_at: null};
-    } catch (error) {
-      await client.query('ROLLBACK');
-
-      if (error.code === '23503') { // foreign key violation
-        logger.error('Invalid programId:', error);
-        throwGraphQLError(res)
-        .status(400)
-        .message(`Invalid programId: ${args.input.programId}`)
-        .throw();
-      }
-
-      logger.error('Error upserting student profile:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
-    }
+    const result = await db.query(
+      `INSERT INTO "student_profile" 
+        ("profileId", programId, year)
+       VALUES ($1, $2, $3)
+       ON CONFLICT ("profileId") DO UPDATE
+         SET programId = COALESCE(EXCLUDED.programId, "student_profile".programId),
+             year = COALESCE(EXCLUDED.year, "student_profile".year)
+             RETURNING *;`,
+      [
+        recordId,
+        args.input.programId,
+        args.input.year
+      ]
+    );
+    logger.debug("Upserted Student Profile:", result.rows[0]);
+    return {...result.rows[0], id: recordId, archived_at: null};
   },
 
   _EmployeeProfile: async (_, {args, recordId}, { user, res }) => {
@@ -135,47 +111,33 @@ const Mutation = {
         .throw();
       }
 
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      // Always record profile_type as 'Employee' so downstream queries expecting
-      await db.queryClient(
-        client,
-        `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
-          ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,
-        [recordId, "Employee"]
-      );
+    // Always record profile_type as 'Employee' so downstream queries expecting
+    await db.query(
+      `INSERT INTO "profileRecord" (id, profile_type) VALUES ($1, $2)
+        ON CONFLICT (id) DO UPDATE SET profile_type = EXCLUDED.profile_type;`,
+      [recordId, "Employee"]
+    );
 
-      const result = await db.queryClient(
-        client,
-        `INSERT INTO "employee_profile" 
-          ("profileId", department, role, position)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT ("profileId") DO UPDATE
-           SET department = EXCLUDED.department,
-               role = EXCLUDED.role,
-               position = EXCLUDED.position
-               RETURNING *;`,
-        [
-          recordId,
-          args.input.department,
-          args.input.role,
-          args.input.position
-        ]
-      );
+    const result = await db.query(
+      `INSERT INTO "employee_profile" 
+        ("profileId", department, role, position)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("profileId") DO UPDATE
+         SET department = EXCLUDED.department,
+             role = EXCLUDED.role,
+             position = EXCLUDED.position
+             RETURNING *;`,
+      [
+        recordId,
+        args.input.department,
+        args.input.role,
+        args.input.position
+      ]
+    );
 
-      await client.query('COMMIT');
-      logger.debug("Upserted Employee Profile:", result.rows[0]);
-      //return result.rows[0];
-      return {...(args.input), id: recordId, archived_at: null};
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting employee profile:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
-    }
+    logger.debug("Upserted Employee Profile:", result.rows[0]);
+    //return result.rows[0];
+    return {...(args.input), id: recordId, archived_at: null};
   },
 
   _VitalSigns: async (_, { args, recordId }, { user, res }) => {
@@ -323,57 +285,39 @@ const Mutation = {
 
 
   _DentalHistory: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      const result = await db.queryClient(
-        client,
-        `INSERT INTO "DentalHistory" 
-          ("id","seenByDentist", "lastDentalCleaning", "purpose", "lastVisitDate")
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (id) DO UPDATE
-           SET "seenByDentist" = EXCLUDED."seenByDentist",
-               "lastDentalCleaning" = EXCLUDED."lastDentalCleaning",
-               "purpose" = EXCLUDED."purpose",
-               "lastVisitDate" = EXCLUDED."lastVisitDate"
-               RETURNING *;`,
-        [
-          recordId,
-          args.input.seenByDentist,
-          args.input.lastDentalCleaning,
-          args.input.purpose,
-          args.input.lastVisitDate
-        ]
-      );
+    const result = await db.query(
+      `INSERT INTO "DentalHistory" 
+        ("id","seenByDentist", "lastDentalCleaning", "purpose", "lastVisitDate")
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO UPDATE
+         SET "seenByDentist" = EXCLUDED."seenByDentist",
+             "lastDentalCleaning" = EXCLUDED."lastDentalCleaning",
+             "purpose" = EXCLUDED."purpose",
+             "lastVisitDate" = EXCLUDED."lastVisitDate"
+             RETURNING *;`,
+      [
+        recordId,
+        args.input.seenByDentist,
+        args.input.lastDentalCleaning,
+        args.input.purpose,
+        args.input.lastVisitDate
+      ]
+    );  
 
-      await client.query('COMMIT');
-      logger.debug("Upserted Dental History:", result.rows[0]);
-      return {...(args.input), id: recordId, archived_at: null};
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting dental history:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
-    }
+    logger.debug("Upserted Dental History:", result.rows[0]);
+    return {...(args.input), id: recordId, archived_at: null};
   },
 
   _ObgynHistory: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      const result = await db.queryClient(
-        client,
-        `INSERT INTO "ObGynHistory" 
-          ("id", "lastMenstrualPeriod", "hasDysmenorrhea", "notes")
-          VALUES ($1, $2, $3, $4) 
-          ON CONFLICT (id) DO UPDATE
-            SET "lastMenstrualPeriod" = EXCLUDED."lastMenstrualPeriod",
-                "hasDysmenorrhea" = EXCLUDED."hasDysmenorrhea",
-                "notes" = EXCLUDED."notes"
-                RETURNING *;`,
+    const result = await db.query(
+      `INSERT INTO "ObGynHistory" 
+        ("id", "lastMenstrualPeriod", "hasDysmenorrhea", "notes")
+        VALUES ($1, $2, $3, $4) 
+        ON CONFLICT (id) DO UPDATE
+          SET "lastMenstrualPeriod" = EXCLUDED."lastMenstrualPeriod",
+              "hasDysmenorrhea" = EXCLUDED."hasDysmenorrhea",
+              "notes" = EXCLUDED."notes"
+              RETURNING *;`,
         [
           recordId,
           args.input.lastMenstrualPeriod,
@@ -381,241 +325,171 @@ const Mutation = {
           args.input.notes
         ]
       );
-      
-      await client.query('COMMIT');
-      logger.debug("Upserted ObGynHistory:", result.rows[0]);
-      return {...(args.input), id: recordId, archived_at: null};
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting obgyn history:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
-    }
+    logger.debug("Upserted ObGynHistory:", result.rows[0]);
+    return {...(args.input), id: recordId, archived_at: null};
   },
 
   _Lifestyle: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      const result = await db.queryClient(
-        client,
-        `INSERT INTO "Lifestyle" 
-          ("id", "smoker", "numberOfCigarettesPerDay", "yearsSmoked", 
-          "alcoholConsumer", "frequencyOfAlcoholConsumption", 
-          "vapeUser", "vapeType", "vapeFrequency", "yearsVaping")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (id) DO UPDATE
-           SET "smoker" = EXCLUDED."smoker",
-               "numberOfCigarettesPerDay" = EXCLUDED."numberOfCigarettesPerDay",
-               "yearsSmoked" = EXCLUDED."yearsSmoked",
-               "alcoholConsumer" = EXCLUDED."alcoholConsumer",
-               "frequencyOfAlcoholConsumption" = EXCLUDED."frequencyOfAlcoholConsumption",
-               "vapeUser" = EXCLUDED."vapeUser",
-               "vapeType" = EXCLUDED."vapeType",
-               "vapeFrequency" = EXCLUDED."vapeFrequency",
-               "yearsVaping" = EXCLUDED."yearsVaping"
-               RETURNING *;`,
-        [
-          recordId,
-          args.input.smoker,
-          args.input.numberOfCigarettesPerDay,
-          args.input.yearsSmoked,
-          args.input.alcoholConsumer,
-          args.input.frequencyOfAlcoholConsumption,
-          args.input.vapeUser,
-          args.input.vapeType,
-          args.input.vapeFrequency,
-          args.input.yearsVaping,
-        ]
-      );
-      
-      await client.query('COMMIT');
-      logger.debug("Upserted Lifestyle:", result.rows[0]);
-      return {...(args.input), id: recordId, archived_at: null};
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting lifestyle:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
-    }
+    const result = await db.query(
+      `INSERT INTO "Lifestyle" 
+        ("id", "smoker", "numberOfCigarettesPerDay", "yearsSmoked", 
+        "alcoholConsumer", "frequencyOfAlcoholConsumption", 
+        "vapeUser", "vapeType", "vapeFrequency", "yearsVaping")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (id) DO UPDATE
+         SET "smoker" = EXCLUDED."smoker",
+             "numberOfCigarettesPerDay" = EXCLUDED."numberOfCigarettesPerDay",
+             "yearsSmoked" = EXCLUDED."yearsSmoked",
+             "alcoholConsumer" = EXCLUDED."alcoholConsumer",
+             "frequencyOfAlcoholConsumption" = EXCLUDED."frequencyOfAlcoholConsumption",
+             "vapeUser" = EXCLUDED."vapeUser",
+             "vapeType" = EXCLUDED."vapeType",
+             "vapeFrequency" = EXCLUDED."vapeFrequency",
+             "yearsVaping" = EXCLUDED."yearsVaping"
+             RETURNING *;`,
+      [
+        recordId,
+        args.input.smoker,
+        args.input.numberOfCigarettesPerDay,
+        args.input.yearsSmoked,
+        args.input.alcoholConsumer,
+        args.input.frequencyOfAlcoholConsumption,
+        args.input.vapeUser,
+        args.input.vapeType,
+        args.input.vapeFrequency,
+        args.input.yearsVaping,
+      ]
+    );
+    logger.debug("Upserted Lifestyle:", result.rows[0]);
+
+    return {...(args.input), id: recordId, archived_at: null};
   },
 
   _DentalPhotoRecord: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      const upperUUID = (args.input.upperTeeth) ? await promoteFile(user.id, args.input.upperTeeth, "dentalPhoto") : null;
-      const lowerUUID = (args.input.lowerTeeth) ? await promoteFile(user.id, args.input.lowerTeeth, "dentalPhoto") : null;
+    const upperUUID = (args.input.upperTeeth) ? await promoteFile(user.id, args.input.upperTeeth, "dentalPhoto") : null;
+    const lowerUUID = (args.input.lowerTeeth) ? await promoteFile(user.id, args.input.lowerTeeth, "dentalPhoto") : null;
 
-      // check existing
-      const existing = await db.queryClient(
-        client,
-        `SELECT "id", "upperTeeth", "lowerTeeth" FROM "DentalPhotoRecord" WHERE "id" = $1;`,
-        [recordId]
+    // check existing
+    const existing = await db.query(
+      `SELECT "id", "upperTeeth", "lowerTeeth" FROM "DentalPhotoRecord" WHERE "id" = $1;`,
+      [recordId]
       );
 
-      if (existing.rows.length > 0) {
-        if (upperUUID && existing.rows[0].upperTeeth) await deleteFile("dentalPhoto", existing.rows[0].upperTeeth);
-        if (lowerUUID && existing.rows[0].lowerTeeth) await deleteFile("dentalPhoto", existing.rows[0].lowerTeeth);
-      }
+    if (existing.rows.length > 0) {
+      if (upperUUID && existing.rows[0].upperTeeth) await deleteFile("dentalPhoto", existing.rows[0].upperTeeth);
+      if (lowerUUID && existing.rows[0].lowerTeeth) await deleteFile("dentalPhoto", existing.rows[0].lowerTeeth);
+    }
 
-      // insert
-      const result = await db.queryClient(
-        client,
-        `INSERT INTO "DentalPhotoRecord" ("id", "upperTeeth", "lowerTeeth")
-          VALUES ($1, $2, $3)
-          ON CONFLICT (id) DO UPDATE
-            SET "upperTeeth" = COALESCE(EXCLUDED."upperTeeth", "DentalPhotoRecord"."upperTeeth"),
-                "lowerTeeth" = COALESCE(EXCLUDED."lowerTeeth", "DentalPhotoRecord"."lowerTeeth")
-          RETURNING *;`,
-        [
-          recordId,
-          upperUUID,
-          lowerUUID
+    // insert
+    const result = await db.query(
+      `INSERT INTO "DentalPhotoRecord" ("id", "upperTeeth", "lowerTeeth")
+        VALUES ($1, $2, $3)
+        ON CONFLICT (id) DO UPDATE
+          SET "upperTeeth" = COALESCE(EXCLUDED."upperTeeth", "DentalPhotoRecord"."upperTeeth"),
+              "lowerTeeth" = COALESCE(EXCLUDED."lowerTeeth", "DentalPhotoRecord"."lowerTeeth")
+        RETURNING *;
+`,
+      [
+        recordId,
+        upperUUID,
+        lowerUUID
         ]
       );
-      
-      await client.query('COMMIT');
-      const record = result.rows[0];
-      return {...record, id: recordId, isValid: result.rows[0].isValid, archived_at: null};
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting dental photo record:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
-    }
+    const record = result.rows[0];
+    return {...record, id: recordId, isValid: result.rows[0].isValid, archived_at: null};
   },
 
   
   _OralApplianceProfile: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      await anchor.OralAppliance(recordId);
-      await remove.OralApplianceRecord(recordId);
+    await anchor.OralAppliance(recordId);
+    await remove.OralApplianceRecord(recordId);
 
-      if (args.input.appliances.length === 0) {
-        await remove.OralApplianceRecord(recordId);
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          appliances: [],
-          archived_at: null
-        };
-      }
-      const inserted = [];
-      for (const appliance of args.input.appliances) {
-        try {
-          const result = await db.queryClient(
-            client,
-            `INSERT INTO "OralApplianceRecord"
-              ("applianceId", "tagId", "status", "dateIssued", "arch")
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING *;`,
-            [
-              recordId,
-              appliance.tagId,
-              appliance.status,
-              appliance.dateIssued,
-              appliance.arch
-            ]
-          );
-          logger.debug("Inserted Oral Appliance:", result.rows[0]);
-          inserted.push(result.rows[0]);
-        } catch (err) {
-          if (err.code === '23503') { // foreign key violation
-            throw new Error(`Invalid tagId: ${appliance.tagId}`);
-          }
-          else throw err;
-        }
-      }
-      
-      await client.query('COMMIT');
-      logger.warn("Inserted Oral Appliances:", inserted);
+    if (args.input.appliances.length === 0) {
+      await remove.OralApplianceRecord(recordId);
       return {
         id: recordId,
-        appliances: inserted,
+        appliances: [],
         archived_at: null
-      };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting oral appliance profile:', err);
-      if (err.message.includes('Invalid tagId')) {
-        throwGraphQLError(res).status(400).message(err.message).throw();
+        };
       }
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
+    const inserted = [];
+    for (const appliance of args.input.appliances) {
+      try {
+        const result = await db.queryControlled(
+          `INSERT INTO "OralApplianceRecord"
+            ("applianceId", "tagId", "status", "dateIssued", "arch")
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *;`,
+          [
+            recordId,
+            appliance.tagId,
+            appliance.status,
+            appliance.dateIssued,
+            appliance.arch
+            ]
+          );
+        logger.debug("Inserted Oral Appliance:", result.rows[0]);
+        inserted.push(result.rows[0]);
+      } catch (err) {
+        if (err.code === '23503') { // foreign key violation
+          throwGraphQLError(res)
+            .status(400)
+            .message(`Invalid tagId: ${appliance.tagId}`)
+            .throw();
+          }
+        else throw err;
+      }
     }
+    logger.warn("Inserted Oral Appliances:", inserted);
+    return {
+      id: recordId,
+      appliances: inserted,
+      archived_at: null
+    };
   },
 
   _EmergencyContact: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      const firstNumber = await upsertEmergencyNumber(args.input.firstContact);
-      const secondNumber = await upsertEmergencyNumber(args.input.secondContact);
+    const firstNumber = await upsertEmergencyNumber(args.input.firstContact);
+    const secondNumber = await upsertEmergencyNumber(args.input.secondContact);
 
-      // Link them
-      const result = await db.queryClient(
-        client,
-        `INSERT INTO "EmergencyContact"
-          ("id", "firstNumber", "secondNumber")
-         VALUES ($1, $2, $3)
-         ON CONFLICT (id) DO UPDATE
-           SET "firstNumber" = EXCLUDED."firstNumber",
-               "secondNumber" = EXCLUDED."secondNumber"
-         RETURNING *;`,
-        [recordId, firstNumber.id, secondNumber.id]
-      );
-      
-      await client.query('COMMIT');
-      logger.debug("Upserted Emergency Contact:", result.rows[0]);
+    // Link them
+    const result = await db.query(
+      `INSERT INTO "EmergencyContact"
+        ("id", "firstNumber", "secondNumber")
+       VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE
+         SET "firstNumber" = EXCLUDED."firstNumber",
+             "secondNumber" = EXCLUDED."secondNumber"
+       RETURNING *;`,
+      [recordId, firstNumber.id, secondNumber.id]
+    );
+    logger.debug("Upserted Emergency Contact:", result.rows[0]);
 
-      return {
-        id: recordId,
-        firstContact: firstNumber,
-        secondContact: secondNumber,
-        archived_at: null
-      };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting emergency contact:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
-    }
+    return {
+      id: recordId,
+      firstContact: firstNumber,
+      secondContact: secondNumber,
+      archived_at: null
+    };
   },
 
   _VisualAcuityProfile: async (_, { args, recordId }, { user, res }) => {
-    const client = await db.connect();
+    // Anchor and cleanup existing records
+    await anchor.VisualAcuity(recordId);
+    await remove.VisualAcuityRecord(recordId);
+
+    // If no acuity input provided, return with acuity = null
+    if (!args.input.acuity) {
+      return {
+        id: recordId,
+        acuity: null,
+        archived_at: null
+      };
+    }
+
     try {
-      await client.query('BEGIN');
-      
-      // Anchor and cleanup existing records
-      await anchor.VisualAcuity(recordId);
-      await remove.VisualAcuityRecord(recordId);
-
-      // If no acuity input provided, return with acuity = null
-      if (!args.input.acuity) {
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          acuity: null,
-          archived_at: null
-        };
-      }
-
       // Upsert the visual acuity record
-      const result = await db.queryClient(
-        client,
+      const result = await db.queryControlled(
         `INSERT INTO "VisualAcuityRecord" 
           ("id", "acuityId", "recorded_at", "left_eye", "right_eye", "notes")
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -636,7 +510,6 @@ const Mutation = {
         ]
       );
 
-      await client.query('COMMIT');
       const acuityRecord = result.rows[0];
       logger.debug("Upserted Visual Acuity Profile:", acuityRecord);
 
@@ -647,509 +520,384 @@ const Mutation = {
         acuity: acuityRecord
       };
     } catch (err) {
-      await client.query('ROLLBACK');
       if (err.code === '23503') { // foreign key violation
-        logger.error('Invalid acuityId:', err);
         throwGraphQLError(res)
           .status(400)
           .message(`Invalid acuityId: ${args.input.acuity.acuityId}`)
           .throw();
       } else {
-        logger.error('Error upserting visual acuity profile:', err);
-        throwGraphQLError(res).message("Internal server error").status(500).throw();
+        throw err;
       }
-    } finally {
-      client.release();
     }
   },
 
 
   _MedicalHistory: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      await anchor.MedicalHistory(recordId);
-      await remove.MedicalCondition(recordId);
+    await anchor.MedicalHistory(recordId);
+    await remove.MedicalCondition(recordId);
 
-      if (args.input.conditions.length === 0) {
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          conditions: [],
-          archived_at: null
+    if (args.input.conditions.length === 0) {
+      return {
+        id: recordId,
+        conditions: [],
+        archived_at: null
         };
       }
 
-      const inserted = [];
-      for (const condition of args.input.conditions) {
-        try {
-          const result = await db.queryClient(
-            client,
-            `INSERT INTO "MedicalCondition"
-              ("medicalHistoryId", "conditionId", "relationship", "description", "diagnosedDate")
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING *;`,
-            [
-              recordId,
-              condition.conditionId,
-              condition.relationship || null,
-              condition.description || null,
-              condition.diagnosedDate || null
+    const inserted = [];
+    for (const condition of args.input.conditions) {
+      try {
+        const result = await db.queryControlled(
+          `INSERT INTO "MedicalCondition"
+            ("medicalHistoryId", "conditionId", "relationship", "description", "diagnosedDate")
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *;`,
+          [
+            recordId,
+            condition.conditionId,
+            condition.relationship || null,
+            condition.description || null,
+            condition.diagnosedDate || null
             ]
           );
-          logger.debug("Inserted Medical Condition:", result.rows[0]);
-          inserted.push(result.rows[0]);
-        } catch (err) {
-          throw err;
-        }
+        logger.debug("Inserted Medical Condition:", result.rows[0]);
+        inserted.push(result.rows[0]);
+      } catch (err) {
+        throw err;
       }
-      
-      await client.query('COMMIT');
-      logger.debug("Inserted Medical Conditions:", inserted);
-      return {
-        id: recordId,
-        conditions: inserted,
-        archived_at: null
-      };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting medical history:', err);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
     }
+    logger.debug("Inserted Medical Conditions:", inserted);
+    return {
+      id: recordId,
+      conditions: inserted,
+      archived_at: null
+    };
   },
 
   _HospitalizationProfile: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      console.log(args.input);
+    console.log(args.input);
 
-      await anchor.Hospitalization(recordId);
-      await remove.HospitalizationRecord(recordId);
+    await anchor.Hospitalization(recordId);
+    await remove.HospitalizationRecord(recordId);
 
-      if (args.input.hospitalizations.length === 0) {
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          hospitalizations: [],
-          archived_at: null
+    if (args.input.hospitalizations.length === 0) {
+      return {
+        id: recordId,
+        hospitalizations: [],
+        archived_at: null
         };
       }
 
-      const inserted = [];
-      for (const hospitalization of args.input.hospitalizations) {
-        try {
-          const result = await db.queryClient(
-            client,
-            `INSERT INTO "HospitalizationRecord"
-              ("hospitalizationId", "conditionId", "admissionDate", "dischargeDate", "notes")
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING *;`,
-            [
-              recordId,
-              hospitalization.conditionId,
-              hospitalization.admissionDate,
-              hospitalization.dischargeDate || null,
-              hospitalization.notes || null
+    const inserted = [];
+    for (const hospitalization of args.input.hospitalizations) {
+      try {
+        const result = await db.queryControlled(
+          `INSERT INTO "HospitalizationRecord"
+            ("hospitalizationId", "conditionId", "admissionDate", "dischargeDate", "notes")
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *;`,
+          [
+            recordId,
+            hospitalization.conditionId,
+            hospitalization.admissionDate,
+            hospitalization.dischargeDate || null,
+            hospitalization.notes || null
             ]
           );
-          logger.debug("Inserted Hospitalization:", result.rows[0]);
-          inserted.push(result.rows[0]);
-        } catch (err) {
-          throw err;
-        }
+        logger.debug("Inserted Hospitalization:", result.rows[0]);
+        inserted.push(result.rows[0]);
+      } catch (err) {
+        throw err;
       }
-      
-      await client.query('COMMIT');
-      logger.debug("Inserted Hospitalizations:", inserted);
-      return {
-        id: recordId,
-        hospitalizations: inserted,
-        archived_at: null
-      };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting hospitalization profile:', err);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
     }
+    logger.debug("Inserted Hospitalizations:", inserted);
+    return {
+      id: recordId,
+      hospitalizations: inserted,
+      archived_at: null
+    };
   },
 
   _OperationProfile: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      console.log(args.input);
+    console.log(args.input);
 
-      await anchor.Operation(recordId);
-      await remove.OperationRecord(recordId);
+    await anchor.Operation(recordId);
+    await remove.OperationRecord(recordId);
 
-      if (args.input.operations.length === 0) {
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          operations: [],
-          archived_at: null
-        };
-      }
-      const inserted = [];
-      for (const operation of args.input.operations) {
-        try {
-          const result = await db.queryClient(
-            client,
-            `INSERT INTO "OperationRecord"
-              ("operationId", "procedureId", "operationDate", "notes")
-             VALUES ($1, $2, $3, $4)
-             RETURNING *;`,
-            [
-              recordId,
-              operation.procedureId,
-              operation.operationDate,
-              operation.notes || null
-            ]
-          );
-          logger.debug("Inserted Operation:", result.rows[0]);
-          inserted.push(result.rows[0]);
-        } catch (err) {
-          throw err;
-        }
-      }
-      
-      await client.query('COMMIT');
+    if (args.input.operations.length === 0) {
       return {
         id: recordId,
-        operations: inserted,
+        operations: [],
         archived_at: null
-      };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting operation profile:', err);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
+        };
+      }
+    const inserted = [];
+    for (const operation of args.input.operations) {
+      try {
+        const result = await db.queryControlled(
+          `INSERT INTO "OperationRecord"
+            ("operationId", "procedureId", "operationDate", "notes")
+           VALUES ($1, $2, $3, $4)
+           RETURNING *;`,
+          [
+            recordId,
+            operation.procedureId,
+            operation.operationDate,
+            operation.notes || null
+            ]
+          );
+        logger.debug("Inserted Operation:", result.rows[0]);
+        inserted.push(result.rows[0]);
+      } catch (err) {
+        throw err;
+      }
     }
+    return {
+      id: recordId,
+      operations: inserted,
+      archived_at: null
+    };
   },
 
   _ImmunizationProfile: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      console.log(args.input);
+    console.log(args.input);
 
-      await anchor.Immunization(recordId);
-      await remove.ImmunizationRecord(recordId);
+    await anchor.Immunization(recordId);
+    await remove.ImmunizationRecord(recordId);
 
-      if (args.input.immunizations.length === 0) {
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          immunizations: [],
-          archived_at: null
+    if (args.input.immunizations.length === 0) {
+      return {
+        id: recordId,
+        immunizations: [],
+        archived_at: null
         };
       }
 
-      const inserted = [];
-      for (const immunization of args.input.immunizations) {
-        try {
-          const result = await db.queryClient(
-            client,
-            `INSERT INTO "ImmunizationRecord"
-              ("immunizationId", "vaccineTypeId", "immunizationDate", "doseNumber")
-             VALUES ($1, $2, $3, $4)
-             RETURNING *;`,
-            [
-              recordId,
-              immunization.vaccineTypeId,
-              immunization.immunizationDate,
-              immunization.doseNumber
+    const inserted = [];
+    for (const immunization of args.input.immunizations) {
+      try {
+        const result = await db.queryControlled(
+          `INSERT INTO "ImmunizationRecord"
+            ("immunizationId", "vaccineTypeId", "immunizationDate", "doseNumber")
+           VALUES ($1, $2, $3, $4)
+           RETURNING *;`,
+          [
+            recordId,
+            immunization.vaccineTypeId,
+            immunization.immunizationDate,
+            immunization.doseNumber
             ]
           );
-          logger.debug("Inserted Immunization:", result.rows[0]);
-          inserted.push(result.rows[0]);
-        } catch (err) {
-          throw err;
-        }
+        logger.debug("Inserted Immunization:", result.rows[0]);
+        inserted.push(result.rows[0]);
+      } catch (err) {
+        throw err;
       }
-      
-      await client.query('COMMIT');
-      return {
-        id: recordId,
-        immunizations: inserted,
-        archived_at: null
-      };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting immunization profile:', err);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
     }
+    return {
+      id: recordId,
+      immunizations: inserted,
+      archived_at: null
+    };
   },
 
   _DentalProcedureProfile: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      console.log(args.input);
+    console.log(args.input);
 
-      await anchor.DentalProcedure(recordId);
-      await remove.DentalProcedureRecord(recordId);
+    await anchor.DentalProcedure(recordId);
+    await remove.DentalProcedureRecord(recordId);
 
-      if (args.input.procedures.length === 0) {
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          procedures: [],
-          archived_at: null
+    if (args.input.procedures.length === 0) {
+      return {
+        id: recordId,
+        procedures: [],
+        archived_at: null
         };
       }
 
-      const inserted = [];
-      for (const procedure of args.input.procedures) {
-        try {
-          const result = await db.queryClient(
-            client,
-            `INSERT INTO "DentalProcedureRecord"
-              ("dentalProcedureId", "procedureTypeId", "procedureDate")
-             VALUES ($1, $2, $3)
-             RETURNING *;`,
-            [
-              recordId,
-              procedure.procedureTypeId,
-              procedure.procedureDate
+    const inserted = [];
+    for (const procedure of args.input.procedures) {
+      try {
+        const result = await db.queryControlled(
+          `INSERT INTO "DentalProcedureRecord"
+            ("dentalProcedureId", "procedureTypeId", "procedureDate")
+           VALUES ($1, $2, $3)
+           RETURNING *;`,
+          [
+            recordId,
+            procedure.procedureTypeId,
+            procedure.procedureDate
             ]
           );
-          logger.debug("Inserted Dental Procedure:", result.rows[0]);
-          inserted.push(result.rows[0]);
-        } catch (err) {
-          if (err.code === '23503') { // foreign key violation
-            throw new Error(`Invalid procedureTypeId: ${procedure.procedureTypeId}`);
-          }
-          else throw err;
-        }
+        logger.debug("Inserted Dental Procedure:", result.rows[0]);
+        inserted.push(result.rows[0]);
+      } catch (err) {
+        if (err.code === '23503') { // foreign key violation
+          throwGraphQLError(res)
+            .status(400)
+            .message(`Invalid procedureTypeId: ${procedure.procedureTypeId}`)
+            .throw();
+            }
+        else throw err;
       }
-      
-      await client.query('COMMIT');
-      return {
-        id: recordId,
-        procedures: inserted,
-        archived_at: null
-      };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting dental procedure profile:', err);
-      if (err.message.includes('Invalid procedureTypeId')) {
-        throwGraphQLError(res).status(400).message(err.message).throw();
-      }
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
     }
+    return {
+      id: recordId,
+      procedures: inserted,
+      archived_at: null
+    };
   },
 
   _AllergyProfile: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      console.log(args.input);
+    console.log(args.input);
 
-      await anchor.Allergy(recordId);
-      await remove.AllergyRecord(recordId);
+    await anchor.Allergy(recordId);
+    await remove.AllergyRecord(recordId);
 
-      if (args.input.allergies.length === 0) {
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          allergies: [],
-          archived_at: null
-        };
-      }
-      const inserted = [];
-      for (const allergy of args.input.allergies) {
-        try {
-          const result = await db.queryClient(
-            client,
-            `INSERT INTO "AllergyRecord"
-              ("allergyId", "allergenCatalogId", "status", "severity", "notes", "date_identified")
-             VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING *;`,
-            [
-              recordId,
-              allergy.allergenCatalogId,
-              allergy.status,
-              allergy.severity,
-              allergy.notes || null,
-              allergy.date_identified || null
-            ]
-          );
-          logger.debug("Inserted Allergy:", result.rows[0]);
-          inserted.push(result.rows[0]);
-        } catch (err) {
-          if (err.code === '23503') { // foreign key violation
-            throw new Error(`Invalid allergenCatalogId: ${allergy.allergenCatalogId}`);
-          }
-          else { throw err; }
-        }
-      }
-
-      await client.query('COMMIT');
+    if (args.input.allergies.length === 0) {
       return {
         id: recordId,
-        allergies: inserted,
+        allergies: [],
         archived_at: null
-      };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting allergy profile:', err);
-      if (err.message.includes('Invalid allergenCatalogId')) {
-        throwGraphQLError(res).status(400).message(err.message).throw();
+        };
       }
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
+    const inserted = [];
+    for (const allergy of args.input.allergies) {
+      try {
+        const result = await db.queryControlled(
+          `INSERT INTO "AllergyRecord"
+            ("allergyId", "allergenCatalogId", "status", "severity", "notes", "date_identified")
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING *;`,
+          [
+            recordId,
+            allergy.allergenCatalogId,
+            allergy.status,
+            allergy.severity,
+            allergy.notes || null,
+            allergy.date_identified || null
+            ]
+          );
+        logger.debug("Inserted Allergy:", result.rows[0]);
+        inserted.push(result.rows[0]);
+      } catch (err) {
+        if (err.code === '23503') { // foreign key violation
+          throwGraphQLError(res)
+            .status(400)
+            .message(`Invalid allergenCatalogId: ${allergy.allergenCatalogId}`)
+            .throw();
+        }
+        else { throw err; }
+      }
     }
+
+    return {
+      id: recordId,
+      allergies: inserted,
+      archived_at: null
+    };
   },
 
   _MedicationProfile: async (_, {args, recordId}, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      console.log(args.input);
+    console.log(args.input);
 
-      await anchor.MaintenanceMedication(recordId);
-      await remove.MedicationRecord(recordId);
+    await anchor.MaintenanceMedication(recordId);
+    await remove.MedicationRecord(recordId);
 
-      if (args.input.medications.length === 0) {
-        await client.query('COMMIT');
-        return {
-          id: recordId,
-          medications: [],
-          archived_at: null
-        };
-      }
-      const inserted = [];
-
-      for (const medication of args.input.medications) {
-        try {
-          const result = await db.queryClient(
-            client,
-            `INSERT INTO "MedicationRecord"
-              ("medicationId", "medicineId", "description")
-             VALUES ($1, $2, $3)
-             RETURNING *;`,
-            [
-              recordId,
-              medication.medicineId,
-              medication.description || null
-            ]
-          );
-          logger.debug("Inserted Medication:", result.rows[0]);
-          inserted.push(result.rows[0]);
-        } catch (err) {
-          if (err.code === '23503') { // foreign key violation
-            throw new Error(`Invalid medicineId: ${medication.medicineId}`);
-          }
-          else { throw err; }
-        }
-      }
-      
-      await client.query('COMMIT');
+    if (args.input.medications.length === 0) {
       return {
         id: recordId,
-        medications: inserted,
+        medications: [],
         archived_at: null
-      };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting medication profile:', err);
-      if (err.message.includes('Invalid medicineId')) {
-        throwGraphQLError(res).status(400).message(err.message).throw();
+        };
       }
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
+    const inserted = [];
+
+    for (const medication of args.input.medications) {
+      try {
+        const result = await db.queryControlled(
+          `INSERT INTO "MedicationRecord"
+            ("medicationId", "medicineId", "description")
+           VALUES ($1, $2, $3)
+           RETURNING *;`,
+          [
+            recordId,
+            medication.medicineId,
+            medication.description || null
+            ]
+          );
+        logger.debug("Inserted Medication:", result.rows[0]);
+        inserted.push(result.rows[0]);
+      } catch (err) {
+        if (err.code === '23503') { // foreign key violation
+          throwGraphQLError(res)
+            .status(400)
+            .message(`Invalid medicineId: ${medication.medicineId}`)
+            .throw();
+        }
+        else { throw err; }
+      }
     }
+    return {
+      id: recordId,
+      medications: inserted,
+      archived_at: null
+    };
   },
 
   _DomainCatalog: async (_, { domain, names }, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      if (!user) {
-        throwGraphQLError(res).status(403).message("Forbidden").throw();
-      }
-
-      const query = `
-        INSERT INTO "DomainTypeCatalog" (domain, name, created_by, code)
-        SELECT $1, UNNEST($2::text[]), $3, UNNEST($4::text[])
-        ON CONFLICT (domain, name) DO NOTHING
-        RETURNING *;
-      `;
-
-      const result = await db.queryClient(client, query, [domain, names || [], user.id, generateDomainCodes(names, domain)]);
-      
-      await client.query('COMMIT');
-      logger.debug("Inserted DomainTypeCatalogs:", result.rows);
-      return result.rows;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting domain catalog:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
     }
+
+    // Normalize names to Title Case before storing so display is consistent
+    const normalizedNames = (names || []).map(n => normalizeName(n));
+
+    // Upsert that:
+    // 1. Inserts with isValid = true so new entries appear in searches (filterIsValid: true)
+    // 2. On case-insensitive duplicate (uniq_domain_name_lower), sets isValid = true on the
+    //    existing row — fixing entries that were previously created with isValid = false
+    // 3. Returns the row in all cases (new or existing), preventing 500 errors on duplicates
+    const query = `
+      INSERT INTO "DomainTypeCatalog" (domain, name, "isValid", created_by, code)
+      SELECT $1, UNNEST($2::text[]), true, $3, UNNEST($4::text[])
+      ON CONFLICT (domain, LOWER(name)) DO UPDATE
+        SET "isValid" = true,
+            name = EXCLUDED.name
+      RETURNING *;
+    `;
+
+    const result = await db.query(query, [domain, normalizedNames, user.id, generateDomainCodes(normalizedNames, domain)]);
+    logger.debug("Inserted DomainTypeCatalogs:", result.rows);
+    return result.rows;
   },
 
   _AllergenCatalogs: async (_, { allergens }, { user, res }) => {
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      
-      if (!user) {
-        throwGraphQLError(res).status(403).message("Forbidden").throw();
-      }
-
-      if (!allergens || allergens.length === 0) {
-        throwGraphQLError(res).status(400).message("No allergens provided").throw();
-      }
-
-      // Build VALUES placeholders dynamically
-      const values = allergens
-        .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
-        .join(", ");
-
-      // Flatten params [allergen, type, allergen, type, ...]
-      const params = allergens.flatMap(a => [a.allergen, a.type, user.id]);
-      const query = `
-        INSERT INTO "AllergenCatalog" (allergen, type, created_by)
-        VALUES ${values}
-        ON CONFLICT (allergen, type) DO NOTHING
-        RETURNING *;
-      `;
-
-      const result = await db.queryClient(client, query, params);
-      
-      await client.query('COMMIT');
-      logger.debug("Inserted AllergenCatalogs:", result.rows);
-      return result.rows;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error upserting allergen catalogs:', error);
-      throwGraphQLError(res).message("Internal server error").status(500).throw();
-    } finally {
-      client.release();
+    if (!user) {
+      throwGraphQLError(res).status(403).message("Forbidden").throw();
     }
+
+    if (!allergens || allergens.length === 0) {
+      throwGraphQLError(res).status(400).message("No allergens provided").throw();
+    }
+
+    // Build VALUES placeholders dynamically
+    const values = allergens
+      .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
+      .join(", ");
+
+    // Flatten params [allergen, type, allergen, type, ...]
+    const params = allergens.flatMap(a => [a.allergen, a.type, user.id]);
+    const query = `
+      INSERT INTO "AllergenCatalog" (allergen, type, created_by)
+      VALUES ${values}
+      ON CONFLICT (allergen, type) DO NOTHING
+      RETURNING *;
+    `;
+
+    const result = await db.queryControlled(query, params);
+    logger.debug("Inserted AllergenCatalogs:", result.rows);
+    return result.rows;
   },
 
   _OralApplianceCatalogs: async (_, { appliances }, { user, res }) => {

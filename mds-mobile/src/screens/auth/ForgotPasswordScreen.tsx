@@ -44,7 +44,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
     try {
       await axiosRequest.post('/auth/password/forget-password', {
         email: email.trim(),
-        recaptchaToken: 'RECAPTCHA_TOKEN_HERE',
+        recaptchaToken: process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET ?? '',
       });
 
       setSuccess('Password reset link sent! Please check your email.');

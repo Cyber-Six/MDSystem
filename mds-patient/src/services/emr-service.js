@@ -103,6 +103,30 @@ const submitUpdateTicket = async () => {
 };
 
 /**
+ * Ensure an update ticket exists for the current user.
+ * If one already exists (InProgress or Revision), returns its ID.
+ * Otherwise creates a new ticket with the given scope.
+ * Silently returns null on failure so callers can treat it as non-blocking.
+ * @param {string} scope - 'Medical', 'Dental', or 'Both'
+ * @returns {Promise<string|null>} ticket ID or null
+ */
+export const ensureUpdateTicket = async (scope = 'Both') => {
+  try {
+    const existing = await fetchCurrentUpdateTicket();
+    if (existing?.id && (existing.status === 'InProgress' || existing.status === 'Revision')) {
+      console.log('[EMR Service] Update ticket already exists:', existing.id, existing.status);
+      return existing.id;
+    }
+    const ticketId = await createUpdateTicket(scope);
+    console.log('[EMR Service] Early update ticket created:', ticketId);
+    return ticketId;
+  } catch (error) {
+    console.warn('[EMR Service] ensureUpdateTicket failed (non-blocking):', error.message);
+    return null;
+  }
+};
+
+/**
  * Cancel the update ticket (in case of errors)
  */
 const cancelUpdateTicket = async () => {
@@ -459,7 +483,14 @@ export const createInitialMedicalRecord = async (formData, { isRevision = false 
         ticketPromise = createUpdateTicket('Both');
       }
     } else {
-      ticketPromise = createUpdateTicket('Both');
+      // Check if a ticket was already created early (e.g. by ensureUpdateTicket on form mount)
+      const existing = await fetchCurrentUpdateTicket();
+      if (existing?.id && existing.status === 'InProgress') {
+        console.log('[EMR Service] Reusing early-created ticket:', existing.id);
+        ticketPromise = Promise.resolve(existing.id);
+      } else {
+        ticketPromise = createUpdateTicket('Both');
+      }
     }
 
     const [ticketResult, upperResult, lowerResult] = await Promise.allSettled([
@@ -611,47 +642,47 @@ export const createInitialEmployeeRecord = async (formData) => {
 export const fetchAllCatalogs = async () => {
   const query = `
     query FetchAllCatalogs {
-      medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true) {
+      medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true) {
+      hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true) {
+      operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true) {
+      medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+      immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      allergenCatalog: getAllergenCatalogs(filterIsValid: true) {
+      allergenCatalog: getAllergenCatalogs(filterIsValid: true, limit: 200) {
         id
         allergen
         type
       }
-      oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true) {
+      oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true, limit: 200) {
         id
         name
         description
       }
-      visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true) {
+      visualAcuityCatalog: getDomainCatalogs(domain: VisualAcuity, filterIsValid: true, limit: 200) {
         id
         code
         name
       }
-      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true) {
+      dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true, limit: 200) {
         id
         code
         name
@@ -696,6 +727,47 @@ export const fetchAllCatalogs = async () => {
       dentalProcedureCatalog: [],
     };
   }
+};
+
+/**
+ * Search for immunization catalog entries by name (used by the "Others" vaccine search field).
+ * Calls searchDomainCatalogs with the Immunization domain.
+ * @param {string} query - The text the patient typed
+ * @returns {Promise<Array<{id, name, code, domain, isValid}>>}
+ */
+export const searchImmunizationCatalog = async (query) => {
+  const gql = `
+    query SearchImmunizations($names: [String!]!) {
+      searchDomainCatalogs(domain: "Immunization", filterIsValid: true, names: $names) {
+        id domain name code isValid
+      }
+    }
+  `;
+  try {
+    const data = await sendGraphQLRequest(gql, { names: [query] });
+    return data.searchDomainCatalogs || [];
+  } catch (err) {
+    console.warn('[EMR Service] searchImmunizationCatalog failed:', err.message);
+    return [];
+  }
+};
+
+/**
+ * Create a new immunization catalog entry (used when patient types a vaccine not in the system).
+ * Calls createDomainCatalogs with the Immunization domain.
+ * @param {string} name - The vaccine name to create
+ * @returns {Promise<Array<{id, name, code, domain, isValid}>>}
+ */
+export const createImmunizationCatalog = async (name) => {
+  const mutation = `
+    mutation CreateImmunization($names: [String!]!) {
+      createDomainCatalogs(domain: Immunization, names: $names) {
+        id domain name code isValid
+      }
+    }
+  `;
+  const data = await sendGraphQLRequest(mutation, { names: [name] });
+  return data.createDomainCatalogs || [];
 };
 
 // ─── Record Builder Functions ─────────────────────────────────────────────────

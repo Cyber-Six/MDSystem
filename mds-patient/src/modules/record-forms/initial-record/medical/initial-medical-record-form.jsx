@@ -9,7 +9,7 @@ import OBGYNEForm from './obygyne';
 import ReviewForm from './review-form';
 import { Button } from './form-elements';
 import ValidationWarningModal from '@core/components/modals/validation-warning-modal';
-import { createInitialMedicalRecord, fetchAllCatalogs } from '@core/services/emr-service';
+import { createInitialMedicalRecord, fetchAllCatalogs, ensureUpdateTicket } from '@core/services/emr-service';
 import { sanitizeFormData, logDataStructure } from '@core/utils/data-transformer';
 
 /**
@@ -53,6 +53,16 @@ const InitialMedicalRecordForm = ({ onComplete, isModal = false, revisionData = 
         setCatalogs((prev) => ({ ...prev, catalogsLoading: false, catalogsError: err.message }));
       });
   }, []);
+
+  // Create the update ticket early so mid-form actions (e.g. adding a custom vaccine)
+  // that require an active ticket don't fail. For revisions, a ticket already exists.
+  useEffect(() => {
+    if (!isRevision) {
+      ensureUpdateTicket('Both').then((id) => {
+        if (id) console.log('[Initial Record Form] Early update ticket ready:', id);
+      });
+    }
+  }, [isRevision]);
 
   // When revision pre-fill data arrives, merge it into the form state
   useEffect(() => {

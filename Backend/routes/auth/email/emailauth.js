@@ -36,7 +36,8 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
     }
 
     // ✅ Required fields
-    if (!email || !recaptchaToken) {
+    // For the login 2FA flow, reCAPTCHA was already verified at the login endpoint
+    if (!email || (purpose !== '2fa' && !recaptchaToken)) {
       return res.status(400).json({
         error: "MISSING_FIELDS",
         message: "Email and reCAPTCHA token are required."
@@ -52,13 +53,15 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
       });
     }
 
-    // ✅ Verify reCAPTCHA
-    const recaptchaValid = await verifyRecaptcha(recaptchaToken);
-    if (!recaptchaValid) {
-      return res.status(400).json({
-        error: "INVALID_RECAPTCHA",
-        message: "reCAPTCHA verification failed."
-      });
+    // ✅ Verify reCAPTCHA (not required for login 2FA — already enforced at login endpoint)
+    if (purpose !== '2fa') {
+      const recaptchaValid = await verifyRecaptcha(recaptchaToken);
+      if (!recaptchaValid) {
+        return res.status(400).json({
+          error: "INVALID_RECAPTCHA",
+          message: "reCAPTCHA verification failed."
+        });
+      }
     }
 
     //add bearing for staff dashboard
