@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import RoleTemplates from './components/role-templates';
 import StaffAccounts from './components/staff-accounts';
 import AdminTransfer from './components/admin-transfer';
+import { usePermissions } from '../../context/permissions-context';
 
 /**
  * Role Management Page
@@ -12,6 +13,7 @@ import AdminTransfer from './components/admin-transfer';
  */
 const RoleManagementPage = () => {
   const [activeSection, setActiveSection] = useState('staff');
+  const { refetch: refetchPermissions } = usePermissions();
 
   const sections = [
     { id: 'staff', label: 'Staff Accounts', icon: 'users' },
@@ -66,8 +68,8 @@ const RoleManagementPage = () => {
 
       {/* Section Content */}
       <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm border border-neutral-200 dark:border-neutral-700 p-5">
-        {activeSection === 'staff' && <StaffAccounts />}
-        {activeSection === 'roles' && <RoleTemplates />}
+        {activeSection === 'staff' && <StaffAccounts onRoleUpdate={refetchPermissions} />}
+        {activeSection === 'roles' && <RoleTemplates onTemplateUpdate={refetchPermissions} />}
         {activeSection === 'transfer' && <AdminTransfer />}
       </div>
     </div>

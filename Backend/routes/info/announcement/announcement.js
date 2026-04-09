@@ -2,7 +2,7 @@ const express = require("express");
 const logger = require("../../../utils/logger.js");
 const { query, queryClient, queryControlled, getUserBranch, connect } = require("../../../config/query.js");
 const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
-const { isMedicalPermitted, isMedicalPermittedLocationBased, permissions, getStaffBranch } = require("../../../services/permit.js");
+const { isMedicalPermitted, isMedicalPermittedLocationBased, permissions } = require("../../../services/permit.js");
 const { promoteFile, deleteFile } = require("../../../config/multer.js");
 const { ValidateBranchbyUserBranch, ValidateLocationDesignation } = require("../../../utils/validator.js");
 const router = express.Router();
@@ -58,6 +58,9 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
             return res.status(403).json({ error: "FORBIDDEN", message: `Not authorized to view announcements for location: '${req.query.location}'.` });
         }
 
+        // Build query: staff can only see announcements in locations where they have permission
+        // If their permission is 'Both', they see everything
+        // If their permission is 'Manila' or 'QuezonCity', they only see that location + 'Both' announcements
         const sql = `
             SELECT id, title as label, content as description, 
                 pubmat, "isActive", created_at, location

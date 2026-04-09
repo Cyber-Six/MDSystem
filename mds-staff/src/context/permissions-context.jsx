@@ -155,3 +155,15 @@ export const usePermissions = () => {
   }
   return context;
 };
+
+/**
+ * Force refresh permissions from server
+ * Call this after admin changes are made (role updates, permission changes)
+ * Usage: const { refetch } = usePermissions(); await refetch();
+ */
+export const refetchPermissions = async () => {
+  const context = useContext(PermissionsContext);
+  if (context) {
+    await context.refetch();
+  }
+};
