@@ -277,13 +277,19 @@ const Query = {
   },
 
   getStatusUpdateTickets: async (_, args, { user, res }) => {
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval);
+    const { permitted, branch: permBranch } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_approval);
     if (!permitted) {
       logger.warn(`Unauthorized access attempt by user ID ${user.id} to getStatusUpdateTickets`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
-      }
+    }
 
-    const result = await Wrapper._getStatusUpdateTickets(_, args, { user, res });
+    // Clamp the requested branch to the staff member's permitted branch.
+    // If staff has a specific branch (Manila/QuezonCity), they cannot escalate to 'Both'.
+    const effectiveBranch = (permBranch && permBranch !== 'Both')
+      ? permBranch
+      : (args.branch || 'Both');
+
+    const result = await Wrapper._getStatusUpdateTickets(_, { ...args, branch: effectiveBranch }, { user, res });
     return result;
   },
 
@@ -297,13 +303,21 @@ const Query = {
   },
 
   searchPatients: async (_, args, { user, res }) => {
-    const { permitted } = await permit.isMedicalPermittedLocationBased(user.id, permit.permissions.emr_allow_view, args.branch);
+    // Use isMedicalPermitted (returns the permission branch) rather than
+    // isMedicalPermittedLocationBased to avoid the 'Both' mismatch bug.
+    const { permitted, branch: permBranch } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
     if (!permitted) {
       logger.warn(`Unauthorized search attempt by user ID ${user.id}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
+
+    // Clamp the requested branch to the staff's permission scope.
+    const effectiveBranch = (permBranch && permBranch !== 'Both')
+      ? permBranch
+      : (args.branch || 'Both');
+
     if (!args.searchTerm || args.searchTerm.trim().length < 2) return [];
-    return await Wrapper._searchPatients(_, args, { user, res });
+    return await Wrapper._searchPatients(_, { ...args, branch: effectiveBranch }, { user, res });
   },
 
 };

@@ -2,7 +2,7 @@ const express = require("express");
 const logger = require("../../../utils/logger.js");
 const { query, queryClient, queryControlled, getUserBranch, connect } = require("../../../config/query.js");
 const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
-const { isMedicalPermitted, isMedicalPermittedLocationBased, permissions } = require("../../../services/permit.js");
+const { isMedicalPermitted, isMedicalPermittedLocationBased, permissions, getStaffBranch } = require("../../../services/permit.js");
 const { promoteFile, deleteFile } = require("../../../config/multer.js");
 const { ValidateBranchbyUserBranch, ValidateLocationDesignation } = require("../../../utils/validator.js");
 const router = express.Router();
@@ -39,17 +39,23 @@ router.get("/", jwtProtect(""), async (req, res) => {
 router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
     try {
         const userId = req.user.id;
-        const userBranch = await getUserBranch(userId);
-        const location = req.query.location || userBranch || 'Both'; // Optional query param, defaults to user's branch
+
+        // Check if user has announcement permission at all, and get their permission branch
+        const { permitted, branch: permBranch } = await isMedicalPermitted(userId, permissions.announcement_allow_crud);
+        if (!permitted) {
+            return res.status(403).json({ error: "FORBIDDEN", message: "Not authorized to manage announcements." });
+        }
+
+        // Use explicit location query param, or fall back to the permission's branch
+        const location = req.query.location || permBranch || 'Both';
 
         if (!ValidateLocationDesignation(location)) {
             return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
         }
 
-        // Check permission
-        const permitted = await isMedicalPermittedLocationBased(userId, permissions.announcement_allow_crud, location);
-        if (!permitted) {
-            return res.status(403).json({ error: "FORBIDDEN", message: `Not authorized to view announcements for location: '${location}'.` });
+        // If a specific location was requested, verify the user has permission for it
+        if (req.query.location && req.query.location !== permBranch && permBranch !== 'Both') {
+            return res.status(403).json({ error: "FORBIDDEN", message: `Not authorized to view announcements for location: '${req.query.location}'.` });
         }
 
         const sql = `
@@ -66,7 +72,7 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
         `;
 
         const result = await query(sql, [location || 'Both']);
-        return res.status(200).json({ success: true, data: result.rows });
+        return res.status(200).json({ success: true, data: result.rows, branch: permBranch });
     } catch (err) {
         logger.error("Failed to fetch all announcements:", err);
         return res.status(500).json({ error: "INTERNAL_ERROR", message: "Failed to fetch announcements" });

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { usePermissions } from '../../context/permissions-context';
 import AnalyticsFilterBar from './components/analytics-filter-bar';
 import AnalyticsChartCard from './components/analytics-chart-card';
 import AnalyticsSummaryCards from './components/analytics-summary-cards';
@@ -90,7 +91,8 @@ function getQueriesForCategory(category, demoDimension = 'all') {
  */
 const StaffAnalytics = () => {
   const defaults = getDateRangeForPeriod('monthly');
-  const [branch, setBranch] = useState('Both');
+  const { branch: permBranch, allowedBranches, isAdmin } = usePermissions();
+  const [branch, setBranch] = useState(() => permBranch || 'Both');
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [groupBy, setGroupBy] = useState('monthly');
@@ -110,6 +112,13 @@ const StaffAnalytics = () => {
   const [initialLoad, setInitialLoad] = useState(true);
   const [exportOpen, setExportOpen] = useState(false);
   const abortRef = useRef(0);
+
+  // Sync branch when permissions finish loading
+  useEffect(() => {
+    if (permBranch && !isAdmin && branch === 'Both' && permBranch !== 'Both') {
+      setBranch(permBranch);
+    }
+  }, [permBranch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect dark mode via class on <html>
   const [dark, setDark] = useState(false);
@@ -305,6 +314,7 @@ const StaffAnalytics = () => {
         startDate={startDate}
         endDate={endDate}
         groupBy={groupBy}
+        allowedBranches={allowedBranches()}
         onBranchChange={setBranch}
         onStartDateChange={setStartDate}
         onEndDateChange={setEndDate}

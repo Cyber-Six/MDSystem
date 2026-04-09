@@ -27,6 +27,7 @@ const MODULE_ROUTE_MAP = {
 export const PermissionsProvider = ({ children }) => {
   const [modules, setModules] = useState(null); // { moduleId: boolean }
   const [isAdmin, setIsAdmin] = useState(false);
+  const [branch, setBranch] = useState(null); // 'Manila' | 'QuezonCity' | 'Both'
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -45,12 +46,14 @@ export const PermissionsProvider = ({ children }) => {
 
       setModules(flat);
       setIsAdmin(data.isAdmin || false);
+      setBranch(data.branch || 'Both');
     } catch (err) {
       console.error('Failed to fetch permissions:', err);
       setError(err.message || 'Failed to load permissions');
       // Default to no permissions on error
       setModules({});
       setIsAdmin(false);
+      setBranch('Both');
     } finally {
       setIsLoading(false);
     }
@@ -100,13 +103,41 @@ export const PermissionsProvider = ({ children }) => {
     [modules, isAdmin]
   );
 
+  /**
+   * Check if the user can access a specific branch location.
+   * Staff with 'Both' can access any branch. Otherwise must match exactly.
+   */
+  const canAccessBranch = useCallback(
+    (targetBranch) => {
+      if (isAdmin) return true;
+      if (!branch) return false;
+      if (branch === 'Both') return true;
+      if (targetBranch === 'Both') return false; // Branch-restricted staff can't access 'Both' scope
+      return branch === targetBranch;
+    },
+    [branch, isAdmin]
+  );
+
+  /**
+   * Get the list of branch options available to the current user.
+   */
+  const allowedBranches = useCallback(() => {
+    if (isAdmin || branch === 'Both') return ['Both', 'Manila', 'QuezonCity'];
+    if (branch === 'Manila') return ['Manila'];
+    if (branch === 'QuezonCity') return ['QuezonCity'];
+    return ['Both', 'Manila', 'QuezonCity'];
+  }, [branch, isAdmin]);
+
   const value = {
     modules,
     isAdmin,
+    branch,
     isLoading,
     error,
     hasPermission,
     canAccessRoute,
+    canAccessBranch,
+    allowedBranches,
     refetch: fetchPermissions,
   };
 

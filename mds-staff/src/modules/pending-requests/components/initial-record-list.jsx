@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePermissions } from '../../../context/permissions-context';
 import {
   BRANCH,
   ALL_BRANCHES,
@@ -28,8 +29,16 @@ const InitialRecordList = ({
   externalStatusFilter = null,
   showStatusFilter = true,
 }) => {
-  const [branch, setBranch] = useState(BRANCH.BOTH);
+  const { branch: permBranch, allowedBranches } = usePermissions();
+  const [branch, setBranch] = useState(() => permBranch || BRANCH.BOTH);
   const [statusFilter, setStatusFilter] = useState(TICKET_STATUS.PENDING);
+
+  // Sync branch when permissions finish loading
+  useEffect(() => {
+    if (permBranch && permBranch !== 'Both' && branch === BRANCH.BOTH) {
+      setBranch(permBranch);
+    }
+  }, [permBranch]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -124,11 +133,14 @@ const InitialRecordList = ({
             <select
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
-              className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+              disabled={allowedBranches().length === 1}
+              className="px-3 py-1 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {ALL_BRANCHES.map((b) => (
-                <option key={b} value={b}>{b === 'QuezonCity' ? 'Quezon City' : b}</option>
-              ))}
+              {ALL_BRANCHES
+                .filter((b) => allowedBranches().includes(b))
+                .map((b) => (
+                  <option key={b} value={b}>{b === 'QuezonCity' ? 'Quezon City' : b}</option>
+                ))}
             </select>
           </div>
 

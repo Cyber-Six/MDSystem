@@ -143,13 +143,15 @@ router.get('/me/profile', jwtProtect("medical"), async (req, res) => {
 // Route: Get current user's module permissions
 router.get('/me/permissions', jwtProtect("medical"), async (req, res) => {
     try {
-        const { getStaffModulePermissions, isMedicalPermitted, permissions: permKeys } = require('../../services/permit.js');
+        const { getStaffModulePermissions, isMedicalPermitted, permissions: permKeys, getStaffBranch: getStaffDesignation } = require('../../services/permit.js');
         const modulePerms = await getStaffModulePermissions(req.user.id);
         const {permitted: isAdmin} = await isMedicalPermitted(req.user.id, permKeys.is_admin);
+        const branch = await getStaffDesignation(req.user.id);
 
         res.json({
             modules: modulePerms.modules,
             isAdmin: !!isAdmin,
+            branch: branch || 'Both',
         });
     } catch (error) {
         logger.error('Error fetching own permissions:', error);
