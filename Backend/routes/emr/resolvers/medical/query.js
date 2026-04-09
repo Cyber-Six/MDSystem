@@ -297,7 +297,7 @@ const Query = {
   },
 
   searchPatients: async (_, args, { user, res }) => {
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
+    const { permitted } = await permit.isMedicalPermittedLocationBased(user.id, permit.permissions.emr_allow_view, args.branch);
     if (!permitted) {
       logger.warn(`Unauthorized search attempt by user ID ${user.id}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
