@@ -8,10 +8,25 @@ const { enqueueNotificationEmail } = require("../../../../../services/emailservi
 const { findEmailByUserId } = require("../../../../../config/query.js");
 const { getPatientIdByRequestId } = require("../wrapper/helper.js");
 
+// Returns allowed location strings for a given branch designation
+function getAllowedLocationsForBranch(branch) {
+  if (branch === 'Manila') return ['Arlegui', 'Casal'];
+  if (branch === 'QuezonCity') return ['QuezonCity'];
+  return ['Arlegui', 'Casal', 'QuezonCity'];
+}
+
 const Query = {
   getAvailableMedicine: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_manage_requests, args.location);
+    const staffBranch = await permit.getStaffBranch(user.id);
+    const allowedLocations = getAllowedLocationsForBranch(staffBranch);
+    if (args.location && !allowedLocations.includes(args.location)) {
+      logger.warn(`Staff ${user.id} attempted to access medicine at location ${args.location} outside their branch ${staffBranch}`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    // Permission check: use the first allowed location as branch context if no specific location provided
+    const checkLocation = args.location || allowedLocations[0];
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_manage_requests, checkLocation);
     if (!isPermitted) {
       logger.warn("Unauthorized medicine request view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
@@ -42,7 +57,14 @@ const Query = {
 
   getAllMedicineRequests: async (_, args, { user, res }) => {
     if (!user) throwGraphQLError(res).message("Unauthorized").status(401).throw();
-    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_manage_requests, args.location);
+    const staffBranch = await permit.getStaffBranch(user.id);
+    const allowedLocations = getAllowedLocationsForBranch(staffBranch);
+    if (args.location && !allowedLocations.includes(args.location)) {
+      logger.warn(`Staff ${user.id} attempted to list medicine requests at location ${args.location} outside their branch ${staffBranch}`);
+      throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+    const checkLocation = args.location || allowedLocations[0];
+    const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.inventory_allow_manage_requests, checkLocation);
     if (!isPermitted) {
       logger.warn("Unauthorized medicine request list attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();

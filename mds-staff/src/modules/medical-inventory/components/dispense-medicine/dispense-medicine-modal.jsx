@@ -32,14 +32,24 @@ const DispenseMedicineModal = ({ patientId, patientName, allowedLocations = [], 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [filterLocation, setFilterLocation] = useState('All');
+  const [filterLocation, setFilterLocation] = useState(() => allowedLocations[0] || 'All');
 
-  // Fetch available medicines on mount
+  // Fetch available medicines when filterLocation changes
   useEffect(() => {
     const loadMedicines = async () => {
       try {
         setLoading(true);
-        const data = await fetchAvailableMedicine(filterLocation === 'All' ? null : filterLocation);
+        let data;
+        if (filterLocation === 'All') {
+          // Fetch from each allowed location individually and merge
+          const results = await Promise.all(
+            (allowedLocations.length > 0 ? allowedLocations : ['Arlegui', 'Casal', 'QuezonCity'])
+              .map((loc) => fetchAvailableMedicine(loc))
+          );
+          data = results.flat();
+        } else {
+          data = await fetchAvailableMedicine(filterLocation);
+        }
         setMedicines(data);
       } catch (err) {
         setError(err.message || 'Failed to load medicines');
@@ -48,7 +58,7 @@ const DispenseMedicineModal = ({ patientId, patientName, allowedLocations = [], 
       }
     };
     loadMedicines();
-  }, [filterLocation]);
+  }, [filterLocation, allowedLocations]);
 
   // Filter medicines by search
   const filtered = medicines.filter((m) => {

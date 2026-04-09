@@ -18,7 +18,6 @@ import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 import { useStaffNotifications } from '../notification/notification-context';
 import { useMedicineRequestSocket } from './hooks/useMedicineRequestSocket';
 import { usePermissions } from '../../context/permissions-context';
-import { useStaffProfile } from '../../hooks/use-staff-profile';
 import { getLocationsByBranch } from '../../utils/branch-utils';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
@@ -72,8 +71,7 @@ const isApprovalExpired = (requestId) => {
 const MedicalInventory = () => {
   const routerLocation = useLocation();
   const { subscribe, refreshInventoryAlerts } = useStaffNotifications();
-  const { hasPermission } = usePermissions();
-  const { profile } = useStaffProfile();
+  const { hasPermission, branch: staffBranch } = usePermissions();
   const [activeSection, setActiveSection] = useState(
     routerLocation.state?.section ?? 'dashboard'
   );
@@ -215,15 +213,8 @@ const MedicalInventory = () => {
     }));
   }, [getPatientNameCached]);
 
-  // Helper function to get allowed locations based on user's branch
-  // Returns array of location strings for UI filtering
-  const getAllowedLocationsList = useCallback(() => {
-    return getLocationsByBranch(profile?.branch);
-  }, [profile]);
-
-
-  // Memoized list of allowed locations for UI components and API fetching
-  const allowedLocationsList = useMemo(() => getAllowedLocationsList(), [getAllowedLocationsList]);
+  // Memoized list of allowed locations based on the staff's branch from permissions context
+  const allowedLocationsList = useMemo(() => getLocationsByBranch(staffBranch), [staffBranch]);
 
   // Set default directReleaseLocation based on user's allowed locations
   useEffect(() => {
