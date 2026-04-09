@@ -144,6 +144,14 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               error={phoneWarnings.ec1 ? 'Contact number cannot exceed 11 digits.' : undefined}
             />
           </div>
+          <div className="mt-2">
+            <Input
+              label="Address"
+              placeholder="Contact's home address"
+              value={formData.emergencyContact1Address || ''}
+              onChange={(e) => handleInputChange('emergencyContact1Address', e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Secondary Emergency Contact */}
@@ -173,6 +181,14 @@ const PersonalInfoStep = ({ formData, onChange }) => {
               value={formData.emergencyContact2Number || ''}
               onChange={(e) => handleInputChange('emergencyContact2Number', handlePhone('ec2', e.target.value))}
               error={phoneWarnings.ec2 ? 'Contact number cannot exceed 11 digits.' : undefined}
+            />
+          </div>
+          <div className="mt-2">
+            <Input
+              label="Address"
+              placeholder="Contact's home address"
+              value={formData.emergencyContact2Address || ''}
+              onChange={(e) => handleInputChange('emergencyContact2Address', e.target.value)}
             />
           </div>
         </div>

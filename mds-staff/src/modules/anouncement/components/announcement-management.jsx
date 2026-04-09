@@ -6,6 +6,51 @@ import {
   deleteAnnouncement,
   uploadPubmat,
 } from '../announcement-service';
+import { axiosRequest } from '../../../packages-core-adapter';
+
+/* Authenticated image loader — media endpoints require JWT */
+function AuthImage({ path, alt, className, onClick }) {
+  const [src, setSrc] = React.useState(null);
+  useEffect(() => {
+    let objectUrl = null, cancelled = false;
+    axiosRequest.get(path, { responseType: 'blob' })
+      .then((res) => { if (!cancelled) { objectUrl = URL.createObjectURL(res.data); setSrc(objectUrl); } })
+      .catch(() => {});
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [path]);
+  if (!src) return <div className="w-full h-24 flex items-center justify-center"><span className="animate-spin w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full" /></div>;
+  return <img src={src} alt={alt} className={className} onClick={onClick} />;
+}
+
+/* Simple lightbox overlay */
+function ImageLightbox({ src, onClose }) {
+  if (!src) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+      onClick={onClose}
+    >
+      <div className="relative max-w-5xl w-full max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+        <img
+          src={src}
+          alt="Enlarged preview"
+          className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+        />
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-2 right-2 p-1.5 bg-neutral-900/70 hover:bg-neutral-900/90 text-white rounded-full transition-colors"
+          title="Close"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Announcement Management Component
@@ -24,6 +69,7 @@ const AnnouncementManagement = () => {
   const [existingPubmat, setExistingPubmat] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, label }
+  const [lightboxSrc, setLightboxSrc] = useState(null);
   const fileInputRef = React.useRef(null);
 
   const [formData, setFormData] = useState({
@@ -221,6 +267,8 @@ const AnnouncementManagement = () => {
   }
 
   return (
+    <>
+    <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -327,12 +375,23 @@ const AnnouncementManagement = () => {
                     <img
                       src={imagePreview}
                       alt="Preview"
-                      className="w-full max-h-48 object-contain bg-neutral-100 dark:bg-neutral-700"
+                      className="w-full max-h-48 object-contain bg-neutral-100 dark:bg-neutral-700 cursor-zoom-in"
+                      onClick={() => setLightboxSrc(imagePreview)}
+                      title="Click to enlarge"
                     />
                   ) : (
-                    <p className="text-xs text-secondary-500 dark:text-neutral-400 p-3">
-                      Current image: {existingPubmat} — upload a new file to replace it
-                    </p>
+                    <div>
+                      <AuthImage
+                        path={`/media/record/announcement/${existingPubmat}`}
+                        alt="Current announcement image"
+                        className="w-full max-h-48 object-contain bg-neutral-100 dark:bg-neutral-700 cursor-zoom-in"
+                        onClick={(e) => setLightboxSrc(e.currentTarget.src)}
+                        title="Click to enlarge"
+                      />
+                      <p className="text-xs text-secondary-500 dark:text-neutral-400 px-3 py-1 border-t border-neutral-200 dark:border-neutral-600">
+                        Upload a new file to replace it
+                      </p>
+                    </div>
                   )}
                   <button
                     type="button"
@@ -553,6 +612,7 @@ const AnnouncementManagement = () => {
         </div>
       )}
     </div>
+    </>
   );
 };
 

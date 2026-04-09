@@ -293,6 +293,7 @@ async function mapRevisionDataToFormData(backendData) {
     formData.emergencyContact1Name = firstContact.contactName || '';
     formData.emergencyContact1Relationship = firstContact.relationship || '';
     formData.emergencyContact1Number = firstContact.contactNumber || '';
+    formData.emergencyContact1Address = firstContact.address || '';
   }
 
   if (backendData.emergencyContact?.secondContact) {
@@ -300,6 +301,7 @@ async function mapRevisionDataToFormData(backendData) {
     formData.emergencyContact2Name = secondContact.contactName || '';
     formData.emergencyContact2Relationship = secondContact.relationship || '';
     formData.emergencyContact2Number = secondContact.contactNumber || '';
+    formData.emergencyContact2Address = secondContact.address || '';
   }
 
   // School/Employee Profile

@@ -142,12 +142,14 @@ export const updateEmergencyContact = async (emergencyData) => {
         contactName: emergencyData.emergencyContact1Name,
         relationship: emergencyData.emergencyContact1Relationship,
         contactNumber: emergencyData.emergencyContact1Number,
+        address: emergencyData.emergencyContact1Address || null,
         isVerified: false
       },
       secondContact: {
         contactName: emergencyData.emergencyContact2Name,
         relationship: emergencyData.emergencyContact2Relationship,
         contactNumber: emergencyData.emergencyContact2Number,
+        address: emergencyData.emergencyContact2Address || null,
         isVerified: false
       }
     }

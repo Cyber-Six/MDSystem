@@ -36,6 +36,7 @@ const GQL_BASIC_RECORD_FALLBACK = `
 `;
 
 const PatientPersonalInfoTab = lazy(() => import('./components/personal-info-tab'));
+const PatientPersonalRecordHistoryTab = lazy(() => import('./components/personal-record-history-tab'));
 const PatientMedicalRecordTab = lazy(() => import('./components/medical-record-tab'));
 const PatientDentalRecordTab = lazy(() => import('./components/dental-record-tab'));
 const PatientConsultationTab = lazy(() => import('./components/consultation-tab'));
@@ -332,7 +333,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [searchParams] = useSearchParams();
   const initialTab = initialTabProp || searchParams.get('tab') || 'personal';
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [dentalSubTab, setDentalSubTab] = useState('dental-grade-history');
+  const [personalSubTab, setPersonalSubTab] = useState('personal-info');
+  const [medicalSubTab, setMedicalSubTab] = useState('medical-record');
+  const [dentalSubTab, setDentalSubTab] = useState('dental-record');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
@@ -618,10 +621,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const tabs = [
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Record' },
-    { id: 'medical-history', label: 'Medical Record History' },
     { id: 'vital-signs', label: 'Vital Signs' },
     { id: 'dental', label: 'Dental Record' },
-    { id: 'dental-grade-history', label: 'Dental Record History' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
     { id: 'history', label: 'Consultation History' },
@@ -640,20 +641,69 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const renderTab = () => {
     switch (activeTab) {
       case 'personal':
-        return <PatientPersonalInfoTab patient={patient} />;
-      case 'medical':
-        return <PatientMedicalRecordTab patient={patient} />;
-      case 'medical-history':
-        return <PatientMedicalRecordHistoryTab patient={patient} />;
-      case 'vital-signs':
-        return <VitalSignsTab patient={patient} />;
-      case 'dental':
-        return <PatientDentalRecordTab patient={patient} />;
-      case 'dental-grade-history':
         return (
           <div>
             <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
               {[
+                { id: 'personal-info', label: 'Personal Info' },
+                { id: 'personal-record-history', label: 'Personal Record Info History' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setPersonalSubTab(sub.id)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    personalSubTab === sub.id
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+            <Suspense fallback={<LoadingBlock label="Loading..." />}>
+              {personalSubTab === 'personal-info'
+                ? <PatientPersonalInfoTab patient={patient} />
+                : <PatientPersonalRecordHistoryTab patient={patient} />}
+            </Suspense>
+          </div>
+        );
+      case 'medical':
+        return (
+          <div>
+            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
+              {[
+                { id: 'medical-record', label: 'Medical Record' },
+                { id: 'medical-record-history', label: 'Medical Record History' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setMedicalSubTab(sub.id)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    medicalSubTab === sub.id
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+            <Suspense fallback={<LoadingBlock label="Loading..." />}>
+              {medicalSubTab === 'medical-record'
+                ? <PatientMedicalRecordTab patient={patient} />
+                : <PatientMedicalRecordHistoryTab patient={patient} />}
+            </Suspense>
+          </div>
+        );
+      case 'vital-signs':
+        return <VitalSignsTab patient={patient} />;
+      case 'dental':
+        return (
+          <div>
+            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
+              {[
+                { id: 'dental-record', label: 'Dental Record' },
                 { id: 'dental-grade-history', label: 'Dental Record History' },
                 { id: 'dental-grading', label: 'Dental Grading' },
               ].map((sub) => (
@@ -671,9 +721,11 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
               ))}
             </div>
             <Suspense fallback={<LoadingBlock label="Loading..." />}>
-              {dentalSubTab === 'dental-grade-history'
-                ? <PatientDentalGradeHistoryTab patient={patient} />
-                : <DentalGradingTab patient={patient} />}
+              {dentalSubTab === 'dental-record'
+                ? <PatientDentalRecordTab patient={patient} />
+                : dentalSubTab === 'dental-grade-history'
+                  ? <PatientDentalGradeHistoryTab patient={patient} />
+                  : <DentalGradingTab patient={patient} />}
             </Suspense>
           </div>
         );
