@@ -4,7 +4,7 @@ const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
 
 const {createVerificationSession, getVerificationSession, deleteVerificationSession,
-        incrementLoginFailure, isLoginLocked } = require("../../../config/redis.js");
+        incrementLoginFailure, isLoginLocked, shouldRequireRecaptcha } = require("../../../config/redis.js");
 
 const query = require("../../../config/query.js");
 const { verifyPassword, generateRandomKey } = require("../../../utils/security.js");
@@ -86,11 +86,15 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Create login verification session (always the same purpose)
   const verificationKey = await createVerificationSession(email, VERIFICATIONKEY_PURPOSE, account_type);
 
+  // ✅ Require reCAPTCHA if the user had ≥3 failed attempts before this success
+  const requiresCaptcha = await shouldRequireRecaptcha(email, account_type);
+
   // ✅ Email OTP is always required; TOTP is the preferred alternative when enabled
   return res.status(200).json({
     ok: true,
     requires2FA: true,
     requiresTotp: user.totp_enabled || false,
+    requiresCaptcha,
     LoginKey: verificationKey,
     });
   });

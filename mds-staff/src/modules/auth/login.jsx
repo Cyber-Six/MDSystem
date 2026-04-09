@@ -188,11 +188,21 @@ const Login = () => {
 
       if (response.data.ok) {
         setVerificationKey(response.data.LoginKey);
-        setPendingNeedsTotp(response.data.requiresTotp || false);
-        setRecaptchaWidgetId(null);
-        setRecaptchaToken('');
-        setMockCaptchaChecked(false);
-        setShowCaptchaGate(true);
+        const needsTotp = response.data.requiresTotp || false;
+        setPendingNeedsTotp(needsTotp);
+
+        if (response.data.requiresCaptcha) {
+          // ≥3 failed attempts prior — gate through reCAPTCHA before 2FA
+          setRecaptchaWidgetId(null);
+          setRecaptchaToken('');
+          setMockCaptchaChecked(false);
+          setShowCaptchaGate(true);
+        } else if (needsTotp) {
+          setShowTotpVerify(true);
+        } else {
+          await handleSend2FA();
+          setShowTwoFactor(true);
+        }
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Login failed. Please try again.';
