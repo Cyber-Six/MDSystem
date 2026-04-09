@@ -53,14 +53,14 @@ const Query = {
     
     const query = `
       SELECT pr.id, pr.profile_type,
-             sp.program, sp.year,
+             sp."programId", sp.year,
              spd.label as program_label,
              ep.department, ep.role, ep.position,
              pul.created_at, pul."patientId", pul.status
       FROM "profileRecord" pr
       JOIN "patientUpdateLog" pul ON pul.id = pr.id
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
-      LEFT JOIN "student_programs" spd ON spd.id = sp.program
+      LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
@@ -917,7 +917,7 @@ const Query = {
         LIMIT 1
       ) pr ON true
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
-      LEFT JOIN "student_programs" spd ON spd.id = sp.program
+      LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE up.id = $1
       LIMIT 1;
@@ -983,7 +983,7 @@ const Query = {
         LIMIT 1
       ) pr ON true
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
-      LEFT JOIN "student_programs" spd ON spd.id = sp.program
+      LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE
         ($1::text IS NULL OR up.branch::text = $1::text)
