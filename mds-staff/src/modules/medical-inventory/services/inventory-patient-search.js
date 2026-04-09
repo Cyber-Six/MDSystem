@@ -5,9 +5,9 @@
  * These endpoints only require jwtProtect("medical") — no EMR permissions needed.
  * 
  * Endpoints used:
- *   GET /staff/id/name/:name/:branch       → { users: [id, ...] }
- *   GET /staff/id/identifier/:id/:branch   → { users: [id, ...] }
- *   GET /staff/id/email/:email/:branch     → { userId: id }
+ *   GET /staff/id/name/:name/:branch       → { users: [...] }
+ *   GET /staff/id/identifier/:id/:branch   → { users: [...] }
+ *   GET /staff/id/email?email=&branch=     → { users: [...] }
  */
 
 import { axiosRequest } from '../../../packages-core-adapter';
@@ -74,9 +74,9 @@ async function searchByIdentifier(identifier, branch) {
 }
 
 async function searchByEmail(email, branch) {
-  const encoded = encodeURIComponent(email.trim());
-  const branchParam = encodeURIComponent(branch);
-  const response = await axiosRequest.get(`/staff/id/email/${encoded}/${branchParam}`);
+  const response = await axiosRequest.get(`/staff/id/email`, {
+    params: { email: email.trim(), branch },
+  });
   const users = response.data.users || [];
   return users.map((u) => ({
     id: u.id,
