@@ -26,17 +26,32 @@ function detectSearchType(query) {
   return 'name';
 }
 
+/**
+ * Format a full name as "Last, First MI."
+ * @param {string|null} firstName
+ * @param {string|null} middleName
+ * @param {string|null} lastName
+ * @returns {string}
+ */
+function formatFullName(firstName, middleName, lastName) {
+  const last = (lastName || '').trim();
+  const first = (firstName || '').trim();
+  const mi = middleName ? ` ${middleName.trim()[0].toUpperCase()}.` : '';
+  if (last && first) return `${last}, ${first}${mi}`;
+  return last || first || 'Unknown';
+}
+
 // ── Individual search functions ──────────────────────────────────────────────
 
 async function searchByName(name, branch) {
   const encoded = encodeURIComponent(name.trim());
   const branchParam = encodeURIComponent(branch);
   const response = await axiosRequest.get(`/staff/id/name/${encoded}/${branchParam}`);
-  const userIds = response.data.users || [];
-  return userIds.map((id) => ({
-    id,
-    name: `Patient #${id}`,
-    identifier: null,
+  const users = response.data.users || [];
+  return users.map((u) => ({
+    id: u.id,
+    name: formatFullName(u.firstName, u.middleName, u.lastName),
+    identifier: u.identifier ?? null,
     email: null,
     searchType: 'name',
     searchQuery: name.trim(),
@@ -47,11 +62,11 @@ async function searchByIdentifier(identifier, branch) {
   const encoded = encodeURIComponent(identifier.trim());
   const branchParam = encodeURIComponent(branch);
   const response = await axiosRequest.get(`/staff/id/identifier/${encoded}/${branchParam}`);
-  const userIds = response.data.users || [];
-  return userIds.map((id) => ({
-    id,
-    name: `Patient #${id}`,
-    identifier: identifier.trim(),
+  const users = response.data.users || [];
+  return users.map((u) => ({
+    id: u.id,
+    name: formatFullName(u.firstName, u.middleName, u.lastName),
+    identifier: u.identifier ?? identifier.trim(),
     email: null,
     searchType: 'identifier',
     searchQuery: identifier.trim(),
@@ -62,12 +77,12 @@ async function searchByEmail(email, branch) {
   const encoded = encodeURIComponent(email.trim());
   const branchParam = encodeURIComponent(branch);
   const response = await axiosRequest.get(`/staff/id/email/${encoded}/${branchParam}`);
-  const userId = response.data.userId;
-  if (!userId) return [];
+  const u = response.data;
+  if (!u.userId) return [];
   return [{
-    id: userId,
-    name: `Patient #${userId}`,
-    identifier: null,
+    id: u.userId,
+    name: formatFullName(u.firstName, u.middleName, u.lastName),
+    identifier: u.identifier ?? null,
     email: email.trim(),
     searchType: 'email',
     searchQuery: email.trim(),

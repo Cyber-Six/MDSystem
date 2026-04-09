@@ -9,7 +9,7 @@ const { getStaffBranch } = require('../../services/permit.js');
 // Helper function to get user ID via identifier
 async function getUserIDViaIdentifier(identifier, branch) {
     const query = `
-        SELECT uc.id as "userId" 
+        SELECT uc.id as "userId", up.first_name, up.middle_name, up.last_name, up.identifier
         FROM "UserCredentials" uc
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
         WHERE up.identifier = $1 AND 
@@ -47,6 +47,7 @@ async function getUserIdViaName(name, branch) {
 
     const query = `
         SELECT DISTINCT uc.id AS "userId",
+               up.first_name, up.middle_name, up.last_name, up.identifier,
                (${scoreClauses.join(' + ')}) AS score
         FROM "UserCredentials" uc
         JOIN "UsersPersonal" up ON uc.id = up.id
@@ -63,7 +64,7 @@ async function getUserIdViaName(name, branch) {
 // Helper function to get user ID via email
 async function getUserIdViaEmail(email, branch) {
     const query = `
-        SELECT uc.id as "userId" 
+        SELECT uc.id as "userId", up.first_name, up.middle_name, up.last_name, up.identifier
         FROM "UserCredentials" uc
         LEFT JOIN "UsersPersonal" up ON uc.id = up.id
         WHERE LOWER(uc.email) = LOWER($1) AND 
@@ -151,7 +152,7 @@ router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (r
         }
         
         logger.info(`Retrieved user IDs by identifier: ${identifier}`);
-        res.json({ users: users.map(u => u.userId) });
+        res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by identifier:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -174,7 +175,7 @@ router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => 
         }
         
         logger.info(`Retrieved user IDs by name: ${name}`);
-        res.json({ users: users.map(u => u.userId) });
+        res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by name:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -197,7 +198,8 @@ router.get('/id/email/:email/:branch', jwtProtect("medical"), async (req, res) =
         }
         
         logger.info(`Retrieved user IDs by email: ${email}`);
-        res.json({ userId: users[0].userId });
+        const u = users[0];
+        res.json({ userId: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier });
     } catch (error) {
         logger.error('Error getting user ID by email:', error);
         res.status(500).json({ error: 'Internal server error' });

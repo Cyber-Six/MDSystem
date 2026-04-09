@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { fetchAvailableMedicineWithQuantities } from '../../prescription-service';
 import { issuePrescription } from '../../prescription-service';
-import { searchPatientsForInventory, formatInventoryPatientLabel } from '../../services/inventory-patient-search';
+import { searchPatientsForInventory } from '../../services/inventory-patient-search';
 import { useStaffProfile } from '../../../../hooks/use-staff-profile';
 import BatchSelectionModal from './batch-selection-modal';
 
@@ -77,7 +77,6 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
         name: p.name,
         identifier: p.identifier,
         email: p.email,
-        profileLabel: formatInventoryPatientLabel(p),
       }));
       setSearchResults(formatted);
     } catch (err) {
