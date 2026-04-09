@@ -896,7 +896,7 @@ const buildAllergyRecords = (medicalBackground) => {
     .filter(([, val]) => (typeof val === 'object' ? val?.checked : val))
     .map(([id, val]) => ({
       allergenCatalogId: id,
-      status: 'Active',
+      status: (typeof val === 'object' && val?.status) ? val.status : 'Active',
       severity: (typeof val === 'object' && val?.severity) ? val.severity : 'Unknown',
       notes: null,
       date_identified: null,
