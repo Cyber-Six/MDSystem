@@ -209,13 +209,22 @@ const MedicalBackgroundForm = ({
   const handleAllergyToggle = (allergenId, checked) => {
     const current = data.allergies?.[allergenId];
     const severity = (typeof current === 'object' && current?.severity) ? current.severity : 'Unknown';
-    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked, severity } } });
+    const status = (typeof current === 'object' && current?.status) ? current.status : 'Active';
+    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked, severity, status } } });
   };
 
   const handleAllergySeverity = (allergenId, severity) => {
     const current = data.allergies?.[allergenId];
     const prevChecked = typeof current === 'object' ? !!current?.checked : !!current;
-    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked: prevChecked, severity } } });
+    const status = (typeof current === 'object' && current?.status) ? current.status : 'Active';
+    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked: prevChecked, severity, status } } });
+  };
+
+  const handleAllergyStatus = (allergenId, status) => {
+    const current = data.allergies?.[allergenId];
+    const prevChecked = typeof current === 'object' ? !!current?.checked : !!current;
+    const severity = (typeof current === 'object' && current?.severity) ? current.severity : 'Unknown';
+    onChange({ ...data, allergies: { ...data.allergies, [allergenId]: { checked: prevChecked, severity, status } } });
   };
 
   const toggleAccordion = (section) => {
@@ -291,12 +300,19 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
                   />
                   {data.immunizations?.[vaccine.id] && (
-                    <div className="ml-6">
+                    <div className="ml-6 space-y-1">
                       <Input
                         label="Date of Immunization:"
                         type="date"
                         value={data.immunizationDates?.[vaccine.id] || ''}
                         onChange={(e) => onChange({ ...data, immunizationDates: { ...data.immunizationDates, [vaccine.id]: e.target.value } })}
+                      />
+                      <Input
+                        label="Dose Number:"
+                        type="number"
+                        min="1"
+                        value={data.immunizationDoses?.[vaccine.id] || 1}
+                        onChange={(e) => onChange({ ...data, immunizationDoses: { ...data.immunizationDoses, [vaccine.id]: parseInt(e.target.value, 10) || 1 } })}
                       />
                     </div>
                   )}
@@ -315,12 +331,19 @@ const MedicalBackgroundForm = ({
                     onChange={(e) => handleCatalogToggle('immunizations', vaccine.id, e.target.checked)}
                   />
                   {data.immunizations?.[vaccine.id] && (
-                    <div className="ml-6">
+                    <div className="ml-6 space-y-1">
                       <Input
                         label="Date of Immunization:"
                         type="date"
                         value={data.immunizationDates?.[vaccine.id] || ''}
                         onChange={(e) => onChange({ ...data, immunizationDates: { ...data.immunizationDates, [vaccine.id]: e.target.value } })}
+                      />
+                      <Input
+                        label="Dose Number:"
+                        type="number"
+                        min="1"
+                        value={data.immunizationDoses?.[vaccine.id] || 1}
+                        onChange={(e) => onChange({ ...data, immunizationDoses: { ...data.immunizationDoses, [vaccine.id]: parseInt(e.target.value, 10) || 1 } })}
                       />
                     </div>
                   )}
@@ -446,6 +469,7 @@ const MedicalBackgroundForm = ({
                             const allergyVal = data.allergies?.[allergen.id];
                             const isChecked = typeof allergyVal === 'object' ? !!allergyVal?.checked : !!allergyVal;
                             const severity = typeof allergyVal === 'object' ? (allergyVal?.severity || 'Unknown') : 'Unknown';
+                            const status = typeof allergyVal === 'object' ? (allergyVal?.status || 'Active') : 'Active';
                             return (
                               <div key={allergen.id}>
                                 <Checkbox
@@ -454,7 +478,7 @@ const MedicalBackgroundForm = ({
                                   onChange={(e) => handleAllergyToggle(allergen.id, e.target.checked)}
                                 />
                                 {isChecked && (
-                                  <div className="ml-6 mt-1 mb-1">
+                                  <div className="ml-6 mt-1 mb-1 flex gap-2">
                                     <select
                                       className="form-input text-xs py-1 px-2"
                                       value={severity}
@@ -464,6 +488,15 @@ const MedicalBackgroundForm = ({
                                       <option value="Mild">Severity: Mild</option>
                                       <option value="Moderate">Severity: Moderate</option>
                                       <option value="Severe">Severity: Severe</option>
+                                    </select>
+                                    <select
+                                      className="form-input text-xs py-1 px-2"
+                                      value={status}
+                                      onChange={(e) => handleAllergyStatus(allergen.id, e.target.value)}
+                                    >
+                                      <option value="Active">Status: Active</option>
+                                      <option value="Resolved">Status: Resolved</option>
+                                      <option value="Suspected">Status: Suspected</option>
                                     </select>
                                   </div>
                                 )}
@@ -484,6 +517,7 @@ const MedicalBackgroundForm = ({
                       const allergyVal = data.allergies?.[allergen.id];
                       const isChecked = typeof allergyVal === 'object' ? !!allergyVal?.checked : !!allergyVal;
                       const severity = typeof allergyVal === 'object' ? (allergyVal?.severity || 'Unknown') : 'Unknown';
+                      const status = typeof allergyVal === 'object' ? (allergyVal?.status || 'Active') : 'Active';
                       return (
                         <div key={allergen.id}>
                           <Checkbox
@@ -492,7 +526,7 @@ const MedicalBackgroundForm = ({
                             onChange={(e) => handleAllergyToggle(allergen.id, e.target.checked)}
                           />
                           {isChecked && (
-                            <div className="ml-6 mt-1 mb-1">
+                            <div className="ml-6 mt-1 mb-1 flex gap-2">
                               <select
                                 className="form-input text-xs py-1 px-2"
                                 value={severity}
@@ -502,6 +536,15 @@ const MedicalBackgroundForm = ({
                                 <option value="Mild">Severity: Mild</option>
                                 <option value="Moderate">Severity: Moderate</option>
                                 <option value="Severe">Severity: Severe</option>
+                              </select>
+                              <select
+                                className="form-input text-xs py-1 px-2"
+                                value={status}
+                                onChange={(e) => handleAllergyStatus(allergen.id, e.target.value)}
+                              >
+                                <option value="Active">Status: Active</option>
+                                <option value="Resolved">Status: Resolved</option>
+                                <option value="Suspected">Status: Suspected</option>
                               </select>
                             </div>
                           )}
