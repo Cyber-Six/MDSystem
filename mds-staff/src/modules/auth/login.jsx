@@ -21,8 +21,9 @@ const Login = () => {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  // Adaptive reCAPTCHA — hidden until the server signals it's needed
-  const [captchaRequired, setCaptchaRequired] = useState(false);
+  // reCAPTCHA — shown after successful credential verification, gates access to 2FA
+  const [showCaptchaGate, setShowCaptchaGate] = useState(false);
+  const [pendingNeedsTotp, setPendingNeedsTotp] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState('');
   const [recaptchaWidgetId, setRecaptchaWidgetId] = useState(null);
   const [mockCaptchaChecked, setMockCaptchaChecked] = useState(false);
@@ -54,9 +55,9 @@ const Login = () => {
     }
   }, [recaptchaWidgetId]);
 
-  // Render the reCAPTCHA widget only when flagged as required
+  // Render the reCAPTCHA widget when the captcha gate step is shown
   useEffect(() => {
-    if (!captchaRequired || !RECAPTCHA_SITE_KEY) return;
+    if (!showCaptchaGate || !RECAPTCHA_SITE_KEY) return;
     const timer = setInterval(() => {
       if (window.grecaptcha && recaptchaRef.current && recaptchaWidgetId === null) {
         renderRecaptcha();
@@ -64,7 +65,7 @@ const Login = () => {
       }
     }, 200);
     return () => clearInterval(timer);
-  }, [captchaRequired, renderRecaptcha, recaptchaWidgetId]);
+  }, [showCaptchaGate, renderRecaptcha, recaptchaWidgetId]);
 
   // ── Google Sign-In setup ──────────────────────────────────────────────
   const handleGoogleCredential = useCallback(async (response) => {
@@ -73,17 +74,8 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      // OAuth always requires reCAPTCHA — show widget if not visible
-      if (!recaptchaToken) {
-        setCaptchaRequired(true);
-        setError('Please complete the "I am not a robot" check first.');
-        setIsLoading(false);
-        return;
-      }
-
       const res = await axiosRequest.post('/auth/oauth/google', {
         credential: response.credential,
-        recaptchaToken,
       });
 
       if (res.data.ok) {
@@ -95,21 +87,16 @@ const Login = () => {
           setEmail(payload.email || '');
         } catch { /* email will be empty — non-critical */ }
 
-        if (res.data.requiresTotp) {
-          setShowTotpVerify(true);
-        } else {
-          await handleSend2FA();
-          setShowTwoFactor(true);
-        }
+        setPendingNeedsTotp(res.data.requiresTotp || false);
+        setRecaptchaWidgetId(null);
+        setRecaptchaToken('');
+        setMockCaptchaChecked(false);
+        setShowCaptchaGate(true);
       }
     } catch (err) {
       const errorCode = err.response?.data?.error;
       const errorMsg = err.response?.data?.message || 'Google sign-in failed.';
       switch (errorCode) {
-        case 'INVALID_RECAPTCHA':
-          setError('reCAPTCHA verification failed. Please try again.');
-          resetRecaptcha();
-          break;
         case 'INVALID_GOOGLE_TOKEN':
           setError('Google authentication failed. Ensure you are using a @tip.edu.ph account.');
           break;
@@ -124,9 +111,8 @@ const Login = () => {
       }
     } finally {
       setIsLoading(false);
-      resetRecaptcha();
     }
-  }, [recaptchaToken, resetRecaptcha]);
+  }, []);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_ENABLED) {
@@ -166,54 +152,52 @@ const Login = () => {
     try {
       await axiosRequest.post('/auth/email/2fa', { 
         email,
-        recaptchaToken: getRecaptchaToken() || 'MOBILE_APP_TOKEN'
+        recaptchaToken: getRecaptchaToken()
       });
     } catch (err) {
       console.error('Failed to send 2FA code:', err);
     }
   };
 
+  // Called when user completes reCAPTCHA on the captcha gate:
+  // proceeds to TOTP input or sends the email OTP
+  const handleProceedAfterCaptcha = async () => {
+    if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+      setError('Please complete the reCAPTCHA check.');
+      return;
+    }
+    setError('');
+    setShowCaptchaGate(false);
+    if (pendingNeedsTotp) {
+      setShowTotpVerify(true);
+    } else {
+      setIsLoading(true);
+      await handleSend2FA();
+      setIsLoading(false);
+      setShowTwoFactor(true);
+    }
+  };
+
   const handleInitialLogin = async (e) => {
     e.preventDefault();
     setError('');
-
-    // Only block submission if reCAPTCHA is required and not yet completed
-    if (captchaRequired && !recaptchaToken) {
-      setError('Please complete the "I am not a robot" check.');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      const payload = { email, password };
-      if (recaptchaToken) payload.recaptchaToken = recaptchaToken;
+      const response = await axiosRequest.post('/auth/login', { email, password });
 
-      const response = await axiosRequest.post('/auth/login', payload);
-      
       if (response.data.ok) {
-        const loginKey = response.data.LoginKey;
-        setVerificationKey(loginKey);
-        
-        const needsTotp = response.data.requiresTotp;
-        const needsEmail2FA = response.data.requires2FA;
-
-        if (needsTotp) {
-          setShowTotpVerify(true);
-        } else {
-          await handleSend2FA();
-          setShowTwoFactor(true);
-        }
+        setVerificationKey(response.data.LoginKey);
+        setPendingNeedsTotp(response.data.requiresTotp || false);
+        setRecaptchaWidgetId(null);
+        setRecaptchaToken('');
+        setMockCaptchaChecked(false);
+        setShowCaptchaGate(true);
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Login failed. Please try again.';
       const errorCode = err.response?.data?.error;
 
-      // Server signals whether the next attempt needs reCAPTCHA
-      if (err.response?.data?.requiresCaptcha) {
-        setCaptchaRequired(true);
-      }
-      
       switch (errorCode) {
         case 'MISSING_FIELDS':
           setError('Please fill in all required fields.');
@@ -224,11 +208,11 @@ const Login = () => {
         case 'INVALID_INSTITUTION_EMAIL':
           setError('Email must follow TIP institutional format.');
           break;
-        case 'RECAPTCHA_REQUIRED':
-          setError('Please complete the "I am not a robot" check to continue.');
+        case 'ACCOUNT_LOCKED':
+          setError(errorMsg);
           break;
-        case 'INVALID_RECAPTCHA':
-          setError('reCAPTCHA verification failed. Please try again.');
+        case 'STAFF_ACCOUNT_SUSPENDED':
+          setError(errorMsg);
           break;
         case 'INVALID_CREDENTIALS':
           setError('Email or password is incorrect.');
@@ -238,7 +222,6 @@ const Login = () => {
       }
     } finally {
       setIsLoading(false);
-      resetRecaptcha();
     }
   };
 
@@ -283,13 +266,23 @@ const Login = () => {
   };
 
   const handleResend2FA = async () => {
+    // If reCAPTCHA token expired, return to captcha gate to re-verify
+    if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+      setShowTwoFactor(false);
+      setRecaptchaWidgetId(null);
+      setRecaptchaToken('');
+      setMockCaptchaChecked(false);
+      setPendingNeedsTotp(false);
+      setShowCaptchaGate(true);
+      return;
+    }
     setError('');
     setIsLoading(true);
 
     try {
       const response = await axiosRequest.post('/auth/email/2fa', { 
         email,
-        recaptchaToken: getRecaptchaToken() || 'MOBILE_APP_TOKEN'
+        recaptchaToken: getRecaptchaToken()
       });
       
       if (response.data.ok) {
@@ -359,6 +352,15 @@ const Login = () => {
     setError('');
     setTotpCode('');
     setShowTotpVerify(false);
+    // If reCAPTCHA token expired, return to captcha gate to re-verify
+    if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+      setRecaptchaWidgetId(null);
+      setRecaptchaToken('');
+      setMockCaptchaChecked(false);
+      setPendingNeedsTotp(false);
+      setShowCaptchaGate(true);
+      return;
+    }
     await handleSend2FA();
     setShowTwoFactor(true);
   };
@@ -434,6 +436,104 @@ const Login = () => {
     setVerificationKey('');
     setError('');
   };
+
+  // Captcha gate — shown after successful credential verification, before 2FA
+  if (showCaptchaGate) {
+    return (
+      <div className="w-full max-w-md mx-auto">
+        <div className="text-center mb-8">
+          <div className="bg-primary-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5">
+            <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-secondary-900 mb-3">Security Check</h2>
+          <p className="text-sm text-neutral-600 leading-relaxed">
+            Please verify you&apos;re not a robot<br />
+            before continuing.
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
+            <p className="text-error-600 text-sm text-center mb-0">{error}</p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {/* reCAPTCHA v2 widget */}
+          {RECAPTCHA_SITE_KEY ? (
+            <div ref={recaptchaRef} id="staff-recaptcha-container" className="flex justify-center"></div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setMockCaptchaChecked(v => !v)}
+              className="w-full border border-[#d3d3d3] rounded bg-[#f9f9f9] shadow-sm flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[#f2f2f2] transition-colors text-left"
+            >
+              <div className="w-6 h-6 border-2 border-[#c1c1c1] rounded-sm flex-shrink-0 bg-white shadow-inner flex items-center justify-center">
+                {mockCaptchaChecked && (
+                  <svg viewBox="0 0 12 12" className="w-4 h-4 text-[#1a73e8]" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="1.5,6 4.5,9.5 10.5,2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+              <span className="flex-1 text-[13px] text-[#555] leading-tight">I&apos;m not a robot</span>
+              <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+                <svg viewBox="0 0 46 52" className="w-8 h-8">
+                  <path fill="#4285F4" d="M23 1L2 10.5V26C2 39 11.5 49 23 52 34.5 49 44 39 44 26V10.5L23 1Z"/>
+                  <path fill="#34A853" d="M23 1V52C34.5 49 44 39 44 26V10.5L23 1Z"/>
+                  <circle cx="23" cy="26" r="10" fill="none" stroke="white" strokeWidth="2.5"/>
+                  <path fill="white" d="M23 15L27 21H19Z"/>
+                </svg>
+                <span className="text-[9px] font-medium leading-none text-[#777]">reCAPTCHA</span>
+                <span className="text-[8px] leading-none text-[#aaa]">Privacy · Terms</span>
+              </div>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleProceedAfterCaptcha}
+            disabled={isLoading || (RECAPTCHA_SITE_KEY ? !recaptchaToken : !mockCaptchaChecked)}
+            className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
+                     text-white font-semibold py-3.5 rounded-lg
+                     transition-all duration-200
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     flex items-center justify-center shadow-md hover:shadow-lg"
+          >
+            {isLoading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Sending...
+              </>
+            ) : 'Continue'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowCaptchaGate(false);
+              setVerificationKey('');
+              setPendingNeedsTotp(false);
+              setRecaptchaWidgetId(null);
+              setRecaptchaToken('');
+              setMockCaptchaChecked(false);
+              setError('');
+            }}
+            className="w-full bg-white hover:bg-neutral-50
+                     text-secondary-700 font-medium py-3 rounded-lg
+                     border border-neutral-300
+                     transition-all duration-200 text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Initial login form
   if (!showTwoFactor && !showTotpVerify) {
@@ -516,42 +616,10 @@ const Login = () => {
             </div>
           </div>
 
-          {/* reCAPTCHA v2 Widget — shown only after failed attempts */}
-          {RECAPTCHA_SITE_KEY && captchaRequired ? (
-            <div ref={recaptchaRef} id="staff-recaptcha-container"></div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => RECAPTCHA_SITE_KEY ? setMockCaptchaChecked(v => !v) : setError('reCAPTCHA is not available.')}
-              className="w-full border border-[#d3d3d3] rounded bg-[#f9f9f9] shadow-sm flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[#f2f2f2] transition-colors text-left"
-            >
-              <div className="w-6 h-6 border-2 border-[#c1c1c1] rounded-sm flex-shrink-0 bg-white shadow-inner flex items-center justify-center">
-                {mockCaptchaChecked && (
-                  <svg viewBox="0 0 12 12" className="w-4 h-4 text-[#1a73e8]" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="1.5,6 4.5,9.5 10.5,2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </div>
-              <span className="flex-1 text-[13px] text-[#555] leading-tight">
-                {captchaRequired ? 'reCAPTCHA unavailable' : "I'm not a robot"}
-              </span>
-              <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
-                <svg viewBox="0 0 46 52" className="w-8 h-8">
-                  <path fill="#4285F4" d="M23 1L2 10.5V26C2 39 11.5 49 23 52 34.5 49 44 39 44 26V10.5L23 1Z"/>
-                  <path fill="#34A853" d="M23 1V52C34.5 49 44 39 44 26V10.5L23 1Z"/>
-                  <circle cx="23" cy="26" r="10" fill="none" stroke="white" strokeWidth="2.5"/>
-                  <path fill="white" d="M23 15L27 21H19Z"/>
-                </svg>
-                <span className="text-[9px] font-medium leading-none text-[#777]">reCAPTCHA</span>
-                <span className="text-[8px] leading-none text-[#aaa]">Privacy · Terms</span>
-              </div>
-            </button>
-          )}
-          
           {/* Login Button */}
           <button 
             type="submit" 
-            disabled={isLoading || (captchaRequired && RECAPTCHA_SITE_KEY && !recaptchaToken)}
+            disabled={isLoading}
             className="w-full bg-primary-500 hover:bg-primary-600 active:bg-primary-700
                      text-white font-semibold py-3.5 rounded-lg
                      transition-all duration-200 

@@ -1,9 +1,8 @@
 const express = require("express");
 const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
-const { verifyRecaptcha } = require("../../../services/recaptcha.js");
 const { verifyGoogleToken } = require("../../../services/google-oauth.js");
-const { createVerificationSession, isLoginLocked, shouldRequireRecaptcha } = require("../../../config/redis.js");
+const { createVerificationSession, isLoginLocked } = require("../../../config/redis.js");
 const query = require("../../../config/query.js");
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
 const logger = require("../../../utils/logger.js");
@@ -22,18 +21,16 @@ const VERIFICATIONKEY_PURPOSE = "2fa";
  *
  * Security layers:
  *  1. IP rate limiting (portal-based)
- *  2. reCAPTCHA verification (always required — email unknown until token decoded)
- *  3. Google ID token verification (signature + audience + hd claim)
- *  4. @tip.edu.ph domain enforcement
- *  5. Existing user requirement (no auto-registration)
- *  6. Login lockout check
- *  7. Portal-based account type validation
+ *  2. Google ID token verification (signature + audience + hd claim)
+ *  3. @tip.edu.ph domain enforcement
+ *  4. Existing user requirement (no auto-registration)
+ *  5. Login lockout check
+ *  6. Portal-based account type validation
  *
- * Note: Unlike password login, reCAPTCHA is always required here because the
- * user's email is not known until the Google token is verified, so we cannot
- * look up a per-email failure count beforehand.
- *
- * The session then follows the same 2FA → consent → /login/complete flow.
+ * reCAPTCHA is no longer verified here. After OAuth credential verification
+ * succeeds, the frontend presents the reCAPTCHA gate before allowing the user
+ * to proceed to 2FA. Email OTP sending is gated server-side by reCAPTCHA in
+ * the /auth/email/2fa endpoint.
  */
 router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Feature flag — set GOOGLE_OAUTH_ENABLED=false to disable
@@ -44,23 +41,14 @@ router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
-  const { credential, recaptchaToken } = req.body;
+  const { credential } = req.body;
   const account_type = detectPortalFromSubdomain(req);
 
   // ✅ Required fields
-  if (!credential || !recaptchaToken) {
+  if (!credential) {
     return res.status(400).json({
       error: "MISSING_FIELDS",
-      message: "Google credential and reCAPTCHA token are required.",
-    });
-  }
-
-  // ✅ Verify reCAPTCHA
-  const recaptchaValid = await verifyRecaptcha(recaptchaToken);
-  if (!recaptchaValid) {
-    return res.status(400).json({
-      error: "INVALID_RECAPTCHA",
-      message: "reCAPTCHA verification failed.",
+      message: "Google credential is required.",
     });
   }
 
