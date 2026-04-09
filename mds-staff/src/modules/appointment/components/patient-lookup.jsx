@@ -23,7 +23,7 @@ const STATUS_COLORS = {
 
 const PatientLookup = () => {
   // ── Search state ─────────────────────────────────────────────
-  const { profile } = useStaffProfile();──────────────
+  const { profile } = useStaffProfile();
   const [searchInput, setSearchInput]       = useState('');
   const [searchResults, setSearchResults]   = useState([]);
   const [isSearching, setIsSearching]       = useState(false);
