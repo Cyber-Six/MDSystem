@@ -4,7 +4,7 @@ const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
 
 const {createVerificationSession, getVerificationSession, deleteVerificationSession,
-        incrementLoginFailure, isLoginLocked } = require("../../../config/redis.js");
+        incrementLoginFailure, isLoginLocked, shouldRequireRecaptcha } = require("../../../config/redis.js");
 
 const { verifyRecaptcha } = require("../../../services/recaptcha.js");
 
@@ -21,11 +21,11 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   const { email, password, recaptchaToken } = req.body;
   const account_type = detectPortalFromSubdomain(req);
 
-  // ✅ Required fields
-  if (!email || !password || !recaptchaToken) {
+  // ✅ Required fields (email & password always required; recaptcha is adaptive)
+  if (!email || !password) {
     return res.status(400).json({
       error: "MISSING_FIELDS",
-      message: "Email, password, and reCAPTCHA token are required."
+      message: "Email and password are required."
     });
   }
 
@@ -45,22 +45,35 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
-  // ✅ Verify reCAPTCHA
-  const recaptchaValid = await verifyRecaptcha(recaptchaToken);
-  if (!recaptchaValid) {
-    return res.status(400).json({
-      error: "INVALID_RECAPTCHA",
-      message: "reCAPTCHA verification failed."
-    });
+  // ✅ Adaptive reCAPTCHA — only enforced after consecutive failures
+  const captchaRequired = await shouldRequireRecaptcha(email, account_type);
+  if (captchaRequired) {
+    if (!recaptchaToken) {
+      return res.status(400).json({
+        error: "RECAPTCHA_REQUIRED",
+        message: "Too many failed attempts. Please complete the reCAPTCHA check.",
+        requiresCaptcha: true,
+      });
+    }
+    const recaptchaValid = await verifyRecaptcha(recaptchaToken);
+    if (!recaptchaValid) {
+      return res.status(400).json({
+        error: "INVALID_RECAPTCHA",
+        message: "reCAPTCHA verification failed.",
+        requiresCaptcha: true,
+      });
+    }
   }
 
   // ✅ Fetch user
   const user = await query.findUserByEmail(email);
   if (!user) {
     const count = await incrementLoginFailure(email, account_type);
+    const nextCaptcha = await shouldRequireRecaptcha(email, account_type);
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
-      message: `Email or password is incorrect. ${count} failed attempts.`
+      message: `Email or password is incorrect. ${count} failed attempts.`,
+      requiresCaptcha: nextCaptcha,
     });
   }
 
@@ -69,9 +82,11 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   if (!passwordValid) {
     const count = await incrementLoginFailure(email, account_type);
     await query.recordLoginAttempt(email, false); // record failed attempt
+    const nextCaptcha = await shouldRequireRecaptcha(email, account_type);
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
-      message: `Email or password is incorrect. ${count} failed attempts.`
+      message: `Email or password is incorrect. ${count} failed attempts.`,
+      requiresCaptcha: nextCaptcha,
     });
   }
 
@@ -82,15 +97,18 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 
     if (!isMedical) {
       const isActive = await query.getMedicalPersonnelStatus(user.id);
+      const nextCaptcha = await shouldRequireRecaptcha(email, account_type);
       if (isActive === false) {
         return res.status(403).json({
           error: "STAFF_ACCOUNT_SUSPENDED",
           message: "Your staff account has been suspended.",
+          requiresCaptcha: nextCaptcha,
         });
       }
       return res.status(400).json({
         error: "INVALID_CREDENTIALS",
-        message: `Email or password is incorrect. ${count} failed attempts.`
+        message: `Email or password is incorrect. ${count} failed attempts.`,
+        requiresCaptcha: nextCaptcha,
       });
     }
   }

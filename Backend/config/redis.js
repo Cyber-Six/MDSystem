@@ -1078,6 +1078,33 @@ async function isLoginLocked(email, portal) {
   return ttl > 0 ? ttl : 0; // return remaining lockout time in seconds
 }
 
+// ── Adaptive reCAPTCHA ──────────────────────────────────────────────────
+// Threshold at which the server starts requiring reCAPTCHA for an email.
+// Below this, login requests are accepted without a captcha token.
+const RECAPTCHA_FAIL_THRESHOLD = Number(process.env.RECAPTCHA_FAIL_ATTEMPT_THRESHOLD) || 2;
+
+/**
+ * Read the current consecutive-failure count for an email + portal.
+ * Returns 0 when no failures are recorded (key absent or expired).
+ */
+async function getLoginFailureCount(email, portal) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!LoginFailureMatrix[portal]) throw new Error(`Unknown portal for failure count: ${portal}`);
+  const prefix = LoginFailureMatrix[portal].prefix;
+  const val = await client.get(`${prefix}:fail:${email}`);
+  return val ? parseInt(val, 10) : 0;
+}
+
+/**
+ * Whether the current failure count means the next request must include a
+ * valid reCAPTCHA token.  Used by the login routes to decide whether to
+ * enforce the captcha check.
+ */
+async function shouldRequireRecaptcha(email, portal) {
+  const count = await getLoginFailureCount(email, portal);
+  return count >= RECAPTCHA_FAIL_THRESHOLD;
+}
+
 async function triggerExpiredMedical(supply, batchId) {
   if (!client) throw new Error("Redis client not initialized");
 
@@ -1166,6 +1193,8 @@ module.exports = {
   getOTPLockoutTTL,
   incrementLoginFailure,
   isLoginLocked,
+  getLoginFailureCount,
+  shouldRequireRecaptcha,
 
   createVerificationSession,
   getVerificationSession,

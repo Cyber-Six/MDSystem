@@ -56,5 +56,6 @@ module.exports = ({ config }) => ({
   // ── Plugins ──────────────────────────────────────────────────────────────
   plugins: [
     '@react-native-community/datetimepicker',
+    'expo-web-browser',
   ],
 });
