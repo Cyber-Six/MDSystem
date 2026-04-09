@@ -21,8 +21,8 @@ import { axiosRequest } from '../../../packages-core-adapter';
  */
 function detectSearchType(query) {
   const trimmed = query.trim();
-  if (/^\d+$/.test(trimmed)) return 'identifier';
   if (trimmed.includes('@')) return 'email';
+  if (/^[\d\-]+$/.test(trimmed)) return 'identifier';
   return 'name';
 }
 
@@ -77,16 +77,15 @@ async function searchByEmail(email, branch) {
   const encoded = encodeURIComponent(email.trim());
   const branchParam = encodeURIComponent(branch);
   const response = await axiosRequest.get(`/staff/id/email/${encoded}/${branchParam}`);
-  const u = response.data;
-  if (!u.userId) return [];
-  return [{
-    id: u.userId,
+  const users = response.data.users || [];
+  return users.map((u) => ({
+    id: u.id,
     name: formatFullName(u.firstName, u.middleName, u.lastName),
     identifier: u.identifier ?? null,
     email: email.trim(),
     searchType: 'email',
     searchQuery: email.trim(),
-  }];
+  }));
 }
 
 // ── Unified search ───────────────────────────────────────────────────────────

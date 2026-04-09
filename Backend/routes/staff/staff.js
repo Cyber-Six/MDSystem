@@ -12,7 +12,7 @@ async function getUserIDViaIdentifier(identifier, branch) {
         SELECT uc.id as "userId", up.first_name, up.middle_name, up.last_name, up.identifier
         FROM "UserCredentials" uc
         INNER JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE up.identifier = $1 AND 
+        WHERE up.identifier::text ILIKE '%' || $1 || '%' AND 
         (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both')
     `;
     const result = await db.query(query, [identifier, branch]);
@@ -67,7 +67,7 @@ async function getUserIdViaEmail(email, branch) {
         SELECT uc.id as "userId", up.first_name, up.middle_name, up.last_name, up.identifier
         FROM "UserCredentials" uc
         LEFT JOIN "UsersPersonal" up ON uc.id = up.id
-        WHERE LOWER(uc.email) = LOWER($1) AND 
+        WHERE LOWER(uc.email) LIKE '%' || LOWER($1) || '%' AND 
         (up.branch = $2 OR up.branch = 'Both' OR $2 = 'Both' OR up.branch IS NULL)
     `;
     const result = await db.query(query, [email, branch]);
@@ -145,7 +145,7 @@ router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (r
             return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
         }
 
-        const users = await getUserIDViaIdentifier(parseInt(identifier), branch);
+        const users = await getUserIDViaIdentifier(identifier, branch);
         
         if (users.length === 0) {
             return res.status(404).json({ error: 'User not found' });
@@ -198,8 +198,7 @@ router.get('/id/email/:email/:branch', jwtProtect("medical"), async (req, res) =
         }
         
         logger.info(`Retrieved user IDs by email: ${email}`);
-        const u = users[0];
-        res.json({ userId: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier });
+        res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by email:', error);
         res.status(500).json({ error: 'Internal server error' });
