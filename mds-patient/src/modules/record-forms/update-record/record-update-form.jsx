@@ -488,7 +488,7 @@ const RecordUpdateForm = () => {
                 <div className="text-sm font-semibold text-error-900 dark:text-error-200 mb-2">
                   🔍 Staff Notes:
                 </div>
-                <p className="text-sm text-error-800 dark:text-error-300 whitespace-pre-wrap">
+                <p className="text-sm text-error-800 dark:text-error-300 whitespace-pre-wrap mb-0">
                   {revisionStatus.notes}
                 </p>
               </div>

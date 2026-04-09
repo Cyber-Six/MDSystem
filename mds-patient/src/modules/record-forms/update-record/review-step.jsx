@@ -123,7 +123,7 @@ const ReviewStep = ({ formData, onEdit, recordType, revisionNotes = null, isRevi
             <p className="text-sm font-semibold text-accent-900 dark:text-accent-200 mb-2">
               Staff Feedback on Your Revision:
             </p>
-            <p className="text-sm text-accent-800 dark:text-accent-300 whitespace-pre-wrap">
+            <p className="text-sm text-accent-800 dark:text-accent-300 whitespace-pre-wrap mb-0">
               {revisionNotes}
             </p>
           </div>

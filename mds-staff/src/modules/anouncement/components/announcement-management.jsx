@@ -404,7 +404,7 @@ const AnnouncementManagement = () => {
                     </svg>
                   </button>
                   {imagePreview && !isUploadingFile && (
-                    <p className="text-xs text-success-600 dark:text-success-400 px-3 py-1 bg-success-50 dark:bg-success-900/20 border-t border-neutral-200 dark:border-neutral-600">
+                    <p className="text-xs text-success-600 dark:text-success-400 px-3 py-1 bg-success-50 dark:bg-success-900/20 border-t border-neutral-200 dark:border-neutral-600 mb-0">
                       Image ready to save
                     </p>
                   )}

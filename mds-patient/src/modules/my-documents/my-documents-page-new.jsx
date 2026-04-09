@@ -304,7 +304,7 @@ export default function MyDocumentsPage() {
       {/* Error Message */}
       {error && (
         <div className="p-4 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
-          <p className="text-sm text-error-700 dark:text-error-400">{error}</p>
+          <p className="text-sm text-error-700 dark:text-error-400 mb-0">{error}</p>
         </div>
       )}
 
@@ -490,7 +490,7 @@ export default function MyDocumentsPage() {
                     {/* Status-specific Messages */}
                     {needsReview && !doc.submission?.notes && (
                       <div className="mb-3 p-3 bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 rounded-lg">
-                        <p className="text-xs text-warning-700 dark:text-warning-300 flex items-center gap-2">
+                        <p className="text-xs text-warning-700 dark:text-warning-300 flex items-center gap-2 mb-0">
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
@@ -501,7 +501,7 @@ export default function MyDocumentsPage() {
 
                     {isApproved && !doc.submission?.notes && (
                       <div className="mb-3 p-3 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 rounded-lg">
-                        <p className="text-xs text-success-700 dark:text-success-300 flex items-center gap-2">
+                        <p className="text-xs text-success-700 dark:text-success-300 flex items-center gap-2 mb-0">
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>

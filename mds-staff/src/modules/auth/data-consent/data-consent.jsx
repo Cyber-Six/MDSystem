@@ -339,7 +339,7 @@ const DataConsent = ({
                 {/* Error */}
                 {error && (
                   <div className="mb-3 px-3 py-2 bg-error-50 border border-error-200 rounded-lg">
-                    <p className="text-xs text-error-600 text-center">{error}</p>
+                    <p className="text-xs text-error-600 text-center mb-0">{error}</p>
                   </div>
                 )}
 

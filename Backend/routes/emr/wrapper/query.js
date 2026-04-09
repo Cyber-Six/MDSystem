@@ -54,11 +54,13 @@ const Query = {
     const query = `
       SELECT pr.id, pr.profile_type,
              sp.program, sp.year,
+             spd.label as program_label,
              ep.department, ep.role, ep.position,
              pul.created_at, pul."patientId", pul.status
       FROM "profileRecord" pr
       JOIN "patientUpdateLog" pul ON pul.id = pr.id
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+      LEFT JOIN "student_programs" spd ON spd.id = sp.program
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE pul."patientId" = $1 AND pul.created_at >= $4 AND
         (pul.status = ANY($5::"UpdateStatus"[]) OR $5 IS NULL)
@@ -83,7 +85,7 @@ const Query = {
           __typename: "StudentProfile",
           id: row.id,
           profile_type: row.profile_type,
-          program: row.program,
+          program: row.program_label,
           year: row.year,
           created_at: row.created_at,
           status: row.status,
@@ -710,12 +712,16 @@ const Query = {
 
   _searchDomainCatalogs: async (_, { domain, filterIsValid, names }, { user, res }) => {
     const query = `
-      SELECT *
-      FROM "DomainTypeCatalog"
-      WHERE domain = COALESCE($1, domain)
-        AND name = ANY($2)
-        AND "isValid" = COALESCE($3, "isValid")
-      ORDER BY created_at ASC;
+    SELECT *
+    FROM "DomainTypeCatalog"
+    WHERE domain = COALESCE($1, domain)
+      AND EXISTS (
+        SELECT 1
+        FROM unnest($2::text[]) AS search_term
+        WHERE name ILIKE '%' || search_term || '%'
+      )
+      AND "isValid" = COALESCE($3, "isValid")
+    ORDER BY created_at ASC;
     `;
 
     const result = await db.query(query, [
@@ -761,6 +767,25 @@ const Query = {
     ]);
 
     logger.debug("Searched Oral Appliance Catalogs Query Result:", result.rows);
+    return result.rows;
+  },
+
+  _searchStudentProgram: async (_, { label, offset, limit }, { user, res }) => {
+    const query = `
+      SELECT id, label
+      FROM "student_programs"
+      WHERE label ILIKE COALESCE($1, '%')
+      ORDER BY created_at ASC
+      LIMIT $2 OFFSET $3;
+    `;
+
+    const result = await db.query(query, [
+      label ? '%' + label + '%' : null,
+      limit || 10,
+      offset || 0
+    ]);
+
+    logger.debug("Searched Student Program Query Result:", result.rows);
     return result.rows;
   },
 
@@ -853,7 +878,7 @@ const Query = {
         upl.middle_name,
         upl.suffix,
         pr.profile_type,
-        sp.program,
+        spd.label as program,
         sp.year,
         ep.department,
         ep.role,
@@ -888,6 +913,7 @@ const Query = {
         LIMIT 1
       ) pr ON true
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+      LEFT JOIN "student_programs" spd ON spd.id = sp.program
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE up.id = $1
       LIMIT 1;
@@ -915,7 +941,7 @@ const Query = {
         upl.middle_name,
         upl.suffix,
         pr.profile_type,
-        sp.program,
+        spd.label as program,
         sp.year,
         ep.department,
         ep.role,
@@ -953,6 +979,7 @@ const Query = {
         LIMIT 1
       ) pr ON true
       LEFT JOIN "student_profile" sp ON sp."profileId" = pr.id
+      LEFT JOIN "student_programs" spd ON spd.id = sp.program
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE
         ($1::text IS NULL OR up.branch::text = $1::text)

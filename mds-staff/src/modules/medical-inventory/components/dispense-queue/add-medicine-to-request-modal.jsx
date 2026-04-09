@@ -184,7 +184,7 @@ const AddMedicineToRequestModal = ({ request, items, batchData, onConfirm, onCan
           {/* Error Message */}
           {error && (
             <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-900/50 rounded-lg p-3">
-              <p className="text-xs text-error-700 dark:text-error-400">{error}</p>
+              <p className="text-xs text-error-700 dark:text-error-400 mb-0">{error}</p>
             </div>
           )}
         </div>

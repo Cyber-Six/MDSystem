@@ -174,7 +174,7 @@ const TwoFactorAuthModal = ({ isOpen, onClose }) => {
                 <p className="font-medium text-success-900 dark:text-success-300 mb-1">
                   Two-Factor Authentication is Active
                 </p>
-                <p className="text-sm text-success-700 dark:text-success-400">
+                <p className="text-sm text-success-700 dark:text-success-400 mb-0">
                   Your account is protected with an additional layer of security. You'll need to enter a code from your authenticator app each time you log in.
                 </p>
               </div>

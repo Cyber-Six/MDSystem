@@ -38,6 +38,8 @@ enum STUDENT_YEAR {
     Senior
     Masteral
     Doctorate
+    Transferee
+    Returnee
 }
 
 
@@ -68,7 +70,7 @@ type EmployeeProfile implements UserProfile {
 }
 
 input StudentProfileInput{
-  program: String!
+  programId: ID!
   year: STUDENT_YEAR!
 }
 
@@ -79,7 +81,7 @@ input EmployeeProfileInput {
 }
 
 input StudentProfileUpdateInput{
-  program: String 
+  programId: ID
   year: STUDENT_YEAR
 }
 
@@ -260,6 +262,11 @@ type OralApplianceTag{
   archable: Boolean!
   isActive: Boolean!
   created_at: Date
+}
+
+type StudentProgram {
+  id: ID!
+  label: String!
 }
 
 input OralApplianceTagInput{
@@ -860,6 +867,7 @@ type Query {
   searchDomainCatalogs(domain: String, filterIsValid: Boolean, names: [String!]!): [DomainCatalog!]
   searchAllergenCatalogs(allergens: [String!]!, filterIsValid: Boolean): [AllergenCatalog!]
   searchOralApplianceCatalogs(names: [String!]!, filterIsValid: Boolean): [OralApplianceTag!]
+  searchStudentProgram(label: String, offset: Int, limit: Int): [StudentProgram!]
 }
 
 # Mutations
