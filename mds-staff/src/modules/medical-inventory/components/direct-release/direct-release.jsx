@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { fetchAvailableMedicineWithQuantities } from '../../prescription-service';
 import { issuePrescription } from '../../prescription-service';
-import { searchPatients } from '../../../../services/patient-search-service';
-import { getProfileLabel } from '../../../../services/patient-search-service';
+import { searchPatientsForInventory, formatInventoryPatientLabel } from '../../services/inventory-patient-search';
+import { useStaffProfile } from '../../../../hooks/use-staff-profile';
 import BatchSelectionModal from './batch-selection-modal';
 
 /**
@@ -14,6 +14,8 @@ import BatchSelectionModal from './batch-selection-modal';
  * - Immediate release without patient request approval
  */
 const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allRequests = [] }) => {
+  const { profile } = useStaffProfile();
+
   // Patient search state
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -52,7 +54,7 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
   // Notes viewing modal state
   const [viewNotesData, setViewNotesData] = useState(null); // { notes, medicineName, patientName }
 
-  // Patient search function
+  // Patient search function — uses staff REST endpoints (no EMR permission needed)
   const handlePatientSearch = useCallback(async (query) => {
     if (!query || query.length < 2) {
       setSearchResults([]);
@@ -61,18 +63,14 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
 
     setIsSearching(true);
     try {
-      const patients = await searchPatients(query, 15);
+      const branch = profile?.branch || 'Both';
+      const patients = await searchPatientsForInventory(query, branch);
       const formatted = patients.map((p) => ({
         id: p.id,
-        name: `${p.last_name}, ${p.first_name}${p.middle_name ? ' ' + p.middle_name[0] + '.' : ''}`,
+        name: p.name,
         identifier: p.identifier,
         email: p.email,
-        profile_type: p.profile_type,
-        program: p.program,
-        year: p.year,
-        department: p.department,
-        role: p.role,
-        profileLabel: getProfileLabel(p),
+        profileLabel: formatInventoryPatientLabel(p),
       }));
       setSearchResults(formatted);
     } catch (err) {
@@ -81,7 +79,7 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
     } finally {
       setIsSearching(false);
     }
-  }, []);
+  }, [profile?.branch]);
 
   // Load medicines for the current location
   useEffect(() => {
