@@ -24,9 +24,9 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
     { path: '/pending', icon: 'pending', label: 'Pending Requests', moduleId: 'pendingRequests' },
     { path: '/appointments', icon: 'calendar', label: 'Appointments', moduleId: 'appointments' },
     { path: '/inventory', icon: 'inventory', label: 'Inventory', moduleId: 'inventory' },
-    { path: '/announcements', icon: 'announcements', label: 'Announcements' },
+    { path: '/announcements', icon: 'announcements', label: 'Announcements', moduleId: 'announcements' },
     { path: '/health-chat', icon: 'healthchat', label: 'Health Chat', moduleId: 'healthChat' },
-    { path: '/notifications', icon: 'notifications', label: 'Send Notification' },
+    { path: '/notifications', icon: 'notifications', label: 'Send Notification', moduleId: 'sendNotification' },
     { path: '/analytics', icon: 'analytics', label: 'Analytics', moduleId: 'analytics' },
     { path: '/settings/roles', icon: 'roles', label: 'Role Management', adminOnly: true },
   ];

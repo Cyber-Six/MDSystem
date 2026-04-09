@@ -744,15 +744,17 @@ const Mutation = {
     const updateResult = await db.query(updateQuery, params);
     const personnel = updateResult.rows[0];
 
-    // If designation changed, update branch in all existing permissions
+    // If designation changed, update branch in location-specific permissions
+    // BUT: Don't override 'Both' permissions since they apply across all locations
     if (designation !== undefined) {
       await db.query(
         `UPDATE "rolesMap"
          SET branch = $1::"UserDesignation"
-         WHERE "personnelId" = $2`,
+         WHERE "personnelId" = $2
+           AND branch != 'Both'`,
         [designation, userId]
       );
-      logger.info(`Updated branch to "${designation}" for all permissions of userId=${userId}`);
+      logger.info(`Updated branch to "${designation}" for location-specific permissions of userId=${userId} (preserved 'Both' permissions)`);
     }
 
     // If template provided, apply permissions from template
@@ -1119,11 +1121,12 @@ const Mutation = {
           [designation, userId]
         );
 
-        // Update branch in all existing permissions
+        // Update branch in location-specific permissions only (preserve 'Both')
         await client.query(
           `UPDATE "rolesMap"
            SET branch = $1::"UserDesignation"
-           WHERE "personnelId" = $2`,
+           WHERE "personnelId" = $2
+             AND branch != 'Both'`,
           [designation, userId]
         );
 

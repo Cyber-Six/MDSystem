@@ -985,8 +985,14 @@ const MODULE_PERMISSION_MAP = {
     'inventory_allow_manage_requests',
     'inventory_allow_prescribe',
   ],
+  announcements: [
+    'announcement_allow_crud',
+  ],
   healthChat: [
     'health_chat_allow_access',
+  ],
+  sendNotification: [
+    'notification_allow_send_to_patients',
   ],
   analytics: [
     'analytics_allow_view',
@@ -1002,7 +1008,9 @@ const MODULE_LABELS = {
   dentalRecords: 'Dental Records',
   appointments: 'Appointments',
   inventory: 'Inventory',
+  announcements: 'Announcements',
   healthChat: 'Health Chat',
+  sendNotification: 'Send Notification',
   analytics: 'Analytics',
   // roleManagement excluded — admin-only access
 };

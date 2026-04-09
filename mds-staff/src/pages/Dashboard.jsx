@@ -47,8 +47,8 @@ const Dashboard = () => {
                 <Route path="/inventory" element={<PermissionRoute moduleId="inventory"><MedicalInventory /></PermissionRoute>} />
                 <Route path="/health-chat" element={<PermissionRoute moduleId="healthChat"><HealthChatView /></PermissionRoute>} />
                 <Route path="/analytics" element={<PermissionRoute moduleId="analytics"><StaffAnalytics /></PermissionRoute>} />
-                <Route path="/announcements" element={<AnnouncementManagement />} />
-                <Route path="/notifications" element={<SendNotificationView />} />
+                <Route path="/announcements" element={<PermissionRoute moduleId="announcements"><AnnouncementManagement /></PermissionRoute>} />
+                <Route path="/notifications" element={<PermissionRoute moduleId="sendNotification"><SendNotificationView /></PermissionRoute>} />
                 <Route path="/settings/roles" element={<PermissionRoute adminOnly><RoleManagementPage /></PermissionRoute>} />
                 <Route path="/settings" element={<StaffSettings />} />
                 <Route path="*" element={<NotFound />} />

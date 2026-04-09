@@ -39,7 +39,8 @@ router.get("/", jwtProtect(""), async (req, res) => {
 router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
     try {
         const userId = req.user.id;
-        const location = req.query.location || 'Both'; // Optional query param to filter by location, defaults to 'Both'
+        const userBranch = await getUserBranch(userId);
+        const location = req.query.location || userBranch || 'Both'; // Optional query param, defaults to user's branch
 
         if (!ValidateLocationDesignation(location)) {
             return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
