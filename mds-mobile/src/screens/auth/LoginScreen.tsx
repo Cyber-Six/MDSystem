@@ -29,7 +29,7 @@ WebBrowser.maybeCompleteAuthSession();
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
 // Server-side secret exchanged instead of a reCAPTCHA browser token.
 // Mobile native apps cannot render v2 checkbox widgets.
-const MOBILE_RECAPTCHA_SECRET = process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || 'MOBILE_APP_TOKEN';
+const MOBILE_RECAPTCHA_SECRET = process.env.EXPO_PUBLIC_RECAPTCHA_MOBILE_SECRET || '';
 
 // Import validation functions from core package
 const validatePassword = (password: string): boolean => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { axiosRequest } from '../../../packages-core-adapter.js';
+import DOMPurify from 'dompurify';
 
 /**
  * DataConsent Modal Component
@@ -283,7 +284,7 @@ const DataConsent = ({
                 {consentData?.consent_text ? (
                   <div
                     className="text-sm text-secondary-700 leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: consentData.consent_text }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(consentData.consent_text) }}
                   />
                 ) : (
                   <p className="text-sm text-secondary-700 leading-relaxed">
