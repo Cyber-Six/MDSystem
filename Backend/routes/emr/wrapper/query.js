@@ -738,7 +738,11 @@ const Query = {
     const query = `
       SELECT *
       FROM "AllergenCatalog"
-      WHERE name = ANY($1)
+      WHERE EXISTS (
+        SELECT 1
+        FROM unnest($1::text[]) AS search_term
+        WHERE allergen ILIKE '%' || search_term || '%'
+      )
         AND "isValid" = COALESCE($2, "isValid")
       ORDER BY created_at ASC;
     `;
