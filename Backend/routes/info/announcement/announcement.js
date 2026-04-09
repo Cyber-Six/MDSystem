@@ -2,7 +2,7 @@ const express = require("express");
 const logger = require("../../../utils/logger.js");
 const { query, queryClient, queryControlled, getUserBranch, connect } = require("../../../config/query.js");
 const { jwtProtect } = require("../../../config/middleware/jwtProtect.js");
-const { isMedicalPermitted, isMedicalPermittedLocationBased, permissions } = require("../../../services/permit.js");
+const { isMedicalPermitted, isMedicalPermittedLocationBased, getMedicalPermissionBranch, permissions } = require("../../../services/permit.js");
 const { promoteFile, deleteFile } = require("../../../config/multer.js");
 const { ValidateBranchbyUserBranch, ValidateLocationDesignation } = require("../../../utils/validator.js");
 const router = express.Router();
@@ -39,19 +39,18 @@ router.get("/", jwtProtect(""), async (req, res) => {
 router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
     try {
         const userId = req.user.id;
-        const userBranch = await getUserBranch(userId);
-        const location = req.query.location || userBranch || 'Both'; // Optional query param, defaults to user's branch
-
-        if (!ValidateLocationDesignation(location)) {
-            return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
+        
+        // Get the staff's announcement permission branch (what they're permitted to access)
+        const permissionBranch = await getMedicalPermissionBranch(userId, permissions.announcement_allow_crud);
+        
+        // If no permission, return 403
+        if (!permissionBranch) {
+            return res.status(403).json({ error: "FORBIDDEN", message: "You do not have announcement management permissions." });
         }
 
-        // Check permission
-        const permitted = await isMedicalPermittedLocationBased(userId, permissions.announcement_allow_crud, location);
-        if (!permitted) {
-            return res.status(403).json({ error: "FORBIDDEN", message: `Not authorized to view announcements for location: '${location}'.` });
-        }
-
+        // Build query: staff can only see announcements in locations where they have permission
+        // If their permission is 'Both', they see everything
+        // If their permission is 'Manila' or 'QuezonCity', they only see that location + 'Both' announcements
         const sql = `
             SELECT id, title as label, content as description, 
                 pubmat, "isActive", created_at, location
@@ -65,7 +64,7 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
             ORDER BY created_at DESC;
         `;
 
-        const result = await query(sql, [location || 'Both']);
+        const result = await query(sql, [permissionBranch]);
         return res.status(200).json({ success: true, data: result.rows });
     } catch (err) {
         logger.error("Failed to fetch all announcements:", err);
