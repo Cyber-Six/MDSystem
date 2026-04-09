@@ -4,6 +4,7 @@ const db = require('../../config/query.js');
 const { jwtProtect } = require('../../config/middleware/jwtProtect');
 const logger = require('../../utils/logger');
 const notificationsRouter = require('./notifications');
+const { getStaffBranch } = require('../../services/permit.js');
 
 // Helper function to get user ID via identifier
 async function getUserIDViaIdentifier(identifier, branch) {
@@ -138,7 +139,7 @@ router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (r
     try {
         const { identifier, branch } = req.params;
 
-        const medicalBranch = await db.getUserBranch(req.user.id);
+        const medicalBranch = await getStaffBranch(req.user.id);
         if (medicalBranch !== 'Both' && medicalBranch !== branch) {
             return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
         }
@@ -162,7 +163,7 @@ router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => 
     try {
         const { name, branch } = req.params;
 
-        const medicalBranch = await db.getUserBranch(req.user.id);
+        const medicalBranch = await getStaffBranch(req.user.id);
         if (medicalBranch !== 'Both' && medicalBranch !== branch) {
             return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
         }
@@ -185,9 +186,8 @@ router.get('/id/email/:email/:branch', jwtProtect("medical"), async (req, res) =
     try {
         const { email, branch } = req.params;
 
-        const medicalBranch = await db.getUserBranch(req.user.id);
+        const medicalBranch = await getStaffBranch(req.user.id);
         if (medicalBranch !== 'Both' && medicalBranch !== branch) {
-            console.log(req.user.id, branch);
             return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
         }
         const users = await getUserIdViaEmail(email, branch);
