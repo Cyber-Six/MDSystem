@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/query.js');
-const { jwtProtect } = require('../../config/middleware/jwtProtect');
-const logger = require('../../utils/logger');
-const notificationsRouter = require('./notifications');
+const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
+const logger = require('../../utils/logger.js');
+const notificationsRouter = require('./notifications.js');
 const { getStaffBranch } = require('../../services/permit.js');
 
 // Helper function to get user ID via identifier

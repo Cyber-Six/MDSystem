@@ -25,7 +25,7 @@ const analyticsRoutes = require('./routes/analytics/analytics.js');
 
 const loginRoutes = require('./routes/auth/user/login.js');
 const passwordResetRoutes = require('./routes/auth/email/emailpassword-reset.js');
-const staffRoutes = require('./routes/staff/staff.js');
+const staffRoutes = require('./routes/staff/profile.js');
 const dashboardRestRoutes = require('./routes/dashboard/rest-endpoint.js');
 const mediaRoutes = require('./routes/media/media.js');
 const documentStaffRoutes = require('./routes/documents/document/document-staff.js');
