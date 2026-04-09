@@ -82,7 +82,7 @@ async function searchByEmail(email, branch) {
     id: u.id,
     name: formatFullName(u.firstName, u.middleName, u.lastName),
     identifier: u.identifier ?? null,
-    email: email.trim(),
+    email: u.email ?? email.trim(),
     searchType: 'email',
     searchQuery: email.trim(),
   }));
@@ -119,8 +119,6 @@ export async function searchPatientsForInventory(query, branch) {
         return await searchByName(trimmed, branch);
     }
   } catch (err) {
-    // 404 = no results found, not an error
-    if (err.response?.status === 404) return [];
     throw err;
   }
 }

@@ -64,7 +64,7 @@ async function getUserIdViaName(name, branch) {
 // Helper function to get user ID via email
 async function getUserIdViaEmail(email, branch) {
     const query = `
-        SELECT uc.id as "userId", up.first_name, up.middle_name, up.last_name, up.identifier
+        SELECT uc.id as "userId", uc.email, up.first_name, up.middle_name, up.last_name, up.identifier
         FROM "UserCredentials" uc
         LEFT JOIN "UsersPersonal" up ON uc.id = up.id
         WHERE LOWER(uc.email) LIKE '%' || LOWER($1) || '%' AND 
@@ -147,10 +147,6 @@ router.get('/id/identifier/:identifier/:branch', jwtProtect("medical"), async (r
 
         const users = await getUserIDViaIdentifier(identifier, branch);
         
-        if (users.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
         logger.info(`Retrieved user IDs by identifier: ${identifier}`);
         res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
@@ -170,9 +166,6 @@ router.get('/id/name/:name/:branch', jwtProtect("medical"), async (req, res) => 
         }
 
         const users = await getUserIdViaName(name, branch);
-        if (users.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
         
         logger.info(`Retrieved user IDs by name: ${name}`);
         res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
@@ -196,13 +189,9 @@ router.get('/id/email', jwtProtect("medical"), async (req, res) => {
             return res.status(403).json({ error: `Forbidden: Access to this branch \`${branch}\` is denied` });
         }
         const users = await getUserIdViaEmail(email, branch);
-
-        if (users.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
         
         logger.info(`Retrieved user IDs by email: ${email}`);
-        res.json({ users: users.map(u => ({ id: u.userId, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
+        res.json({ users: users.map(u => ({ id: u.userId, email: u.email, firstName: u.first_name, middleName: u.middle_name, lastName: u.last_name, identifier: u.identifier })) });
     } catch (error) {
         logger.error('Error getting user ID by email:', error);
         res.status(500).json({ error: 'Internal server error' });
