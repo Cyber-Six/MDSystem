@@ -140,10 +140,10 @@ export const getActiveTickets = async (offset = 0, limit = 50, location = 'Both'
 /**
  * Get all tickets with optional status filter
  */
-export const getAllTickets = async (status = null, offset = 0, limit = 50) => {
+export const getAllTickets = async (status = null, offset = 0, limit = 50, location = 'Both') => {
   const query = `
-    query GetAllTickets($status: ChatStatus, $offset: Int, $limit: Int) {
-      getAllTickets(status: $status, offset: $offset, limit: $limit) {
+    query GetAllTickets($status: ChatStatus, $location: Designation, $offset: Int, $limit: Int) {
+      getAllTickets(status: $status, location: $location, offset: $offset, limit: $limit) {
         chats {
           id
           patientId
@@ -185,17 +185,17 @@ export const getAllTickets = async (status = null, offset = 0, limit = 50) => {
     }
   `;
 
-  const data = await sendGraphQL(query, { status, offset, limit });
+  const data = await sendGraphQL(query, { status, location, offset, limit });
   return data.getAllTickets;
 };
 
 /**
  * Get archived tickets (closed or expired)
  */
-export const getArchivedTickets = async (offset = 0, limit = 50) => {
+export const getArchivedTickets = async (offset = 0, limit = 50, location = 'Both') => {
   // Get both closed and expired tickets
-  const closedResult = await getAllTickets('Closed', offset, limit / 2);
-  const expiredResult = await getAllTickets('Expired', offset, limit / 2);
+  const closedResult = await getAllTickets('Closed', offset, limit / 2, location);
+  const expiredResult = await getAllTickets('Expired', offset, limit / 2, location);
 
   const allChats = [...closedResult.chats, ...expiredResult.chats]
     .sort((a, b) => new Date(b.session_end || b.archived_at) - new Date(a.session_end || a.archived_at));

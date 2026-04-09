@@ -19,6 +19,7 @@ import { useStaffNotifications } from '../notification/notification-context';
 import { useMedicineRequestSocket } from './hooks/useMedicineRequestSocket';
 import { usePermissions } from '../../context/permissions-context';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
+import { getLocationsByBranch } from '../../utils/branch-utils';
 import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
 import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
@@ -217,23 +218,9 @@ const MedicalInventory = () => {
   // Helper function to get allowed locations based on user's branch
   // Returns array of location strings for UI filtering
   const getAllowedLocationsList = useCallback(() => {
-    if (!profile || !profile.branch) {
-      return []; // No profile yet - don't allow any locations until loaded
-    }
-
-    // Branch determines which locations a staff can access
-    switch (profile.branch) {
-      case 'Manila':
-        return ['Arlegui', 'Casal'];
-      case 'QuezonCity':
-        return ['QuezonCity'];
-      case 'Both':
-        return ['Arlegui', 'Casal', 'QuezonCity']; // User has access to all locations
-      default:
-        console.warn(`Unknown branch value: ${profile.branch}`);
-        return []; // Unknown branch - no access
-    }
+    return getLocationsByBranch(profile?.branch);
   }, [profile]);
+
 
   // Memoized list of allowed locations for UI components and API fetching
   const allowedLocationsList = useMemo(() => getAllowedLocationsList(), [getAllowedLocationsList]);

@@ -5,6 +5,7 @@ import { fetchMedicalItems, fetchMedicineBatches, fetchSupplyBatches } from '../
 import { computeItemStats } from '../medical-inventory/inventory-seed-data';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
 import { usePermissions } from '../../context/permissions-context';
+import { getLocationsByBranch } from '../../utils/branch-utils';
 
 /**
  * Staff notification events emitted by the backend.
@@ -231,21 +232,7 @@ const NotificationContext = createContext(null);
 
 // Helper function to get allowed locations based on user's branch
 function getAllowedLocations(profile) {
-  if (!profile || !profile.branch) {
-    return []; // No profile yet - don't allow any locations
-  }
-
-  switch (profile.branch) {
-    case 'Manila':
-      return ['Arlegui', 'Casal'];
-    case 'QuezonCity':
-      return ['QuezonCity'];
-    case 'Both':
-      return ['Arlegui', 'Casal', 'QuezonCity'];
-    default:
-      console.warn(`[INVENTORY_ALERTS] Unknown branch value: ${profile.branch}`);
-      return [];
-  }
+  return getLocationsByBranch(profile?.branch);
 }
 
 export function StaffNotificationProvider({ children }) {

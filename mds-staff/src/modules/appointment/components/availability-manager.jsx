@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Settings, ChevronDown, Sun, Moon, Calendar, MapPin, Users, Check, X, Trash2, Save, FileText, Trash } from 'lucide-react';
 
 /**
@@ -46,6 +46,8 @@ import {
   checkDateOccupancy,
   cancelDateAppointments,
 } from '../staff-appointment-service';
+import { useStaffProfile } from '../../../hooks/use-staff-profile';
+import { getLocationsByBranch } from '../../../utils/branch-utils';
 
 // Include Sunday in the days list - Sunday disabled by default, only enabled via custom dates
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -56,6 +58,9 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
  * SRS §3.4.2
  */
 const AvailabilityManager = () => {
+  const { profile } = useStaffProfile();
+  const allowedLocations = useMemo(() => getLocationsByBranch(profile?.branch), [profile?.branch]);
+
   const [showEventModal, setShowEventModal] = useState(false);
   const [_eventModalDate, _setEventModalDate] = useState(null); // Reserved for future use
   const [editingEvent, setEditingEvent] = useState(null);
@@ -120,8 +125,10 @@ const AvailabilityManager = () => {
     setLoading(true);
     setError('');
     try {
-      const list = await listAllSchedulers();
-      setSchedulers(list || []);
+      const raw = await listAllSchedulers();
+      // Filter schedulers to only those in this staff member's allowed locations
+      const list = (raw || []).filter(s => allowedLocations.includes(s.location));
+      setSchedulers(list);
       if (list?.length > 0) {
         const kept = preserveId ? list.find((s) => String(s.id) === String(preserveId)) : null;
         const selected = kept || list[0];
@@ -138,11 +145,11 @@ const AvailabilityManager = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [allowedLocations]);
 
   useEffect(() => {
-    loadSchedulers();
-  }, [loadSchedulers]);
+    if (allowedLocations.length > 0) loadSchedulers();
+  }, [loadSchedulers, allowedLocations]);
 
   // Update edit form and reload data when active scheduler ID changes.
   // Use activeScheduler?.id (not the full object) so optimistic updates
@@ -455,7 +462,7 @@ const AvailabilityManager = () => {
     });
     setEditForm({
       label: '',
-      location: 'Arlegui',
+      location: allowedLocations[0] || 'Arlegui',
       patientType: null,
       schedulePerWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
       morningAllowed: 25,
@@ -961,13 +968,13 @@ const AvailabilityManager = () => {
                         Location
                       </label>
                       <select
-                        value={editForm.location || 'Arlegui'}
+                        value={editForm.location || allowedLocations[0] || 'Arlegui'}
                         onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
                         className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
                       >
-                        <option value="Arlegui">Arlegui</option>
-                        <option value="Casal">Casal</option>
-                        <option value="QuezonCity">Quezon City</option>
+                        {allowedLocations.includes('Arlegui') && <option value="Arlegui">Arlegui</option>}
+                        {allowedLocations.includes('Casal') && <option value="Casal">Casal</option>}
+                        {allowedLocations.includes('QuezonCity') && <option value="QuezonCity">Quezon City</option>}
                       </select>
                     </div>
                     <div>

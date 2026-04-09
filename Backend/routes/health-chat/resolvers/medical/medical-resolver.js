@@ -1,38 +1,47 @@
 const Wrapper = require("../wrapper/wrapper.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { isMedicalPermitted, permissions,
-  isMedicalPermittedPatientBased, isMedicalAdmin } = require("../../../../services/permit.js");
+  isMedicalPermittedPatientBased, isMedicalAdmin, getStaffBranch } = require("../../../../services/permit.js");
 const { getPatientIdFromChatId } = require("../wrapper/helper.js");
 
-/** Clamp a requested location to the staff member's permission branch. */
-const clampLocation = (requested, permBranch) =>
-  (permBranch && permBranch !== 'Both') ? permBranch : (requested || 'Both');
+/** Clamp a requested location to the staff member's actual branch designation.
+ * Reads from MedicalPersonnel.designation (authoritative) rather than rolesMap.branch
+ * so the restriction holds even when permissions were stored with branch='Both'.
+ */
+const clampLocationAsync = async (userId, requested) => {
+  const staffBranch = await getStaffBranch(userId);
+  return (staffBranch && staffBranch !== 'Both') ? staffBranch : (requested || 'Both');
+};
+
+/** Synchronous version kept for any call site that already has the branch value. */
+const clampLocation = (requested, staffBranch) =>
+  (staffBranch && staffBranch !== 'Both') ? staffBranch : (requested || 'Both');
 
 const Query = {
   getPendingTickets: async (_, { location='Both', offset, limit }, { user, res }) => {
-    const { permitted, branch: permBranch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
+    const { permitted } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
     if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
-    const effectiveLoc = clampLocation(location, permBranch);
+    const effectiveLoc = await clampLocationAsync(user.id, location);
     return await Wrapper.Query._getPendingTickets(_, { location: effectiveLoc, offset, limit }, { user, res });
   },
 
   getActiveTickets: async (_, { location='Both', offset, limit }, { user, res }) => {
-    const { permitted, branch: permBranch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
+    const { permitted } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
     if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
-    const effectiveLoc = clampLocation(location, permBranch);
+    const effectiveLoc = await clampLocationAsync(user.id, location);
     return await Wrapper.Query._getActiveTickets(_, { location: effectiveLoc, offset, limit }, { user, res });
   },
 
   getAllTickets: async (_, { location='Both', status, offset, limit }, { user, res }) => {
-    const { permitted, branch: permBranch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
+    const { permitted } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
     if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
-    const effectiveLoc = clampLocation(location, permBranch);
+    const effectiveLoc = await clampLocationAsync(user.id, location);
     return await Wrapper.Query._getAllTickets(_, { location: effectiveLoc, status, offset, limit }, { user, res });
   },
 
@@ -56,11 +65,11 @@ const Query = {
   },
 
   getPatientConversations: async (_, { location='Both', statuses, offset, limit}, { user, res }) => {
-    const { permitted, branch: permBranch } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
+    const { permitted } = await isMedicalPermitted(user.id, permissions.health_chat_allow_access);
     if (!permitted) {
       throwGraphQLError(res).message("Access denied").status(403).throw();
     }
-    const effectiveLoc = clampLocation(location, permBranch);
+    const effectiveLoc = await clampLocationAsync(user.id, location);
     return await Wrapper.Query._getPatientConversations(_, { location: effectiveLoc, statuses, offset, limit}, { user, res });
   },
 
