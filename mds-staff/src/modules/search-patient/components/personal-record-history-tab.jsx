@@ -16,7 +16,7 @@ const GQL_PERSONAL_RECORD_LOG = `
 `;
 
 function fmt(dateStr) {
-  if (!dateStr) return '—';
+  if (!dateStr) return null;
   return new Date(dateStr).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
@@ -29,13 +29,11 @@ function fmtDateTime(dateStr) {
   };
 }
 
-function DataRow({ label, value }) {
+function Field({ label, value }) {
   return (
-    <div className="flex items-start gap-3 py-1.5 border-b border-neutral-100 dark:border-neutral-700/60 last:border-0">
-      <span className="text-xs text-secondary-400 dark:text-neutral-500 min-w-[140px] shrink-0 pt-px">{label}</span>
-      <span className="text-sm font-medium text-secondary-800 dark:text-white leading-snug">
-        {value != null && value !== '' ? value : <span className="text-secondary-300 dark:text-neutral-600 font-normal">—</span>}
-      </span>
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400">{label}</p>
+      <p className="text-sm font-medium text-secondary-800 dark:text-white">{value || 'N/A'}</p>
     </div>
   );
 }
@@ -155,9 +153,8 @@ export default function PatientPersonalRecordHistoryTab({ patient }) {
     <div className="space-y-3">
       {records.map((r, i) => {
         const snapshotDate = r.created_at || r.updated_at || null;
-        const dobFormatted = r.date_of_birth ? fmt(r.date_of_birth) : null;
+        const dobFormatted = fmt(r.date_of_birth);
 
-        // Compute age from date_of_birth
         let age = null;
         if (r.date_of_birth) {
           const dob = new Date(r.date_of_birth);
@@ -168,33 +165,69 @@ export default function PatientPersonalRecordHistoryTab({ patient }) {
 
         return (
           <SnapshotBlock key={r.id ?? i} index={i} isCurrent={i === 0} snapshotDate={snapshotDate}>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
-              {/* LEFT COLUMN */}
-              <div className="space-y-3">
-                <PatientSectionCard title="Basic Information">
-                  <DataRow label="First Name"    value={r.first_name} />
-                  <DataRow label="Middle Name"   value={r.middle_name} />
-                  <DataRow label="Last Name"     value={r.last_name} />
-                  <DataRow label="Suffix"        value={r.suffix} />
-                  <DataRow label="Birth Date"    value={dobFormatted} />
-                  <DataRow label="Age"           value={age != null ? `${age} years old` : null} />
-                  <DataRow label="Sex"           value={r.sex} />
-                  <DataRow label="Civil Status"  value={r.civil_status} />
-                  <DataRow label="Nationality"   value={r.nationality} />
-                  <DataRow label="Religion"      value={r.religion} />
-                </PatientSectionCard>
-              </div>
+            <div className="space-y-3">
+              <PatientSectionCard title="Basic Information">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <Field label="First Name"     value={r.first_name} />
+                  <Field label="Middle Name"    value={r.middle_name} />
+                  <Field label="Last Name"      value={r.last_name} />
+                  <Field label="Suffix"         value={r.suffix} />
+                  <Field label="Birth Date"     value={dobFormatted} />
+                  <Field label="Age"            value={age != null ? `${age} years old` : ''} />
+                  <Field label="Sex"            value={r.sex} />
+                  <Field label="Civil Status"   value={r.civil_status} />
+                  <Field label="Nationality"    value={r.nationality} />
+                  <Field label="Religion"       value={r.religion} />
+                  <Field label="Contact Number" value={r.contactNumber} />
+                  <Field label="Email"          value={r.email || patient.email} />
+                </div>
+              </PatientSectionCard>
 
-              {/* RIGHT COLUMN */}
-              <div className="space-y-3">
-                <PatientSectionCard title="Contact & Address">
-                  <DataRow label="Contact Number"    value={r.contactNumber} />
-                  <DataRow label="Email"             value={r.email} />
-                  <DataRow label="Present Address"   value={r.present_address} />
-                  <DataRow label="Province Address"  value={r.province_address} />
-                  <DataRow label="Branch"            value={getBranchLabel(r.branch)} />
-                </PatientSectionCard>
-              </div>
+              <PatientSectionCard title="Address">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Present Address"  value={r.present_address} />
+                  <Field label="Province Address" value={r.province_address} />
+                </div>
+              </PatientSectionCard>
+
+              <PatientSectionCard title={patient.type === 'Employee' ? 'Employment Information' : 'Academic Information'}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {patient.type === 'Employee' ? (
+                    <>
+                      <Field label="Employee Number"      value={patient.personal.employeeNumber || patient.id} />
+                      <Field label="Department"           value={patient.department || patient.program} />
+                      <Field label="Position"             value={patient.personal.position || patient.year} />
+                      <Field label="Employment Category"  value={patient.personal.employmentCategory} />
+                      <Field label="Employment Status"    value={patient.personal.employmentStatus} />
+                      <Field label="Campus Branch"        value={getBranchLabel(r.branch) || getBranchLabel(patient.personal.branch)} />
+                    </>
+                  ) : (
+                    <>
+                      <Field label="Student Number" value={patient.personal.studentNumber || patient.id} />
+                      <Field label="Program"        value={patient.program} />
+                      <Field label="Year Level"     value={patient.year} />
+                      {(r.branch || patient.personal.branch) && (
+                        <Field label="Campus Branch" value={getBranchLabel(r.branch) || getBranchLabel(patient.personal.branch)} />
+                      )}
+                    </>
+                  )}
+                </div>
+              </PatientSectionCard>
+
+              <PatientSectionCard title="Emergency Contacts">
+                <div className="grid md:grid-cols-2 gap-3">
+                  {Object.entries(patient.emergencyContacts).map(([key, contact]) => (
+                    <div key={key} className="p-3 rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-700/30">
+                      <p className="text-sm font-semibold text-secondary-800 dark:text-white mb-2">{contact.name || 'N/A'}</p>
+                      <div className="space-y-1 text-xs">
+                        <p className="text-secondary-600 dark:text-neutral-300"><span className="text-secondary-500 dark:text-neutral-400">Relationship:</span> {contact.relationship || 'N/A'}</p>
+                        <p className="text-secondary-600 dark:text-neutral-300"><span className="text-secondary-500 dark:text-neutral-400">Contact:</span> {contact.contact || 'N/A'}</p>
+                        <p className="text-secondary-600 dark:text-neutral-300"><span className="text-secondary-500 dark:text-neutral-400">Address:</span> {contact.address || 'N/A'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </PatientSectionCard>
             </div>
           </SnapshotBlock>
         );
