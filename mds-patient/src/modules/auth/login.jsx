@@ -442,7 +442,7 @@ const Login = () => {
           {/* Error Message */}
           {error && (
             <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
-              <p className="text-error-600 text-sm text-center">
+              <p className="text-error-600 text-sm text-center mb-0">
                 {error}
               </p>
             </div>
@@ -521,7 +521,7 @@ const Login = () => {
           ) : (
             <button
               type="button"
-              onClick={() => setMockCaptchaChecked(v => !v)}
+              onClick={() => RECAPTCHA_SITE_KEY ? setMockCaptchaChecked(v => !v) : setError('reCAPTCHA is not available.')}
               className="w-full border border-[#d3d3d3] rounded bg-[#f9f9f9] shadow-sm flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[#f2f2f2] transition-colors text-left"
             >
               <div className="w-6 h-6 border-2 border-[#c1c1c1] rounded-sm flex-shrink-0 bg-white shadow-inner flex items-center justify-center">
@@ -673,7 +673,7 @@ const Login = () => {
 
         {error && (
           <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
-            <p className="text-error-600 text-sm text-center">
+            <p className="text-error-600 text-sm text-center mb-0">
               {error}
             </p>
           </div>
@@ -776,7 +776,7 @@ const Login = () => {
         
         {error && (
           <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
-            <p className="text-error-600 text-sm text-center">
+            <p className="text-error-600 text-sm text-center mb-0">
               {error}
             </p>
           </div>
