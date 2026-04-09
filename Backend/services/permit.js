@@ -829,11 +829,15 @@ async function deletePermissionTemplate(templateId) {
 
 /**
  * Apply a template to a staff member (copy template permissions to staff)
+ * REVISED: Preserves template branch assignments for location-scoped permissions
+ * 
  * @param {Object} params
  * @param {number} params.personnelId - Staff user ID
  * @param {number} params.templateId - Template ID to apply
  * @param {number} params.assignedBy - Admin user ID applying the template
- * @param {string} params.staffBranch - Staff's branch designation (Manila, QuezonCity, Both) - all permissions inherit this branch
+ * @param {string} params.staffBranch - Staff's branch designation (Manila, QuezonCity, Both)
+ *                                     - For non-location-scoped permissions, defaults to this
+ *                                     - For location-scoped permissions, template branches are PRESERVED
  * @param {Object} params.client - Optional database client for transaction support
  * @returns {Promise<Object>} Result with inserted permissions
  */
@@ -845,14 +849,27 @@ async function applyTemplateToStaff({ personnelId, templateId, assignedBy, staff
     throw new Error(`Template with id ${templateId} not found`);
   }
 
+  // Location-scoped permissions that should preserve template branch assignments
+  // These are permissions where the branch represents accessible locations
+  const LOCATION_SCOPED_KEYS = new Set([
+    'announcement_allow_crud',
+    'health_chat_allow_access'
+    // Add other location-based permissions here
+  ]);
+
   // Filter only enabled permissions
-  // If staffBranch provided, all permissions inherit the staff's branch (override template's branches)
+  // Preserve template branch for location-scoped permissions
+  // Use staffBranch as default for other permissions
   const enabledPermissions = template.permissions
     .filter(p => p.enabled)
     .map(p => ({
       key: p.key,
       enabled: true,
-      branch: staffBranch || p.branch  // Use staff's branch if provided, otherwise use template's branch
+      // For location-scoped permissions, use template branch
+      // For others, use staff branch or default to 'Both'
+      branch: LOCATION_SCOPED_KEYS.has(p.key) 
+        ? p.branch  // Keep template's branch for location-scoped
+        : (staffBranch || p.branch || 'Both')  // Use staff branch for non-location-scoped
     }));
 
   // Apply permissions using existing function, passing client through
@@ -942,6 +959,7 @@ async function propagateTemplatePermissions({ templateId, roleLabel, assignedBy,
 
 // ─── MODULE-LEVEL PERMISSION MAP ─────────────────────────────────────────────
 // Maps frontend module IDs to their underlying backend permission keys.
+// MUST be kept in sync with Frontend mds-staff/src/modules/role-management/role-permissions.js
 // When a module is ON, ALL listed keys are granted.
 // When a module is OFF, keys are revoked ONLY if no other enabled module uses them (union logic).
 
@@ -949,6 +967,7 @@ const MODULE_PERMISSION_MAP = {
   patientSearch: [
     'profile_allow_view',
     'emr_allow_view',
+    'profile_allow_update_email_identifier',  // ← Added to match frontend
   ],
   pendingRequests: [
     'emr_allow_approval',
@@ -960,6 +979,7 @@ const MODULE_PERMISSION_MAP = {
     'emr_allow_view',
     'emr_allow_edit',
     'emr_allow_edit_catalogs',
+    'emr_allow_set_vital_sign',  // ← Added to match frontend
     'consultation_allow_view',
     'consultation_allow_edit',
     'profile_allow_view',
@@ -984,6 +1004,7 @@ const MODULE_PERMISSION_MAP = {
     'inventory_allow_dispense',
     'inventory_allow_manage_requests',
     'inventory_allow_prescribe',
+    'inventory_allow_configure',  // ← Added to match frontend
   ],
   announcements: [
     'announcement_allow_crud',
@@ -997,6 +1018,9 @@ const MODULE_PERMISSION_MAP = {
   analytics: [
     'analytics_allow_view',
     'analytics_allow_export',
+  ],
+  superiorAccess: [
+    'privileged_to_perform_on_superior',  // ← Added to match frontend
   ],
   // roleManagement intentionally excluded — admin-only via is_admin, not assignable via templates
 };
@@ -1012,6 +1036,7 @@ const MODULE_LABELS = {
   healthChat: 'Health Chat',
   sendNotification: 'Send Notification',
   analytics: 'Analytics',
+  superiorAccess: 'Superior Account Access',  // ← Added to match frontend
   // roleManagement excluded — admin-only access
 };
 

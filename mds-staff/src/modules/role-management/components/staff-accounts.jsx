@@ -9,7 +9,7 @@ import StaffDetail from './staff-detail';
  * Pending = no IS_STAFF role, Active = identity Medical, Suspended = identity Employee + has IS_STAFF.
  */
 
-const StaffAccounts = () => {
+const StaffAccounts = ({ onRoleUpdate = null }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [filterRole, setFilterRole] = useState('all');
@@ -73,6 +73,10 @@ const StaffAccounts = () => {
       const result = await updateStaffAccount(staffId, params.status, params.role, params.templateId, params.designation);
       if (result.staff) {
         setStaffList(prev => prev.map(s => s.id === staffId ? result.staff : s));
+        // Refresh all staff permissions after role change
+        if (onRoleUpdate && field === 'role') {
+          await onRoleUpdate();
+        }
       }
       setOpenDropdown(null);
     } catch (err) {
@@ -80,7 +84,7 @@ const StaffAccounts = () => {
     } finally {
       setCellLoading(null);
     }
-  }, []);
+  }, [onRoleUpdate]);
 
   // Load templates on mount for role display & filtering
   useEffect(() => {

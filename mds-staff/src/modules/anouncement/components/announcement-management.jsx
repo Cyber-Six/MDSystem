@@ -424,7 +424,7 @@ const AnnouncementManagement = () => {
             {/* Branch / Location */}
             <div>
               <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
-                Branch Visibility
+                Announcement Visibility
               </label>
               <select
                 name="location"
@@ -432,12 +432,12 @@ const AnnouncementManagement = () => {
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="Both">All Branches</option>
-                <option value="Manila">Manila (Arlegui &amp; Casal)</option>
-                <option value="QuezonCity">Quezon City</option>
+                <option value="Both">All Branches (both Manila &amp; Quezon City)</option>
+                <option value="Manila">Manila Only (Arlegui &amp; Casal)</option>
+                <option value="QuezonCity">Quezon City Only</option>
               </select>
               <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                Controls which branch patients can see this announcement.
+                Who can see this announcement. Your role must have permission for the selected location.
               </p>
             </div>
 
