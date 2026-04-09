@@ -4,10 +4,11 @@ const { isValidEmail } = require("../../../utils/validator.js");
 const { portalBasedIpRateLimiter } = require("../../../config/middleware/ratelimiter.js");
 
 const {createVerificationSession, getVerificationSession, deleteVerificationSession,
-        incrementLoginFailure, isLoginLocked, shouldRequireRecaptcha } = require("../../../config/redis.js");
+        incrementLoginFailure, isLoginLocked, shouldRequireRecaptcha, resetLoginFailures } = require("../../../config/redis.js");
 
 const query = require("../../../config/query.js");
 const { verifyPassword, generateRandomKey } = require("../../../utils/security.js");
+const { verifyRecaptcha } = require('../../../services/recaptcha.js');
 
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
 const AuthSession = require("../../../utils/authSession.js");
@@ -16,7 +17,7 @@ const router = express.Router();
 const VERIFICATIONKEY_PURPOSE = "2fa";
 
 router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, recaptchaToken } = req.body;
   const account_type = detectPortalFromSubdomain(req);
 
   // ✅ Required fields
@@ -43,13 +44,35 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
+  // ✅ Adaptive reCAPTCHA — required after threshold of failed attempts
+  const captchaRequired = await shouldRequireRecaptcha(email, account_type);
+  if (captchaRequired) {
+    if (!recaptchaToken) {
+      return res.status(400).json({
+        error: "RECAPTCHA_REQUIRED",
+        message: "Please complete the reCAPTCHA check.",
+        requiresCaptcha: true,
+      });
+    }
+    const captchaValid = await verifyRecaptcha(recaptchaToken);
+    if (!captchaValid) {
+      return res.status(400).json({
+        error: "INVALID_RECAPTCHA",
+        message: "reCAPTCHA verification failed. Please try again.",
+        requiresCaptcha: true,
+      });
+    }
+  }
+
   // ✅ Fetch user
   const user = await query.findUserByEmail(email);
   if (!user) {
     const count = await incrementLoginFailure(email, account_type);
+    const nextRequiresCaptcha = await shouldRequireRecaptcha(email, account_type);
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
       message: `Email or password is incorrect. ${count} failed attempts.`,
+      requiresCaptcha: nextRequiresCaptcha,
     });
   }
 
@@ -58,9 +81,11 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   if (!passwordValid) {
     const count = await incrementLoginFailure(email, account_type);
     await query.recordLoginAttempt(email, false);
+    const nextRequiresCaptcha = await shouldRequireRecaptcha(email, account_type);
     return res.status(400).json({
       error: "INVALID_CREDENTIALS",
       message: `Email or password is incorrect. ${count} failed attempts.`,
+      requiresCaptcha: nextRequiresCaptcha,
     });
   }
 
@@ -69,6 +94,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     const isMedical = await query.isActiveMedicalPersonnel(user.id);
     if (!isMedical) {
       const count = await incrementLoginFailure(email, account_type);
+      const nextRequiresCaptcha = await shouldRequireRecaptcha(email, account_type);
       const isActive = await query.getMedicalPersonnelStatus(user.id);
       if (isActive === false) {
         return res.status(403).json({
@@ -79,6 +105,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
       return res.status(400).json({
         error: "INVALID_CREDENTIALS",
         message: `Email or password is incorrect. ${count} failed attempts.`,
+        requiresCaptcha: nextRequiresCaptcha,
       });
     }
   }
@@ -86,15 +113,11 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
   // ✅ Create login verification session (always the same purpose)
   const verificationKey = await createVerificationSession(email, VERIFICATIONKEY_PURPOSE, account_type);
 
-  // ✅ Require reCAPTCHA if the user had ≥3 failed attempts before this success
-  const requiresCaptcha = await shouldRequireRecaptcha(email, account_type);
-
   // ✅ Email OTP is always required; TOTP is the preferred alternative when enabled
   return res.status(200).json({
     ok: true,
     requires2FA: true,
     requiresTotp: user.totp_enabled || false,
-    requiresCaptcha,
     LoginKey: verificationKey,
     });
   });
@@ -182,6 +205,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   //const authToken = await query.createAuthToken(session.user_id);
 
   await query.recordLoginAttempt(session.email, true); // record successful login
+  await resetLoginFailures(session.email, portal);     // clear failure count so next login starts fresh
   const tokens = await AuthSession.create(req, session.user_id);
   return res.status(200).json({
     ok: true,

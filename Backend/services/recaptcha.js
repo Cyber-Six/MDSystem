@@ -1,5 +1,6 @@
 const path = require('path');
 const dotenv = require('dotenv');
+const crypto = require('crypto');
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const logger = require('../utils/logger.js');
@@ -9,12 +10,20 @@ const logger = require('../utils/logger.js');
 // secret server-side rather than forwarding to Google's siteverify API.
 const MOBILE_APP_SECRET = process.env.RECAPTCHA_MOBILE_SECRET;
 
+function timingSafeCompare(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+}
+
 async function verifyRecaptcha(token) {
     try {
         // ── Mobile native app bypass ──────────────────────────────────────────
         // Mobile clients (iOS/Android) cannot complete a reCAPTCHA v2 checkbox.
         // They present a server-side shared secret. Validate it here.
-        if (MOBILE_APP_SECRET && token === MOBILE_APP_SECRET) {
+        if (MOBILE_APP_SECRET && timingSafeCompare(token, MOBILE_APP_SECRET)) {
             return true;
         }
 
