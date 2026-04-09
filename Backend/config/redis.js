@@ -1081,7 +1081,7 @@ async function isLoginLocked(email, portal) {
 // ── Adaptive reCAPTCHA ──────────────────────────────────────────────────
 // Threshold at which the server starts requiring reCAPTCHA for an email.
 // Below this, login requests are accepted without a captcha token.
-const RECAPTCHA_FAIL_THRESHOLD = Number(process.env.RECAPTCHA_FAIL_THRESHOLD) || 2;
+const RECAPTCHA_FAIL_THRESHOLD = Number(process.env.RECAPTCHA_FAIL_ATTEMPT_THRESHOLD) || 2;
 
 /**
  * Read the current consecutive-failure count for an email + portal.

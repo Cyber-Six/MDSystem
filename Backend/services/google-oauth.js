@@ -1,20 +1,20 @@
 const { OAuth2Client } = require('google-auth-library');
 const logger = require('../utils/logger.js');
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
 
 let _client = null;
 
 /**
  * Lazily create the OAuth2Client singleton.
- * This avoids instantiation at import time when GOOGLE_CLIENT_ID may not yet
+ * This avoids instantiation at import time when GOOGLE_OAUTH_CLIENT_ID may not yet
  * be loaded from .env (dotenv runs later in the startup sequence).
  */
 function getClient() {
   if (!_client) {
-    const clientId = process.env.GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID;
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || GOOGLE_CLIENT_ID;
     if (!clientId) {
-      throw new Error('GOOGLE_CLIENT_ID is not configured');
+      throw new Error('GOOGLE_OAUTH_CLIENT_ID is not configured');
     }
     _client = new OAuth2Client(clientId);
   }
@@ -42,7 +42,7 @@ async function verifyGoogleToken(idToken) {
     }
 
     const client = getClient();
-    const clientId = process.env.GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID;
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || GOOGLE_CLIENT_ID;
 
     const ticket = await client.verifyIdToken({
       idToken,
