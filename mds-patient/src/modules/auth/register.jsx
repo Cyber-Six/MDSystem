@@ -250,7 +250,7 @@ const Register = ({ onBackToLogin }) => {
     <div className="w-full max-w-md mx-auto">
       {error && (
         <div className="mb-2 p-2 bg-error-50 border border-error-300 rounded-lg">
-          <p className="text-error-600 text-xs text-center">{error}</p>
+          <p className="text-error-600 text-xs text-center mb-0">{error}</p>
         </div>
       )}
 
@@ -414,13 +414,13 @@ const Register = ({ onBackToLogin }) => {
 
       {error && (
           <div className="mb-5 p-3 bg-error-50 border border-error-300 rounded-lg">
-          <p className="text-error-600 text-xs text-center">{error}</p>
+          <p className="text-error-600 text-xs text-center mb-0">{error}</p>
         </div>
       )}
 
       {successMessage && (
         <div className="mb-5 p-3 bg-success-50 border border-success-300 rounded-lg">
-          <p className="text-success-600 text-xs text-center">{successMessage}</p>
+          <p className="text-success-600 text-xs text-center mb-0">{successMessage}</p>
         </div>
       )}
 
@@ -494,11 +494,11 @@ const Register = ({ onBackToLogin }) => {
 
       {error && (
           <div className="mb-5 p-3 bg-error-50 border border-error-300 rounded-lg">
-          <p className="text-error-600 text-xs text-center">{error}</p>
+          <p className="text-error-600 text-xs text-center mb-0">{error}</p>
         </div>
       )}
 
-      {/* DataConsent modal is rendered at the bottom of the component */}
+      {/* DataConsent modal is rendered at the bottom of the component */}}
       <p className="text-center text-neutral-500 text-sm">
         Opening consent agreement...
       </p>

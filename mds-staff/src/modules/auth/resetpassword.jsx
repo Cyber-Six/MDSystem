@@ -108,7 +108,7 @@ const ResetPassword = () => {
         {/* Success state */}
         {success && (
           <div className="mb-6 p-4 bg-success-50 border border-success-300 rounded-lg">
-            <p className="text-success-600 text-sm text-center flex items-center justify-center gap-2">
+            <p className="text-success-600 text-sm text-center flex items-center justify-center gap-2 mb-0">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
@@ -120,7 +120,7 @@ const ResetPassword = () => {
         {/* Error state */}
         {error && (
           <div className="mb-6 p-4 bg-error-50 border border-error-300 rounded-lg">
-            <p className="text-error-600 text-sm text-center">{error}</p>
+            <p className="text-error-600 text-sm text-center mb-0">{error}</p>
           </div>
         )}
 

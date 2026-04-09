@@ -482,7 +482,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
               <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm text-error-700 dark:text-error-400">{error}</p>
+              <p className="text-sm text-error-700 dark:text-error-400 mb-0">{error}</p>
             </div>
           )}
 
@@ -499,7 +499,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
               <svg className="w-4 h-4 text-success-600 dark:text-success-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <p className="text-sm text-success-700 dark:text-success-400">{reopenSuccess}</p>
+              <p className="text-sm text-success-700 dark:text-success-400 mb-0">{reopenSuccess}</p>
             </div>
           )}
 

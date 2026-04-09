@@ -248,7 +248,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 
             {error && (
               <div className="p-3 bg-error-50 dark:bg-error-900/20 rounded-lg border border-error-200 dark:border-error-700">
-                <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
+                <p className="text-sm text-error-600 dark:text-error-400 mb-0">{error}</p>
               </div>
             )}
 
@@ -284,7 +284,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
         {step === 'verify-totp' && (
           <form onSubmit={handleVerifyAndSubmit} className="px-6 py-5 space-y-4">
             <div className="p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg border border-warning-200 dark:border-warning-700">
-              <p className="text-xs text-warning-700 dark:text-warning-300">
+              <p className="text-xs text-warning-700 dark:text-warning-300 mb-0">
                 Enter the 6-digit code from your authenticator app to authorize this change.
               </p>
             </div>
@@ -310,7 +310,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 
             {error && (
               <div className="p-3 bg-error-50 dark:bg-error-900/20 rounded-lg border border-error-200 dark:border-error-700">
-                <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
+                <p className="text-sm text-error-600 dark:text-error-400 mb-0">{error}</p>
               </div>
             )}
 
@@ -354,7 +354,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
         {step === 'verify-email' && (
           <form onSubmit={handleVerifyAndSubmit} className="px-6 py-5 space-y-4">
             <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-700">
-              <p className="text-xs text-primary-700 dark:text-primary-300">
+              <p className="text-xs text-primary-700 dark:text-primary-300 mb-0">
                 A 6-digit verification code has been sent to your email address.
               </p>
             </div>
@@ -380,7 +380,7 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 
             {error && (
               <div className="p-3 bg-error-50 dark:bg-error-900/20 rounded-lg border border-error-200 dark:border-error-700">
-                <p className="text-sm text-error-600 dark:text-error-400">{error}</p>
+                <p className="text-sm text-error-600 dark:text-error-400 mb-0">{error}</p>
               </div>
             )}
 

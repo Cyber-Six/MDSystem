@@ -712,7 +712,7 @@ const StaffAccounts = () => {
                 (<span className="font-mono text-[10px]">{nonMdsWarningUser.email}</span>) does not use a{' '}
                 <span className="font-medium">.mds@tip.edu.ph</span> email address.
               </p>
-              <p className="text-[10px] text-warning-700 dark:text-warning-400 mt-1">
+              <p className="text-[10px] text-warning-700 dark:text-warning-400 mt-1 mb-0">
                 Adding non-MDS employees as staff may cause access issues. Proceed only if intentional.
               </p>
             </div>
