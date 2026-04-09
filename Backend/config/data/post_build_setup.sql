@@ -323,3 +323,34 @@ INSERT INTO "rolesTable" (label, data) VALUES
 ('ALLOW_TO_CONFIGURE_INVENTORY',           'Permission to configure inventory settings and thresholds'),
 ('ALLOW_TO_SEND_NOTIFICATION_TO_PATIENTS', 'Permission to send push notifications and alerts to patients')
 ON CONFLICT (label) DO NOTHING;
+
+-- Student programs (added post-initial build)
+INSERT INTO student_programs (label)
+VALUES
+  ('BS Architecture'),
+  ('BS Chemical Engineering'),
+  ('BS Civil Engineering'),
+  ('BS Computer Engineering'),
+  ('BS Electrical Engineering'),
+  ('BS Electronics Engineering'),
+  ('BS Industrial Engineering'),
+  ('BS Mechanical Engineering'),
+  ('BS Environmental and Sanitary Engineering'),
+  ('BS Computer Science'),
+  ('BS Data Science and Analytics'),
+  ('BS Entertainment and Multimedia Computing'),
+  ('BS Information Technology'),
+  ('BS Information Systems'),
+  ('BS Accountancy'),
+  ('BS Accounting Information Systems'),
+  ('BSBA Financial Management'),
+  ('BSBA Human Resource Management'),
+  ('BSBA Logistics and Supply Chain Management'),
+  ('BSBA Marketing Management'),
+  ('Bachelor of Arts in English Language'),
+  ('Bachelor of Arts in Political Science'),
+  ('Bachelor of Secondary Education Major in English'),
+  ('Bachelor of Secondary Education Major in Mathematics'),
+  ('Bachelor of Secondary Education Major in Sciences'),
+  ('Bachelor of Special Needs Education'),
+  ('Teaching Certificate Program');
