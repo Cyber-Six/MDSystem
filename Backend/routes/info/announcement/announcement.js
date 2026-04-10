@@ -243,7 +243,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         "isActive" = COALESCE($4, "isActive"),
         location = COALESCE($5, location),
         "viewableUntil" = CASE
-          WHEN $6::boolean THEN $7::timestamptz
+          WHEN $6::boolean THEN $7::timestamp
           ELSE "viewableUntil"
         END
       WHERE id = $8
