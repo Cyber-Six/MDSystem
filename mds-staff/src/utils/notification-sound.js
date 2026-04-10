@@ -34,11 +34,13 @@ export const AVAILABLE_SOUNDS = [
   // ── Per-module pre-named files ─────────────────────────────────────────────
   // Drop a file with the exact name into  mds-staff/public/sounds/  and it
   // will play automatically for that module — no code change needed.
-  { id: 'ack.mp3',                 label: 'Appointments' },
-  { id: 'dee-dee-risa.mp3',        label: 'Requests'     },
-  { id: 'fahhh.mp3',       label: 'Inventory'    },
-  { id: 'bruh.mp3',                label: 'Health Chat'  },
-  { id: 'tobol.mp3',             label: 'General'      },
+  // IMPORTANT: Frontend module defaults are derived by these labels. You can
+  // freely change ids (filenames), keep labels as-is.
+  { id: 'ack.mp3', label: 'Appointments' },
+  { id: 'chicken-on-tree-screaming.mp3',     label: 'Requests'     },
+  { id: 'dee-dee-risa.mp3',    label: 'Inventory'    },
+  { id: 'tobol.mp3',   label: 'Health Chat'  },
+  { id: 'you-phone-is-ringing.mp3',      label: 'General'      },
 
   // ── Add more custom sounds below ──────────────────────────────────────────
   // { id: 'chime.mp3',      label: 'Chime'      },
@@ -152,7 +154,7 @@ const VALID_SOUND_FILE = /^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]{1,8}$/;
  *  - AudioContext hasn't been unlocked yet (synthesis only)
  *  - the file name fails the security pattern check
  */
-export function playNotificationSound(volume = 1, soundId = 'synthesis', fallbackId = 'synthesis') {
+export function playNotificationSound(volume = 1, soundId = 'synthesis', fallbackId = null) {
   const vol = Math.min(1, Math.max(0, Number(volume) || 0));
   if (vol === 0) return;
 

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { tokenService, axiosRequest } from '../packages-core-adapter';
+import { AVAILABLE_SOUNDS } from '../utils/notification-sound';
 
 // ── DB ↔ Frontend format converters ──────────────────────────────────────────
 // Converts between the flat localStorage shape and the nested API shape.
@@ -39,6 +40,45 @@ function isAuthenticated() {
   }
 }
 
+const MODULE_LABEL_TO_KEY = {
+  Appointments: 'appointments',
+  Requests: 'medicineRequests',
+  Inventory: 'inventory',
+  'Health Chat': 'healthChat',
+  General: 'general',
+};
+
+const MODULE_SOUND_FALLBACK = {
+  appointments: 'appointments.mp3',
+  medicineRequests: 'requests.mp3',
+  inventory: 'inventory.mp3',
+  healthChat: 'healthchat.mp3',
+  general: 'general.mp3',
+};
+
+// Build module defaults from AVAILABLE_SOUNDS so changing ids there (e.g.
+// appointments.mp3 -> ack.mp3) is automatically picked up by the frontend.
+const DEFAULT_SOUND_FILE_BY_MODULE = (() => {
+  const next = { ...MODULE_SOUND_FALLBACK };
+  AVAILABLE_SOUNDS.forEach((s) => {
+    const moduleKey = MODULE_LABEL_TO_KEY[s?.label];
+    if (moduleKey && typeof s?.id === 'string') {
+      next[moduleKey] = s.id;
+    }
+  });
+  return next;
+})();
+
+const AVAILABLE_SOUND_IDS = new Set(
+  AVAILABLE_SOUNDS
+    .map((s) => s?.id)
+    .filter((id) => typeof id === 'string'),
+);
+
+function isAllowedSoundId(id) {
+  return id === 'synthesis' || AVAILABLE_SOUND_IDS.has(id);
+}
+
 /**
  * Default settings for new users.
  * All flags are enabled by default to preserve existing behavior.
@@ -48,15 +88,9 @@ const DEFAULT_SETTINGS = {
   soundEnabled: true,
   soundVolume: 1,
   notificationSound: 'synthesis', // 'synthesis' | any id from AVAILABLE_SOUNDS
-  // Per-module sound files — save  mds-staff/public/sounds/<filename>  to activate.
-  // Default values match the pre-named files; change in Settings to override.
-  soundFileByModule: {
-    appointments:    'appointments.mp3',
-    medicineRequests: 'requests.mp3',
-    inventory:       'inventory.mp3',
-    healthChat:      'healthchat.mp3',
-    general:         'general.mp3',
-  },
+  // Per-module defaults are generated from AVAILABLE_SOUNDS labels.
+  // Keep labels as: Appointments, Requests, Inventory, Health Chat, General.
+  soundFileByModule: DEFAULT_SOUND_FILE_BY_MODULE,
   soundByModule: {
     healthChat: true,
     appointments: true,
@@ -167,12 +201,18 @@ function sanitizeSettings(parsed) {
   if (parsed.soundFileByModule && typeof parsed.soundFileByModule === 'object') {
     SOUND_FILE_MODULE_KEYS.forEach((k) => {
       const v = parsed.soundFileByModule[k];
-      if (typeof v === 'string' && VALID_SOUND_ID.test(v)) safe.soundFileByModule[k] = v;
+      if (typeof v === 'string' && VALID_SOUND_ID.test(v) && isAllowedSoundId(v)) {
+        safe.soundFileByModule[k] = v;
+      }
     });
   }
 
   // notificationSound — SECURITY: only allow safe filenames or 'synthesis'
-  if (typeof parsed.notificationSound === 'string' && VALID_SOUND_ID.test(parsed.notificationSound)) {
+  if (
+    typeof parsed.notificationSound === 'string'
+    && VALID_SOUND_ID.test(parsed.notificationSound)
+    && isAllowedSoundId(parsed.notificationSound)
+  ) {
     safe.notificationSound = parsed.notificationSound;
   }
 
