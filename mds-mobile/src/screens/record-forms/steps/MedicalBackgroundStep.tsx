@@ -9,6 +9,13 @@ import { View, Text, TouchableOpacity, TextInput, Switch, StyleSheet } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../context/ThemeContext';
 import { DatePickerInput } from '../../../components/ui/DatePickerInput';
+import { CatalogSearchField } from '../../../components/ui/CatalogSearchField';
+import { useCatalogSearch } from '../../../hooks/useCatalogSearch';
+import {
+  searchImmunizationCatalog, createImmunizationCatalog,
+  searchAllergenCatalogByName, createAllergenCatalogEntry,
+  searchDomainCatalog, createDomainCatalog,
+} from '../../../services/emr-service';
 import type { FormData, AllCatalogs } from '../../../services/emr-service';
 
 interface Props {
@@ -52,6 +59,38 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
     borderColor: isDark ? colors.neutral[600] : colors.neutral[200],
   }];
 
+  // "Others" search/create hooks for each catalog
+  const immunizationOthers = useCatalogSearch({
+    catalog: catalogs.immunizationCatalog,
+    searchFn: searchImmunizationCatalog,
+    createFn: (name: string) => createImmunizationCatalog(name),
+    nameKey: 'name',
+  });
+  const allergenOthers = useCatalogSearch({
+    catalog: catalogs.allergenCatalog,
+    searchFn: searchAllergenCatalogByName,
+    createFn: (name: string) => createAllergenCatalogEntry(name, allergenTypeForCreate),
+    nameKey: 'allergen',
+  });
+  const [allergenTypeForCreate, setAllergenTypeForCreate] = useState('Drug');
+  const hospitalizationOthers = useCatalogSearch({
+    catalog: catalogs.hospitalizationCatalog,
+    searchFn: (q: string) => searchDomainCatalog('Hospitalization', q),
+    createFn: (name: string) => createDomainCatalog('Hospitalization', name),
+    nameKey: 'name',
+  });
+  const operationOthers = useCatalogSearch({
+    catalog: catalogs.operationCatalog,
+    searchFn: (q: string) => searchDomainCatalog('Operation', q),
+    createFn: (name: string) => createDomainCatalog('Operation', name),
+    nameKey: 'name',
+  });
+  const medicationOthers = useCatalogSearch({
+    catalog: catalogs.medicationCatalog,
+    searchFn: (q: string) => searchDomainCatalog('Medication', q),
+    createFn: (name: string) => createDomainCatalog('Medication', name),
+    nameKey: 'name',
+  });
 
   const renderYesNo = (label: string, value: string, onSelect: (v: string) => void) => (
     <View style={styles.yesNoContainer}>
@@ -182,8 +221,54 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
             </View>
           );
         })}
-        <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.immunizationOther} onChangeText={v => onUpdateBg({ immunizationOther: v })}
-          placeholder="Other immunizations..." placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
+        {/* Dynamic (searched/created) immunizations */}
+        {immunizationOthers.dynamicItems.map((vac: any) => {
+          const isChecked = !!bg.immunizations[vac.id];
+          const details = bg.immunizationDetails?.[vac.id];
+          return (
+            <View key={vac.id}>
+              <TouchableOpacity style={styles.checkRow} onPress={() => handleImmunizationToggle(vac.id)} activeOpacity={0.7}>
+                <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                  {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+                </View>
+                <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{vac.name}</Text>
+                <Text style={{ fontSize: 10, color: colors.primary[400], fontWeight: '600' }}>NEW</Text>
+              </TouchableOpacity>
+              {isChecked && (
+                <View style={[styles.detailCard, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
+                  <View style={styles.detailRow}>
+                    <View style={{ flex: 1 }}>
+                      <DatePickerInput label="Date Received" value={details?.date || ''} onChange={v => handleImmunizationDetail(vac.id, 'date', v)} isDark={isDark} required />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.detailLabel, { color: isDark ? colors.neutral[300] : colors.neutral[600] }]}>Dose Number *</Text>
+                      <TextInput style={inputStyle} value={details?.doseNumber || ''} onChangeText={v => handleImmunizationDetail(vac.id, 'doseNumber', v)}
+                        placeholder="1, 2, 3..." keyboardType="numeric" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
+                    </View>
+                  </View>
+                </View>
+              )}
+            </View>
+          );
+        })}
+        <CatalogSearchField
+          label="Other Immunizations"
+          input={immunizationOthers.input}
+          onInputChange={immunizationOthers.handleInputChange}
+          suggestions={immunizationOthers.suggestions}
+          displayKey="name"
+          searching={immunizationOthers.searching}
+          creating={immunizationOthers.creating}
+          focused={immunizationOthers.focused}
+          onFocusChange={immunizationOthers.setFocused}
+          onSelect={(item) => {
+            immunizationOthers.selectItem(item);
+            handleImmunizationToggle(item.id);
+          }}
+          onCreate={() => immunizationOthers.createItem(immunizationOthers.input.trim())}
+          isDark={isDark}
+          placeholder="Search or add immunizations..."
+        />
       </AccordionSection>
 
       {/* Allergies */}
@@ -215,8 +300,60 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
                 </View>
               );
             })}
-            <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.allergyOther} onChangeText={v => onUpdateBg({ allergyOther: v })}
-              placeholder="Other allergies..." placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
+            {/* Dynamic (searched/created) allergens */}
+            {allergenOthers.dynamicItems.map((allergen: any) => {
+              const val = bg.allergies[allergen.id];
+              const isChecked = typeof val === 'object' ? val.checked : !!val;
+              const severity = typeof val === 'object' ? val.severity : '';
+              const status = typeof val === 'object' ? (val as any).status : 'Active';
+              return (
+                <View key={allergen.id}>
+                  <TouchableOpacity style={styles.checkRow} onPress={() => handleAllergyToggle(allergen.id)} activeOpacity={0.7}>
+                    <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                      {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+                    </View>
+                    <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>
+                      {allergen.allergen} ({allergen.type})
+                    </Text>
+                    <Text style={{ fontSize: 10, color: colors.primary[400], fontWeight: '600' }}>NEW</Text>
+                  </TouchableOpacity>
+                  {isChecked && (
+                    <View style={[styles.detailCard, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
+                      {renderOptionPicker('Status *', STATUS_OPTIONS, status, v => handleAllergyDetail(allergen.id, 'status', v))}
+                      {renderOptionPicker('Severity *', SEVERITY_OPTIONS, severity, v => handleAllergyDetail(allergen.id, 'severity', v))}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            {/* Allergen type picker for creation */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 }}>
+              <Text style={{ fontSize: 13, color: isDark ? colors.neutral[300] : colors.neutral[600] }}>Type:</Text>
+              {['Drug', 'Food', 'Environmental', 'Other'].map(t => (
+                <TouchableOpacity key={t} onPress={() => setAllergenTypeForCreate(t)}
+                  style={[styles.optionChip, { backgroundColor: allergenTypeForCreate === t ? colors.primary[500] : isDark ? colors.neutral[700] : colors.neutral[100] }]}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: allergenTypeForCreate === t ? '#FFF' : isDark ? colors.neutral[300] : colors.neutral[600] }}>{t}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <CatalogSearchField
+              label="Other Allergens"
+              input={allergenOthers.input}
+              onInputChange={allergenOthers.handleInputChange}
+              suggestions={allergenOthers.suggestions}
+              displayKey="allergen"
+              searching={allergenOthers.searching}
+              creating={allergenOthers.creating}
+              focused={allergenOthers.focused}
+              onFocusChange={allergenOthers.setFocused}
+              onSelect={(item) => {
+                allergenOthers.selectItem(item);
+                handleAllergyToggle(item.id);
+              }}
+              onCreate={() => allergenOthers.createItem(allergenOthers.input.trim())}
+              isDark={isDark}
+              placeholder="Search or add allergens..."
+            />
             <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.allergyNotes || ''} onChangeText={v => onUpdateBg({ allergyNotes: v })}
               placeholder="Additional allergy notes (optional)" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} multiline />
           </>
@@ -279,6 +416,68 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
                 </View>
               );
             })}
+            {/* Dynamic (searched/created) hospitalizations */}
+            {hospitalizationOthers.dynamicItems.map((cond: any) => {
+              const isChecked = !!bg.hospitalizationConditions[cond.id];
+              const dates = bg.hospitalizationDates?.[cond.id];
+              return (
+                <View key={cond.id}>
+                  <TouchableOpacity style={styles.checkRow} onPress={() => {
+                    const newChecked = !isChecked;
+                    onUpdateBg({ hospitalizationConditions: { ...bg.hospitalizationConditions, [cond.id]: newChecked } });
+                    if (!newChecked) {
+                      const updated = { ...bg.hospitalizationDates };
+                      delete updated[cond.id];
+                      onUpdateBg({ hospitalizationDates: updated });
+                    }
+                  }} activeOpacity={0.7}>
+                    <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                      {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+                    </View>
+                    <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{cond.name}</Text>
+                    <Text style={{ fontSize: 10, color: colors.primary[400], fontWeight: '600' }}>NEW</Text>
+                  </TouchableOpacity>
+                  {isChecked && (
+                    <View style={[styles.detailCard, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
+                      <View style={styles.detailRow}>
+                        <View style={{ flex: 1 }}>
+                          <DatePickerInput label="Admission Date" value={dates?.admissionDate || ''}
+                            onChange={v => {
+                              const existing = bg.hospitalizationDates?.[cond.id] || { admissionDate: '', dischargeDate: '' };
+                              onUpdateBg({ hospitalizationDates: { ...bg.hospitalizationDates, [cond.id]: { ...existing, admissionDate: v } } });
+                            }} isDark={isDark} required />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <DatePickerInput label="Discharge Date" value={dates?.dischargeDate || ''}
+                            onChange={v => {
+                              const existing = bg.hospitalizationDates?.[cond.id] || { admissionDate: '', dischargeDate: '' };
+                              onUpdateBg({ hospitalizationDates: { ...bg.hospitalizationDates, [cond.id]: { ...existing, dischargeDate: v } } });
+                            }} isDark={isDark} />
+                        </View>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            <CatalogSearchField
+              label="Other Hospitalizations"
+              input={hospitalizationOthers.input}
+              onInputChange={hospitalizationOthers.handleInputChange}
+              suggestions={hospitalizationOthers.suggestions}
+              displayKey="name"
+              searching={hospitalizationOthers.searching}
+              creating={hospitalizationOthers.creating}
+              focused={hospitalizationOthers.focused}
+              onFocusChange={hospitalizationOthers.setFocused}
+              onSelect={(item) => {
+                hospitalizationOthers.selectItem(item);
+                onUpdateBg({ hospitalizationConditions: { ...bg.hospitalizationConditions, [item.id]: true } });
+              }}
+              onCreate={() => hospitalizationOthers.createItem(hospitalizationOthers.input.trim())}
+              isDark={isDark}
+              placeholder="Search or add hospitalizations..."
+            />
             <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.hospitalizationNotes} onChangeText={v => onUpdateBg({ hospitalizationNotes: v })}
               placeholder="Notes (optional)" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} multiline />
           </>
@@ -323,6 +522,54 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
                 </View>
               );
             })}
+            {/* Dynamic (searched/created) operations */}
+            {operationOthers.dynamicItems.map((proc: any) => {
+              const isChecked = !!bg.operationConditions[proc.id];
+              const opDate = bg.operationDates?.[proc.id] || '';
+              return (
+                <View key={proc.id}>
+                  <TouchableOpacity style={styles.checkRow} onPress={() => {
+                    const newChecked = !isChecked;
+                    onUpdateBg({ operationConditions: { ...bg.operationConditions, [proc.id]: newChecked } });
+                    if (!newChecked) {
+                      const updated = { ...bg.operationDates };
+                      delete updated[proc.id];
+                      onUpdateBg({ operationDates: updated });
+                    }
+                  }} activeOpacity={0.7}>
+                    <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                      {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+                    </View>
+                    <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{proc.name}</Text>
+                    <Text style={{ fontSize: 10, color: colors.primary[400], fontWeight: '600' }}>NEW</Text>
+                  </TouchableOpacity>
+                  {isChecked && (
+                    <View style={[styles.detailCard, { backgroundColor: isDark ? colors.neutral[700] : colors.neutral[50] }]}>
+                      <DatePickerInput label="Operation Date" value={opDate}
+                        onChange={v => onUpdateBg({ operationDates: { ...bg.operationDates, [proc.id]: v } })} isDark={isDark} required />
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            <CatalogSearchField
+              label="Other Operations"
+              input={operationOthers.input}
+              onInputChange={operationOthers.handleInputChange}
+              suggestions={operationOthers.suggestions}
+              displayKey="name"
+              searching={operationOthers.searching}
+              creating={operationOthers.creating}
+              focused={operationOthers.focused}
+              onFocusChange={operationOthers.setFocused}
+              onSelect={(item) => {
+                operationOthers.selectItem(item);
+                onUpdateBg({ operationConditions: { ...bg.operationConditions, [item.id]: true } });
+              }}
+              onCreate={() => operationOthers.createItem(operationOthers.input.trim())}
+              isDark={isDark}
+              placeholder="Search or add operations..."
+            />
             <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.operationNotes} onChangeText={v => onUpdateBg({ operationNotes: v })}
               placeholder="Surgery notes (optional)" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} multiline />
           </>
@@ -345,8 +592,37 @@ export const MedicalBackgroundStep: React.FC<Props> = ({ formData, onUpdateBg, i
                 </TouchableOpacity>
               );
             })}
-            <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.medicationDescription || ''} onChangeText={v => onUpdateBg({ medicationDescription: v })}
-              placeholder="Description / Dosage (e.g. 500mg twice daily)" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} />
+            {/* Dynamic (searched/created) medications */}
+            {medicationOthers.dynamicItems.map((med: any) => {
+              const isChecked = !!bg.selectedMedications[med.id];
+              return (
+                <TouchableOpacity key={med.id} style={styles.checkRow} onPress={() => onUpdateBg({ selectedMedications: { ...bg.selectedMedications, [med.id]: !isChecked } })} activeOpacity={0.7}>
+                  <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                    {isChecked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+                  </View>
+                  <Text style={[styles.itemText, { color: isDark ? colors.neutral[100] : colors.neutral[800] }]}>{med.name}</Text>
+                  <Text style={{ fontSize: 10, color: colors.primary[400], fontWeight: '600' }}>NEW</Text>
+                </TouchableOpacity>
+              );
+            })}
+            <CatalogSearchField
+              label="Other Medications"
+              input={medicationOthers.input}
+              onInputChange={medicationOthers.handleInputChange}
+              suggestions={medicationOthers.suggestions}
+              displayKey="name"
+              searching={medicationOthers.searching}
+              creating={medicationOthers.creating}
+              focused={medicationOthers.focused}
+              onFocusChange={medicationOthers.setFocused}
+              onSelect={(item) => {
+                medicationOthers.selectItem(item);
+                onUpdateBg({ selectedMedications: { ...bg.selectedMedications, [item.id]: true } });
+              }}
+              onCreate={() => medicationOthers.createItem(medicationOthers.input.trim())}
+              isDark={isDark}
+              placeholder="Search or add medications..."
+            />
             <TextInput style={[...inputStyle, { marginTop: 8 }]} value={bg.medicationNotes || ''} onChangeText={v => onUpdateBg({ medicationNotes: v })}
               placeholder="Medication notes (optional)" placeholderTextColor={isDark ? colors.neutral[500] : colors.neutral[400]} multiline />
           </>
