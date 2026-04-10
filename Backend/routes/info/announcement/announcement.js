@@ -7,6 +7,28 @@ const { promoteFile, deleteFile } = require("../../../config/multer.js");
 const { ValidateBranchbyUserBranch, ValidateLocationDesignation } = require("../../../utils/validator.js");
 const router = express.Router();
 
+function parseViewableUntilInput(viewableUntil, { allowUndefined = true } = {}) {
+  if (viewableUntil === undefined) {
+    if (allowUndefined) return { hasValue: false, value: null };
+    return { hasValue: true, value: null };
+  }
+
+  if (viewableUntil === null || viewableUntil === "") {
+    return { hasValue: true, value: null };
+  }
+
+  const parsed = new Date(viewableUntil);
+  if (Number.isNaN(parsed.getTime())) {
+    return { error: "INVALID_VIEWABLE_UNTIL", message: "Viewable Until must be a valid date/time." };
+  }
+
+  if (parsed <= new Date()) {
+    return { error: "INVALID_VIEWABLE_UNTIL", message: "Viewable Until must be a future date/time." };
+  }
+
+  return { hasValue: true, value: parsed.toISOString() };
+}
+
 // ✅ GET all active announcements (Patient accessible)
 router.get("/", jwtProtect(""), async (req, res) => {
     try {
@@ -129,6 +151,11 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
         const userId = req.user.id;
         const { label, description, pubmat, isActive, location, viewableUntil } = req.body;
 
+    const parsedViewableUntil = parseViewableUntilInput(viewableUntil, { allowUndefined: true });
+    if (parsedViewableUntil.error) {
+      return res.status(400).json({ error: parsedViewableUntil.error, message: parsedViewableUntil.message });
+    }
+
         if (!ValidateLocationDesignation(location)) {
             return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
         }
@@ -162,7 +189,7 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
             promotedPubmat,
             isActive !== undefined ? isActive : true,
             location || 'Both',
-            viewableUntil || null
+          parsedViewableUntil.value
         ];
 
         const result = await queryControlled(sql, params);
@@ -178,12 +205,21 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
 // ✅ UPDATE announcement (Staff only)
 router.put("/:id", jwtProtect("medical"), async (req, res) => {
   const client = await connect();
+  let oldPubmat = null;
+  let promotedPubmat = null;
   try {
     await client.query("BEGIN");
 
     const userId = req.user.id;
     const { id } = req.params;
     let { label, description, pubmat, isActive, location, viewableUntil } = req.body;
+    const hasViewableUntil = Object.prototype.hasOwnProperty.call(req.body, "viewableUntil");
+
+    const parsedViewableUntil = parseViewableUntilInput(viewableUntil, { allowUndefined: true });
+    if (parsedViewableUntil.error) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: parsedViewableUntil.error, message: parsedViewableUntil.message });
+    }
 
     // Existence check - need to verify current location for permission checks
     const existsResult = await client.query(`SELECT id, pubmat, location FROM "Announcement" WHERE id = $1;`, [id]);
@@ -192,7 +228,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
       return res.status(404).json({ error: "NOT_FOUND", message: "Announcement not found" });
     }
 
-    const oldPubmat = existsResult.rows[0].pubmat;
+    oldPubmat = existsResult.rows[0].pubmat;
     const currentLocation = existsResult.rows[0].location;
 
     // Validate new location if provided
@@ -218,7 +254,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
       }
     }
 
-    let promotedPubmat = oldPubmat;
+    promotedPubmat = oldPubmat;
 
     // Promote new pubmat if provided
     if (pubmat && pubmat !== oldPubmat) {
@@ -239,11 +275,23 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         pubmat = COALESCE($3, pubmat),
         "isActive" = COALESCE($4, "isActive"),
         location = COALESCE($5, location),
-        "viewableUntil" = COALESCE($6, "viewableUntil")
-      WHERE id = $7
+        "viewableUntil" = CASE
+          WHEN $6::boolean THEN $7::timestamptz
+          ELSE "viewableUntil"
+        END
+      WHERE id = $8
       RETURNING id, title as label, content as description, pubmat, "isActive", location, created_at, "viewableUntil";
     `;
-    const params = [label, description, promotedPubmat, isActive, location, viewableUntil, id];
+    const params = [
+      label,
+      description,
+      promotedPubmat,
+      isActive,
+      location,
+      hasViewableUntil,
+      hasViewableUntil ? parsedViewableUntil.value : null,
+      id,
+    ];
     const result = await client.query(sql, params);
 
     if (result.rowCount === 0) {
