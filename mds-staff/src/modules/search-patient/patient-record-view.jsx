@@ -336,6 +336,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [personalSubTab, setPersonalSubTab] = useState('personal-info');
   const [medicalSubTab, setMedicalSubTab] = useState('medical-record');
   const [dentalSubTab, setDentalSubTab] = useState('dental-record');
+  const [consultationSubTab, setConsultationSubTab] = useState('consultation-form');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
@@ -347,7 +348,20 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const mockPatient = isMockPatient ? MOCK_PATIENT_RECORDS[String(patientId)] : null;
 
   useEffect(() => {
-    setActiveTab(initialTab || 'personal');
+    const requestedTab = initialTab || 'personal';
+
+    // Keep backward compatibility for old links/tabs that still use `history`.
+    if (requestedTab === 'history') {
+      setActiveTab('consultation');
+      setConsultationSubTab('consultation-history');
+      return;
+    }
+
+    setActiveTab(requestedTab);
+
+    if (requestedTab === 'consultation') {
+      setConsultationSubTab('consultation-form');
+    }
   }, [initialTab]);
 
   useEffect(() => {
@@ -620,12 +634,11 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
   const tabs = [
     { id: 'personal', label: 'Personal Info' },
-    { id: 'medical', label: 'Medical Record' },
+    { id: 'medical', label: 'Medical Info' },
     { id: 'vital-signs', label: 'Vital Signs' },
-    { id: 'dental', label: 'Dental Record' },
+    { id: 'dental', label: 'Dental Info' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
-    { id: 'history', label: 'Consultation History' },
     { id: 'appointments', label: 'Appointments' },
     { id: 'medicines', label: 'Medicine Requests' },
     { id: 'documents', label: 'Documents' },
@@ -645,8 +658,8 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           <div>
             <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
               {[
-                { id: 'personal-info', label: 'Personal Info' },
-                { id: 'personal-record-history', label: 'Personal Record Info History' },
+                { id: 'personal-info', label: 'Personal Record' },
+                { id: 'personal-record-history', label: 'Personal Record History' },
               ].map((sub) => (
                 <button
                   key={sub.id}
@@ -731,14 +744,42 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         );
       case 'consultation':
         return (
-          <PatientConsultationTab
-            patient={patient}
-            consultations={consultations}
-            onSaveConsultation={handleSaveConsultation}
-          />
+          <div>
+            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
+              {[
+                { id: 'consultation-form', label: 'Consultation Form' },
+                { id: 'consultation-history', label: 'Consultation History' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setConsultationSubTab(sub.id)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    consultationSubTab === sub.id
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+            <Suspense fallback={<LoadingBlock label="Loading..." />}>
+              {consultationSubTab === 'consultation-form' ? (
+                <PatientConsultationTab
+                  patient={patient}
+                  consultations={consultations}
+                  onSaveConsultation={handleSaveConsultation}
+                />
+              ) : (
+                <PatientConsultationHistoryTab
+                  patient={patient}
+                  consultations={consultations}
+                  onRefreshConsultations={handleRefreshConsultations}
+                />
+              )}
+            </Suspense>
+          </div>
         );
-      case 'history':
-        return <PatientConsultationHistoryTab patient={patient} consultations={consultations} onRefreshConsultations={handleRefreshConsultations} />;
       case 'appointments':
         return <PatientAppointmentsTab patient={patient} />;
       case 'medicines':

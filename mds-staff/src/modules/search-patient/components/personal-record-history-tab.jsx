@@ -143,7 +143,7 @@ export default function PatientPersonalRecordHistoryTab({ patient }) {
 
   if (records.length === 0) {
     return (
-      <PatientSectionCard title="Personal Record Info History">
+      <PatientSectionCard title="Personal Record History">
         <p className="text-sm text-secondary-400 dark:text-neutral-500">No personal record history found.</p>
       </PatientSectionCard>
     );
