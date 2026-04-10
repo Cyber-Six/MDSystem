@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { sendGraphQLRequest } from '../../utils/graphql-client';
 import { getMyPersonalEmail } from '../../services/emr-service';
 import { usePatientNotifications } from '../notification/notification-context';
+import { formatBatchDisplay } from '../../utils/batch-display-utils';
 import RequestNotificationModal from './components/request-notification-modal';
 import SuccessMessageModal from '../../components/modals/SuccessMessageModal';
 
@@ -741,8 +742,15 @@ const MedicineRequestPage = () => {
                       const selectedCount = formData.items.length;
                       const canSelect = isSelected || selectedCount < 2;
                       
+                      // Sort batches by expiry date (FEFO)
+                      const sortedBatches = [...(medicineGroup.batches || [])].sort((a, b) => {
+                        const dateA = new Date(a.expiryDate || '2099-12-31').getTime();
+                        const dateB = new Date(b.expiryDate || '2099-12-31').getTime();
+                        return dateA - dateB;
+                      });
+                      
                       return (
-                        <div key={itemCode} className="space-y-2">
+                        <div key={itemCode} className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 space-y-2 hover:border-neutral-300 dark:hover:border-neutral-600 transition-colors">
                           <label className="flex items-start space-x-2 cursor-pointer">
                             <input
                               type="checkbox"
@@ -755,15 +763,40 @@ const MedicineRequestPage = () => {
                                   handleMedicineToggle(itemCode, medicineGroup);
                                 }
                               }}
-                              className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500 mt-1 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500 mt-0.5 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                             />
-                            <div className="text-sm text-neutral-700 dark:text-neutral-300">
-                              <div className="font-medium">{medicineGroup.item_name}</div>
+                            <div className="text-sm text-neutral-700 dark:text-neutral-300 flex-1">
+                              <div className="font-semibold text-neutral-800 dark:text-white">{medicineGroup.item_name}</div>
                               {!canSelect && !isSelected && (
-                                <div className="text-xs text-red-600 dark:text-red-400">Maximum 2 medicines reached</div>
+                                <div className="text-xs text-red-600 dark:text-red-400 mt-0.5">Maximum 2 medicines reached</div>
                               )}
                             </div>
                           </label>
+                          
+                          {/* Available Batches */}
+                          <div className="text-xs text-neutral-500 dark:text-neutral-400 space-y-0.5 border-t border-neutral-200 dark:border-neutral-700 pt-2 mt-2">
+                            <div className="font-medium text-[10px] uppercase tracking-wider text-neutral-600 dark:text-neutral-500">Available Batches:</div>
+                            {sortedBatches.length > 0 ? (
+                              <ul className="space-y-0.5">
+                                {sortedBatches.map((batch, idx) => (
+                                  <li key={batch.id} className="text-[11px] text-neutral-600 dark:text-neutral-400 flex items-start gap-1.5">
+                                    <span className="flex-shrink-0">
+                                      {idx === 0 && sortedBatches.length > 1 ? (
+                                        <span title="First to be dispensed (FEFO)" className="px-1 py-0.5 bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300 rounded text-[9px] font-bold leading-none">FEFO</span>
+                                      ) : idx === 0 && sortedBatches.length === 1 ? (
+                                        <span className="text-neutral-400 dark:text-neutral-600">•</span>
+                                      ) : (
+                                        <span className="text-neutral-400 dark:text-neutral-600">•</span>
+                                      )}
+                                    </span>
+                                    <span className="flex-1">{formatBatchDisplay(batch, { compact: true, showUnit: false })}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="text-neutral-400 dark:text-neutral-600 text-[10px]">No batches available</div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

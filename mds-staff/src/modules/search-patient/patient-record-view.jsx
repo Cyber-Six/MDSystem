@@ -1,9 +1,10 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../../packages-core-adapter';
 import { GQL_FULL_RECORD, GQL_PERSONAL_PROFILE, MOCK_PATIENT_RECORDS, STATUS_BANNER } from './patient-record-data';
 import * as consultationService from './consultation-service';
 import { ENUM_TO_CODE } from './components/tooth-chart-constants';
+import { fetchPatientMedicineRequests } from '../medical-inventory/medicine-request-service';
 
 const GQL_BASIC_RECORD_FALLBACK = `
   query GetPatientBasicRecordFallback($userId: ID!) {
@@ -329,6 +330,51 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
   };
 }
 
+const normalizeMedicineRequestStatus = (status) => {
+  if (status === 'Completed' || status === 'Dispensed') return 'Dispensed';
+  if (status === 'Rejected') return 'Rejected';
+  if (status === 'Cancelled' || status === 'Expired') return 'Cancelled';
+  return 'Pending';
+};
+
+const formatMedicineRequestDate = (dateValue) => {
+  if (!dateValue) return '';
+  try {
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '';
+  }
+};
+
+const mapMedicineRequestsForDisplay = (requests = []) => {
+  return requests.map((req) => {
+    const items = Array.isArray(req?.items) ? req.items : [];
+    const medicineNames = items
+      .map((item) => item?.itemName || item?.item_name || (item?.medicineId ? `Medicine #${item.medicineId}` : null))
+      .filter(Boolean);
+
+    const totalQuantity = items.reduce((sum, item) => sum + Number(item?.quantity || 0), 0);
+    const normalizedStatus = normalizeMedicineRequestStatus(req?.status);
+
+    return {
+      id: req?.id ? `#${req.id}` : '',
+      requestId: req?.id,
+      medicine: medicineNames.length > 0 ? medicineNames.join(', ') : 'Medicine request',
+      quantity: totalQuantity || 0,
+      reason: req?.purpose || '',
+      notes: req?.notes || '',
+      prescribedBy: req?.approved_by ? `Staff #${req.approved_by}` : '',
+      date: formatMedicineRequestDate(req?.created_at),
+      dispensedDate: '',
+      status: normalizedStatus,
+      backendStatus: req?.status || 'Pending',
+      location: req?.location || '',
+    };
+  });
+};
+
 export default function PatientRecordView({ patientId, initialTab: initialTabProp, embedded = false, onBack }) {
   const [searchParams] = useSearchParams();
   const initialTab = initialTabProp || searchParams.get('tab') || 'personal';
@@ -343,6 +389,10 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [profileData, setProfileData] = useState(null);
   const [vitalsData, setVitalsData] = useState(null);
   const [consultations, setConsultations] = useState([]);
+  const [medicineRequests, setMedicineRequests] = useState(() => []);
+  const [isLoadingMedicineRequests, setIsLoadingMedicineRequests] = useState(false);
+  const [medicineRequestsError, setMedicineRequestsError] = useState('');
+  const medicineRequestsFetchIdRef = useRef(0);
 
   const isMockPatient = String(patientId || '').startsWith('mock-');
   const mockPatient = isMockPatient ? MOCK_PATIENT_RECORDS[String(patientId)] : null;
@@ -506,12 +556,65 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     };
   }, [patientId, isMockPatient, mockPatient]);
 
-  const patient = useMemo(() => toDisplayPatient(patientId, recordData, mockPatient, profileData, vitalsData), [patientId, recordData, mockPatient, profileData, vitalsData]);
+  const loadMedicineRequests = useCallback(async () => {
+    const fetchId = ++medicineRequestsFetchIdRef.current;
+
+    if (!patientId) {
+      setMedicineRequests([]);
+      setMedicineRequestsError('');
+      return;
+    }
+
+    if (isMockPatient) {
+      setMedicineRequests(mockPatient?.history?.medicineRequests || []);
+      setMedicineRequestsError('');
+      setIsLoadingMedicineRequests(false);
+      return;
+    }
+
+    setIsLoadingMedicineRequests(true);
+    setMedicineRequestsError('');
+    try {
+      const data = await fetchPatientMedicineRequests(String(patientId), 0, 100);
+      if (fetchId !== medicineRequestsFetchIdRef.current) return;
+      setMedicineRequests(mapMedicineRequestsForDisplay(data));
+    } catch (err) {
+      if (fetchId !== medicineRequestsFetchIdRef.current) return;
+      setMedicineRequests([]);
+      setMedicineRequestsError(err.message || 'Failed to load medicine requests.');
+    } finally {
+      if (fetchId === medicineRequestsFetchIdRef.current) {
+        setIsLoadingMedicineRequests(false);
+      }
+    }
+  }, [patientId, isMockPatient, mockPatient]);
+
+  useEffect(() => {
+    loadMedicineRequests();
+  }, [loadMedicineRequests]);
+
+  useEffect(() => {
+    if (activeTab === 'medicines') {
+      loadMedicineRequests();
+    }
+  }, [activeTab, loadMedicineRequests]);
+
+  const patient = useMemo(() => {
+    const basePatient = toDisplayPatient(patientId, recordData, mockPatient, profileData, vitalsData);
+    const baseHistory = basePatient?.history || {};
+    return {
+      ...basePatient,
+      history: {
+        ...baseHistory,
+        medicineRequests,
+      },
+    };
+  }, [patientId, recordData, mockPatient, profileData, vitalsData, medicineRequests]);
 
   // Fetch consultations from backend on page load
   useEffect(() => {
     if (!patientId || isMockPatient) {
-      setConsultations(patient?.history?.consultations || []);
+      setConsultations(mockPatient?.history?.consultations || []);
       return;
     }
 
@@ -537,7 +640,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     return () => {
       cancelled = true;
     };
-  }, [patientId, isMockPatient, patient]);
+  }, [patientId, isMockPatient, mockPatient]);
 
   const handleRefreshConsultations = async () => {
     try {
@@ -794,7 +897,15 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       case 'appointments':
         return <PatientAppointmentsTab patient={patient} />;
       case 'medicines':
-        return <PatientMedicineRequestsTab patient={patient} />;
+        return (
+          <PatientMedicineRequestsTab
+            patient={patient}
+            requests={medicineRequests}
+            isLoading={isLoadingMedicineRequests}
+            error={medicineRequestsError}
+            onRefresh={loadMedicineRequests}
+          />
+        );
       case 'documents':
         return <PatientDocumentsTab patient={patient} />;
       case 'obgyne':

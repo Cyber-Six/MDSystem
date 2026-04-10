@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchAvailableMedicine, issuePrescription } from '../../prescription-service';
-import { getDisplayLocation } from '../../medical-inventory-service';
-
-// Helper to format date for display (remove time portion)
-const formatDateDisplay = (dateValue) => {
-  if (!dateValue) return 'N/A';
-  try {
-    const date = new Date(dateValue);
-    if (isNaN(date.getTime())) return 'N/A';
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch (err) {
-    return 'N/A';
-  }
-};
+import { getDisplayLocation, formatDateDisplay, formatBatchDisplay } from '../../medical-inventory-service';
 
 /**
  * Dispense Medicine Modal — issue medicine batch(es) to a patient.
@@ -223,14 +211,11 @@ const DispenseMedicineModal = ({ patientId, patientName, allowedLocations = [], 
                         {med.item_name} ({med.dosageValue} {med.dosageUnit})
                       </p>
                       <p className="text-[10px] text-secondary-400 dark:text-neutral-500 leading-none mt-0.5">
-                        {med.item_code} • Batch: {med.batchNumber}
+                        {med.item_code} • {formatBatchDisplay(med, { compact: true })}
                       </p>
                       <div className="flex gap-2 mt-1 flex-wrap">
                         <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
                           {getDisplayLocation(med.location)}
-                        </span>
-                        <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-400">
-                          Expires: {formatDateDisplay(med.expiryDate)}
                         </span>
                       </div>
                     </div>

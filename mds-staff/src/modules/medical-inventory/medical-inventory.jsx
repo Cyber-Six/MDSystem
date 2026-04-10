@@ -315,6 +315,11 @@ const MedicalInventory = () => {
     loadItems();
   }, [loadItems]);
 
+  const refreshInventoryItems = useCallback(async () => {
+    await loadItems();
+    refreshInventoryAlerts();
+  }, [loadItems, refreshInventoryAlerts]);
+
   // Helper function to show success modal
   const showSuccess = useCallback((title = 'Success', message = '', details = null) => {
     setSuccessMsg(message); // Keep backward compatibility if needed
@@ -473,33 +478,6 @@ const MedicalInventory = () => {
       });
     }
 
-    const normalized = batch.isMedicine
-      ? {
-          id: created.id,
-          medicalItemId: created.medicalItemId,
-          batchNumber: created.batchNumber,
-          dosageValue: created.dosageValue,
-          dosageUnit: created.dosageUnit,
-          currentQuantity: Number(created.dosageValue ?? 0),
-          availableQuantity: Number(batch.quantity ?? 0),
-          initialQuantity: Number(created.dosageValue ?? 0),
-          expiryDate: created.expiryDate,
-          location: created.location,
-          supplierName: created.supplierName,
-          notes: created.notes,
-        }
-      : {
-          id: created.id,
-          medicalItemId: created.supplyItemId,
-          batchNumber: created.batchNumber,
-          currentQuantity: created.currentQuantity,
-          expiryDate: created.expiryDate,
-          location: created.location,
-          supplierName: created.supplierName,
-          notes: created.notes,
-        };
-    setBatches([...batches, normalized]);
-
     // Record ADD transaction for per-item history
     const addQty = Number(batch.quantity ?? 0);
     recordTransaction({
@@ -512,8 +490,11 @@ const MedicalInventory = () => {
       batchNumber: batch.batchNumber,
     });
 
+    await refreshInventoryItems();
+
     setShowAddSupply(false);
-    showSuccess('Batch Received', `Batch ${batch.batchNumber} received (${batch.quantity} units).`);
+    setSupplyContext(null);
+    showSuccess('Inventory Updated', 'Inventory updated successfully.', `Batch ${created.batchNumber} received (${batch.quantity} units).`);
   };
 
   const handleSplit = async ({ sourceBatchId, quantity, toClinic, notes }) => {
@@ -574,12 +555,12 @@ const MedicalInventory = () => {
         batchNumber: source.batchNumber,
       });
 
-      // Reload from backend so batch counts reflect all the moves
-      await loadItems();
-      refreshInventoryAlerts();
+      // Reload from backend so all dependent views show canonical values.
+      await refreshInventoryItems();
 
       setShowSplitSupply(false);
-      showSuccess('Supply Transferred', `Successfully moved ${quantity} units to ${toClinic}.`);
+      setSplitContext(null);
+      showSuccess('Inventory Updated', 'Inventory updated successfully.', `Moved ${quantity} units to ${toClinic}.`);
     } catch (err) {
       setError(err.message || 'Failed to split supply. Please try again.');
     }
@@ -672,6 +653,11 @@ const MedicalInventory = () => {
       setIsLoadingRequests(false);
     }
   }, [allowedLocationsList, enrichRequestItems, enrichRequestsWithPatientNames]);
+
+  const refreshInventoryAndQueue = useCallback(async () => {
+    await Promise.all([loadItems(), loadAllMedicineRequests()]);
+    refreshInventoryAlerts();
+  }, [loadItems, loadAllMedicineRequests, refreshInventoryAlerts]);
 
   useEffect(() => {
     if (itemsLoading || hasLoadedRequestsRef.current) return;
@@ -853,11 +839,10 @@ const MedicalInventory = () => {
         notes: reason,
         itemId: source?.medicalItemId, batchNumber: source?.batchNumber || '',
       });
-      await loadItems();
-      refreshInventoryAlerts();
+      await refreshInventoryItems();
       setShowAdjustStock(false);
       setAdjustContext(null);
-      showSuccess('Stock Adjusted', `Stock ${type === 'add' ? 'increased' : 'decreased'} by ${quantity} units.`);
+      showSuccess('Inventory Updated', 'Inventory updated successfully.', `Stock ${type === 'add' ? 'increased' : 'decreased'} by ${quantity} units.`);
     } catch (err) {
       setError(err.message || 'Failed to adjust stock');
     }
@@ -952,8 +937,11 @@ const MedicalInventory = () => {
         batchNumber: (allocation || []).map((a) => batches.find((b) => b.id === a.id)?.batchNumber).filter(Boolean).join(', '),
       }, ...transactions]);
 
+      await refreshInventoryAndQueue();
+
       setShowDispense(false);
-      showSuccess('Medicine Dispensed', `Dispensed ${totalQty} units to ${req?.patientName || 'patient'}.`, `Transaction #${txId}`);
+      setDispenseContext(null);
+      showSuccess('Inventory Updated', 'Inventory updated successfully.', `Dispensed ${totalQty} units to ${req?.patientName || 'patient'} (Transaction #${txId}).`);
     } catch (err) {
       console.error('❌ Dispense mutation failed:', err);
       setError(err.message || 'Failed to dispense medicine. Please try again.');
@@ -1280,8 +1268,8 @@ const MedicalInventory = () => {
                 <DirectRelease
                   location={directReleaseLocation}
                   allRequests={requests}
-                  onRelease={(result) => {
-                    loadAllMedicineRequests();
+                  onRelease={async (result) => {
+                    await refreshInventoryAndQueue();
                     recordTransaction({
                       action: 'direct_release',
                       itemId: null,
@@ -1378,8 +1366,9 @@ const MedicalInventory = () => {
           patientName={dispenseMedicineContext.patientName}
           allowedLocations={allowedLocationsList}
           onClose={() => setShowDispenseMedicine(false)}
-          onSuccess={(result) => {
-            showSuccess('Medicine Dispensed', `Dispensed medicine to ${dispenseMedicineContext.patientName}.`, `Transaction ID: ${result.id}`);
+          onSuccess={async (result) => {
+            await refreshInventoryAndQueue();
+            showSuccess('Inventory Updated', 'Inventory updated successfully.', `Dispensed medicine to ${dispenseMedicineContext.patientName}. Transaction ID: ${result.id}`);
             setShowDispenseMedicine(false);
           }}
         />

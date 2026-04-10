@@ -3,6 +3,7 @@ import { fetchAvailableMedicineWithQuantities } from '../../prescription-service
 import { issuePrescription } from '../../prescription-service';
 import { searchPatientsForInventory } from '../../services/inventory-patient-search';
 import { useStaffProfile } from '../../../../hooks/use-staff-profile';
+import { formatBatchDisplay, formatDateDisplay } from '../../medical-inventory-service';
 import BatchSelectionModal from './batch-selection-modal';
 
 /**
@@ -88,24 +89,24 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
   }, [profile?.branch]);
 
   // Load medicines for the current location
-  useEffect(() => {
-    const loadMedicines = async () => {
-      if (!location) return;
+  const loadMedicines = useCallback(async () => {
+    if (!location) return;
 
-      setLoadingMedicines(true);
-      try {
-        const availableMedicines = await fetchAvailableMedicineWithQuantities(location, 0, 100);
-        setMedicines(availableMedicines || []);
-      } catch (err) {
-        console.error('Failed to load medicines:', err);
-        onShowError('Failed to load available medicines');
-      } finally {
-        setLoadingMedicines(false);
-      }
-    };
-
-    loadMedicines();
+    setLoadingMedicines(true);
+    try {
+      const availableMedicines = await fetchAvailableMedicineWithQuantities(location, 0, 100);
+      setMedicines(availableMedicines || []);
+    } catch (err) {
+      console.error('Failed to load medicines:', err);
+      onShowError('Failed to load available medicines');
+    } finally {
+      setLoadingMedicines(false);
+    }
   }, [location, onShowError]);
+
+  useEffect(() => {
+    loadMedicines();
+  }, [loadMedicines]);
 
   // Handle patient selection
   const handleSelectPatient = (patient) => {
@@ -303,6 +304,9 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
         return updated;
       });
 
+      // Reload available batches/quantities immediately after backend success.
+      await loadMedicines();
+
       // Reset form
       setSelectedPatient(null);
       setReleaseItems([]);
@@ -311,7 +315,7 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
 
       // Callback for parent component
       if (onRelease) {
-        onRelease(result);
+        await Promise.resolve(onRelease(result));
       }
     } catch (err) {
       console.error('Release error:', err);
@@ -799,18 +803,15 @@ const DirectRelease = ({ location, onRelease, onShowSuccess, onShowError, allReq
                         {record.quantity}
                       </td>
                       <td className="px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400">
-                        <div className="font-medium">{record.batchNumber}</div>
-                        {record.expiryDate && (
-                          <div className={`text-[10px] ${
-                            isExpired 
-                              ? 'text-error-600 dark:text-error-400' 
-                              : expirySoon 
-                              ? 'text-warning-600 dark:text-warning-400' 
-                              : 'text-neutral-500 dark:text-neutral-500'
-                          }`}>
-                            {new Date(record.expiryDate).toLocaleDateString()}
-                          </div>
-                        )}
+                        <div className={`font-medium ${
+                          isExpired 
+                            ? 'text-error-600 dark:text-error-400' 
+                            : expirySoon 
+                            ? 'text-warning-600 dark:text-warning-400' 
+                            : 'text-neutral-700 dark:text-neutral-300'
+                        }`}>
+                          {formatBatchDisplay(record, { compact: true })}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 text-xs text-secondary-700 dark:text-neutral-300">{displayLocation}</td>
                       <td className="px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400 max-w-xs">

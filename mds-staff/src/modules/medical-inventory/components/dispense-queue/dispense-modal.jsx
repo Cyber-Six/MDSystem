@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { getExpiryStatus } from '../../inventory-seed-data';
+import { formatBatchDisplay, getBatchDropdownText } from '../../medical-inventory-service';
 
 /**
  * Dispense Modal — FEFO allocation preview + confirm dispense.
@@ -231,7 +232,7 @@ const DispenseModal = ({ request, items, batches, onClose, onConfirm }) => {
                         })
                         .map((batch) => (
                           <option key={batch.id} value={batch.id}>
-                            {batch.batchNumber} (Exp: {formatDate(batch.expiryDate)})
+                            {getBatchDropdownText(batch)}
                           </option>
                         ))}
                     </select>
