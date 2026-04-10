@@ -6,6 +6,8 @@ import { computeItemStats } from '../medical-inventory/inventory-seed-data';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
 import { usePermissions } from '../../context/permissions-context';
 import { getLocationsByBranch } from '../../utils/branch-utils';
+import { getStaffSettings } from '../../context/settings-context';
+import { playNotificationSound } from '../../utils/notification-sound';
 
 /**
  * Maps a socket event name to the frontend moduleId that must be enabled for a
@@ -230,6 +232,16 @@ function persistSeenInventoryIds(ids) {
 }
 const MAX_NOTIFICATIONS = 50;
 
+// Maps notification.type → soundByModule key
+const TYPE_TO_SOUND_MODULE = {
+  chat: 'healthChat',
+  appointment: 'appointments',
+  medicine: 'medicineRequests',
+  record: 'general',
+  document: 'general',
+  general: 'general',
+};
+
 function loadPersistedNotifications() {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -288,6 +300,13 @@ export function StaffNotificationProvider({ children }) {
       persistNotifications(next);
       return next;
     });
+
+    // Play notification sound honoring per-module settings
+    const soundModuleKey = TYPE_TO_SOUND_MODULE[notif.type] ?? 'general';
+    const s = getStaffSettings();
+    if (s.soundEnabled && s.soundByModule[soundModuleKey] !== false) {
+      playNotificationSound(s.soundVolume);
+    }
   }, []);
 
   const markAsRead = useCallback((id) => {
@@ -561,6 +580,25 @@ export function StaffNotificationProvider({ children }) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissionsLoading]);
+
+  // Play sound when new unseen inventory alerts arrive. Skip the very first
+  // fetch so opening the app doesn't immediately chime.
+  const prevInventoryIdsRef = useRef(null);
+  useEffect(() => {
+    const currentIds = new Set(inventoryAlerts.map((a) => a.id));
+    if (prevInventoryIdsRef.current === null) {
+      prevInventoryIdsRef.current = currentIds;
+      return;
+    }
+    const hasNew = inventoryAlerts.some((a) => !prevInventoryIdsRef.current.has(a.id));
+    prevInventoryIdsRef.current = currentIds;
+    if (hasNew) {
+      const s = getStaffSettings();
+      if (s.soundEnabled && s.soundByModule.inventory !== false) {
+        playNotificationSound(s.soundVolume);
+      }
+    }
+  }, [inventoryAlerts]);
 
   const unseenInventoryCount = inventoryAlerts.filter((a) => !seenInventoryIds.has(a.id)).length;
   const unreadCount = notifications.filter((n) => n.unread).length + unseenInventoryCount;
