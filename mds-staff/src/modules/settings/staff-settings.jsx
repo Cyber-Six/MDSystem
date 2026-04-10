@@ -69,9 +69,9 @@ const Toggle = ({ checked, onChange, disabled }) => (
 
 // Separate style tokens so section header and setting rows can be tuned independently.
 const SECTION_HEADER_STYLES = {
-  container: 'px-5 py-2.5 border-b border-neutral-100 dark:border-neutral-700/50',
+  container: 'px-5 py-2 border-b border-neutral-100 dark:border-neutral-700/50',
   icon: 'text-secondary-500 dark:text-neutral-400 flex-shrink-0',
-  textWrap: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  textWrap: { display: 'flex', flexDirection: 'column', gap: '6px' },
   title: 'text-sm font-semibold text-secondary-800 dark:text-white',
   description: 'text-xs text-secondary-500 dark:text-neutral-400',
   titleStyle: { lineHeight: 1.25, margin: 0 },
@@ -79,12 +79,12 @@ const SECTION_HEADER_STYLES = {
 };
 
 const SETTING_ROW_STYLES = {
-  rowBase: 'flex items-center justify-between gap-4 py-1.5',
+  rowBase: 'flex items-center justify-between gap-4 py-1',
   labelBase: 'text-sm font-medium text-secondary-700 dark:text-neutral-200',
   labelIndented: 'text-xs',
   description: 'text-xs text-secondary-400 dark:text-neutral-500',
   labelStyle: { lineHeight: 1.2, margin: 0 },
-  descriptionStyle: { marginTop: '3px', lineHeight: 1.25, marginBottom: 0 },
+  descriptionStyle: { marginTop: '2px', lineHeight: 1.25, marginBottom: 0 },
 };
 
 /**
@@ -103,7 +103,7 @@ const Section = ({ icon, title, description, children }) => (
         </div>
       </div>
     </div>
-    <div className="px-5 py-1.5 divide-y divide-neutral-100 dark:divide-neutral-700/50">
+    <div className="px-5 py-1 divide-y divide-neutral-100 dark:divide-neutral-700/50">
       {children}
     </div>
   </div>
@@ -373,10 +373,10 @@ const StaffSettings = () => {
   const showSaveBar = hasChanges && !isScrolling;
 
   return (
-    <div className={`max-w-2xl mx-auto space-y-5 transition-all duration-200 ${showSaveBarAnim ? 'pb-24' : 'pb-6'}`}>
+    <div className={`max-w-2xl mx-auto space-y-3 transition-all duration-200 ${showSaveBarAnim ? 'pb-24' : 'pb-4'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div className="flex items-center justify-between px-0.5">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-lg font-bold text-secondary-800 dark:text-white">Settings</h2>
           <p style={{ margin: 0 }} className="text-xs text-secondary-500 dark:text-neutral-400">
             Customize your staff portal experience. Saved to your account.
@@ -468,8 +468,8 @@ const StaffSettings = () => {
         </SettingRow>
 
         {/* Per-module toggles + sound pickers */}
-        <div className="pt-1">
-          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1 pl-6">
+        <div className="pt-0">
+          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-0.5 pl-6">
             By Module
           </p>
           {Object.entries(MODULE_LABELS).map(([key, label]) => (
@@ -678,12 +678,12 @@ const StaffSettings = () => {
       </Section>
 
       {/* ── Save Bar ── */}
-      <div className={`sticky bottom-3 z-30 bg-white/95 dark:bg-neutral-800/95 backdrop-blur-md rounded-xl border border-primary-300 dark:border-primary-700 shadow-xl ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300 ${
+      <div className={`sticky bottom-2 z-30 bg-white/95 dark:bg-neutral-800/95 backdrop-blur-md rounded-xl border border-primary-300 dark:border-primary-700 shadow-xl ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300 ${
         showSaveBar 
           ? 'opacity-100 scale-y-100 translate-y-0' 
           : 'opacity-0 scale-y-95 translate-y-full pointer-events-none'
       }`}>
-        <div className="flex items-center justify-between gap-4 px-5 py-3">
+        <div className="flex items-center justify-between gap-4 px-5 py-2.5">
           <div className="flex min-h-10 items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-warning-500 animate-pulse" />
             <p style={{ margin: 0, lineHeight: 1.2 }} className="text-xs font-medium text-warning-600 dark:text-warning-400">You have unsaved changes</p>

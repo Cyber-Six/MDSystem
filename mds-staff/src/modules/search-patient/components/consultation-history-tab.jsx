@@ -96,7 +96,7 @@ export default function PatientConsultationHistoryTab({ patient, consultations: 
                 onClick={() => setFilter(f)}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                   filter === f
-                    ? 'bg-primary-500 dark:bg-primary-600 text-secondary-900 dark:text-secondary-900 font-semibold'
+                    ? 'bg-primary-500 dark:bg-primary-600 text-white dark:text-white font-semibold'
                     : 'text-secondary-400 dark:text-neutral-500 hover:text-secondary-600 dark:hover:text-neutral-300'
                 }`}
               >
@@ -110,69 +110,69 @@ export default function PatientConsultationHistoryTab({ patient, consultations: 
         {filtered.length === 0 ? (
           <p className="text-xs text-secondary-300 dark:text-neutral-600">No consultation records yet.</p>
         ) : (
-          <div className="divide-y divide-neutral-100 dark:divide-neutral-700/60 -mx-3 -mb-3">
+          <div className="space-y-2">
             {filtered.map((consult, idx) => (
               <article
                 key={idx}
-                className="px-3 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors cursor-pointer"
+                className="rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/30 overflow-hidden hover:shadow-sm dark:hover:shadow-2xl/10 transition-shadow cursor-pointer"
                 onClick={() => handleConsultationClick(consult)}
               >
                 {(() => {
                   const diagnosis = getPrimaryDiagnosis(consult);
                   return (
                     <>
+                      {/* Header: Diagnosis + Date */}
+                      <div className="px-3.5 py-2.5 flex items-start justify-between gap-2 border-b border-neutral-100 dark:border-neutral-700/60">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-base font-semibold text-secondary-800 dark:text-white truncate" style={{ margin: 0, lineHeight: 1.2 }}>
+                            {diagnosis.text}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {consult.date && <span className="text-xs text-secondary-400 dark:text-neutral-500 whitespace-nowrap">{consult.date}{consult.time ? ` · ${consult.time}` : ''}</span>}
+                          <span className="text-[10px] text-primary-600 dark:text-primary-400 font-medium">View</span>
+                        </div>
+                      </div>
 
-                {/* Row 1: type badge + status badge + mode + id + date/time */}
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <TypeBadge type={consult.type} />
-                    {consult.status && <StatusBadge status={consult.status} />}
-                    {consult.mode && <ModeBadge mode={consult.mode} />}
-                    <span className="text-[11px] font-mono text-secondary-400 dark:text-neutral-500">{consult.id}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-secondary-400 dark:text-neutral-500 shrink-0">
-                      {consult.date}{consult.time ? ` · ${consult.time}` : ''}
-                    </span>
-                    <div className="text-[11px] text-primary-600 dark:text-primary-400 font-medium">
-                      Click to view details
-                    </div>
-                  </div>
-                </div>
+                      {/* Badges row: type + status + mode + id */}
+                      <div className="px-3.5 py-2 border-b border-neutral-100 dark:border-neutral-700/60 flex items-center gap-1.5 flex-wrap">
+                        <TypeBadge type={consult.type} />
+                        {consult.status && <StatusBadge status={consult.status} />}
+                        {consult.mode && <ModeBadge mode={consult.mode} />}
+                        {consult.id && <span className="text-[11px] font-mono text-secondary-500 dark:text-neutral-400">{consult.id}</span>}
+                      </div>
 
-                {/* Row 2: diagnosis + doctor */}
-                <p className="text-sm font-semibold text-secondary-800 dark:text-white leading-snug">{diagnosis.text}</p>
-                <p className="text-xs text-secondary-400 dark:text-neutral-500 mt-1">{consult.doctor}</p>
-                {diagnosis.codes.length > 1 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {diagnosis.codes.slice(0, 4).map((code, codeIdx) => (
-                      <span key={`${code}-${codeIdx}`} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300">
-                        {code}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                      {/* Content: Doctor + Treatment + Notes */}
+                      <div className="px-3.5 py-2 space-y-1">
+                        {consult.doctor && (
+                          <p className="text-sm text-secondary-700 dark:text-neutral-200" style={{ margin: 0, lineHeight: 1.3 }}>
+                            <span className="text-secondary-500 dark:text-neutral-400 font-medium">Clinic Staff:</span> {consult.doctor}
+                          </p>
+                        )}
+                        {consult.treatment && (
+                          <p className="text-sm text-secondary-700 dark:text-neutral-200" style={{ margin: 0, lineHeight: 1.3 }}>
+                            <span className="text-secondary-500 dark:text-neutral-400 font-medium">Treatment:</span> {consult.treatment}
+                          </p>
+                        )}
+                        {consult.notes && (
+                          <p className="text-sm text-secondary-700 dark:text-neutral-200" style={{ margin: 0, lineHeight: 1.3 }}>
+                            <span className="text-secondary-500 dark:text-neutral-400 font-medium">Notes:</span> {consult.notes}
+                          </p>
+                        )}
+                      </div>
 
-                {/* Row 3: treatment + notes */}
-                {(consult.treatment || consult.notes) && (
-                  <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-700/60">
-                    {consult.treatment && (
-                      <p className="text-xs text-secondary-600 dark:text-neutral-300">
-                        <span className="text-secondary-400 dark:text-neutral-500">Treatment: </span>{consult.treatment}
-                      </p>
-                    )}
-                    {consult.notes && (
-                      <p className="text-xs text-secondary-500 dark:text-neutral-400">
-                        <span className="text-secondary-400 dark:text-neutral-500">Notes: </span>{consult.notes}
-                      </p>
-                    )}
-                  </div>
-                )}
-
+                      {diagnosis.codes.length > 1 && (
+                        <div className="px-3.5 py-1.5 border-t border-neutral-100 dark:border-neutral-700/60 flex gap-1 flex-wrap">
+                          {diagnosis.codes.slice(0, 4).map((code, codeIdx) => (
+                            <span key={`${code}-${codeIdx}`} className="inline-flex items-center px-2 py-0.5 rounded text-[9px] bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 font-medium">
+                              {code}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </>
                   );
                 })()}
-
               </article>
             ))}
           </div>
