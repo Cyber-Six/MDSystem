@@ -375,6 +375,29 @@ const mapMedicineRequestsForDisplay = (requests = []) => {
   });
 };
 
+// ── Helper: Get icon and color for each tab category ──────────────────────────
+const TAB_CONFIG = {
+  personal: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Profile' },
+  medical: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Medical' },
+  dental: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Dental' },
+  consultation: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Consultation' },
+  obgyne: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'OB-GYN' },
+  appointments: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Schedule' },
+  medicines: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Medicines' },
+  documents: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: 'Documents' },
+};
+
+// ── Helper: Get active sub-tab label ──────────────────────────────────────────
+const getActiveSubTabLabel = (mainTab, subTabState) => {
+  const subTabMap = {
+    personal: { 'personal-info': 'Personal Record', 'personal-record-history': 'History' },
+    medical: { 'medical-record': 'Medical Record', 'medical-record-history': 'History', 'vital-signs': 'Vital Signs' },
+    dental: { 'dental-record': 'Dental Record', 'dental-grade-history': 'History', 'dental-grading': 'Grading' },
+    consultation: { 'consultation-form': 'New Form', 'consultation-history': 'History' },
+  };
+  return subTabMap[mainTab]?.[subTabState] || '';
+};
+
 export default function PatientRecordView({ patientId, initialTab: initialTabProp, embedded = false, onBack }) {
   const [searchParams] = useSearchParams();
   const initialTab = initialTabProp || searchParams.get('tab') || 'personal';
@@ -384,6 +407,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [dentalSubTab, setDentalSubTab] = useState('dental-record');
   const [consultationSubTab, setConsultationSubTab] = useState('consultation-form');
   const [isLoading, setIsLoading] = useState(true);
+  const tabsRef = useRef(null);
   const [loadError, setLoadError] = useState(null);
   const [recordData, setRecordData] = useState(null);
   const [profileData, setProfileData] = useState(null);
@@ -393,6 +417,23 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const [isLoadingMedicineRequests, setIsLoadingMedicineRequests] = useState(false);
   const [medicineRequestsError, setMedicineRequestsError] = useState('');
   const medicineRequestsFetchIdRef = useRef(0);
+
+  // ── Keyboard navigation for tabs (Arrow keys) ────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(e.key) || !tabsRef.current) return;
+      e.preventDefault();
+      const buttons = Array.from(tabsRef.current.querySelectorAll('button[data-tab-id]'));
+      const currentIdx = buttons.findIndex(b => b.getAttribute('data-tab-id') === activeTab);
+      if (currentIdx === -1) return;
+      const nextIdx = e.key === 'ArrowRight' ? (currentIdx + 1) % buttons.length : (currentIdx - 1 + buttons.length) % buttons.length;
+      const nextTabId = buttons[nextIdx].getAttribute('data-tab-id');
+      setActiveTab(nextTabId);
+      buttons[nextIdx].focus();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab]);
 
   const isMockPatient = String(patientId || '').startsWith('mock-');
   const mockPatient = isMockPatient ? MOCK_PATIENT_RECORDS[String(patientId)] : null;
@@ -767,132 +808,34 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const renderTab = () => {
     switch (activeTab) {
       case 'personal':
-        return (
-          <div>
-            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
-              {[
-                { id: 'personal-info', label: 'Personal Record' },
-                { id: 'personal-record-history', label: 'Personal Record History' },
-              ].map((sub) => (
-                <button
-                  key={sub.id}
-                  onClick={() => setPersonalSubTab(sub.id)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    personalSubTab === sub.id
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                  }`}
-                >
-                  {sub.label}
-                </button>
-              ))}
-            </div>
-            <Suspense fallback={<LoadingBlock label="Loading..." />}>
-              {personalSubTab === 'personal-info'
-                ? <PatientPersonalInfoTab patient={patient} />
-                : <PatientPersonalRecordHistoryTab patient={patient} />}
-            </Suspense>
-          </div>
-        );
+        return personalSubTab === 'personal-info'
+          ? <PatientPersonalInfoTab patient={patient} />
+          : <PatientPersonalRecordHistoryTab patient={patient} />;
       case 'medical':
-        return (
-          <div>
-            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
-              {[
-                { id: 'medical-record', label: 'Medical Record' },
-                { id: 'medical-record-history', label: 'Medical Record History' },
-                { id: 'vital-signs', label: 'Vital Signs' },
-              ].map((sub) => (
-                <button
-                  key={sub.id}
-                  onClick={() => setMedicalSubTab(sub.id)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    medicalSubTab === sub.id
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                  }`}
-                >
-                  {sub.label}
-                </button>
-              ))}
-            </div>
-            <Suspense fallback={<LoadingBlock label="Loading..." />}>
-              {medicalSubTab === 'medical-record'
-                ? <PatientMedicalRecordTab patient={patient} />
-                : medicalSubTab === 'medical-record-history'
-                  ? <PatientMedicalRecordHistoryTab patient={patient} />
-                  : <VitalSignsTab patient={patient} />}
-            </Suspense>
-          </div>
-        );
+        return medicalSubTab === 'medical-record'
+          ? <PatientMedicalRecordTab patient={patient} />
+          : medicalSubTab === 'medical-record-history'
+            ? <PatientMedicalRecordHistoryTab patient={patient} />
+            : <VitalSignsTab patient={patient} />;
       case 'dental':
-        return (
-          <div>
-            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
-              {[
-                { id: 'dental-record', label: 'Dental Record' },
-                { id: 'dental-grade-history', label: 'Dental Record History' },
-                { id: 'dental-grading', label: 'Dental Grading' },
-              ].map((sub) => (
-                <button
-                  key={sub.id}
-                  onClick={() => setDentalSubTab(sub.id)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    dentalSubTab === sub.id
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                  }`}
-                >
-                  {sub.label}
-                </button>
-              ))}
-            </div>
-            <Suspense fallback={<LoadingBlock label="Loading..." />}>
-              {dentalSubTab === 'dental-record'
-                ? <PatientDentalRecordTab patient={patient} />
-                : dentalSubTab === 'dental-grade-history'
-                  ? <PatientDentalGradeHistoryTab patient={patient} />
-                  : <DentalGradingTab patient={patient} />}
-            </Suspense>
-          </div>
-        );
+        return dentalSubTab === 'dental-record'
+          ? <PatientDentalRecordTab patient={patient} />
+          : dentalSubTab === 'dental-grade-history'
+            ? <PatientDentalGradeHistoryTab patient={patient} />
+            : <DentalGradingTab patient={patient} />;
       case 'consultation':
-        return (
-          <div>
-            <div className="flex gap-1.5 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
-              {[
-                { id: 'consultation-form', label: 'Consultation Form' },
-                { id: 'consultation-history', label: 'Consultation History' },
-              ].map((sub) => (
-                <button
-                  key={sub.id}
-                  onClick={() => setConsultationSubTab(sub.id)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    consultationSubTab === sub.id
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                  }`}
-                >
-                  {sub.label}
-                </button>
-              ))}
-            </div>
-            <Suspense fallback={<LoadingBlock label="Loading..." />}>
-              {consultationSubTab === 'consultation-form' ? (
-                <PatientConsultationTab
-                  patient={patient}
-                  consultations={consultations}
-                  onSaveConsultation={handleSaveConsultation}
-                />
-              ) : (
-                <PatientConsultationHistoryTab
-                  patient={patient}
-                  consultations={consultations}
-                  onRefreshConsultations={handleRefreshConsultations}
-                />
-              )}
-            </Suspense>
-          </div>
+        return consultationSubTab === 'consultation-form' ? (
+          <PatientConsultationTab
+            patient={patient}
+            consultations={consultations}
+            onSaveConsultation={handleSaveConsultation}
+          />
+        ) : (
+          <PatientConsultationHistoryTab
+            patient={patient}
+            consultations={consultations}
+            onRefreshConsultations={handleRefreshConsultations}
+          />
         );
       case 'appointments':
         return <PatientAppointmentsTab patient={patient} />;
@@ -987,25 +930,144 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       </section>
 
       <section className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-        <div className="px-2 py-2.5 border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto">
-          <div className="flex gap-1.5 min-w-max">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-neutral-100 dark:bg-neutral-700/50 text-secondary-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+        {/* ── Main Tab Bar ──────────────────────────────────────────────────────── */}
+        <div className="px-3 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto">
+          <div className="flex gap-1.5 min-w-max" role="tablist" ref={tabsRef}>
+            {tabs.map((tab) => {
+              const config = TAB_CONFIG[tab.id] || { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: '' };
+              return (
+                <button
+                  key={tab.id}
+                  data-tab-id={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  aria-controls={`tabpanel-${tab.id}`}
+                  className={`px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white shadow-sm'
+                      : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="p-3">
+        {/* ── Breadcrumb Navigation ─────────────────────────────────────────────── */}
+        {['personal', 'medical', 'dental', 'consultation'].includes(activeTab) && (
+          <div className="px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex items-center gap-2 text-sm text-neutral-800 dark:text-white">
+              <span className="font-semibold">{TAB_CONFIG[activeTab]?.category}</span>
+              <span className="text-neutral-300 dark:text-neutral-600">›</span>
+              <span className="text-neutral-700 dark:text-neutral-100">{getActiveSubTabLabel(activeTab, 
+                activeTab === 'personal' ? personalSubTab : 
+                activeTab === 'medical' ? medicalSubTab : 
+                activeTab === 'dental' ? dentalSubTab : 
+                consultationSubTab)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Sub-Tabs (Nested View) ────────────────────────────────────────────── */}
+        {activeTab === 'personal' && (
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'personal-info', label: 'Personal Record' },
+                { id: 'personal-record-history', label: 'History' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setPersonalSubTab(sub.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                    personalSubTab === sub.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'medical' && (
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'medical-record', label: 'Medical Record' },
+                { id: 'medical-record-history', label: 'History' },
+                { id: 'vital-signs', label: 'Vital Signs' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setMedicalSubTab(sub.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                    medicalSubTab === sub.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'dental' && (
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'dental-record', label: 'Dental Record' },
+                { id: 'dental-grade-history', label: 'History' },
+                { id: 'dental-grading', label: 'Grading' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setDentalSubTab(sub.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                    dentalSubTab === sub.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'consultation' && (
+          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'consultation-form', label: 'New Consultation' },
+                { id: 'consultation-history', label: 'History' },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  onClick={() => setConsultationSubTab(sub.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                    consultationSubTab === sub.id
+                      ? 'bg-yellow-400 dark:bg-yellow-500 text-neutral-900 dark:text-white'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-300 dark:hover:bg-neutral-600'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab Content ───────────────────────────────────────────────────────── */}
+        <div className="p-4" id={`tabpanel-${activeTab}`} role="tabpanel" aria-labelledby={`tab-${activeTab}`}>
           <Suspense fallback={<LoadingBlock label="Loading tab content..." />}>
             {renderTab()}
           </Suspense>
