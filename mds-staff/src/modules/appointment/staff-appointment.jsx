@@ -209,7 +209,7 @@ const StaffAppointment = () => {
       {/* Page Header + Section Switcher */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-secondary-800 dark:text-white leading-none m-0">Appointments</h1>
+          <h1 className="text-lg font-bold text-secondary-800 dark:text-white leading-none m-0">Appointments</h1>
           <p className="text-xs text-secondary-500 dark:text-neutral-400">Manage appointment queue and slot availability</p>
         </div>
         <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
