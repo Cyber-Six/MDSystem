@@ -927,12 +927,17 @@ const Query = {
     return result.rows[0] || null;
   },
 
-  _searchPatients: async (_, { searchTerm, branch, offset, limit }, { user, res }) => {
+  _searchPatients: async (_, { searchTerm, branch, identities, offset, limit }, { user, res }) => {
     if (!searchTerm || searchTerm.trim().length < 2) return [];
 
     const term = searchTerm.trim();
     const prefixTerm = term + '%';          // for identifier prefix match
     const anyTerm   = '%' + term + '%';     // for name contains match
+    const tokens = term.split(/\s+/).filter(Boolean);
+    const hasTwoTokens = tokens.length >= 2;
+    const token1Any = hasTwoTokens ? `%${tokens[0]}%` : null;
+    const token2Any = hasTwoTokens ? `%${tokens[1]}%` : null;
+    const identitiesFilter = Array.isArray(identities) && identities.length > 0 ? identities : null;
 
     const query = `
       SELECT
@@ -992,23 +997,38 @@ const Query = {
           OR up.branch::"UserDesignation" = $1::"UserDesignation"
         )
         AND (
+          COALESCE(array_length($7::text[], 1), 0) = 0
+          OR uc.identity::text = ANY($7::text[])
+        )
+        AND (
           up.identifier::text ILIKE $2
           OR (COALESCE(upl.first_name, '') || ' ' || COALESCE(upl.last_name, '')) ILIKE $3
           OR (COALESCE(upl.last_name, '')  || ', ' || COALESCE(upl.first_name, '')) ILIKE $3
           OR COALESCE(upl.first_name, '') ILIKE $3
           OR COALESCE(upl.last_name, '') ILIKE $3
           OR uc.email ILIKE $3
+          OR (
+            $6::boolean = true AND (
+              (COALESCE(upl.first_name, '') ILIKE $4 AND COALESCE(upl.last_name, '') ILIKE $5)
+              OR
+              (COALESCE(upl.last_name, '') ILIKE $4 AND COALESCE(upl.first_name, '') ILIKE $5)
+            )
+          )
         )
       ORDER BY
         CASE WHEN up.identifier::text ILIKE $2 THEN 0 ELSE 1 END,
         upl.last_name, upl.first_name
-      LIMIT $4 OFFSET $5;
+      LIMIT $8 OFFSET $9;
     `;
 
     const result = await db.query(query, [
       branch || null,
       prefixTerm,
       anyTerm,
+      token1Any,
+      token2Any,
+      hasTwoTokens,
+      identitiesFilter,
       limit || 15,
       offset || 0,
     ]);
