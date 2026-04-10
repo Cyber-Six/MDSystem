@@ -7,34 +7,6 @@ const { promoteFile, deleteFile } = require("../../../config/multer.js");
 const { ValidateBranchbyUserBranch, ValidateLocationDesignation } = require("../../../utils/validator.js");
 const router = express.Router();
 
-function parseViewableUntilInput(viewableUntil, { allowUndefined = true, skipFutureCheck = false } = {}) {
-  if (viewableUntil === undefined) {
-    if (allowUndefined) return { hasValue: false, value: null };
-    return { hasValue: true, value: null };
-  }
-
-  if (viewableUntil === null || viewableUntil === "") {
-    return { hasValue: true, value: null };
-  }
-
-  // If already formatted as ISO string, use it as-is (for backend already-stored values)
-  if (typeof viewableUntil === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(viewableUntil)) {
-    return { hasValue: true, value: viewableUntil };
-  }
-
-  const parsed = new Date(viewableUntil);
-  if (Number.isNaN(parsed.getTime())) {
-    return { error: "INVALID_VIEWABLE_UNTIL", message: "Viewable Until must be a valid date/time." };
-  }
-
-  // Only check if date is in future during creation (not during updates)
-  if (!skipFutureCheck && parsed <= new Date()) {
-    return { error: "INVALID_VIEWABLE_UNTIL", message: "Viewable Until must be a future date/time." };
-  }
-
-  return { hasValue: true, value: parsed.toISOString() };
-}
-
 // ✅ GET all active announcements (Patient accessible)
 router.get("/", jwtProtect(""), async (req, res) => {
     try {
@@ -157,12 +129,7 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
         const userId = req.user.id;
         const { label, description, pubmat, isActive, location, viewableUntil } = req.body;
 
-    const parsedViewableUntil = parseViewableUntilInput(viewableUntil, { allowUndefined: true });
-    if (parsedViewableUntil.error) {
-      return res.status(400).json({ error: parsedViewableUntil.error, message: parsedViewableUntil.message });
-    }
-
-        if (!ValidateLocationDesignation(location)) {
+    if (!ValidateLocationDesignation(location)) {
             return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
         }
 
@@ -195,7 +162,7 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
             promotedPubmat,
             isActive !== undefined ? isActive : true,
             location || 'Both',
-          parsedViewableUntil.value
+            viewableUntil || null
         ];
 
         const result = await queryControlled(sql, params);
@@ -220,12 +187,6 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
     const { id } = req.params;
     let { label, description, pubmat, isActive, location, viewableUntil } = req.body;
     const hasViewableUntil = Object.prototype.hasOwnProperty.call(req.body, "viewableUntil");
-
-    const parsedViewableUntil = parseViewableUntilInput(viewableUntil, { allowUndefined: true, skipFutureCheck: true });
-    if (parsedViewableUntil.error) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: parsedViewableUntil.error, message: parsedViewableUntil.message });
-    }
 
     // Existence check - need to verify current location for permission checks
     const existsResult = await client.query(`SELECT id, pubmat, location FROM "Announcement" WHERE id = $1;`, [id]);
@@ -295,7 +256,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
       isActive,
       location,
       hasViewableUntil,
-      hasViewableUntil ? parsedViewableUntil.value : null,
+      hasViewableUntil ? viewableUntil : null,
       id,
     ];
     const result = await client.query(sql, params);
