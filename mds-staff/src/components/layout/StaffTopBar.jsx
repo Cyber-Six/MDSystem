@@ -8,13 +8,28 @@ import { useStaffProfile, clearStaffProfileCache } from '../../hooks/use-staff-p
 import { usePermissions } from '../../context/permissions-context';
 
 function formatRelativeTime(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  const date = new Date(iso);
+  const now = new Date();
+
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfThisWeek = new Date(startOfToday);
+  startOfThisWeek.setDate(startOfToday.getDate() - 6); // 7-day window (Mon-Sun relative to today)
+
+  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  if (date >= startOfToday) {
+    // Same calendar day → show time only (e.g. "2:30 PM")
+    return timeStr;
+  }
+
+  if (date >= startOfThisWeek) {
+    // Within the last 7 days → show day abbreviation + time (e.g. "Mon 2:30 PM")
+    const dayStr = date.toLocaleDateString([], { weekday: 'short' });
+    return `${dayStr} ${timeStr}`;
+  }
+
+  // Older than a week → show date (e.g. "Jan 23, 2026")
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 /**
@@ -168,17 +183,6 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
 
             // Build only the tabs the staff is permitted to see
             const allTabs = [
-              canSeeInventory && {
-                key: 'inventory',
-                label: 'Inventory',
-                count: inventoryCount,
-                urgent: inventoryAlerts.some((a) => a.notificationType === 'expired' || a.notificationType === 'low-stock'),
-                icon: (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                ),
-              },
               canSeeAppointment && {
                 key: 'appointment',
                 label: 'Appointments',
@@ -198,6 +202,17 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
                 icon: (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                ),
+              },
+              canSeeInventory && {
+                key: 'inventory',
+                label: 'Inventory',
+                count: inventoryCount,
+                urgent: inventoryAlerts.some((a) => a.notificationType === 'expired' || a.notificationType === 'low-stock'),
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
                 ),
               },

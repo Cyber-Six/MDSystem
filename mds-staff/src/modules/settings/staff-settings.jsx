@@ -105,11 +105,11 @@ const SettingRow = ({ label, description, children, indent }) => (
 );
 
 const MODULE_LABELS = {
-  healthChat: 'Health Chat',
   appointments: 'Appointments',
-  medicineRequests: 'Medicine Requests',
-  inventory: 'Inventory Alerts',
-  general: 'General / Announcements',
+  medicineRequests: 'Requests',
+  inventory: 'Inventory',
+  healthChat: 'Health Chat',
+  general: 'General',
 };
 
 const FONT_SIZE_OPTIONS = [
@@ -265,7 +265,7 @@ const StaffSettings = () => {
         <div>
           <h2 className="text-lg font-bold text-secondary-800 dark:text-white">Settings</h2>
           <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">
-            Customize your staff portal experience. Stored locally on this device.
+            Customize your staff portal experience. Saved to your account.
           </p>
         </div>
         <button
