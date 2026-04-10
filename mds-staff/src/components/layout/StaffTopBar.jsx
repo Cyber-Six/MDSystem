@@ -8,13 +8,28 @@ import { useStaffProfile, clearStaffProfileCache } from '../../hooks/use-staff-p
 import { usePermissions } from '../../context/permissions-context';
 
 function formatRelativeTime(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  const date = new Date(iso);
+  const now = new Date();
+
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfThisWeek = new Date(startOfToday);
+  startOfThisWeek.setDate(startOfToday.getDate() - 6); // 7-day window (Mon-Sun relative to today)
+
+  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  if (date >= startOfToday) {
+    // Same calendar day → show time only (e.g. "2:30 PM")
+    return timeStr;
+  }
+
+  if (date >= startOfThisWeek) {
+    // Within the last 7 days → show day abbreviation + time (e.g. "Mon 2:30 PM")
+    const dayStr = date.toLocaleDateString([], { weekday: 'short' });
+    return `${dayStr} ${timeStr}`;
+  }
+
+  // Older than a week → show date (e.g. "Jan 23, 2026")
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 /**

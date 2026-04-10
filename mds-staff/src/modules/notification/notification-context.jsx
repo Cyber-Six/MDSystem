@@ -41,6 +41,7 @@ const EVENT_MAP = {
   'healthchat:ticket-created': (data) => ({
     type: 'chat',
     route: '/health-chat',
+    routeState: { chatId: data?.chat?.id ?? null },
     title: 'New Chat Request',
     message: 'A patient submitted a new health chat request.',
     refId: data?.chat?.id ?? null,
@@ -48,6 +49,7 @@ const EVENT_MAP = {
   'healthchat:new-message': (data) => ({
     type: 'chat',
     route: '/health-chat',
+    routeState: { chatId: data?.chatId ?? data?.chat?.id ?? null },
     title: 'New Chat Message',
     message: data?.message?.content
       ? `Patient: ${String(data.message.content).slice(0, 80)}`
@@ -57,6 +59,7 @@ const EVENT_MAP = {
   'healthchat:ticket-closed': (data) => ({
     type: 'chat',
     route: '/health-chat',
+    routeState: { chatId: data?.chatId ?? data?.chat?.id ?? null },
     title: 'Chat Session Closed',
     message: 'A health chat session has been closed.',
     refId: data?.chat?.id ?? null,
@@ -64,6 +67,7 @@ const EVENT_MAP = {
   'healthchat:ticket-status-changed': (data) => ({
     type: 'chat',
     route: '/health-chat',
+    routeState: { chatId: data?.chatId ?? data?.chat?.id ?? null },
     title: 'Chat Ticket Updated',
     message: `A health chat ticket is now ${(data?.status ?? '').toLowerCase() || 'updated'}.`,
     refId: data?.chat?.id ?? null,

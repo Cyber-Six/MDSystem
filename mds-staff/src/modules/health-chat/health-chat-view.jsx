@@ -1,4 +1,5 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { RefreshCw, Stethoscope } from 'lucide-react';
 import { HealthChatProvider, useHealthChat } from './context/health-chat-context';
 import { useHealthChatSocket } from './hooks/use-health-chat-socket';
@@ -9,7 +10,18 @@ import { SidebarContext } from '../../components/layout/StaffLayout';
 
 const HealthChatContent = () => {
   const { isConnected, emitTyping } = useHealthChatSocket();
-  const { socketError, refreshMessages } = useHealthChat();
+  const { socketError, refreshMessages, selectChat, conversations } = useHealthChat();
+  const { state } = useLocation();
+
+  // If we arrived here via a notification click that included a chatId,
+  // auto-select that conversation once the list has loaded.
+  useEffect(() => {
+    const chatId = state?.chatId;
+    if (!chatId || conversations.length === 0) return;
+    selectChat(chatId);
+    // Only fire once per navigation (state won't change while on this route)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.chatId, conversations.length > 0]);
 
   const connStatus = socketError
     ? { dot: '#F59E0B', label: 'Manual refresh' }
