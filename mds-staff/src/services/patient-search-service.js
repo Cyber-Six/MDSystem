@@ -2,8 +2,8 @@ import { axiosRequest } from '../packages-core-adapter';
 
 // ── GraphQL ─────────────────────────────────────────────────────────────────────
 const SEARCH_PATIENTS_QUERY = `
-  query SearchPatients($searchTerm: String!, $branch: DesignationBranch, $limit: Int) {
-    searchPatients(searchTerm: $searchTerm, branch: $branch, limit: $limit) {
+  query SearchPatients($searchTerm: String!, $branch: DesignationBranch, $identities: [PATIENT_IDENTITY!], $limit: Int) {
+    searchPatients(searchTerm: $searchTerm, branch: $branch, identities: $identities, limit: $limit) {
       id
       identifier
       branch
@@ -31,12 +31,13 @@ const SEARCH_PATIENTS_QUERY = `
  * @param {string} searchTerm - The text to search for (name / ID / email).
  * @param {number} [limit=15] - Maximum results to return.
  * @param {string} [branch] - Staff branch to scope results ('Manila'|'QuezonCity'|'Both').
+ * @param {string[]|null} [identities] - Optional PATIENT_IDENTITY filter array.
  * @returns {Promise<Array>} Array of patient result objects.
  */
-export async function searchPatients(searchTerm, limit = 15, branch = null) {
+export async function searchPatients(searchTerm, limit = 15, branch = null, identities = null) {
   const response = await axiosRequest.post('/emr/medical', {
     query: SEARCH_PATIENTS_QUERY,
-    variables: { searchTerm, limit, branch },
+    variables: { searchTerm, limit, branch, identities },
   });
   if (response.data.errors) {
     throw new Error(response.data.errors[0]?.message || 'Search failed');

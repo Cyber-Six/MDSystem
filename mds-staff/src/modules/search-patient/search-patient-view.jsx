@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense, useMemo } from 'react';
 import { searchPatients } from '../../services/patient-search-service';
 import { usePatientTabs } from '../../context/patient-tabs-context';
 import { useStaffProfile } from '../../hooks/use-staff-profile';
@@ -31,6 +31,13 @@ export default function SearchPatientView() {
   const inputRef = useRef(null);
   const listRef  = useRef(null);
 
+  const selectedIdentities = useMemo(() => {
+    if (searchType === 'student') return ['Student'];
+    if (searchType === 'employee') return ['Employee'];
+    if (searchType === 'superior') return ['Superior'];
+    return null;
+  }, [searchType]);
+
   // ── Drag-to-reorder state ─────────────────────────────────────────────────
   const [draggedTabId, setDraggedTabId] = useState(null);
   const [dragOverTabId, setDragOverTabId] = useState(null);
@@ -59,7 +66,7 @@ export default function SearchPatientView() {
 
     const timer = setTimeout(async () => {
       try {
-        const data = await searchPatients(trimmed, 15, profile?.branch || null);
+        const data = await searchPatients(trimmed, 15, profile?.branch || null, selectedIdentities);
         setResults(data);
       } catch (err) {
         setError(err.message || 'Search failed');
@@ -70,14 +77,10 @@ export default function SearchPatientView() {
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, profile?.branch]);
+  }, [searchTerm, profile?.branch, selectedIdentities]);
 
-  // ── Filter by type locally ────────────────────────────────────────────────
-  const filtered = results.filter((p) => {
-    if (searchType === 'student') return p.profile_type === 'Student';
-    if (searchType === 'employee') return p.profile_type === 'Employee';
-    return true;
-  });
+  // Backend now receives identity filters directly; keep result set as-is.
+  const filtered = results;
 
   // ── Keyboard nav ──────────────────────────────────────────────────────────
   const handleKeyDown = useCallback(

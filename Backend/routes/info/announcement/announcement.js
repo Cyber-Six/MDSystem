@@ -15,9 +15,10 @@ router.get("/", jwtProtect(""), async (req, res) => {
 
         const sql = `
             SELECT id, title as label, content as description, pubmat, 
-                "isActive", created_at, location
+                "isActive", created_at, location, "viewableUntil"
             FROM "Announcement"
             WHERE "isActive" = true AND
+            ("viewableUntil" IS NULL OR "viewableUntil" > NOW()) AND
             (
               $1 = 'Both'
               OR location = 'Both'
@@ -68,7 +69,7 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
         // If their branch is 'QuezonCity', they see QuezonCity + 'Both' announcements
         const sql = `
             SELECT id, title as label, content as description, 
-                pubmat, "isActive", created_at, location
+                pubmat, "isActive", created_at, location, "viewableUntil"
             FROM "Announcement"
             WHERE (
               $1 = 'Both'
@@ -97,9 +98,10 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
             SELECT an.id, an.title as label, 
             an.content as description, 
             an.pubmat, "isActive", 
-            an.created_at, an.location
+            an.created_at, an.location, an."viewableUntil"
             FROM "Announcement" an
             WHERE id = $1 AND 
+            ("viewableUntil" IS NULL OR "viewableUntil" > NOW()) AND
             (
               $2 = 'Both'
               OR an.location = 'Both'
@@ -125,9 +127,9 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
 router.post("/", jwtProtect("medical"), async (req, res) => {
     try {
         const userId = req.user.id;
-        const { label, description, pubmat, isActive, location } = req.body;
+        const { label, description, pubmat, isActive, location, viewableUntil } = req.body;
 
-        if (!ValidateLocationDesignation(location)) {
+    if (!ValidateLocationDesignation(location)) {
             return res.status(400).json({ error: "INVALID_LOCATION", message: "Location must be 'Manila', 'QuezonCity', or 'Both'" });
         }
 
@@ -149,9 +151,9 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
         }
 
         const sql = `
-        INSERT INTO "Announcement" (title, content, pubmat, "isActive", location)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, title as label, content as description, pubmat, "isActive", created_at, location;
+        INSERT INTO "Announcement" (title, content, pubmat, "isActive", location, "viewableUntil")
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, title as label, content as description, pubmat, "isActive", created_at, location, "viewableUntil";
         `;
 
         const params = [
@@ -159,7 +161,8 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
             description || null,
             promotedPubmat,
             isActive !== undefined ? isActive : true,
-            location || 'Both'
+            location || 'Both',
+            viewableUntil || null
         ];
 
         const result = await queryControlled(sql, params);
@@ -175,12 +178,15 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
 // ✅ UPDATE announcement (Staff only)
 router.put("/:id", jwtProtect("medical"), async (req, res) => {
   const client = await connect();
+  let oldPubmat = null;
+  let promotedPubmat = null;
   try {
     await client.query("BEGIN");
 
     const userId = req.user.id;
     const { id } = req.params;
-    let { label, description, pubmat, isActive, location } = req.body;
+    let { label, description, pubmat, isActive, location, viewableUntil } = req.body;
+    const hasViewableUntil = Object.prototype.hasOwnProperty.call(req.body, "viewableUntil");
 
     // Existence check - need to verify current location for permission checks
     const existsResult = await client.query(`SELECT id, pubmat, location FROM "Announcement" WHERE id = $1;`, [id]);
@@ -189,7 +195,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
       return res.status(404).json({ error: "NOT_FOUND", message: "Announcement not found" });
     }
 
-    const oldPubmat = existsResult.rows[0].pubmat;
+    oldPubmat = existsResult.rows[0].pubmat;
     const currentLocation = existsResult.rows[0].location;
 
     // Validate new location if provided
@@ -215,7 +221,7 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
       }
     }
 
-    let promotedPubmat = oldPubmat;
+    promotedPubmat = oldPubmat;
 
     // Promote new pubmat if provided
     if (pubmat && pubmat !== oldPubmat) {
@@ -235,11 +241,24 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         content = COALESCE($2, content),
         pubmat = COALESCE($3, pubmat),
         "isActive" = COALESCE($4, "isActive"),
-        location = COALESCE($5, location)
-      WHERE id = $6
-      RETURNING id, title as label, content as description, pubmat, "isActive", location, created_at;
+        location = COALESCE($5, location),
+        "viewableUntil" = CASE
+          WHEN $6::boolean THEN $7
+          ELSE "viewableUntil"
+        END
+      WHERE id = $8
+      RETURNING id, title as label, content as description, pubmat, "isActive", location, created_at, "viewableUntil";
     `;
-    const params = [label, description, promotedPubmat, isActive, location, id];
+    const params = [
+      label,
+      description,
+      promotedPubmat,
+      isActive,
+      location,
+      hasViewableUntil,
+      hasViewableUntil ? viewableUntil : null,
+      id,
+    ];
     const result = await client.query(sql, params);
 
     if (result.rowCount === 0) {

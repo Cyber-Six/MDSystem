@@ -1,0 +1,215 @@
+<mxfile host="app.diagrams.net" modified="2026-04-11T00:00:00.000Z" agent="GPT-5.3-Codex" version="26.0.0" type="device">
+  <diagram id="appointment-level2" name="Appointment Level 2 DFD (Inferred from Code)">
+    <mxGraphModel dx="1840" dy="1080" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="entity_patient" value="External Entity&#xa;Patient" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="190" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="entity_staff" value="External Entity&#xa;Staff" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="190" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p21" value="2.1 Query Availability and Requirements&#xa;(listOpenAppointments, listAppointmentSchedule, listMonthAvailability, listAppointmentRequirements)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="70" width="430" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p22" value="2.2 Submit Appointment Request&#xa;(submitAppointment resolver: branch access + active status checks)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="260" width="430" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p23" value="2.3 Validate Date and Capacity / Initialize Slot&#xa;(validateSchedulerDate, timeframe, ScheduleDateEntity create, session usage count)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="770" y="260" width="450" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p24" value="2.4 Persist Appointment and Requirement Uploads&#xa;(patientSlot Pending + patientScheduleRequirement + promoteFile)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1270" y="260" width="450" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p25" value="2.5 Manage Appointment Lifecycle&#xa;(respondAppointment, cancelAppointment, cancelDateAppointments, recordAppointmentAttendance)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="770" y="70" width="500" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p26" value="2.6 Retrieve Status, Queue, and History&#xa;(getAppointmentStatus, getUserAppointmentRecords, searchAppointmentStatuses, getAppointmentStatusCounts)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="770" y="470" width="530" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d1" value="D1: Scheduler Configuration&#xa;slotScheduler, SlotCustomDate, scheduleRequirement, schedulerWhitelist" style="shape=partialRectangle;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;top=0;left=0;right=0;bottom=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="40" width="620" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d2" value="D2: Date Capacity / Slot Identity&#xa;ScheduleDateEntity" style="shape=partialRectangle;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;top=0;left=0;right=0;bottom=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="420" width="330" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d3" value="D3: Appointment Records&#xa;patientSlot" style="shape=partialRectangle;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;top=0;left=0;right=0;bottom=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1690" y="420" width="260" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d4" value="D4: Requirement Metadata&#xa;patientScheduleRequirement" style="shape=partialRectangle;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;top=0;left=0;right=0;bottom=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="560" width="330" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d5" value="D5: User and Identity Data&#xa;UsersPersonal, UserCredentials, user branch/patient type" style="shape=partialRectangle;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;top=0;left=0;right=0;bottom=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1690" y="560" width="300" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d6" value="D6: Appointment Requirement Files&#xa;media/committed/appointment_requirements" style="shape=partialRectangle;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;top=0;left=0;right=0;bottom=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="700" width="350" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d7" value="D7: Application Logs&#xa;logs/app-YYYY-MM-DD.log" style="shape=partialRectangle;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;top=0;left=0;right=0;bottom=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1710" y="700" width="280" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f1" value="availability and requirement query" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="entity_patient" target="p21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f2" value="open schedule and occupancy query" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="entity_staff" target="p21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f3" value="read schedulers/custom dates/requirements" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p21" target="d1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f4" value="read or initialize date identity" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p21" target="d2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f5" value="read user branch and patient type" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p21" target="d5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f6" value="available schedules and limits" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p21" target="entity_patient">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f7" value="schedules and occupancy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p21" target="entity_staff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f8" value="schedulerId/date/session/requirements/purpose" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="entity_patient" target="p22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f9" value="validate branch, active appointment, and requirements" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p22" target="d1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f10" value="read patient status/user branch" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p22" target="d5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f11" value="validated request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p22" target="p23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f12" value="read/insert schedule date row" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p23" target="d2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f13" value="count used session slots" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p23" target="d3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f14" value="slotEntityId + capacity-approved request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p23" target="p24">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f15" value="promote uploaded requirement files" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p24" target="d6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f16" value="insert Pending appointment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p24" target="d3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f17" value="insert requirement metadata" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p24" target="d4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f18" value="appointment:submitted event" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p24" target="entity_staff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f19" value="pending appointment response" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p24" target="entity_patient">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f20" value="cancel active appointment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="entity_patient" target="p25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f21" value="approve/reject/cancel/attendance actions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="entity_staff" target="p25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f22" value="read current status and write status transition" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p25" target="d3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f23" value="read approver identity and patient email" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p25" target="d5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f24" value="appointment response notification" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p25" target="entity_patient">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f25" value="status/history query" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="entity_patient" target="p26">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f26" value="queue/search/status counts query" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="entity_staff" target="p26">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f27" value="read appointment rows" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p26" target="d3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f28" value="read requirement rows" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p26" target="d4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f29" value="join scheduledDate and slotId" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p26" target="d2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f30" value="join scheduler location/label" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p26" target="d1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f31" value="join patient and approver identity" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p26" target="d5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f32" value="status and appointment history" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p26" target="entity_patient">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f33" value="status queues and counts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p26" target="entity_staff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f34" value="error/warn logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="p22" target="d7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f35" value="error/warn logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="p24" target="d7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f36" value="error logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="p25" target="d7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
