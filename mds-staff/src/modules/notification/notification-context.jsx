@@ -305,7 +305,8 @@ export function StaffNotificationProvider({ children }) {
     const soundModuleKey = TYPE_TO_SOUND_MODULE[notif.type] ?? 'general';
     const s = getStaffSettings();
     if (s.soundEnabled && s.soundByModule[soundModuleKey] !== false) {
-      playNotificationSound(s.soundVolume);
+      const moduleSound = s.soundFileByModule?.[soundModuleKey] ?? s.notificationSound;
+      playNotificationSound(s.soundVolume, moduleSound, null);
     }
   }, []);
 
@@ -595,7 +596,8 @@ export function StaffNotificationProvider({ children }) {
     if (hasNew) {
       const s = getStaffSettings();
       if (s.soundEnabled && s.soundByModule.inventory !== false) {
-        playNotificationSound(s.soundVolume);
+        const moduleSound = s.soundFileByModule?.inventory ?? s.notificationSound;
+        playNotificationSound(s.soundVolume, moduleSound, null);
       }
     }
   }, [inventoryAlerts]);

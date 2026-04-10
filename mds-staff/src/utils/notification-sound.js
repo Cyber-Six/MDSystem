@@ -1,16 +1,54 @@
 /**
- * Notification sound utility — synthesises a short two-note chime using the
- * Web Audio API. No external audio files are required; works in all modern
- * browsers that support AudioContext.
+ * Notification sound utility
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Supports two playback modes:
+ *
+ *   1. Built-in synthesis  (id: 'synthesis')
+ *      Generates a two-note chime via the Web Audio API.  Zero network cost,
+ *      always available, works offline.
+ *
+ *   2. Custom audio file   (any other id)
+ *      Plays a file from  public/sounds/<id>  e.g. /sounds/chime.mp3.
+ *      Drop the file into  mds-staff/public/sounds/  and add an entry to
+ *      AVAILABLE_SOUNDS below — no rebuild required.
+ *
+ * AVAILABLE_SOUNDS is the single source of truth for which sounds appear in
+ * the Settings UI.  Add / remove entries freely.
+ *
+ * Chrome autoplay policy: an AudioContext must be resumed after the first user
+ * gesture.  This module registers a one-shot click/keydown listener that
+ * unlocks it automatically.  File-based playback uses HTMLAudioElement which
+ * follows the same policy but recovers via the .play() promise.
  *
  * Location: mds-staff/src/utils/notification-sound.js
- *
- * Chrome's autoplay policy (https://developer.chrome.com/blog/autoplay/#web_audio)
- * requires an AudioContext to be resumed/created AFTER a user gesture. This module
- * keeps ONE shared AudioContext for the lifetime of the page and registers a
- * one-shot click/keydown listener that unlocks it on the first user interaction.
- * Sound is silently skipped if the context is still suspended (pre-gesture).
  */
+
+// ── Sound manifest ─────────────────────────────────────────────────────────
+// To add a custom sound:
+//   1. Drop the audio file into  mds-staff/public/sounds/  (MP3, OGG or WAV)
+//   2. Add an entry here:  { id: 'filename.mp3', label: 'My Sound' }
+//   3. Save — no rebuild needed.
+export const AVAILABLE_SOUNDS = [
+  { id: 'synthesis', label: 'System Chime (Built-in)' },
+
+  // ── Per-module pre-named files ─────────────────────────────────────────────
+  // Drop a file with the exact name into  mds-staff/public/sounds/  and it
+  // will play automatically for that module — no code change needed.
+  // IMPORTANT: Frontend module defaults are derived by these labels. You can
+  // freely change ids (filenames), keep labels as-is.
+  { id: 'ack.mp3', label: 'Appointments' },
+  { id: 'chicken-on-tree-screaming.mp3',     label: 'Requests'     },
+  { id: 'dee-dee-risa.mp3',    label: 'Inventory'    },
+  { id: 'tobol.mp3',   label: 'Health Chat'  },
+  { id: 'you-phone-is-ringing.mp3',      label: 'General'      },
+
+  // ── Add more custom sounds below ──────────────────────────────────────────
+  // { id: 'chime.mp3',      label: 'Chime'      },
+  // { id: 'ping.mp3',       label: 'Ping'        },
+  // { id: 'ding.wav',       label: 'Ding'        },
+  // { id: 'pop.ogg',        label: 'Pop'         },
+  // { id: 'soft-alert.mp3', label: 'Soft Alert'  },
+];
 
 // Minimum gap (ms) between successive chimes to avoid an audio pile-up when
 // several notifications arrive in rapid succession.
@@ -96,18 +134,27 @@ function _playChime(ctx, vol) {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
+// SECURITY: Only allow safe filenames — alphanumeric, dot, hyphen, underscore.
+// This prevents path traversal when constructing the audio src URL.
+const VALID_SOUND_FILE = /^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]{1,8}$/;
+
 /**
- * Play a short two-note notification chime.
+ * Play a notification sound.
+ *
+ * @param {number} volume     - Gain multiplier [0, 1].  Defaults to 1.
+ * @param {string} soundId    - Sound id from AVAILABLE_SOUNDS.
+ *                              'synthesis' (default) uses Web Audio;
+ *                              any other value plays  /sounds/<soundId>.
+ * @param {string} fallbackId - Sound to play if <soundId> file is missing
+ *                              or fails to load.  Defaults to 'synthesis'.
  *
  * Silently no-ops if:
  *  - volume is 0
  *  - called too soon after the previous chime (throttle)
- *  - the AudioContext hasn't been unlocked by a user gesture yet
- *  - the Web Audio API is unavailable
- *
- * @param {number} volume - Gain multiplier in the range [0, 1]. Defaults to 1.
+ *  - AudioContext hasn't been unlocked yet (synthesis only)
+ *  - the file name fails the security pattern check
  */
-export function playNotificationSound(volume = 1) {
+export function playNotificationSound(volume = 1, soundId = 'synthesis', fallbackId = null) {
   const vol = Math.min(1, Math.max(0, Number(volume) || 0));
   if (vol === 0) return;
 
@@ -115,13 +162,40 @@ export function playNotificationSound(volume = 1) {
   if (now - lastPlayTime < THROTTLE_MS) return;
   lastPlayTime = now;
 
+  // ── File-based playback ────────────────────────────────────────────────────
+  if (soundId && soundId !== 'synthesis') {
+    // SECURITY: validate filename before constructing URL
+    if (!VALID_SOUND_FILE.test(soundId)) return;
+    try {
+      const audio = new Audio(`/sounds/${soundId}`);
+      audio.volume = vol;
+      // If the file is missing/unplayable, fall back to fallbackId.
+      // We use the 'error' event (fires on 404 / bad format) rather than the
+      // play() rejection (which fires on autoplay-policy blocks).
+      audio.addEventListener('error', () => {
+        if (fallbackId && fallbackId !== soundId) {
+          _playSoundId(vol, fallbackId);
+        }
+      }, { once: true });
+      audio.play().catch(() => {
+        // Autoplay blocked — silently skip (don't fall back; user hasn't
+        // gestured yet and the fallback would have the same problem).
+      });
+    } catch (_) { /* ignore */ }
+    return;
+  }
+
+  // ── Synthesis (or fallback path) ───────────────────────────────────────────
+  _playSynthesis(vol);
+}
+
+/** Internal: play synthesis chime. */
+function _playSynthesis(vol) {
   try {
     const ctx = getCtx();
     if (!ctx) return;
 
     if (ctx.state === 'suspended') {
-      // Context not yet unlocked by user gesture — attempt a resume then play.
-      // If the resume is blocked (still no gesture), the catch swallows it silently.
       ctx.resume().then(() => {
         if (ctx.state === 'running') _playChime(ctx, vol);
       }).catch(() => {});
@@ -134,4 +208,18 @@ export function playNotificationSound(volume = 1) {
   } catch (_) {
     // Web Audio API unavailable or any unexpected error — silently skip.
   }
+}
+
+/** Internal: dispatch to the right playback mode without throttle-checking. */
+function _playSoundId(vol, soundId) {
+  if (!soundId || soundId === 'synthesis') {
+    _playSynthesis(vol);
+    return;
+  }
+  if (!VALID_SOUND_FILE.test(soundId)) return;
+  try {
+    const audio = new Audio(`/sounds/${soundId}`);
+    audio.volume = vol;
+    audio.play().catch(() => {});
+  } catch (_) { /* ignore */ }
 }
