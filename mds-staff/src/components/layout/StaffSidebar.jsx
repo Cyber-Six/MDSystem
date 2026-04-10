@@ -18,6 +18,11 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
   const showBadges = settings.showBadges;
   const { profile } = useStaffProfile();
 
+  const handleLogoClick = () => {
+    if (typeof onClose === 'function') onClose();
+    window.location.assign('/');
+  };
+
   const allNavItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard', exact: true },
     { path: '/search', icon: 'search', label: 'Search Patient', moduleId: 'patientSearch' },
@@ -119,7 +124,14 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
       >
         {/* Logo Section */}
         <div className="h-14 flex items-center justify-center border-b border-neutral-200 dark:border-neutral-700 px-2">
-          <img src={logo} alt="MDSystem" className="h-8 w-8" />
+          <button
+            type="button"
+            onClick={handleLogoClick}
+            aria-label="Go to Dashboard"
+            className="flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer"
+          >
+            <img src={logo} alt="MDSystem" className="h-8 w-8" />
+          </button>
           {isExpanded && (
             <span className="ml-2 font-semibold text-secondary-800 dark:text-white text-sm">
               MDS Staff

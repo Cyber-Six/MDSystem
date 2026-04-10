@@ -5,6 +5,11 @@ import logo from '@core/assets/MDSystem.png';
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
 
+  const handleLogoClick = () => {
+    if (typeof onClose === 'function') onClose();
+    window.location.assign('/');
+  };
+
   const navItems = [
     { path: '/', icon: 'dashboard', label: 'Dashboard' },
     { path: '/record-update', icon: 'edit', label: 'Record Update' },
@@ -32,7 +37,8 @@ const Sidebar = ({ isOpen, onClose }) => {
     ),
     medication: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.5 20.5l10-10a4.95 4.95 0 10-7-7l-10 10a4.95 4.95 0 107 7z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.5 8.5l7 7" />
       </svg>
     ),
     chat: (
@@ -66,7 +72,14 @@ const Sidebar = ({ isOpen, onClose }) => {
         <div className="flex flex-col h-full">
           {/* Logo Section */}
           <div className="flex items-center justify-center border-b border-neutral-800/10 dark:border-white/10 bg-primary-500 dark:bg-neutral-900" style={{height: '60px'}}>
-            <img src={logo} alt="MDSystem" className="h-12 w-12" />
+            <button
+              type="button"
+              onClick={handleLogoClick}
+              aria-label="Go to Dashboard"
+              className="flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer"
+            >
+              <img src={logo} alt="MDSystem" className="h-12 w-12" />
+            </button>
           </div>
 
           {/* Navigation Items */}
