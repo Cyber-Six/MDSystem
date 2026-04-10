@@ -794,7 +794,7 @@ type Query {
   getUserIdViaEmail(email: String!, branch: DesignationBranch!): [UserProfile!]
 
   # Patient Search (real-time, medical staff only)
-  searchPatients(searchTerm: String!, branch: DesignationBranch, identities: [PATIENT_IDENTITY!]!, offset: Int, limit: Int): [PatientSearchResult!]!
+  searchPatients(searchTerm: String!, branch: DesignationBranch, identities: [PATIENT_IDENTITY!], offset: Int, limit: Int): [PatientSearchResult!]!
   getPatientBasicInfo(userId: ID!): PatientSearchResult
 
 
