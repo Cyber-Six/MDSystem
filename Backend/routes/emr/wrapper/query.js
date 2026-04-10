@@ -986,7 +986,11 @@ const Query = {
       LEFT JOIN "student_programs" spd ON spd.id = sp."programId"
       LEFT JOIN "employee_profile" ep ON ep."profileId" = pr.id
       WHERE
-        TRUE --- ($1::"UserDesignation" IS NULL OR up.branch::"UserDesignation" = $1::"UserDesignation")
+        (
+          $1::"UserDesignation" IS NULL
+          OR $1::"UserDesignation" = 'Both'::"UserDesignation"
+          OR up.branch::"UserDesignation" = $1::"UserDesignation"
+        )
         AND (
           up.identifier::text ILIKE $2
           OR (COALESCE(upl.first_name, '') || ' ' || COALESCE(upl.last_name, '')) ILIKE $3

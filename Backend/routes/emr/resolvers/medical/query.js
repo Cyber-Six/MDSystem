@@ -312,11 +312,12 @@ const Query = {
     // Use MedicalPersonnel.designation as the authoritative source for branch.
     // This ensures branch restriction holds even when rolesMap.branch is stored as 'Both'.
     const staffBranch = await permit.getStaffBranch(user.id);
+    const requestedBranch = args.branch === 'Both' ? null : (args.branch || null);
 
     // Clamp the requested branch to the staff's actual designation.
     const effectiveBranch = (staffBranch && staffBranch !== 'Both')
       ? staffBranch
-      : (args.branch || null);
+      : requestedBranch;
 
     if (!args.searchTerm || args.searchTerm.trim().length < 2) return [];
     return await Wrapper._searchPatients(_, { ...args, branch: effectiveBranch }, { user, res });
