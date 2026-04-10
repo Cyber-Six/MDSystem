@@ -1,0 +1,29 @@
+Custom Notification Sounds
+==========================
+
+Drop audio files here (MP3, OGG, WAV) and register them in:
+
+  mds-staff/src/utils/notification-sound.js  →  AVAILABLE_SOUNDS array
+
+Per-module default filenames (rename your downloaded files to these):
+  - appointments.mp3   (Appointments)
+  - requests.mp3       (Requests)
+  - inventory.mp3      (Inventory)
+  - healthchat.mp3     (Health Chat)
+  - general.mp3        (General)
+
+If these files exist in this folder, module-specific sound playback works out
+of the box using the current defaults in settings-context.
+
+Example:
+  1. Copy  my-sound.mp3  into this folder.
+  2. Add the following line to AVAILABLE_SOUNDS:
+       { id: 'my-sound.mp3', label: 'My Sound' },
+  3. Save the file — no rebuild required.
+  4. The sound will appear in Settings → Sound & Audio → Notification sound.
+
+Recommended specs:
+  - Duration : 0.3 – 1.5 seconds
+  - Format   : MP3 (broadest browser support), OGG (Firefox fallback), WAV (uncompressed)
+  - Sample rate: 44100 Hz  |  Channels: Mono or Stereo
+  - Loudness : normalise to -14 LUFS so it sounds consistent at any volume level

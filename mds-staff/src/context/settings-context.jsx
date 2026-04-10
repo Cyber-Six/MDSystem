@@ -8,7 +8,10 @@ function toBackendPrefs(s) {
   return {
     appearance:   { themeMode: s.themeMode, fontSize: s.fontSize, compactSidebar: s.compactSidebar },
     notification: {
-      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume, soundByModule: s.soundByModule,
+      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume,
+      notificationSound: s.notificationSound,
+      soundByModule: s.soundByModule,
+      soundFileByModule: s.soundFileByModule,
       showBadges: s.showBadges, showBanners: s.showBanners, bannerErrorsOnly: s.bannerErrorsOnly,
       bannerCompact: s.bannerCompact, bannerAutoDismiss: s.bannerAutoDismiss, bannerDismissDelay: s.bannerDismissDelay,
     },
@@ -20,6 +23,9 @@ function mergeFromBackendPrefs(prefs) {
   const merged = sanitizeSettings(flat);
   if (prefs.notification?.soundByModule && typeof prefs.notification.soundByModule === 'object') {
     merged.soundByModule = { ...DEFAULT_SETTINGS.soundByModule, ...merged.soundByModule };
+  }
+  if (prefs.notification?.soundFileByModule && typeof prefs.notification.soundFileByModule === 'object') {
+    merged.soundFileByModule = { ...DEFAULT_SETTINGS.soundFileByModule, ...merged.soundFileByModule };
   }
   return merged;
 }
@@ -41,6 +47,16 @@ const DEFAULT_SETTINGS = {
   // ── Sound Settings ──
   soundEnabled: true,
   soundVolume: 1,
+  notificationSound: 'synthesis', // 'synthesis' | any id from AVAILABLE_SOUNDS
+  // Per-module sound files — save  mds-staff/public/sounds/<filename>  to activate.
+  // Default values match the pre-named files; change in Settings to override.
+  soundFileByModule: {
+    appointments:    'appointments.mp3',
+    medicineRequests: 'requests.mp3',
+    inventory:       'inventory.mp3',
+    healthChat:      'healthchat.mp3',
+    general:         'general.mp3',
+  },
   soundByModule: {
     healthChat: true,
     appointments: true,
@@ -107,6 +123,9 @@ const BOOL_SETTINGS_KEYS = [
   'bannerCompact', 'bannerAutoDismiss', 'compactSidebar',
 ];
 const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
+const SOUND_FILE_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundFileByModule);
+// SECURITY: valid sound id — alphanumeric + dot/hyphen/underscore, max 64 chars.
+const VALID_SOUND_ID = /^[a-zA-Z0-9_\-.]{1,64}$/;
 
 /**
  * Strictly validate and sanitize a parsed settings object against known schema.
@@ -114,7 +133,11 @@ const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
  * SECURITY: Prevents XSS-planted localStorage values from poisoning app state.
  */
 function sanitizeSettings(parsed) {
-  const safe = { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+  const safe = {
+    ...DEFAULT_SETTINGS,
+    soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
+    soundFileByModule: { ...DEFAULT_SETTINGS.soundFileByModule },
+  };
 
   // Boolean keys
   BOOL_SETTINGS_KEYS.forEach((key) => {
@@ -140,6 +163,19 @@ function sanitizeSettings(parsed) {
     });
   }
 
+  // soundFileByModule — validate each value against sound-id pattern
+  if (parsed.soundFileByModule && typeof parsed.soundFileByModule === 'object') {
+    SOUND_FILE_MODULE_KEYS.forEach((k) => {
+      const v = parsed.soundFileByModule[k];
+      if (typeof v === 'string' && VALID_SOUND_ID.test(v)) safe.soundFileByModule[k] = v;
+    });
+  }
+
+  // notificationSound — SECURITY: only allow safe filenames or 'synthesis'
+  if (typeof parsed.notificationSound === 'string' && VALID_SOUND_ID.test(parsed.notificationSound)) {
+    safe.notificationSound = parsed.notificationSound;
+  }
+
   return safe;
 }
 
@@ -156,7 +192,11 @@ function loadSettings(userId) {
   } catch {
     // corrupted data — fall through to defaults
   }
-  return { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+  return {
+    ...DEFAULT_SETTINGS,
+    soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
+    soundFileByModule: { ...DEFAULT_SETTINGS.soundFileByModule },
+  };
 }
 
 /**

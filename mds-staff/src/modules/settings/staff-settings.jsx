@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../../context/settings-context';
 import TotpSettings from './totp-settings';
 import ChangePasswordSettings from './change-password-settings';
+import { AVAILABLE_SOUNDS, playNotificationSound } from '../../utils/notification-sound';
 
 /**
  * Unsaved-changes guard dialog
@@ -199,6 +200,14 @@ const StaffSettings = () => {
     setSaved(false);
   }, []);
 
+  const setModuleSoundFile = useCallback((moduleKey, value) => {
+    setDraft((prev) => ({
+      ...prev,
+      soundFileByModule: { ...prev.soundFileByModule, [moduleKey]: value },
+    }));
+    setSaved(false);
+  }, []);
+
   // ── Save / Reset ──
   const handleSave = () => {
     updateSettings(structuredClone(draft));
@@ -207,7 +216,11 @@ const StaffSettings = () => {
   };
 
   const handleReset = () => {
-    const defaults = { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+    const defaults = {
+      ...DEFAULT_SETTINGS,
+      soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
+      soundFileByModule: { ...DEFAULT_SETTINGS.soundFileByModule },
+    };
     setDraft(defaults);
     setSaved(false);
   };
@@ -293,6 +306,37 @@ const StaffSettings = () => {
           <Toggle checked={draft.soundEnabled} onChange={(v) => set('soundEnabled', v)} />
         </SettingRow>
 
+        {/* Sound picker */}
+        <SettingRow
+          label="Notification sound"
+          description="Choose a sound or drop your own file into public/sounds/"
+          indent
+        >
+          <div className="flex items-center gap-1.5">
+            <select
+              value={draft.notificationSound}
+              onChange={(e) => set('notificationSound', e.target.value)}
+              disabled={!draft.soundEnabled}
+              className="text-sm px-2 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40 max-w-[160px]"
+            >
+              {AVAILABLE_SOUNDS.map((s) => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              title="Preview sound"
+              disabled={!draft.soundEnabled}
+              onClick={() => playNotificationSound(draft.soundVolume, draft.notificationSound)}
+              className="p-1.5 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+          </div>
+        </SettingRow>
+
         {/* Volume slider */}
         <SettingRow
           label="Sound volume"
@@ -315,18 +359,46 @@ const StaffSettings = () => {
           </div>
         </SettingRow>
 
-        {/* Per-module toggles */}
+        {/* Per-module toggles + sound pickers */}
         <div className="pt-1">
           <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1 pl-6">
             By Module
           </p>
           {Object.entries(MODULE_LABELS).map(([key, label]) => (
             <SettingRow key={key} label={label} indent>
-              <Toggle
-                checked={draft.soundByModule[key]}
-                onChange={(v) => setModuleSound(key, v)}
-                disabled={!draft.soundEnabled}
-              />
+              <div className="flex items-center gap-1.5">
+                <Toggle
+                  checked={draft.soundByModule[key]}
+                  onChange={(v) => setModuleSound(key, v)}
+                  disabled={!draft.soundEnabled}
+                />
+                <select
+                  value={draft.soundFileByModule[key]}
+                  onChange={(e) => setModuleSoundFile(key, e.target.value)}
+                  disabled={!draft.soundEnabled || !draft.soundByModule[key]}
+                  className="text-xs px-1.5 py-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-700 dark:text-neutral-200 disabled:opacity-40 max-w-[120px]"
+                >
+                  <option value="synthesis">System Chime</option>
+                  {AVAILABLE_SOUNDS.filter((s) => s.id !== 'synthesis').map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  title={`Preview ${label} sound`}
+                  disabled={!draft.soundEnabled || !draft.soundByModule[key]}
+                  onClick={() => playNotificationSound(
+                    draft.soundVolume,
+                    draft.soundFileByModule[key],
+                    draft.notificationSound,
+                  )}
+                  className="p-1 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
+              </div>
             </SettingRow>
           ))}
         </div>
