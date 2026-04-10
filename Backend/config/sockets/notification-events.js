@@ -1,15 +1,18 @@
 const logger = require('../../utils/logger');
 const { registerHandlers } = require('./socket-events');
-const db = require('../query');
-const { isMedicalPermitted, permissions: permKeys } = require('../../services/permit');
+const { isMedicalPermitted, getStaffBranch, permissions: permKeys } = require('../../services/permit');
 
 /**
- * Maps a UsersPersonal.branch value to the slotScheduler.location values
- * that belong to that branch. This bridges the branch/location naming gap:
- *   UsersPersonal.branch  →  slotScheduler.location
- *   'Manila'              →  ['Arlegui', 'Casal']
- *   'QuezonCity'          →  ['QuezonCity']
- *   'Both'                →  ['Arlegui', 'Casal', 'QuezonCity']
+ * Maps a MedicalPersonnel.designation value to the slotScheduler.location
+ * values that belong to that branch. This bridges the branch/location naming gap:
+ *   MedicalPersonnel.designation  →  slotScheduler.location
+ *   'Manila'                      →  ['Arlegui', 'Casal']
+ *   'QuezonCity'                  →  ['QuezonCity']
+ *   'Both'                        →  ['Arlegui', 'Casal', 'QuezonCity']
+ *
+ * Note: For updateTicket, the EMR emitter uses branch names directly (Manila /
+ * QuezonCity / Both) rather than location names, so we also track branch-level
+ * rooms prefixed with 'role:' to match the emitToRole() convention.
  */
 const BRANCH_TO_LOCATIONS = {
   Manila: ['Arlegui', 'Casal'],
@@ -60,7 +63,10 @@ const notificationHandlers = {
    */
   'notification:join-branch': async (socket, _data, ack) => {
     try {
-      const branch = await db.getUserBranch(socket.userId);
+      // Use MedicalPersonnel.designation — the authoritative branch field for staff.
+      // getUserBranch() queries UsersPersonal.branch (a patient-centric table that may
+      // not be set for staff, causing them to default to 'Both' and receive all branches).
+      const branch = await getStaffBranch(socket.userId);
 
       if (!branch) {
         logger.warn(`[NOTIF-EVENTS] No branch found for user:${socket.userId}`);
@@ -107,10 +113,21 @@ const notificationHandlers = {
         joinedRooms.push('notif:healthchat');
       }
 
-      // Medical staff also need the role-prefixed branch room used by EMR mutations
+      // EMR mutations emit updateTicket to role:${patientBranch}::staff rooms.
+      // Patient branch can be 'Manila', 'QuezonCity', or 'Both'. Staff must join
+      // the rooms corresponding to their own branch scope plus 'Both' so that
+      // patients assigned to 'Both' always reach an authorized staff member.
       if (socket.userRole === 'medical' && pendingPerm.permitted) {
-        socket.join(`${branch}::staff`);
-        joinedRooms.push(`${branch}::staff`);
+        // Build the set of branch-level rooms this staff member should monitor.
+        const staffBranchRooms =
+          branch === 'Both'
+            ? ['Manila', 'QuezonCity', 'Both']
+            : [branch, 'Both'];
+
+        for (const b of staffBranchRooms) {
+          socket.join(`role:${b}::staff`);
+          joinedRooms.push(`role:${b}::staff`);
+        }
       }
 
       logger.debug(`[NOTIF-EVENTS] user:${socket.userId} joined branch:${branch} → rooms: ${joinedRooms.join(', ')}`);
