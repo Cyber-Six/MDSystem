@@ -53,6 +53,47 @@ function ImageLightbox({ src, onClose }) {
   );
 }
 
+const padDateTimePart = (value) => String(value).padStart(2, '0');
+
+const toDateTimeLocalValue = (value) => {
+  try {
+    if (!value) return '';
+    
+    // Backend can return either format:
+    // - timestamp: "2026-04-11T01:47:00.000"
+    // - TIMESTAMPTZ: "2026-04-11T01:47:00.000Z" or "2026-04-11T01:47:00+00:00"
+    // Extract just the date and time portion (works for both formats)
+    const stringValue = typeof value === 'string' ? value : String(value || '');
+    const match = stringValue.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!match) return '';
+    
+    return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
+  } catch (err) {
+    console.error('Error in toDateTimeLocalValue:', err);
+    return '';
+  }
+};
+
+const toIsoDateTimeOrNull = (value) => {
+  try {
+    if (!value) return null;
+    
+    // datetime-local input format: "YYYY-MM-DDTHH:mm"
+    // Send local time as-is to backend (don't convert to UTC)
+    // This ensures the backend receives exactly what the user selected
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (!match) return null;
+    
+    const [, year, month, day, hours, minutes] = match;
+    
+    // Format as ISO string without Z (timestamp format, not TIMESTAMPTZ)
+    return `${year}-${month}-${day}T${hours}:${minutes}:00.000`;
+  } catch (err) {
+    console.error('Error in toIsoDateTimeOrNull:', err);
+    return null;
+  }
+};
+
 /**
  * Announcement Management Component
  * Staff interface to manage announcements (CRUD)
@@ -92,6 +133,7 @@ const AnnouncementManagement = () => {
     description: '',
     isActive: true,
     location: defaultLocation,
+    viewableUntil: '',
   });
 
   // Update form default location when branch info becomes available
@@ -193,6 +235,7 @@ const AnnouncementManagement = () => {
       description: '',
       isActive: true,
       location: defaultLocation,
+      viewableUntil: '',
     });
     setEditingId(null);
     setStagedFileId(null);
@@ -201,27 +244,46 @@ const AnnouncementManagement = () => {
   };
 
   const handleEdit = (announcement) => {
-    setFormData({
-      label: announcement.label || '',
-      description: announcement.description || '',
-      isActive: announcement.isActive !== false,
-      location: announcement.location || 'Both',
-    });
-    setEditingId(announcement.id);
-    setStagedFileId(null);
-    setImagePreview(null);
-    setExistingPubmat(announcement.pubmat || null);
-    setIsFormOpen(true);
+    try {
+      setFormData({
+        label: announcement.label || '',
+        description: announcement.description || '',
+        isActive: announcement.isActive !== false,
+        location: announcement.location || 'Both',
+        viewableUntil: announcement.viewableUntil ? toDateTimeLocalValue(announcement.viewableUntil) : '',
+      });
+      setEditingId(announcement.id);
+      setStagedFileId(null);
+      setImagePreview(null);
+      setExistingPubmat(announcement.pubmat || null);
+      setIsFormOpen(false);
+    } catch (err) {
+      console.error('Error in handleEdit:', err);
+      setError('Failed to open edit form. Please try again.');
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setIsSaving(true);
+      setError(null);
+
+      const normalizedViewableUntil = toIsoDateTimeOrNull(formData.viewableUntil);
+      if (formData.viewableUntil && !normalizedViewableUntil) {
+        setError('Viewable Until must be a valid date and time.');
+        return;
+      }
+
+      if (normalizedViewableUntil && new Date(normalizedViewableUntil) <= new Date()) {
+        setError('Viewable Until must be a future date and time.');
+        return;
+      }
 
       const payload = {
         ...formData,
         pubmat: stagedFileId || existingPubmat || null,
+        viewableUntil: normalizedViewableUntil,
       };
 
       if (editingId) {
@@ -262,6 +324,233 @@ const AnnouncementManagement = () => {
     }
   };
 
+  const handleCancelForm = () => {
+    resetForm();
+    setIsFormOpen(false);
+  };
+
+  const renderAnnouncementForm = ({ mode = 'create' } = {}) => {
+    const isInlineEdit = mode === 'edit';
+    const checkboxId = isInlineEdit ? `isActive-${editingId}` : 'isActive-create';
+
+    return (
+      <div
+        className={isInlineEdit
+          ? 'rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50/80 dark:bg-neutral-800/60 p-4'
+          : 'bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4'
+        }
+      >
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Title */}
+          <div>
+            <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
+              Title
+            </label>
+            <input
+              type="text"
+              name="label"
+              value={formData.label}
+              onChange={handleInputChange}
+              placeholder="Enter announcement title"
+              className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              required
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
+              Description
+            </label>
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleInputChange}
+              placeholder="Enter announcement description"
+              rows="4"
+              className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* File Upload */}
+          <div>
+            <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
+              Image / Pubmat (Optional)
+            </label>
+
+            {/* Drag-and-drop zone */}
+            {!imagePreview && !existingPubmat ? (
+              <div
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onClick={() => !isUploadingFile && fileInputRef.current?.click()}
+                className={`relative flex flex-col items-center justify-center gap-2 w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors
+                  ${isDragging
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                    : 'border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/40 hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/10'
+                  }
+                  ${isUploadingFile ? 'pointer-events-none opacity-60' : ''}
+                `}
+              >
+                {isUploadingFile ? (
+                  <span className="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full" />
+                ) : (
+                  <svg className="w-8 h-8 text-neutral-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                )}
+                <span className="text-xs text-secondary-500 dark:text-neutral-400">
+                  {isUploadingFile ? 'Uploading…' : 'Drag & drop or click to upload'}
+                </span>
+                <span className="text-xs text-neutral-400 dark:text-neutral-500">PNG, JPG accepted</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  onChange={handleFileChange}
+                  disabled={isUploadingFile}
+                  className="hidden"
+                />
+              </div>
+            ) : (
+              <div className="relative mt-1 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-600">
+                {imagePreview ? (
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="w-full max-h-48 object-contain bg-neutral-100 dark:bg-neutral-700 cursor-zoom-in"
+                    onClick={() => setLightboxSrc(imagePreview)}
+                    title="Click to enlarge"
+                  />
+                ) : (
+                  <div>
+                    <AuthImage
+                      path={`/media/record/announcement/${existingPubmat}`}
+                      alt="Current announcement image"
+                      className="w-full max-h-48 object-contain bg-neutral-100 dark:bg-neutral-700 cursor-zoom-in"
+                      onClick={(e) => setLightboxSrc(e.currentTarget.src)}
+                      title="Click to enlarge"
+                    />
+                    <p className="text-xs text-secondary-500 dark:text-neutral-400 px-3 py-1 border-t border-neutral-200 dark:border-neutral-600">
+                      Upload a new file to replace it
+                    </p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={removeImage}
+                  className="absolute top-2 right-2 p-1 bg-neutral-900/60 hover:bg-neutral-900/80 text-white rounded-full transition-colors"
+                  title="Remove image"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                {imagePreview && !isUploadingFile && (
+                  <p className="text-xs text-success-600 dark:text-success-400 px-3 py-1 bg-success-50 dark:bg-success-900/20 border-t border-neutral-200 dark:border-neutral-600 mb-0">
+                    Image ready to save
+                  </p>
+                )}
+                {/* Hidden input for re-upload */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  onChange={handleFileChange}
+                  disabled={isUploadingFile}
+                  className="hidden"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Branch / Location */}
+          <div>
+            <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
+              Announcement Visibility
+            </label>
+            <select
+              name="location"
+              value={formData.location}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {locationOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+              Controls which branch patients can see this announcement.
+            </p>
+          </div>
+
+          {/* Viewable Until */}
+          <div>
+            <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
+              Viewable Until
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="datetime-local"
+                name="viewableUntil"
+                value={formData.viewableUntil}
+                onChange={handleInputChange}
+                min={toDateTimeLocalValue(new Date(Date.now() + 60000))}
+                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              {formData.viewableUntil && (
+                <button
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, viewableUntil: '' }))}
+                  className="px-3 py-2 border border-neutral-300 dark:border-neutral-600 text-secondary-700 dark:text-neutral-300 text-sm font-medium rounded hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
+              Leave blank to keep this announcement visible indefinitely.
+            </p>
+          </div>
+
+          {/* Active Status */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={checkboxId}
+              name="isActive"
+              checked={formData.isActive}
+              onChange={handleInputChange}
+              className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500"
+            />
+            <label htmlFor={checkboxId} className="text-xs text-secondary-700 dark:text-neutral-300">
+              Active (publicly visible)
+            </label>
+          </div>
+
+          {/* Submit Button */}
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={handleCancelForm}
+              className="px-3 py-2 border border-neutral-300 dark:border-neutral-600 text-secondary-700 dark:text-neutral-300 text-sm font-medium rounded hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving || isUploadingFile}
+              className="px-3 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 text-white text-sm font-medium rounded transition-colors"
+            >
+              {isSaving ? 'Saving...' : isInlineEdit ? 'Update' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
@@ -299,12 +588,16 @@ const AnnouncementManagement = () => {
         </h2>
         <button
           onClick={() => {
+            if (isFormOpen && !editingId) {
+              handleCancelForm();
+              return;
+            }
             resetForm();
-            setIsFormOpen(!isFormOpen);
+            setIsFormOpen(true);
           }}
           className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded transition-colors"
         >
-          {isFormOpen ? 'Cancel' : '+ New Announcement'}
+          {isFormOpen && !editingId ? 'Cancel' : '+ New Announcement'}
         </button>
       </div>
 
@@ -316,191 +609,7 @@ const AnnouncementManagement = () => {
       )}
 
       {/* Form */}
-      {isFormOpen && (
-        <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-4">
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {/* Title */}
-            <div>
-              <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
-                Title
-              </label>
-              <input
-                type="text"
-                name="label"
-                value={formData.label}
-                onChange={handleInputChange}
-                placeholder="Enter announcement title"
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                required
-              />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
-                Description
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                placeholder="Enter announcement description"
-                rows="4"
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-
-            {/* File Upload */}
-            <div>
-              <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
-                Image / Pubmat (Optional)
-              </label>
-
-              {/* Drag-and-drop zone */}
-              {!imagePreview && !existingPubmat ? (
-                <div
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onClick={() => !isUploadingFile && fileInputRef.current?.click()}
-                  className={`relative flex flex-col items-center justify-center gap-2 w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors
-                    ${isDragging
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700/40 hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/10'
-                    }
-                    ${isUploadingFile ? 'pointer-events-none opacity-60' : ''}
-                  `}
-                >
-                  {isUploadingFile ? (
-                    <span className="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full" />
-                  ) : (
-                    <svg className="w-8 h-8 text-neutral-400 dark:text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  )}
-                  <span className="text-xs text-secondary-500 dark:text-neutral-400">
-                    {isUploadingFile ? 'Uploading…' : 'Drag & drop or click to upload'}
-                  </span>
-                  <span className="text-xs text-neutral-400 dark:text-neutral-500">PNG, JPG accepted</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png"
-                    onChange={handleFileChange}
-                    disabled={isUploadingFile}
-                    className="hidden"
-                  />
-                </div>
-              ) : (
-                <div className="relative mt-1 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-600">
-                  {imagePreview ? (
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="w-full max-h-48 object-contain bg-neutral-100 dark:bg-neutral-700 cursor-zoom-in"
-                      onClick={() => setLightboxSrc(imagePreview)}
-                      title="Click to enlarge"
-                    />
-                  ) : (
-                    <div>
-                      <AuthImage
-                        path={`/media/record/announcement/${existingPubmat}`}
-                        alt="Current announcement image"
-                        className="w-full max-h-48 object-contain bg-neutral-100 dark:bg-neutral-700 cursor-zoom-in"
-                        onClick={(e) => setLightboxSrc(e.currentTarget.src)}
-                        title="Click to enlarge"
-                      />
-                      <p className="text-xs text-secondary-500 dark:text-neutral-400 px-3 py-1 border-t border-neutral-200 dark:border-neutral-600">
-                        Upload a new file to replace it
-                      </p>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={removeImage}
-                    className="absolute top-2 right-2 p-1 bg-neutral-900/60 hover:bg-neutral-900/80 text-white rounded-full transition-colors"
-                    title="Remove image"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  {imagePreview && !isUploadingFile && (
-                    <p className="text-xs text-success-600 dark:text-success-400 px-3 py-1 bg-success-50 dark:bg-success-900/20 border-t border-neutral-200 dark:border-neutral-600 mb-0">
-                      Image ready to save
-                    </p>
-                  )}
-                  {/* Hidden input for re-upload */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png"
-                    onChange={handleFileChange}
-                    disabled={isUploadingFile}
-                    className="hidden"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Branch / Location */}
-            <div>
-              <label className="block text-xs font-semibold text-secondary-700 dark:text-neutral-300 mb-1">
-                Announcement Visibility
-              </label>
-              <select
-                name="location"
-                value={formData.location}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {locationOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-                Controls which branch patients can see this announcement.
-              </p>
-            </div>
-
-            {/* Active Status */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="isActive"
-                name="isActive"
-                checked={formData.isActive}
-                onChange={handleInputChange}
-                className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500"
-              />
-              <label htmlFor="isActive" className="text-xs text-secondary-700 dark:text-neutral-300">
-                Active (publicly visible)
-              </label>
-            </div>
-
-            {/* Submit Button */}
-            <div className="flex gap-2 justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  resetForm();
-                  setIsFormOpen(false);
-                }}
-                className="px-3 py-2 border border-neutral-300 dark:border-neutral-600 text-secondary-700 dark:text-neutral-300 text-sm font-medium rounded hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving || isUploadingFile}
-                className="px-3 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 text-white text-sm font-medium rounded transition-colors"
-              >
-                {isSaving ? 'Saving...' : editingId ? 'Update' : 'Create'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {isFormOpen && !editingId && renderAnnouncementForm({ mode: 'create' })}
 
       {/* Announcements List */}
       {(() => {
@@ -558,6 +667,9 @@ const AnnouncementManagement = () => {
                     <p className="text-xs text-secondary-500 dark:text-neutral-500">
                       Posted: {new Date(announcement.created_at).toLocaleDateString()}
                     </p>
+                    <p className="text-xs text-secondary-500 dark:text-neutral-500">
+                      Viewable Until: {announcement.viewableUntil ? new Date(announcement.viewableUntil).toLocaleString() : 'Indefinite'}
+                    </p>
                   </div>
 
                   {/* Actions */}
@@ -584,6 +696,12 @@ const AnnouncementManagement = () => {
                     </button>
                   </div>
                 </div>
+
+                {editingId === announcement.id && (
+                  <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                    {renderAnnouncementForm({ mode: 'edit' })}
+                  </div>
+                )}
               </div>
             ))}
           </div>
