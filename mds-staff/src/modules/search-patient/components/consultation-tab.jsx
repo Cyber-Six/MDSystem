@@ -376,6 +376,54 @@ export default function PatientConsultationTab({ patient, consultations = [], on
         right={<span className="text-xs text-secondary-400 dark:text-neutral-500">Patient ID: {patient?.id || 'N/A'}</span>}
       >
         <div className="space-y-4">
+          {/* ── VITAL SIGNS - FULL WIDTH ON TOP ── */}
+          <div className="rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-green-50 dark:bg-green-900/10">
+              <span className="text-sm font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">
+                Vital Signs
+              </span>
+              <span className="block text-xs font-normal text-green-600 dark:text-green-500 mt-1">
+                Optional — fill all fields to record
+              </span>
+            </div>
+            <div className="p-3 grid md:grid-cols-5 gap-3">
+              <InputField
+                label="Height (cm)"
+                value={form.vitalSigns.height_cm}
+                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, height_cm: e.target.value })}
+                placeholder="170"
+                type="number"
+              />
+              <InputField
+                label="Weight (kg)"
+                value={form.vitalSigns.weight_kg}
+                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, weight_kg: e.target.value })}
+                placeholder="65"
+                type="number"
+              />
+              <InputField
+                label="Blood Pressure"
+                value={form.vitalSigns.blood_pressure}
+                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, blood_pressure: e.target.value })}
+                placeholder="120/80"
+              />
+              <InputField
+                label="Heart Rate (bpm)"
+                value={form.vitalSigns.heart_rate}
+                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, heart_rate: e.target.value })}
+                placeholder="72"
+                type="number"
+              />
+              <InputField
+                label="Temperature (°C)"
+                value={form.vitalSigns.temperature}
+                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, temperature: e.target.value })}
+                placeholder="36.5"
+                type="number"
+              />
+            </div>
+          </div>
+
           {/* ── Full form: 70/30 split from the very top ── */}
           <div className="flex gap-4">
             {/* Left side (70%): all consultation fields */}
@@ -563,68 +611,6 @@ export default function PatientConsultationTab({ patient, consultations = [], on
                     placeholder="Medication, advice, and follow-up plan"
                     isTextarea={false}
                   />
-                </div>
-              </div>
-            </div>
-
-            {/* Right side (30%): Vital Signs — spans from top row down */}
-            <div className="w-[30%] shrink-0">
-              <div className="rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden flex flex-col">
-                <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800/50">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-secondary-500 dark:text-neutral-400">
-                    Vital Signs
-                  </span>
-                  <span className="block text-[10px] font-normal text-secondary-400 dark:text-neutral-500 mt-0.5">
-                    Optional — fill all fields to record
-                  </span>
-                </div>
-                <div className="p-3 flex flex-col gap-3">
-                  <InputField
-                    label="Height (cm)"
-                    value={form.vitalSigns.height_cm}
-                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, height_cm: e.target.value })}
-                    placeholder="e.g. 170"
-                    type="number"
-                  />
-                  <InputField
-                    label="Weight (kg)"
-                    value={form.vitalSigns.weight_kg}
-                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, weight_kg: e.target.value })}
-                    placeholder="e.g. 65"
-                    type="number"
-                  />
-                  <InputField
-                    label="Blood Pressure"
-                    value={form.vitalSigns.blood_pressure}
-                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, blood_pressure: e.target.value })}
-                    placeholder="e.g. 120/80"
-                  />
-                  <InputField
-                    label="Heart Rate (bpm)"
-                    value={form.vitalSigns.heart_rate}
-                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, heart_rate: e.target.value })}
-                    placeholder="e.g. 72"
-                    type="number"
-                  />
-                  <InputField
-                    label="Temperature (°C)"
-                    value={form.vitalSigns.temperature}
-                    onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, temperature: e.target.value })}
-                    placeholder="e.g. 36.5"
-                    type="number"
-                  />
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-secondary-400 dark:text-neutral-500">
-                      Notes
-                    </label>
-                    <textarea
-                      value={form.vitalSigns.notes}
-                      onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, notes: e.target.value })}
-                      placeholder="Additional vital sign observations..."
-                      rows={3}
-                      className="w-full rounded-sm border border-neutral-300 dark:border-neutral-600 bg-transparent px-2.5 py-1.5 text-xs text-secondary-700 dark:text-neutral-200 placeholder-secondary-300 dark:placeholder-neutral-600 outline-none focus:border-primary-400 resize-none"
-                    />
-                  </div>
                 </div>
               </div>
             </div>

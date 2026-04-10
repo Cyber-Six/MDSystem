@@ -618,48 +618,56 @@ const AnnouncementManagement = () => {
           ? announcements
           : announcements.filter(a => a.location === 'Both' || a.location === effectiveBranch);
         return (
-      <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-        {visibleAnnouncements.length === 0 ? (
-          <div className="p-4 text-center text-secondary-500 dark:text-neutral-400 text-sm">
-            No announcements yet
-          </div>
-        ) : (
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
-            {visibleAnnouncements.map((announcement) => (
-              <div
-                key={announcement.id}
-                className="p-4 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
-                        {announcement.label}
-                      </h3>
-                      <span
-                        className={`px-2 py-0.5 text-xs font-medium rounded ${
-                          announcement.isActive
-                            ? 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400'
-                            : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-400'
-                        }`}
-                      >
-                        {announcement.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 text-xs font-medium rounded ${
-                          announcement.location === 'Manila'
-                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+          <div className="space-y-2">
+            {visibleAnnouncements.length === 0 ? (
+              <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-4 py-5 text-center text-secondary-500 dark:text-neutral-400 text-sm">
+                No announcements yet
+              </div>
+            ) : (
+              visibleAnnouncements.map((announcement) => (
+                <div
+                  key={announcement.id}
+                  className="group rounded-xl border border-neutral-200/80 dark:border-neutral-700 bg-white/95 dark:bg-neutral-800/90 px-3 py-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary-300/70 hover:shadow-md dark:hover:border-primary-500/30"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className="m-0 flex h-5 min-w-0 max-w-[62%] shrink items-center truncate text-sm font-semibold leading-none text-secondary-800 dark:text-white">
+                          {announcement.label}
+                        </h3>
+                        <span
+                          className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[10px] font-semibold leading-none ${
+                            announcement.isActive
+                              ? 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400'
+                              : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-400'
+                          }`}
+                        >
+                          {announcement.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        <span
+                          className={`inline-flex h-5 shrink-0 items-center rounded-full px-1.5 text-[10px] font-medium leading-none ${
+                            announcement.location === 'Manila'
+                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                              : announcement.location === 'QuezonCity'
+                              ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                              : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400'
+                          }`}
+                        >
+                          {announcement.location === 'Manila'
+                            ? 'Manila'
                             : announcement.location === 'QuezonCity'
-                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
-                            : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400'
-                        }`}
-                      >
-                        {announcement.location === 'Manila'
-                          ? 'Manila'
-                          : announcement.location === 'QuezonCity'
-                          ? 'Quezon City'
-                          : 'All Branches'}
-                      </span>
+                            ? 'Quezon City'
+                            : 'All Branches'}
+                        </span>
+                      </div>
+
+                      <p className="mt-1 text-xs leading-snug text-secondary-600 dark:text-neutral-400 line-clamp-2">
+                        {announcement.description}
+                      </p>
+
+                      <p className="mt-1.5 text-[11px] leading-none text-secondary-500 dark:text-neutral-500">
+                        Posted on {new Date(announcement.created_at).toLocaleDateString()}
+                      </p>
                     </div>
                     <p className="text-xs text-secondary-600 dark:text-neutral-400 line-clamp-2 mb-1">
                       {announcement.description}
@@ -672,30 +680,34 @@ const AnnouncementManagement = () => {
                     </p>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2 ml-4">
-                    <button
-                      onClick={() => handleEdit(announcement)}
-                      disabled={isSaving}
-                      className="p-1.5 text-secondary-500 hover:text-primary-600 dark:text-neutral-400 dark:hover:text-primary-400 transition-colors disabled:opacity-50"
-                      title="Edit"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => handleDelete(announcement.id)}
-                      disabled={isSaving}
-                      className="p-1.5 text-secondary-500 hover:text-error-600 dark:text-neutral-400 dark:hover:text-error-400 transition-colors disabled:opacity-50"
-                      title="Delete"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    <div className="flex shrink-0 items-start gap-1.5 pt-0.5 opacity-80 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={() => handleEdit(announcement)}
+                        disabled={isSaving}
+                        className="rounded-full p-1.5 text-secondary-500 transition-colors hover:bg-neutral-100 hover:text-primary-600 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-primary-400 disabled:opacity-50"
+                        title="Edit"
+                        aria-label={`Edit announcement ${announcement.label}`}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(announcement.id)}
+                        disabled={isSaving}
+                        className="rounded-full p-1.5 text-secondary-500 transition-colors hover:bg-neutral-100 hover:text-error-600 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-error-400 disabled:opacity-50"
+                        title="Delete"
+                        aria-label={`Delete announcement ${announcement.label}`}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
+              ))
+            )}
 
                 {editingId === announcement.id && (
                   <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
@@ -705,8 +717,6 @@ const AnnouncementManagement = () => {
               </div>
             ))}
           </div>
-        )}
-      </div>
         );
       })()}
       

@@ -109,22 +109,22 @@ function OutcomeCard({ outcome, index, total }) {
     : 'Unknown date';
 
   return (
-    <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
-      <div className="bg-neutral-50 dark:bg-neutral-700/30 px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+    <div className="rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/30 overflow-hidden">
+      <div className="bg-neutral-100 dark:bg-neutral-700/50 px-3.5 py-2 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
         <span className="text-xs font-semibold text-secondary-700 dark:text-neutral-300">
           Entry #{total - index}
         </span>
-        <span className="text-[11px] text-secondary-400 dark:text-neutral-500">{recordedDate}</span>
+        <span className="text-[10px] text-secondary-400 dark:text-neutral-500">{recordedDate}</span>
       </div>
-      <div className="p-4 space-y-3">
+      <div className="p-3.5 space-y-2">
         {outcome.complaints?.length > 0 && (
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400 mb-1">
               Chief Complaints
             </p>
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {outcome.complaints.map((c, i) => (
-                <li key={c.id || i} className="text-sm text-secondary-700 dark:text-neutral-300 flex items-start gap-2">
+                <li key={c.id || i} className="text-xs text-secondary-700 dark:text-neutral-300 flex items-start gap-2" style={{ margin: 0, lineHeight: 1.3 }}>
                   <span className="text-primary-500 mt-0.5">-</span>
                   <span>{c.complaint}</span>
                 </li>
@@ -135,24 +135,24 @@ function OutcomeCard({ outcome, index, total }) {
 
         {outcome.diagnoses?.length > 0 && (
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400 mb-1">
               Diagnoses
             </p>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {outcome.diagnoses.map((d, i) => (
-                <div key={d.id || i} className="flex items-center gap-2">
+                <div key={d.id || i} className="flex items-center gap-1.5">
                   <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-medium whitespace-nowrap ${
                       d.diagnosisType === 'Primary'
                         ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
-                        : 'bg-neutral-100 dark:bg-neutral-700 text-secondary-600 dark:text-neutral-400'
+                        : 'bg-neutral-200 dark:bg-neutral-600 text-secondary-700 dark:text-neutral-300'
                     }`}
                   >
                     {d.diagnosisType}
                   </span>
-                  <span className="text-sm text-secondary-700 dark:text-neutral-300">{d.diagnosisName}</span>
+                  <span className="text-xs text-secondary-700 dark:text-neutral-300">{d.diagnosisName}</span>
                   {d.notes && (
-                    <span className="text-xs text-secondary-400 dark:text-neutral-500 italic">({d.notes})</span>
+                    <span className="text-[9px] text-secondary-400 dark:text-neutral-500 italic">({d.notes})</span>
                   )}
                 </div>
               ))}
@@ -162,12 +162,12 @@ function OutcomeCard({ outcome, index, total }) {
 
         {outcome.treatments?.length > 0 && (
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400 mb-1">
               Treatments
             </p>
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {outcome.treatments.map((t, i) => (
-                <li key={t.id || i} className="text-sm text-secondary-700 dark:text-neutral-300 flex items-start gap-2">
+                <li key={t.id || i} className="text-xs text-secondary-700 dark:text-neutral-300 flex items-start gap-2" style={{ margin: 0, lineHeight: 1.3 }}>
                   <span className="text-success-500 mt-0.5">-</span>
                   <span>{t.treatment}</span>
                 </li>
@@ -178,12 +178,12 @@ function OutcomeCard({ outcome, index, total }) {
 
         {outcome.peFindings?.length > 0 && (
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400 mb-1">
               PE Findings
             </p>
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {outcome.peFindings.map((f, i) => (
-                <li key={f.id || i} className="text-sm text-secondary-700 dark:text-neutral-300 flex items-start gap-2">
+                <li key={f.id || i} className="text-xs text-secondary-700 dark:text-neutral-300 flex items-start gap-2" style={{ margin: 0, lineHeight: 1.3 }}>
                   <span className="text-accent-500 mt-0.5">-</span>
                   <span>{f.finding}</span>
                 </li>
@@ -194,10 +194,10 @@ function OutcomeCard({ outcome, index, total }) {
 
         {outcome.remarks && (
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400 mb-1">
               Remarks
             </p>
-            <p className="text-sm text-secondary-600 dark:text-neutral-400">{outcome.remarks}</p>
+            <p className="text-xs text-secondary-700 dark:text-neutral-300" style={{ margin: 0, lineHeight: 1.3 }}>{outcome.remarks}</p>
           </div>
         )}
       </div>
@@ -431,29 +431,29 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[95vh] flex flex-col">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[95vh] flex flex-col">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between rounded-t-xl">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <h2 className="text-xl font-bold text-secondary-900 dark:text-white">Consultation Details</h2>
+        <div className="sticky top-0 z-10 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between rounded-t-xl">
+          <div className="flex-1 min-w-0 flex flex-col gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold text-secondary-900 dark:text-white" style={{ margin: 0, lineHeight: 1.2 }}>Consultation Details</h2>
               <span
-                className={`inline-flex items-center px-2 py-1 rounded text-[11px] font-medium leading-none ${
+                className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${
                   TYPE_STYLES[consultation.type] || TYPE_STYLES.Medical
                 }`}
               >
                 {consultation.type}
               </span>
               <span
-                className={`inline-flex items-center px-2 py-1 rounded text-[11px] font-medium leading-none ${
+                className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${
                   STATUS_STYLES[consultation.status] || STATUS_STYLES.Created
                 }`}
               >
                 {consultation.status}
               </span>
             </div>
-            <div className="flex items-center gap-3 text-sm text-secondary-600 dark:text-neutral-400 flex-wrap">
-              <span className="font-mono text-xs">{consultation.id}</span>
+            <div className="flex items-center text-xs text-secondary-600 dark:text-neutral-400 flex-wrap" style={{ gap: '4px' }}>
+              <span className="font-mono text-[10px]">{consultation.id}</span>
               <span>&middot;</span>
               <span>{consultation.date}</span>
               {consultation.time && (
@@ -466,23 +466,23 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors flex-shrink-0"
+            className="p-1.5 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors flex-shrink-0"
           >
-            <svg className="w-5 h-5 text-secondary-600 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-secondary-600 dark:text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {/* Error/Loading state */}
           {error && (
             <div className="flex items-center gap-2 p-3 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
-              <svg className="w-4 h-4 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 text-error-600 dark:text-error-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm text-error-700 dark:text-error-400 mb-0">{error}</p>
+              <p className="text-xs text-error-700 dark:text-error-400 mb-0">{error}</p>
             </div>
           )}
 
@@ -496,20 +496,20 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
           {/* Success message */}
           {reopenSuccess && (
             <div className="flex items-center gap-2 p-3 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 rounded-lg">
-              <svg className="w-4 h-4 text-success-600 dark:text-success-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 text-success-600 dark:text-success-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <p className="text-sm text-success-700 dark:text-success-400 mb-0">{reopenSuccess}</p>
+              <p className="text-xs text-success-700 dark:text-success-400 mb-0">{reopenSuccess}</p>
             </div>
           )}
 
           {/* Consultation notes */}
           {consultation.notes && (
-            <div className="bg-neutral-50 dark:bg-neutral-700/30 rounded-lg p-4">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1">
+            <div className="bg-neutral-50 dark:bg-neutral-700/30 rounded-lg p-3.5">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400 mb-1">
                 Consultation Notes
               </p>
-              <p className="text-sm text-secondary-700 dark:text-neutral-300">{consultation.notes}</p>
+              <p className="text-xs text-secondary-700 dark:text-neutral-300" style={{ margin: 0, lineHeight: 1.3 }}>{consultation.notes}</p>
             </div>
           )}
 
@@ -522,10 +522,10 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
 
           {!loading && outcomes.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-3">
+              <h3 className="text-xs font-semibold text-secondary-800 dark:text-white mb-2">
                 Consultation History ({outcomes.length} {outcomes.length === 1 ? 'entry' : 'entries'})
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {outcomes.map((outcome, idx) => (
                   <OutcomeCard key={outcome.id || idx} outcome={outcome} index={idx} total={outcomes.length} />
                 ))}
@@ -536,18 +536,18 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
           {/* Reopen form */}
           {showReopenForm && (
             <div className="border-2 border-orange-200 dark:border-orange-800 rounded-lg overflow-hidden">
-              <div className="bg-orange-50 dark:bg-orange-900/20 px-4 py-3 border-b border-orange-200 dark:border-orange-800">
-                <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-400">
+              <div className="bg-orange-50 dark:bg-orange-900/20 px-3.5 py-2.5 border-b border-orange-200 dark:border-orange-800">
+                <h3 className="text-xs font-semibold text-orange-900 dark:text-orange-400">
                   Add New Consultation Details
                 </h3>
-                <p className="text-xs text-orange-700 dark:text-orange-500 mt-1">
+                <p className="text-[11px] text-orange-700 dark:text-orange-500 mt-0.5" style={{ margin: 0, lineHeight: 1.3 }}>
                   Add new complaints, treatments, diagnoses, or remarks. You can add multiple entries to this consultation.
                 </p>
               </div>
-              <div className="p-4 space-y-4 bg-white dark:bg-neutral-800">
-                <div className="grid md:grid-cols-2 gap-3">
+              <div className="p-3.5 space-y-3 bg-white dark:bg-neutral-800">
+                <div className="grid md:grid-cols-2 gap-2.5">
                   <label className="block">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400 mb-1 block">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400 mb-1 block">
                       New Clinical Notes (Optional)
                     </span>
                     <textarea
@@ -555,7 +555,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                       value={newRemarks}
                       onChange={(e) => setNewRemarks(e.target.value)}
                       placeholder="Additional clinical notes"
-                      className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                      className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-xs text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                   </label>
 
@@ -568,7 +568,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                   />
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-3">
+                <div className="grid md:grid-cols-2 gap-2.5">
                   <MultiInputField
                     label="New Chief Complaints"
                     values={newComplaints}
@@ -589,7 +589,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                 {/* ICD Search */}
                 <div className="space-y-2">
                   <label className="block">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-secondary-500 dark:text-neutral-400">
                       Search ICD for New Diagnoses
                     </span>
                     <input
@@ -597,7 +597,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                       value={icdQuery}
                       onChange={(e) => setIcdQuery(e.target.value)}
                       placeholder="Type ICD code or diagnosis title"
-                      className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                      className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-xs text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                   </label>
 
@@ -640,7 +640,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                               <select
                                 value={entry.diagnosisType}
                                 onChange={(e) => setDiagnosisType(entry.id, e.target.value)}
-                                className={`px-2 py-1 rounded text-[11px] font-medium border ${
+                                className={`px-2 py-1 rounded text-[10px] font-medium border ${
                                   entry.diagnosisType === 'Primary'
                                     ? 'bg-primary-500 text-white border-primary-600'
                                     : 'bg-white dark:bg-neutral-600 text-secondary-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-500'
@@ -655,7 +655,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                               <button
                                 type="button"
                                 onClick={() => removeDiagnosis(entry.id)}
-                                className="px-2 py-1 rounded text-[11px] font-medium bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400"
+                                className="px-2 py-1 rounded text-[10px] font-medium bg-error-50 dark:bg-error-900/20 text-error-700 dark:text-error-400"
                               >
                                 Remove
                               </button>
@@ -666,7 +666,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                             value={entry.notes}
                             onChange={(e) => setDiagnosisNotes(entry.id, e.target.value)}
                             placeholder="Optional diagnosis note"
-                            className="mt-2 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-xs text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                            className="mt-1.5 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-xs text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
                           />
                         </div>
                       ))
@@ -683,23 +683,23 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-neutral-50 dark:bg-neutral-800/50 px-6 py-4 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-3 rounded-b-xl">
+        <div className="sticky bottom-0 bg-neutral-50 dark:bg-neutral-800/50 px-4 py-2 border-t border-neutral-200 dark:border-neutral-700 flex items-center justify-between gap-3 rounded-b-xl">
           {showReopenForm ? (
             <>
               <button
                 onClick={resetReopenForm}
                 disabled={reopenLoading}
-                className="px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors disabled:opacity-50"
+                className="px-3.5 py-2 text-xs font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleReopen}
                 disabled={reopenLoading}
-                className="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                className="px-3.5 py-2 text-xs font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors inline-flex items-center gap-2 disabled:opacity-50"
               >
                 {reopenLoading && (
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
@@ -711,7 +711,7 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
             <>
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors"
+                className="px-3.5 py-2 text-xs font-medium text-secondary-700 dark:text-neutral-300 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-600 transition-colors"
               >
                 Close
               </button>
@@ -719,9 +719,9 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                 {patient && (
                   <button
                     onClick={() => setShowPrescription(true)}
-                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors inline-flex items-center gap-2"
+                    className="px-3.5 py-2 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors inline-flex items-center gap-2"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     Generate Prescription
@@ -730,9 +730,9 @@ export default function ConsultationDetailModal({ consultation, patient, onClose
                 {canReopen && (
                   <button
                     onClick={() => setShowReopenForm(true)}
-                    className="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors inline-flex items-center gap-2"
+                    className="px-3.5 py-2 text-xs font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors inline-flex items-center gap-2"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                     Add New Details

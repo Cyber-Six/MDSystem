@@ -569,3 +569,58 @@ html div {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-gray-400);
 }
+
+/* Settings volume slider: custom thumb positioning and visuals so max reaches corner. */
+.settings-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  border-radius: 9999px;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(163, 163, 163, 0.75);
+  box-shadow: none;
+  background: rgba(115, 115, 115, 0.5);
+}
+
+.settings-volume-slider:focus,
+.settings-volume-slider:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: rgba(163, 163, 163, 0.75);
+}
+
+.settings-volume-slider::-webkit-slider-runnable-track {
+  height: 16px;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+.settings-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background-color: #EAB308;
+  border: 1px solid #EAB308;
+  box-shadow: none;
+  margin-top: 2px;
+}
+
+.settings-volume-slider::-moz-range-track {
+  height: 16px;
+  border-radius: 9999px;
+  background: rgba(115, 115, 115, 0.5);
+}
+
+.settings-volume-slider::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background-color: #EAB308;
+  border: 1px solid #EAB308;
+  box-shadow: none;
+}

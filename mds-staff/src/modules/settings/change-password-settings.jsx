@@ -192,16 +192,16 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
     <ModalBackdrop onClose={isLoading ? undefined : onCancel}>
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-700/50">
+        <div className="px-6 py-3 border-b border-neutral-100 dark:border-neutral-700/50">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-full bg-primary-100 dark:bg-primary-900/30">
+            <div className="p-2 rounded-full bg-primary-100 dark:bg-primary-900/30 flex-shrink-0">
               <svg className="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
               </svg>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">{stepTitle}</h3>
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">{stepDesc}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <h3 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-semibold text-secondary-800 dark:text-white">{stepTitle}</h3>
+              <p style={{ margin: 0 }} className="text-xs text-secondary-500 dark:text-neutral-400">{stepDesc}</p>
             </div>
           </div>
         </div>
@@ -423,15 +423,15 @@ const ChangePasswordModal = ({ totpEnabled, onSuccess, onCancel }) => {
 const SuccessModal = ({ message, onClose }) => (
   <ModalBackdrop onClose={onClose}>
     <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-700 p-6 text-center">
-      <div className="mx-auto w-12 h-12 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center mb-4">
+      <div className="mx-auto w-12 h-12 rounded-full bg-success-100 dark:bg-success-900/30 flex items-center justify-center" style={{ marginBottom: '12px' }}>
         <svg className="w-6 h-6 text-success-600 dark:text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       </div>
-      <h3 className="text-sm font-semibold text-secondary-800 dark:text-white mb-1">{message}</h3>
+      <h3 style={{ lineHeight: 1.2, margin: 0, marginBottom: '16px' }} className="text-sm font-semibold text-secondary-800 dark:text-white">{message}</h3>
       <button
         onClick={onClose}
-        className="mt-4 px-6 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+        className="px-6 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors"
       >
         Done
       </button>

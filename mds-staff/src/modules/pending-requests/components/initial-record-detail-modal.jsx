@@ -108,12 +108,12 @@ const InitialRecordDetailModal = ({ ticket, onClose, onAction, staffRole = 'both
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-bold text-secondary-900 dark:text-white">
+        <div className="sticky top-0 bg-white dark:bg-neutral-800 px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-base font-bold text-secondary-900 dark:text-white">
               Initial Record Submission
             </h2>
-            <p className="text-xs text-secondary-600 dark:text-neutral-400">
+            <p style={{ margin: 0 }} className="text-xs text-secondary-500 dark:text-neutral-400">
               Ticket&nbsp;#&nbsp;{ticket.id}
             </p>
           </div>

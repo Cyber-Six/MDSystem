@@ -208,10 +208,10 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[95vh] flex flex-col">
 
         {/* ── Header ── */}
-        <div className="sticky top-0 z-10 bg-gradient-to-r from-primary-50 to-accent-50 dark:from-neutral-800 dark:to-neutral-800 px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between rounded-t-xl">
+        <div className="sticky top-0 z-10 bg-white dark:bg-neutral-800 px-6 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between rounded-t-xl">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-xl font-bold text-secondary-900 dark:text-white truncate">
+            <div className="flex items-center gap-2" style={{ marginBottom: '8px' }}>
+              <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-xl font-bold text-secondary-900 dark:text-white truncate">
                 Record Review
               </h2>
               <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded whitespace-nowrap ${badgeClass}`}>
@@ -219,14 +219,14 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
               </span>
             </div>
             <div className="flex items-center gap-3 text-sm text-secondary-600 dark:text-neutral-400">
-              <span className="font-semibold text-secondary-900 dark:text-white">
+              <span className="font-semibold text-secondary-800 dark:text-neutral-200">
                 {ticket.first_name || ticket.last_name
                   ? `${ticket.first_name ?? ''} ${ticket.last_name ?? ''}`.trim()
                   : `Patient #${ticket.patientId}`}
               </span>
-              <span>&middot;</span>
+              <span className="text-neutral-400 dark:text-neutral-500">&middot;</span>
               <span>Scope: {scope}</span>
-              <span>&middot;</span>
+              <span className="text-neutral-400 dark:text-neutral-500">&middot;</span>
               <span>{ticket.branch === 'QuezonCity' ? 'Quezon City' : ticket.branch}</span>
             </div>
           </div>

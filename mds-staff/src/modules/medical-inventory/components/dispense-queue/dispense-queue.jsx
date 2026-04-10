@@ -345,7 +345,7 @@ const DispenseQueue = ({ requests, items, batches, allowedLocations = [], onDisp
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-white bg-neutral-600 dark:bg-neutral-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-700 dark:hover:bg-neutral-600 transition-colors"
             >
               Previous
             </button>
@@ -353,10 +353,10 @@ const DispenseQueue = ({ requests, items, batches, allowedLocations = [], onDisp
               <button
                 key={i + 1}
                 onClick={() => setCurrentPage(i + 1)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                className={`px-2 py-1 text-xs font-medium transition-colors ${
                   currentPage === i + 1
-                    ? 'bg-primary-500 text-white'
-                    : 'border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                    ? 'bg-yellow-500 text-white font-semibold px-3 py-1.5 rounded-md'
+                    : 'text-secondary-600 dark:text-neutral-400 hover:text-secondary-800 dark:hover:text-neutral-200'
                 }`}
               >
                 {i + 1}
@@ -365,7 +365,7 @@ const DispenseQueue = ({ requests, items, batches, allowedLocations = [], onDisp
             <button
               onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filtered.length / itemsPerPage), prev + 1))}
               disabled={currentPage === Math.ceil(filtered.length / itemsPerPage)}
-              className="px-3 py-1.5 text-xs font-medium border border-neutral-300 dark:border-neutral-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-white bg-yellow-500 hover:bg-yellow-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>
