@@ -15,7 +15,7 @@ router.get("/", jwtProtect(""), async (req, res) => {
 
         const sql = `
             SELECT id, title as label, content as description, pubmat, 
-                "isActive", created_at, location, "viewableUntil"::timestamp
+                "isActive", created_at, location, "viewableUntil"
             FROM "Announcement"
             WHERE "isActive" = true AND
             ("viewableUntil" IS NULL OR "viewableUntil" > NOW()) AND
@@ -69,7 +69,7 @@ router.get("/admin/all", jwtProtect("medical"), async (req, res) => {
         // If their branch is 'QuezonCity', they see QuezonCity + 'Both' announcements
         const sql = `
             SELECT id, title as label, content as description, 
-                pubmat, "isActive", created_at, location, "viewableUntil"::timestamp
+                pubmat, "isActive", created_at, location, "viewableUntil"
             FROM "Announcement"
             WHERE (
               $1 = 'Both'
@@ -98,7 +98,7 @@ router.get("/:id", jwtProtect(""), async (req, res) => {
             SELECT an.id, an.title as label, 
             an.content as description, 
             an.pubmat, "isActive", 
-            an.created_at, an.location, an."viewableUntil"::timestamp
+            an.created_at, an.location, an."viewableUntil"
             FROM "Announcement" an
             WHERE id = $1 AND 
             ("viewableUntil" IS NULL OR "viewableUntil" > NOW()) AND
@@ -153,7 +153,7 @@ router.post("/", jwtProtect("medical"), async (req, res) => {
         const sql = `
         INSERT INTO "Announcement" (title, content, pubmat, "isActive", location, "viewableUntil")
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, title as label, content as description, pubmat, "isActive", created_at, location, "viewableUntil"::timestamp;
+            RETURNING id, title as label, content as description, pubmat, "isActive", created_at, location, "viewableUntil";
         `;
 
         const params = [
@@ -243,11 +243,11 @@ router.put("/:id", jwtProtect("medical"), async (req, res) => {
         "isActive" = COALESCE($4, "isActive"),
         location = COALESCE($5, location),
         "viewableUntil" = CASE
-          WHEN $6::boolean THEN $7::timestamp
+          WHEN $6::boolean THEN $7
           ELSE "viewableUntil"
         END
       WHERE id = $8
-      RETURNING id, title as label, content as description, pubmat, "isActive", location, created_at, "viewableUntil"::timestamp;
+      RETURNING id, title as label, content as description, pubmat, "isActive", location, created_at, "viewableUntil";
     `;
     const params = [
       label,
