@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { tokenService, axiosRequest } from '../packages-core-adapter';
+import { AVAILABLE_SOUNDS } from '../utils/notification-sound';
 
 // ── DB ↔ Frontend format converters ──────────────────────────────────────────
 // Converts between the flat localStorage shape and the nested API shape.
@@ -8,7 +9,10 @@ function toBackendPrefs(s) {
   return {
     appearance:   { themeMode: s.themeMode, fontSize: s.fontSize, compactSidebar: s.compactSidebar },
     notification: {
-      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume, soundByModule: s.soundByModule,
+      soundEnabled: s.soundEnabled, soundVolume: s.soundVolume,
+      notificationSound: s.notificationSound,
+      soundByModule: s.soundByModule,
+      soundFileByModule: s.soundFileByModule,
       showBadges: s.showBadges, showBanners: s.showBanners, bannerErrorsOnly: s.bannerErrorsOnly,
       bannerCompact: s.bannerCompact, bannerAutoDismiss: s.bannerAutoDismiss, bannerDismissDelay: s.bannerDismissDelay,
     },
@@ -20,6 +24,9 @@ function mergeFromBackendPrefs(prefs) {
   const merged = sanitizeSettings(flat);
   if (prefs.notification?.soundByModule && typeof prefs.notification.soundByModule === 'object') {
     merged.soundByModule = { ...DEFAULT_SETTINGS.soundByModule, ...merged.soundByModule };
+  }
+  if (prefs.notification?.soundFileByModule && typeof prefs.notification.soundFileByModule === 'object') {
+    merged.soundFileByModule = { ...DEFAULT_SETTINGS.soundFileByModule, ...merged.soundFileByModule };
   }
   return merged;
 }
@@ -33,6 +40,45 @@ function isAuthenticated() {
   }
 }
 
+const MODULE_LABEL_TO_KEY = {
+  Appointments: 'appointments',
+  Requests: 'medicineRequests',
+  Inventory: 'inventory',
+  'Health Chat': 'healthChat',
+  General: 'general',
+};
+
+const MODULE_SOUND_FALLBACK = {
+  appointments: 'appointments.mp3',
+  medicineRequests: 'requests.mp3',
+  inventory: 'inventory.mp3',
+  healthChat: 'healthchat.mp3',
+  general: 'general.mp3',
+};
+
+// Build module defaults from AVAILABLE_SOUNDS so changing ids there (e.g.
+// appointments.mp3 -> ack.mp3) is automatically picked up by the frontend.
+const DEFAULT_SOUND_FILE_BY_MODULE = (() => {
+  const next = { ...MODULE_SOUND_FALLBACK };
+  AVAILABLE_SOUNDS.forEach((s) => {
+    const moduleKey = MODULE_LABEL_TO_KEY[s?.label];
+    if (moduleKey && typeof s?.id === 'string') {
+      next[moduleKey] = s.id;
+    }
+  });
+  return next;
+})();
+
+const AVAILABLE_SOUND_IDS = new Set(
+  AVAILABLE_SOUNDS
+    .map((s) => s?.id)
+    .filter((id) => typeof id === 'string'),
+);
+
+function isAllowedSoundId(id) {
+  return id === 'synthesis' || AVAILABLE_SOUND_IDS.has(id);
+}
+
 /**
  * Default settings for new users.
  * All flags are enabled by default to preserve existing behavior.
@@ -41,6 +87,10 @@ const DEFAULT_SETTINGS = {
   // ── Sound Settings ──
   soundEnabled: true,
   soundVolume: 1,
+  notificationSound: 'synthesis', // 'synthesis' | any id from AVAILABLE_SOUNDS
+  // Per-module defaults are generated from AVAILABLE_SOUNDS labels.
+  // Keep labels as: Appointments, Requests, Inventory, Health Chat, General.
+  soundFileByModule: DEFAULT_SOUND_FILE_BY_MODULE,
   soundByModule: {
     healthChat: true,
     appointments: true,
@@ -107,6 +157,9 @@ const BOOL_SETTINGS_KEYS = [
   'bannerCompact', 'bannerAutoDismiss', 'compactSidebar',
 ];
 const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
+const SOUND_FILE_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundFileByModule);
+// SECURITY: valid sound id — alphanumeric + dot/hyphen/underscore, max 64 chars.
+const VALID_SOUND_ID = /^[a-zA-Z0-9_\-.]{1,64}$/;
 
 /**
  * Strictly validate and sanitize a parsed settings object against known schema.
@@ -114,7 +167,11 @@ const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
  * SECURITY: Prevents XSS-planted localStorage values from poisoning app state.
  */
 function sanitizeSettings(parsed) {
-  const safe = { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+  const safe = {
+    ...DEFAULT_SETTINGS,
+    soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
+    soundFileByModule: { ...DEFAULT_SETTINGS.soundFileByModule },
+  };
 
   // Boolean keys
   BOOL_SETTINGS_KEYS.forEach((key) => {
@@ -140,6 +197,25 @@ function sanitizeSettings(parsed) {
     });
   }
 
+  // soundFileByModule — validate each value against sound-id pattern
+  if (parsed.soundFileByModule && typeof parsed.soundFileByModule === 'object') {
+    SOUND_FILE_MODULE_KEYS.forEach((k) => {
+      const v = parsed.soundFileByModule[k];
+      if (typeof v === 'string' && VALID_SOUND_ID.test(v) && isAllowedSoundId(v)) {
+        safe.soundFileByModule[k] = v;
+      }
+    });
+  }
+
+  // notificationSound — SECURITY: only allow safe filenames or 'synthesis'
+  if (
+    typeof parsed.notificationSound === 'string'
+    && VALID_SOUND_ID.test(parsed.notificationSound)
+    && isAllowedSoundId(parsed.notificationSound)
+  ) {
+    safe.notificationSound = parsed.notificationSound;
+  }
+
   return safe;
 }
 
@@ -156,7 +232,11 @@ function loadSettings(userId) {
   } catch {
     // corrupted data — fall through to defaults
   }
-  return { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+  return {
+    ...DEFAULT_SETTINGS,
+    soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
+    soundFileByModule: { ...DEFAULT_SETTINGS.soundFileByModule },
+  };
 }
 
 /**

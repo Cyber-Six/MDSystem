@@ -133,30 +133,36 @@ const RecordUpdateForm = () => {
           }
         }
       }
-      // If user said yes to hospitalizations, check sub-fields
+      // If user said yes to hospitalizations, check at least one condition is checked with an admission date
       if (formData.hasHospitalizations === 'yes') {
-        if (!formData.admissionDate) {
-          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Admission Date for your hospitalization.' });
-        }
-      }
-      // If user said yes to surgeries, check sub-fields
-      if (formData.hasSurgeries === 'yes') {
-        if (!formData.operationDate) {
-          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Operation Date for your surgery.' });
-        }
-      }
-      // If user said yes to medications, check at least one medication entry
-      if (formData.hasMedications === 'yes') {
-        const meds = formData.currentMedications || [];
-        if (meds.length === 0) {
-          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please add at least one medication.' });
-        } else {
-          for (const med of meds) {
-            if (!med.medicineId) {
-              errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the medication name/selection for all added medications.' });
-              break;
-            }
+        const conditions = formData.hospitalizationConditions || {};
+        const dates = formData.hospitalizationDates || {};
+        const checkedIds = Object.entries(conditions).filter(([, v]) => v).map(([k]) => k);
+        if (checkedIds.length > 0) {
+          const missingDate = checkedIds.some(id => !dates[id]?.admissionDate);
+          if (missingDate) {
+            errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Admission Date for all selected hospitalizations.' });
           }
+        }
+      }
+      // If user said yes to surgeries, check at least one procedure is checked with an operation date
+      if (formData.hasSurgeries === 'yes') {
+        const conditions = formData.operationConditions || {};
+        const dates = formData.operationDates || {};
+        const checkedIds = Object.entries(conditions).filter(([, v]) => v).map(([k]) => k);
+        if (checkedIds.length > 0) {
+          const missingDate = checkedIds.some(id => !dates[id]);
+          if (missingDate) {
+            errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please fill in the Operation Date for all selected surgeries.' });
+          }
+        }
+      }
+      // If user said yes to medications, check at least one medication is selected
+      if (formData.hasMedications === 'yes') {
+        const selected = formData.selectedMedications || {};
+        const hasAny = Object.values(selected).some(v => v);
+        if (!hasAny) {
+          errors.push({ section: 'Medical History', sectionIndex: 1, message: 'Please select at least one medication.' });
         }
       }
     }

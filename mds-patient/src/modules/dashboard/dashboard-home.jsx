@@ -371,7 +371,7 @@ const DashboardHome = ({ firstName }) => {
                     {requestTab === 'all' ? 'No recent requests' : `No ${REQUEST_TABS.find(t => t.key === requestTab)?.label ?? requestTab}`}
                   </p>
                 ) : (
-                  filtered.map(item => <RequestRow key={item.key} {...item} />)
+                  filtered.map(({ key, ...item }) => <RequestRow key={key} {...item} />)
                 );
               })()}
             </div>

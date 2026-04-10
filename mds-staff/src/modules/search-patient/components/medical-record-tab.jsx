@@ -89,10 +89,13 @@ export default function PatientMedicalRecordTab({ patient }) {
   const vision           = med.vision           || {};
 
   // Group allergies by type
-  const foodAllergies  = allergiesList.filter((a) => a.type === 'Food');
-  const drugAllergies  = allergiesList.filter((a) => a.type === 'Drug');
-  const envAllergies   = allergiesList.filter((a) => a.type === 'Environmental');
-  const otherAllergies = allergiesList.filter((a) => a.type && a.type !== 'Food' && a.type !== 'Drug' && a.type !== 'Environmental');
+  const foodAllergies     = allergiesList.filter((a) => a.type === 'Food');
+  const drugAllergies     = allergiesList.filter((a) => a.type === 'Drug');
+  const envAllergies      = allergiesList.filter((a) => a.type === 'Environmental');
+  const insectAllergies   = allergiesList.filter((a) => a.type === 'Insect');
+  const chemicalAllergies = allergiesList.filter((a) => a.type === 'Chemical');
+  const otherAllergies    = allergiesList.filter((a) => a.type === 'Other');
+  const unknownAllergies  = allergiesList.filter((a) => a.type && !['Food','Drug','Environmental','Insect','Chemical','Other'].includes(a.type));
 
   const vitalItems = [
     { label: 'Height',      value: vitals.height      ? `${vitals.height} cm`      : null },
@@ -176,10 +179,13 @@ export default function PatientMedicalRecordTab({ patient }) {
               <EmptyState>None on record</EmptyState>
             ) : (
               <div className="space-y-0.5">
-                <AllergyGroup label="Food" items={foodAllergies} />
-                <AllergyGroup label="Drugs" items={drugAllergies} />
+                <AllergyGroup label="Food"          items={foodAllergies} />
+                <AllergyGroup label="Drugs"         items={drugAllergies} />
                 <AllergyGroup label="Environmental" items={envAllergies} />
-                <AllergyGroup label="Others" items={otherAllergies} />
+                <AllergyGroup label="Insect"        items={insectAllergies} />
+                <AllergyGroup label="Chemical"      items={chemicalAllergies} />
+                <AllergyGroup label="Other"         items={otherAllergies} />
+                <AllergyGroup label="Others"        items={unknownAllergies} />
               </div>
             )}
           </PatientSectionCard>

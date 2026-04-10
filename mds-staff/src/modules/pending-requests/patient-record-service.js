@@ -431,36 +431,36 @@ export const fetchCatalogsForReview = async () => {
   try {
     const data = await sendGraphQL(`
       query FetchReviewCatalogs {
-        medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true) {
+        medicalConditionCatalog: getDomainCatalogs(domain: MedicalCondition, filterIsValid: true, limit: 200) {
           id
           name
         }
-        hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true) {
+        hospitalizationCatalog: getDomainCatalogs(domain: Hospitalization, filterIsValid: true, limit: 200) {
           id
           name
         }
-        operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true) {
+        operationCatalog: getDomainCatalogs(domain: Operation, filterIsValid: true, limit: 200) {
           id
           name
         }
-        medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true) {
+        medicationCatalog: getDomainCatalogs(domain: Medication, filterIsValid: true, limit: 200) {
           id
           name
         }
-        immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true) {
+        immunizationCatalog: getDomainCatalogs(domain: Immunization, filterIsValid: true, limit: 200) {
           id
           name
         }
-        allergenCatalog: getAllergenCatalogs(filterIsValid: true) {
+        allergenCatalog: getAllergenCatalogs(filterIsValid: true, limit: 200) {
           id
           allergen
           type
         }
-        oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true) {
+        oralApplianceCatalog: getOralApplianceCatalogs(filterIsValid: true, limit: 200) {
           id
           name
         }
-        dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true) {
+        dentalProcedureCatalog: getDomainCatalogs(domain: DentalProcedure, filterIsValid: true, limit: 200) {
           id
           name
         }
