@@ -5,6 +5,9 @@ import { LEGENDS, TOOTH_LAYOUT, getLegend } from './tooth-chart-constants';
 function Tooth({ number, state, onToothClick, hoveredTooth, onHover, selectedLegend, isEditing }) {
   const legend = state ? getLegend(state) : null;
   const isHovered = hoveredTooth === number;
+  const legendSurfaceClass = legend
+    ? legend.color.split(' ').filter((token) => !token.includes('border')).join(' ')
+    : 'bg-neutral-50 dark:bg-neutral-700';
 
   return (
     <div className="relative group">
@@ -16,18 +19,18 @@ function Tooth({ number, state, onToothClick, hoveredTooth, onHover, selectedLeg
         className={`
           w-10 h-14 md:w-12 md:h-16 rounded-2xl transition-all duration-200
           flex flex-col items-center justify-center gap-0.5
-          border
+          border-[2.5px] border-neutral-900 dark:border-neutral-100 shadow-sm
           ${isEditing ? 'hover:scale-105 hover:shadow-md active:scale-95' : ''}
-          ${legend ? legend.color : 'bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600'}
-          ${isHovered && isEditing ? 'ring-2 ring-primary-500 ring-offset-1' : ''}
-          ${isEditing && selectedLegend ? 'cursor-pointer' : isEditing ? 'cursor-not-allowed opacity-60' : 'cursor-default'}
+          ${legendSurfaceClass}
+          ${isHovered && isEditing ? 'ring-2 ring-primary-500 ring-offset-1 ring-offset-white dark:ring-offset-neutral-900' : ''}
+          ${isEditing && selectedLegend ? 'cursor-pointer' : isEditing ? 'cursor-not-allowed' : 'cursor-default'}
         `}
       >
-        <span className={`text-[10px] font-medium ${legend ? legend.textColor : 'text-neutral-500 dark:text-neutral-400'}`}>
+        <span className={`text-[10px] font-semibold ${legend ? legend.textColor : 'text-neutral-600 dark:text-neutral-300'}`}>
           {number}
         </span>
         {legend && (
-          <span className={`text-base font-bold leading-none ${legend.textColor}`}>
+          <span className={`text-base font-bold leading-none tracking-tight ${legend.textColor}`}>
             {legend.code}
           </span>
         )}
@@ -35,11 +38,11 @@ function Tooth({ number, state, onToothClick, hoveredTooth, onHover, selectedLeg
 
       {/* Tooltip */}
       {isHovered && (
-        <div className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-neutral-900 text-white text-[11px] rounded-lg shadow-lg whitespace-nowrap animate-fade-in pointer-events-none">
+        <div className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-white dark:bg-neutral-900 text-secondary-800 dark:text-neutral-100 text-[11px] rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-lg whitespace-nowrap animate-fade-in pointer-events-none">
           <div className="font-semibold">Tooth {number}</div>
-          {legend && <div className="text-neutral-300">{legend.label}</div>}
-          {!legend && <div className="text-neutral-400">No condition</div>}
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-neutral-900" />
+          {legend && <div className="text-secondary-500 dark:text-neutral-400">{legend.label}</div>}
+          {!legend && <div className="text-secondary-400 dark:text-neutral-500">No condition</div>}
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-2 h-2 rotate-45 bg-white dark:bg-neutral-900 border-r border-b border-neutral-200 dark:border-neutral-700 -mt-1" />
         </div>
       )}
     </div>
@@ -58,9 +61,10 @@ function LegendPalette({ selectedLegend, onSelectLegend, compact = false }) {
             onClick={() => onSelectLegend(selectedLegend === legend.code ? null : legend.code)}
             className={`
               flex items-center gap-2 px-2 py-1.5 rounded-md transition-all text-left
-              ${legend.color}
+              ${legend.color} shadow-sm
               ${selectedLegend === legend.code ? 'ring-2 ring-primary-500 ring-offset-1 dark:ring-offset-neutral-800' : 'hover:scale-[1.02]'}
             `}
+            title={`${legend.code} - ${legend.label}`}
           >
             <span className={`text-sm font-bold ${legend.textColor}`}>{legend.code}</span>
             <span className={`text-[10px] truncate ${legend.textColor}`}>{legend.label}</span>
@@ -84,7 +88,7 @@ function LegendPalette({ selectedLegend, onSelectLegend, compact = false }) {
               : 'border-neutral-200 dark:border-neutral-600 hover:border-primary-300 bg-white dark:bg-neutral-800'}
           `}
         >
-          <div className={`w-9 h-9 rounded-md flex items-center justify-center text-sm font-bold ${legend.color} ${legend.textColor}`}>
+          <div className={`w-9 h-9 rounded-md flex items-center justify-center text-sm font-bold shadow-sm ${legend.color} ${legend.textColor}`}>
             {legend.code}
           </div>
           <div className="flex-1 min-w-0">
@@ -114,19 +118,44 @@ function ChartStats({ toothStates }) {
   const getCategoryCount = (code) => Object.values(toothStates).filter(s => s === code).length;
 
   const stats = [
-    { label: 'Marked', value: markedCount, color: 'text-primary-600 dark:text-primary-400' },
-    { label: 'Missing', value: getCategoryCount('M'), color: 'text-neutral-600 dark:text-neutral-400' },
-    { label: 'Filled', value: getCategoryCount('F'), color: 'text-green-600 dark:text-green-400' },
-    { label: 'For Extraction', value: getCategoryCount('X'), color: 'text-red-600 dark:text-red-400' },
-    { label: 'For Filling', value: getCategoryCount('C'), color: 'text-blue-600 dark:text-blue-400' },
+    {
+      label: 'Marked',
+      value: markedCount,
+      accent: 'text-primary-700 dark:text-primary-300',
+      card: 'bg-primary-50 border-primary-200 dark:bg-primary-900/20 dark:border-primary-800',
+    },
+    {
+      label: 'Missing',
+      value: getCategoryCount('M'),
+      accent: 'text-neutral-700 dark:text-neutral-200',
+      card: 'bg-neutral-50 border-neutral-200 dark:bg-neutral-700/40 dark:border-neutral-600',
+    },
+    {
+      label: 'Filled',
+      value: getCategoryCount('F'),
+      accent: 'text-green-700 dark:text-green-300',
+      card: 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800',
+    },
+    {
+      label: 'For Extraction',
+      value: getCategoryCount('X'),
+      accent: 'text-red-700 dark:text-red-300',
+      card: 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800',
+    },
+    {
+      label: 'For Filling',
+      value: getCategoryCount('C'),
+      accent: 'text-blue-700 dark:text-blue-300',
+      card: 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800',
+    },
   ];
 
   return (
-    <div className="flex flex-wrap gap-6 text-xs">
-      {stats.map(({ label, value, color }) => (
-        <div key={label} className="text-center">
-          <div className={`text-xl font-bold ${color}`}>{value}</div>
-          <div className="text-neutral-500 dark:text-neutral-400">{label}</div>
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+      {stats.map(({ label, value, accent, card }) => (
+        <div key={label} className={`rounded-lg border px-2.5 py-2 text-center ${card}`}>
+          <div className={`text-lg font-bold ${accent}`}>{value}</div>
+          <div className="text-secondary-500 dark:text-neutral-400">{label}</div>
         </div>
       ))}
     </div>
@@ -262,7 +291,7 @@ export default function ToothChart({
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             {selectedLegend && (
-              <div className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getLegend(selectedLegend)?.color} ${getLegend(selectedLegend)?.textColor}`}>
+              <div className={`px-2.5 py-1 rounded-md text-xs font-semibold border shadow-sm ${getLegend(selectedLegend)?.color} ${getLegend(selectedLegend)?.textColor}`}>
                 {selectedLegend} — {getLegend(selectedLegend)?.label}
               </div>
             )}

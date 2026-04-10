@@ -124,35 +124,112 @@ function HistoryBlock({ index, isCurrent, record }) {
 
 /* ─── Analytics Component ─────────────────────────────────── */
 
-const TOOLTIP_STYLE = {
-  backgroundColor: '#1f2937',
-  border: 'none',
-  borderRadius: 8,
-  fontSize: 12,
-  color: '#e5e7eb',
-};
 const AXIS_STYLE = { fontSize: 11, fill: '#9ca3af' };
 const GRID_STYLE = { stroke: '#374151', strokeDasharray: '3 3' };
 const CHART_MARGIN = { top: 8, right: 12, left: -16, bottom: 4 };
 
-function MiniLineChart({ data, dataKeys, colors, height = 150 }) {
+function useIsDarkTheme() {
+  const getIsDark = () => (
+    typeof document !== 'undefined'
+    && document.documentElement.classList.contains('dark')
+  );
+
+  const [isDarkTheme, setIsDarkTheme] = useState(getIsDark);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+
+    const root = document.documentElement;
+    const update = () => setIsDarkTheme(root.classList.contains('dark'));
+    update();
+
+    const observer = new MutationObserver(update);
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return isDarkTheme;
+}
+
+function fmtChartTick(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+}
+
+function fmtChartTooltipLabel(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString('en-PH', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function MiniLineChart({ data, dataKeys, height = 150, xDataKey = 'x', xTickFormatter, tooltipLabelFormatter, chartTheme }) {
+  const tooltipStyle = {
+    backgroundColor: chartTheme.tooltipBg,
+    border: `1px solid ${chartTheme.tooltipBorder}`,
+    borderRadius: 8,
+    fontSize: 12,
+    color: chartTheme.tooltipText,
+  };
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={CHART_MARGIN}>
-        <CartesianGrid {...GRID_STYLE} />
-        <XAxis dataKey="label" tick={AXIS_STYLE} interval="preserveStartEnd" />
-        <YAxis tick={AXIS_STYLE} width={36} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} />
-        {dataKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />}
+        <CartesianGrid stroke={chartTheme.gridStroke} strokeDasharray={GRID_STYLE.strokeDasharray} />
+        <XAxis
+          dataKey={xDataKey}
+          tick={{ ...AXIS_STYLE, fill: chartTheme.axisTick }}
+          axisLine={{ stroke: chartTheme.axisLine }}
+          tickLine={{ stroke: chartTheme.axisLine }}
+          tickFormatter={xTickFormatter}
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          tick={{ ...AXIS_STYLE, fill: chartTheme.axisTick }}
+          axisLine={{ stroke: chartTheme.axisLine }}
+          tickLine={{ stroke: chartTheme.axisLine }}
+          width={36}
+        />
+        <Tooltip
+          contentStyle={tooltipStyle}
+          labelFormatter={tooltipLabelFormatter}
+          labelStyle={{ color: chartTheme.tooltipLabel, fontWeight: 600 }}
+          itemStyle={{ color: chartTheme.tooltipText }}
+        />
+        {dataKeys.length > 1 && (
+          <Legend
+            wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+            formatter={(value) => <span style={{ color: chartTheme.legendText }}>{value}</span>}
+          />
+        )}
         {dataKeys.map(({ key, name, color }, i) => (
           <Line
             key={key}
             type="monotone"
             dataKey={key}
-            stroke={color || colors?.[i] || '#f59e0b'}
+            stroke={color || chartTheme.defaultLine}
             strokeWidth={2}
-            dot={{ r: 3 }}
-            activeDot={{ r: 5 }}
+            dot={{
+              r: 3,
+              strokeWidth: 2,
+              stroke: color || chartTheme.defaultLine,
+              fill: chartTheme.pointFill,
+            }}
+            activeDot={{
+              r: 5,
+              strokeWidth: 2,
+              stroke: color || chartTheme.defaultLine,
+              fill: chartTheme.pointFill,
+            }}
             name={name || key}
             connectNulls
           />
@@ -163,8 +240,54 @@ function MiniLineChart({ data, dataKeys, colors, height = 150 }) {
 }
 
 function VitalSignsAnalytics({ history }) {
+  const isDarkTheme = useIsDarkTheme();
+
+  const chartTheme = useMemo(() => {
+    if (isDarkTheme) {
+      return {
+        axisTick: '#d1d5db',
+        axisLine: '#4b5563',
+        gridStroke: '#374151',
+        tooltipBg: '#111827',
+        tooltipBorder: '#374151',
+        tooltipText: '#f3f4f6',
+        tooltipLabel: '#f9fafb',
+        legendText: '#d1d5db',
+        defaultLine: '#fbbf24',
+        pointFill: '#111827',
+        lines: {
+          weight: '#fbbf24',
+          bmi: '#60a5fa',
+          systolic: '#f87171',
+          diastolic: '#fb923c',
+          heartRate: '#34d399',
+        },
+      };
+    }
+
+    return {
+      axisTick: '#374151',
+      axisLine: '#9ca3af',
+      gridStroke: '#d1d5db',
+      tooltipBg: '#ffffff',
+      tooltipBorder: '#d1d5db',
+      tooltipText: '#111827',
+      tooltipLabel: '#0f172a',
+      legendText: '#334155',
+      defaultLine: '#b45309',
+      pointFill: '#ffffff',
+      lines: {
+        weight: '#b45309',
+        bmi: '#1d4ed8',
+        systolic: '#dc2626',
+        diastolic: '#c2410c',
+        heartRate: '#047857',
+      },
+    };
+  }, [isDarkTheme]);
+
   const chartData = useMemo(() => {
-    return [...history].reverse().map((r) => {
+    return [...history].reverse().map((r, i) => {
       const bmi =
         r.height_cm && r.weight_kg
           ? parseFloat((r.weight_kg / ((r.height_cm / 100) ** 2)).toFixed(1))
@@ -172,15 +295,20 @@ function VitalSignsAnalytics({ history }) {
       const bpParts = r.blood_pressure ? r.blood_pressure.split('/') : [];
       const systolic = bpParts[0] ? parseInt(bpParts[0], 10) : null;
       const diastolic = bpParts[1] ? parseInt(bpParts[1], 10) : null;
-      const d = new Date(r.created_at);
-      const label = d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+
+      // Use a unique x value for each point so tooltip/index mapping stays accurate.
+      const createdAt = r.created_at ? new Date(r.created_at) : null;
+      const x = createdAt && !Number.isNaN(createdAt.getTime())
+        ? createdAt.toISOString()
+        : `point-${i}`;
+
       return {
-        label,
-        weight: r.weight_kg ? parseFloat(r.weight_kg) : null,
+        x,
+        weight: r.weight_kg != null ? parseFloat(r.weight_kg) : null,
         bmi,
         systolic,
         diastolic,
-        heartRate: r.heart_rate ? parseInt(r.heart_rate, 10) : null,
+        heartRate: r.heart_rate != null ? parseInt(r.heart_rate, 10) : null,
       };
     });
   }, [history]);
@@ -204,7 +332,11 @@ function VitalSignsAnalytics({ history }) {
         </p>
         <MiniLineChart
           data={chartData}
-          dataKeys={[{ key: 'weight', name: 'Weight (kg)', color: '#f59e0b' }]}
+          dataKeys={[{ key: 'weight', name: 'Weight (kg)', color: chartTheme.lines.weight }]}
+          xDataKey="x"
+          xTickFormatter={fmtChartTick}
+          tooltipLabelFormatter={fmtChartTooltipLabel}
+          chartTheme={chartTheme}
         />
       </div>
 
@@ -215,7 +347,11 @@ function VitalSignsAnalytics({ history }) {
         </p>
         <MiniLineChart
           data={chartData}
-          dataKeys={[{ key: 'bmi', name: 'BMI', color: '#60a5fa' }]}
+          dataKeys={[{ key: 'bmi', name: 'BMI', color: chartTheme.lines.bmi }]}
+          xDataKey="x"
+          xTickFormatter={fmtChartTick}
+          tooltipLabelFormatter={fmtChartTooltipLabel}
+          chartTheme={chartTheme}
         />
       </div>
 
@@ -227,9 +363,13 @@ function VitalSignsAnalytics({ history }) {
         <MiniLineChart
           data={chartData}
           dataKeys={[
-            { key: 'systolic', name: 'Systolic', color: '#f87171' },
-            { key: 'diastolic', name: 'Diastolic', color: '#fb923c' },
+            { key: 'systolic', name: 'Systolic', color: chartTheme.lines.systolic },
+            { key: 'diastolic', name: 'Diastolic', color: chartTheme.lines.diastolic },
           ]}
+          xDataKey="x"
+          xTickFormatter={fmtChartTick}
+          tooltipLabelFormatter={fmtChartTooltipLabel}
+          chartTheme={chartTheme}
         />
       </div>
 
@@ -240,7 +380,11 @@ function VitalSignsAnalytics({ history }) {
         </p>
         <MiniLineChart
           data={chartData}
-          dataKeys={[{ key: 'heartRate', name: 'Heart Rate (bpm)', color: '#34d399' }]}
+          dataKeys={[{ key: 'heartRate', name: 'Heart Rate (bpm)', color: chartTheme.lines.heartRate }]}
+          xDataKey="x"
+          xTickFormatter={fmtChartTick}
+          tooltipLabelFormatter={fmtChartTooltipLabel}
+          chartTheme={chartTheme}
         />
       </div>
     </div>
@@ -260,6 +404,7 @@ const INITIAL_FORM = {
 
 export default function VitalSignsTab({ patient }) {
   const [form, setForm] = useState(INITIAL_FORM);
+  const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -291,6 +436,17 @@ export default function VitalSignsTab({ patient }) {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
     setSaveError(null);
     setSaveSuccess(false);
+  };
+
+  const handleOpenForm = () => {
+    setShowForm(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+  };
+
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setSaveError(null);
   };
 
   const handleSubmit = async (e) => {
@@ -341,6 +497,7 @@ export default function VitalSignsTab({ patient }) {
       });
       setSaveSuccess(true);
       setForm(INITIAL_FORM);
+      setShowForm(false);
       fetchHistory();
     } catch (err) {
       setSaveError(err?.response?.data?.errors?.[0]?.message || err?.message || 'Failed to create vital signs.');
@@ -351,50 +508,79 @@ export default function VitalSignsTab({ patient }) {
 
   return (
     <div className="space-y-4">
-      {/* ── Create Vital Signs form ── */}
-      <PatientSectionCard title="Create Vital Signs">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <InputField label="Height (cm)" value={form.height_cm} onChange={handleChange('height_cm')} placeholder="e.g. 170" type="number" step="0.1" />
-            <InputField label="Weight (kg)" value={form.weight_kg} onChange={handleChange('weight_kg')} placeholder="e.g. 65" type="number" step="0.1" />
-            <InputField label="Blood Pressure *" value={form.blood_pressure} onChange={handleChange('blood_pressure')} placeholder="e.g. 120/80" />
-            <InputField label="Heart Rate (bpm) *" value={form.heart_rate} onChange={handleChange('heart_rate')} placeholder="e.g. 72" type="number" />
-            <InputField label="Temperature (°C)" value={form.temperature} onChange={handleChange('temperature')} placeholder="e.g. 36.5" type="number" step="0.1" />
-          </div>
-
-          <label className="block">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Notes</span>
-            <textarea
-              rows={2}
-              value={form.notes}
-              onChange={handleChange('notes')}
-              placeholder="Optional notes..."
-              className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
-            />
-          </label>
-
-          {saveError && (
-            <div className="px-3 py-2 rounded-md bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-700 dark:text-error-400">
-              {saveError}
-            </div>
-          )}
-
-          {saveSuccess && (
-            <div className="px-3 py-2 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-400">
-              Vital signs recorded successfully.
-            </div>
-          )}
-
-          <div className="flex justify-end">
+      {/* ── Vital Signs Form (collapsible) ── */}
+      <PatientSectionCard
+        title="Vital Signs Form"
+        right={
+          !showForm ? (
             <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              type="button"
+              onClick={handleOpenForm}
+              className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md transition-colors"
             >
-              {saving ? 'Saving…' : 'Save Vital Signs'}
+              Create
             </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCloseForm}
+              className="px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
+            >
+              Close
+            </button>
+          )
+        }
+      >
+        {!showForm && (
+          <p className="text-xs text-secondary-500 dark:text-neutral-400">
+            Click Create to open the vital signs form.
+          </p>
+        )}
+
+        {!showForm && saveSuccess && (
+          <div className="mt-3 px-3 py-2 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-700 dark:text-green-400">
+            Vital signs recorded successfully.
           </div>
-        </form>
+        )}
+
+        {showForm && (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <InputField label="Height (cm)" value={form.height_cm} onChange={handleChange('height_cm')} placeholder="e.g. 170" type="number" step="0.1" />
+              <InputField label="Weight (kg)" value={form.weight_kg} onChange={handleChange('weight_kg')} placeholder="e.g. 65" type="number" step="0.1" />
+              <InputField label="Blood Pressure *" value={form.blood_pressure} onChange={handleChange('blood_pressure')} placeholder="e.g. 120/80" />
+              <InputField label="Heart Rate (bpm) *" value={form.heart_rate} onChange={handleChange('heart_rate')} placeholder="e.g. 72" type="number" />
+              <InputField label="Temperature (°C)" value={form.temperature} onChange={handleChange('temperature')} placeholder="e.g. 36.5" type="number" step="0.1" />
+            </div>
+
+            <label className="block">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">Notes</span>
+              <textarea
+                rows={2}
+                value={form.notes}
+                onChange={handleChange('notes')}
+                placeholder="Optional notes..."
+                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+              />
+            </label>
+
+            {saveError && (
+              <div className="px-3 py-2 rounded-md bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-700 dark:text-error-400">
+                {saveError}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save Vital Signs'}
+              </button>
+            </div>
+          </form>
+        )}
       </PatientSectionCard>
 
       {/* ── Analytics + History side-by-side ── */}

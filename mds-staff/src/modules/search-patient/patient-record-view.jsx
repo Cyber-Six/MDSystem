@@ -357,7 +357,18 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
       return;
     }
 
+    // Keep backward compatibility for old links/tabs that still use `vital-signs`.
+    if (requestedTab === 'vital-signs') {
+      setActiveTab('medical');
+      setMedicalSubTab('vital-signs');
+      return;
+    }
+
     setActiveTab(requestedTab);
+
+    if (requestedTab === 'medical') {
+      setMedicalSubTab('medical-record');
+    }
 
     if (requestedTab === 'consultation') {
       setConsultationSubTab('consultation-form');
@@ -635,7 +646,6 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const tabs = [
     { id: 'personal', label: 'Personal Info' },
     { id: 'medical', label: 'Medical Info' },
-    { id: 'vital-signs', label: 'Vital Signs' },
     { id: 'dental', label: 'Dental Info' },
     { id: 'consultation', label: 'Consultation' },
     ...(patient?.personal?.sex === 'Female' ? [{ id: 'obgyne', label: 'OB-GYN' }] : []),
@@ -688,6 +698,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
               {[
                 { id: 'medical-record', label: 'Medical Record' },
                 { id: 'medical-record-history', label: 'Medical Record History' },
+                { id: 'vital-signs', label: 'Vital Signs' },
               ].map((sub) => (
                 <button
                   key={sub.id}
@@ -705,12 +716,12 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
             <Suspense fallback={<LoadingBlock label="Loading..." />}>
               {medicalSubTab === 'medical-record'
                 ? <PatientMedicalRecordTab patient={patient} />
-                : <PatientMedicalRecordHistoryTab patient={patient} />}
+                : medicalSubTab === 'medical-record-history'
+                  ? <PatientMedicalRecordHistoryTab patient={patient} />
+                  : <VitalSignsTab patient={patient} />}
             </Suspense>
           </div>
         );
-      case 'vital-signs':
-        return <VitalSignsTab patient={patient} />;
       case 'dental':
         return (
           <div>
