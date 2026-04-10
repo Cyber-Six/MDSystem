@@ -32,7 +32,7 @@ async function batchIdToBranch(batch, batchId) {
   if (result.rows.length === 0) {
     return null;
   }
-  return result.rows[0].branch;
+  return result.rows[0].location;
 }
 
 module.exports = { validateItemExists, validateItemActive, batchIdToBranch };
