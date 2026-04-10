@@ -34,11 +34,11 @@ export const AVAILABLE_SOUNDS = [
   // ── Per-module pre-named files ─────────────────────────────────────────────
   // Drop a file with the exact name into  mds-staff/public/sounds/  and it
   // will play automatically for that module — no code change needed.
-  { id: 'appointments.mp3', label: 'Appointments' },
-  { id: 'requests.mp3',     label: 'Requests'     },
-  { id: 'inventory.mp3',    label: 'Inventory'    },
-  { id: 'healthchat.mp3',   label: 'Health Chat'  },
-  { id: 'general.mp3',      label: 'General'      },
+  { id: 'ack.mp3',                 label: 'Appointments' },
+  { id: 'dee-dee-risa.mp3',        label: 'Requests'     },
+  { id: 'fahhh.mp3',       label: 'Inventory'    },
+  { id: 'bruh.mp3',                label: 'Health Chat'  },
+  { id: 'tobol.mp3',             label: 'General'      },
 
   // ── Add more custom sounds below ──────────────────────────────────────────
   // { id: 'chime.mp3',      label: 'Chime'      },
