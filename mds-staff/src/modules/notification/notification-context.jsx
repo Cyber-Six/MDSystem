@@ -8,6 +8,21 @@ import { usePermissions } from '../../context/permissions-context';
 import { getLocationsByBranch } from '../../utils/branch-utils';
 
 /**
+ * Maps a socket event name to the frontend moduleId that must be enabled for a
+ * staff member to receive it.  Events not listed here are always allowed through
+ * (general / admin notifications, document:submitted which is user-specific, etc.)
+ */
+const EVENT_PERMISSION_MAP = {
+  'healthchat:ticket-created': 'healthChat',
+  'healthchat:new-message': 'healthChat',
+  'healthchat:ticket-closed': 'healthChat',
+  'healthchat:ticket-status-changed': 'healthChat',
+  'appointment:submitted': 'appointments',
+  'medicine:request:new': 'inventory',
+  'updateTicket': 'pendingRequests',
+};
+
+/**
  * Staff notification events emitted by the backend.
  *
  * Role-room events ('role:medical') — received automatically because the
@@ -243,6 +258,13 @@ export function StaffNotificationProvider({ children }) {
   const [seenInventoryIds, setSeenInventoryIds] = useState(() => loadSeenInventoryIds());
   const socketRef = useRef(null);
   const subscribersRef = useRef({});
+
+  // Keep refs so socket event handlers always see the latest permission state
+  // without closing over stale values from the initial mount.
+  const hasPermissionRef = useRef(hasPermission);
+  const permissionsLoadingRef = useRef(permissionsLoading);
+  useEffect(() => { hasPermissionRef.current = hasPermission; }, [hasPermission]);
+  useEffect(() => { permissionsLoadingRef.current = permissionsLoading; }, [permissionsLoading]);
   const fetchInventoryRef = useRef(null);
 
   const addNotification = useCallback((event, data) => {
@@ -342,6 +364,19 @@ export function StaffNotificationProvider({ children }) {
       Object.keys(EVENT_MAP).forEach((event) => {
         service.on(event, (data) => {
           if (!isMounted) return;
+
+          // Permission gate: drop the event if the staff does not have the required
+          // module permission.  We wait until permissions have finished loading to
+          // avoid silently dropping valid notifications during the loading window.
+          const requiredModule = EVENT_PERMISSION_MAP[event];
+          if (requiredModule) {
+            if (permissionsLoadingRef.current) return; // defer until loaded
+            if (!hasPermissionRef.current(requiredModule)) {
+              console.log(`[NOTIFICATION] Dropping event "${event}" — no "${requiredModule}" permission`);
+              return;
+            }
+          }
+
           console.log(`[NOTIFICATION] Received event: ${event}`, data);
           addNotification(event, data);
           const subs = subscribersRef.current[event];
@@ -499,6 +534,29 @@ export function StaffNotificationProvider({ children }) {
   const refreshInventoryAlerts = useCallback(() => {
     if (fetchInventoryRef.current) fetchInventoryRef.current();
   }, []);
+
+  // When permissions finish loading, prune any persisted notifications from
+  // sessionStorage that the staff is no longer permitted to see.
+  useEffect(() => {
+    if (permissionsLoading) return;
+    setNotifications((prev) => {
+      const next = prev.filter((n) => {
+        // General / admin / document notifications are always kept
+        const TYPE_TO_MODULE = {
+          chat: 'healthChat',
+          appointment: 'appointments',
+          medicine: 'inventory',
+          record: 'pendingRequests',
+        };
+        const requiredModule = TYPE_TO_MODULE[n.type];
+        if (!requiredModule) return true;
+        return hasPermission(requiredModule);
+      });
+      if (next.length !== prev.length) persistNotifications(next);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissionsLoading]);
 
   const unseenInventoryCount = inventoryAlerts.filter((a) => !seenInventoryIds.has(a.id)).length;
   const unreadCount = notifications.filter((n) => n.unread).length + unseenInventoryCount;

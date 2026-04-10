@@ -604,8 +604,8 @@ const Mutation = {
 
     const chat = await formatChatRecord(result.rows[0]);
 
-    // Notify all medical staff about new ticket
-    emitToRole('medical', 'healthchat:ticket-created', { chat });
+    // Notify only health-chat permitted staff about new ticket
+    emitToRoom('notif:healthchat', 'healthchat:ticket-created', { chat });
 
     return {
       success: true,
@@ -745,9 +745,9 @@ const Mutation = {
       chat
     });
 
-    // Also notify all medical staff so their conversation list updates
+    // Also notify health-chat permitted staff so their conversation list updates
     // (staff may not be in the chat room if viewing a different patient)
-    emitToRole('medical', 'healthchat:ticket-closed', {
+    emitToRoom('notif:healthchat', 'healthchat:ticket-closed', {
       chatId,
       closedBy: 'Patient',
       chat
@@ -821,8 +821,8 @@ const Mutation = {
       notifyUser(chat.patientId, 'healthchat:ticket-approved', { chat });
     }
 
-    // Notify all medical staff about ticket status change (so other staff can update their UI)
-    emitToRole('medical', 'healthchat:ticket-status-changed', {
+    // Notify health-chat permitted staff about ticket status change (so other staff can update their UI)
+    emitToRoom('notif:healthchat', 'healthchat:ticket-status-changed', {
       chatId: chat.id,
       patientId: chat.patientId,
       status: 'Ongoing',
@@ -895,8 +895,8 @@ const Mutation = {
       });
     }
 
-    // Notify all medical staff about ticket status change (so other staff can update their UI)
-    emitToRole('medical', 'healthchat:ticket-status-changed', {
+    // Notify health-chat permitted staff about ticket status change (so other staff can update their UI)
+    emitToRoom('notif:healthchat', 'healthchat:ticket-status-changed', {
       chatId: chat.id,
       patientId: chat.patientId,
       status: 'Closed',
