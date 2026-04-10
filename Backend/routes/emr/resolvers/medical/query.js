@@ -303,24 +303,14 @@ const Query = {
   },
 
   searchPatients: async (_, args, { user, res }) => {
-    const { permitted } = await permit.isMedicalPermitted(user.id, permit.permissions.emr_allow_view);
+    const { permitted } = await permit.isMedicalPermittedLocationBased(user.id, permit.permissions.emr_allow_view, args.branch);
     if (!permitted) {
       logger.warn(`Unauthorized search attempt by user ID ${user.id}`);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    // Use MedicalPersonnel.designation as the authoritative source for branch.
-    // This ensures branch restriction holds even when rolesMap.branch is stored as 'Both'.
-    const staffBranch = await permit.getStaffBranch(user.id);
-    const requestedBranch = args.branch === 'Both' ? null : (args.branch || null);
-
-    // Clamp the requested branch to the staff's actual designation.
-    const effectiveBranch = (staffBranch && staffBranch !== 'Both')
-      ? staffBranch
-      : requestedBranch;
-
     if (!args.searchTerm || args.searchTerm.trim().length < 2) return [];
-    return await Wrapper._searchPatients(_, { ...args, branch: effectiveBranch }, { user, res });
+    return await Wrapper._searchPatients(_, { ...args }, { user, res });
   },
 
 };
