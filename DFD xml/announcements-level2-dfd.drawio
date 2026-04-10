@@ -1,0 +1,67 @@
+<mxfile host="app.diagrams.net" modified="2026-04-10T00:00:00.000Z" agent="GPT-5.3-Codex" version="26.0.0" type="device">
+  <diagram id="announcements-level2" name="Announcements Level 2 DFD">
+    <mxGraphModel dx="1520" dy="860" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="patient" value="External Entity&#xa;Patient" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="staff" value="External Entity&#xa;Staff" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p21" value="2.1 Create Announcement&#xa;(staff input via resolver)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="80" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p22" value="2.2 Store Announcement&#xa;(persist in records)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="80" width="240" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p23" value="2.3 Display Announcement&#xa;(query for patient/staff)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="260" width="280" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="p24" value="2.4 Expire Announcement&#xa;(auto-hide after expiry date)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="260" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ds1" value="D1: Announcement Records" style="shape=partialRectangle;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;top=0;left=0;right=0;bottom=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="980" y="150" width="260" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f1" value="announcement details" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="staff" target="p21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f2" value="validated announcement" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p21" target="p22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f3" value="save announcement" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p22" target="ds1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f4" value="view announcements request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="patient" target="p23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f5" value="view announcements request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="staff" target="p23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f6" value="announcement data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="ds1" target="p23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f7" value="mark expired" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="p24" target="ds1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
