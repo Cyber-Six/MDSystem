@@ -16,7 +16,7 @@ const { initMedicalInventoryGraphQL } = require('./routes/medical-inventory/inve
 const { initMedicalMedicineRequestGraphQL } = require('./routes/medical-inventory/medicine-request/graphql.js');
 const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescription/graphql.js');
 const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
-const { initRoleManagementGraphQL } = require('./routes/role-management/graphql.js');
+const { initRoleManagementGraphQL } = require('./routes/admin/role-management/graphql.js');
 const { initDashboardGraphQL } = require('./routes/dashboard/graphql.js');
 const initAdminPatientManagementGraphQL = require('./routes/admin/patient-management/graphql.js');
 
