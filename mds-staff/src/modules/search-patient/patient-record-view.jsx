@@ -6,6 +6,14 @@ import * as consultationService from './consultation-service';
 import { ENUM_TO_CODE } from './components/tooth-chart-constants';
 import { fetchPatientMedicineRequests } from '../medical-inventory/medicine-request-service';
 
+const GQL_CREATE_DENTAL_RECORD = `
+  mutation CreateDentalRecord($patientId: ID!, $input: DentalRecordInput!) {
+    createDentalRecord(patientId: $patientId, input: $input) {
+      id
+    }
+  }
+`;
+
 const GQL_BASIC_RECORD_FALLBACK = `
   query GetPatientBasicRecordFallback($userId: ID!) {
     getPatientBasicInfo(userId: $userId) {
@@ -728,7 +736,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         return;
       }
 
-      const { consultationInput, consultationOutcomeInput, vitalSignsData, patientId: vsPatientId } = entry.backendPayload;
+      const { consultationInput, consultationOutcomeInput, vitalSignsData, dentalGradingData, patientId: vsPatientId } = entry.backendPayload;
 
       // If vital signs data was provided and all required fields are valid, create them first
       let vitalSignsId = null;
@@ -752,6 +760,21 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         finalOutcomeInput,
         'Completed'
       );
+
+      // If dental grading data was provided, save the dental record (non-blocking)
+      if (dentalGradingData) {
+        try {
+          await axiosRequest.post('/staff/emr', {
+            query: GQL_CREATE_DENTAL_RECORD,
+            variables: {
+              patientId: String(vsPatientId || patientId),
+              input: dentalGradingData,
+            },
+          });
+        } catch (dentalErr) {
+          console.error('Failed to create dental record during consultation (non-blocking):', dentalErr);
+        }
+      }
 
       // Fetch updated consultations from backend using the service
       consultationService.clearConsultationCache(patientId); // Clear cache for fresh data

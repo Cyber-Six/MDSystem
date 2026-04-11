@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { axiosRequest } from '../../../packages-core-adapter';
 import PatientSectionCard from './section-card';
+import ToothChart from './tooth-chart';
+import { CODE_TO_ENUM, TOOTH_LAYOUT } from './tooth-chart-constants';
 import * as consultationService from '../consultation-service';
 
 const INITIAL_FORM = {
@@ -30,6 +33,68 @@ const DIAGNOSIS_TYPES = [
   { value: 'Chronic', label: 'Chronic' },
   { value: 'FollowUp', label: 'Follow-Up' },
 ];
+
+const GQL_ORAL_FINDING_CATALOGS = `
+  query GetOralFindingCatalogs {
+    getOralFindingCatalogs { id name }
+  }
+`;
+
+function ConsultDentalOralFindingsTable({ catalogs, findings, onFindingChange }) {
+  if (!catalogs || catalogs.length === 0) return null;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[420px] text-sm border-separate border-spacing-0">
+        <thead>
+          <tr className="bg-neutral-100 dark:bg-neutral-700/50">
+            <th className="px-3 py-2 text-left text-[11px] font-semibold text-secondary-600 dark:text-neutral-300 uppercase tracking-wide border-b border-neutral-200 dark:border-neutral-600">
+              Finding
+            </th>
+            <th className="px-3 py-2 text-center text-[11px] font-semibold text-secondary-600 dark:text-neutral-300 uppercase tracking-wide border-b border-neutral-200 dark:border-neutral-600 w-20">
+              Yes
+            </th>
+            <th className="px-3 py-2 text-center text-[11px] font-semibold text-secondary-600 dark:text-neutral-300 uppercase tracking-wide border-b border-neutral-200 dark:border-neutral-600 w-20">
+              No
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {catalogs.map((catalog, idx) => {
+            const value = findings[catalog.id];
+            return (
+              <tr
+                key={catalog.id}
+                className={`${idx % 2 === 0 ? 'bg-white dark:bg-neutral-800' : 'bg-neutral-50 dark:bg-neutral-800/50'} hover:bg-primary-50/50 dark:hover:bg-neutral-700/30 transition-colors`}
+              >
+                <td className="px-3 py-2 text-xs text-secondary-700 dark:text-neutral-300 border-b border-neutral-100 dark:border-neutral-700">
+                  {catalog.name}
+                </td>
+                <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
+                  <input
+                    type="radio"
+                    name={`consult-finding-${catalog.id}`}
+                    checked={value === true}
+                    onChange={() => onFindingChange(catalog.id, true)}
+                    className="w-4 h-4 accent-green-600 dark:accent-green-400 border-neutral-300 dark:border-neutral-500 cursor-pointer"
+                  />
+                </td>
+                <td className="px-3 py-2 text-center border-b border-neutral-100 dark:border-neutral-700">
+                  <input
+                    type="radio"
+                    name={`consult-finding-${catalog.id}`}
+                    checked={value === false}
+                    onChange={() => onFindingChange(catalog.id, false)}
+                    className="w-4 h-4 accent-red-600 dark:accent-red-400 border-neutral-300 dark:border-neutral-500 cursor-pointer"
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function InputField({ label, value, onChange, placeholder, type = 'text', disabled = false }) {
   return (
@@ -141,12 +206,41 @@ export default function PatientConsultationTab({ patient, consultations = [], on
   const [selectedDiagnoses, setSelectedDiagnoses] = useState([]);
   const [submitState, setSubmitState] = useState({ ok: false, message: '' });
 
+  // Dental grading state (used when consultation type = Dental)
+  const [dentalCatalogs, setDentalCatalogs] = useState([]);
+  const [dentalCatalogsLoading, setDentalCatalogsLoading] = useState(false);
+  const [dentalToothStates, setDentalToothStates] = useState({});
+  const [dentalFindings, setDentalFindings] = useState({});
+  const [dentalNotes, setDentalNotes] = useState('');
+  const [dentalChartKey, setDentalChartKey] = useState(0);
+  const [dentalGradingOpen, setDentalGradingOpen] = useState(false);
+  const emptyDentalToothStates = useMemo(() => ({}), []);
+
   const recentConsultations = useMemo(() => consultations.slice(0, 3), [consultations]);
 
   const setField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     if (submitState.ok) setSubmitState({ ok: false, message: '' });
   };
+
+  // Fetch oral finding catalogs when dental type is selected (lazy load once)
+  useEffect(() => {
+    if (form.type !== 'Dental') return;
+    if (dentalCatalogs.length > 0) return;
+    let ignore = false;
+    setDentalCatalogsLoading(true);
+    axiosRequest
+      .post('/staff/emr', { query: GQL_ORAL_FINDING_CATALOGS })
+      .then((res) => {
+        if (ignore) return;
+        const cats = res.data?.data?.getOralFindingCatalogs || [];
+        setDentalCatalogs(cats);
+        setDentalFindings(Object.fromEntries(cats.map((c) => [c.id, null])));
+      })
+      .catch(() => {})
+      .finally(() => { if (!ignore) setDentalCatalogsLoading(false); });
+    return () => { ignore = true; };
+  }, [form.type, dentalCatalogs.length]);
 
   useEffect(() => {
     let ignore = false;
@@ -342,7 +436,7 @@ export default function PatientConsultationTab({ patient, consultations = [], on
             treatments: validTreatments,
             diagnoses: normalizedDiagnoses.map(mapToBackendDiagnosis),
           },
-          vitalSignsData: (() => {
+          vitalSignsData: form.type !== 'Dental' ? (() => {
             const vs = form.vitalSigns;
             const h = parseFloat(vs.height_cm);
             const w = parseFloat(vs.weight_kg);
@@ -355,7 +449,23 @@ export default function PatientConsultationTab({ patient, consultations = [], on
               return result;
             }
             return null;
-          })(),
+          })() : null,
+          dentalGradingData: form.type === 'Dental' && dentalGradingOpen ? (() => {
+            const allTeeth = [
+              ...TOOTH_LAYOUT.upper.right, ...TOOTH_LAYOUT.upper.left,
+              ...TOOTH_LAYOUT.lower.right, ...TOOTH_LAYOUT.lower.left,
+            ];
+            const ToothPlacements = allTeeth.map((toothIndex) => {
+              const code = dentalToothStates[toothIndex] ?? '✓';
+              return { toothIndex, legend: CODE_TO_ENUM[code] ?? 'PRESENT' };
+            });
+            const oralFindingsInput = dentalCatalogs.map((c) => ({
+              oralFindingId: c.id,
+              status: dentalFindings[c.id] === true ? 'true' : 'false',
+              notes: null,
+            }));
+            return { notes: dentalNotes.trim() || '', ToothPlacements, oralFindings: oralFindingsInput };
+          })() : null,
           patientId: String(patient?.id || ''),
         },
       });
@@ -366,6 +476,11 @@ export default function PatientConsultationTab({ patient, consultations = [], on
     setIcdQuery('');
     setIcdResults([]);
     setIcdError('');
+    setDentalToothStates({});
+    setDentalFindings(Object.fromEntries(dentalCatalogs.map((c) => [c.id, null])));
+    setDentalNotes('');
+    setDentalChartKey((k) => k + 1);
+    setDentalGradingOpen(false);
     setSubmitState({ ok: true, message: 'Consultation saved. It is now added to Consultation History.' });
   };
 
@@ -376,53 +491,135 @@ export default function PatientConsultationTab({ patient, consultations = [], on
         right={<span className="text-xs text-secondary-400 dark:text-neutral-500">Patient ID: {patient?.id || 'N/A'}</span>}
       >
         <div className="space-y-4">
-          {/* ── VITAL SIGNS - FULL WIDTH ON TOP ── */}
-          <div className="rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-green-50 dark:bg-green-900/10">
-              <span className="text-sm font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">
-                Vital Signs
-              </span>
-              <span className="block text-xs font-normal text-green-600 dark:text-green-500 mt-1">
-                Optional — fill all fields to record
-              </span>
+          {/* ── VITAL SIGNS (Medical) or DENTAL GRADING (Dental) ── */}
+          {form.type !== 'Dental' ? (
+            <div className="rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-green-50 dark:bg-green-900/10">
+                <span className="text-sm font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">
+                  Vital Signs
+                </span>
+                <span className="block text-xs font-normal text-green-600 dark:text-green-500 mt-1">
+                  Optional — fill all fields to record
+                </span>
+              </div>
+              <div className="p-3 grid md:grid-cols-5 gap-3">
+                <InputField
+                  label="Height (cm)"
+                  value={form.vitalSigns.height_cm}
+                  onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, height_cm: e.target.value })}
+                  placeholder="170"
+                  type="number"
+                />
+                <InputField
+                  label="Weight (kg)"
+                  value={form.vitalSigns.weight_kg}
+                  onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, weight_kg: e.target.value })}
+                  placeholder="65"
+                  type="number"
+                />
+                <InputField
+                  label="Blood Pressure"
+                  value={form.vitalSigns.blood_pressure}
+                  onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, blood_pressure: e.target.value })}
+                  placeholder="120/80"
+                />
+                <InputField
+                  label="Heart Rate (bpm)"
+                  value={form.vitalSigns.heart_rate}
+                  onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, heart_rate: e.target.value })}
+                  placeholder="72"
+                  type="number"
+                />
+                <InputField
+                  label="Temperature (°C)"
+                  value={form.vitalSigns.temperature}
+                  onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, temperature: e.target.value })}
+                  placeholder="36.5"
+                  type="number"
+                />
+              </div>
             </div>
-            <div className="p-3 grid md:grid-cols-5 gap-3">
-              <InputField
-                label="Height (cm)"
-                value={form.vitalSigns.height_cm}
-                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, height_cm: e.target.value })}
-                placeholder="170"
-                type="number"
-              />
-              <InputField
-                label="Weight (kg)"
-                value={form.vitalSigns.weight_kg}
-                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, weight_kg: e.target.value })}
-                placeholder="65"
-                type="number"
-              />
-              <InputField
-                label="Blood Pressure"
-                value={form.vitalSigns.blood_pressure}
-                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, blood_pressure: e.target.value })}
-                placeholder="120/80"
-              />
-              <InputField
-                label="Heart Rate (bpm)"
-                value={form.vitalSigns.heart_rate}
-                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, heart_rate: e.target.value })}
-                placeholder="72"
-                type="number"
-              />
-              <InputField
-                label="Temperature (°C)"
-                value={form.vitalSigns.temperature}
-                onChange={(e) => setField('vitalSigns', { ...form.vitalSigns, temperature: e.target.value })}
-                placeholder="36.5"
-                type="number"
-              />
+          ) : (
+            <div className="rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+              <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-blue-50 dark:bg-blue-900/10 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">
+                    Dental Grading
+                  </span>
+                  <span className="block text-xs font-normal text-blue-600 dark:text-blue-500 mt-0.5">
+                    Optional — record tooth chart and oral findings
+                  </span>
+                </div>
+                {!dentalGradingOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => setDentalGradingOpen(true)}
+                    className="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white rounded-md transition-colors flex items-center gap-1.5"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                    Grade
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDentalGradingOpen(false);
+                      setDentalToothStates({});
+                      setDentalFindings(Object.fromEntries(dentalCatalogs.map((c) => [c.id, null])));
+                      setDentalNotes('');
+                      setDentalChartKey((k) => k + 1);
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+              <div className="p-4">
+                {!dentalGradingOpen ? (
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400">
+                    Click Grade to open the dental grading form.
+                  </p>
+                ) : dentalCatalogsLoading ? (
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400">Loading dental data…</p>
+                ) : (
+                  <div className="space-y-4">
+                    <PatientSectionCard title="Tooth Chart">
+                      <ToothChart
+                        key={dentalChartKey}
+                        initialStates={emptyDentalToothStates}
+                        isEditing={true}
+                        onStateChange={setDentalToothStates}
+                      />
+                    </PatientSectionCard>
+                    {dentalCatalogs.length > 0 && (
+                      <PatientSectionCard title="Oral Findings">
+                        <ConsultDentalOralFindingsTable
+                          catalogs={dentalCatalogs}
+                          findings={dentalFindings}
+                          onFindingChange={(id, val) => setDentalFindings((p) => ({ ...p, [id]: val }))}
+                        />
+                      </PatientSectionCard>
+                    )}
+                    <label className="block">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-secondary-500 dark:text-neutral-400">
+                        Dental Notes
+                      </span>
+                      <textarea
+                        rows={2}
+                        value={dentalNotes}
+                        onChange={(e) => setDentalNotes(e.target.value)}
+                        placeholder="Optional dental/clinical notes…"
+                        className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm text-secondary-800 dark:text-neutral-200 placeholder:text-secondary-300 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ── Full form: 70/30 split from the very top ── */}
           <div className="flex gap-4">

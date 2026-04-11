@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TICKET_STATUS, staffUpdateTicket, approveInitialRecord } from '../initial-record-service';
-import { fetchPatientRecordForReview, fetchCatalogsForReview, submitStaffEdits } from '../patient-record-service';
+import { fetchPatientRecordForReview, submitStaffEdits } from '../patient-record-service';
 import {
   PersonalInfoSection,
   EmergencyContactSection,
@@ -69,13 +69,11 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
       setFetchError('');
       try {
         const sex = ticket.sex ?? null; // may not be available from ticket list
-        const [data, cats] = await Promise.all([
-          fetchPatientRecordForReview(ticket.patientId, scope, sex),
-          fetchCatalogsForReview(),
-        ]);
+        const data = await fetchPatientRecordForReview(ticket.patientId, scope, sex);
         if (!cancelled) {
-          setRecordData(data);
-          setCatalogs(cats);
+          const { catalogs: cats, ...recordFields } = data;
+          setRecordData(recordFields);
+          setCatalogs(cats ?? {});
         }
       } catch (err) {
         if (!cancelled) setFetchError(err.message || 'Failed to load patient record.');
@@ -88,11 +86,15 @@ const RecordReviewModal = ({ ticket, onClose, onAction, staffRole = 'both' }) =>
     return () => { cancelled = true; };
   }, [ticket?.patientId, scope]);
 
-  // After basic info loads & we now know the sex, lazy-load OB-GYNE if female
+  // OB-GYNE is now included in the initial batched fetch for all medical-scope
+  // records, so a lazy-load is only needed if recordData was set before the
+  // batch approach existed (i.e. obgynHistory key is completely absent).
   useEffect(() => {
     const sex = recordData?.basicInfo?.sex;
     if (!sex || !includeMedical || obgynFetchedRef.current) return;
     if (sex.toLowerCase() !== 'female') return;
+    // Skip if already populated by the batched fetch.
+    if ('obgynHistory' in (recordData ?? {})) return;
 
     obgynFetchedRef.current = true; // mark attempted — prevents infinite loop
     import('../patient-record-service').then(({ getUserObgynHistory }) => {

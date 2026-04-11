@@ -102,7 +102,7 @@ export const getBatchDropdownText = (batch) => {
   return `#${batchNum} (Exp: ${expiry}) — ${qty} avail`;
 };
 
-// ── Internal helper ──────────────────────────────────────────────────────────
+// ── Internal helpers ──────────────────────────────────────────────────────────
 
 const sendGraphQL = async (query, variables = {}) => {
   const response = await axiosRequest.post('/medical-inventory/medical', {
@@ -115,6 +115,22 @@ const sendGraphQL = async (query, variables = {}) => {
   }
 
   return response.data.data;
+};
+
+/**
+ * Like sendGraphQL but tolerates partial field errors — returns whatever data
+ * the server resolved, only logs any field-level errors rather than throwing.
+ * Used for batched alias queries where one item failing shouldn't abort the rest.
+ */
+const sendGraphQLPartial = async (query, variables = {}) => {
+  const response = await axiosRequest.post('/medical-inventory/medical', {
+    query,
+    variables,
+  });
+  if (response.data.errors) {
+    console.warn('[Inventory] Partial GraphQL errors in batched batch fetch:', response.data.errors.map((e) => e.message));
+  }
+  return response.data.data ?? {};
 };
 
 // ── Queries ──────────────────────────────────────────────────────────────────
@@ -344,6 +360,95 @@ export const fetchSupplyBatches = async (supplyItemId, location = null, availabl
     variables,
   );
   return data.getSupplyBatches ?? [];
+};
+
+// ── Batched Batch Fetcher ─────────────────────────────────────────────────────
+
+/**
+ * Fetch batches for ALL items at ALL locations in ONE GraphQL request using
+ * field aliases.  Replaces the previous N×M individual fetch loop.
+ *
+ * Each alias is named:
+ *   `med_{itemId}_{location}` → getMedicalSupply (medicine items)
+ *   `sup_{itemId}_{location}` → getSupplyBatches  (supply items)
+ *
+ * Returns normalised batch objects ready for state (same shape as the old
+ * per-item fetch loop produced).
+ *
+ * @param {Array<{id: string|number, category: string}>} items
+ * @param {string[]} locations  — subset of LocationDesignation enum values
+ * @returns {Promise<Array>} Normalised batch objects
+ */
+export const fetchAllBatchesForItems = async (items, locations) => {
+  if (items.length === 0 || locations.length === 0) return [];
+
+  // Inline field lists (no variables needed — all values are inlined as literals)
+  const medF = `id medicalItemId supplierName batchNumber dosageUnit dosageValue availableQuantity expiryDate location receivedBy notes created_at`;
+  const supF = `id supplyItemId batchNumber currentQuantity unit expiryDate location receivedBy supplierName notes created_at`;
+
+  const aliasParts = [];
+  for (const item of items) {
+    const isMedicine = item.category?.toLowerCase() === 'medicine';
+    const numId = Number(item.id);
+    for (const loc of locations) {
+      if (isMedicine) {
+        aliasParts.push(
+          `med_${numId}_${loc}: getMedicalSupply(medicalItemId: ${numId}, location: ${loc}) { ${medF} }`,
+        );
+      } else {
+        aliasParts.push(
+          `sup_${numId}_${loc}: getSupplyBatches(supplyItemId: ${numId}, location: ${loc}) { ${supF} }`,
+        );
+      }
+    }
+  }
+
+  const query = `{ ${aliasParts.join('\n')} }`;
+  const data = await sendGraphQLPartial(query);
+
+  // Collect and normalise results
+  const result = [];
+  for (const item of items) {
+    const isMedicine = item.category?.toLowerCase() === 'medicine';
+    const numId = Number(item.id);
+    for (const loc of locations) {
+      const alias = isMedicine ? `med_${numId}_${loc}` : `sup_${numId}_${loc}`;
+      const raw = data[alias];
+      if (!Array.isArray(raw)) continue;
+      for (const b of raw) {
+        if (isMedicine) {
+          result.push({
+            id: b.id,
+            medicalItemId: Number(b.medicalItemId),
+            batchNumber: b.batchNumber,
+            currentQuantity: Number(b.availableQuantity ?? 0),
+            availableQuantity: Number(b.availableQuantity ?? 0),
+            initialQuantity: Number(b.availableQuantity ?? 0),
+            dosageValue: Number(b.dosageValue ?? 0),
+            dosageUnit: b.dosageUnit,
+            expiryDate: b.expiryDate,
+            location: b.location,
+            supplierName: b.supplierName,
+            notes: b.notes,
+          });
+        } else {
+          result.push({
+            id: b.id,
+            medicalItemId: Number(b.supplyItemId),
+            batchNumber: b.batchNumber,
+            currentQuantity: Number(b.currentQuantity ?? 0),
+            availableQuantity: Number(b.currentQuantity ?? 0),
+            unit: b.unit,
+            expiryDate: b.expiryDate,
+            location: b.location,
+            supplierName: b.supplierName,
+            notes: b.notes,
+          });
+        }
+      }
+    }
+  }
+  return result;
 };
 
 // ── Split Mutations ──────────────────────────────────────────────────────────
