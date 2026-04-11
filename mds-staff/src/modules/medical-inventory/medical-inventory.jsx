@@ -19,10 +19,10 @@ import { useStaffNotifications } from '../notification/notification-context';
 import { useMedicineRequestSocket } from './hooks/useMedicineRequestSocket';
 import { usePermissions } from '../../context/permissions-context';
 import { getLocationsByBranch } from '../../utils/branch-utils';
-import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
-import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
+import { fetchMedicalItems, fetchMedicalItem, createMedicalItem, updateMedicalItem, deleteMedicalItem, addMedicineSupply, addSupplyBatch, fetchMedicineBatches, fetchSupplyBatches, fetchAllBatchesForItems, splitMedicineSupply, splitMedicalSupply, updateSupplyBatch, updateMedicineBatch } from './medical-inventory-service';
+import { fetchPatientMedicineRequests, fetchAllMedicineRequests, fetchAllMedicineRequestsByLocations, fetchMedicineRequestById, setMedicineRequestStatus } from './medicine-request-service';
 import { issuePrescription } from './prescription-service';
-import { getPatientBasicInfo } from '../../modules/pending-requests/patient-record-service';
+import { getPatientBasicInfoBatch } from '../../modules/pending-requests/patient-record-service';
 import { formatPatientName } from '../../services/patient-search-service';
 import {
   SEED_BATCHES, SEED_TRANSACTIONS,
@@ -140,78 +140,58 @@ const MedicalInventory = () => {
   const hasLoadedRequestsRef = useRef(false);
   const patientNameCacheRef = useRef({}); // Cache for patient names to avoid redundant API calls
 
-  // Helper function to get patient name with caching
-  const getPatientNameCached = useCallback(async (patientId) => {
-    if (!patientId) return `Patient #${patientId}`;
-
-    // Check cache first
-    if (patientNameCacheRef.current[patientId]) {
-      return patientNameCacheRef.current[patientId];
-    }
-
-    // Check if user has permission to view patient information
-    // NOTE: getPatientBasicInfo uses /emr/medical endpoint which requires specific EMR permissions
-    // Being an admin or having inventory module doesn't grant EMR access
-    // Only fetch if user explicitly has patientSearch or medicalRecords modules
-    const canViewPatientInfo = hasPermission('patientSearch') || hasPermission('medicalRecords');
-
-    // For inventory-only staff, use fallback (Patient #ID) without trying to fetch
-    // This prevents 401 errors for users who don't need patient names
-    if (!canViewPatientInfo) {
-      const fallback = `Patient #${patientId}`;
-      patientNameCacheRef.current[patientId] = fallback;
-      return fallback;
-    }
-
-    // Try to fetch patient info, but handle unauthorized gracefully
-    try {
-      const patient = await getPatientBasicInfo(patientId);
-      if (patient) {
-        const name = formatPatientName(patient);
-        patientNameCacheRef.current[patientId] = name;
-        return name;
-      }
-    } catch (err) {
-      // If unauthorized, cache fallback to avoid retrying
-      // This happens when frontend permissions don't match backend EMR access
-      if (err.message?.includes('Unauthorized') || err.response?.status === 401) {
-        const fallback = `Patient #${patientId}`;
-        patientNameCacheRef.current[patientId] = fallback;
-        return fallback;
-      }
-      // Log other errors but still use fallback
-      console.warn(`Failed to fetch patient info for ID ${patientId}:`, err.message);
-    }
-
-    // Fallback to ID if fetch fails
-    const fallback = `Patient #${patientId}`;
-    patientNameCacheRef.current[patientId] = fallback;
-    return fallback;
-  }, [hasPermission]);
-
-  // Helper function to enrich multiple requests with patient names
+  // Helper function to enrich multiple requests with patient names.
+  // Uses a single batched /emr/medical request for all unique patient IDs
+  // instead of one request per patient.
   const enrichRequestsWithPatientNames = useCallback(async (requests) => {
-    const uniquePatientIds = [...new Set(requests.map(r => r.patientId))];
-    
-    // Fetch all patient names in parallel
-    const patientNames = await Promise.all(
-      uniquePatientIds.map(id => getPatientNameCached(id))
-    );
-    
-    // Create a map of patientId -> patientName
+    if (requests.length === 0) return [];
+
+    const uniquePatientIds = [...new Set(requests.map(r => r.patientId).filter(Boolean))];
+
+    // Build name map from cache first
     const patientNameMap = {};
-    uniquePatientIds.forEach((id, index) => {
-      patientNameMap[id] = patientNames[index];
-    });
-    
-    // Enrich requests with patient names
+    const uncachedIds = [];
+    for (const id of uniquePatientIds) {
+      if (patientNameCacheRef.current[id]) {
+        patientNameMap[id] = patientNameCacheRef.current[id];
+      } else {
+        uncachedIds.push(id);
+      }
+    }
+
+    // Fetch all uncached patients in one batched request (if permitted)
+    if (uncachedIds.length > 0) {
+      const canViewPatientInfo = hasPermission('patientSearch') || hasPermission('medicalRecords');
+      if (canViewPatientInfo) {
+        try {
+          const batchMap = await getPatientBasicInfoBatch(uncachedIds);
+          for (const [id, patient] of batchMap.entries()) {
+            const name = patient ? formatPatientName(patient) : `Patient #${id}`;
+            patientNameCacheRef.current[id] = name;
+            patientNameMap[id] = name;
+          }
+        } catch (err) {
+          console.warn('Failed to batch-fetch patient names:', err.message);
+          for (const id of uncachedIds) {
+            patientNameMap[id] = patientNameMap[id] ?? `Patient #${id}`;
+          }
+        }
+      } else {
+        for (const id of uncachedIds) {
+          const fallback = `Patient #${id}`;
+          patientNameCacheRef.current[id] = fallback;
+          patientNameMap[id] = fallback;
+        }
+      }
+    }
+
     return requests.map(req => ({
       ...req,
       patientName: patientNameMap[req.patientId] || `Patient #${req.patientId}`,
       patientType: 'Self-Request',
       _isRealRequest: true,
     }));
-  }, [getPatientNameCached]);
+  }, [hasPermission]);
 
   // Memoized list of allowed locations based on the staff's branch from permissions context
   const allowedLocationsList = useMemo(() => getLocationsByBranch(staffBranch), [staffBranch]);
@@ -243,66 +223,8 @@ const MedicalInventory = () => {
       const data = await fetchMedicalItems();
       setItems(data);
 
-      // Fetch batches for all items in parallel
-      // ALWAYS fetch with location filter to prevent unauthorized access errors
-      const batchResults = await Promise.all(
-        data.map(async (item) => {
-          const isMedicine = item.category?.toLowerCase() === 'medicine';
-
-          // Fetch batches for each allowed location and combine them
-          const locationBatches = await Promise.all(
-            allowedLocationsList.map(async (location) => {
-              try {
-                if (isMedicine) {
-                  return await fetchMedicineBatches(Number(item.id), location);
-                } else {
-                  return await fetchSupplyBatches(Number(item.id), location);
-                }
-              } catch (err) {
-                console.warn(`Failed to fetch batches for item ${item.id} at location ${location}:`, err);
-                return [];
-              }
-            })
-          );
-          // Flatten the results from all locations
-          const batches = locationBatches.flat();
-
-          // Normalize the batch data
-          return batches.map((b) => {
-            if (isMedicine) {
-              return {
-                id: b.id,
-                medicalItemId: Number(b.medicalItemId),
-                batchNumber: b.batchNumber,
-                currentQuantity: Number(b.availableQuantity ?? 0),
-                availableQuantity: Number(b.availableQuantity ?? 0),
-                initialQuantity: Number(b.availableQuantity ?? 0),
-                dosageValue: Number(b.dosageValue ?? 0),
-                dosageUnit: b.dosageUnit,
-                expiryDate: b.expiryDate,
-                location: b.location,
-                supplierName: b.supplierName,
-                notes: b.notes,
-              };
-            } else {
-              return {
-                id: b.id,
-                medicalItemId: Number(b.supplyItemId),
-                batchNumber: b.batchNumber,
-                currentQuantity: Number(b.currentQuantity ?? 0),
-                availableQuantity: Number(b.currentQuantity ?? 0),
-                unit: b.unit,
-                expiryDate: b.expiryDate,
-                location: b.location,
-                supplierName: b.supplierName,
-                notes: b.notes,
-              };
-            }
-          });
-        })
-      );
-
-      const flatBatches = batchResults.flat();
+      // Fetch ALL batches for ALL items at ALL locations in ONE GraphQL request.
+      const flatBatches = await fetchAllBatchesForItems(data, allowedLocationsList);
       setBatches(flatBatches);
     } catch (err) {
       setItemsError(err.message || 'Failed to load medical items.');
@@ -579,25 +501,8 @@ const MedicalInventory = () => {
         return;
       }
 
-      console.log('📍 Fetching medicine requests for allowed locations:', allowedLocationsList);
-      
-      // Fetch requests for each allowed location and combine them
-      const locationRequests = await Promise.all(
-        allowedLocationsList.map(async (location) => {
-          try {
-            return await fetchAllMedicineRequests(null, location);
-          } catch (err) {
-            console.warn(`Failed to fetch medicine requests for location ${location}:`, err);
-            return [];
-          }
-        })
-      );
-      
-      // Flatten and deduplicate by ID
-      const allRequests = locationRequests.flat();
-      const uniqueRequests = Array.from(
-        new Map(allRequests.map(req => [req.id, req])).values()
-      );
+      // Fetch requests for all allowed locations in ONE batched GraphQL request.
+      const uniqueRequests = await fetchAllMedicineRequestsByLocations(allowedLocationsList);
       
       const enrichedWithNames = await enrichRequestsWithPatientNames(uniqueRequests);
       const enriched = enrichedWithNames.map(req => ({

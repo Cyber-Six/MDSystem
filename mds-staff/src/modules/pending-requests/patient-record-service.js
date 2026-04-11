@@ -58,7 +58,39 @@ export const getPatientBasicInfo = async (userId) => {
   return data.getPatientBasicInfo ?? null;
 };
 
-// ── Profile (Student / Employee) ─────────────────────────────────────────────
+/**
+ * Fetch basic info for multiple patients in ONE request using field aliases.
+ * Returns a Map of userId → patient object (null if not found / error).
+ *
+ * @param {string[]} userIds
+ * @returns {Promise<Map<string, Object|null>>}
+ */
+export const getPatientBasicInfoBatch = async (userIds) => {
+  const result = new Map(userIds.map((id) => [String(id), null]));
+  if (userIds.length === 0) return result;
+
+  const fields = `id identifier branch sex first_name last_name middle_name suffix profile_type program year department role latest_ticket_id latest_status latest_scope latest_updated_at`;
+  const aliasParts = userIds.map(
+    (id) => `u_${String(id).replace(/[^a-zA-Z0-9]/g, '_')}: getPatientBasicInfo(userId: "${id}") { ${fields} }`,
+  );
+
+  try {
+    const response = await axiosRequest.post('/emr/medical', {
+      query: `{ ${aliasParts.join('\n')} }`,
+    });
+    if (response.data?.errors) {
+      console.warn('[PatientRecordService] Partial errors in batched getPatientBasicInfo:', response.data.errors.map((e) => e.message));
+    }
+    const data = response.data?.data ?? {};
+    for (const id of userIds) {
+      const alias = `u_${String(id).replace(/[^a-zA-Z0-9]/g, '_')}`;
+      result.set(String(id), data[alias] ?? null);
+    }
+  } catch (err) {
+    console.warn('[PatientRecordService] getPatientBasicInfoBatch error:', err.message);
+  }
+  return result;
+};
 
 export const getUserProfile = async (userId) => {
   const data = await sendGraphQL(
