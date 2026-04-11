@@ -1,0 +1,29 @@
+type Patient {
+    id: Int!
+    profile: PatientIdentity
+    created_at: String
+    superior_patient_id: Int
+    superior: Patient
+    subordinates: [Patient]
+}
+
+type PatientIdentity {
+    id: Int!
+    first_name: String
+    last_name: String
+    email: String
+    phone: String
+}
+
+type Query {
+    getPatients: [Patient]
+    getPatient(id: Int!): Patient
+    getSuperiorPatients: [Patient]
+    getSubordinates(superior_patient_id: Int!): [Patient]
+}
+
+type Mutation {
+    setPatientAsSuperior(patient_id: Int!): Patient
+    assignSuperiorToPatient(patient_id: Int!, superior_patient_id: Int!): Patient
+    removeSuperiorFromPatient(patient_id: Int!): Patient
+}

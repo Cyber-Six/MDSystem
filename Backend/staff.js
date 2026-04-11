@@ -18,6 +18,7 @@ const { initPrescriptionGraphQL } = require('./routes/medical-inventory/prescrip
 const { initMedicalHealthChatGraphQL } = require('./routes/health-chat/graphql.js');
 const { initRoleManagementGraphQL } = require('./routes/role-management/graphql.js');
 const { initDashboardGraphQL } = require('./routes/dashboard/graphql.js');
+const initAdminPatientManagementGraphQL = require('./routes/admin/patient-management/graphql.js');
 
 const consentRoutes = require('./routes/info/compliance/consent.js');
 const AnnouncementRoutes = require('./routes/info/announcement/announcement.js');
@@ -108,6 +109,7 @@ initPrescriptionGraphQL(app);
 initMedicalHealthChatGraphQL(app);
 initRoleManagementGraphQL(app);
 initDashboardGraphQL(app);
+initAdminPatientManagementGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
