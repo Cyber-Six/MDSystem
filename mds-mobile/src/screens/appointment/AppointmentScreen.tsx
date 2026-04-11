@@ -155,7 +155,7 @@ export const AppointmentScreen: React.FC = () => {
   const [selectedScheduler, setSelectedScheduler] = useState<any>(null);
 
   // Step 1 - date/session
-  const [customDates, setCustomDates] = useState<string[]>([]);
+  const [customDates, setCustomDates] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [availability, setAvailability] = useState<any>(null);
   const [selectedSession, setSelectedSession] = useState('');
@@ -370,10 +370,28 @@ export const AppointmentScreen: React.FC = () => {
 
   const isScheduleMatch = (dateStr: string) => {
     if (!selectedScheduler) return false;
+
+    // Check for Exclude custom date first — blocks even regular schedule days
+    const toLocal = (s: string) => {
+      if (!s) return '';
+      if (!s.includes('T') && !s.endsWith('Z')) return s;
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return s.split('T')[0];
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const customEntry = customDates.find((cd: any) => {
+      if (typeof cd === 'string') return cd === dateStr || cd?.split('T')[0] === dateStr;
+      return cd?.scheduledDate && toLocal(String(cd.scheduledDate)) === dateStr;
+    });
+    const cdType = typeof customEntry === 'object' ? customEntry?.type : undefined;
+    if (cdType === 'Exclude') return false;
+
     const d = new Date(dateStr + 'T00:00:00');
     const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
     if (selectedScheduler.schedulePerWeek?.includes(dayName)) return true;
-    if (customDates.some((cd: string) => cd === dateStr || cd?.split('T')[0] === dateStr)) return true;
+
+    // Include custom date opens the day
+    if (customEntry) return true;
     return false;
   };
 
