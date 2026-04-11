@@ -1,4 +1,4 @@
-const db = require('../../../../config/query.js');
+const db = require('../../../../../config/query.js');
 const {
   permissions,
   getStaffPermissions,
@@ -17,7 +17,7 @@ const {
   setStaffModulePermissions,
   getStaffModulePermissions,
   clearMedicalPermits,
-} = require('../../../../services/permit.js');
+} = require('../../../../../services/permit.js');
 const {
   listUserSessions,
   scanAllRefreshSessions,
@@ -32,17 +32,17 @@ const {
   recordAdminTransferPasswordFailure,
   isAdminTransferPasswordLocked,
   clearAdminTransferPasswordFailures,
-} = require('../../../../config/redis.js');
-const { enqueueAdminTransferEmail } = require('../../../../services/emailservice.js');
+} = require('../../../../../config/redis.js');
+const { enqueueAdminTransferEmail } = require('../../../../../services/emailservice.js');
 const { generateOTP, verifyPassword, 
-  delayRandom, generateUUID } = require('../../../../utils/security.js');
+  delayRandom, generateUUID } = require('../../../../../utils/security.js');
 const crypto = require('crypto');
-const logger = require('../../../../utils/logger.js');
-const { throwGraphQLError } = require('../../../../utils/graphql-helper.js');
+const logger = require('../../../../../utils/logger.js');
+const { throwGraphQLError } = require('../../../../../utils/graphql-helper.js');
 
 const path = require("path");
 const dotenv = require("dotenv");
-dotenv.config({ path: path.resolve(__dirname, "../../../../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../../../../../.env") });
 
 /**
  * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────

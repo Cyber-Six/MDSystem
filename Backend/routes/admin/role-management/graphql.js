@@ -4,9 +4,9 @@ const { graphqlHTTP } = require('express-graphql');
 const { makeExecutableSchema } = require('@graphql-tools/schema');
 const fs = require('fs');
 const path = require('path');
-const { ipRateLimiter } = require('../../config/middleware/ratelimiter.js');
+const { ipRateLimiter } = require('../../../config/middleware/ratelimiter.js');
 const adminResolver = require('./resolvers/admin/admin-resolver.js');
-const { jwtProtect } = require('../../config/middleware/jwtProtect.js');
+const { jwtProtect } = require('../../../config/middleware/jwtProtect.js');
 
 const schemaPath = path.join(__dirname, './schema.graphql');
 const typeDefs = fs.readFileSync(schemaPath, 'utf8');
