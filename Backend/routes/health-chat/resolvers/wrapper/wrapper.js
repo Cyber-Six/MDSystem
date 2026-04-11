@@ -1097,6 +1097,10 @@ const Mutation = {
       [chatId]
     );
 
+    if (result.rowCount === 0) {
+      throwGraphQLError(res).message("Failed to delete ticket").status(500).throw();
+    }
+
     return {
       success: true,
       chat: null,
