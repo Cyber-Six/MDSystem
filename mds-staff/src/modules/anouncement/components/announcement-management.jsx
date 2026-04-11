@@ -625,10 +625,10 @@ const AnnouncementManagement = () => {
               </div>
             ) : (
               visibleAnnouncements.map((announcement) => (
-                <div
-                  key={announcement.id}
-                  className="group rounded-xl border border-neutral-200/80 dark:border-neutral-700 bg-white/95 dark:bg-neutral-800/90 px-3 py-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary-300/70 hover:shadow-md dark:hover:border-primary-500/30"
-                >
+                <div key={announcement.id}>
+                  <div
+                    className="group rounded-xl border border-neutral-200/80 dark:border-neutral-700 bg-white/95 dark:bg-neutral-800/90 px-3 py-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary-300/70 hover:shadow-md dark:hover:border-primary-500/30"
+                  >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -705,17 +705,15 @@ const AnnouncementManagement = () => {
                       </button>
                     </div>
                   </div>
+
+                  {editingId === announcement.id && (
+                    <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                      {renderAnnouncementForm({ mode: 'edit' })}
+                    </div>
+                  )}
                 </div>
               ))
             )}
-
-                {editingId === announcement.id && (
-                  <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                    {renderAnnouncementForm({ mode: 'edit' })}
-                  </div>
-                )}
-              </div>
-            ))}
           </div>
         );
       })()}

@@ -2,7 +2,7 @@ const db = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
 const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
-const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
+const { isMedicalPermitted, permissions } = require("../../../../services/permit.js");
 const {
   calculateExpiryDate,
   isChatExpired,
@@ -1065,7 +1065,7 @@ const Mutation = {
     }
 
     // Check if user is admin
-    const { permitted } = await isMedicalPermitted(user.id, medPermissions.is_admin);
+    const { permitted } = await isMedicalPermitted(user.id, permissions.is_admin);
     if (!permitted) {
       throwGraphQLError(res).message("Only administrators can delete archived tickets").status(403).throw();
     }
