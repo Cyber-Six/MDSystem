@@ -2,7 +2,7 @@ const db = require("../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
 const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
-const { isMedicalPermitted, medPermissions } = require("../../../../services/permit.js");
+const { isMedicalPermitted, permissions: medPermissions } = require("../../../../services/permit.js");
 const {
   calculateExpiryDate,
   isChatExpired,
