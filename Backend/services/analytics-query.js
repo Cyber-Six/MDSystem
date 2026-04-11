@@ -61,8 +61,8 @@ function branchFilter(branch, alias = 'up', paramIndex = 3) {
 }
 
 /**
- * Generate SQL WHERE clause fragment to filter patients by department or program.
- * @param {object} options - { department?: string, program?: string }
+ * Generate SQL WHERE clause fragment to filter patients by department or sex.
+ * @param {object} options - { department?: string, sex?: string }
  * @param {string} patientIdExpr - SQL expression for patient ID (e.g. 'p.id')
  * @param {number} startIdx - Starting $N param index (after existing params)
  * @returns {{ clause: string, params: any[], nextIndex: number }}
@@ -80,14 +80,11 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
     params.push(options.department);
     startIdx++;
   }
-  if (options.program) {
-    clause += ` AND ${patientIdExpr} IN (
-      SELECT pul_pf."patientId" FROM "patientUpdateLog" pul_pf
-      INNER JOIN "profileRecord" pr_pf ON pr_pf.id = pul_pf.id AND pr_pf.profile_type = 'Student'
-      INNER JOIN "student_profile" sp_pf ON sp_pf."profileId" = pr_pf.id
-      WHERE pul_pf.status = 'Approved' AND sp_pf.program = $${startIdx}
-    )`;
-    params.push(options.program);
+  if (options.sex) {
+    clause += ` AND (
+      SELECT up_sex.sex FROM "UsersPersonal" up_sex WHERE up_sex.id = ${patientIdExpr}
+    ) = $${startIdx}`;
+    params.push(options.sex);
     startIdx++;
   }
   return { clause, params, nextIndex: startIdx };
@@ -772,17 +769,14 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
  */
 async function consultationsByProgram(branch, startDate, endDate, options = {}) {
   const bf = branchFilter(branch);
-  const progCteFilter = options.program ? `AND sp.program = $3` : '';
-  const progCteParams = options.program ? [options.program] : [];
-  const bfIdx = options.program ? 4 : 3;
-  const bf2 = branchFilter(branch, 'up', bfIdx);
+  const bf2 = branchFilter(branch, 'up', 3);
   const result = await db.query(`
     WITH patient_prog AS (
       SELECT DISTINCT ON (pul."patientId") pul."patientId", sp.program
       FROM "patientUpdateLog" pul
       INNER JOIN "profileRecord" pr ON pr.id = pul.id AND pr.profile_type = 'Student'
       INNER JOIN "student_profile" sp ON sp."profileId" = pr.id
-      WHERE pul.status = 'Approved' AND sp.program IS NOT NULL ${progCteFilter}
+      WHERE pul.status = 'Approved' AND sp.program IS NOT NULL
       ORDER BY pul."patientId", pul.created_at DESC
     )
     SELECT pp.program, COUNT(*) as count
@@ -792,7 +786,7 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
     INNER JOIN patient_prog pp ON pp."patientId" = p.id
     WHERE c."createdAt" BETWEEN $1 AND $2 ${bf2.clause}
     GROUP BY pp.program ORDER BY count DESC LIMIT 15
-  `, [startDate, endDate, ...progCteParams, ...bf2.params]);
+  `, [startDate, endDate, ...bf2.params]);
 
   const labels = result.rows.map(r => r.program);
   const values = result.rows.map(r => parseInt(r.count));
@@ -1136,11 +1130,11 @@ async function executeQuery(dataType, branch, startDate, endDate, options = {}) 
     throw new Error(`Unknown query type: ${dataType}`);
   }
 
-  // Include groupBy, department, program in cache key when present
+  // Include groupBy and department in cache key when present
   const groupSuffix = options.groupBy ? `:g=${options.groupBy}` : '';
   const deptSuffix = options.department ? `:d=${options.department}` : '';
-  const progSuffix = options.program ? `:p=${options.program}` : '';
-  const cacheKey = getCacheKey(dataType, branch, startDate, endDate) + groupSuffix + deptSuffix + progSuffix;
+  const sexSuffix = options.sex ? `:sx=${options.sex}` : '';
+  const cacheKey = getCacheKey(dataType, branch, startDate, endDate) + groupSuffix + deptSuffix + sexSuffix;
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
@@ -1209,14 +1203,14 @@ function hasReport(reportType) {
 }
 
 /**
- * Get distinct departments and programs for filter dropdowns
+ * Get distinct departments and sex values for filter dropdowns
  */
 async function getFilterOptions() {
   const cacheKey = `${CACHE_PREFIX}filter-options`;
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
-  const [deptResult, progResult] = await Promise.all([
+  const [deptResult, sexResult] = await Promise.all([
     db.query(`
       SELECT DISTINCT ep.department
       FROM "employee_profile" ep
@@ -1226,18 +1220,17 @@ async function getFilterOptions() {
       ORDER BY ep.department
     `),
     db.query(`
-      SELECT DISTINCT sp.program
-      FROM "student_profile" sp
-      INNER JOIN "profileRecord" pr ON sp."profileId" = pr.id AND pr.profile_type = 'Student'
-      INNER JOIN "patientUpdateLog" pul ON pul.id = pr.id AND pul.status = 'Approved'
-      WHERE sp.program IS NOT NULL AND sp.program <> ''
-      ORDER BY sp.program
+      SELECT DISTINCT up.sex
+      FROM "UsersPersonal" up
+      INNER JOIN "Patients" p ON up.id = p.id
+      WHERE up.sex IS NOT NULL AND up.sex <> ''
+      ORDER BY up.sex
     `),
   ]);
 
   const data = {
     departments: deptResult.rows.map(r => r.department),
-    programs: progResult.rows.map(r => r.program),
+    sexes: sexResult.rows.map(r => r.sex),
   };
   await setCachedResult(cacheKey, data);
   return data;
