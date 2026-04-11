@@ -109,7 +109,7 @@ initPrescriptionGraphQL(app);
 initMedicalHealthChatGraphQL(app);
 initRoleManagementGraphQL(app);
 initDashboardGraphQL(app);
-initAdminPatientManagementGraphQL(app);
+//initAdminPatientManagementGraphQL(app);
 
 
 app.use('/auth/login', loginRoutes);
