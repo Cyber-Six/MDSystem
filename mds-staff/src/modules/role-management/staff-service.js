@@ -14,11 +14,15 @@ const sendGraphQL = async (query, variables = {}) => {
   } catch (err) {
     // Extract GraphQL error message from non-2xx responses when available
     const gqlMsg = err.response?.data?.errors?.[0]?.message;
-    throw new Error(gqlMsg || err.message || 'Network error');
+    const error = new Error(gqlMsg || err.message || 'Network error');
+    error.status = err.response?.status;
+    throw error;
   }
 
   if (response.data.errors) {
-    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+    const error = new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+    error.status = response.status;
+    throw error;
   }
 
   return response.data.data;
@@ -30,11 +34,15 @@ const sendMedicalGraphQL = async (query, variables = {}) => {
     response = await axiosRequest.post(EMR_ENDPOINT, { query, variables });
   } catch (err) {
     const gqlMsg = err.response?.data?.errors?.[0]?.message;
-    throw new Error(gqlMsg || err.message || 'Network error');
+    const error = new Error(gqlMsg || err.message || 'Network error');
+    error.status = err.response?.status;
+    throw error;
   }
 
   if (response.data.errors) {
-    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+    const error = new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+    error.status = response.status;
+    throw error;
   }
 
   return response.data.data;

@@ -1,13 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchActiveRefreshTokenCount,
   fetchPatientBasicInfo,
-  fetchStaffSessions,
   fetchUserSessions,
 } from '../staff-service';
 
 const ACCOUNT_SCAN_LIMIT = 100;
+const ANALYTICS_INITIAL_LIMIT = 10;
 const ANALYTICS_LIMIT_OPTIONS = [10, 20, 50];
+const ANALYTICS_POLL_INTERVAL_MS = 60_000;
+const ENABLE_ANALYTICS_POLLING = false;
+const RATE_LIMIT_MESSAGE = 'Rate limit exceeded, please retry later';
+const NETWORK_ERROR_MESSAGE = 'Unable to connect to server. Please check your connection.';
+
+let ANALYTICS_MOUNT_FETCH_IN_FLIGHT = null;
+let ACCOUNTS_MOUNT_FETCH_IN_FLIGHT = null;
 
 const STATUS_DOT_CLASS = {
   active: 'bg-success-500',
@@ -85,34 +92,25 @@ function formatPatientName(patientInfo, email, userId) {
   return `User ${userId}`;
 }
 
-function buildSessionId(baseSession, detailSession, index) {
-  const device = detailSession?.deviceId || 'device';
-  const expPart = Number(baseSession?.exp) || index;
-  return `${baseSession?.userId || 'user'}-${device}-${expPart}`;
+function buildSessionId(baseSession, ordinal) {
+  return `${baseSession?.userId || 'user'}-${ordinal}`;
 }
 
-function matchSessionDetail(baseSession, detailSessions) {
-  if (!Array.isArray(detailSessions) || detailSessions.length === 0) return null;
+function isRateLimitedError(error) {
+  const status = Number(error?.status || error?.response?.status);
+  const message = String(error?.message || '').toLowerCase();
+  return status === 429 || message.includes('429') || message.includes('rate limit');
+}
 
-  const baseExpiry = toDateFromUnix(baseSession.exp);
-  if (!baseExpiry) return detailSessions[0];
+function isConnectivityError(error) {
+  const status = Number(error?.status || error?.response?.status);
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
 
-  let bestMatch = null;
-  let bestDelta = Number.POSITIVE_INFINITY;
-
-  for (const detail of detailSessions) {
-    if (!detail?.expiresAt) continue;
-    const detailExpiry = new Date(detail.expiresAt);
-    if (Number.isNaN(detailExpiry.getTime())) continue;
-
-    const delta = Math.abs(detailExpiry.getTime() - baseExpiry.getTime());
-    if (delta < bestDelta) {
-      bestDelta = delta;
-      bestMatch = detail;
-    }
-  }
-
-  return bestMatch || detailSessions[0];
+  if (status === 902) return true;
+  if (code === 'err_network') return true;
+  if (!Number.isFinite(status) && (message.includes('network') || message.includes('connect'))) return true;
+  return false;
 }
 
 const PatientManagement = () => {
@@ -129,9 +127,29 @@ const PatientManagement = () => {
   const [sessionRows, setSessionRows] = useState([]);
   const [sessionTotal, setSessionTotal] = useState(0);
   const [sessionOffset, setSessionOffset] = useState(0);
-  const [sessionLimit, setSessionLimit] = useState(10);
+  const [sessionLimit, setSessionLimit] = useState(ANALYTICS_INITIAL_LIMIT);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState(null);
+
+  const [analyticsRateLimited, setAnalyticsRateLimited] = useState(false);
+  const [analyticsBanner, setAnalyticsBanner] = useState(null);
+
+  const analyticsRateLimitedRef = useRef(false);
+  const loadAnalyticsCountRef = useRef(null);
+  const loadAnalyticsSessionsRef = useRef(null);
+
+  const markAnalyticsRateLimited = useCallback(() => {
+    analyticsRateLimitedRef.current = true;
+    setAnalyticsRateLimited(true);
+    setAnalyticsBanner({ type: 'rate-limit', message: RATE_LIMIT_MESSAGE });
+    setTokenCountError(RATE_LIMIT_MESSAGE);
+    setSessionsError(RATE_LIMIT_MESSAGE);
+  }, []);
+
+  const markAnalyticsNetworkError = useCallback(() => {
+    if (analyticsRateLimitedRef.current) return;
+    setAnalyticsBanner({ type: 'network', message: NETWORK_ERROR_MESSAGE });
+  }, []);
 
   const loadAccounts = useCallback(async () => {
     setAccountsLoading(true);
@@ -186,7 +204,9 @@ const PatientManagement = () => {
     }
   }, []);
 
-  const loadActiveRefreshTokenCount = useCallback(async () => {
+  const loadAnalyticsCount = useCallback(async () => {
+    if (analyticsRateLimitedRef.current) return;
+
     setTokenCountLoading(true);
     setTokenCountError(null);
 
@@ -194,77 +214,113 @@ const PatientManagement = () => {
       const count = await fetchActiveRefreshTokenCount();
       setTokenCount(Number(count) || 0);
     } catch (error) {
+      if (isRateLimitedError(error)) {
+        markAnalyticsRateLimited();
+        return;
+      }
+      if (isConnectivityError(error)) {
+        markAnalyticsNetworkError();
+        return;
+      }
       setTokenCountError(error.message || 'Failed to load active refresh token count.');
       setTokenCount(0);
     } finally {
       setTokenCountLoading(false);
     }
-  }, []);
+  }, [markAnalyticsNetworkError, markAnalyticsRateLimited]);
 
-  const loadAnalyticsSessions = useCallback(async () => {
+  const loadAnalyticsSessionsPage = useCallback(async (nextOffset, nextLimit) => {
+    if (analyticsRateLimitedRef.current) return;
+
     setSessionsLoading(true);
     setSessionsError(null);
 
     try {
-      const page = await fetchUserSessions(sessionOffset, sessionLimit);
-      const baseSessions = page.sessions || [];
-      const uniqueUserIds = Array.from(new Set(baseSessions.map((session) => String(session.userId)).filter(Boolean)));
-
-      const detailMap = new Map();
-      await Promise.all(
-        uniqueUserIds.map(async (userId) => {
-          try {
-            const detailSessions = await fetchStaffSessions(userId);
-            detailMap.set(userId, detailSessions || []);
-          } catch {
-            detailMap.set(userId, []);
-          }
-        })
-      );
-
-      const mergedRows = baseSessions.map((baseSession, index) => {
-        const details = detailMap.get(String(baseSession.userId)) || [];
-        const matched = matchSessionDetail(baseSession, details);
-        const fallbackDate = toDateFromUnix(baseSession.exp);
-
-        const status = matched?.status || (fallbackDate && fallbackDate > new Date() ? 'active' : 'expired');
-        const lastActive = matched?.updatedAt || matched?.createdAt || (fallbackDate ? fallbackDate.toISOString() : null);
+      const page = await fetchUserSessions(nextOffset, nextLimit);
+      const rows = (page.sessions || []).map((session, index) => {
+        const expiresAt = toDateFromUnix(session.exp);
+        const isActive = Boolean(expiresAt && expiresAt.getTime() > Date.now());
 
         return {
-          sessionId: buildSessionId(baseSession, matched, sessionOffset + index),
-          userId: String(baseSession.userId || '--'),
-          device: matched?.deviceId || 'Unknown',
-          lastActive,
-          status,
+          sessionId: buildSessionId(session, nextOffset + index + 1),
+          userId: String(session.userId || '--'),
+          device: 'Unknown',
+          lastActive: expiresAt ? expiresAt.toISOString() : null,
+          status: isActive ? 'active' : 'expired',
         };
       });
 
-      setSessionRows(mergedRows);
+      setSessionRows(rows);
       setSessionTotal(Number(page.totalCount) || 0);
+      setSessionOffset(nextOffset);
+      setSessionLimit(nextLimit);
     } catch (error) {
+      if (isRateLimitedError(error)) {
+        markAnalyticsRateLimited();
+        return;
+      }
+      if (isConnectivityError(error)) {
+        markAnalyticsNetworkError();
+        return;
+      }
       setSessionsError(error.message || 'Failed to load sessions analytics.');
       setSessionRows([]);
       setSessionTotal(0);
     } finally {
       setSessionsLoading(false);
     }
-  }, [sessionLimit, sessionOffset]);
+  }, [markAnalyticsNetworkError, markAnalyticsRateLimited]);
 
   useEffect(() => {
-    if (activeTab === 'accounts' && accountRows.length === 0 && !accountsLoading) {
-      loadAccounts();
+    loadAnalyticsCountRef.current = loadAnalyticsCount;
+    loadAnalyticsSessionsRef.current = loadAnalyticsSessionsPage;
+  }, [loadAnalyticsCount, loadAnalyticsSessionsPage]);
+
+  useEffect(() => {
+    if (!ACCOUNTS_MOUNT_FETCH_IN_FLIGHT) {
+      ACCOUNTS_MOUNT_FETCH_IN_FLIGHT = loadAccounts().finally(() => {
+        ACCOUNTS_MOUNT_FETCH_IN_FLIGHT = null;
+      });
     }
-  }, [activeTab, accountRows.length, accountsLoading, loadAccounts]);
+
+    void ACCOUNTS_MOUNT_FETCH_IN_FLIGHT;
+  }, [loadAccounts]);
 
   useEffect(() => {
-    if (activeTab !== 'analytics') return;
-    loadActiveRefreshTokenCount();
-  }, [activeTab, loadActiveRefreshTokenCount]);
+    if (!ANALYTICS_MOUNT_FETCH_IN_FLIGHT) {
+      ANALYTICS_MOUNT_FETCH_IN_FLIGHT = (async () => {
+        await Promise.allSettled([
+          loadAnalyticsCountRef.current?.(),
+          loadAnalyticsSessionsRef.current?.(0, ANALYTICS_INITIAL_LIMIT),
+        ]);
+      })().finally(() => {
+        ANALYTICS_MOUNT_FETCH_IN_FLIGHT = null;
+      });
+    }
+
+    void ANALYTICS_MOUNT_FETCH_IN_FLIGHT;
+  }, []);
 
   useEffect(() => {
-    if (activeTab !== 'analytics') return;
-    loadAnalyticsSessions();
-  }, [activeTab, loadAnalyticsSessions]);
+    if (!ENABLE_ANALYTICS_POLLING || analyticsRateLimitedRef.current || activeTab !== 'analytics') return;
+
+    const intervalId = window.setInterval(() => {
+      if (analyticsRateLimitedRef.current) return;
+      void loadAnalyticsCount();
+      void loadAnalyticsSessionsPage(sessionOffset, sessionLimit);
+    }, ANALYTICS_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeTab, loadAnalyticsCount, loadAnalyticsSessionsPage, sessionLimit, sessionOffset]);
+
+  const retryAnalyticsOnce = useCallback(() => {
+    if (analyticsRateLimitedRef.current || tokenCountLoading || sessionsLoading) return;
+    setAnalyticsBanner(null);
+    void loadAnalyticsCount();
+    void loadAnalyticsSessionsPage(sessionOffset, sessionLimit);
+  }, [loadAnalyticsCount, loadAnalyticsSessionsPage, sessionLimit, sessionOffset, sessionsLoading, tokenCountLoading]);
 
   const canGoPrev = sessionOffset > 0;
   const canGoNext = sessionOffset + sessionLimit < sessionTotal;
@@ -313,10 +369,14 @@ const PatientManagement = () => {
               loadAccounts();
               return;
             }
-            loadActiveRefreshTokenCount();
-            loadAnalyticsSessions();
+
+            if (analyticsRateLimitedRef.current) return;
+            setAnalyticsBanner(null);
+            void loadAnalyticsCount();
+            void loadAnalyticsSessionsPage(sessionOffset, sessionLimit);
           }}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+          disabled={activeTab === 'analytics' && analyticsRateLimited}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label={`Refresh ${activeTab === 'accounts' ? 'accounts list' : 'analytics'}`}
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -396,6 +456,28 @@ const PatientManagement = () => {
 
       {activeTab === 'analytics' && (
         <div className="space-y-3">
+          {analyticsBanner && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="rounded-lg border border-warning-300 dark:border-warning-700 bg-warning-50 dark:bg-warning-900/20 px-3 py-2"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-medium text-warning-700 dark:text-warning-300">{analyticsBanner.message}</p>
+                {analyticsBanner.type === 'network' && (
+                  <button
+                    type="button"
+                    onClick={retryAnalyticsOnce}
+                    disabled={tokenCountLoading || sessionsLoading}
+                    className="px-2.5 py-1 text-xs rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-100 dark:hover:bg-warning-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-3">
               <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wide">Active Refresh Tokens</p>
@@ -425,13 +507,17 @@ const PatientManagement = () => {
           ) : sessionsError ? (
             <div className="py-10 text-center">
               <p className="text-xs text-error-600 dark:text-error-400 mb-2">{sessionsError}</p>
-              <button
-                type="button"
-                onClick={loadAnalyticsSessions}
-                className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
-              >
-                Retry
-              </button>
+              {!analyticsRateLimited && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void loadAnalyticsSessionsPage(sessionOffset, sessionLimit);
+                  }}
+                  className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                >
+                  Retry
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -479,10 +565,11 @@ const PatientManagement = () => {
                     id="session-limit"
                     value={sessionLimit}
                     onChange={(event) => {
-                      setSessionLimit(Number(event.target.value));
-                      setSessionOffset(0);
+                      const nextLimit = Number(event.target.value);
+                      void loadAnalyticsSessionsPage(0, nextLimit);
                     }}
-                    className="px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                    disabled={analyticsRateLimited || sessionsLoading}
+                    className="px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {ANALYTICS_LIMIT_OPTIONS.map((option) => (
                       <option key={option} value={option}>{option}</option>
@@ -491,8 +578,11 @@ const PatientManagement = () => {
 
                   <button
                     type="button"
-                    onClick={() => setSessionOffset((prev) => Math.max(0, prev - sessionLimit))}
-                    disabled={!canGoPrev || sessionsLoading}
+                    onClick={() => {
+                      const nextOffset = Math.max(0, sessionOffset - sessionLimit);
+                      void loadAnalyticsSessionsPage(nextOffset, sessionLimit);
+                    }}
+                    disabled={!canGoPrev || sessionsLoading || analyticsRateLimited}
                     className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
@@ -500,8 +590,11 @@ const PatientManagement = () => {
 
                   <button
                     type="button"
-                    onClick={() => setSessionOffset((prev) => prev + sessionLimit)}
-                    disabled={!canGoNext || sessionsLoading}
+                    onClick={() => {
+                      const nextOffset = sessionOffset + sessionLimit;
+                      void loadAnalyticsSessionsPage(nextOffset, sessionLimit);
+                    }}
+                    disabled={!canGoNext || sessionsLoading || analyticsRateLimited}
                     className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
