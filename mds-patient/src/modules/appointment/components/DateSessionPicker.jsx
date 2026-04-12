@@ -132,11 +132,15 @@ const DateSessionPicker = ({
     if (!apiData) return 'available'; // No booking data yet = open
 
     const totalAllowed = (apiData.morningAllowed || 0) + (apiData.afternoonAllowed || 0);
+
+    // Staff disabled this date (both sessions explicitly set to 0) — treat as unavailable, not full
+    if (totalAllowed === 0) return 'unavailable';
+
     const totalBooked = (apiData.morningRegistered || 0) + (apiData.morningPending || 0) +
                         (apiData.afternoonRegistered || 0) + (apiData.afternoonPending || 0);
 
-    if (totalAllowed > 0 && totalBooked >= totalAllowed) return 'full';
-    if (totalAllowed > 0 && totalBooked / totalAllowed >= 0.7) return 'partial';
+    if (totalBooked >= totalAllowed) return 'full';
+    if (totalBooked / totalAllowed >= 0.7) return 'partial';
     return 'available';
   };
 
@@ -275,7 +279,7 @@ const DateSessionPicker = ({
       )}
 
       {/* ── Session picker — only this part was changed ── */}
-      {availability && selectedDate && isDateAllowed(selectedDate) && (
+      {availability && selectedDate && isDateAllowed(selectedDate) && getDayStatus(selectedDate) !== 'unavailable' && (
         <div className="mb-6">
           <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
             Select session for <span className="font-semibold text-neutral-900 dark:text-white">{selectedDate}</span>
