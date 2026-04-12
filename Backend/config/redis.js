@@ -390,7 +390,7 @@ async function createVerificationSession(email, purpose, account_type = "patient
       data_consent: user.data_consent ? "true" : "false",
       data_consent_version: user.data_consent_version || "",
       data_consent_agreed: user.data_consent_agreed
-        ? user.data_consent_agreed.toISOString()
+        ? new Date(user.data_consent_agreed).toISOString()
         : "",
     });
   } else { // account doesnt exist
