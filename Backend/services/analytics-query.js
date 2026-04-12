@@ -61,7 +61,7 @@ function branchFilter(branch, alias = 'up', paramIndex = 3) {
 }
 
 /**
- * Generate SQL WHERE clause fragment to filter patients by department or sex.
+ * Generate SQL WHERE clause fragment to filter patients by department, program, or sex.
  * @param {object} options - { department?: string, sex?: string }
  * @param {string} patientIdExpr - SQL expression for patient ID (e.g. 'p.id')
  * @param {number} startIdx - Starting $N param index (after existing params)
@@ -70,16 +70,22 @@ function branchFilter(branch, alias = 'up', paramIndex = 3) {
 function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3) {
   let clause = '';
   const params = [];
+
   if (options.department) {
+    // Filter by department OR program (since both are treated as department filter from frontend)
     clause += ` AND ${patientIdExpr} IN (
-      SELECT pul_df."patientId" FROM "patientUpdateLog" pul_df
-      INNER JOIN "profileRecord" pr_df ON pr_df.id = pul_df.id AND pr_df.profile_type = 'Employee'
-      INNER JOIN "employee_profile" ep_df ON ep_df."profileId" = pr_df.id
-      WHERE pul_df.status = 'Approved' AND ep_df.department = $${startIdx}
+      SELECT DISTINCT pul_df."patientId" FROM "patientUpdateLog" pul_df
+      LEFT JOIN "profileRecord" pr_df ON pr_df.id = pul_df.id AND pr_df.profile_type = 'Employee'
+      LEFT JOIN "employee_profile" ep_df ON ep_df."profileId" = pr_df.id
+      LEFT JOIN "profileRecord" pr_prog ON pr_prog.id = pul_df.id AND pr_prog.profile_type = 'Student'
+      LEFT JOIN "student_profile" sp_prog ON sp_prog."profileId" = pr_prog.id
+      WHERE pul_df.status = 'Approved'
+        AND (ep_df.department = $${startIdx} OR sp_prog.program = $${startIdx})
     )`;
     params.push(options.department);
     startIdx++;
   }
+
   if (options.sex) {
     clause += ` AND (
       SELECT up_sex.sex FROM "UsersPersonal" up_sex WHERE up_sex.id = ${patientIdExpr}
@@ -87,6 +93,7 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
     params.push(options.sex);
     startIdx++;
   }
+
   return { clause, params, nextIndex: startIdx };
 }
 
@@ -1210,7 +1217,8 @@ async function getFilterOptions() {
   const cached = await getCachedResult(cacheKey);
   if (cached) return cached;
 
-  const [deptResult, sexResult] = await Promise.all([
+  const [deptResult, programResult, sexResult] = await Promise.all([
+    // Fetch all departments
     db.query(`
       SELECT DISTINCT ep.department
       FROM "employee_profile" ep
@@ -1219,6 +1227,16 @@ async function getFilterOptions() {
       WHERE ep.department IS NOT NULL AND ep.department <> ''
       ORDER BY ep.department
     `),
+    // Fetch all programs
+    db.query(`
+      SELECT DISTINCT sp.program
+      FROM "student_profile" sp
+      INNER JOIN "profileRecord" pr ON sp."profileId" = pr.id AND pr.profile_type = 'Student'
+      INNER JOIN "patientUpdateLog" pul ON pul.id = pr.id AND pul.status = 'Approved'
+      WHERE sp.program IS NOT NULL AND sp.program <> ''
+      ORDER BY sp.program
+    `),
+    // Fetch all sex values (Male, Female, Other, etc.)
     db.query(`
       SELECT DISTINCT up.sex
       FROM "UsersPersonal" up
@@ -1228,9 +1246,46 @@ async function getFilterOptions() {
     `),
   ]);
 
+  // Combine departments and programs for the departments filter
+  const departments = deptResult.rows.map(r => r.department);
+  const programs = programResult.rows.map(r => r.program);
+  const sexes = sexResult.rows.map(r => r.sex);
+
+  // Academic programs list for analytics department
+  const academicPrograms = [
+    'BS Architecture',
+    'BS Chemical Engineering',
+    'BS Civil Engineering',
+    'BS Computer Engineering',
+    'BS Electrical Engineering',
+    'BS Electronics Engineering',
+    'BS Industrial Engineering',
+    'BS Mechanical Engineering',
+    'BS Environmental and Sanitary Engineering',
+    'BS Computer Science',
+    'BS Data Science and Analytics',
+    'BS Entertainment and Multimedia Computing',
+    'BS Information Technology',
+    'BS Information Systems',
+    'BS Accountancy',
+    'BS Accounting Information Systems',
+    'BSBA Logistics and Supply Chain Management',
+    'BSBA Marketing Management',
+    'Bachelor of Arts in English Language',
+    'Bachelor of Arts in Political Science',
+    'Bachelor of Secondary Education Major in English',
+    'Bachelor of Secondary Education Major in Mathematics',
+    'Bachelor of Secondary Education Major in Sciences',
+    'Bachelor of Special Needs Education',
+    'Teaching Certificate Program'
+  ];
+
+  // Merge database programs with academic programs, avoiding duplicates
+  const uniquePrograms = Array.from(new Set([...programs, ...academicPrograms]));
+
   const data = {
-    departments: deptResult.rows.map(r => r.department),
-    sexes: sexResult.rows.map(r => r.sex),
+    departments: [...departments, ...uniquePrograms], // Include all departments and programs
+    sexes: sexes,
   };
   await setCachedResult(cacheKey, data);
   return data;
