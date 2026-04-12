@@ -532,7 +532,7 @@ async function createPermissionTemplate({ label, permissionsList, createdBy, def
       id: String(templateId),
       label: template.label,
       createdBy: String(template.created_by),
-      createdAt: template.created_at.toISOString()
+      createdAt: new Date(template.created_at).toISOString()
     };
 
   } catch (error) {
@@ -595,7 +595,7 @@ async function getPermissionTemplate(templateId) {
     id: String(template.id),
     label: template.label,
     createdBy: String(template.created_by),
-    createdAt: template.created_at.toISOString(),
+    createdAt: new Date(template.created_at).toISOString(),
     permissions: permsList,
     permissionCount: permsList.filter(p => p.enabled).length
   };
@@ -645,7 +645,7 @@ async function listPermissionTemplates() {
       id: String(row.id),
       label: row.label,
       createdBy: String(row.created_by),
-      createdAt: row.created_at.toISOString(),
+      createdAt: new Date(row.created_at).toISOString(),
       permissions: permsList,
       permissionCount: permsList.filter(p => p.enabled).length
     };
