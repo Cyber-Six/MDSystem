@@ -1056,6 +1056,43 @@ const Mutation = {
       throwGraphQLError(res).message("Failed to update scheduler").status(500).throw();
     }
 
+    // Cascade default slot updates to ScheduleDateEntity rows that are NOT backed by a
+    // SlotCustomDate entry (those are true "default" dates and should always match the
+    // scheduler defaults).  Custom date entities keep their own per-date overrides.
+    const newMorning = input.morningAllowed;
+    const newAfternoon = input.afternoonAllowed;
+    const slotDefaultChanged =
+      (newMorning !== undefined && newMorning !== null) ||
+      (newAfternoon !== undefined && newAfternoon !== null);
+
+    if (slotDefaultChanged) {
+      // Build a SET clause only for the columns that actually changed
+      const cascadeFields = [];
+      const cascadeValues = [];
+      let ci = 1;
+      if (newMorning !== undefined && newMorning !== null) {
+        cascadeFields.push(`"morningAllowed" = $${ci++}`);
+        cascadeValues.push(newMorning);
+      }
+      if (newAfternoon !== undefined && newAfternoon !== null) {
+        cascadeFields.push(`"afternoonAllowed" = $${ci++}`);
+        cascadeValues.push(newAfternoon);
+      }
+      cascadeValues.push(schedulerId);
+
+      await db.query(
+        `UPDATE "ScheduleDateEntity" sde
+         SET ${cascadeFields.join(', ')}
+         WHERE sde."slotId" = $${ci}
+           AND NOT EXISTS (
+             SELECT 1 FROM "SlotCustomDate" scd
+             WHERE scd."slotScheduleId" = sde."slotId"
+               AND scd."scheduledDate" = sde."scheduledDate"
+           );`,
+        cascadeValues
+      );
+    }
+
     const scheduler = result.rows[0];
     scheduler.schedulePerWeek = decodeSchedulingFlags(scheduler.scheduleFlags);
     return scheduler;
