@@ -680,13 +680,22 @@ async function scanAllRefreshSessionsWithMeta() {
 
       try {
         const session = JSON.parse(raw);
-        if (!session || typeof session !== 'object') continue;
+        if (!session || typeof session !== 'object') {
+          logger.error('Skipping refresh session with invalid JSON', { key });
+          continue; // Skip if not an object
+        }
 
         const parts = key.split(':');
-        if (parts.length !== 3) continue;
+        if (parts.length !== 3) {
+          logger.error('Skipping refresh session with unexpected key format', { key });
+          continue;
+        }
 
         const [, keyUserId, keyTicket] = parts;
-        if (!keyUserId || !keyTicket) continue;
+        if (!keyUserId || !keyTicket) {
+          logger.error('Skipping refresh session with missing userId or ticket', { key });
+          continue;
+        }
 
         const sessionUserId = session.userId !== undefined && session.userId !== null
           ? String(session.userId)
