@@ -978,7 +978,7 @@ const Mutation = {
 
     // Verify target user exists and is medical staff
     const userResult = await db.query(
-      `SELECT uc.id, mp.designation, mp.is_active
+      `SELECT uc.id, mp.designation, mp.is_active, mp.role
        FROM "UserCredentials" uc
        JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        WHERE uc.id = $1`,
@@ -991,6 +991,8 @@ const Mutation = {
 
     const targetUser = userResult.rows[0];
     const branch = targetUser.designation || 'Both';
+    const previousRole = targetUser.role || null;
+    const previousBranch = branch;
 
     // Perform all validations BEFORE starting transaction
 
@@ -1145,18 +1147,25 @@ const Mutation = {
       // Fetch and return the updated staff account to avoid a round-trip on the frontend
       const updatedStaff = await Query._getStaffAccount(_, { userId }, { user, res });
 
-      // Notify the affected staff account when role is updated.
+      // Notify the affected staff account only when role or branch changed.
       // Emission is user-scoped via the user:{id} socket room.
-      if (role) {
+      const updatedRole = updatedStaff?.role ?? role ?? previousRole;
+      const updatedBranch = updatedStaff?.branch ?? designation ?? previousBranch;
+      const roleChanged = String(updatedRole ?? '') !== String(previousRole ?? '');
+      const branchChanged = String(updatedBranch ?? '') !== String(previousBranch ?? '');
+
+      if (roleChanged || branchChanged) {
         const payload = {
           userId: String(userId),
-          newRole: updatedStaff?.role || role,
-          branch: updatedStaff?.branch || designation || branch || 'Both',
+          newRole: updatedRole,
+          newBranch: updatedBranch,
           timestamp: new Date().toISOString(),
         };
 
-        emitToUser(payload.userId, 'roleUpdated', payload);
-        logger.info(`roleUpdated emitted to userId=${payload.userId} with role=${payload.newRole}`);
+        emitToUser(payload.userId, 'accountUpdated', payload);
+        logger.info(
+          `accountUpdated emitted to userId=${payload.userId} (roleChanged=${roleChanged}, branchChanged=${branchChanged})`
+        );
       }
 
       return {
