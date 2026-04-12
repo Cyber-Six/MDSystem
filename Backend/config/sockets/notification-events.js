@@ -24,6 +24,8 @@ const BRANCH_TO_LOCATIONS = {
  * Notification Socket Events
  *
  * Client -> Server:
+ *   notification:join-self   — Join the caller's user-specific room
+ *                              (user:{userId}) for direct user-targeted events
  *   notification:join-branch — Join the caller's branch room so they receive
  *                              branch-scoped events (appointment:submitted,
  *                              medicine:request:new, updateTicket, etc.)
@@ -50,6 +52,21 @@ const BRANCH_TO_LOCATIONS = {
  */
 
 const notificationHandlers = {
+  /**
+   * Join the authenticated caller's user-specific room.
+   * Room format: user:{userId}
+   */
+  'notification:join-self': async (socket, _data, ack) => {
+    try {
+      const room = `user:${socket.userId}`;
+      socket.join(room);
+      if (typeof ack === 'function') ack({ success: true, room });
+    } catch (err) {
+      logger.error(`[NOTIF-EVENTS] join-self error for user:${socket.userId}:`, err.message);
+      if (typeof ack === 'function') ack({ error: 'INTERNAL_ERROR', message: err.message });
+    }
+  },
+
   /**
    * Join the caller's assigned branch room.
    * Looks up the user's branch identifier in the DB and calls socket.join().

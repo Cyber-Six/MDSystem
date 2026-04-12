@@ -34,6 +34,7 @@ const {
   clearAdminTransferPasswordFailures,
 } = require('../../../../../config/redis.js');
 const { enqueueAdminTransferEmail } = require('../../../../../services/emailservice.js');
+const { emitToUser } = require('../../../../../config/sockets');
 const { generateOTP, verifyPassword, 
   delayRandom, generateUUID } = require('../../../../../utils/security.js');
 const crypto = require('crypto');
@@ -1143,6 +1144,20 @@ const Mutation = {
 
       // Fetch and return the updated staff account to avoid a round-trip on the frontend
       const updatedStaff = await Query._getStaffAccount(_, { userId }, { user, res });
+
+      // Notify the affected staff account when role is updated.
+      // Emission is user-scoped via the user:{id} socket room.
+      if (role) {
+        const payload = {
+          userId: String(userId),
+          newRole: updatedStaff?.role || role,
+          branch: updatedStaff?.branch || designation || branch || 'Both',
+          timestamp: new Date().toISOString(),
+        };
+
+        emitToUser(payload.userId, 'roleUpdated', payload);
+        logger.info(`roleUpdated emitted to userId=${payload.userId} with role=${payload.newRole}`);
+      }
 
       return {
         ok: true,
