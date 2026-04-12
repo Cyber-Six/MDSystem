@@ -451,16 +451,23 @@ export function StaffNotificationProvider({ children }) {
             const currentBranch = profileRef.current?.branch ?? permissionBranchRef.current ?? null;
             const incomingRole = data?.newRole ?? null;
             const incomingBranch = data?.newBranch ?? null;
+            const incomingStatus = data?.newStatus ?? null;
 
             const roleChanged =
               currentRole != null && incomingRole != null && String(currentRole) !== String(incomingRole);
             const branchChanged =
               currentBranch != null && incomingBranch != null && String(currentBranch) !== String(incomingBranch);
+            const statusChanged =
+              incomingStatus != null && String(incomingStatus).toLowerCase() === 'suspended';
 
-            if (roleChanged) {
+            if (incomingStatus === 'Suspended') {
+              accountUpdateMessage = 'Your account has been suspended. The page will reload.';
+            } else if (roleChanged) {
               accountUpdateMessage = 'Your role has been updated. The page will reload to apply changes.';
             } else if (branchChanged) {
               accountUpdateMessage = 'Your branch assignment has been updated. The page will reload to apply changes.';
+            } else if (statusChanged) {
+              accountUpdateMessage = 'Your account status has been updated. The page will reload to apply changes.';
             } else {
               // Fallback when local profile/permissions are stale or still loading.
               accountUpdateMessage = 'Your role has been updated. The page will reload to apply changes.';
