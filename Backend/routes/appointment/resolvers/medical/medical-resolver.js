@@ -242,24 +242,24 @@ const Mutation = {
     return await Wrapper.Mutation._deleteSchedulerRequirement(_, { schedulerId, label }, { user, res });
   },
 
-  setCustomDates: async (_, { schedulerId, type, dates }, { user, res }) => {
+  setCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
     const scheduleBranch = await getBranchFromShedulerId(schedulerId);
     const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
     if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    return await Wrapper.Mutation._setCustomDates(_, { schedulerId, type, dates }, { user, res });
+    return await Wrapper.Mutation._setCustomDates(_, { schedulerId, dates }, { user, res });
   },
 
-  unsetCustomDates: async (_, { schedulerId, type, dates }, { user, res }) => {
+  unsetCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
     const scheduleBranch = await getBranchFromShedulerId(schedulerId);
     const isPermitted = await permit.isMedicalPermittedBranchBased(user.id, permit.permissions.appointment_allow_edit_configuration, scheduleBranch);
     if (!isPermitted) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    return await Wrapper.Mutation._unsetCustomDates(_, { schedulerId, type, dates }, { user, res });
+    return await Wrapper.Mutation._unsetCustomDates(_, { schedulerId, dates }, { user, res });
   },
 
   addEntryWhitelist: async (_, { schedulerId, patientIds }, { user, res }) => {

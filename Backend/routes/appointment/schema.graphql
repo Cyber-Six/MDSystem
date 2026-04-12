@@ -56,7 +56,15 @@ type SlotCustomDateEntry {
   slotScheduleId: ID!
   scheduledDate: Date!
   type: SCHEDULER_CUSTOM_DATE_TYPE!
+  morningAllowed: Int
+  afternoonAllowed: Int
   created_at: Date
+}
+
+input SlotCustomDateInput {
+  scheduledDate: Date!
+  morningAllowed: Int
+  afternoonAllowed: Int
 }
 
 
@@ -234,8 +242,8 @@ type Mutation {
   updateSchedulerRequirement(schedulerId: ID!, input: ScheduleRequirementInput!): ScheduleRequirement
   deleteSchedulerRequirement(schedulerId: ID!, label: String!): Boolean
 
-  setCustomDates(schedulerId: ID!, type: SCHEDULER_CUSTOM_DATE_TYPE!, dates: [Date!]!): [Date!]
-  unsetCustomDates(schedulerId: ID!, type: SCHEDULER_CUSTOM_DATE_TYPE!, dates: [Date!]!): [Date!]
+  setCustomDates(schedulerId: ID!, dates: [SlotCustomDateInput!]!): [SlotCustomDateEntry!]
+  unsetCustomDates(schedulerId: ID!, dates: [Date!]!): [Date!]
 
   addEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]
   removeEntryWhitelist(schedulerId: ID!, patientIds: [ID!]!): [ID!]

@@ -355,6 +355,7 @@ export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
         id
         slotScheduleId
         scheduledDate
+        type
         morningAllowed
         afternoonAllowed
         created_at
@@ -521,7 +522,8 @@ export const deleteRequirement = async (schedulerId, label) => {
 // ── Mutations — Custom Dates ─────────────────────────────────────────────────
 
 /**
- * Add custom open dates to a scheduler with optional slot configuration.
+ * Add custom dates to a scheduler with slot configuration.
+ * Type is auto-derived: both morningAllowed and afternoonAllowed = 0 → Exclude, else → Include.
  * @param {string} schedulerId
  * @param {Array<{scheduledDate: string, morningAllowed?: number, afternoonAllowed?: number}>} dates
  * @returns {Promise<Array>} SlotCustomDateEntry[]
@@ -533,6 +535,7 @@ export const setCustomDates = async (schedulerId, dates) => {
         id
         slotScheduleId
         scheduledDate
+        type
         morningAllowed
         afternoonAllowed
         created_at

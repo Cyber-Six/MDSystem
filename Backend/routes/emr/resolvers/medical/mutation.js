@@ -35,13 +35,16 @@ const Mutation = {
 
     // Notify patient about the update ticket status change
     try {
-      const notification = await notifyUser(args.userId, "updateTicket:statusChanged", {
-        email: await findEmailByUserId(args.userId),
-        recordId: record.id,
-        newStatus: updateResult.status,
-        message: `Your update ticket has been ${updateResult.status.toLowerCase()}.`,
-        subject: "Update Ticket Status Changed"
-      });
+      const notification = await notifyUser(
+        args.userId,
+        "updateTicket:statusChanged",
+        { recordId: record.id, newStatus: updateResult.status },
+        {
+          email: await findEmailByUserId(args.userId),
+          title: "Update Ticket Status Changed",
+          message: `Your update ticket has been ${updateResult.status.toLowerCase()}.`,
+        }
+      );
 
       logger.info(`Notification sent to user ${args.userId}: ${notification}`);
     } catch (error) {

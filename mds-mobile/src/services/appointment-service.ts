@@ -72,7 +72,13 @@ export const listRequirements = async (schedulerId: string, offset = 0, limit = 
 export const listCustomDates = async (schedulerId: string, offset = 0, limit = 100) => {
   const data = await sendGraphQL(`
     query ListCustomDates($schedulerId: ID!, $offset: Int, $limit: Int) {
-      listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit)
+      listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit) {
+        id
+        scheduledDate
+        type
+        morningAllowed
+        afternoonAllowed
+      }
     }
   `, { schedulerId, offset, limit });
   return data.listCustomDates;

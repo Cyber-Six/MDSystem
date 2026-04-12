@@ -657,7 +657,7 @@ tail -f logs/app.log | grep "ACK-EVENTS"
 1. **Notification Categories** — Different types (urgent, info, reminder)
 2. **Read Receipts** — Track when user opened/read message
 3. **Scheduled Notifications** — Send at specific times
-4. **Notification Preferences** — User opt-in/opt-out per type
+4. ~~**Notification Preferences** — User opt-in/opt-out per type~~ ✅ Implemented — see [NOTIFICATION_PREFERENCES_IMPLEMENTATION.md](./NOTIFICATION_PREFERENCES_IMPLEMENTATION.md)
 5. **Batch Acknowledgement** — Mark multiple as read
 6. **Notification History** — UI dashboard for notification history
 7. **Analytics** — Track delivery/acknowledgement rates
@@ -670,3 +670,4 @@ tail -f logs/app.log | grep "ACK-EVENTS"
 - **Email Service:** Email notifications use `enqueueNotificationEmail()` from `services/emailservice.js`
 - **Expo Push:** See `config/sockets/push-notification.js`
 - **Validator:** `ValidateUserBranchbyUserBranch()` in `utils/validator.js`
+- **Notification Preferences:** See [NOTIFICATION_PREFERENCES_IMPLEMENTATION.md](./NOTIFICATION_PREFERENCES_IMPLEMENTATION.md)

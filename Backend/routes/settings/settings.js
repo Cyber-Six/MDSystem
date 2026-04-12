@@ -5,6 +5,7 @@ const { jwtProtect } = require("../../config/middleware/jwtProtect.js");
 const query = require("../../config/query.js");
 const redis = require("../../config/redis.js");
 const logger = require("../../utils/logger.js");
+const { invalidateNotifPrefCache } = require("../../config/sockets/notification-preferences.js");
 
 // ========================================
 // TABLE AUTO-CREATION
@@ -219,6 +220,8 @@ router.put("/", jwtProtect("all"), async (req, res) => {
 
     // Invalidate cache to force fresh fetch
     await invalidatePreferencesCache(userId);
+    // Also invalidate the notification-specific cache used by the dispatch layer
+    await invalidateNotifPrefCache(userId);
 
     logger.debug(`[PREFS] PUT success userId=${userId}`);
     return res.status(200).json({
@@ -294,6 +297,7 @@ router.patch("/", jwtProtect("all"), async (req, res) => {
 
     // Invalidate cache
     await invalidatePreferencesCache(userId);
+    await invalidateNotifPrefCache(userId);
 
     logger.debug(`[PREFS] PATCH success userId=${userId}`);
     return res.status(200).json({
@@ -328,6 +332,7 @@ router.delete("/", jwtProtect("all"), async (req, res) => {
 
     await query.setUserPreferences(userId, reset);
     await invalidatePreferencesCache(userId);
+    await invalidateNotifPrefCache(userId);
 
     logger.debug(`[PREFS] DELETE success userId=${userId}`);
     return res.status(200).json({
