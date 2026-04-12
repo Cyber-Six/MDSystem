@@ -157,6 +157,21 @@ const TopBar = ({ onMenuClick, isSidebarOpen }) => {
                   )}
                 </div>
 
+                {/* Notifications-disabled banner */}
+                {!settings.channels?.web && (
+                  <div className="px-4 py-2.5 bg-warning-50 dark:bg-warning-900/20 border-b border-warning-200 dark:border-warning-800 shrink-0">
+                    <p className="text-xs text-warning-700 dark:text-warning-300 font-medium">
+                      Web notifications are disabled.{' '}
+                      <button
+                        onClick={() => { setShowNotifications(false); navigate('/settings'); }}
+                        className="underline hover:text-warning-900 dark:hover:text-warning-100"
+                      >
+                        Enable in Settings
+                      </button>
+                    </p>
+                  </div>
+                )}
+
                 {/* Tabs */}
                 <div className="flex border-b border-gray-200 dark:border-neutral-700 shrink-0 bg-white dark:bg-neutral-900">
                   {/* General tab */}

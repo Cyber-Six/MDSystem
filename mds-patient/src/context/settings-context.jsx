@@ -11,6 +11,8 @@ function toBackendPrefs(s) {
       soundEnabled: s.soundEnabled, soundVolume: s.soundVolume, soundByModule: s.soundByModule,
       showBadges: s.showBadges, showBanners: s.showBanners, bannerErrorsOnly: s.bannerErrorsOnly,
       bannerCompact: s.bannerCompact, bannerAutoDismiss: s.bannerAutoDismiss, bannerDismissDelay: s.bannerDismissDelay,
+      channels: s.channels,
+      moduleChannels: s.moduleChannels,
     },
   };
 }
@@ -20,6 +22,17 @@ function mergeFromBackendPrefs(prefs) {
   const merged = sanitizeSettings(flat);
   if (prefs.notification?.soundByModule && typeof prefs.notification.soundByModule === 'object') {
     merged.soundByModule = { ...DEFAULT_SETTINGS.soundByModule, ...merged.soundByModule };
+  }
+  if (prefs.notification?.channels && typeof prefs.notification.channels === 'object') {
+    merged.channels = { ...DEFAULT_SETTINGS.channels, ...merged.channels };
+  }
+  if (prefs.notification?.moduleChannels && typeof prefs.notification.moduleChannels === 'object') {
+    merged.moduleChannels = { ...DEFAULT_SETTINGS.moduleChannels };
+    for (const key of NOTIFICATION_MODULE_KEYS) {
+      if (prefs.notification.moduleChannels[key] && typeof prefs.notification.moduleChannels[key] === 'object') {
+        merged.moduleChannels[key] = { ...DEFAULT_SETTINGS.channels, ...prefs.notification.moduleChannels[key] };
+      }
+    }
   }
   return merged;
 }
@@ -32,6 +45,11 @@ function isAuthenticated() {
     return false;
   }
 }
+
+const NOTIFICATION_MODULE_KEYS = [
+  'appointments', 'healthChat', 'medicineRequests', 'documents',
+  'emr', 'inventory', 'roleManagement', 'general',
+];
 
 /**
  * Default settings for new users.
@@ -56,6 +74,23 @@ const DEFAULT_SETTINGS = {
   bannerCompact: false,
   bannerAutoDismiss: true,
   bannerDismissDelay: 5,     // seconds
+
+  // ── Notification Channels ──
+  channels: {
+    web: true,            // Web/socket notifications — enabled by default
+    email: false,         // Always-send email — disabled by default
+    emailFallback: true,  // Email only when offline — enabled by default
+  },
+  moduleChannels: {
+    appointments:     { web: true, email: false, emailFallback: true },
+    healthChat:       { web: true, email: false, emailFallback: true },
+    medicineRequests: { web: true, email: false, emailFallback: true },
+    documents:        { web: true, email: false, emailFallback: true },
+    emr:              { web: true, email: false, emailFallback: true },
+    inventory:        { web: true, email: false, emailFallback: true },
+    roleManagement:   { web: true, email: false, emailFallback: true },
+    general:          { web: true, email: false, emailFallback: true },
+  },
 
   // ── Appearance ──
   themeMode: 'system',       // 'light' | 'dark' | 'system'
@@ -114,7 +149,16 @@ const SOUND_MODULE_KEYS = Object.keys(DEFAULT_SETTINGS.soundByModule);
  * SECURITY: Prevents XSS-planted localStorage values from poisoning app state.
  */
 function sanitizeSettings(parsed) {
-  const safe = { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+  const safe = {
+    ...DEFAULT_SETTINGS,
+    soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
+    channels: { ...DEFAULT_SETTINGS.channels },
+    moduleChannels: {},
+  };
+  // Initialise moduleChannels from defaults
+  for (const key of NOTIFICATION_MODULE_KEYS) {
+    safe.moduleChannels[key] = { ...DEFAULT_SETTINGS.channels };
+  }
 
   // Boolean keys
   BOOL_SETTINGS_KEYS.forEach((key) => {
@@ -140,6 +184,25 @@ function sanitizeSettings(parsed) {
     });
   }
 
+  // channels — global notification channel preferences
+  if (parsed.channels && typeof parsed.channels === 'object') {
+    if (typeof parsed.channels.web === 'boolean')           safe.channels.web = parsed.channels.web;
+    if (typeof parsed.channels.email === 'boolean')         safe.channels.email = parsed.channels.email;
+    if (typeof parsed.channels.emailFallback === 'boolean') safe.channels.emailFallback = parsed.channels.emailFallback;
+  }
+
+  // moduleChannels — per-module notification channel overrides
+  if (parsed.moduleChannels && typeof parsed.moduleChannels === 'object') {
+    for (const key of NOTIFICATION_MODULE_KEYS) {
+      if (parsed.moduleChannels[key] && typeof parsed.moduleChannels[key] === 'object') {
+        const mc = parsed.moduleChannels[key];
+        if (typeof mc.web === 'boolean')           safe.moduleChannels[key].web = mc.web;
+        if (typeof mc.email === 'boolean')         safe.moduleChannels[key].email = mc.email;
+        if (typeof mc.emailFallback === 'boolean') safe.moduleChannels[key].emailFallback = mc.emailFallback;
+      }
+    }
+  }
+
   return safe;
 }
 
@@ -156,7 +219,7 @@ function loadSettings(userId) {
   } catch {
     // corrupted data — fall through to defaults
   }
-  return { ...DEFAULT_SETTINGS, soundByModule: { ...DEFAULT_SETTINGS.soundByModule } };
+  return sanitizeSettings({});
 }
 
 /**

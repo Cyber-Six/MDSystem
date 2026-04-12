@@ -1,7 +1,7 @@
 const db = require("../../../../../config/query.js");
 const { throwGraphQLError } = require("../../../../../utils/graphql-helper.js");
 const logger = require("../../../../../utils/logger.js");
-const { isConnectedAnywhere, emitToUserWithAck, emitToRole } = require("../../../../../config/sockets");
+const { isConnectedAnywhere, emitToUserWithAck, emitToRole, notifyUser } = require("../../../../../config/sockets");
 const { enqueueNotificationEmail } = require("../../../../../services/emailservice.js");
 const { findEmailByUserId } = require("../../../../../config/query.js");
 
@@ -215,22 +215,19 @@ const Mutation = {
         logger.warn('[INVENTORY] Failed to emit inventory:stock-changed after dispense:', emitErr.message);
       }
 
-      // Notify patient: socket with ack, fall back to email if not acked or offline
+      // Notify patient: uses notifyUser which respects channel preferences
       try {
-        const acked = (await isConnectedAnywhere(input.patientId))
-          && await emitToUserWithAck(input.patientId, 'medicine:prescription:issued', { transactionId: transaction.id });
-
-        if (!acked) {
-          const patientEmail = await findEmailByUserId(input.patientId);
-          if (patientEmail) {
-            await enqueueNotificationEmail(
-              patientEmail,
-              'Prescription Issued',
-              `A prescription <strong>#${transaction.id}</strong> has been <span style="color:green;font-weight:bold;">issued</span> for you by the medical staff. Please visit the clinic to collect your prescribed medicine.`,
-              input.notes ?? null,
-            );
-          }
-        }
+        await notifyUser(
+          input.patientId,
+          'medicine:prescription:issued',
+          { transactionId: transaction.id },
+          {
+            email: null,
+            title: 'Prescription Issued',
+            message: `A prescription <strong>#${transaction.id}</strong> has been <span style="color:green;font-weight:bold;">issued</span> for you by the medical staff. Please visit the clinic to collect your prescribed medicine.`,
+            notes: input.notes ?? null,
+          },
+        );
       } catch (notifErr) {
         logger.error("Failed to send prescription notification:", notifErr);
       }

@@ -3,6 +3,8 @@ const { isConnectedAnywhere } = require('./socket-store');
 const { pushPending, getPushToken } = require('./notification-store');
 const { enqueueNotificationEmail } = require('../../services/emailservice');
 const { sendExpoPushNotification, eventToPushContent } = require('./push-notification');
+const { resolveChannelsForEvent } = require('./notification-preferences');
+const query = require('../query');
 
 // Lazy-loaded to avoid circular dependency with socket-server.js
 let _getIO;
@@ -108,8 +110,14 @@ function emitToRole(role, eventName, data) {
  * If they are offline, the notification is persisted in Redis and will be delivered
  * automatically the next time they connect.
  *
- * Optionally, pass `emailNotif` to also send an email when the user is offline.
- * The email is enqueued via BullMQ and rendered with the generic notification template.
+ * Respects the user's notification channel preferences:
+ *   - web: true/false — controls socket delivery + offline queue
+ *   - email: true/false — always send email regardless of online status
+ *   - emailFallback: true/false — send email only when user is offline
+ *
+ * Optionally, pass `emailNotif` to provide email content.  If `emailNotif` is not
+ * supplied, the system will attempt to build one automatically when email delivery
+ * is needed, using the user's registered email address.
  *
  * This is the preferred API for any notification that must not be lost.
  *
@@ -117,43 +125,81 @@ function emitToRole(role, eventName, data) {
  * @param {string} eventName
  * @param {*}      data
  * @param {{ email: string, title: string, message: string, notes?: string, ctaText?: string, ctaLink?: string } | null} [emailNotif]
- * @returns {Promise<'delivered'|'queued'>}
+ * @returns {Promise<'delivered'|'queued'|'suppressed'>}
  */
 async function notifyUser(userId, eventName, data, emailNotif = null) {
+  // ── Resolve channel preferences for this event ────────────────────────────
+  let channelPrefs;
+  try {
+    channelPrefs = await resolveChannelsForEvent(userId, eventName);
+  } catch (err) {
+    logger.warn(`[NOTIF] Failed to resolve channel prefs for user:${userId}, using defaults: ${err.message}`);
+    channelPrefs = { web: true, email: false, emailFallback: true };
+  }
+
+  // If both web and all email channels are off, suppress entirely
+  if (!channelPrefs.web && !channelPrefs.email && !channelPrefs.emailFallback) {
+    logger.debug(`[NOTIF] Suppressed "${eventName}" for user:${userId} — all channels disabled`);
+    return 'suppressed';
+  }
+
   const online = await isConnectedAnywhere(userId);
-  if (online) {
-    emitToUser(userId, eventName, data);
-    logger.debug(`[NOTIF] Delivered "${eventName}" to active user:${userId}`);
-    return 'delivered';
-  }
-  await pushPending(userId, eventName, data);
-  logger.debug(`[NOTIF] Queued "${eventName}" for offline user:${userId}`);
 
-  // Send Expo remote push notification so the device receives it even when app is killed
-  const pushContent = eventToPushContent(eventName, data);
-  if (pushContent) {
-    const pushToken = await getPushToken(String(userId));
-    if (pushToken) {
-      await sendExpoPushNotification(pushToken, pushContent.title, pushContent.body, { chatId: data?.chatId ?? data?.chat?.id }, String(userId));
+  // ── Web delivery (socket) ─────────────────────────────────────────────────
+  if (channelPrefs.web) {
+    if (online) {
+      emitToUser(userId, eventName, data);
+      logger.debug(`[NOTIF] Delivered "${eventName}" to active user:${userId}`);
+    } else {
+      // Queue for delivery when user reconnects
+      await pushPending(userId, eventName, data);
+      logger.debug(`[NOTIF] Queued "${eventName}" for offline user:${userId}`);
+
+      // Send Expo remote push notification so the device receives it even when app is killed
+      const pushContent = eventToPushContent(eventName, data);
+      if (pushContent) {
+        const pushToken = await getPushToken(String(userId));
+        if (pushToken) {
+          await sendExpoPushNotification(pushToken, pushContent.title, pushContent.body, { chatId: data?.chatId ?? data?.chat?.id }, String(userId));
+        }
+      }
     }
   }
 
-  if (emailNotif && emailNotif.email) {
+  // ── Email delivery ────────────────────────────────────────────────────────
+  // Three scenarios:
+  //   1. email = true  → always send email
+  //   2. emailFallback = true && user offline → send email
+  //   3. otherwise → no email
+  const shouldEmail =
+    channelPrefs.email ||
+    (channelPrefs.emailFallback && !online);
+
+  if (shouldEmail) {
     try {
-      await enqueueNotificationEmail(
-        emailNotif.email,
-        emailNotif.title,
-        emailNotif.message,
-        emailNotif.notes ?? null,
-        emailNotif.ctaText ?? null,
-        emailNotif.ctaLink ?? null,
-      );
-      logger.debug(`[NOTIF] Enqueued offline email notification for user:${userId}`);
+      let email = emailNotif?.email;
+      if (!email) {
+        // Auto-resolve user email from DB
+        email = await query.findEmailByUserId(userId);
+      }
+      if (email) {
+        const title   = emailNotif?.title   || eventName.replace(/[:.]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const message = emailNotif?.message  || (typeof data?.message === 'string' ? data.message : `You have a new notification: ${eventName}`);
+        const notes   = emailNotif?.notes    ?? null;
+        const ctaText = emailNotif?.ctaText  ?? null;
+        const ctaLink = emailNotif?.ctaLink  ?? null;
+
+        await enqueueNotificationEmail(email, title, message, notes, ctaText, ctaLink);
+        logger.debug(`[NOTIF] Enqueued email for user:${userId} (${channelPrefs.email ? 'always' : 'fallback'})`);
+      } else {
+        logger.warn(`[NOTIF] No email found for user:${userId}, skipping email delivery`);
+      }
     } catch (err) {
-      logger.error(`[NOTIF] Failed to enqueue offline email for user:${userId}: ${err.message}`);
+      logger.error(`[NOTIF] Failed to enqueue email for user:${userId}: ${err.message}`);
     }
   }
-  return 'queued';
+
+  return online && channelPrefs.web ? 'delivered' : 'queued';
 }
 
 /**
@@ -162,7 +208,7 @@ async function notifyUser(userId, eventName, data, emailNotif = null) {
  * @param {string[]} userIds
  * @param {string}   eventName
  * @param {*}        data
- * @returns {Promise<{ delivered: string[], queued: string[] }>}
+ * @returns {Promise<{ delivered: string[], queued: string[], suppressed: string[] }>}
  */
 async function notifyUsers(userIds, eventName, data) {
   const results = await Promise.all(
@@ -173,7 +219,7 @@ async function notifyUsers(userIds, eventName, data) {
       acc[result].push(userId);
       return acc;
     },
-    { delivered: [], queued: [] }
+    { delivered: [], queued: [], suppressed: [] }
   );
 }
 
