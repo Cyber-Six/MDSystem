@@ -69,10 +69,11 @@ END$$;
 ALTER TABLE "SlotCustomDate"
   ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
--- Step 3: Handle the "type" column — three cases covered:
---   a) column does not exist          → add it as the enum type directly
---   b) column exists as TEXT/VARCHAR  → convert it to the enum type
---   c) column already is SlotCustomType → nothing to do
+-- Step 3: Handle the "type" column — four cases covered:
+--   a) column does not exist            → add it as the enum type directly
+--   b) column exists as TEXT/VARCHAR    → convert it to the enum type
+--   c) column exists as a wrong enum    → migrate via temp column (avoids cast error)
+--   d) column already is SlotCustomType → nothing to do
 DO $$
 DECLARE
   col_type TEXT;
@@ -94,7 +95,26 @@ BEGIN
       ALTER COLUMN "type" SET NOT NULL,
       ALTER COLUMN "type" SET DEFAULT 'Include'::"SlotCustomType";
 
-  -- Case (c): already enum — skip
+  ELSIF col_type = 'USER-DEFINED' THEN
+    -- Case (c): column is an old/wrong enum type — migrate via temp column
+    -- (Direct enum-to-enum cast fails; dropping CASCADE removes the column too,
+    --  so we copy data out, drop the column, then recreate with the correct type.)
+    ALTER TABLE "SlotCustomDate" ADD COLUMN "type_temp" TEXT;
+    UPDATE "SlotCustomDate" SET "type_temp" = "type"::TEXT;
+    ALTER TABLE "SlotCustomDate" DROP COLUMN "type";
+    BEGIN
+      DROP TYPE IF EXISTS slotcustomtype;
+    EXCEPTION WHEN OTHERS THEN
+      NULL; -- old enum already gone, continue
+    END;
+    ALTER TABLE "SlotCustomDate"
+      ADD COLUMN "type" "SlotCustomType" NOT NULL DEFAULT 'Include'::"SlotCustomType";
+    UPDATE "SlotCustomDate"
+      SET "type" = "type_temp"::"SlotCustomType"
+      WHERE "type_temp" IS NOT NULL;
+    ALTER TABLE "SlotCustomDate" DROP COLUMN "type_temp";
+
+  -- Case (d): already correct enum — skip
   END IF;
 END$$;
 
