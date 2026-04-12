@@ -8,6 +8,7 @@ import { usePermissions } from '../../context/permissions-context';
 import { getLocationsByBranch } from '../../utils/branch-utils';
 import { getStaffSettings } from '../../context/settings-context';
 import { playNotificationSound } from '../../utils/notification-sound';
+import { useBanner } from '../../context/use-banner';
 
 /**
  * Maps a socket event name to the frontend moduleId that must be enabled for a
@@ -101,6 +102,13 @@ const EVENT_MAP = {
     title: 'Record Update Request',
     message: 'A patient submitted a record update request.',
     refId: data?.recordId ?? null,
+  }),
+  'accountUpdated': (data) => ({
+    type: 'general',
+    route: null,
+    title: 'Account Updated',
+    message: data?._accountUpdateMessage || 'Your role has been updated. The page will reload to apply changes.',
+    refId: data?.timestamp ?? null,
   }),
   'document:submitted': (data) => ({
     type: 'document',
@@ -261,6 +269,17 @@ function persistNotifications(notifications) {
 
 const NotificationContext = createContext(null);
 
+function getSessionUserId() {
+  try {
+    const refreshToken = tokenService.TokenStorage.getRefreshToken();
+    if (!refreshToken || typeof refreshToken !== 'string') return null;
+    const [userId] = refreshToken.split(':');
+    return userId ? String(userId) : null;
+  } catch {
+    return null;
+  }
+}
+
 // Helper function to get allowed locations based on user's branch
 function getAllowedLocations(profile) {
   return getLocationsByBranch(profile?.branch);
@@ -268,7 +287,8 @@ function getAllowedLocations(profile) {
 
 export function StaffNotificationProvider({ children }) {
   const { profile } = useStaffProfile();
-  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
+  const { hasPermission, isLoading: permissionsLoading, refetch: refetchPermissions, branch: permissionBranch } = usePermissions();
+  const { showBanner } = useBanner();
   const [notifications, setNotifications] = useState(() => loadPersistedNotifications());
   const [inventoryAlerts, setInventoryAlerts] = useState([]);
   const [seenInventoryIds, setSeenInventoryIds] = useState(() => loadSeenInventoryIds());
@@ -279,9 +299,16 @@ export function StaffNotificationProvider({ children }) {
   // without closing over stale values from the initial mount.
   const hasPermissionRef = useRef(hasPermission);
   const permissionsLoadingRef = useRef(permissionsLoading);
+  const profileRef = useRef(profile);
+  const refetchPermissionsRef = useRef(refetchPermissions);
+  const permissionBranchRef = useRef(permissionBranch);
   useEffect(() => { hasPermissionRef.current = hasPermission; }, [hasPermission]);
   useEffect(() => { permissionsLoadingRef.current = permissionsLoading; }, [permissionsLoading]);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+  useEffect(() => { refetchPermissionsRef.current = refetchPermissions; }, [refetchPermissions]);
+  useEffect(() => { permissionBranchRef.current = permissionBranch; }, [permissionBranch]);
   const fetchInventoryRef = useRef(null);
+  const accountReloadScheduledRef = useRef(false);
 
   const addNotification = useCallback((event, data) => {
     const factory = EVENT_MAP[event];
@@ -380,6 +407,10 @@ export function StaffNotificationProvider({ children }) {
       console.log('[NOTIFICATION] Socket connected successfully');
       socketRef.current = service;
 
+      // Join user-specific room keyed by authenticated staff userId.
+      // Server also auto-joins this room, but we emit explicitly for clarity.
+      service.emit('notification:join-self', {});
+
       // Join the staff member's branch room so they receive branch-scoped events
       // (appointment:submitted, medicine:request:new, updateTicket)
       service.emit('notification:join-branch', {});
@@ -388,6 +419,18 @@ export function StaffNotificationProvider({ children }) {
       Object.keys(EVENT_MAP).forEach((event) => {
         service.on(event, (data) => {
           if (!isMounted) return;
+
+          // Extra safety: enforce user-targeted scoping for account updates.
+          if (event === 'accountUpdated') {
+            const payloadUserId = data?.userId != null ? String(data.userId) : null;
+            const currentUserId = profileRef.current?.id != null
+              ? String(profileRef.current.id)
+              : getSessionUserId();
+
+            if (payloadUserId && currentUserId && payloadUserId !== currentUserId) {
+              return;
+            }
+          }
 
           // Permission gate: drop the event if the staff does not have the required
           // module permission.  We wait until permissions have finished loading to
@@ -402,7 +445,52 @@ export function StaffNotificationProvider({ children }) {
           }
 
           console.log(`[NOTIFICATION] Received event: ${event}`, data);
-          addNotification(event, data);
+          let accountUpdateMessage = null;
+          if (event === 'accountUpdated') {
+            const currentRole = profileRef.current?.role ?? null;
+            const currentBranch = profileRef.current?.branch ?? permissionBranchRef.current ?? null;
+            const incomingRole = data?.newRole ?? null;
+            const incomingBranch = data?.newBranch ?? null;
+
+            const roleChanged =
+              currentRole != null && incomingRole != null && String(currentRole) !== String(incomingRole);
+            const branchChanged =
+              currentBranch != null && incomingBranch != null && String(currentBranch) !== String(incomingBranch);
+
+            if (roleChanged) {
+              accountUpdateMessage = 'Your role has been updated. The page will reload to apply changes.';
+            } else if (branchChanged) {
+              accountUpdateMessage = 'Your branch assignment has been updated. The page will reload to apply changes.';
+            } else {
+              // Fallback when local profile/permissions are stale or still loading.
+              accountUpdateMessage = 'Your role has been updated. The page will reload to apply changes.';
+            }
+          }
+
+          addNotification(event, accountUpdateMessage ? { ...data, _accountUpdateMessage: accountUpdateMessage } : data);
+
+          if (event === 'accountUpdated') {
+            showBanner({
+              message: accountUpdateMessage || 'Your role has been updated. The page will reload to apply changes.',
+              type: 'info',
+              duration: 4000,
+            });
+
+            if (!accountReloadScheduledRef.current) {
+              accountReloadScheduledRef.current = true;
+
+              Promise.resolve(refetchPermissionsRef.current?.())
+                .catch(() => {
+                  // Ignore refresh errors; a forced reload runs below.
+                })
+                .finally(() => {
+                  window.setTimeout(() => {
+                    window.location.reload();
+                  }, 4000);
+                });
+            }
+          }
+
           const subs = subscribersRef.current[event];
           if (subs) subs.forEach((cb) => cb(data));
         });

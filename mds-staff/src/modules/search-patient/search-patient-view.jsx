@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense, useMemo } from 'react';
 import { searchPatients } from '../../services/patient-search-service';
 import { usePatientTabs } from '../../context/patient-tabs-context';
-import { useStaffProfile } from '../../hooks/use-staff-profile';
+import { usePermissions } from '../../context/permissions-context';
 import SearchBar from './components/search-bar';
 import SearchResultsList from './components/search-results-list';
 
@@ -18,13 +18,15 @@ const TabLoader = () => (
 
 export default function SearchPatientView() {
   const { tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch, reorderTabs } = usePatientTabs();
-  const { profile } = useStaffProfile();
+  const { branch: roleBranch, isLoading: permissionsLoading } = usePermissions();
 
   // ── Search state ────────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults]       = useState([]);
   const [isLoading, setIsLoading]   = useState(false);
   const [error, setError]           = useState(null);
+  const [authError, setAuthError]   = useState(null);
+  const [enforcedBranch, setEnforcedBranch] = useState(null);
   const [hasFired, setHasFired]     = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [searchType, setSearchType] = useState('all');
@@ -37,6 +39,20 @@ export default function SearchPatientView() {
     if (searchType === 'superior') return ['Superior'];
     return null;
   }, [searchType]);
+
+  // Resolve authoritative branch from authenticated RoleManagement context.
+  useEffect(() => {
+    if (permissionsLoading) return;
+
+    if (!roleBranch) {
+      setEnforcedBranch(null);
+      setAuthError('Unauthorized: your staff branch/designation is missing. Please contact an administrator.');
+      return;
+    }
+
+    setEnforcedBranch(roleBranch);
+    setAuthError(null);
+  }, [roleBranch, permissionsLoading]);
 
   // ── Drag-to-reorder state ─────────────────────────────────────────────────
   const [draggedTabId, setDraggedTabId] = useState(null);
@@ -58,6 +74,20 @@ export default function SearchPatientView() {
       return;
     }
 
+    // Never allow branch to be supplied by user input in this component.
+    if (permissionsLoading) {
+      setIsLoading(false);
+      return;
+    }
+
+    if (authError || !enforcedBranch) {
+      setResults([]);
+      setHasFired(true);
+      setFocusedIdx(-1);
+      setIsLoading(false);
+      return;
+    }
+
     // Show loader immediately while waiting for debounce
     setIsLoading(true);
     setHasFired(true);
@@ -66,7 +96,7 @@ export default function SearchPatientView() {
 
     const timer = setTimeout(async () => {
       try {
-        const data = await searchPatients(trimmed, 15, profile?.branch || null, selectedIdentities);
+        const data = await searchPatients(trimmed, 15, enforcedBranch, selectedIdentities);
         setResults(data);
       } catch (err) {
         setError(err.message || 'Search failed');
@@ -77,7 +107,7 @@ export default function SearchPatientView() {
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, profile?.branch, selectedIdentities]);
+  }, [searchTerm, selectedIdentities, permissionsLoading, authError, enforcedBranch]);
 
   // Backend now receives identity filters directly; keep result set as-is.
   const filtered = results;
@@ -218,9 +248,9 @@ export default function SearchPatientView() {
             />
 
             {/* Error message */}
-            {error && (
+            {(authError || error) && (
               <div className="bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg p-3 text-sm text-error-700 dark:text-error-400">
-                {error}
+                {authError || error}
               </div>
             )}
 

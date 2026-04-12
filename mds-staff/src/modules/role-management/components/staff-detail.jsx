@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { updateStaffAccount, fetchTemplates } from '../staff-service';
 import ActivityLog from './activity-log';
+import { useBanner } from '../../../context/use-banner';
+import ConfirmationModal from '../../../components/modals/ConfirmationModal.jsx';
 
 /**
  * Staff Detail Component
@@ -9,6 +11,7 @@ import ActivityLog from './activity-log';
  * Permissions are template-only — no per-staff overrides.
  */
 const StaffDetail = ({ staff, onClose, onSave }) => {
+  const { showBanner } = useBanner();
   const isPending = staff.status === 'Pending';
 
   const [activeTab, setActiveTab] = useState('info');
@@ -21,6 +24,7 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
   const [hasChanges, setHasChanges] = useState(isPending);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [showAccountUpdateConfirm, setShowAccountUpdateConfirm] = useState(false);
 
   // Load templates from backend
   useEffect(() => {
@@ -35,12 +39,19 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
     setHasChanges(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (confirmedAccountUpdate = false) => {
     setSaveError(null);
-    setIsSaving(true);
     try {
       const roleChanged = role !== originalRole;
       const branchChanged = branch !== originalBranch;
+
+      if (!confirmedAccountUpdate) {
+        setShowAccountUpdateConfirm(true);
+        return;
+      }
+
+      setIsSaving(true);
+
       const result = await updateStaffAccount(
         staff.id,
         status,
@@ -51,6 +62,13 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
       const updatedStaff = result.staff
         ? result.staff
         : { ...staff, role, status, branch };
+
+      showBanner({
+        type: 'success',
+        message: 'Staff account updated and staff notified.',
+        duration: 5000,
+      });
+
       onSave(updatedStaff);
       setHasChanges(false);
     } catch (err) {
@@ -283,6 +301,21 @@ const StaffDetail = ({ staff, onClose, onSave }) => {
           </div>
         )}
       </div>
+
+      <ConfirmationModal
+        isOpen={showAccountUpdateConfirm}
+        onClose={() => setShowAccountUpdateConfirm(false)}
+        onConfirm={async () => {
+          setShowAccountUpdateConfirm(false);
+          await handleSave(true);
+        }}
+        title="Confirm Account Update"
+        message="Updating this account will notify the staff and reload their page."
+        description="Proceed with account update?"
+        confirmText="Update Account"
+        cancelText="Cancel"
+        variant="primary"
+      />
     </div>
   );
 };

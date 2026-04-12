@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { fetchStaffAccounts as fetchStaffAccountsAPI, searchUsers, createMedicalPersonnel, fetchTemplates, updateStaffAccount } from '../staff-service';
 import StaffDetail from './staff-detail';
+import { useBanner } from '../../../context/use-banner';
+import ConfirmationModal from '../../../components/modals/ConfirmationModal.jsx';
 
 /**
  * Staff Accounts Component
@@ -10,6 +12,7 @@ import StaffDetail from './staff-detail';
  */
 
 const StaffAccounts = ({ onRoleUpdate = null }) => {
+  const { showBanner } = useBanner();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [filterRole, setFilterRole] = useState('all');
@@ -36,6 +39,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
   // Inline dropdown state for table cells
   const [openDropdown, setOpenDropdown] = useState(null); // { staffId, field: 'role'|'branch'|'status' }
   const [cellLoading, setCellLoading] = useState(null); // { staffId, field }
+  const [pendingAccountUpdate, setPendingAccountUpdate] = useState(null); // { staffId, field, role?, templateId?, designation?, status? }
   const dropdownRef = useRef(null);
 
   // Close dropdown on click outside
@@ -73,6 +77,13 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
       const result = await updateStaffAccount(staffId, params.status, params.role, params.templateId, params.designation);
       if (result.staff) {
         setStaffList(prev => prev.map(s => s.id === staffId ? result.staff : s));
+
+        showBanner({
+          type: 'success',
+          message: 'Staff account updated and staff notified.',
+          duration: 5000,
+        });
+
         // Refresh all staff permissions after role change
         if (onRoleUpdate && field === 'role') {
           await onRoleUpdate();
@@ -84,7 +95,7 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
     } finally {
       setCellLoading(null);
     }
-  }, [onRoleUpdate]);
+  }, [onRoleUpdate, showBanner]);
 
   // Load templates on mount for role display & filtering
   useEffect(() => {
@@ -358,8 +369,12 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                               {templates.filter(t => t.label !== s.role).map(t => (
                                 <button
                                   key={t.id}
-                                  onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'role', t.label, t.id); }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenDropdown(null);
+                                    setPendingAccountUpdate({ staffId: s.id, field: 'role', role: t.label, templateId: t.id });
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                                 >
                                   {t.label}
                                 </button>
@@ -403,7 +418,11 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                               {['Manila', 'QuezonCity', 'Both'].filter(b => b !== s.branch).map(b => (
                                 <button
                                   key={b}
-                                  onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'branch', b); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenDropdown(null);
+                                    setPendingAccountUpdate({ staffId: s.id, field: 'branch', designation: b });
+                                  }}
                                 className="w-full text-left px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                               >
                                   {b === 'QuezonCity' ? 'Quezon City' : b === 'Both' ? 'MLA & QC (Both)' : b}
@@ -447,7 +466,11 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
                                 return (
                                   <button
                                     key={st}
-                                    onClick={(e) => { e.stopPropagation(); handleCellUpdate(s.id, 'status', st); }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenDropdown(null);
+                                      setPendingAccountUpdate({ staffId: s.id, field: 'status', status: st });
+                                    }}
                                     className="w-full text-left px-3 py-1.5 text-xs text-secondary-700 dark:text-neutral-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors flex items-center gap-1.5"
                                   >
                                     <span className={`w-1.5 h-1.5 rounded-full ${stc.dot}`} />
@@ -737,6 +760,30 @@ const StaffAccounts = ({ onRoleUpdate = null }) => {
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={!!pendingAccountUpdate}
+        onClose={() => setPendingAccountUpdate(null)}
+        onConfirm={async () => {
+          if (!pendingAccountUpdate) return;
+          const { staffId, field, role, templateId, designation, status } = pendingAccountUpdate;
+          setPendingAccountUpdate(null);
+
+          if (field === 'role') {
+            await handleCellUpdate(staffId, 'role', role, templateId);
+          } else if (field === 'branch') {
+            await handleCellUpdate(staffId, 'branch', designation);
+          } else if (field === 'status') {
+            await handleCellUpdate(staffId, 'status', status);
+          }
+        }}
+        title="Confirm Account Update"
+        message="Updating this account will notify the staff and reload their page."
+        description="Proceed with account update?"
+        confirmText="Update Account"
+        cancelText="Cancel"
+        variant="primary"
+      />
     </div>
   );
 };
