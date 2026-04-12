@@ -31,7 +31,7 @@ const Query = {
       logger.warn("Unauthorized medicine request view attempt by staff " + user.id);
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
-    return await Wrapper.Query._getAvailableMedicine(_, args, { res });
+    return await Wrapper.Query._getAvailableMedicine(_, args, { user, res });
   },
 
   getMedicineRequestById: async (_, args, { user, res }) => {
