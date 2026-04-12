@@ -3,6 +3,7 @@ const { throwGraphQLError } = require("../../../../utils/graphql-helper.js");
 const { promoteFile } = require("../../../../config/multer.js");
 const { emitToRoom, emitToRole, notifyUser } = require("../../../../config/sockets");
 const { isMedicalPermitted, permissions: medPermissions } = require("../../../../services/permit.js");
+const logger = require("../../../../utils/logger.js");
 const {
   calculateExpiryDate,
   isChatExpired,
