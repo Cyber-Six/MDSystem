@@ -681,10 +681,11 @@ async function scanAllRefreshSessionsWithMeta() {
 
   for await (const rawKey of client.scanIterator({ match: pattern, count: batchSize })) {
     const key = rawKey.toString();
-
+    logger.debug("Scanning Redis key", { key });
+    
     // Skip non-session keys (e.g., rt:fail:*, rt:lock:*).
     const parts = key.split(':');
-    if (parts.length !== 3) continue;
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds < -1) continue;
 
     batch.push(key);
     if (batch.length >= batchSize) {
