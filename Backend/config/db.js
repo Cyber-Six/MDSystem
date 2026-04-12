@@ -11,6 +11,13 @@ const logger = require('../utils/logger.js');
 // YYYY-MM-DD string so all date comparisons on the frontend are timezone-safe.
 types.setTypeParser(1082, val => val);
 
+// For plain TIMESTAMP (OID 1114), return as string without timezone conversion.
+// Plain TIMESTAMP values are stored as local time (e.g., "2026-04-14 21:00:00")
+// If parsed as a JavaScript Date, the pg driver interprets it as UTC, causing
+// an 8-hour offset on UTC+8 systems. Return the string as-is to preserve the
+// stored value without reinterpretation.
+types.setTypeParser(1114, val => val);
+
 // Set up a PostgreSQL connection pool using config.js
 const pool = new Pool({
   host: dbConfig.host,

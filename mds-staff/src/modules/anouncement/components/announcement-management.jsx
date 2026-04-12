@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   fetchAllAnnouncementsAdmin,
+  fetchAnnouncementById,
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
@@ -8,6 +9,17 @@ import {
 } from '../announcement-service';
 import { axiosRequest } from '../../../packages-core-adapter';
 import { usePermissions } from '../../../context/permissions-context';
+import {
+  formatAnnouncementDate,
+  formatAnnouncementDateTime,
+  getAnnouncementTimeZone,
+  getLocalMinDateTime,
+  isPastLocalDateTime,
+  toLocal,
+  toUTC,
+} from '../timezoneUtils';
+
+const ANNOUNCEMENT_DETAILS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /* Authenticated image loader — media endpoints require JWT */
 function AuthImage({ path, alt, className, onClick }) {
@@ -53,45 +65,6 @@ function ImageLightbox({ src, onClose }) {
   );
 }
 
-const padDateTimePart = (value) => String(value).padStart(2, '0');
-
-const toDateTimeLocalValue = (value) => {
-  try {
-    if (!value) return '';
-    
-    // The backend stores times as "2026-04-11T01:47:00.000Z" where the time represents local time
-    // Extract just the date and time portion to display in datetime-local input
-    const stringValue = typeof value === 'string' ? value : String(value || '');
-    const match = stringValue.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-    if (!match) return '';
-    
-    return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
-  } catch (err) {
-    console.error('Error in toDateTimeLocalValue:', err);
-    return '';
-  }
-};
-
-const toIsoDateTimeOrNull = (value) => {
-  try {
-    if (!value) return null;
-    
-    // datetime-local input format: "YYYY-MM-DDTHH:mm"
-    // Send local time as-is to backend (don't convert to UTC)
-    // This ensures the backend receives exactly what the user selected
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-    if (!match) return null;
-    
-    const [, year, month, day, hours, minutes] = match;
-    
-    // Format as ISO string without Z (timestamp format, not TIMESTAMPTZ)
-    return `${year}-${month}-${day}T${hours}:${minutes}:00.000`;
-  } catch (err) {
-    console.error('Error in toIsoDateTimeOrNull:', err);
-    return null;
-  }
-};
-
 /**
  * Announcement Management Component
  * Staff interface to manage announcements (CRUD)
@@ -103,6 +76,9 @@ const AnnouncementManagement = () => {
   const [error, setError] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [expandedAnnouncementId, setExpandedAnnouncementId] = useState(null);
+  const [detailsLoadingId, setDetailsLoadingId] = useState(null);
+  const [announcementDetailsCache, setAnnouncementDetailsCache] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [stagedFileId, setStagedFileId] = useState(null);
@@ -114,6 +90,7 @@ const AnnouncementManagement = () => {
   const fileInputRef = React.useRef(null);
   // Use staffBranch from usePermissions() — already sourced from MedicalPersonnel.designation (authoritative)
   const effectiveBranch = staffBranch || 'Both';
+  const clientTimeZone = getAnnouncementTimeZone();
 
   // Compute allowed location options based on branch.
   // Manila and QuezonCity staff can also create/manage 'All Branches' announcements.
@@ -151,8 +128,29 @@ const AnnouncementManagement = () => {
   const loadAnnouncements = async () => {
     try {
       setIsLoading(true);
-      const { data, branch: responseBranch } = await fetchAllAnnouncementsAdmin();
+      const { data } = await fetchAllAnnouncementsAdmin();
       setAnnouncements(data);
+      setAnnouncementDetailsCache((previousCache) => {
+        const nextCache = { ...previousCache };
+
+        data.forEach((announcement) => {
+          const existingEntry = nextCache[announcement.id];
+          if (existingEntry) {
+            nextCache[announcement.id] = {
+              ...existingEntry,
+              data: mergeAnnouncementDetails(announcement, existingEntry.data),
+            };
+          } else {
+            nextCache[announcement.id] = {
+              data: mergeAnnouncementDetails(announcement, announcement),
+              fetchedAt: 0,
+              hasFullDetails: false,
+            };
+          }
+        });
+
+        return nextCache;
+      });
       setError(null);
       setIsPermissionDenied(false);
     } catch (err) {
@@ -164,6 +162,81 @@ const AnnouncementManagement = () => {
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const mergeAnnouncementDetails = (baseAnnouncement, detailedAnnouncement) => ({
+    id: detailedAnnouncement?.id ?? baseAnnouncement?.id,
+    label: detailedAnnouncement?.label ?? baseAnnouncement?.label ?? '',
+    description: detailedAnnouncement?.description ?? baseAnnouncement?.description ?? '',
+    pubmat: detailedAnnouncement?.pubmat ?? baseAnnouncement?.pubmat ?? null,
+    isActive: detailedAnnouncement?.isActive ?? baseAnnouncement?.isActive ?? true,
+    location: detailedAnnouncement?.location ?? baseAnnouncement?.location ?? 'Both',
+    created_at: detailedAnnouncement?.created_at ?? baseAnnouncement?.created_at ?? null,
+    viewableUntil: detailedAnnouncement?.viewableUntil ?? baseAnnouncement?.viewableUntil ?? null,
+  });
+
+  const isDetailsCacheStale = (cacheEntry) => {
+    if (!cacheEntry?.fetchedAt) return true;
+    return (Date.now() - cacheEntry.fetchedAt) > ANNOUNCEMENT_DETAILS_CACHE_TTL_MS;
+  };
+
+  const setAnnouncementDetailsCacheEntry = (announcementId, details, options = {}) => {
+    const {
+      hasFullDetails = true,
+      fetchedAt = Date.now(),
+    } = options;
+
+    setAnnouncementDetailsCache((previousCache) => ({
+      ...previousCache,
+      [announcementId]: {
+        data: details,
+        fetchedAt,
+        hasFullDetails,
+      },
+    }));
+  };
+
+  const ensureAnnouncementDetails = async (announcementSummary, options = {}) => {
+    const { forceRefresh = false } = options;
+    if (!announcementSummary?.id) return announcementSummary;
+
+    const cacheEntry = announcementDetailsCache[announcementSummary.id];
+    const requiresFetch = forceRefresh
+      || !cacheEntry
+      || !cacheEntry.hasFullDetails
+      || isDetailsCacheStale(cacheEntry);
+
+    if (!requiresFetch) {
+      return cacheEntry.data;
+    }
+
+    setDetailsLoadingId(announcementSummary.id);
+    try {
+      const fetchedAnnouncement = await fetchAnnouncementById(announcementSummary.id);
+      const mergedAnnouncement = mergeAnnouncementDetails(announcementSummary, fetchedAnnouncement);
+
+      setAnnouncementDetailsCacheEntry(announcementSummary.id, mergedAnnouncement, {
+        hasFullDetails: true,
+      });
+
+      return mergedAnnouncement;
+    } catch (err) {
+      const fallbackAnnouncement = mergeAnnouncementDetails(
+        announcementSummary,
+        cacheEntry?.data,
+      );
+
+      // Cache fallback details after a fetch attempt to avoid unnecessary refetches until stale.
+      setAnnouncementDetailsCacheEntry(announcementSummary.id, fallbackAnnouncement, {
+        hasFullDetails: true,
+      });
+
+      return fallbackAnnouncement;
+    } finally {
+      setDetailsLoadingId((currentId) => (
+        currentId === announcementSummary.id ? null : currentId
+      ));
     }
   };
 
@@ -241,24 +314,55 @@ const AnnouncementManagement = () => {
     setExistingPubmat(null);
   };
 
-  const handleEdit = (announcement) => {
+  const handleEdit = async (announcement) => {
     try {
+      const detailedAnnouncement = await ensureAnnouncementDetails(announcement);
+
       setFormData({
-        label: announcement.label || '',
-        description: announcement.description || '',
-        isActive: announcement.isActive !== false,
-        location: announcement.location || 'Both',
-        viewableUntil: announcement.viewableUntil ? toDateTimeLocalValue(announcement.viewableUntil) : '',
+        label: detailedAnnouncement.label || '',
+        description: detailedAnnouncement.description || '',
+        isActive: detailedAnnouncement.isActive !== false,
+        location: detailedAnnouncement.location || 'Both',
+        viewableUntil: detailedAnnouncement.viewableUntil
+          ? toLocal(detailedAnnouncement.viewableUntil, clientTimeZone)
+          : '',
       });
-      setEditingId(announcement.id);
+      setEditingId(detailedAnnouncement.id);
       setStagedFileId(null);
       setImagePreview(null);
-      setExistingPubmat(announcement.pubmat || null);
+      setExistingPubmat(detailedAnnouncement.pubmat || null);
       setIsFormOpen(false);
+      setExpandedAnnouncementId(detailedAnnouncement.id);
     } catch (err) {
       console.error('Error in handleEdit:', err);
       setError('Failed to open edit form. Please try again.');
     }
+  };
+
+  const toggleExpandedAnnouncement = async (announcement) => {
+    if (!announcement?.id) return;
+
+    if (expandedAnnouncementId === announcement.id) {
+      if (editingId === announcement.id) {
+        setEditingId(null);
+        setStagedFileId(null);
+        setImagePreview(null);
+        setExistingPubmat(null);
+      }
+      setExpandedAnnouncementId(null);
+      return;
+    }
+
+    if (editingId && editingId !== announcement.id) {
+      setEditingId(null);
+      setStagedFileId(null);
+      setImagePreview(null);
+      setExistingPubmat(null);
+    }
+
+    setIsFormOpen(false);
+    setExpandedAnnouncementId(announcement.id);
+    await ensureAnnouncementDetails(announcement);
   };
 
   const handleSubmit = async (e) => {
@@ -266,14 +370,18 @@ const AnnouncementManagement = () => {
     try {
       setIsSaving(true);
       setError(null);
+      const editedAnnouncementId = editingId;
 
-      const normalizedViewableUntil = toIsoDateTimeOrNull(formData.viewableUntil);
+      const normalizedViewableUntil = formData.viewableUntil
+        ? toUTC(formData.viewableUntil, clientTimeZone)
+        : null;
+
       if (formData.viewableUntil && !normalizedViewableUntil) {
-        setError('Viewable Until must be a valid date and time.');
+        setError(`Viewable Until must be a valid date and time in ${clientTimeZone}.`);
         return;
       }
 
-      if (normalizedViewableUntil && new Date(normalizedViewableUntil) <= new Date()) {
+      if (formData.viewableUntil && isPastLocalDateTime(formData.viewableUntil, clientTimeZone)) {
         setError('Viewable Until must be a future date and time.');
         return;
       }
@@ -284,15 +392,28 @@ const AnnouncementManagement = () => {
         viewableUntil: normalizedViewableUntil,
       };
 
-      if (editingId) {
-        await updateAnnouncement(editingId, payload);
+      let savedAnnouncement;
+
+      if (editedAnnouncementId) {
+        savedAnnouncement = await updateAnnouncement(editedAnnouncementId, payload);
       } else {
-        await createAnnouncement(payload);
+        savedAnnouncement = await createAnnouncement(payload);
+      }
+
+      if (savedAnnouncement?.id) {
+        const normalizedDetails = mergeAnnouncementDetails(savedAnnouncement, savedAnnouncement);
+        setAnnouncementDetailsCacheEntry(savedAnnouncement.id, normalizedDetails, {
+          hasFullDetails: true,
+        });
       }
 
       resetForm();
       setIsFormOpen(false);
       await loadAnnouncements();
+
+      if (editedAnnouncementId) {
+        setExpandedAnnouncementId(null);
+      }
     } catch (err) {
       setError(err.message || 'Failed to save announcement');
       console.error(err);
@@ -313,6 +434,7 @@ const AnnouncementManagement = () => {
     try {
       setIsSaving(true);
       await deleteAnnouncement(id);
+      setExpandedAnnouncementId((currentId) => (currentId === id ? null : currentId));
       await loadAnnouncements();
     } catch (err) {
       setError(err.message || 'Failed to delete announcement');
@@ -323,8 +445,13 @@ const AnnouncementManagement = () => {
   };
 
   const handleCancelForm = () => {
+    const editedAnnouncementId = editingId;
     resetForm();
     setIsFormOpen(false);
+
+    if (editedAnnouncementId) {
+      setExpandedAnnouncementId(editedAnnouncementId);
+    }
   };
 
   const renderAnnouncementForm = ({ mode = 'create' } = {}) => {
@@ -494,7 +621,7 @@ const AnnouncementManagement = () => {
                 name="viewableUntil"
                 value={formData.viewableUntil}
                 onChange={handleInputChange}
-                min={toDateTimeLocalValue(new Date(Date.now() + 60000))}
+                min={getLocalMinDateTime(clientTimeZone, 1)}
                 className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded text-sm bg-white dark:bg-neutral-700 text-secondary-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               {formData.viewableUntil && (
@@ -507,8 +634,13 @@ const AnnouncementManagement = () => {
                 </button>
               )}
             </div>
+            {error && (
+              <p className="text-xs text-warning-600 dark:text-warning-400 mt-2">
+                ⚠ {error}
+              </p>
+            )}
             <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-1">
-              Leave blank to keep this announcement visible indefinitely.
+              Timezone: {clientTimeZone}. Leave blank to keep this announcement visible indefinitely.
             </p>
           </div>
 
@@ -592,6 +724,7 @@ const AnnouncementManagement = () => {
             }
             resetForm();
             setIsFormOpen(true);
+            setExpandedAnnouncementId(null);
           }}
           className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded transition-colors"
         >
@@ -600,7 +733,7 @@ const AnnouncementManagement = () => {
       </div>
 
       {/* Error Message */}
-      {error && (
+      {error && !isFormOpen && !editingId && (
         <div className="p-3 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded text-sm text-error-700 dark:text-error-400">
           {error}
         </div>
@@ -624,56 +757,171 @@ const AnnouncementManagement = () => {
         ) : (
           <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
             {visibleAnnouncements.map((announcement) => (
+              (() => {
+                const cachedDetails = announcementDetailsCache[announcement.id]?.data;
+                const announcementDetails = cachedDetails || announcement;
+                const isExpanded = expandedAnnouncementId === announcement.id;
+                const isLoadingExpandedDetails = detailsLoadingId === announcement.id;
+
+                return (
               <div
                 key={announcement.id}
-                className="p-4 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                onClick={() => toggleExpandedAnnouncement(announcement)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleExpandedAnnouncement(announcement);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExpanded}
+                className={`p-4 transition-colors cursor-pointer ${
+                  isExpanded
+                    ? 'bg-neutral-100 dark:bg-neutral-700/60'
+                    : 'hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h3 className="text-sm font-semibold text-secondary-800 dark:text-white">
-                        {announcement.label}
+                        {announcementDetails.label}
                       </h3>
                       <span
                         className={`px-2 py-0.5 text-xs font-medium rounded ${
-                          announcement.isActive
+                          announcementDetails.isActive
                             ? 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400'
                             : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-400'
                         }`}
                       >
-                        {announcement.isActive ? 'Active' : 'Inactive'}
+                        {announcementDetails.isActive ? 'Active' : 'Inactive'}
                       </span>
                       <span
                         className={`px-2 py-0.5 text-xs font-medium rounded ${
-                          announcement.location === 'Manila'
+                          announcementDetails.location === 'Manila'
                             ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                            : announcement.location === 'QuezonCity'
+                            : announcementDetails.location === 'QuezonCity'
                             ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
                             : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400'
                         }`}
                       >
-                        {announcement.location === 'Manila'
+                        {announcementDetails.location === 'Manila'
                           ? 'Manila'
-                          : announcement.location === 'QuezonCity'
+                          : announcementDetails.location === 'QuezonCity'
                           ? 'Quezon City'
                           : 'All Branches'}
                       </span>
+                      <span className="text-[11px] font-medium text-secondary-500 dark:text-neutral-400">
+                        {isExpanded ? 'Hide details' : 'View details'}
+                      </span>
                     </div>
-                    <p className="text-xs text-secondary-600 dark:text-neutral-400 line-clamp-2 mb-1">
-                      {announcement.description}
+                    <p className={`text-xs text-secondary-600 dark:text-neutral-400 mb-1 ${
+                      isExpanded
+                        ? 'whitespace-pre-wrap leading-relaxed'
+                        : 'line-clamp-2'
+                    }`}>
+                      {announcementDetails.description}
                     </p>
                     <p className="text-xs text-secondary-500 dark:text-neutral-500">
-                      Posted: {new Date(announcement.created_at).toLocaleDateString()}
+                      Posted: {formatAnnouncementDate(announcementDetails.created_at, clientTimeZone, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      }) || 'Unknown'}
                     </p>
                     <p className="text-xs text-secondary-500 dark:text-neutral-500">
-                      Viewable Until: {announcement.viewableUntil ? new Date(announcement.viewableUntil).toLocaleString() : 'Indefinite'}
+                      Viewable Until: {announcementDetails.viewableUntil
+                        ? formatAnnouncementDateTime(announcementDetails.viewableUntil, clientTimeZone)
+                        : 'Indefinite'}
                     </p>
+
+                    {isExpanded && isLoadingExpandedDetails && (
+                      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600">
+                        <div className="flex items-center gap-2 text-xs text-secondary-500 dark:text-neutral-400">
+                          <span className="animate-spin w-3.5 h-3.5 border-2 border-primary-500 border-t-transparent rounded-full" />
+                          Loading latest announcement details...
+                        </div>
+                      </div>
+                    )}
+
+                    {isExpanded && editingId !== announcement.id && (
+                      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-secondary-600 dark:text-neutral-300">
+                          <p>
+                            <span className="font-semibold text-secondary-700 dark:text-neutral-200">Visibility:</span>{' '}
+                            {announcementDetails.location === 'Manila'
+                              ? 'Manila'
+                              : announcementDetails.location === 'QuezonCity'
+                                ? 'Quezon City'
+                                : 'All Branches'}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-secondary-700 dark:text-neutral-200">Status:</span>{' '}
+                            {announcementDetails.isActive ? 'Active' : 'Inactive'}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-secondary-700 dark:text-neutral-200">Posted:</span>{' '}
+                            {formatAnnouncementDate(announcementDetails.created_at, clientTimeZone, {
+                              month: 'long',
+                              day: 'numeric',
+                              year: 'numeric',
+                            }) || 'Unknown'}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-secondary-700 dark:text-neutral-200">Viewable Until:</span>{' '}
+                            {announcementDetails.viewableUntil
+                              ? formatAnnouncementDateTime(announcementDetails.viewableUntil, clientTimeZone)
+                              : 'Indefinite'}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-200 mb-1">
+                            Full Description
+                          </p>
+                          <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap leading-relaxed">
+                            {announcementDetails.description || 'No description available'}
+                          </p>
+                        </div>
+
+                        {announcementDetails.pubmat && (
+                          <div>
+                            <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-200 mb-1">
+                              Pubmat
+                            </p>
+                            <AuthImage
+                              path={`/media/record/announcement/${announcementDetails.pubmat}`}
+                              alt={announcementDetails.label || 'Announcement image'}
+                              className="w-full max-h-80 object-contain rounded border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-800 cursor-zoom-in"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLightboxSrc(e.currentTarget.src);
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {isExpanded && editingId === announcement.id && (
+                      <div
+                        className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        {renderAnnouncementForm({ mode: 'edit' })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
                   <div className="flex gap-2 ml-4">
                     <button
-                      onClick={() => handleEdit(announcement)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(announcement);
+                      }}
                       disabled={isSaving}
                       className="p-1.5 text-secondary-500 hover:text-primary-600 dark:text-neutral-400 dark:hover:text-primary-400 transition-colors disabled:opacity-50"
                       title="Edit"
@@ -683,7 +931,10 @@ const AnnouncementManagement = () => {
                       </svg>
                     </button>
                     <button
-                      onClick={() => handleDelete(announcement.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(announcement.id);
+                      }}
                       disabled={isSaving}
                       className="p-1.5 text-secondary-500 hover:text-error-600 dark:text-neutral-400 dark:hover:text-error-400 transition-colors disabled:opacity-50"
                       title="Delete"
@@ -694,13 +945,9 @@ const AnnouncementManagement = () => {
                     </button>
                   </div>
                 </div>
-
-                {editingId === announcement.id && (
-                  <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
-                    {renderAnnouncementForm({ mode: 'edit' })}
-                  </div>
-                )}
               </div>
+                );
+              })()
             ))}
           </div>
         )}
