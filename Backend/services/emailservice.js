@@ -1,4 +1,5 @@
 const { Queue } = require('bullmq');
+const xss = require('xss');
 const { generateOTP } = require('../utils/security.js');
 const { redisConfig } = require('../config/redis.js');
 const logger = require('../utils/logger.js');
@@ -205,15 +206,23 @@ function twoFATemplate(otp) {
  * @param {string}  [options.ctaLink]  - Call-to-action button URL
  */
 function notificationTemplate({ title, message, notes, ctaText, ctaLink }) {
+  // SECURITY: Sanitize all user-supplied fields to prevent stored XSS in emails
+  const safeTitle   = xss(title   || '');
+  const safeMessage = xss(message || '');
+  const safeNotes   = notes   ? xss(notes)   : null;
+  const safeCtaText = ctaText ? xss(ctaText) : null;
+  // SECURITY: Only allow http/https URLs in CTA links to prevent javascript: injection
+  const safeCtaLink = ctaLink && /^https?:\/\//i.test(ctaLink) ? xss(ctaLink) : null;
+
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-      <h2 style="color:#2F4F4F;">${title}</h2>
-      <p>${message}</p>
-      ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
-      ${ctaText && ctaLink
+      <h2 style="color:#2F4F4F;">${safeTitle}</h2>
+      <p>${safeMessage}</p>
+      ${safeNotes ? `<p><strong>Notes:</strong> ${safeNotes}</p>` : ''}
+      ${safeCtaText && safeCtaLink
         ? `<div style="text-align:center; margin: 25px 0;">
-             <a href="${ctaLink}" style="background:#2F4F4F; color:white; padding:12px 25px; text-decoration:none; border-radius:5px; font-weight:bold;">
-               ${ctaText}
+             <a href="${safeCtaLink}" style="background:#2F4F4F; color:white; padding:12px 25px; text-decoration:none; border-radius:5px; font-weight:bold;">
+               ${safeCtaText}
              </a>
            </div>`
         : ''}

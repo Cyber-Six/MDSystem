@@ -8,7 +8,8 @@ to control **how** they receive notifications: via **web** (real-time Socket.IO)
 
 Settings apply globally and per-module, are persisted in the `UsersPreferences`
 table (`notification` JSONB column), cached in Redis, and exposed through the
-existing settings UI in both staff and patient portals.
+existing settings UI in both staff and patient portals, and the React Native
+mobile app (`mds-mobile`).
 
 ---
 
@@ -227,6 +228,33 @@ Full audit of all notification call sites across the codebase. Bugs found and fi
 - **`role:` prefix unused**: `EVENT_MODULE_MAP` maps `role:` to `roleManagement` but no `notifyUser` call currently uses a `role:*` event. The mapping is reserved for future use.
 - **Document/HealthChat events lack `emailNotif`**: 16 `notifyUser` calls pass `null` for `emailNotif`. Email fallback uses auto-generated subject/body from the event name, which is functional but generic. Future work: add module-specific email templates.
 - **Room/role broadcasts bypass preferences**: `emitToRoom` and `emitToRole` (20 call sites) don't check per-user preferences. This is by design — they target active socket rooms, not individual users.
+
+---
+
+### Security Audit — Session 2
+
+Deep audit focused on security and optimizations across the notification pipeline:
+
+| # | Severity | Issue | Fix | Files |
+|---|----------|-------|-----|-------|
+| 7 | **High** | XSS in `notificationTemplate()` — the `xss` npm package was installed in `package.json` but never imported. All 5 user-supplied fields (title, message, notes, ctaText, ctaLink) were injected unsanitized into the HTML email template. | Added `const xss = require('xss')` import. All 5 fields now run through `xss()`. Added URL scheme validation on `ctaLink` (only `http://` and `https://` allowed, defaults to `#`). | `Backend/services/emailservice.js` |
+| 8 | **High** | CTA link injection — `ctaLink` could use `javascript:` or `data:` URI schemes to execute code in email clients. | Added scheme allowlist check (`http://` or `https://`), non-matching URLs replaced with `#`. | `Backend/services/emailservice.js` |
+| 9 | **Medium** | 9 `notifyUser()` calls in health-chat `wrapper.js` were fire-and-forget without `.catch()`, risking unhandled promise rejections that could crash the Node.js process. | Added `.catch(err => logger.error(...))` to all 9 calls. | `Backend/routes/health-chat/resolvers/wrapper/wrapper.js` |
+| 10 | **Medium** | No message length validation on staff broadcast routes (`/notify-staffs`, `/notify-patients`). A malicious or buggy client could send arbitrarily large payloads. | Added `typeof message !== 'string' \|\| message.length > 2000` validation returning 400. | `Backend/routes/staff/notifications.js` |
+| 11 | **Low** | Patient sound-toggle section showed "Inventory Alerts" label — meaningless for patients. | Removed `inventory` from `MODULE_LABELS` (sound toggles). | `mds-patient/src/modules/settings/patient-settings.jsx` |
+
+---
+
+### mds-mobile Implementation — Session 2
+
+Extended notification preferences to the React Native mobile app:
+
+| Component | File | Description |
+|-----------|------|-------------|
+| **SettingsContext** | `mds-mobile/src/context/SettingsContext.tsx` | New context: AsyncStorage persistence, per-user hashed keys, GET/PATCH server sync, sanitization, `NOTIFICATION_MODULE_KEYS` (6 modules, excludes inventory/roleManagement). |
+| **SettingsScreen** | `mds-mobile/src/screens/more/SettingsScreen.tsx` | Complete rewrite: appearance + notification toggles + notification channels (global push/email/emailFallback) + per-module overrides with expandable section. |
+| **App.tsx** | `mds-mobile/App.tsx` | Added `SettingsProvider` to provider hierarchy. |
+| **HealthChatNotificationProvider** | `mds-mobile/src/context/HealthChatNotificationProvider.tsx` | Integrated `useSettings()`: `handleEvent()` now accepts `moduleKey`, checks `isModuleWebEnabled()` before showing local push notifications, respects `showBanners` toggle. |
 
 ---
 

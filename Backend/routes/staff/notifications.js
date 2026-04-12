@@ -64,10 +64,17 @@ router.post('/notify-staffs', jwtProtect('medical'), async (req, res) => {
 
     const { message, recipientIds } = req.body;
 
-    if (!message) {
+    if (!message || typeof message !== 'string') {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
         message: 'Message is required'
+      });
+    }
+
+    if (message.length > 2000) {
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: 'Message must not exceed 2000 characters'
       });
     }
 
@@ -151,10 +158,17 @@ router.post('/notify-patients', jwtProtect('medical'), async (req, res) => {
 
     const { message, recipientIds } = req.body;
 
-    if (!message) {
+    if (!message || typeof message !== 'string') {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
         message: 'Message is required'
+      });
+    }
+
+    if (message.length > 2000) {
+      return res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: 'Message must not exceed 2000 characters'
       });
     }
 

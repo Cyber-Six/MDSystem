@@ -15,6 +15,7 @@ import { ThemeProvider, useTheme, colors } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { BannerProvider } from './src/context/BannerContext';
 import { RecordStatusProvider } from './src/context/RecordStatusContext';
+import { SettingsProvider } from './src/context/SettingsContext';
 import { HealthChatNotificationProvider } from './src/context/HealthChatNotificationProvider';
 import { AuthScreen } from './src/screens/auth';
 import { MainTabNavigator } from './src/navigation/MainTabNavigator';
@@ -155,11 +156,13 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <RecordStatusProvider>
-            <BannerProvider>
-              <AppContent />
-            </BannerProvider>
-          </RecordStatusProvider>
+          <SettingsProvider>
+            <RecordStatusProvider>
+              <BannerProvider>
+                <AppContent />
+              </BannerProvider>
+            </RecordStatusProvider>
+          </SettingsProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

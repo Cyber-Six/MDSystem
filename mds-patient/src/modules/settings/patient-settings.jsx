@@ -108,7 +108,6 @@ const MODULE_LABELS = {
   healthChat: 'Health Chat',
   appointments: 'Appointments',
   medicineRequests: 'Medicine Requests',
-  inventory: 'Inventory Alerts',
   general: 'General / Announcements',
 };
 
