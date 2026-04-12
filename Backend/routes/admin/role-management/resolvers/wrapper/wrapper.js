@@ -1151,20 +1151,24 @@ const Mutation = {
       // Emission is user-scoped via the user:{id} socket room.
       const updatedRole = updatedStaff?.role ?? role ?? previousRole;
       const updatedBranch = updatedStaff?.branch ?? designation ?? previousBranch;
+      const updatedStatus = updatedStaff?.isActive ? 'Active' : 'Suspended' || status || (targetUser.is_active ? 'Active' : 'Suspended');
+
       const roleChanged = String(updatedRole ?? '') !== String(previousRole ?? '');
       const branchChanged = String(updatedBranch ?? '') !== String(previousBranch ?? '');
+      const statusChanged = String(updatedStatus) !== (targetUser.is_active ? 'Active' : 'Suspended');
 
-      if (roleChanged || branchChanged) {
+      if (roleChanged || branchChanged || statusChanged) {
         const payload = {
           userId: String(userId),
           newRole: updatedRole,
           newBranch: updatedBranch,
+          newStatus: updatedStatus,
           timestamp: new Date().toISOString(),
         };
 
         emitToUser(payload.userId, 'accountUpdated', payload);
         logger.info(
-          `accountUpdated emitted to userId=${payload.userId} (roleChanged=${roleChanged}, branchChanged=${branchChanged})`
+          `accountUpdated emitted to userId=${payload.userId} (roleChanged=${roleChanged}, branchChanged=${branchChanged}, statusChanged=${statusChanged})`
         );
       }
 
