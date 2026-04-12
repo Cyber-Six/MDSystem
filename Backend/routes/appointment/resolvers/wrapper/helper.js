@@ -211,7 +211,7 @@ async function insertSlotCustomDates(slotScheduleId, dates, db) {
     const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
     const type = typeof dateEntry === 'string' ? 'Include' : (dateEntry.type || 'Include');
     values.push(slotScheduleId, scheduledDate, type);
-    return `($${offset + 1}::integer, $${offset + 2}::date, $${offset + 3})`;
+    return `($${offset + 1}::integer, $${offset + 2}::date, $${offset + 3}::"SlotCustomType")`;
   });
 
   const query = `
