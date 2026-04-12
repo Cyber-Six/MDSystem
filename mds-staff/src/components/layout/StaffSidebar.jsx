@@ -33,7 +33,7 @@ const StaffSidebar = ({ isOpen, isExpanded, onClose, onToggleExpand }) => {
     { path: '/health-chat', icon: 'healthchat', label: 'Health Chat', moduleId: 'healthChat' },
     { path: '/notifications', icon: 'notifications', label: 'Send Notification', moduleId: 'sendNotification' },
     { path: '/analytics', icon: 'analytics', label: 'Analytics', moduleId: 'analytics' },
-    { path: '/settings/roles', icon: 'roles', label: 'Role Management', adminOnly: true },
+    { path: '/settings/roles', icon: 'roles', label: 'Administration', adminOnly: true },
   ];
 
   const navItems = useMemo(() => {

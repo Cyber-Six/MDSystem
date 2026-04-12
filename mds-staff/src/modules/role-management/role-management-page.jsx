@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import RoleTemplates from './components/role-templates';
 import StaffAccounts from './components/staff-accounts';
 import AdminTransfer from './components/admin-transfer';
+import PatientManagement from './components/patient-management';
 import { usePermissions } from '../../context/permissions-context';
 
 /**
@@ -12,8 +13,14 @@ import { usePermissions } from '../../context/permissions-context';
  * - Admin Transfer: transfer admin privileges to another staff member
  */
 const RoleManagementPage = () => {
+  const [activeModule, setActiveModule] = useState('roles');
   const [activeSection, setActiveSection] = useState('staff');
   const { refetch: refetchPermissions } = usePermissions();
+
+  const modules = [
+    { id: 'roles', label: 'Role Management', icon: 'shield' },
+    { id: 'patients', label: 'Patient Management', icon: 'patients' },
+  ];
 
   const sections = [
     { id: 'staff', label: 'Staff Accounts', icon: 'users' },
@@ -37,41 +44,76 @@ const RoleManagementPage = () => {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
       </svg>
     ),
+    patients: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7a3 3 0 110 6 3 3 0 010-6zm6 2a2 2 0 110 4 2 2 0 010-4zM2 18a4 4 0 018 0m4 0a3 3 0 016 0" />
+      </svg>
+    ),
   };
 
   return (
-    <div className="space-y-1">
-      {/* Page Header + Tabs in same row */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-3">
+      <div>
         <div>
-          <h2 className="text-lg font-bold text-secondary-900 dark:text-white leading-none m-0">Role Management</h2>
-          <p className="text-[11px] text-secondary-500 dark:text-neutral-400">Manage staff access and permissions across the system</p>
-        </div>
-        {/* Section Tabs */}
-        <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
-          {sections.map((section) => (
-            <button
-              key={section.id}
-              onClick={() => setActiveSection(section.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                activeSection === section.id
-                  ? 'bg-primary-500 text-white shadow-sm'
-                  : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
-              }`}
-            >
-              {sectionIcons[section.icon]}
-              {section.label}
-            </button>
-          ))}
+          <h2 className="text-lg font-bold text-secondary-900 dark:text-white leading-none m-0">Administration</h2>
+          <p className="text-[11px] text-secondary-500 dark:text-neutral-400">Manage staff access, permissions, and patient account analytics</p>
         </div>
       </div>
 
-      {/* Section Content */}
-      <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm border border-neutral-200 dark:border-neutral-700 p-5">
-        {activeSection === 'staff' && <StaffAccounts onRoleUpdate={refetchPermissions} />}
-        {activeSection === 'roles' && <RoleTemplates onTemplateUpdate={refetchPermissions} />}
-        {activeSection === 'transfer' && <AdminTransfer />}
+      <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg w-fit">
+        {modules.map((module) => (
+          <button
+            key={module.id}
+            type="button"
+            onClick={() => setActiveModule(module.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              activeModule === module.id
+                ? 'bg-primary-500 text-white shadow-sm'
+                : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+            }`}
+          >
+            {sectionIcons[module.icon]}
+            {module.label}
+          </button>
+        ))}
       </div>
+
+      {activeModule === 'roles' && (
+        <>
+          <div className="flex items-center justify-end">
+            {/* Section Tabs */}
+            <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
+              {sections.map((section) => (
+                <button
+                  key={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    activeSection === section.id
+                      ? 'bg-primary-500 text-white shadow-sm'
+                      : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
+                  }`}
+                >
+                  {sectionIcons[section.icon]}
+                  {section.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section Content */}
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm border border-neutral-200 dark:border-neutral-700 p-5">
+            {activeSection === 'staff' && <StaffAccounts onRoleUpdate={refetchPermissions} />}
+            {activeSection === 'roles' && <RoleTemplates onTemplateUpdate={refetchPermissions} />}
+            {activeSection === 'transfer' && <AdminTransfer />}
+          </div>
+        </>
+      )}
+
+      {activeModule === 'patients' && (
+        <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm border border-neutral-200 dark:border-neutral-700 p-5">
+          <PatientManagement />
+        </div>
+      )}
     </div>
   );
 };

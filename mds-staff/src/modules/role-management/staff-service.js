@@ -5,6 +5,7 @@
 import { axiosRequest } from '../../packages-core-adapter';
 
 const ENDPOINT = '/rolemanagement/admin';
+const EMR_ENDPOINT = '/emr/medical';
 
 const sendGraphQL = async (query, variables = {}) => {
   let response;
@@ -12,6 +13,22 @@ const sendGraphQL = async (query, variables = {}) => {
     response = await axiosRequest.post(ENDPOINT, { query, variables });
   } catch (err) {
     // Extract GraphQL error message from non-2xx responses when available
+    const gqlMsg = err.response?.data?.errors?.[0]?.message;
+    throw new Error(gqlMsg || err.message || 'Network error');
+  }
+
+  if (response.data.errors) {
+    throw new Error(response.data.errors[0]?.message || 'GraphQL error occurred');
+  }
+
+  return response.data.data;
+};
+
+const sendMedicalGraphQL = async (query, variables = {}) => {
+  let response;
+  try {
+    response = await axiosRequest.post(EMR_ENDPOINT, { query, variables });
+  } catch (err) {
     const gqlMsg = err.response?.data?.errors?.[0]?.message;
     throw new Error(gqlMsg || err.message || 'Network error');
   }
@@ -88,6 +105,58 @@ const GQL_GET_STAFF_ACCOUNT = `
   query GetStaffAccount($userId: ID!) {
     getStaffAccount(userId: $userId) {
       ${STAFF_FIELDS}
+    }
+  }
+`;
+
+const GQL_COUNT_ACTIVE_REFRESH_TOKENS = `
+  query CountActiveRefreshTokens {
+    countActiveRefreshTokens
+  }
+`;
+
+const GQL_LIST_USER_SESSIONS = `
+  query ListUserSessions($offset: Int!, $limit: Int!) {
+    listUserSessions(offset: $offset, limit: $limit) {
+      sessions {
+        userId
+        email
+        role
+        exp
+      }
+      totalCount
+    }
+  }
+`;
+
+const GQL_LIST_STAFF_SESSIONS = `
+  query ListStaffSessions($userId: ID!) {
+    listStaffSessions(userId: $userId) {
+      sessions {
+        deviceId
+        status
+        createdAt
+        updatedAt
+        expiresAt
+        isCurrent
+      }
+      count
+      currentAnchor
+    }
+  }
+`;
+
+const GQL_GET_PATIENT_BASIC_INFO = `
+  query GetPatientBasicInfo($userId: ID!) {
+    getPatientBasicInfo(userId: $userId) {
+      id
+      first_name
+      middle_name
+      last_name
+      suffix
+      branch
+      credentials_status
+      latest_updated_at
     }
   }
 `;
@@ -277,6 +346,28 @@ export const updateStaffAccount = async (userId, status, role, templateId, desig
   const result = data.updateStaffAccount;
   if (result.staff) result.staff = enrichStaff(result.staff);
   return result;
+};
+
+// ─── PATIENT MANAGEMENT (READ-ONLY) ──────────────────────────────────────────
+
+export const fetchActiveRefreshTokenCount = async () => {
+  const data = await sendGraphQL(GQL_COUNT_ACTIVE_REFRESH_TOKENS);
+  return data.countActiveRefreshTokens || 0;
+};
+
+export const fetchUserSessions = async (offset = 0, limit = 10) => {
+  const data = await sendGraphQL(GQL_LIST_USER_SESSIONS, { offset, limit });
+  return data.listUserSessions || { sessions: [], totalCount: 0 };
+};
+
+export const fetchStaffSessions = async (userId) => {
+  const data = await sendGraphQL(GQL_LIST_STAFF_SESSIONS, { userId });
+  return data.listStaffSessions?.sessions || [];
+};
+
+export const fetchPatientBasicInfo = async (userId) => {
+  const data = await sendMedicalGraphQL(GQL_GET_PATIENT_BASIC_INFO, { userId });
+  return data.getPatientBasicInfo || null;
 };
 
 // ─── TEMPLATE OPERATIONS ──────────────────────────────────────────────────────

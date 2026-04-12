@@ -440,8 +440,8 @@ const Query = {
 
   _listStaffSessions: async (_, { userId }, { user, res }) => {
     // Get all refresh sessions for this user from Redis
-    const sessions = await listUserSessions(userId);
-    const currentAnchor = await getStaffAnchor(userId);
+    const sessions = await listUserSessions(String(userId));
+    const currentAnchor = await getStaffAnchor(String(userId));
 
     // Format sessions for GraphQL response
     const formattedSessions = sessions.map(session => ({

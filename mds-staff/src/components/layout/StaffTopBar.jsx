@@ -36,7 +36,7 @@ function formatRelativeTime(iso) {
  * Staff Top Bar Component
  * Contains page title, search, notifications, and user menu
  */
-const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
+const StaffTopBar = ({ onMenuClick }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -72,7 +72,7 @@ const StaffTopBar = ({ onMenuClick, isSidebarOpen }) => {
     if (path.includes('/appointments')) return 'Appointments';
     if (path.includes('/analytics')) return 'Analytics';
     if (path.includes('/inventory')) return 'Inventory';
-    if (path.includes('/settings/roles')) return 'Role Management';
+    if (path.includes('/settings/roles')) return 'Administration';
     if (path.includes('/settings')) return 'Settings';
     return 'Staff Portal';
   };
