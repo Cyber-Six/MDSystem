@@ -643,6 +643,19 @@ async function scanAllRefreshSessionsWithMeta() {
 
   let batch = [];
 
+  const normalizeExecNumber = (value) => {
+    // Some Redis clients/modes may surface pipeline replies as [err, value].
+    if (Array.isArray(value)) {
+      if (value.length === 2) {
+        return Number(value[1]);
+      }
+      if (value.length === 1) {
+        return Number(value[0]);
+      }
+    }
+    return Number(value);
+  };
+
   const flushBatch = async () => {
     if (batch.length === 0) return;
 
@@ -658,18 +671,70 @@ async function scanAllRefreshSessionsWithMeta() {
     const ttlValues = await ttlPipeline.exec();
 
     for (let index = 0; index < keys.length; index += 1) {
+      const key = keys[index];
       const raw = rawValues[index];
       if (!raw) continue;
 
-      const ttlSeconds = Number(ttlValues?.[index]);
-      if (!Number.isFinite(ttlSeconds) || ttlSeconds < -1) continue;
+      const ttlSeconds = normalizeExecNumber(ttlValues?.[index]);
+      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) continue;
 
       try {
         const session = JSON.parse(raw);
         if (!session || typeof session !== 'object') continue;
 
+        const parts = key.split(':');
+        if (parts.length !== 3) continue;
+
+        const [, keyUserId, keyTicket] = parts;
+        if (!keyUserId || !keyTicket) continue;
+
+        const sessionUserId = session.userId !== undefined && session.userId !== null
+          ? String(session.userId)
+          : null;
+
+        if (!sessionUserId) {
+          logger.error('Skipping refresh session with missing userId', { key });
+          continue;
+        }
+
+        if (sessionUserId !== String(keyUserId)) {
+          logger.error('Skipping refresh session due to key/userId mismatch', {
+            key,
+            keyUserId,
+            sessionUserId,
+          });
+          continue;
+        }
+
+        const sessionRefreshToken = session.refreshToken ? String(session.refreshToken) : null;
+        const sessionDeviceId = session.deviceId ? String(session.deviceId) : null;
+
+        if (!sessionRefreshToken && !sessionDeviceId) {
+          logger.error('Skipping refresh session with missing JWT ticket fields', { key, userId: sessionUserId });
+          continue;
+        }
+
+        const refreshTokenMatches = sessionRefreshToken && keyTicket === sessionRefreshToken;
+        const deviceIdMatches = sessionDeviceId && keyTicket === sessionDeviceId;
+
+        if (!refreshTokenMatches && !deviceIdMatches) {
+          logger.error('Skipping refresh session due to JWT ticket mismatch', {
+            key,
+            keyTicket,
+            sessionUserId,
+          });
+          continue;
+        }
+
+        if (!refreshTokenMatches && deviceIdMatches) {
+          logger.warn('Refresh session key uses legacy deviceId ticket format', {
+            key,
+            sessionUserId,
+          });
+        }
+
         records.push({
-          key: keys[index],
+          key,
           ttlSeconds,
           session,
         });
@@ -682,9 +747,11 @@ async function scanAllRefreshSessionsWithMeta() {
   for await (const rawKey of client.scanIterator({ match: pattern, count: batchSize })) {
     const key = rawKey.toString();
 
-    // Skip non-session keys (e.g., rt:fail:*, rt:lock:*).
+    // Include only rt:userId:ticket keys and explicitly exclude rt:fail:* / rt:lock:*.
     const parts = key.split(':');
     if (parts.length !== 3) continue;
+    if (parts[0] !== 'rt') continue;
+    if (parts[1] === 'fail' || parts[1] === 'lock') continue;
 
     batch.push(key);
     if (batch.length >= batchSize) {
