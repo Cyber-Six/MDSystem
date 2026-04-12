@@ -234,6 +234,14 @@ const AvailabilityManager = () => {
     setDayOverrideData(monthAvailability[dateStr] || null);
   };
 
+  // Returns true if dateStr is strictly before today (past date)
+  const isPastDate = (dateStr) => {
+    if (!dateStr) return false;
+    const t = new Date();
+    const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    return normalizeDate(dateStr) < todayStr;
+  };
+
   // Check if a specific date is available (in schedule or custom dates)
   const isDateAvailable = (dateStr) => {
     if (!dateStr || !editForm) return false;
@@ -259,6 +267,10 @@ const AvailabilityManager = () => {
   // Handle adding a date as custom date from DaySlotEditor
   const handleAddCustomDateFromEditor = async (dateStr, morning, afternoon) => {
     if (!activeScheduler?.id) return;
+    if (isPastDate(dateStr)) {
+      setError('Cannot add, create, or change past dates');
+      return;
+    }
     try {
       await setCustomDatesAPI(activeScheduler.id, [{ scheduledDate: dateStr }]);
       await loadCustomDates(activeScheduler.id);
@@ -305,6 +317,10 @@ const AvailabilityManager = () => {
   // Handle saving day override
   const handleSaveDayOverride = async (input) => {
     if (!activeScheduler?.id || !selectedCalendarDate) return;
+    if (isPastDate(selectedCalendarDate)) {
+      setError('Cannot add, create, or change past dates');
+      throw new Error('Cannot add, create, or change past dates');
+    }
     try {
       const updated = await updateDateIdentity(activeScheduler.id, selectedCalendarDate, input);
       setDayOverrideData(updated);
@@ -321,6 +337,10 @@ const AvailabilityManager = () => {
   // Handle editing session limit from calendar inline popup
   const handleEditSessionLimit = async (dateStr, session, value) => {
     if (!activeScheduler?.id) return;
+    if (isPastDate(dateStr)) {
+      setError('Cannot add, create, or change past dates');
+      throw new Error('Cannot add, create, or change past dates');
+    }
     try {
       const input = session === 'morning'
         ? { morningAllowed: value }
@@ -382,6 +402,10 @@ const AvailabilityManager = () => {
   // Handle disabling a date (set both sessions to 0)
   const handleDisableDate = async (dateStr) => {
     if (!activeScheduler?.id || !dateStr) return;
+    if (isPastDate(dateStr)) {
+      setError('Cannot add, create, or change past dates');
+      return;
+    }
     await _withOccupancyCheck(
       dateStr,
       'Disable this date',
@@ -406,6 +430,10 @@ const AvailabilityManager = () => {
   // Handle re-enabling a disabled date (reset to scheduler defaults)
   const handleResetDate = async (dateStr) => {
     if (!activeScheduler?.id || !dateStr) return;
+    if (isPastDate(dateStr)) {
+      setError('Cannot add, create, or change past dates');
+      return;
+    }
     try {
       const result = await updateDateIdentity(activeScheduler.id, dateStr, {
         morningAllowed: activeScheduler.morningAllowed,
@@ -479,6 +507,10 @@ const AvailabilityManager = () => {
   // Handle adding a custom date
   const handleAddCustomDate = async () => {
     if (!customDateInput.scheduledDate) return;
+    if (isPastDate(customDateInput.scheduledDate)) {
+      setError('Cannot add, create, or change past dates');
+      return;
+    }
 
     const morning = customDateInput.morningAllowed === '' || customDateInput.morningAllowed == null
       ? editForm?.morningAllowed ?? 25
@@ -1111,6 +1143,7 @@ const AvailabilityManager = () => {
                         <div className="mb-3 p-3 bg-neutral-50 dark:bg-neutral-700/50 rounded-lg space-y-2">
                           <input
                             type="date"
+                            min={(() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })()}
                             value={customDateInput.scheduledDate}
                             onChange={(e) => setCustomDateInput({ ...customDateInput, scheduledDate: e.target.value })}
                             className="w-full px-3 py-2 text-base border border-neutral-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-secondary-900 dark:text-white focus:ring-2 focus:ring-primary-500"
@@ -1169,10 +1202,15 @@ const AvailabilityManager = () => {
                               </div>
                             );
                           })()}
+                          {customDateInput.scheduledDate && isPastDate(customDateInput.scheduledDate) && (
+                            <p className="text-xs text-error-600 dark:text-error-400 text-center font-medium">
+                              Cannot add, create, or change past dates
+                            </p>
+                          )}
                           <button
                             type="button"
                             onClick={handleAddCustomDate}
-                            disabled={!customDateInput.scheduledDate || saving}
+                            disabled={!customDateInput.scheduledDate || saving || isPastDate(customDateInput.scheduledDate)}
                             className="w-full px-3 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 bg-primary-500 hover:bg-primary-600"
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -1191,43 +1229,53 @@ const AvailabilityManager = () => {
                               ? dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
                               : normalized || 'Unknown';
                             const isExclude = cd.type === 'Exclude';
+                            const isPast = isPastDate(normalized);
                             const mSlots = cd.morningAllowed ?? '—';
                             const aSlots = cd.afternoonAllowed ?? '—';
                             return (
                               <div
                                 key={cd.id || normalized}
                                 className={`flex items-center justify-between px-2 py-1.5 rounded text-sm ${
-                                  isExclude
-                                    ? 'bg-rose-50 dark:bg-rose-900/20'
-                                    : 'bg-violet-50 dark:bg-violet-900/20'
+                                  isPast
+                                    ? 'bg-neutral-50 dark:bg-neutral-700/30 opacity-60'
+                                    : isExclude
+                                      ? 'bg-rose-50 dark:bg-rose-900/20'
+                                      : 'bg-violet-50 dark:bg-violet-900/20'
                                 }`}
                               >
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isExclude ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isPast ? 'bg-neutral-400' : isExclude ? 'bg-rose-500' : 'bg-emerald-500'}`} />
                                   <span className={`font-medium truncate ${
-                                    isExclude
-                                      ? 'text-rose-700 dark:text-rose-400'
-                                      : 'text-violet-700 dark:text-violet-400'
+                                    isPast
+                                      ? 'text-neutral-500 dark:text-neutral-400'
+                                      : isExclude
+                                        ? 'text-rose-700 dark:text-rose-400'
+                                        : 'text-violet-700 dark:text-violet-400'
                                   }`}>
                                     {dateLabel}
                                   </span>
                                   <span className="text-xs text-secondary-500 dark:text-neutral-400 flex-shrink-0">
                                     AM {mSlots} / PM {aSlots}
                                   </span>
-                                  <span className={`text-xs px-1 py-0.5 rounded flex-shrink-0 ${
-                                    isExclude
-                                      ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
-                                      : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
-                                  }`}>
-                                    {isExclude ? 'Blocked' : 'Open'}
-                                  </span>
+                                  {isPast ? (
+                                    <span className="text-xs px-1 py-0.5 rounded flex-shrink-0 bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400">
+                                      Past
+                                    </span>
+                                  ) : (
+                                    <span className={`text-xs px-1 py-0.5 rounded flex-shrink-0 ${
+                                      isExclude
+                                        ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
+                                        : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                                    }`}>
+                                      {isExclude ? 'Blocked' : 'Open'}
+                                    </span>
+                                  )}
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveCustomDate(normalized)}
-                                  className={`p-1 hover:text-error-500 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors flex-shrink-0 ${
-                                    isExclude ? 'text-rose-400' : 'text-violet-400'
-                                  }`}
+                                  className="p-1 text-neutral-400 hover:text-error-500 hover:bg-error-50 dark:hover:bg-error-900/20 rounded transition-colors flex-shrink-0"
+                                  title="Delete custom date"
                                 >
                                   <X className="w-3 h-3" />
                                 </button>
