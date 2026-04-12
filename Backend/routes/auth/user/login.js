@@ -12,11 +12,13 @@ const { verifyRecaptcha } = require('../../../services/recaptcha.js');
 
 const { detectPortalFromSubdomain } = require("../../../utils/portal.js");
 const AuthSession = require("../../../utils/authSession.js");
+const logger = require("../../../utils/logger.js");
 const router = express.Router();
 
 const VERIFICATIONKEY_PURPOSE = "2fa";
 
 router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
+  try {
   const { email, password, recaptchaToken } = req.body;
   const account_type = detectPortalFromSubdomain(req);
 
@@ -120,11 +122,16 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     requiresTotp: user.totp_enabled || false,
     LoginKey: verificationKey,
     });
-  });
+  } catch (err) {
+    logger.error('[LOGIN] Unhandled error in POST /auth/login:', err);
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'An unexpected error occurred. Please try again.' });
+  }
+});
 
 
 
 router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
+  try {
   const { LoginKey: verificationKey } = req.body;
 
   if (!verificationKey) {
@@ -212,6 +219,10 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
     ...tokens,
     message: "Login successful.",
   });
+  } catch (err) {
+    logger.error('[LOGIN] Unhandled error in POST /auth/login/complete:', err);
+    return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'An unexpected error occurred. Please try again.' });
+  }
 });
 
 module.exports = router;
