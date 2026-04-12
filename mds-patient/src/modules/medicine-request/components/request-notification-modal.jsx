@@ -18,7 +18,6 @@ const RequestNotificationModal = ({ request, onDismiss, batches, groupedMedicine
           query GetAvailableMedicine($location: LocationDesignation, $offset: Int, $limit: Int) {
             getAvailableMedicine(location: $location, offset: $offset, limit: $limit) {
               id
-              item_code
               item_name
               category
             }
