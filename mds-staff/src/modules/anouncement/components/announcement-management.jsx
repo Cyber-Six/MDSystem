@@ -18,18 +18,56 @@ import {
   toLocal,
   toUTC,
 } from '../timezoneUtils';
+import './announcement-management-theme.css';
 
 const ANNOUNCEMENT_DETAILS_CACHE_TTL_MS = 5 * 60 * 1000;
+const AUTH_IMAGE_SRC_CACHE = new Map();
+const AUTH_IMAGE_FETCH_CACHE = new Map();
+
+const getCachedAuthImageSrc = async (path) => {
+  if (!path) return null;
+
+  const cachedSrc = AUTH_IMAGE_SRC_CACHE.get(path);
+  if (cachedSrc) return cachedSrc;
+
+  const pendingFetch = AUTH_IMAGE_FETCH_CACHE.get(path);
+  if (pendingFetch) return pendingFetch;
+
+  const fetchPromise = axiosRequest
+    .get(path, { responseType: 'blob' })
+    .then((res) => {
+      const objectUrl = URL.createObjectURL(res.data);
+      AUTH_IMAGE_SRC_CACHE.set(path, objectUrl);
+      AUTH_IMAGE_FETCH_CACHE.delete(path);
+      return objectUrl;
+    })
+    .catch((error) => {
+      AUTH_IMAGE_FETCH_CACHE.delete(path);
+      throw error;
+    });
+
+  AUTH_IMAGE_FETCH_CACHE.set(path, fetchPromise);
+  return fetchPromise;
+};
 
 /* Authenticated image loader — media endpoints require JWT */
 function AuthImage({ path, alt, className, onClick }) {
   const [src, setSrc] = React.useState(null);
   useEffect(() => {
-    let objectUrl = null, cancelled = false;
-    axiosRequest.get(path, { responseType: 'blob' })
-      .then((res) => { if (!cancelled) { objectUrl = URL.createObjectURL(res.data); setSrc(objectUrl); } })
-      .catch(() => {});
-    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    let cancelled = false;
+
+    setSrc(null);
+    getCachedAuthImageSrc(path)
+      .then((cachedSrc) => {
+        if (!cancelled) setSrc(cachedSrc);
+      })
+      .catch(() => {
+        if (!cancelled) setSrc(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [path]);
   if (!src) return <div className="w-full h-24 flex items-center justify-center"><span className="animate-spin w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full" /></div>;
   return <img src={src} alt={alt} className={className} onClick={onClick} />;
@@ -88,6 +126,7 @@ const AnnouncementManagement = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, label }
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const fileInputRef = React.useRef(null);
+  const detailsRequestCacheRef = React.useRef({});
   // Use staffBranch from usePermissions() — already sourced from MedicalPersonnel.designation (authoritative)
   const effectiveBranch = staffBranch || 'Both';
   const clientTimeZone = getAnnouncementTimeZone();
@@ -201,7 +240,13 @@ const AnnouncementManagement = () => {
     const { forceRefresh = false } = options;
     if (!announcementSummary?.id) return announcementSummary;
 
-    const cacheEntry = announcementDetailsCache[announcementSummary.id];
+    const announcementId = announcementSummary.id;
+    const pendingRequest = detailsRequestCacheRef.current[announcementId];
+    if (pendingRequest) {
+      return pendingRequest;
+    }
+
+    const cacheEntry = announcementDetailsCache[announcementId];
     const requiresFetch = forceRefresh
       || !cacheEntry
       || !cacheEntry.hasFullDetails
@@ -211,33 +256,39 @@ const AnnouncementManagement = () => {
       return cacheEntry.data;
     }
 
-    setDetailsLoadingId(announcementSummary.id);
-    try {
-      const fetchedAnnouncement = await fetchAnnouncementById(announcementSummary.id);
-      const mergedAnnouncement = mergeAnnouncementDetails(announcementSummary, fetchedAnnouncement);
+    const detailsRequestPromise = (async () => {
+      setDetailsLoadingId(announcementId);
+      try {
+        const fetchedAnnouncement = await fetchAnnouncementById(announcementId);
+        const mergedAnnouncement = mergeAnnouncementDetails(announcementSummary, fetchedAnnouncement);
 
-      setAnnouncementDetailsCacheEntry(announcementSummary.id, mergedAnnouncement, {
-        hasFullDetails: true,
-      });
+        setAnnouncementDetailsCacheEntry(announcementId, mergedAnnouncement, {
+          hasFullDetails: true,
+        });
 
-      return mergedAnnouncement;
-    } catch (err) {
-      const fallbackAnnouncement = mergeAnnouncementDetails(
-        announcementSummary,
-        cacheEntry?.data,
-      );
+        return mergedAnnouncement;
+      } catch (err) {
+        const fallbackAnnouncement = mergeAnnouncementDetails(
+          announcementSummary,
+          cacheEntry?.data,
+        );
 
-      // Cache fallback details after a fetch attempt to avoid unnecessary refetches until stale.
-      setAnnouncementDetailsCacheEntry(announcementSummary.id, fallbackAnnouncement, {
-        hasFullDetails: true,
-      });
+        // Cache fallback details after a fetch attempt to avoid unnecessary refetches until stale.
+        setAnnouncementDetailsCacheEntry(announcementId, fallbackAnnouncement, {
+          hasFullDetails: true,
+        });
 
-      return fallbackAnnouncement;
-    } finally {
-      setDetailsLoadingId((currentId) => (
-        currentId === announcementSummary.id ? null : currentId
-      ));
-    }
+        return fallbackAnnouncement;
+      } finally {
+        delete detailsRequestCacheRef.current[announcementId];
+        setDetailsLoadingId((currentId) => (
+          currentId === announcementId ? null : currentId
+        ));
+      }
+    })();
+
+    detailsRequestCacheRef.current[announcementId] = detailsRequestPromise;
+    return detailsRequestPromise;
   };
 
   const handleInputChange = (e) => {
@@ -412,7 +463,7 @@ const AnnouncementManagement = () => {
       await loadAnnouncements();
 
       if (editedAnnouncementId) {
-        setExpandedAnnouncementId(null);
+        setExpandedAnnouncementId(editedAnnouncementId);
       }
     } catch (err) {
       setError(err.message || 'Failed to save announcement');
@@ -710,7 +761,7 @@ const AnnouncementManagement = () => {
   return (
     <>
     <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
-    <div className="space-y-4">
+    <div className="space-y-4 announcement-management-theme">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-secondary-800 dark:text-white">
@@ -751,7 +802,7 @@ const AnnouncementManagement = () => {
         return (
       <div className="bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
         {visibleAnnouncements.length === 0 ? (
-          <div className="p-4 text-center text-secondary-500 dark:text-neutral-400 text-sm">
+          <div className="p-4 text-center announcement-meta-muted text-sm">
             No announcements yet
           </div>
         ) : (
@@ -761,6 +812,7 @@ const AnnouncementManagement = () => {
                 const cachedDetails = announcementDetailsCache[announcement.id]?.data;
                 const announcementDetails = cachedDetails || announcement;
                 const isExpanded = expandedAnnouncementId === announcement.id;
+                const isEditing = editingId === announcement.id;
                 const isLoadingExpandedDetails = detailsLoadingId === announcement.id;
 
                 return (
@@ -776,7 +828,7 @@ const AnnouncementManagement = () => {
                 role="button"
                 tabIndex={0}
                 aria-expanded={isExpanded}
-                className={`p-4 transition-colors cursor-pointer ${
+                className={`announcement-card p-4 transition-colors cursor-pointer ${
                   isExpanded
                     ? 'bg-neutral-100 dark:bg-neutral-700/60'
                     : 'hover:bg-neutral-50 dark:hover:bg-neutral-700'
@@ -789,21 +841,21 @@ const AnnouncementManagement = () => {
                         {announcementDetails.label}
                       </h3>
                       <span
-                        className={`px-2 py-0.5 text-xs font-medium rounded ${
+                        className={`announcement-pill px-2 py-0.5 text-xs ${
                           announcementDetails.isActive
-                            ? 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400'
-                            : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-400'
+                            ? 'announcement-pill--active'
+                            : 'announcement-pill--inactive'
                         }`}
                       >
                         {announcementDetails.isActive ? 'Active' : 'Inactive'}
                       </span>
                       <span
-                        className={`px-2 py-0.5 text-xs font-medium rounded ${
+                        className={`announcement-pill px-2 py-0.5 text-xs ${
                           announcementDetails.location === 'Manila'
-                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                            ? 'announcement-pill--manila'
                             : announcementDetails.location === 'QuezonCity'
-                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
-                            : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400'
+                            ? 'announcement-pill--qc'
+                            : 'announcement-pill--all'
                         }`}
                       >
                         {announcementDetails.location === 'Manila'
@@ -812,82 +864,101 @@ const AnnouncementManagement = () => {
                           ? 'Quezon City'
                           : 'All Branches'}
                       </span>
-                      <span className="text-[11px] font-medium text-secondary-500 dark:text-neutral-400">
+                      <span className="text-[11px] font-medium announcement-meta-muted">
                         {isExpanded ? 'Hide details' : 'View details'}
                       </span>
+                      {isEditing && (
+                        <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300">
+                          Editing
+                        </span>
+                      )}
                     </div>
-                    <p className={`text-xs text-secondary-600 dark:text-neutral-400 mb-1 ${
+                    <p className={`text-xs announcement-meta-text mb-1 ${
                       isExpanded
                         ? 'whitespace-pre-wrap leading-relaxed'
                         : 'line-clamp-2'
                     }`}>
                       {announcementDetails.description}
                     </p>
-                    <p className="text-xs text-secondary-500 dark:text-neutral-500">
-                      Posted: {formatAnnouncementDate(announcementDetails.created_at, clientTimeZone, {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      }) || 'Unknown'}
+                    <p className="text-xs">
+                      <span className="announcement-meta-label">Posted:</span>{' '}
+                      <span className="announcement-meta-value">
+                        {formatAnnouncementDate(announcementDetails.created_at, clientTimeZone, {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        }) || 'Unknown'}
+                      </span>
                     </p>
-                    <p className="text-xs text-secondary-500 dark:text-neutral-500">
-                      Viewable Until: {announcementDetails.viewableUntil
-                        ? formatAnnouncementDateTime(announcementDetails.viewableUntil, clientTimeZone)
-                        : 'Indefinite'}
+                    <p className="text-xs">
+                      <span className="announcement-meta-label">Viewable Until:</span>{' '}
+                      <span className="announcement-meta-value">
+                        {announcementDetails.viewableUntil
+                          ? formatAnnouncementDateTime(announcementDetails.viewableUntil, clientTimeZone)
+                          : 'Indefinite'}
+                      </span>
                     </p>
 
                     {isExpanded && isLoadingExpandedDetails && (
                       <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600">
-                        <div className="flex items-center gap-2 text-xs text-secondary-500 dark:text-neutral-400">
+                        <div className="flex items-center gap-2 text-xs announcement-meta-muted">
                           <span className="animate-spin w-3.5 h-3.5 border-2 border-primary-500 border-t-transparent rounded-full" />
                           Loading latest announcement details...
                         </div>
                       </div>
                     )}
 
-                    {isExpanded && editingId !== announcement.id && (
+                    {isExpanded && !isEditing && (
                       <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-secondary-600 dark:text-neutral-300">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs announcement-meta-text">
                           <p>
-                            <span className="font-semibold text-secondary-700 dark:text-neutral-200">Visibility:</span>{' '}
-                            {announcementDetails.location === 'Manila'
-                              ? 'Manila'
-                              : announcementDetails.location === 'QuezonCity'
-                                ? 'Quezon City'
-                                : 'All Branches'}
+                            <span className="announcement-meta-label">Visibility:</span>{' '}
+                            <span className="announcement-meta-value">
+                              {announcementDetails.location === 'Manila'
+                                ? 'Manila'
+                                : announcementDetails.location === 'QuezonCity'
+                                  ? 'Quezon City'
+                                  : 'All Branches'}
+                            </span>
                           </p>
                           <p>
-                            <span className="font-semibold text-secondary-700 dark:text-neutral-200">Status:</span>{' '}
-                            {announcementDetails.isActive ? 'Active' : 'Inactive'}
+                            <span className="announcement-meta-label">Status:</span>{' '}
+                            <span className="announcement-meta-value">
+                              {announcementDetails.isActive ? 'Active' : 'Inactive'}
+                            </span>
                           </p>
                           <p>
-                            <span className="font-semibold text-secondary-700 dark:text-neutral-200">Posted:</span>{' '}
-                            {formatAnnouncementDate(announcementDetails.created_at, clientTimeZone, {
-                              month: 'long',
-                              day: 'numeric',
-                              year: 'numeric',
-                            }) || 'Unknown'}
+                            <span className="announcement-meta-label">Posted:</span>{' '}
+                            <span className="announcement-meta-value">
+                              {formatAnnouncementDate(announcementDetails.created_at, clientTimeZone, {
+                                month: 'long',
+                                day: 'numeric',
+                                year: 'numeric',
+                              }) || 'Unknown'}
+                            </span>
                           </p>
                           <p>
-                            <span className="font-semibold text-secondary-700 dark:text-neutral-200">Viewable Until:</span>{' '}
-                            {announcementDetails.viewableUntil
-                              ? formatAnnouncementDateTime(announcementDetails.viewableUntil, clientTimeZone)
-                              : 'Indefinite'}
+                            <span className="announcement-meta-label">Viewable Until:</span>{' '}
+                            <span className="announcement-meta-value">
+                              {announcementDetails.viewableUntil
+                                ? formatAnnouncementDateTime(announcementDetails.viewableUntil, clientTimeZone)
+                                : 'Indefinite'}
+                            </span>
                           </p>
                         </div>
 
                         <div>
-                          <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-200 mb-1">
+                          <p className="text-xs announcement-meta-label mb-1">
                             Full Description
                           </p>
-                          <p className="text-sm text-secondary-700 dark:text-neutral-300 whitespace-pre-wrap leading-relaxed">
+                          <p className="text-sm announcement-meta-text whitespace-pre-wrap leading-relaxed">
                             {announcementDetails.description || 'No description available'}
                           </p>
                         </div>
 
                         {announcementDetails.pubmat && (
                           <div>
-                            <p className="text-xs font-semibold text-secondary-700 dark:text-neutral-200 mb-1">
+                            <p className="text-xs announcement-meta-label mb-1">
                               Pubmat
                             </p>
                             <AuthImage
@@ -904,7 +975,7 @@ const AnnouncementManagement = () => {
                       </div>
                     )}
 
-                    {isExpanded && editingId === announcement.id && (
+                    {isExpanded && isEditing && (
                       <div
                         className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-600"
                         onClick={(e) => e.stopPropagation()}
@@ -918,25 +989,32 @@ const AnnouncementManagement = () => {
                   {/* Actions */}
                   <div className="flex gap-2 ml-4">
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleEdit(announcement);
                       }}
+                      aria-pressed={isEditing}
                       disabled={isSaving}
-                      className="p-1.5 text-secondary-500 hover:text-primary-600 dark:text-neutral-400 dark:hover:text-primary-400 transition-colors disabled:opacity-50"
-                      title="Edit"
+                      className={`announcement-icon-button announcement-icon-button--edit p-1.5 disabled:opacity-50 ${
+                        isEditing
+                          ? 'announcement-icon-button--active'
+                          : ''
+                      }`}
+                      title={isEditing ? 'Exit edit mode' : 'Edit'}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </button>
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDelete(announcement.id);
                       }}
                       disabled={isSaving}
-                      className="p-1.5 text-secondary-500 hover:text-error-600 dark:text-neutral-400 dark:hover:text-error-400 transition-colors disabled:opacity-50"
+                      className="announcement-icon-button announcement-icon-button--delete p-1.5 disabled:opacity-50"
                       title="Delete"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

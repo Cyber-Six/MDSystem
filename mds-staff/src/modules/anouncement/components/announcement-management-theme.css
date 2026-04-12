@@ -1,0 +1,156 @@
+.announcement-management-theme {
+  --text-secondary-light: var(--color-text-secondary);
+  --text-secondary-dark: var(--color-gray-200);
+
+  --text-value-light: var(--color-text-primary);
+  --text-value-dark: var(--text-secondary-dark);
+
+  --text-muted-light: var(--color-text-tertiary);
+  --text-muted-dark: var(--color-gray-300);
+
+  --text-label-light: var(--color-gray-700);
+  --text-label-dark: var(--color-gray-50);
+
+  --icon-color-light: var(--color-text-secondary);
+  --icon-color-dark: var(--color-gray-100);
+  --icon-edit-hover-light: var(--color-primary-700);
+  --icon-edit-hover-dark: var(--color-primary-300);
+  --icon-delete-hover-light: var(--color-error);
+  --icon-delete-hover-dark: #fca5a5;
+
+  --focus-ring-light: var(--color-primary-600);
+  --focus-ring-dark: var(--color-primary-300);
+
+  --announcement-text-secondary: var(--text-secondary-light);
+  --announcement-text-value: var(--text-value-light);
+  --announcement-text-muted: var(--text-muted-light);
+  --announcement-text-label: var(--text-label-light);
+
+  --announcement-icon-color: var(--icon-color-light);
+  --announcement-icon-edit-hover: var(--icon-edit-hover-light);
+  --announcement-icon-delete-hover: var(--icon-delete-hover-light);
+  --announcement-focus-ring: var(--focus-ring-light);
+
+  --announcement-pill-active-bg: var(--color-success-light);
+  --announcement-pill-active-text: #065f46;
+  --announcement-pill-inactive-bg: var(--color-gray-200);
+  --announcement-pill-inactive-text: var(--color-gray-700);
+  --announcement-pill-all-bg: var(--color-gray-200);
+  --announcement-pill-all-text: var(--color-gray-800);
+  --announcement-pill-manila-bg: #dbeafe;
+  --announcement-pill-manila-text: #1d4ed8;
+  --announcement-pill-qc-bg: #f3e8ff;
+  --announcement-pill-qc-text: #6b21a8;
+}
+
+.dark .announcement-management-theme {
+  --announcement-text-secondary: var(--text-secondary-dark);
+  --announcement-text-value: var(--text-value-dark);
+  --announcement-text-muted: var(--text-muted-dark);
+  --announcement-text-label: var(--text-label-dark);
+
+  --announcement-icon-color: var(--icon-color-dark);
+  --announcement-icon-edit-hover: var(--icon-edit-hover-dark);
+  --announcement-icon-delete-hover: var(--icon-delete-hover-dark);
+  --announcement-focus-ring: var(--focus-ring-dark);
+
+  --announcement-pill-active-bg: rgb(16 185 129 / 0.3);
+  --announcement-pill-active-text: #a7f3d0;
+  --announcement-pill-inactive-bg: rgb(68 64 60 / 0.85);
+  --announcement-pill-inactive-text: var(--color-gray-100);
+  --announcement-pill-all-bg: rgb(68 64 60 / 0.85);
+  --announcement-pill-all-text: var(--color-gray-100);
+  --announcement-pill-manila-bg: rgb(37 99 235 / 0.35);
+  --announcement-pill-manila-text: #dbeafe;
+  --announcement-pill-qc-bg: rgb(147 51 234 / 0.35);
+  --announcement-pill-qc-text: #f3e8ff;
+}
+
+.announcement-card {
+  outline: none;
+}
+
+.announcement-card:focus-visible {
+  box-shadow: 0 0 0 2px var(--announcement-focus-ring);
+}
+
+.announcement-meta-text {
+  color: var(--announcement-text-value);
+}
+
+.announcement-meta-value {
+  color: var(--announcement-text-value);
+  font-weight: 500;
+}
+
+.announcement-meta-muted {
+  color: var(--announcement-text-muted);
+  font-weight: 500;
+}
+
+.announcement-meta-label {
+  color: var(--announcement-text-label);
+  font-weight: 700;
+}
+
+.announcement-pill {
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+
+.announcement-pill--active {
+  background-color: var(--announcement-pill-active-bg);
+  color: var(--announcement-pill-active-text);
+}
+
+.announcement-pill--inactive {
+  background-color: var(--announcement-pill-inactive-bg);
+  color: var(--announcement-pill-inactive-text);
+}
+
+.announcement-pill--all {
+  background-color: var(--announcement-pill-all-bg);
+  color: var(--announcement-pill-all-text);
+}
+
+.announcement-pill--manila {
+  background-color: var(--announcement-pill-manila-bg);
+  color: var(--announcement-pill-manila-text);
+}
+
+.announcement-pill--qc {
+  background-color: var(--announcement-pill-qc-bg);
+  color: var(--announcement-pill-qc-text);
+}
+
+.announcement-icon-button {
+  color: var(--announcement-icon-color);
+  border-radius: 0.375rem;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.announcement-icon-button:focus-visible {
+  outline: 2px solid var(--announcement-focus-ring);
+  outline-offset: 2px;
+}
+
+.announcement-icon-button--edit:hover,
+.announcement-icon-button--edit:focus-visible {
+  color: var(--announcement-icon-edit-hover);
+  background-color: rgb(241 197 38 / 0.14);
+}
+
+.announcement-icon-button--delete:hover,
+.announcement-icon-button--delete:focus-visible {
+  color: var(--announcement-icon-delete-hover);
+  background-color: rgb(239 68 68 / 0.12);
+}
+
+.announcement-icon-button--active {
+  color: var(--announcement-icon-edit-hover);
+  background-color: rgb(241 197 38 / 0.18);
+}
+
+.dark .announcement-icon-button--active {
+  background-color: rgb(241 197 38 / 0.26);
+}
