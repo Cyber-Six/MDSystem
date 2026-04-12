@@ -1,6 +1,5 @@
 // config/redis.js
 const redis = require("redis");
-const jwt = require("jsonwebtoken");
 const { hashOTP, generateRandomKey, delayRandom } = require("../utils/security.js");
 const query = require("./query.js");
 const { redis: redisConfig } = require('./config');
@@ -641,7 +640,6 @@ async function scanAllRefreshSessionsWithMeta() {
   const pattern = `rt:*`;
   const records = [];
   const batchSize = 100;
-  const jwtSecret = process.env.JWT_SECRET;
 
   let batch = [];
 
@@ -677,43 +675,6 @@ async function scanAllRefreshSessionsWithMeta() {
     if (!keyUserId || !keyDeviceId) return null;
 
     return { keyUserId, keyDeviceId };
-  };
-
-  const isValidRefreshJwtTicket = (refreshToken, expected) => {
-    if (!jwtSecret) {
-      logger.error("Skipping refresh session scan: JWT_SECRET is missing");
-      return false;
-    }
-
-    try {
-      const decoded = jwt.verify(String(refreshToken), jwtSecret);
-
-      const tokenUserId = decoded?.id ?? decoded?.userId ?? decoded?.sub ?? null;
-      if (tokenUserId === null || tokenUserId === undefined) {
-        return false;
-      }
-
-      if (String(tokenUserId) !== String(expected.userId)) {
-        return false;
-      }
-
-      if (expected.role) {
-        const tokenRole = decoded?.role;
-        if (!tokenRole || String(tokenRole).toLowerCase() !== String(expected.role).toLowerCase()) {
-          return false;
-        }
-      }
-
-      // Keep compatibility with different claim names used as refresh "ticket".
-      const tokenTicket = decoded?.ticket ?? decoded?.deviceId ?? decoded?.did ?? decoded?.jti ?? null;
-      if (tokenTicket !== null && tokenTicket !== undefined) {
-        return String(tokenTicket) === String(expected.deviceId);
-      }
-
-      return true;
-    } catch {
-      return false;
-    }
   };
 
   const normalizeExecNumber = (value) => {
@@ -752,7 +713,10 @@ async function scanAllRefreshSessionsWithMeta() {
     for (let index = 0; index < keys.length; index += 1) {
       const key = keys[index];
       const parsedKey = parseRefreshSessionKey(key);
-      if (!parsedKey) continue;
+      if (!parsedKey) {
+        logger.error('Skipping refresh session with missing userId/deviceId', { key });
+        continue;
+      }
 
       const { keyUserId, keyDeviceId } = parsedKey;
 
@@ -760,7 +724,10 @@ async function scanAllRefreshSessionsWithMeta() {
       if (!raw) continue;
 
       const ttlSeconds = normalizeExecNumber(normalizedTtlValues[index]);
-      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) continue;
+      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+        logger.error('Skipping refresh session due to expired TTL', { key, ttlSeconds });
+        continue;
+      }
 
       try {
         const session = JSON.parse(raw);
@@ -787,11 +754,15 @@ async function scanAllRefreshSessionsWithMeta() {
           continue;
         }
 
-        const sessionRefreshToken = session.refreshToken ? String(session.refreshToken) : null;
-        const sessionDeviceId = session.deviceId ? String(session.deviceId) : null;
+        const sessionRefreshToken = typeof session.refreshToken === 'string'
+          ? session.refreshToken.trim()
+          : '';
+        const sessionDeviceId = session.deviceId !== undefined && session.deviceId !== null
+          ? String(session.deviceId)
+          : null;
 
-        if (!sessionRefreshToken || !sessionDeviceId) {
-          logger.error('Skipping refresh session with missing refreshToken or deviceId', { key, userId: sessionUserId });
+        if (!sessionDeviceId) {
+          logger.error('Skipping refresh session with missing userId/deviceId', { key, userId: sessionUserId });
           continue;
         }
 
@@ -804,17 +775,8 @@ async function scanAllRefreshSessionsWithMeta() {
           continue;
         }
 
-        const jwtMatchesSession = isValidRefreshJwtTicket(sessionRefreshToken, {
-          userId: sessionUserId,
-          role: session.role ? String(session.role) : null,
-          deviceId: sessionDeviceId,
-        });
-
-        if (!jwtMatchesSession) {
-          logger.error('Skipping refresh session due to invalid JWT refresh ticket', {
-            key,
-            userId: sessionUserId,
-          });
+        // Refresh tokens are UUIDs, not JWTs. Keep only non-empty string tokens.
+        if (!sessionRefreshToken) {
           continue;
         }
         
@@ -824,7 +786,7 @@ async function scanAllRefreshSessionsWithMeta() {
           session,
         });
       } catch {
-        // Skip invalid JSON
+        logger.error('Skipping refresh session with invalid JSON', { key });
       }
     }
   };
