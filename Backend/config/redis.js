@@ -641,7 +641,7 @@ async function scanAllRefreshSessions() {
 
   let batch = [];
 
-  for await (const key of client.scanIterator({ match: pattern, count: batchSize })) {
+  for await (const rawKey of client.scanIterator({ match: pattern, count: batchSize })) {
     // Skip non-session keys (e.g., rt:fail:*, rt:lock:*)
     const key = rawKey.toString(); // ensure string
     const parts = key.split(':');
