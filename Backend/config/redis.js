@@ -1,5 +1,6 @@
 // config/redis.js
 const redis = require("redis");
+const jwt = require("jsonwebtoken");
 const { hashOTP, generateRandomKey, delayRandom } = require("../utils/security.js");
 const query = require("./query.js");
 const { redis: redisConfig } = require('./config');
@@ -640,8 +641,80 @@ async function scanAllRefreshSessionsWithMeta() {
   const pattern = `rt:*`;
   const records = [];
   const batchSize = 100;
+  const jwtSecret = process.env.JWT_SECRET;
 
   let batch = [];
+
+  const normalizeScanIteratorItem = (raw) => {
+    if (raw === null || raw === undefined) return [];
+
+    if (Array.isArray(raw)) {
+      return raw.flatMap((item) => normalizeScanIteratorItem(item));
+    }
+
+    if (Buffer.isBuffer(raw)) {
+      const key = raw.toString().trim();
+      return key ? [key] : [];
+    }
+
+    if (typeof raw === "string") {
+      const key = raw.trim();
+      return key ? [key] : [];
+    }
+
+    const key = String(raw).trim();
+    return key ? [key] : [];
+  };
+
+  const parseRefreshSessionKey = (key) => {
+    if (typeof key !== "string" || !key.startsWith("rt:")) return null;
+    if (key.startsWith("rt:fail:") || key.startsWith("rt:lock:")) return null;
+
+    const parts = key.split(":");
+    if (parts.length !== 3) return null;
+
+    const [, keyUserId, keyDeviceId] = parts;
+    if (!keyUserId || !keyDeviceId) return null;
+
+    return { keyUserId, keyDeviceId };
+  };
+
+  const isValidRefreshJwtTicket = (refreshToken, expected) => {
+    if (!jwtSecret) {
+      logger.error("Skipping refresh session scan: JWT_SECRET is missing");
+      return false;
+    }
+
+    try {
+      const decoded = jwt.verify(String(refreshToken), jwtSecret);
+
+      const tokenUserId = decoded?.id ?? decoded?.userId ?? decoded?.sub ?? null;
+      if (tokenUserId === null || tokenUserId === undefined) {
+        return false;
+      }
+
+      if (String(tokenUserId) !== String(expected.userId)) {
+        return false;
+      }
+
+      if (expected.role) {
+        const tokenRole = decoded?.role;
+        if (!tokenRole || String(tokenRole).toLowerCase() !== String(expected.role).toLowerCase()) {
+          return false;
+        }
+      }
+
+      // Keep compatibility with different claim names used as refresh "ticket".
+      const tokenTicket = decoded?.ticket ?? decoded?.deviceId ?? decoded?.did ?? decoded?.jti ?? null;
+      if (tokenTicket !== null && tokenTicket !== undefined) {
+        return String(tokenTicket) === String(expected.deviceId);
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const normalizeExecNumber = (value) => {
     // Some Redis clients/modes may surface pipeline replies as [err, value].
@@ -663,19 +736,30 @@ async function scanAllRefreshSessionsWithMeta() {
     batch = [];
 
     const rawValues = await client.mGet(keys);
+    const normalizedRawValues = Array.isArray(rawValues)
+      ? rawValues
+      : keys.map(() => null);
 
     const ttlPipeline = client.multi();
     for (const key of keys) {
       ttlPipeline.ttl(key);
     }
     const ttlValues = await ttlPipeline.exec();
+    const normalizedTtlValues = Array.isArray(ttlValues)
+      ? ttlValues
+      : keys.map(() => null);
 
     for (let index = 0; index < keys.length; index += 1) {
       const key = keys[index];
-      const raw = rawValues[index];
+      const parsedKey = parseRefreshSessionKey(key);
+      if (!parsedKey) continue;
+
+      const { keyUserId, keyDeviceId } = parsedKey;
+
+      const raw = normalizedRawValues[index];
       if (!raw) continue;
 
-      const ttlSeconds = normalizeExecNumber(ttlValues?.[index]);
+      const ttlSeconds = normalizeExecNumber(normalizedTtlValues[index]);
       if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) continue;
 
       try {
@@ -683,18 +767,6 @@ async function scanAllRefreshSessionsWithMeta() {
         if (!session || typeof session !== 'object') {
           logger.error('Skipping refresh session with invalid JSON', { key });
           continue; // Skip if not an object
-        }
-
-        const parts = key.split(':');
-        if (parts.length !== 3) {
-          logger.error('Skipping refresh session with unexpected key format', { key });
-          continue;
-        }
-
-        const [, keyUserId, keyTicket] = parts;
-        if (!keyUserId || !keyTicket) {
-          logger.error('Skipping refresh session with missing userId or ticket', { key });
-          continue;
         }
 
         const sessionUserId = session.userId !== undefined && session.userId !== null
@@ -718,28 +790,32 @@ async function scanAllRefreshSessionsWithMeta() {
         const sessionRefreshToken = session.refreshToken ? String(session.refreshToken) : null;
         const sessionDeviceId = session.deviceId ? String(session.deviceId) : null;
 
-        if (!sessionRefreshToken && !sessionDeviceId) {
-          logger.error('Skipping refresh session with missing JWT ticket fields', { key, userId: sessionUserId });
+        if (!sessionRefreshToken || !sessionDeviceId) {
+          logger.error('Skipping refresh session with missing refreshToken or deviceId', { key, userId: sessionUserId });
           continue;
         }
 
-        const refreshTokenMatches = sessionRefreshToken && keyTicket === sessionRefreshToken;
-        const deviceIdMatches = sessionDeviceId && keyTicket === sessionDeviceId;
-
-        if (!refreshTokenMatches && !deviceIdMatches) {
-          logger.error('Skipping refresh session due to JWT ticket mismatch', {
+        if (sessionDeviceId !== String(keyDeviceId)) {
+          logger.error('Skipping refresh session due to key/deviceId mismatch', {
             key,
-            keyTicket,
-            sessionUserId,
+            keyDeviceId,
+            sessionDeviceId,
           });
           continue;
         }
 
-        if (!refreshTokenMatches && deviceIdMatches) {
-          logger.warn('Refresh session key uses legacy deviceId ticket format', {
+        const jwtMatchesSession = isValidRefreshJwtTicket(sessionRefreshToken, {
+          userId: sessionUserId,
+          role: session.role ? String(session.role) : null,
+          deviceId: sessionDeviceId,
+        });
+
+        if (!jwtMatchesSession) {
+          logger.error('Skipping refresh session due to invalid JWT refresh ticket', {
             key,
-            sessionUserId,
+            userId: sessionUserId,
           });
+          continue;
         }
         
         records.push({
@@ -753,18 +829,19 @@ async function scanAllRefreshSessionsWithMeta() {
     }
   };
 
-  for await (const rawKey of client.scanIterator({ match: pattern, count: batchSize })) {
-    const key = rawKey.toString();
-    logger.debug('Scanning Redis key', { key });
-    // Include only rt:userId:ticket keys and explicitly exclude rt:fail:* / rt:lock:*.
-    const parts = key.split(':');
-    if (parts.length !== 3) continue;
-    if (parts[0] !== 'rt') continue;
-    if (parts[1] === 'fail' || parts[1] === 'lock') continue;
+  for await (const rawScanItem of client.scanIterator({ match: pattern, count: batchSize })) {
+    const scannedKeys = normalizeScanIteratorItem(rawScanItem);
 
-    batch.push(key);
-    if (batch.length >= batchSize) {
-      await flushBatch();
+    for (const key of scannedKeys) {
+      logger.debug('Scanning Redis key', { key });
+      // Explicitly skip limiter families only; all other rt:* keys are parsed in flushBatch.
+      if (key.startsWith('rt:fail:') || key.startsWith('rt:lock:')) continue;
+      if (!key.startsWith('rt:')) continue;
+
+      batch.push(key);
+      if (batch.length >= batchSize) {
+        await flushBatch();
+      }
     }
   }
 
