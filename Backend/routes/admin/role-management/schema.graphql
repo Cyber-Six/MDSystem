@@ -237,6 +237,7 @@ type UserSession {
   device: String!
   refreshToken: String!
   ttlSeconds: Int!
+  numberOfSessions: Int!
   status: String!
   lastActive: Float
   exp: Float!
