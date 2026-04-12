@@ -1236,9 +1236,9 @@ const Mutation = {
         // Upsert SlotCustomDate (insert or update type if already exists)
         await client.query(
           `INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate", "type")
-           VALUES ($1, $2, $3::"SlotCustomType")
+           VALUES ($1, $2, $3)
            ON CONFLICT ("slotScheduleId", "scheduledDate")
-           DO UPDATE SET "type" = $3::"SlotCustomType";`,
+           DO UPDATE SET "type" = $3;`,
           [schedulerId, scheduledDate, derivedType]
         );
 

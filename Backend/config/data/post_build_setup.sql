@@ -54,6 +54,20 @@ ALTER TABLE "SlotCustomDate"
 ADD CONSTRAINT "SlotCustomDate_slotScheduleId_scheduledDate_key"
 UNIQUE ("slotScheduleId", "scheduledDate");
 
+-- Add type column to SlotCustomDate (Include/Exclude custom date overrides)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'SlotCustomType'
+  ) THEN
+    CREATE TYPE "SlotCustomType" AS ENUM ('Include', 'Exclude');
+  END IF;
+END$$;
+
+ALTER TABLE "SlotCustomDate"
+  ADD COLUMN IF NOT EXISTS "type" TEXT NOT NULL DEFAULT 'Include',
+  ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES
