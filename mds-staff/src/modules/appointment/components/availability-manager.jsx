@@ -602,7 +602,8 @@ const AvailabilityManager = () => {
           notes: editForm.notes || null,
           whitelistOnly: editForm.whitelistOnly ?? false,
           purposeRequired: editForm.purposeRequired ?? false,
-          slotCustomDates: [],
+          slotIncludedDates: [],
+          slotExcludedDates: [],
           whiteLists: [],
         });
 
