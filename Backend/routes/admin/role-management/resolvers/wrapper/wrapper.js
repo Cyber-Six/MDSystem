@@ -353,8 +353,11 @@ function normalizeScannedRefreshSession(record, nowMs) {
 async function getActiveRefreshSessionsAcrossUsers({ includeEmails = false } = {}) {
   const nowMs = Date.now();
   const scannedSessions = await scanAllRefreshSessionsWithMeta();
-  logger.info(`Scanned ${scannedSessions.length} refresh sessions from Redis for active session retrieval.`); 
-
+  logger.debug(
+    `Scanned ${scannedSessions.length} refresh sessions from Redis.`,
+    { sessions: scannedSessions.slice(0, 5) } // show first 5
+  );
+  
   const normalizedSessions = scannedSessions
     .map((record) => normalizeScannedRefreshSession(record, nowMs))
     .filter(Boolean);
