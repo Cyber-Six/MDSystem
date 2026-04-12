@@ -353,6 +353,7 @@ function normalizeScannedRefreshSession(record, nowMs) {
 async function getActiveRefreshSessionsAcrossUsers({ includeEmails = false } = {}) {
   const nowMs = Date.now();
   const scannedSessions = await scanAllRefreshSessionsWithMeta();
+  logger.info(`Scanned ${scannedSessions.length} refresh sessions from Redis for active session retrieval.`); 
 
   const normalizedSessions = scannedSessions
     .map((record) => normalizeScannedRefreshSession(record, nowMs))
@@ -362,6 +363,7 @@ async function getActiveRefreshSessionsAcrossUsers({ includeEmails = false } = {
     return normalizedSessions;
   }
 
+  logger.info(`Identified ${normalizedSessions.length} active refresh sessions after normalization. Fetching user emails...`);
   const candidateUserIds = [...new Set(normalizedSessions.map((session) => session.userId))];
   const emailMap = await getUserEmailMap(candidateUserIds);
 
