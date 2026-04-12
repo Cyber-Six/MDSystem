@@ -1,22 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchActiveRefreshTokenCount,
-  fetchPatientBasicInfo,
+  fetchAllSessions,
   fetchUserSessions,
+  fetchUsers,
 } from '../staff-service';
 
-const PATIENT_SCAN_LIMIT = 100;
-const PATIENT_PAGE_SIZE_OPTIONS = [10, 20, 50];
+const USER_SCAN_LIMIT = 100;
+const USER_PAGE_SIZE_OPTIONS = [10, 20, 50];
 const SESSION_LIMIT_OPTIONS = [10, 20, 50];
-const PATIENT_INITIAL_PAGE_SIZE = 10;
+const USER_INITIAL_PAGE_SIZE = 10;
 const SESSION_INITIAL_LIMIT = 10;
-const PATIENT_INFO_BATCH_SIZE = 4;
 
 const RATE_LIMIT_MESSAGE = 'Rate limit exceeded, please retry later';
 const NETWORK_ERROR_MESSAGE = 'Unable to connect to server. Please check your connection.';
-
-let PATIENT_MOUNT_FETCH_IN_FLIGHT = null;
-let SESSIONS_MOUNT_FETCH_IN_FLIGHT = null;
 
 const STATUS_DOT_CLASS = {
   active: 'bg-success-500',
@@ -29,22 +26,31 @@ const STATUS_DOT_CLASS = {
   unknown: 'bg-neutral-400',
 };
 
+let USERS_MOUNT_FETCH_IN_FLIGHT = null;
+let SESSIONS_MOUNT_FETCH_IN_FLIGHT = null;
+
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function toDateFromUnix(exp) {
-  const numeric = Number(exp);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  const millis = numeric > 1e12 ? numeric : numeric * 1000;
-  const date = new Date(millis);
-  return Number.isNaN(date.getTime()) ? null : date;
+function toDate(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    const millis = value > 1e12 ? value : value * 1000;
+    const date = new Date(millis);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
 }
 
 function formatDateTime(value) {
-  if (!value) return '--';
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return '--';
+  const date = toDate(value);
+  if (!date) return '--';
 
   return date.toLocaleString('en-US', {
     month: 'short',
@@ -58,6 +64,11 @@ function formatDateTime(value) {
 function normalizeBranchLabel(branch) {
   const normalized = String(branch || '').trim();
   return normalized || '--';
+}
+
+function normalizeTypeLabel(type) {
+  const normalized = String(type || '').trim();
+  return normalized || 'Unknown';
 }
 
 function getStatusKey(rawStatus) {
@@ -84,28 +95,6 @@ function formatStatusLabel(rawStatus) {
   return 'Active';
 }
 
-function formatPatientName(patientInfo, fallbackEmail, userId) {
-  if (patientInfo) {
-    const first = patientInfo.first_name || '';
-    const middle = patientInfo.middle_name ? `${patientInfo.middle_name[0]}.` : '';
-    const last = patientInfo.last_name || '';
-    const suffix = patientInfo.suffix || '';
-    const fullName = [first, middle, last, suffix].filter(Boolean).join(' ').trim();
-    if (fullName) return fullName;
-  }
-
-  if (fallbackEmail) {
-    const localPart = fallbackEmail.split('@')[0] || '';
-    const pretty = localPart
-      .replace(/[._-]+/g, ' ')
-      .replace(/\b\w/g, (char) => char.toUpperCase())
-      .trim();
-    if (pretty) return pretty;
-  }
-
-  return `User ${userId}`;
-}
-
 function isRateLimitedError(error) {
   const status = Number(error?.status || error?.response?.status);
   const message = normalizeText(error?.message);
@@ -123,41 +112,24 @@ function isConnectivityError(error) {
   return false;
 }
 
-function getSessionExpiryMs(session) {
-  const expiry = toDateFromUnix(session?.exp);
-  return expiry ? expiry.getTime() : 0;
-}
+const UserManagement = () => {
+  const [activeTab, setActiveTab] = useState('patients-list');
 
-function buildSessionId(baseSession, ordinal) {
-  return `${baseSession?.userId || 'user'}-${ordinal}`;
-}
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState(null);
 
-async function mapInBatches(items, batchSize, mapper) {
-  const output = [];
+  const [userSearch, setUserSearch] = useState('');
+  const [userBranchFilter, setUserBranchFilter] = useState('all');
+  const [userTypeFilter, setUserTypeFilter] = useState('all');
+  const [userStatusFilter, setUserStatusFilter] = useState('all');
+  const [userPage, setUserPage] = useState(1);
+  const [userPageSize, setUserPageSize] = useState(USER_INITIAL_PAGE_SIZE);
 
-  for (let start = 0; start < items.length; start += batchSize) {
-    const batch = items.slice(start, start + batchSize);
-    const mappedBatch = await Promise.all(
-      batch.map((item, index) => mapper(item, start + index))
-    );
-    output.push(...mappedBatch);
-  }
-
-  return output;
-}
-
-const PatientManagement = () => {
-  const [activeTab, setActiveTab] = useState('patient-list');
-
-  const [patientRows, setPatientRows] = useState([]);
-  const [patientsLoading, setPatientsLoading] = useState(false);
-  const [patientsError, setPatientsError] = useState(null);
-
-  const [patientSearch, setPatientSearch] = useState('');
-  const [patientBranchFilter, setPatientBranchFilter] = useState('all');
-  const [patientStatusFilter, setPatientStatusFilter] = useState('all');
-  const [patientPage, setPatientPage] = useState(1);
-  const [patientPageSize, setPatientPageSize] = useState(PATIENT_INITIAL_PAGE_SIZE);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userSessionRows, setUserSessionRows] = useState([]);
+  const [userSessionsLoading, setUserSessionsLoading] = useState(false);
+  const [userSessionsError, setUserSessionsError] = useState(null);
 
   const [tokenCount, setTokenCount] = useState(0);
   const [tokenCountLoading, setTokenCountLoading] = useState(false);
@@ -174,8 +146,6 @@ const PatientManagement = () => {
   const [isRateLimited, setIsRateLimited] = useState(false);
   const rateLimitedRef = useRef(false);
 
-  const patientInfoCacheRef = useRef(new Map());
-  const patientInfoInFlightRef = useRef(new Map());
   const loadTokenCountRef = useRef(null);
   const loadSessionsPageRef = useRef(null);
 
@@ -183,9 +153,10 @@ const PatientManagement = () => {
     rateLimitedRef.current = true;
     setIsRateLimited(true);
     setBanner({ type: 'rate-limit', message: RATE_LIMIT_MESSAGE });
-    setPatientsError(RATE_LIMIT_MESSAGE);
+    setUsersError(RATE_LIMIT_MESSAGE);
     setTokenCountError(RATE_LIMIT_MESSAGE);
     setSessionsError(RATE_LIMIT_MESSAGE);
+    setUserSessionsError(RATE_LIMIT_MESSAGE);
   }, []);
 
   const markNetworkError = useCallback(() => {
@@ -193,109 +164,46 @@ const PatientManagement = () => {
     setBanner({ type: 'network', message: NETWORK_ERROR_MESSAGE });
   }, []);
 
-  const getPatientInfo = useCallback(async (userId) => {
-    const key = String(userId || '');
-    if (!key) return null;
-
-    if (patientInfoCacheRef.current.has(key)) {
-      return patientInfoCacheRef.current.get(key);
-    }
-
-    if (patientInfoInFlightRef.current.has(key)) {
-      return patientInfoInFlightRef.current.get(key);
-    }
-
-    const request = fetchPatientBasicInfo(key)
-      .then((patientInfo) => {
-        const normalized = patientInfo || null;
-        patientInfoCacheRef.current.set(key, normalized);
-        return normalized;
-      })
-      .finally(() => {
-        patientInfoInFlightRef.current.delete(key);
-      });
-
-    patientInfoInFlightRef.current.set(key, request);
-    return request;
-  }, []);
-
-  const loadPatientDirectory = useCallback(async () => {
+  const loadUsers = useCallback(async () => {
     if (rateLimitedRef.current) return;
 
-    setPatientsLoading(true);
-    setPatientsError(null);
+    setUsersLoading(true);
+    setUsersError(null);
 
     try {
       setBanner(null);
 
-      const allSessions = [];
+      const allUsers = [];
       let offset = 0;
       let totalCount = 0;
       let safetyCounter = 0;
 
       do {
-        const page = await fetchUserSessions(offset, PATIENT_SCAN_LIMIT);
-        const pageSessions = Array.isArray(page.sessions) ? page.sessions : [];
+        const page = await fetchUsers(offset, USER_SCAN_LIMIT);
+        const pageUsers = Array.isArray(page.users) ? page.users : [];
 
-        allSessions.push(...pageSessions);
+        allUsers.push(...pageUsers);
         totalCount = Number(page.totalCount) || 0;
-        offset += PATIENT_SCAN_LIMIT;
+        offset += USER_SCAN_LIMIT;
         safetyCounter += 1;
 
-        if (pageSessions.length === 0) {
+        if (pageUsers.length === 0) {
           break;
         }
-      } while (offset < totalCount && safetyCounter < 50);
+      } while (offset < totalCount && safetyCounter < 100);
 
-      const latestByUser = new Map();
-      for (const session of allSessions) {
-        if (!session?.userId) continue;
+      const normalizedUsers = allUsers.map((row) => ({
+        id: String(row.id || ''),
+        name: row.name || row.email || `User ${row.id}`,
+        email: row.email || '--',
+        branch: normalizeBranchLabel(row.branch),
+        type: normalizeTypeLabel(row.type),
+        status: row.status || 'Unknown',
+        lastLogin: row.lastLogin || null,
+      }));
 
-        const key = String(session.userId);
-        const previous = latestByUser.get(key);
-        const currentExpiry = getSessionExpiryMs(session);
-        const previousExpiry = getSessionExpiryMs(previous);
-
-        if (!previous || currentExpiry > previousExpiry) {
-          latestByUser.set(key, session);
-        }
-      }
-
-      const uniqueSessions = Array.from(latestByUser.values()).sort(
-        (left, right) => getSessionExpiryMs(right) - getSessionExpiryMs(left)
-      );
-
-      const hydratedRows = await mapInBatches(
-        uniqueSessions,
-        PATIENT_INFO_BATCH_SIZE,
-        async (session) => {
-          let patientInfo = null;
-
-          try {
-            patientInfo = await getPatientInfo(session.userId);
-          } catch (error) {
-            if (isRateLimitedError(error) || isConnectivityError(error)) {
-              throw error;
-            }
-            patientInfo = null;
-          }
-
-          const expDate = toDateFromUnix(session.exp);
-          const derivedStatus = expDate && expDate.getTime() > Date.now() ? 'Active' : 'Expired';
-
-          return {
-            id: String(session.userId),
-            patientName: formatPatientName(patientInfo, session.email, session.userId),
-            email: session.email || '--',
-            branch: normalizeBranchLabel(patientInfo?.branch),
-            status: patientInfo?.credentials_status || derivedStatus,
-            lastActive: patientInfo?.latest_updated_at || (expDate ? expDate.toISOString() : null),
-          };
-        }
-      );
-
-      setPatientRows(hydratedRows);
-      setPatientPage(1);
+      setUsers(normalizedUsers);
+      setUserPage(1);
     } catch (error) {
       if (isRateLimitedError(error)) {
         markRateLimited();
@@ -306,12 +214,61 @@ const PatientManagement = () => {
         markNetworkError();
       }
 
-      setPatientsError(error?.message || 'Failed to load patient list.');
-      setPatientRows([]);
+      setUsersError(error?.message || 'Failed to load users.');
+      setUsers([]);
     } finally {
-      setPatientsLoading(false);
+      setUsersLoading(false);
     }
-  }, [getPatientInfo, markNetworkError, markRateLimited]);
+  }, [markNetworkError, markRateLimited]);
+
+  const loadUserSessions = useCallback(async (userId) => {
+    if (rateLimitedRef.current) return;
+    if (!userId) return;
+
+    setUserSessionsLoading(true);
+    setUserSessionsError(null);
+
+    try {
+      const sessions = await fetchUserSessions(String(userId));
+      const rows = (Array.isArray(sessions) ? sessions : [])
+        .map((session, index) => {
+          const ttlSeconds = Number(session.ttlSeconds) || 0;
+          const expiresAt = session.expiresAt || (ttlSeconds > 0 ? new Date(Date.now() + ttlSeconds * 1000).toISOString() : null);
+
+          return {
+            rowId: `${userId}:${session.deviceId || index}`,
+            deviceId: session.deviceId || '--',
+            refreshToken: session.refreshToken || '--',
+            status: session.status || 'unknown',
+            createdAt: session.createdAt || null,
+            updatedAt: session.updatedAt || null,
+            ttlSeconds,
+            expiresAt,
+          };
+        })
+        .sort((left, right) => {
+          const leftDate = toDate(left.updatedAt) || toDate(left.createdAt) || toDate(left.expiresAt);
+          const rightDate = toDate(right.updatedAt) || toDate(right.createdAt) || toDate(right.expiresAt);
+          return (rightDate?.getTime() || 0) - (leftDate?.getTime() || 0);
+        });
+
+      setUserSessionRows(rows);
+    } catch (error) {
+      if (isRateLimitedError(error)) {
+        markRateLimited();
+        return;
+      }
+
+      if (isConnectivityError(error)) {
+        markNetworkError();
+      }
+
+      setUserSessionsError(error?.message || 'Failed to load linked sessions.');
+      setUserSessionRows([]);
+    } finally {
+      setUserSessionsLoading(false);
+    }
+  }, [markNetworkError, markRateLimited]);
 
   const loadTokenCount = useCallback(async () => {
     if (rateLimitedRef.current) return;
@@ -348,35 +305,17 @@ const PatientManagement = () => {
     try {
       setBanner(null);
 
-      const page = await fetchUserSessions(nextOffset, nextLimit);
+      const page = await fetchAllSessions(nextOffset, nextLimit);
       const baseSessions = Array.isArray(page.sessions) ? page.sessions : [];
 
-      const rows = await mapInBatches(baseSessions, PATIENT_INFO_BATCH_SIZE, async (session, index) => {
-        let patientInfo = null;
-
-        try {
-          patientInfo = await getPatientInfo(session.userId);
-        } catch (error) {
-          if (isRateLimitedError(error) || isConnectivityError(error)) {
-            throw error;
-          }
-          patientInfo = null;
-        }
-
-        const expDate = toDateFromUnix(session.exp);
-        const isActive = Boolean(expDate && expDate.getTime() > Date.now());
-
-        return {
-          sessionId: buildSessionId(session, nextOffset + index + 1),
-          userId: String(session.userId || '--'),
-          patientName: formatPatientName(patientInfo, session.email, session.userId),
-          email: session.email || '--',
-          role: session.role || 'patient',
-          device: '--',
-          lastActive: patientInfo?.latest_updated_at || (expDate ? expDate.toISOString() : null),
-          status: isActive ? 'active' : 'expired',
-        };
-      });
+      const rows = baseSessions.map((session, index) => ({
+        rowId: session.userId ? `session-user-${session.userId}` : `session-row-${nextOffset + index + 1}`,
+        userId: String(session.userId || '--'),
+        email: session.email || '--',
+        numberOfSessions: Number(session.numberOfSessions) || 0,
+        status: session.status || 'unknown',
+        lastActive: session.lastActive || session.exp || null,
+      }));
 
       setSessionRows(rows);
       setSessionTotal(Number(page.totalCount) || 0);
@@ -398,7 +337,7 @@ const PatientManagement = () => {
     } finally {
       setSessionsLoading(false);
     }
-  }, [getPatientInfo, markNetworkError, markRateLimited]);
+  }, [markNetworkError, markRateLimited]);
 
   useEffect(() => {
     loadTokenCountRef.current = loadTokenCount;
@@ -406,14 +345,14 @@ const PatientManagement = () => {
   }, [loadSessionsPage, loadTokenCount]);
 
   useEffect(() => {
-    if (!PATIENT_MOUNT_FETCH_IN_FLIGHT) {
-      PATIENT_MOUNT_FETCH_IN_FLIGHT = loadPatientDirectory().finally(() => {
-        PATIENT_MOUNT_FETCH_IN_FLIGHT = null;
+    if (!USERS_MOUNT_FETCH_IN_FLIGHT) {
+      USERS_MOUNT_FETCH_IN_FLIGHT = loadUsers().finally(() => {
+        USERS_MOUNT_FETCH_IN_FLIGHT = null;
       });
     }
 
-    void PATIENT_MOUNT_FETCH_IN_FLIGHT;
-  }, [loadPatientDirectory]);
+    void USERS_MOUNT_FETCH_IN_FLIGHT;
+  }, [loadUsers]);
 
   useEffect(() => {
     if (!SESSIONS_MOUNT_FETCH_IN_FLIGHT) {
@@ -429,13 +368,13 @@ const PatientManagement = () => {
   }, []);
 
   useEffect(() => {
-    setPatientPage(1);
-  }, [patientSearch, patientBranchFilter, patientStatusFilter, patientPageSize]);
+    setUserPage(1);
+  }, [userSearch, userBranchFilter, userTypeFilter, userStatusFilter, userPageSize]);
 
   const branchOptions = useMemo(() => {
     const optionsMap = new Map();
 
-    for (const row of patientRows) {
+    for (const row of users) {
       const label = normalizeBranchLabel(row.branch);
       const value = normalizeText(label);
       if (!value || value === '--') continue;
@@ -446,12 +385,28 @@ const PatientManagement = () => {
       { value: 'all', label: 'All Branches' },
       ...Array.from(optionsMap.entries()).map(([value, label]) => ({ value, label })),
     ];
-  }, [patientRows]);
+  }, [users]);
+
+  const typeOptions = useMemo(() => {
+    const optionsMap = new Map();
+
+    for (const row of users) {
+      const label = normalizeTypeLabel(row.type);
+      const value = normalizeText(label);
+      if (!value) continue;
+      optionsMap.set(value, label);
+    }
+
+    return [
+      { value: 'all', label: 'All Types' },
+      ...Array.from(optionsMap.entries()).map(([value, label]) => ({ value, label })),
+    ];
+  }, [users]);
 
   const statusOptions = useMemo(() => {
     const optionsMap = new Map();
 
-    for (const row of patientRows) {
+    for (const row of users) {
       const label = formatStatusLabel(row.status);
       const value = normalizeText(label);
       if (!value) continue;
@@ -462,17 +417,21 @@ const PatientManagement = () => {
       { value: 'all', label: 'All Status' },
       ...Array.from(optionsMap.entries()).map(([value, label]) => ({ value, label })),
     ];
-  }, [patientRows]);
+  }, [users]);
 
-  const filteredPatientRows = useMemo(() => {
-    const searchValue = normalizeText(patientSearch);
+  const filteredUsers = useMemo(() => {
+    const searchValue = normalizeText(userSearch);
 
-    return patientRows.filter((row) => {
-      if (patientBranchFilter !== 'all' && normalizeText(row.branch) !== patientBranchFilter) {
+    return users.filter((row) => {
+      if (userBranchFilter !== 'all' && normalizeText(row.branch) !== userBranchFilter) {
         return false;
       }
 
-      if (patientStatusFilter !== 'all' && normalizeText(formatStatusLabel(row.status)) !== patientStatusFilter) {
+      if (userTypeFilter !== 'all' && normalizeText(row.type) !== userTypeFilter) {
+        return false;
+      }
+
+      if (userStatusFilter !== 'all' && normalizeText(formatStatusLabel(row.status)) !== userStatusFilter) {
         return false;
       }
 
@@ -480,39 +439,39 @@ const PatientManagement = () => {
         return true;
       }
 
-      const searchable = [row.patientName, row.email, row.id]
+      const searchable = [row.name, row.email, row.id]
         .map((value) => normalizeText(value))
         .join(' ');
 
       return searchable.includes(searchValue);
     });
-  }, [patientBranchFilter, patientRows, patientSearch, patientStatusFilter]);
+  }, [userBranchFilter, userSearch, userStatusFilter, userTypeFilter, users]);
 
-  const patientTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(filteredPatientRows.length / patientPageSize)),
-    [filteredPatientRows.length, patientPageSize]
+  const userTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredUsers.length / userPageSize)),
+    [filteredUsers.length, userPageSize]
   );
 
   useEffect(() => {
-    if (patientPage > patientTotalPages) {
-      setPatientPage(patientTotalPages);
+    if (userPage > userTotalPages) {
+      setUserPage(userTotalPages);
     }
-  }, [patientPage, patientTotalPages]);
+  }, [userPage, userTotalPages]);
 
-  const patientPageRows = useMemo(() => {
-    const start = (patientPage - 1) * patientPageSize;
-    return filteredPatientRows.slice(start, start + patientPageSize);
-  }, [filteredPatientRows, patientPage, patientPageSize]);
+  const userPageRows = useMemo(() => {
+    const start = (userPage - 1) * userPageSize;
+    return filteredUsers.slice(start, start + userPageSize);
+  }, [filteredUsers, userPage, userPageSize]);
 
-  const patientRangeLabel = useMemo(() => {
-    if (filteredPatientRows.length === 0 || patientPageRows.length === 0) {
+  const userRangeLabel = useMemo(() => {
+    if (filteredUsers.length === 0 || userPageRows.length === 0) {
       return 'Showing 0 of 0';
     }
 
-    const start = (patientPage - 1) * patientPageSize + 1;
-    const end = Math.min(start + patientPageRows.length - 1, filteredPatientRows.length);
-    return `Showing ${start}-${end} of ${filteredPatientRows.length}`;
-  }, [filteredPatientRows.length, patientPage, patientPageRows.length, patientPageSize]);
+    const start = (userPage - 1) * userPageSize + 1;
+    const end = Math.min(start + userPageRows.length - 1, filteredUsers.length);
+    return `Showing ${start}-${end} of ${filteredUsers.length}`;
+  }, [filteredUsers.length, userPage, userPageRows.length, userPageSize]);
 
   const canSessionPrev = sessionOffset > 0;
   const canSessionNext = sessionOffset + sessionLimit < sessionTotal;
@@ -530,8 +489,8 @@ const PatientManagement = () => {
   const refreshActiveTab = useCallback(() => {
     if (rateLimitedRef.current) return;
 
-    if (activeTab === 'patient-list') {
-      void loadPatientDirectory();
+    if (activeTab === 'patients-list') {
+      void loadUsers();
       return;
     }
 
@@ -539,7 +498,7 @@ const PatientManagement = () => {
       loadTokenCount(),
       loadSessionsPage(sessionOffset, sessionLimit),
     ]);
-  }, [activeTab, loadPatientDirectory, loadSessionsPage, loadTokenCount, sessionLimit, sessionOffset]);
+  }, [activeTab, loadSessionsPage, loadTokenCount, loadUsers, sessionLimit, sessionOffset]);
 
   const retryAfterNetworkError = useCallback(() => {
     if (rateLimitedRef.current) return;
@@ -547,21 +506,45 @@ const PatientManagement = () => {
     refreshActiveTab();
   }, [refreshActiveTab]);
 
+  const openSessionDetail = useCallback(async (row) => {
+    const normalizedUser = {
+      id: String(row.userId || ''),
+      name: row.email || `User ${row.userId}`,
+      email: row.email || '--',
+    };
+
+    if (!normalizedUser.id || normalizedUser.id === '--') {
+      return;
+    }
+
+    setSelectedUser(normalizedUser);
+    setUserSessionRows([]);
+    setUserSessionsError(null);
+    await loadUserSessions(normalizedUser.id);
+  }, [loadUserSessions]);
+
+  const closeUserDetail = useCallback(() => {
+    setSelectedUser(null);
+    setUserSessionRows([]);
+    setUserSessionsError(null);
+    setUserSessionsLoading(false);
+  }, []);
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1 bg-neutral-100 dark:bg-neutral-700/50 p-0.5 rounded-lg">
           <button
             type="button"
-            onClick={() => setActiveTab('patient-list')}
-            aria-pressed={activeTab === 'patient-list'}
+            onClick={() => setActiveTab('patients-list')}
+            aria-pressed={activeTab === 'patients-list'}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              activeTab === 'patient-list'
+              activeTab === 'patients-list'
                 ? 'bg-primary-500 text-white shadow-sm'
                 : 'text-secondary-500 dark:text-neutral-400 hover:text-secondary-700 dark:hover:text-neutral-300'
             }`}
           >
-            Patient List
+            Patients List
           </button>
           <button
             type="button"
@@ -582,7 +565,7 @@ const PatientManagement = () => {
           onClick={refreshActiveTab}
           disabled={isRateLimited}
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label={`Refresh ${activeTab === 'patient-list' ? 'patient list' : 'active sessions'}`}
+          aria-label={`Refresh ${activeTab === 'patients-list' ? 'patients list' : 'active sessions'}`}
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -603,7 +586,7 @@ const PatientManagement = () => {
               <button
                 type="button"
                 onClick={retryAfterNetworkError}
-                disabled={patientsLoading || sessionsLoading || tokenCountLoading}
+                disabled={usersLoading || sessionsLoading || tokenCountLoading}
                 className="px-2.5 py-1 text-xs rounded border border-warning-300 dark:border-warning-700 text-warning-700 dark:text-warning-300 hover:bg-warning-100 dark:hover:bg-warning-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Retry
@@ -613,20 +596,20 @@ const PatientManagement = () => {
         </div>
       )}
 
-      {activeTab === 'patient-list' && (
+      {activeTab === 'patients-list' && (
         <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
             <input
               type="text"
-              value={patientSearch}
-              onChange={(event) => setPatientSearch(event.target.value)}
+              value={userSearch}
+              onChange={(event) => setUserSearch(event.target.value)}
               placeholder="Search by name, email, or user ID"
               className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 placeholder:text-secondary-400 dark:placeholder:text-neutral-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
             />
 
             <select
-              value={patientBranchFilter}
-              onChange={(event) => setPatientBranchFilter(event.target.value)}
+              value={userBranchFilter}
+              onChange={(event) => setUserBranchFilter(event.target.value)}
               className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
             >
               {branchOptions.map((option) => (
@@ -635,8 +618,18 @@ const PatientManagement = () => {
             </select>
 
             <select
-              value={patientStatusFilter}
-              onChange={(event) => setPatientStatusFilter(event.target.value)}
+              value={userTypeFilter}
+              onChange={(event) => setUserTypeFilter(event.target.value)}
+              className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+            >
+              {typeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+
+            <select
+              value={userStatusFilter}
+              onChange={(event) => setUserStatusFilter(event.target.value)}
               className="px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
             >
               {statusOptions.map((option) => (
@@ -646,28 +639,28 @@ const PatientManagement = () => {
           </div>
 
           <p className="text-xs text-secondary-500 dark:text-neutral-400">
-            {filteredPatientRows.length} patient account{filteredPatientRows.length !== 1 ? 's' : ''} matched
+            {filteredUsers.length} patient account{filteredUsers.length !== 1 ? 's' : ''} matched
           </p>
 
-          {patientsLoading ? (
+          {usersLoading ? (
             <div className="py-12 text-center">
               <div className="w-6 h-6 mx-auto border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-2" />
-              <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading patient list...</p>
+              <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading patients...</p>
             </div>
-          ) : patientsError ? (
+          ) : usersError ? (
             <div className="py-10 text-center">
-              <p className="text-xs text-error-600 dark:text-error-400 mb-2">{patientsError}</p>
+              <p className="text-xs text-error-600 dark:text-error-400 mb-2">{usersError}</p>
               {!isRateLimited && (
                 <button
                   type="button"
-                  onClick={loadPatientDirectory}
+                  onClick={loadUsers}
                   className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
                 >
                   Retry
                 </button>
               )}
             </div>
-          ) : patientPageRows.length === 0 ? (
+          ) : userPageRows.length === 0 ? (
             <div className="py-12 text-center border border-neutral-200 dark:border-neutral-700 rounded-lg">
               <p className="text-xs text-secondary-500 dark:text-neutral-400">No patients matched your filters.</p>
             </div>
@@ -678,59 +671,48 @@ const PatientManagement = () => {
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-neutral-50 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700">
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Patient Name</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Name</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Email</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Branch</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Last Active</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Type</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Last Login</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {patientPageRows.map((row) => {
-                        const statusKey = getStatusKey(row.status);
-                        return (
-                          <tr
-                            key={row.id}
-                            className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
-                          >
-                            <td className="py-2.5 px-3 text-xs font-medium text-secondary-900 dark:text-white">{row.patientName}</td>
-                            <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{row.email}</td>
-                            <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.branch}</td>
-                            <td className="py-2.5 px-3">
-                              <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
-                                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[statusKey] || STATUS_DOT_CLASS.unknown}`} />
-                                {formatStatusLabel(row.status)}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.lastActive)}</td>
-                          </tr>
-                        );
-                      })}
+                      {userPageRows.map((row) => (
+                        <tr key={row.id} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0">
+                          <td className="py-2.5 px-3 text-xs font-medium text-secondary-900 dark:text-white">{row.name}</td>
+                          <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{row.email}</td>
+                          <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.branch}</td>
+                          <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.type}</td>
+                          <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.lastLogin)}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <p className="text-xs text-secondary-500 dark:text-neutral-400">{patientRangeLabel}</p>
+                <p className="text-xs text-secondary-500 dark:text-neutral-400">{userRangeLabel}</p>
 
                 <div className="flex items-center gap-2">
-                  <label htmlFor="patient-page-size" className="text-xs text-secondary-500 dark:text-neutral-400">Rows</label>
+                  <label htmlFor="user-page-size" className="text-xs text-secondary-500 dark:text-neutral-400">Rows</label>
                   <select
-                    id="patient-page-size"
-                    value={patientPageSize}
-                    onChange={(event) => setPatientPageSize(Number(event.target.value))}
+                    id="user-page-size"
+                    value={userPageSize}
+                    onChange={(event) => setUserPageSize(Number(event.target.value))}
                     className="px-2 py-1 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-secondary-700 dark:text-neutral-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                   >
-                    {PATIENT_PAGE_SIZE_OPTIONS.map((option) => (
+                    {USER_PAGE_SIZE_OPTIONS.map((option) => (
                       <option key={option} value={option}>{option}</option>
                     ))}
                   </select>
 
                   <button
                     type="button"
-                    onClick={() => setPatientPage((currentPage) => Math.max(1, currentPage - 1))}
-                    disabled={patientPage <= 1}
+                    onClick={() => setUserPage((currentPage) => Math.max(1, currentPage - 1))}
+                    disabled={userPage <= 1}
                     className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
@@ -738,8 +720,8 @@ const PatientManagement = () => {
 
                   <button
                     type="button"
-                    onClick={() => setPatientPage((currentPage) => Math.min(patientTotalPages, currentPage + 1))}
-                    disabled={patientPage >= patientTotalPages}
+                    onClick={() => setUserPage((currentPage) => Math.min(userTotalPages, currentPage + 1))}
+                    disabled={userPage >= userTotalPages}
                     className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
@@ -796,7 +778,7 @@ const PatientManagement = () => {
             </div>
           ) : sessionRows.length === 0 ? (
             <div className="py-12 text-center border border-neutral-200 dark:border-neutral-700 rounded-lg">
-              <p className="text-xs text-secondary-500 dark:text-neutral-400">No active patient sessions found.</p>
+              <p className="text-xs text-secondary-500 dark:text-neutral-400">No active sessions found.</p>
             </div>
           ) : (
             <>
@@ -805,11 +787,9 @@ const PatientManagement = () => {
                   <table className="w-full text-xs min-w-[760px]">
                     <thead>
                       <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Session ID</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Patient</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">User ID</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Email</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Role</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Device</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Number of Sessions</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Last Active</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
                       </tr>
@@ -818,12 +798,25 @@ const PatientManagement = () => {
                       {sessionRows.map((row) => {
                         const statusKey = getStatusKey(row.status);
                         return (
-                          <tr key={row.sessionId} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
-                            <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300">{row.sessionId}</td>
-                            <td className="py-2.5 px-3 text-xs font-medium text-secondary-900 dark:text-white">{row.patientName}</td>
+                          <tr
+                            key={row.rowId}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              void openSessionDetail(row);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                void openSessionDetail(row);
+                              }
+                            }}
+                            aria-label={`Open active tickets for user ${row.userId}`}
+                            className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer"
+                          >
+                            <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.userId}</td>
                             <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{row.email}</td>
-                            <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.role}</td>
-                            <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{row.device}</td>
+                            <td className="py-2.5 px-3 text-xs text-secondary-600 dark:text-neutral-300">{row.numberOfSessions}</td>
                             <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.lastActive)}</td>
                             <td className="py-2.5 px-3">
                               <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
@@ -888,8 +881,91 @@ const PatientManagement = () => {
           )}
         </div>
       )}
+
+      {selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="user-session-title">
+          <div className="absolute inset-0 bg-black/40" onClick={closeUserDetail} aria-hidden="true" />
+          <div className="relative w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-700">
+              <div>
+                <h3 id="user-session-title" className="text-sm font-semibold text-secondary-900 dark:text-white">Active Tickets (Devices and Refresh Tokens)</h3>
+                <p className="text-xs text-secondary-500 dark:text-neutral-400 mt-0.5">{selectedUser.name} ({selectedUser.email})</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeUserDetail}
+                className="px-2.5 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-secondary-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                aria-label="Close user session details"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-4 overflow-auto max-h-[calc(85vh-64px)]">
+              {userSessionsLoading ? (
+                <div className="py-10 text-center">
+                  <div className="w-6 h-6 mx-auto border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-2" />
+                  <p className="text-xs text-secondary-400 dark:text-neutral-500">Loading linked sessions...</p>
+                </div>
+              ) : userSessionsError ? (
+                <div className="py-10 text-center">
+                  <p className="text-xs text-error-600 dark:text-error-400 mb-2">{userSessionsError}</p>
+                  {!isRateLimited && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void loadUserSessions(selectedUser.id);
+                      }}
+                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                    >
+                      Retry
+                    </button>
+                  )}
+                </div>
+              ) : userSessionRows.length === 0 ? (
+                <div className="py-10 text-center border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                  <p className="text-xs text-secondary-500 dark:text-neutral-400">No active tickets found for this user.</p>
+                </div>
+              ) : (
+                <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+                  <div className="overflow-auto">
+                    <table className="w-full text-xs min-w-[760px]">
+                      <thead>
+                        <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700">
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Device ID</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Refresh Token</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Status</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-secondary-500 dark:text-neutral-400 uppercase tracking-wider">Expiry</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {userSessionRows.map((row) => {
+                          const statusKey = getStatusKey(row.status);
+                          return (
+                            <tr key={row.rowId} className="border-b border-neutral-100 dark:border-neutral-800 last:border-b-0 hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
+                              <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300">{row.deviceId}</td>
+                              <td className="py-2.5 px-3 text-xs font-mono text-secondary-700 dark:text-neutral-300 max-w-[360px] truncate" title={row.refreshToken}>{row.refreshToken}</td>
+                              <td className="py-2.5 px-3">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-secondary-700 dark:text-neutral-200">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT_CLASS[statusKey] || STATUS_DOT_CLASS.unknown}`} />
+                                  {formatStatusLabel(row.status)}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-xs text-secondary-500 dark:text-neutral-400">{formatDateTime(row.expiresAt)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default PatientManagement;
+export default UserManagement;

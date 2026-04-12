@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import RoleTemplates from './components/role-templates';
 import StaffAccounts from './components/staff-accounts';
 import AdminTransfer from './components/admin-transfer';
-import PatientManagement from './components/patient-management';
+import UserManagement from './components/user-management';
 import { usePermissions } from '../../context/permissions-context';
 
 /**
@@ -19,7 +19,7 @@ const RoleManagementPage = () => {
 
   const modules = [
     { id: 'roles', label: 'Role Management', icon: 'shield' },
-    { id: 'patients', label: 'Patient Management', icon: 'patients' },
+    { id: 'users', label: 'User Management', icon: 'users' },
   ];
 
   const sections = [
@@ -109,9 +109,9 @@ const RoleManagementPage = () => {
         </>
       )}
 
-      {activeModule === 'patients' && (
+      {activeModule === 'users' && (
         <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm border border-neutral-200 dark:border-neutral-700 p-5">
-          <PatientManagement />
+          <UserManagement />
         </div>
       )}
     </div>
