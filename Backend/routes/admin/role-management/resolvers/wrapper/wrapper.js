@@ -20,6 +20,7 @@ const {
 } = require('../../../../../services/permit.js');
 const {
   listUserSessions,
+  listUserSessionsWithMeta,
   scanAllRefreshSessions,
   scanAllRefreshSessionsWithMeta,
   deleteAllUserSessions,
@@ -315,6 +316,14 @@ function normalizeScannedRefreshSession(record, nowMs) {
   const keyUserId = parts[1];
   const keyDeviceId = parts[2];
 
+  const sessionRefreshToken = typeof rawSession.refreshToken === 'string'
+    ? rawSession.refreshToken.trim()
+    : '';
+
+  if (!sessionRefreshToken) {
+    return null;
+  }
+
   const userIdRaw = rawSession.userId ?? keyUserId;
   if (userIdRaw === undefined || userIdRaw === null || userIdRaw === '') {
     return null;
@@ -341,6 +350,8 @@ function normalizeScannedRefreshSession(record, nowMs) {
     sessionId: String(rawSession.sessionId || `${userId}:${deviceId}`),
     userId,
     deviceId,
+    refreshToken: sessionRefreshToken,
+    ttlSeconds,
     lastActiveMs,
     status,
     role: String(rawSession.role || 'unknown').toLowerCase(),
@@ -645,6 +656,94 @@ const Query = {
     return await getStaffModulePermissions(userId);
   },
 
+  _listUsers: async (_, { offset = 0, limit }, { user, res }) => {
+    if (offset < 0) {
+      throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
+    }
+
+    if (limit < 1 || limit > 500) {
+      throwGraphQLError(res).message('limit must be between 1 and 500').status(400).throw();
+    }
+
+    const listResult = await db.query(
+      `SELECT
+         uc.id::text AS id,
+         uc.email,
+         COALESCE(uc.identity::text, 'Unknown') AS type,
+         COALESCE(uc.credentials_status::text, 'Unknown') AS status,
+         COALESCE(up.branch::text, '--') AS branch,
+         COALESCE(
+           NULLIF(
+             TRIM(CONCAT_WS(
+               ' ',
+               upl.first_name,
+               CASE
+                 WHEN upl.middle_name IS NOT NULL AND upl.middle_name <> '' THEN LEFT(upl.middle_name, 1) || '.'
+                 ELSE NULL
+               END,
+               upl.last_name,
+               upl.suffix
+             )),
+             ''
+           ),
+           NULLIF(
+             TRIM(CONCAT_WS(
+               ' ',
+               up.first_name,
+               CASE
+                 WHEN up.middle_name IS NOT NULL AND up.middle_name <> '' THEN LEFT(up.middle_name, 1) || '.'
+                 ELSE NULL
+               END,
+               up.last_name,
+               up.suffix
+             )),
+             ''
+           ),
+           uc.email
+         ) AS name,
+         lla.last_login
+       FROM "UserCredentials" uc
+       LEFT JOIN "UsersPersonal" up ON up.id = uc.id
+       LEFT JOIN LATERAL (
+         SELECT l.first_name, l.middle_name, l.last_name, l.suffix
+         FROM "UsersPersonalLog" l
+         WHERE l.user_id = uc.id
+         ORDER BY l.created_at DESC
+         LIMIT 1
+       ) upl ON true
+       LEFT JOIN (
+         SELECT user_id, MAX(attempted_at) AS last_login
+         FROM "UserLoginAttempt"
+         WHERE was_successful = true
+         GROUP BY user_id
+       ) lla ON lla.user_id = uc.id
+       ORDER BY uc.id DESC
+       OFFSET $1
+       LIMIT $2`,
+      [offset, limit]
+    );
+
+    const countResult = await db.query(
+      `SELECT COUNT(*)::int AS total_count
+       FROM "UserCredentials"`
+    );
+
+    const users = listResult.rows.map((row) => ({
+      id: String(row.id),
+      name: row.name || row.email || `User ${row.id}`,
+      email: row.email || 'unknown',
+      branch: row.branch || '--',
+      type: row.type || 'Unknown',
+      status: row.status || 'Unknown',
+      lastLogin: row.last_login ? new Date(row.last_login).toISOString() : null,
+    }));
+
+    return {
+      users,
+      totalCount: Number(countResult.rows?.[0]?.total_count) || 0,
+    };
+  },
+
   _listStaffSessions: async (_, { userId }, { user, res }) => {
     // Get all refresh sessions for this user from Redis
     const sessions = await listUserSessions(String(userId));
@@ -687,10 +786,11 @@ const Query = {
     const sessions = sortedSessions
       .slice(offset, offset + limit)
       .map((session) => ({
-        // Extra fields are included for downstream compatibility even if not selected in GraphQL.
         sessionId: session.sessionId,
         userId: session.userId,
         device: session.deviceId,
+        refreshToken: session.refreshToken || '',
+        ttlSeconds: Number(session.ttlSeconds) || 0,
         lastActive: session.lastActiveMs,
         status: session.status,
         email: session.email || 'unknown',
@@ -704,41 +804,50 @@ const Query = {
     };
   },
 
-  _listUserSessions: async (_, { offset = 0, limit }, { user, res }) => {
-    if (offset < 0) {
-      throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
-    }
-    if (limit < 1 || limit > 100) {
-      throwGraphQLError(res).message('limit must be between 1 and 100').status(400).throw();
+  _listUserSessions: async (_, { userId }, { user, res }) => {
+    if (!userId) {
+      throwGraphQLError(res).message('userId is required').status(400).throw();
     }
 
-    const patientSessions = await getActivePatientRefreshSessions();
+    const sessionRecords = await listUserSessionsWithMeta(String(userId));
+    const nowMs = Date.now();
 
-    // Keep one most-recent active session per patient for stable pagination.
-    const latestSessionByUser = new Map();
-    for (const session of patientSessions) {
-      const current = latestSessionByUser.get(session.userId);
-      if (!current || isSessionMoreRecent(session, current)) {
-        latestSessionByUser.set(session.userId, session);
-      }
-    }
+    const sessions = sessionRecords
+      .map((record) => {
+        const rawSession = record?.session;
+        if (!rawSession || typeof rawSession !== 'object') {
+          return null;
+        }
 
-    const sortedSessions = Array.from(latestSessionByUser.values()).sort(compareSessionsByRecencyDesc);
-    const totalCount = sortedSessions.length;
+        const key = String(record.key || '');
+        const keyParts = key.split(':');
+        const keyDeviceId = keyParts[2];
 
-    const sessions = sortedSessions
-      .slice(offset, offset + limit)
-      .map((session) => ({
-        userId: session.userId,
-        email: session.email,
-        role: 'patient',
-        exp: session.expMs || 0,
-      }));
+        const deviceId = String(rawSession.deviceId || keyDeviceId || 'unknown');
+        const refreshToken = typeof rawSession.refreshToken === 'string'
+          ? rawSession.refreshToken.trim()
+          : '';
 
-    return {
-      sessions,
-      totalCount
-    };
+        const createdAtMs = toTimestampMs(rawSession.createdAt);
+        const updatedAtMs = toTimestampMs(rawSession.updatedAt);
+        const expMs = getSessionExpirationMs(rawSession) || (nowMs + (Number(record.ttlSeconds) || 0) * 1000);
+
+        return {
+          deviceId,
+          refreshToken,
+          status: String(rawSession.status || 'active'),
+          createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : null,
+          updatedAt: updatedAtMs ? new Date(updatedAtMs).toISOString() : null,
+          ttlSeconds: Number(record.ttlSeconds) || 0,
+          expiresAt: Number.isFinite(expMs) && expMs > 0 ? new Date(expMs).toISOString() : null,
+          _sortMs: updatedAtMs || createdAtMs || expMs || 0,
+        };
+      })
+      .filter((session) => Boolean(session && session.refreshToken))
+      .sort((left, right) => (right._sortMs || 0) - (left._sortMs || 0))
+      .map(({ _sortMs, ...session }) => session);
+
+    return sessions;
   },
 
   _listPermissionTemplates: async (_, __, { user, res }) => {

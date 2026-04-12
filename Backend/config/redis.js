@@ -592,6 +592,96 @@ async function listUserSessions(userId) {
 }
 
 /**
+ * List refresh sessions for a specific user with Redis key and TTL metadata.
+ * Uses batched mGet + pipelined TTL for efficiency.
+ *
+ * @param {string|number} userId
+ * @returns {Promise<Array<{key: string, ttlSeconds: number, session: object}>>}
+ */
+async function listUserSessionsWithMeta(userId) {
+  if (!client) throw new Error("Redis client not initialized");
+  if (!userId) throw new Error("listUserSessionsWithMeta: userId is required");
+
+  const pattern = `rt:${String(userId)}:*`;
+  const keys = [];
+
+  const normalizeExecNumber = (value) => {
+    if (Array.isArray(value)) {
+      if (value.length === 2) return Number(value[1]);
+      if (value.length === 1) return Number(value[0]);
+    }
+    return Number(value);
+  };
+
+  const normalizeScanIteratorItem = (raw) => {
+    if (raw === null || raw === undefined) return [];
+
+    if (Array.isArray(raw)) {
+      return raw.flatMap((item) => normalizeScanIteratorItem(item));
+    }
+
+    if (Buffer.isBuffer(raw)) {
+      const key = raw.toString().trim();
+      return key ? [key] : [];
+    }
+
+    const key = String(raw).trim();
+    return key ? [key] : [];
+  };
+
+  for await (const rawItem of client.scanIterator({ match: pattern, count: 100 })) {
+    const scannedKeys = normalizeScanIteratorItem(rawItem);
+    for (const key of scannedKeys) {
+      keys.push(key);
+    }
+  }
+
+  if (keys.length === 0) {
+    return [];
+  }
+
+  const rawValues = await client.mGet(keys);
+  const normalizedRawValues = Array.isArray(rawValues)
+    ? rawValues
+    : keys.map(() => null);
+
+  const ttlPipeline = client.multi();
+  for (const key of keys) {
+    ttlPipeline.ttl(key);
+  }
+  const ttlValues = await ttlPipeline.exec();
+  const normalizedTtlValues = Array.isArray(ttlValues)
+    ? ttlValues
+    : keys.map(() => null);
+
+  const records = [];
+
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index];
+    const raw = normalizedRawValues[index];
+    if (!raw) continue;
+
+    const ttlSeconds = normalizeExecNumber(normalizedTtlValues[index]);
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) continue;
+
+    try {
+      const session = JSON.parse(raw);
+      if (!session || typeof session !== 'object') continue;
+
+      records.push({
+        key,
+        ttlSeconds,
+        session,
+      });
+    } catch {
+      logger.error('Skipping refresh session with invalid JSON', { key });
+    }
+  }
+
+  return records;
+}
+
+/**
  * Delete all refresh sessions for a user
  * @param {string|number} userId
  * @returns {Promise<number>} Number of sessions deleted
@@ -1358,6 +1448,7 @@ module.exports = {
   saveStaffAnchor,
   getStaffAnchor,
   listUserSessions,
+  listUserSessionsWithMeta,
   scanAllRefreshSessionsWithMeta,
   scanAllRefreshSessions,
   deleteAllUserSessions,

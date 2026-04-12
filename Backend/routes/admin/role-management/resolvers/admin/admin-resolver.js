@@ -64,6 +64,11 @@ const Query = {
     return await Wrapper.Query._countActiveRefreshTokens(_, args, context);
   },
 
+  listUsers: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._listUsers(_, args, context);
+  },
+
   listUserSessions: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listUserSessions(_, args, context);

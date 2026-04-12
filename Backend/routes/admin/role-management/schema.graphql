@@ -201,11 +201,44 @@ type ConfirmAdminTransferResult {
   newAdminId: ID
 }
 
-# User session info for paginated listing
+# User list item for User Management tab
+type UserListItem {
+  id: ID!
+  name: String!
+  email: String!
+  branch: String!
+  type: String!
+  status: String!
+  lastLogin: String
+}
+
+type UserListPage {
+  users: [UserListItem!]!
+  totalCount: Int!
+}
+
+# Linked user sessions (detail view when clicking a user row)
+type LinkedUserSession {
+  deviceId: String!
+  refreshToken: String!
+  status: String!
+  createdAt: String
+  updatedAt: String
+  ttlSeconds: Int!
+  expiresAt: String
+}
+
+# User session info for paginated global active-session listing
 type UserSession {
+  sessionId: String!
   userId: ID!
   email: String!
   role: String!
+  device: String!
+  refreshToken: String!
+  ttlSeconds: Int!
+  status: String!
+  lastActive: Float
   exp: Float!
 }
 
@@ -300,7 +333,8 @@ type Query {
 
   # Refresh Token Analytics
   countActiveRefreshTokens: Int!
-  listUserSessions(offset: Int!, limit: Int!): UserSessionPage!
+  listUsers(offset: Int!, limit: Int!): UserListPage!
+  listUserSessions(userId: ID!): [LinkedUserSession!]!
   listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
 
   # Permission Templates
