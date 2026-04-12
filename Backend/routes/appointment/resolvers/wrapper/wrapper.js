@@ -105,8 +105,12 @@ const Query = {
         scd."slotScheduleId",
         scd."scheduledDate",
         scd."type",
+        sde."morningAllowed",
+        sde."afternoonAllowed",
         scd.created_at
       FROM "SlotCustomDate" scd
+      LEFT JOIN "ScheduleDateEntity" sde
+        ON sde."slotId" = scd."slotScheduleId" AND sde."scheduledDate" = scd."scheduledDate"
       WHERE scd."slotScheduleId" = $1
       ORDER BY scd."scheduledDate" ASC
       LIMIT $2 OFFSET $3;
@@ -914,7 +918,7 @@ const Mutation = {
         }));
         await insertSlotCustomDates(schedulerId, excludeDatesWithType, client);
         
-        // Initialize ScheduleDateEntity for each excluded date
+        // Initialize ScheduleDateEntity for each excluded date with 0 slots
         for (const scheduledDate of input.slotExcludedDates) {
           await client.query(
             `INSERT INTO "ScheduleDateEntity" ("slotId", "scheduledDate", "morningAllowed", "afternoonAllowed")
@@ -922,7 +926,7 @@ const Mutation = {
              WHERE NOT EXISTS (
                SELECT 1 FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2
              );`,
-            [schedulerId, scheduledDate, input.morningAllowed, input.afternoonAllowed]
+            [schedulerId, scheduledDate, 0, 0]
           );
         }
       }
@@ -1189,21 +1193,14 @@ const Mutation = {
     return result.rowCount > 0;
   },
 
-  _setCustomDates: async (_, { schedulerId, type, dates }, { user, res }) => {
+  _setCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    if (!schedulerId || !type || !Array.isArray(dates) || dates.length === 0) {
+    if (!schedulerId || !Array.isArray(dates) || dates.length === 0) {
       throwGraphQLError(res)
-        .message("Invalid schedulerId, type, or empty dates list")
-        .status(400)
-        .throw();
-    }
-
-    if (!['Include', 'Exclude'].includes(type)) {
-      throwGraphQLError(res)
-        .message("Invalid type. Must be 'Include' or 'Exclude'")
+        .message("Invalid schedulerId or empty dates list")
         .status(400)
         .throw();
     }
@@ -1223,28 +1220,9 @@ const Mutation = {
       }
       const defaults = schedulerResult.rows[0];
 
-      // Insert date markers into SlotCustomDate with type — skip any that already exist
-      const values = [];
-      const selectParts = dates.map((dateEntry, i) => {
-        const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
-        const offset = i * 3;
-        values.push(schedulerId, scheduledDate, type);
-        return `($${offset + 1}::integer, $${offset + 2}::date, $${offset + 3}::"SlotCustomType")`;
-      });
-
-      await client.query(
-        `INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate", "type")
-         SELECT v."slotScheduleId", v."scheduledDate", v."type"
-         FROM (VALUES ${selectParts.join(", ")}) AS v("slotScheduleId", "scheduledDate", "type")
-         WHERE NOT EXISTS (
-           SELECT 1 FROM "SlotCustomDate" scd
-           WHERE scd."slotScheduleId" = v."slotScheduleId"
-             AND scd."scheduledDate" = v."scheduledDate"
-         );`,
-        values
-      );
-
-      // Always initialize/upsert ScheduleDateEntity for every custom date
+      // Auto-derive type for each date from morningAllowed/afternoonAllowed
+      // Both 0 → Exclude, otherwise → Include
+      // Insert/upsert SlotCustomDate entries and ScheduleDateEntity entries
       for (const dateEntry of dates) {
         const scheduledDate = typeof dateEntry === 'string' ? dateEntry : dateEntry.scheduledDate;
         const morning = (typeof dateEntry === 'object' && dateEntry.morningAllowed != null)
@@ -1253,7 +1231,18 @@ const Mutation = {
         const afternoon = (typeof dateEntry === 'object' && dateEntry.afternoonAllowed != null)
           ? dateEntry.afternoonAllowed
           : defaults.afternoonAllowed;
+        const derivedType = (morning === 0 && afternoon === 0) ? 'Exclude' : 'Include';
 
+        // Upsert SlotCustomDate (insert or update type if already exists)
+        await client.query(
+          `INSERT INTO "SlotCustomDate" ("slotScheduleId", "scheduledDate", "type")
+           VALUES ($1, $2, $3::"SlotCustomType")
+           ON CONFLICT ("slotScheduleId", "scheduledDate")
+           DO UPDATE SET "type" = $3::"SlotCustomType";`,
+          [schedulerId, scheduledDate, derivedType]
+        );
+
+        // Upsert ScheduleDateEntity
         const existing = await client.query(
           `SELECT id FROM "ScheduleDateEntity" WHERE "slotId" = $1 AND "scheduledDate" = $2 LIMIT 1;`,
           [schedulerId, scheduledDate]
@@ -1275,7 +1264,7 @@ const Mutation = {
         }
       }
 
-      // Step 1: If containsCustomDates is currently false, set it to true
+      // If containsCustomDates is currently false, set it to true
       if (!defaults.containsCustomDates) {
         await client.query(
           `UPDATE "slotScheduler" SET "containsCustomDates" = true WHERE id = $1;`,
@@ -1285,7 +1274,7 @@ const Mutation = {
 
       await client.query('COMMIT');
 
-      // Return full SlotCustomDateEntry objects (with slot counts from ScheduleDateEntity)
+      // Return full SlotCustomDateEntry objects with slot counts from ScheduleDateEntity
       const scheduledDates = dates.map(d => (typeof d === 'string' ? d : d.scheduledDate));
       const finalResult = await db.query(
         `SELECT
@@ -1293,8 +1282,12 @@ const Mutation = {
            scd."slotScheduleId",
            scd."scheduledDate",
            scd."type",
+           sde."morningAllowed",
+           sde."afternoonAllowed",
            scd.created_at
          FROM "SlotCustomDate" scd
+         LEFT JOIN "ScheduleDateEntity" sde
+           ON sde."slotId" = scd."slotScheduleId" AND sde."scheduledDate" = scd."scheduledDate"
          WHERE scd."slotScheduleId" = $1
            AND scd."scheduledDate" = ANY($2)
          ORDER BY scd."scheduledDate" ASC;`,
@@ -1313,21 +1306,14 @@ const Mutation = {
     }
   },
 
-  _unsetCustomDates: async (_, { schedulerId, type, dates }, { user, res }) => {
+  _unsetCustomDates: async (_, { schedulerId, dates }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
 
-    if (!schedulerId || !type || !Array.isArray(dates) || dates.length === 0) {
+    if (!schedulerId || !Array.isArray(dates) || dates.length === 0) {
       throwGraphQLError(res)
-        .message("Invalid schedulerId, type, or empty dates list")
-        .status(400)
-        .throw();
-    }
-
-    if (!['Include', 'Exclude'].includes(type)) {
-      throwGraphQLError(res)
-        .message("Invalid type. Must be 'Include' or 'Exclude'")
+        .message("Invalid schedulerId or empty dates list")
         .status(400)
         .throw();
     }
@@ -1352,16 +1338,15 @@ const Mutation = {
       const result = await client.query(
         `DELETE FROM "SlotCustomDate"
          WHERE "slotScheduleId" = $1
-         AND "type" = $2
-         AND "scheduledDate"::date = ANY($3::date[])
+         AND "scheduledDate"::date = ANY($2::date[])
          RETURNING "scheduledDate"::date::text AS "scheduledDate";`,
-        [schedulerId, type, normalizedDates]
+        [schedulerId, normalizedDates]
       );
 
       if (result.rowCount === 0) {
         await client.query('ROLLBACK');
         throwGraphQLError(res)
-          .message(`No matching ${type} custom dates found to unset`)
+          .message("No matching custom dates found to unset")
           .status(404)
           .throw();
       }

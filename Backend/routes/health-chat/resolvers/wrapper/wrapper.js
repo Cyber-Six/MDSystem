@@ -691,7 +691,7 @@ const Mutation = {
         chatId,
         message,
         senderType: 'Patient'
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -818,7 +818,8 @@ const Mutation = {
 
     // Notify patient about ticket approval
     if (chat.patientId) {
-      notifyUser(chat.patientId, 'healthchat:ticket-approved', { chat });
+      notifyUser(chat.patientId, 'healthchat:ticket-approved', { chat })
+        .catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     // Notify health-chat permitted staff about ticket status change (so other staff can update their UI)
@@ -892,7 +893,7 @@ const Mutation = {
       notifyUser(chat.patientId, 'healthchat:ticket-rejected', {
         chat,
         reason: reason || 'Not specified'
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     // Notify health-chat permitted staff about ticket status change (so other staff can update their UI)
@@ -989,7 +990,7 @@ const Mutation = {
         chatId,
         message,
         senderType: 'Medical'
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -1046,7 +1047,7 @@ const Mutation = {
         chatId,
         closedBy: 'Medical',
         chat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -1157,7 +1158,7 @@ const Mutation = {
         chatId,
         toMedicalId,
         chat: updatedChat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -1212,7 +1213,7 @@ const Mutation = {
         chatId,
         toMedicalId: user.id,
         chat: updatedChat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {
@@ -1297,14 +1298,14 @@ const Mutation = {
         expiresAt: updatedChat.expiresAt,
         extendedBy: 'Patient',
         chat: updatedChat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     } else if (!isPatient && updatedChat.patientId) {
       notifyUser(String(updatedChat.patientId), 'healthchat:session-extended', {
         chatId,
         expiresAt: updatedChat.expiresAt,
         extendedBy: 'Medical',
         chat: updatedChat
-      });
+      }).catch(err => logger.error(`[HEALTHCHAT] notifyUser failed: ${err.message}`));
     }
 
     return {

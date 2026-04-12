@@ -121,6 +121,7 @@ export const listCustomDates = async (schedulerId, offset = 0, limit = 100) => {
       listCustomDates(schedulerId: $schedulerId, offset: $offset, limit: $limit) {
         id
         scheduledDate
+        type
         morningAllowed
         afternoonAllowed
       }

@@ -132,6 +132,17 @@ const MODULE_LABELS = {
   general: 'General',
 };
 
+const CHANNEL_MODULE_LABELS = {
+  appointments:     'Appointments',
+  healthChat:       'Health Chat',
+  medicineRequests: 'Medicine Requests',
+  documents:        'Documents',
+  emr:              'EMR Updates',
+  inventory:        'Inventory',
+  roleManagement:   'Role Management',
+  general:          'General / Announcements',
+};
+
 const FONT_SIZE_OPTIONS = [
   { value: 'small', label: 'Small' },
   { value: 'default', label: 'Default' },
@@ -303,6 +314,28 @@ const StaffSettings = () => {
     setSaved(false);
   }, []);
 
+  const setModuleChannel = useCallback((moduleKey, channel, value) => {
+    setDraft((prev) => ({
+      ...prev,
+      moduleChannels: {
+        ...prev.moduleChannels,
+        [moduleKey]: { ...prev.moduleChannels[moduleKey], [channel]: value },
+      },
+    }));
+    setSaved(false);
+  }, []);
+
+  const setAllModuleChannel = useCallback((channel, value) => {
+    setDraft((prev) => {
+      const next = { ...prev.moduleChannels };
+      for (const key of Object.keys(CHANNEL_MODULE_LABELS)) {
+        next[key] = { ...(next[key] || {}), [channel]: value };
+      }
+      return { ...prev, channels: { ...prev.channels, [channel]: value }, moduleChannels: next };
+    });
+    setSaved(false);
+  }, []);
+
   // ── Save / Reset ──
   const handleSave = () => {
     updateSettings(structuredClone(draft));
@@ -316,7 +349,12 @@ const StaffSettings = () => {
       ...DEFAULT_SETTINGS,
       soundByModule: { ...DEFAULT_SETTINGS.soundByModule },
       soundFileByModule: { ...DEFAULT_SETTINGS.soundFileByModule },
+      channels: { ...DEFAULT_SETTINGS.channels },
+      moduleChannels: {},
     };
+    for (const key of Object.keys(DEFAULT_SETTINGS.moduleChannels)) {
+      defaults.moduleChannels[key] = { ...DEFAULT_SETTINGS.channels };
+    }
     setDraft(defaults);
     setHasUserInteracted(true);
     setSaved(false);
@@ -585,6 +623,86 @@ const StaffSettings = () => {
             </select>
           </div>
         </SettingRow>
+      </Section>
+
+      {/* ── Notification Channels ── */}
+      <Section
+        icon={
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        }
+        title="Notification Channels"
+        description="Control how you receive notifications — via web, email, or both"
+      >
+        {/* Global toggles */}
+        <SettingRow
+          label="Web notifications"
+          description="Receive real-time notifications in the portal when you're online"
+        >
+          <Toggle checked={draft.channels.web} onChange={(v) => setAllModuleChannel('web', v)} />
+        </SettingRow>
+        <SettingRow
+          label="Email notifications"
+          description="Always receive email notifications regardless of online status"
+        >
+          <Toggle checked={draft.channels.email} onChange={(v) => setAllModuleChannel('email', v)} />
+        </SettingRow>
+        <SettingRow
+          label="Email fallback"
+          description="Send email notifications as backup when you're offline or not connected to the portal"
+        >
+          <Toggle checked={draft.channels.emailFallback} onChange={(v) => setAllModuleChannel('emailFallback', v)} />
+        </SettingRow>
+
+        {(!draft.channels.web && !draft.channels.email && !draft.channels.emailFallback) && (
+          <div className="py-2 px-3 rounded-lg bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 my-1">
+            <p className="text-xs text-warning-700 dark:text-warning-300 font-medium">
+              All notification channels are disabled. You will not receive any notifications. Enable at least one channel to stay informed.
+            </p>
+          </div>
+        )}
+
+        {/* Per-module channel overrides */}
+        <div className="pt-1">
+          <p className="text-xs font-medium text-secondary-500 dark:text-neutral-400 uppercase tracking-wider mb-1 pl-6">
+            By Module
+          </p>
+          {Object.entries(CHANNEL_MODULE_LABELS).map(([key, label]) => (
+            <div key={key} className="py-2 pl-6">
+              <p className="text-xs font-medium text-secondary-700 dark:text-neutral-200 mb-1.5">{label}</p>
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={draft.moduleChannels[key]?.web ?? true}
+                    onChange={(e) => setModuleChannel(key, 'web', e.target.checked)}
+                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                  />
+                  Web
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={draft.moduleChannels[key]?.email ?? false}
+                    onChange={(e) => setModuleChannel(key, 'email', e.target.checked)}
+                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                  />
+                  Email
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-secondary-500 dark:text-neutral-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={draft.moduleChannels[key]?.emailFallback ?? true}
+                    onChange={(e) => setModuleChannel(key, 'emailFallback', e.target.checked)}
+                    className="rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-primary-500/40 h-3.5 w-3.5"
+                  />
+                  Email fallback
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
       </Section>
 
       {/* ── Security ── */}
