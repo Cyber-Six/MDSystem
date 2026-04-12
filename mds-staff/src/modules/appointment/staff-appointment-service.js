@@ -255,6 +255,7 @@ export const listAllSchedulers = async (offset = 0, limit = 50) => {
         morningAllowed
         afternoonAllowed
         notes
+        purposeRequired
         isActive
         containsCustomDates
         whitelistOnly
@@ -429,6 +430,7 @@ export const createScheduler = async (input) => {
         morningAllowed
         afternoonAllowed
         notes
+        purposeRequired
         isActive
         containsCustomDates
         whitelistOnly
@@ -457,6 +459,7 @@ export const updateScheduler = async (schedulerId, input) => {
         morningAllowed
         afternoonAllowed
         notes
+        purposeRequired
         isActive
         containsCustomDates
         whitelistOnly

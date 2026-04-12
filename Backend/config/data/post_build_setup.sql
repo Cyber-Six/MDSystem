@@ -54,6 +54,70 @@ ALTER TABLE "SlotCustomDate"
 ADD CONSTRAINT "SlotCustomDate_slotScheduleId_scheduledDate_key"
 UNIQUE ("slotScheduleId", "scheduledDate");
 
+-- SlotCustomType enum + SlotCustomDate schema alignment
+-- Step 1: Create the enum type if it does not exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'SlotCustomType'
+  ) THEN
+    CREATE TYPE "SlotCustomType" AS ENUM ('Include', 'Exclude');
+  END IF;
+END$$;
+
+-- Step 2: Add created_at column if missing (straightforward, no type conversion needed)
+ALTER TABLE "SlotCustomDate"
+  ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+-- Step 3: Handle the "type" column — four cases covered:
+--   a) column does not exist            → add it as the enum type directly
+--   b) column exists as TEXT/VARCHAR    → convert it to the enum type
+--   c) column exists as a wrong enum    → migrate via temp column (avoids cast error)
+--   d) column already is SlotCustomType → nothing to do
+DO $$
+DECLARE
+  col_type TEXT;
+BEGIN
+  SELECT data_type INTO col_type
+  FROM information_schema.columns
+  WHERE table_name = 'SlotCustomDate' AND column_name = 'type';
+
+  IF col_type IS NULL THEN
+    -- Case (a): column missing — add as enum
+    ALTER TABLE "SlotCustomDate"
+      ADD COLUMN "type" "SlotCustomType" NOT NULL DEFAULT 'Include'::"SlotCustomType";
+
+  ELSIF col_type IN ('text', 'character varying') THEN
+    -- Case (b): column is text/varchar — cast existing values and change type
+    ALTER TABLE "SlotCustomDate"
+      ALTER COLUMN "type" TYPE "SlotCustomType"
+        USING "type"::"SlotCustomType",
+      ALTER COLUMN "type" SET NOT NULL,
+      ALTER COLUMN "type" SET DEFAULT 'Include'::"SlotCustomType";
+
+  ELSIF col_type = 'USER-DEFINED' THEN
+    -- Case (c): column is an old/wrong enum type — migrate via temp column
+    -- (Direct enum-to-enum cast fails; dropping CASCADE removes the column too,
+    --  so we copy data out, drop the column, then recreate with the correct type.)
+    ALTER TABLE "SlotCustomDate" ADD COLUMN "type_temp" TEXT;
+    UPDATE "SlotCustomDate" SET "type_temp" = "type"::TEXT;
+    ALTER TABLE "SlotCustomDate" DROP COLUMN "type";
+    BEGIN
+      DROP TYPE IF EXISTS slotcustomtype;
+    EXCEPTION WHEN OTHERS THEN
+      NULL; -- old enum already gone, continue
+    END;
+    ALTER TABLE "SlotCustomDate"
+      ADD COLUMN "type" "SlotCustomType" NOT NULL DEFAULT 'Include'::"SlotCustomType";
+    UPDATE "SlotCustomDate"
+      SET "type" = "type_temp"::"SlotCustomType"
+      WHERE "type_temp" IS NOT NULL;
+    ALTER TABLE "SlotCustomDate" DROP COLUMN "type_temp";
+
+  -- Case (d): already correct enum — skip
+  END IF;
+END$$;
+
 
 INSERT INTO "DomainTypeCatalog" (domain, code, name, description, "isValid", created_by)
 VALUES

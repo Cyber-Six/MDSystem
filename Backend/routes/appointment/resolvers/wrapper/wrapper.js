@@ -15,6 +15,16 @@ const { encodeSchedulingFlags, decodeSchedulingFlags, validateSchedulerDate,
 
 const MAX_SCHEDULING_DAYS = parseInt(dotenv.MAX_SCHEDULING_DAYS || 7);
 
+/**
+ * Returns true if the given YYYY-MM-DD date string is strictly before today (server local date).
+ * Today itself is NOT considered past — only dates < today are blocked.
+ */
+function isPastDate(dateStr) {
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return String(dateStr).slice(0, 10) < todayStr;
+}
+
 const Query = {
   _listOpenAppointments: async (_, { offset, limit, schedulerId = null }, { user, res }) => {
     if (!user) {
@@ -859,6 +869,19 @@ const Mutation = {
         throwGraphQLError(res).message("Invalid schedule days").status(400).throw();
       }
 
+      // Reject any past dates in the initial custom date lists
+      const allInitialDates = [
+        ...(input.slotIncludedDates || []),
+        ...(input.slotExcludedDates || [])
+      ];
+      const pastInitial = allInitialDates.filter(isPastDate);
+      if (pastInitial.length > 0) {
+        throwGraphQLError(res)
+          .message(`Cannot add, create, or change past dates: ${pastInitial.join(', ')}`)
+          .status(400)
+          .throw();
+      }
+
       // Check if there are any custom dates (Include or Exclude)
       const hasCustomDates = 
         (input.slotIncludedDates && input.slotIncludedDates.length > 0) ||
@@ -1205,6 +1228,17 @@ const Mutation = {
         .throw();
     }
 
+    // Reject any past dates — staff may only add/edit present or future dates
+    const pastDates = dates
+      .map(d => (typeof d === 'string' ? d : d.scheduledDate))
+      .filter(isPastDate);
+    if (pastDates.length > 0) {
+      throwGraphQLError(res)
+        .message(`Cannot add, create, or change past dates: ${pastDates.join(', ')}`)
+        .status(400)
+        .throw();
+    }
+
     const client = await db.connect();
     try {
       await client.query('BEGIN');
@@ -1500,6 +1534,14 @@ const Mutation = {
   _updateDateIdentity: async (_, { schedulerId, date, input }, { user, res }) => {
     if (!user) {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
+    }
+
+    // Reject modifications to past dates
+    if (isPastDate(date)) {
+      throwGraphQLError(res)
+        .message("Cannot add, create, or change past dates")
+        .status(400)
+        .throw();
     }
 
     try {
