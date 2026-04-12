@@ -69,6 +69,11 @@ const Query = {
     return await Wrapper.Query._listUserSessions(_, args, context);
   },
 
+  listAllSessions: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._listAllSessions(_, args, context);
+  },
+
   listPermissionTemplates: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listPermissionTemplates(_, args, context);

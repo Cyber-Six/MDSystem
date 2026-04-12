@@ -629,59 +629,80 @@ async function deleteStaffAnchor(userId) {
 }
 
 /**
- * Scan ALL refresh sessions across all users (for system-wide queries)
- * @returns {Promise<Array>} Array of session objects with userId and deviceId
+ * Scan ALL refresh sessions across all users with key metadata.
+ * Includes Redis key and TTL so callers can enforce active-session checks.
+ *
+ * @returns {Promise<Array<{key: string, ttlSeconds: number, session: object}>>}
  */
-async function scanAllRefreshSessions() {
+async function scanAllRefreshSessionsWithMeta() {
   if (!client) throw new Error("Redis client not initialized");
 
   const pattern = `rt:*`;
-  const sessions = [];
-  const batchSize = 100; // how many keys to fetch per MGET
+  const records = [];
+  const batchSize = 100;
 
   let batch = [];
 
+  const flushBatch = async () => {
+    if (batch.length === 0) return;
+
+    const keys = batch;
+    batch = [];
+
+    const rawValues = await client.mGet(keys);
+
+    const ttlPipeline = client.multi();
+    for (const key of keys) {
+      ttlPipeline.ttl(key);
+    }
+    const ttlValues = await ttlPipeline.exec();
+
+    for (let index = 0; index < keys.length; index += 1) {
+      const raw = rawValues[index];
+      if (!raw) continue;
+
+      const ttlSeconds = Number(ttlValues?.[index]);
+      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) continue;
+
+      try {
+        const session = JSON.parse(raw);
+        if (!session || typeof session !== 'object') continue;
+
+        records.push({
+          key: keys[index],
+          ttlSeconds,
+          session,
+        });
+      } catch {
+        // Skip invalid JSON
+      }
+    }
+  };
+
   for await (const rawKey of client.scanIterator({ match: pattern, count: batchSize })) {
-    // Skip non-session keys (e.g., rt:fail:*, rt:lock:*)
-    const key = rawKey.toString(); // ensure string
+    const key = rawKey.toString();
+
+    // Skip non-session keys (e.g., rt:fail:*, rt:lock:*).
     const parts = key.split(':');
     if (parts.length !== 3) continue;
 
     batch.push(key);
-
-    // When batch is full, fetch them all at once
     if (batch.length >= batchSize) {
-      const rawValues = await client.mGet(batch);
-      rawValues.forEach(raw => {
-        if (raw) {
-          try {
-            const session = JSON.parse(raw);
-            sessions.push(session);
-          } catch {
-            // Skip invalid JSON
-          }
-        }
-      });
-      batch = [];
+      await flushBatch();
     }
   }
 
-  // Handle leftover keys in the last batch
-  if (batch.length > 0) {
-    const rawValues = await client.mGet(batch);
-    rawValues.forEach(raw => {
-      if (raw) {
-        try {
-          const session = JSON.parse(raw);
-          sessions.push(session);
-        } catch {
-          // Skip invalid JSON
-        }
-      }
-    });
-  }
+  await flushBatch();
+  return records;
+}
 
-  return sessions;
+/**
+ * Scan ALL refresh sessions across all users (for system-wide queries)
+ * @returns {Promise<Array>} Array of session objects with userId and deviceId
+ */
+async function scanAllRefreshSessions() {
+  const records = await scanAllRefreshSessionsWithMeta();
+  return records.map((record) => record.session);
 }
 
 
@@ -1222,6 +1243,7 @@ module.exports = {
   saveStaffAnchor,
   getStaffAnchor,
   listUserSessions,
+  scanAllRefreshSessionsWithMeta,
   scanAllRefreshSessions,
   deleteAllUserSessions,
   deleteStaffAnchor,

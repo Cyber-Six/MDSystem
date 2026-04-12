@@ -301,6 +301,7 @@ type Query {
   # Refresh Token Analytics
   countActiveRefreshTokens: Int!
   listUserSessions(offset: Int!, limit: Int!): UserSessionPage!
+  listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
 
   # Permission Templates
   listPermissionTemplates: PermissionTemplateList!

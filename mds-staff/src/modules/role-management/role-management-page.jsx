@@ -56,7 +56,7 @@ const RoleManagementPage = () => {
       <div>
         <div>
           <h2 className="text-lg font-bold text-secondary-900 dark:text-white leading-none m-0">Administration</h2>
-          <p className="text-[11px] text-secondary-500 dark:text-neutral-400">Manage staff access, permissions, and patient account analytics</p>
+          <p className="text-[11px] text-secondary-500 dark:text-neutral-400">Manage staff access, permissions, and patient account sessions</p>
         </div>
       </div>
 

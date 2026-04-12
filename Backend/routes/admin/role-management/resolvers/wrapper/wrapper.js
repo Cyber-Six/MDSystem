@@ -21,6 +21,7 @@ const {
 const {
   listUserSessions,
   scanAllRefreshSessions,
+  scanAllRefreshSessionsWithMeta,
   deleteAllUserSessions,
   getStaffAnchor,
   saveStaffAnchor,
@@ -279,6 +280,95 @@ async function getActivePatientRefreshSessions() {
       ...session,
       email: patientEmails.get(session.userId) || 'unknown',
     }));
+}
+
+async function getUserEmailMap(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return new Map();
+  }
+
+  const result = await db.query(
+    `SELECT uc.id::text AS "userId", uc.email
+     FROM "UserCredentials" uc
+     WHERE uc.id::text = ANY($1::text[])`,
+    [userIds]
+  );
+
+  return new Map(
+    result.rows.map((row) => [String(row.userId), row.email || 'unknown'])
+  );
+}
+
+function normalizeScannedRefreshSession(record, nowMs) {
+  if (!record || !record.session) {
+    return null;
+  }
+
+  const ttlSeconds = Number(record.ttlSeconds);
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+    return null;
+  }
+
+  const rawSession = record.session;
+  const key = String(record.key || '');
+  const parts = key.split(':');
+  const keyUserId = parts[1];
+  const keyDeviceId = parts[2];
+
+  const userIdRaw = rawSession.userId ?? keyUserId;
+  if (userIdRaw === undefined || userIdRaw === null || userIdRaw === '') {
+    return null;
+  }
+
+  const status = String(rawSession.status || 'active').toLowerCase();
+  if (status !== 'active') {
+    return null;
+  }
+
+  const expMs = getSessionExpirationMs(rawSession) || (nowMs + ttlSeconds * 1000);
+  if (!Number.isFinite(expMs) || expMs <= nowMs) {
+    return null;
+  }
+
+  const updatedAtMs = toTimestampMs(rawSession.updatedAt);
+  const createdAtMs = toTimestampMs(rawSession.createdAt);
+  const lastActiveMs = updatedAtMs || createdAtMs || expMs;
+
+  const deviceId = String(rawSession.deviceId || keyDeviceId || 'unknown');
+  const userId = String(userIdRaw);
+
+  return {
+    sessionId: String(rawSession.sessionId || `${userId}:${deviceId}`),
+    userId,
+    deviceId,
+    lastActiveMs,
+    status,
+    role: String(rawSession.role || 'unknown').toLowerCase(),
+    expMs,
+    createdAtMs,
+    updatedAtMs,
+  };
+}
+
+async function getActiveRefreshSessionsAcrossUsers({ includeEmails = false } = {}) {
+  const nowMs = Date.now();
+  const scannedSessions = await scanAllRefreshSessionsWithMeta();
+
+  const normalizedSessions = scannedSessions
+    .map((record) => normalizeScannedRefreshSession(record, nowMs))
+    .filter(Boolean);
+
+  if (!includeEmails || normalizedSessions.length === 0) {
+    return normalizedSessions;
+  }
+
+  const candidateUserIds = [...new Set(normalizedSessions.map((session) => session.userId))];
+  const emailMap = await getUserEmailMap(candidateUserIds);
+
+  return normalizedSessions.map((session) => ({
+    ...session,
+    email: emailMap.get(session.userId) || 'unknown',
+  }));
 }
 
 // ─── QUERIES ──────────────────────────────────────────────────────────────────
@@ -573,8 +663,40 @@ const Query = {
   },
 
   _countActiveRefreshTokens: async (_, __, { user, res }) => {
-    const patientSessions = await getActivePatientRefreshSessions();
-    return patientSessions.length;
+    const activeSessions = await getActiveRefreshSessionsAcrossUsers();
+    return activeSessions.length;
+  },
+
+  _listAllSessions: async (_, { offset = 0, limit }, { user, res }) => {
+    if (offset < 0) {
+      throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
+    }
+    if (limit < 1 || limit > 100) {
+      throwGraphQLError(res).message('limit must be between 1 and 100').status(400).throw();
+    }
+
+    const activeSessions = await getActiveRefreshSessionsAcrossUsers({ includeEmails: true });
+    const sortedSessions = activeSessions.slice().sort(compareSessionsByRecencyDesc);
+    const totalCount = sortedSessions.length;
+
+    const sessions = sortedSessions
+      .slice(offset, offset + limit)
+      .map((session) => ({
+        // Extra fields are included for downstream compatibility even if not selected in GraphQL.
+        sessionId: session.sessionId,
+        userId: session.userId,
+        device: session.deviceId,
+        lastActive: session.lastActiveMs,
+        status: session.status,
+        email: session.email || 'unknown',
+        role: session.role || 'unknown',
+        exp: session.expMs,
+      }));
+
+    return {
+      sessions,
+      totalCount,
+    };
   },
 
   _listUserSessions: async (_, { offset = 0, limit }, { user, res }) => {
