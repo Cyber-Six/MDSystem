@@ -57,6 +57,7 @@ const MedicineRequestPage = () => {
   // Data
   const [availableMedicines, setAvailableMedicines] = useState([]);
   const [groupedMedicines, setGroupedMedicines] = useState({});
+  const [allMedicinesForDisplay, setAllMedicinesForDisplay] = useState([]);
   const [requests, setRequests] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -101,6 +102,39 @@ const MedicineRequestPage = () => {
     };
 
     fetchUserInfo();
+  }, []);
+
+  // Fetch all medicines for display purposes (used for resolving history items)
+  useEffect(() => {
+    const fetchAllMedicinesForDisplay = async () => {
+      try {
+        const query = `
+          query GetAvailableMedicine($offset: Int, $limit: Int) {
+            getAvailableMedicine(offset: $offset, limit: $limit) {
+              id
+              item_name
+              category
+            }
+          }
+        `;
+        
+        const data = await sendGraphQLRequest(
+          query,
+          { offset: 0, limit: 500 },
+          { endpoint: '/medical-inventory/medicine-request/patient' }
+        );
+        
+        const medicines = data.getAvailableMedicine || [];
+        const dedupedMedicines = Array.from(
+          new Map(medicines.map((medicine) => [String(medicine.id), medicine])).values()
+        );
+        setAllMedicinesForDisplay(dedupedMedicines);
+      } catch (error) {
+        console.error('Error fetching medicines for display:', error);
+      }
+    };
+
+    fetchAllMedicinesForDisplay();
   }, []);
 
   // Fetch available medicines on mount and when location changes
@@ -507,6 +541,27 @@ const MedicineRequestPage = () => {
     const medicine = selectedMedicinesByCode[itemCode];
     if (!medicine) return 'Unknown';
     return `${medicine.item_name}`;
+  };
+
+  // Helper function to resolve medicine names from medicineId
+  const resolveMedicineNamesForRequest = (items) => {
+    if (!items || items.length === 0) return '—';
+    
+    const medicineNames = items
+      .map(item => {
+        // Try to find the medicine by ID in allMedicinesForDisplay
+        const medicine = allMedicinesForDisplay.find(m => String(m.id) === String(item.medicineId));
+        return medicine?.item_name || `Medicine #${item.medicineId}`;
+      })
+      .filter(name => name);
+    
+    if (medicineNames.length === 0) return `${items.length} item(s)`;
+    
+    // Join names with comma, or show count if too many
+    if (medicineNames.length > 2) {
+      return medicineNames.slice(0, 2).join(', ') + ` +${medicineNames.length - 2}`;
+    }
+    return medicineNames.join(', ');
   };
 
   const formatDate = (dateValue) => {
@@ -937,7 +992,7 @@ const MedicineRequestPage = () => {
                         )}
                       </td>
                       <td className="py-3 px-4 text-sm text-neutral-900 dark:text-white">
-                        {request.items?.length || 0} item(s)
+                        {resolveMedicineNamesForRequest(request.items)}
                       </td>
                       <td className="py-3 px-4">
                         {request.notes && (request.status === 'Approved' || request.status === 'Rejected') ? (
