@@ -315,6 +315,12 @@ const Mutation = {
       return result.rows[0];
     } catch (err) {
       await client.query('ROLLBACK');
+
+      // If it's already a GraphQLError, rethrow it directly
+      if (err instanceof GraphQLError) {
+        throw err;
+      }
+      
       logger.error("Error in _setStatusMedicineRequest:", err);
       throwGraphQLError(res).message("Database error").status(500).throw();
     } finally {
