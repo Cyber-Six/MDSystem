@@ -45,6 +45,9 @@ const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, "../../../../../.env") });
 
+const REFRESH_SESSION_TTL_SECONDS = Number(process.env.JWT_REFRESH_EXPIRATION) || 604800;
+const REFRESH_SESSION_TTL_MS = REFRESH_SESSION_TTL_SECONDS * 1000;
+
 /**
  * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────
  * 
@@ -167,6 +170,115 @@ function buildUserInfo(row) {
     credentialsStatus: row.credentials_status,
     name: nameParts.join(' ') || row.email
   };
+}
+
+function toTimestampMs(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return numeric > 1e12 ? numeric : numeric * 1000;
+}
+
+function getSessionExpirationMs(session) {
+  const explicitExpiration = toTimestampMs(session?.exp);
+  if (explicitExpiration) {
+    return explicitExpiration;
+  }
+
+  const updatedAt = toTimestampMs(session?.updatedAt);
+  const createdAt = toTimestampMs(session?.createdAt);
+  const lastTouchedAt = updatedAt || createdAt;
+
+  if (!lastTouchedAt) {
+    return null;
+  }
+
+  return lastTouchedAt + REFRESH_SESSION_TTL_MS;
+}
+
+function normalizeActiveRefreshSession(session, nowMs) {
+  if (!session || session.userId === undefined || session.userId === null) {
+    return null;
+  }
+
+  const role = String(session.role || '').toLowerCase();
+  if (role && role !== 'patient') {
+    return null;
+  }
+
+  const status = String(session.status || 'active').toLowerCase();
+  if (status !== 'active') {
+    return null;
+  }
+
+  const expMs = getSessionExpirationMs(session);
+  if (expMs && expMs <= nowMs) {
+    return null;
+  }
+
+  return {
+    userId: String(session.userId),
+    deviceId: String(session.deviceId || 'unknown'),
+    role: role || 'patient',
+    expMs,
+    createdAtMs: toTimestampMs(session.createdAt),
+    updatedAtMs: toTimestampMs(session.updatedAt),
+  };
+}
+
+function compareSessionsByRecencyDesc(a, b) {
+  const expDelta = (b.expMs || 0) - (a.expMs || 0);
+  if (expDelta !== 0) return expDelta;
+
+  const updatedDelta = (b.updatedAtMs || 0) - (a.updatedAtMs || 0);
+  if (updatedDelta !== 0) return updatedDelta;
+
+  const createdDelta = (b.createdAtMs || 0) - (a.createdAtMs || 0);
+  if (createdDelta !== 0) return createdDelta;
+
+  const userIdOrder = a.userId.localeCompare(b.userId, undefined, { numeric: true, sensitivity: 'base' });
+  if (userIdOrder !== 0) return userIdOrder;
+
+  return a.deviceId.localeCompare(b.deviceId, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function isSessionMoreRecent(candidate, current) {
+  return compareSessionsByRecencyDesc(candidate, current) < 0;
+}
+
+async function getPatientEmailMap(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return new Map();
+  }
+
+  const result = await db.query(
+    `SELECT uc.id::text AS "userId", uc.email
+     FROM "UserCredentials" uc
+     JOIN "Patients" p ON p.id = uc.id
+     WHERE uc.id::text = ANY($1::text[])`,
+    [userIds]
+  );
+
+  return new Map(
+    result.rows.map((row) => [String(row.userId), row.email || 'unknown'])
+  );
+}
+
+async function getActivePatientRefreshSessions() {
+  const nowMs = Date.now();
+  const allSessions = await scanAllRefreshSessions();
+  const normalized = allSessions
+    .map((session) => normalizeActiveRefreshSession(session, nowMs))
+    .filter(Boolean);
+
+  const candidateUserIds = [...new Set(normalized.map((session) => session.userId))];
+  const patientEmails = await getPatientEmailMap(candidateUserIds);
+
+  return normalized
+    .filter((session) => patientEmails.has(session.userId))
+    .map((session) => ({
+      ...session,
+      email: patientEmails.get(session.userId) || 'unknown',
+    }));
 }
 
 // ─── QUERIES ──────────────────────────────────────────────────────────────────
@@ -460,38 +572,12 @@ const Query = {
     };
   },
 
-  /**
-   * Count all active refresh tokens across all users
-   * Filters out expired sessions (exp < now) or those with status !== "active"
-   */
   _countActiveRefreshTokens: async (_, __, { user, res }) => {
-    const now = Date.now();
-    const allSessions = await scanAllRefreshSessions();
-
-    // Filter active, non-expired sessions
-    const activeCount = allSessions.filter(session => {
-      // Handle missing or malformed session data gracefully
-      if (!session) return false;
-
-      // Check status is "active"
-      if (session.status !== 'active') return false;
-
-      // Check not expired (exp is in milliseconds)
-      if (session.exp && session.exp < now) return false;
-
-      return true;
-    }).length;
-
-    return activeCount;
+    const patientSessions = await getActivePatientRefreshSessions();
+    return patientSessions.length;
   },
 
-  /**
-   * List all sessions across all logged-in users with offset-based pagination (global query)
-   * Scans all refresh sessions, maps userId to email, and paginates
-   * Returns userId, email, role, exp for each session
-   */
   _listUserSessions: async (_, { offset = 0, limit }, { user, res }) => {
-    // Validate pagination parameters
     if (offset < 0) {
       throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
     }
@@ -499,35 +585,28 @@ const Query = {
       throwGraphQLError(res).message('limit must be between 1 and 100').status(400).throw();
     }
 
-    // Scan all refresh sessions across all users in the system
-    const allSessions = await scanAllRefreshSessions();
-    const totalCount = allSessions.length;
+    const patientSessions = await getActivePatientRefreshSessions();
 
-    // Apply offset-based pagination
-    const paginatedSessions = allSessions.slice(offset, offset + limit);
-
-    // Map userId to email and extract userId, email, role, exp
-    const sessions = await Promise.all(paginatedSessions.map(async (session) => {
-      // Handle missing or malformed session data gracefully
-      if (!session) {
-        return {
-          userId: 'unknown',
-          email: 'unknown',
-          role: 'unknown',
-          exp: 0
-        };
+    // Keep one most-recent active session per patient for stable pagination.
+    const latestSessionByUser = new Map();
+    for (const session of patientSessions) {
+      const current = latestSessionByUser.get(session.userId);
+      if (!current || isSessionMoreRecent(session, current)) {
+        latestSessionByUser.set(session.userId, session);
       }
+    }
 
-      // Look up email for this session's userId
-      const email = await db.findEmailByUserId(session.userId);
+    const sortedSessions = Array.from(latestSessionByUser.values()).sort(compareSessionsByRecencyDesc);
+    const totalCount = sortedSessions.length;
 
-      return {
-        userId: String(session.userId) || 'unknown',
-        email: email || 'unknown',
-        role: session.role || 'unknown',
-        exp: session.exp ? Number(session.exp) : 0
-      };
-    }));
+    const sessions = sortedSessions
+      .slice(offset, offset + limit)
+      .map((session) => ({
+        userId: session.userId,
+        email: session.email,
+        role: 'patient',
+        exp: session.expMs || 0,
+      }));
 
     return {
       sessions,
