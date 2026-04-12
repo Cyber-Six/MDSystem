@@ -1125,8 +1125,7 @@ const Mutation = {
         await client.query(
           `UPDATE "rolesMap"
            SET branch = $1::"UserDesignation"
-           WHERE "personnelId" = $2
-             AND branch != 'Both'`,
+           WHERE "personnelId" = $2`,
           [designation, userId]
         );
 
