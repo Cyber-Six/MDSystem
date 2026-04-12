@@ -219,14 +219,6 @@ const StaffSettings = () => {
     setSaved(false);
   }, []);
 
-  const setChannel = useCallback((channel, value) => {
-    setDraft((prev) => ({
-      ...prev,
-      channels: { ...prev.channels, [channel]: value },
-    }));
-    setSaved(false);
-  }, []);
-
   const setModuleChannel = useCallback((moduleKey, channel, value) => {
     setDraft((prev) => ({
       ...prev,
@@ -241,8 +233,8 @@ const StaffSettings = () => {
   const setAllModuleChannel = useCallback((channel, value) => {
     setDraft((prev) => {
       const next = { ...prev.moduleChannels };
-      for (const key of Object.keys(next)) {
-        next[key] = { ...next[key], [channel]: value };
+      for (const key of Object.keys(CHANNEL_MODULE_LABELS)) {
+        next[key] = { ...(next[key] || {}), [channel]: value };
       }
       return { ...prev, channels: { ...prev.channels, [channel]: value }, moduleChannels: next };
     });
@@ -550,7 +542,7 @@ const StaffSettings = () => {
         </SettingRow>
         <SettingRow
           label="Email fallback"
-          description="Send email only when you're offline or logged out"
+          description="Send email notifications as backup when you're offline or not connected to the portal"
         >
           <Toggle checked={draft.channels.emailFallback} onChange={(v) => setAllModuleChannel('emailFallback', v)} />
         </SettingRow>

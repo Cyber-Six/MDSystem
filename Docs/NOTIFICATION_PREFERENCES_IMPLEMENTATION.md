@@ -181,12 +181,15 @@ Clicking the link navigates to `/settings`.
 | Event prefix | Module key |
 |--------------|------------|
 | `appointment:` | `appointments` |
-| `healthchat:` / `chat:` | `healthChat` |
-| `medicine:` | `medicineRequests` |
+| `healthchat:` | `healthChat` |
+| `medicine:request:` | `medicineRequests` |
+| `medicine:prescription:` | `medicineRequests` |
 | `document:` | `documents` |
-| `emr:` | `emr` |
+| `updateTicket` | `emr` |
 | `inventory:` | `inventory` |
-| `role:` / `admin:` | `roleManagement` |
+| `admin:notification` | `general` |
+| `staff:notification` | `general` |
+| `role:` | `roleManagement` |
 | *(unmatched)* | `general` |
 
 ---
@@ -201,6 +204,29 @@ Clicking the link navigates to `/settings`.
 - [ ] Frontend settings round-trip: toggle → save → reload page → toggles preserved
 - [ ] `notifyUser()` returns `'suppressed'` when all channels are off
 - [ ] Auto-email resolution works when `emailNotif` is not provided
+
+---
+
+## Bug Fix Changelog
+
+### Code Review — April 2026
+
+Full audit of all notification call sites across the codebase. Bugs found and fixed:
+
+| # | Severity | Bug | Fix | Files |
+|---|----------|-----|-----|-------|
+| 1 | **Critical** | Patient `settings-context.jsx` was heavily corrupted by a bad merge — `mergeFromBackendPrefs`, `DEFAULT_SETTINGS`, `getUserSettingsKey`, `isAllowedSoundId`, and `sanitizeSettings` all had garbled/interleaved code. Missing `soundEnabled` and `soundVolume` from defaults. | Rewrote the entire file top section (lines 1–251) using the staff version as reference, adapted for patient. | `mds-patient/src/context/settings-context.jsx` |
+| 2 | **Critical** | EMR `notifyUser` call placed email metadata (`email`, `subject`, `message`) in the 3rd parameter (`data`) instead of the 4th (`emailNotif`). Email fallback would never fire; socket payloads were polluted with email fields; used `subject` instead of `title`. | Moved email fields to 4th parameter with correct `title` key. | `Backend/routes/emr/resolvers/medical/mutation.js` |
+| 3 | **High** | `setAllModuleChannel` iterated `Object.keys(prev.moduleChannels)` — if that object was empty (corrupted localStorage), no per-module entries would be created. | Changed to iterate `Object.keys(CHANNEL_MODULE_LABELS)` with fallback init `(next[key] \|\| {})`. | `staff-settings.jsx`, `patient-settings.jsx` |
+| 4 | **High** | Patient UI showed "Inventory" and "Role Management" toggles — modules patients never interact with. | Removed `inventory` and `roleManagement` from patient `CHANNEL_MODULE_LABELS`. | `mds-patient/src/modules/settings/patient-settings.jsx` |
+| 5 | **Medium** | `notifyUsers()` did not accept or forward `emailNotif` to individual `notifyUser()` calls, preventing bulk notifications from using custom email content. | Added `emailNotif` parameter and forwarded it. | `Backend/config/sockets/socket-emitter.js` |
+| 6 | **Low** | Dead code: `setChannel` callback defined but never called in either settings UI. | Removed from both files. | `staff-settings.jsx`, `patient-settings.jsx` |
+
+### Known Limitations (not bugs)
+
+- **`role:` prefix unused**: `EVENT_MODULE_MAP` maps `role:` to `roleManagement` but no `notifyUser` call currently uses a `role:*` event. The mapping is reserved for future use.
+- **Document/HealthChat events lack `emailNotif`**: 16 `notifyUser` calls pass `null` for `emailNotif`. Email fallback uses auto-generated subject/body from the event name, which is functional but generic. Future work: add module-specific email templates.
+- **Room/role broadcasts bypass preferences**: `emitToRoom` and `emitToRole` (20 call sites) don't check per-user preferences. This is by design — they target active socket rooms, not individual users.
 
 ---
 

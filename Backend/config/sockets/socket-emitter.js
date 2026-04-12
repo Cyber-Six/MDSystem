@@ -208,11 +208,12 @@ async function notifyUser(userId, eventName, data, emailNotif = null) {
  * @param {string[]} userIds
  * @param {string}   eventName
  * @param {*}        data
+ * @param {{ email: string, title: string, message: string, notes?: string, ctaText?: string, ctaLink?: string } | null} [emailNotif]
  * @returns {Promise<{ delivered: string[], queued: string[], suppressed: string[] }>}
  */
-async function notifyUsers(userIds, eventName, data) {
+async function notifyUsers(userIds, eventName, data, emailNotif = null) {
   const results = await Promise.all(
-    userIds.map(async (userId) => ({ userId, result: await notifyUser(userId, eventName, data) }))
+    userIds.map(async (userId) => ({ userId, result: await notifyUser(userId, eventName, data, emailNotif) }))
   );
   return results.reduce(
     (acc, { userId, result }) => {
