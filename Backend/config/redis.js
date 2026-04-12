@@ -741,7 +741,7 @@ async function scanAllRefreshSessionsWithMeta() {
             sessionUserId,
           });
         }
-
+        
         records.push({
           key,
           ttlSeconds,
@@ -755,7 +755,7 @@ async function scanAllRefreshSessionsWithMeta() {
 
   for await (const rawKey of client.scanIterator({ match: pattern, count: batchSize })) {
     const key = rawKey.toString();
-
+    logger.debug('Scanning Redis key', { key });
     // Include only rt:userId:ticket keys and explicitly exclude rt:fail:* / rt:lock:*.
     const parts = key.split(':');
     if (parts.length !== 3) continue;
