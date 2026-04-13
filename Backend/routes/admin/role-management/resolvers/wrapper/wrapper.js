@@ -2259,8 +2259,8 @@ const Mutation = {
 
       if (hasIdentityChanged) {
         await client.query(
-          `UPDATE "UserCredentials"
-           SET identity = $1
+          `UPDATE "Patients"
+           SET profile = $1
            WHERE id = $2`,
           [nextIdentity, normalizedUserId]
         );
