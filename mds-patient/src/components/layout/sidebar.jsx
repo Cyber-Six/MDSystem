@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '@core/assets/MDSystem.png';
 
-const Sidebar = ({ isOpen, onClose }) => {
+const Sidebar = ({ isOpen, onClose, isInactive = false }) => {
   const location = useLocation();
 
   const handleLogoClick = () => {
@@ -87,31 +87,46 @@ const Sidebar = ({ isOpen, onClose }) => {
             {navItems.map((item) => {
               // Exact match for all paths
               const isActive = location.pathname === item.path;
+              // When account is inactive, only Record Update is accessible
+              const isDisabled = isInactive && item.path !== '/record-update';
+
+              const itemClassName = `flex items-center transition-all duration-200 ${
+                isOpen
+                  ? 'flex-row space-x-4 py-4 px-6'
+                  : 'flex-col justify-center space-y-1.5 py-4'
+              } ${
+                isDisabled
+                  ? 'opacity-40 cursor-not-allowed text-white dark:text-white/70'
+                  : isActive
+                    ? 'bg-white dark:bg-neutral-800 text-primary-500 dark:text-yellow-400 border-l-4 border-primary-500 dark:border-yellow-400 font-semibold'
+                    : 'text-white dark:text-white/70 hover:bg-white/10 dark:hover:bg-neutral-800 hover:text-white dark:hover:text-white'
+              }`;
+
+              const itemContent = (
+                <>
+                  <span>{icons[item.icon]}</span>
+                  <span className={`font-medium leading-tight ${isOpen ? 'text-base' : 'text-[11px] text-center'}`}>
+                    {item.label}
+                  </span>
+                </>
+              );
+
               return (
                 <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    onClick={() => onClose()}
-                    title={item.label}
-                    className={`flex items-center transition-all duration-200 ${
-                      isOpen 
-                        ? 'flex-row space-x-4 py-4 px-6' 
-                        : 'flex-col justify-center space-y-1.5 py-4'
-                    } ${
-                      isActive
-                        ? 'bg-white dark:bg-neutral-800 text-primary-500 dark:text-yellow-400 border-l-4 border-primary-500 dark:border-yellow-400 font-semibold'
-                        : 'text-white dark:text-white/70 hover:bg-white/10 dark:hover:bg-neutral-800 hover:text-white dark:hover:text-white'
-                    }`}
-                  >
-                    <span>
-                      {icons[item.icon]}
+                  {isDisabled ? (
+                    <span title={item.label} className={itemClassName}>
+                      {itemContent}
                     </span>
-                    <span className={`font-medium leading-tight ${
-                      isOpen ? 'text-base' : 'text-[11px] text-center'
-                    }`}>
-                      {item.label}
-                    </span>
-                  </Link>
+                  ) : (
+                    <Link
+                      to={item.path}
+                      onClick={() => onClose()}
+                      title={item.label}
+                      className={itemClassName}
+                    >
+                      {itemContent}
+                    </Link>
+                  )}
                 </li>
               );
             })}

@@ -15,6 +15,7 @@ const RecordUpdateForm = ({
   skipPersonalSubmit = false,
   hideRecordChoice = false,
   onSubmissionSuccess = null,
+  isInactiveMode = false,
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
@@ -381,7 +382,8 @@ const RecordUpdateForm = ({
   };
 
   const handleChoiceSelect = (choice) => {
-    if (forceRecordType || hideRecordChoice) return;
+    if (hideRecordChoice) return;
+    if (forceRecordType && choice !== forceRecordType) return; // only allow the forced type
     setRecordType(choice);
     setCurrentStep(0);
     setFormData(prev => ({ sex: prev.sex }));
@@ -615,10 +617,21 @@ const RecordUpdateForm = ({
         </div>
       )}
 
-      {!effectiveRecordType && !hideRecordChoice ? (
-        <RecordChoicePage onSelect={handleChoiceSelect} />
+      {!recordType && !hideRecordChoice ? (
+        <RecordChoicePage
+          onSelect={handleChoiceSelect}
+          disabledChoiceIds={forceRecordType === 'both' ? ['medical', 'dental'] : []}
+        />
       ) : (
         <div className="max-w-5xl mx-auto px-4">
+          {isInactiveMode && (
+            <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
+              <p className="text-sm font-semibold text-yellow-800">Inactive Account Recovery Mode</p>
+              <p className="text-xs text-yellow-700 mt-1">
+                Complete your medical and dental updates before staff re-checking and approval. Personal information is read-only in this mode.
+              </p>
+            </div>
+          )}
           {/* Header Section */}
           <div className="rounded-2xl p-6 mb-6 bg-primary-500">
             <div className="flex items-center gap-4">

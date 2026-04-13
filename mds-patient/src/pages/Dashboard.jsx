@@ -213,7 +213,7 @@ const Dashboard = () => {
       : null;
 
     return (
-      <Layout>
+      <Layout isInactive={true}>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="max-w-2xl mx-auto px-4">
             <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-8 text-center">
@@ -473,15 +473,7 @@ const Dashboard = () => {
         )}
       </InitialRecordModal>
 
-      <Layout>
-        {isInactiveCredential && isOnRecordUpdateRoute && (
-          <div className="mx-4 mt-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
-            <p className="text-sm font-semibold text-yellow-800">Inactive Account Recovery Mode</p>
-            <p className="text-xs text-yellow-700 mt-1">
-              Complete your medical and dental updates before staff re-checking and approval. Personal information is read-only in this mode.
-            </p>
-          </div>
-        )}
+      <Layout isInactive={isInactiveCredential}>
         <ErrorBoundary>
           <Suspense fallback={<RouteLoader />}>
             <Routes>
@@ -491,9 +483,10 @@ const Dashboard = () => {
                 element={(
                   <RecordUpdateForm
                     forceRecordType={isInactiveCredential ? 'both' : null}
-                    hideRecordChoice={isInactiveCredential}
+                    hideRecordChoice={false}
                     skipPersonalStep={isInactiveCredential}
                     skipPersonalSubmit={isInactiveCredential}
+                    isInactiveMode={isInactiveCredential}
                     onSubmissionSuccess={isInactiveCredential ? handleInactiveUpdateSubmissionSuccess : undefined}
                   />
                 )}
