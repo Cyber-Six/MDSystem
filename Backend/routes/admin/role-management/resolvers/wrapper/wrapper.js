@@ -598,7 +598,7 @@ const Query = {
          SELECT user_id, MAX(attempted_at) AS last_login
          FROM "UserLoginAttempt"
          WHERE was_successful = true
-           AND COALESCE(type::text, 'Medical') = 'Medical'
+           AND type = 'Medical'
          GROUP BY user_id
        ) lla ON lla.user_id = uc.id
        WHERE
@@ -676,7 +676,7 @@ const Query = {
          SELECT user_id, MAX(attempted_at) AS last_login
          FROM "UserLoginAttempt"
          WHERE was_successful = true
-           AND COALESCE(type::text, 'Medical') = 'Medical'
+           AND type = 'Medical'
          GROUP BY user_id
        ) lla ON lla.user_id = uc.id
        WHERE uc.id = $1
@@ -910,9 +910,9 @@ const Query = {
          WHERE ula.user_id = uc.id
            AND ula.was_successful = true
            AND (
-             (mp.id IS NOT NULL AND COALESCE(ula.type::text, 'Medical') = 'Medical')
+             (mp.id IS NOT NULL AND ula.type = 'Medical')
              OR
-             (mp.id IS NULL AND COALESCE(ula.type::text, 'Patient') = 'Patient')
+             (mp.id IS NULL AND ula.type = 'Patient')
            )
        ) lla ON true
        WHERE
