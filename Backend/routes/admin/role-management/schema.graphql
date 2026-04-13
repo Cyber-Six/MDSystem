@@ -228,6 +228,11 @@ type LinkedUserSession {
   expiresAt: String
 }
 
+type LinkedUserSessionPage {
+  sessions: [LinkedUserSession!]!
+  totalCount: Int!
+}
+
 # User session info for paginated global active-session listing
 type UserSession {
   sessionId: String!
@@ -335,8 +340,8 @@ type Query {
   # Refresh Token Analytics
   countActiveRefreshTokens: Int!
   countActiveUsersInDays(days: Int!): Int!
-  listUsers(offset: Int!, limit: Int!): UserListPage!
-  listUserSessions(userId: ID!): [LinkedUserSession!]!
+  listUsers(offset: Int!, limit: Int!, search: String, branch: String, type: String, status: String): UserListPage!
+  listUserSessions(userId: ID!, offset: Int = 0, limit: Int = 10): LinkedUserSessionPage!
   listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
 
   # Permission Templates

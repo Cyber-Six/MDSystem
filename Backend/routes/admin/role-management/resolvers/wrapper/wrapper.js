@@ -679,7 +679,7 @@ const Query = {
     return await getStaffModulePermissions(userId);
   },
 
-  _listUsers: async (_, { offset = 0, limit }, { user, res }) => {
+  _listUsers: async (_, { offset = 0, limit, search, branch, type, status }, { user, res }) => {
     if (offset < 0) {
       throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
     }
@@ -688,6 +688,25 @@ const Query = {
       throwGraphQLError(res).message('limit must be between 1 and 500').status(400).throw();
     }
 
+    const normalizeOptionalFilter = (value) => {
+      if (typeof value !== 'string') {
+        return null;
+      }
+
+      const normalized = value.trim();
+      if (!normalized || normalized.toLowerCase() === 'all') {
+        return null;
+      }
+
+      return normalized;
+    };
+
+    const normalizedBranch = normalizeOptionalFilter(branch);
+    const normalizedType = normalizeOptionalFilter(type);
+    const normalizedStatus = normalizeOptionalFilter(status);
+    const normalizedSearch = normalizeOptionalFilter(search);
+    const searchPattern = normalizedSearch ? `%${normalizedSearch}%` : null;
+
     const listResult = await db.query(
       `SELECT
          uc.id::text AS id,
@@ -695,66 +714,83 @@ const Query = {
          COALESCE(uc.identity::text, 'Unknown') AS type,
          COALESCE(uc.credentials_status::text, 'Unknown') AS status,
          up.branch::text AS branch,
-         COALESCE(
-           NULLIF(
-             TRIM(CONCAT_WS(
-               ' ',
-               upl.first_name,
-               CASE
-                 WHEN upl.middle_name IS NOT NULL AND upl.middle_name <> '' THEN LEFT(upl.middle_name, 1) || '.'
-                 ELSE NULL
-               END,
-               upl.last_name,
-               upl.suffix
-             )),
-             ''
-           ),
-           NULLIF(
-             TRIM(CONCAT_WS(
-               ' ',
-               up.first_name,
-               CASE
-                 WHEN up.middle_name IS NOT NULL AND up.middle_name <> '' THEN LEFT(up.middle_name, 1) || '.'
-                 ELSE NULL
-               END,
-               up.last_name,
-               up.suffix
-             )),
-             ''
-           ),
-           uc.email
+         NULLIF(
+           TRIM(CONCAT_WS(
+             ' ',
+             up.first_name,
+             CASE
+               WHEN up.middle_name IS NOT NULL AND up.middle_name <> '' THEN LEFT(up.middle_name, 1) || '.'
+               ELSE NULL
+             END,
+             up.last_name,
+             up.suffix
+           )),
+           ''
          ) AS name,
          lla.last_login
        FROM "UserCredentials" uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-       LEFT JOIN LATERAL (
-         SELECT l.first_name, l.middle_name, l.last_name, l.suffix
-         FROM "UsersPersonalLog" l
-         WHERE l.user_id = uc.id
-         ORDER BY l.created_at DESC
-         LIMIT 1
-       ) upl ON true
        LEFT JOIN (
          SELECT user_id, MAX(attempted_at) AS last_login
          FROM "UserLoginAttempt"
          WHERE was_successful = true
          GROUP BY user_id
        ) lla ON lla.user_id = uc.id
+       WHERE
+         ($3::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($3))
+         AND ($4::text IS NULL OR LOWER(COALESCE(uc.identity::text, '')) = LOWER($4))
+         AND ($5::text IS NULL OR LOWER(COALESCE(uc.credentials_status::text, '')) = LOWER($5))
+         AND (
+           $6::text IS NULL
+           OR uc.email ILIKE $6
+           OR uc.id::text ILIKE $6
+           OR TRIM(CONCAT_WS(
+             ' ',
+             up.first_name,
+             CASE
+               WHEN up.middle_name IS NOT NULL AND up.middle_name <> '' THEN LEFT(up.middle_name, 1) || '.'
+               ELSE NULL
+             END,
+             up.last_name,
+             up.suffix
+           )) ILIKE $6
+         )
        ORDER BY uc.id DESC
        OFFSET $1
        LIMIT $2`,
-      [offset, limit]
+      [offset, limit, normalizedBranch, normalizedType, normalizedStatus, searchPattern]
     );
 
     const countResult = await db.query(
       `SELECT COUNT(*)::int AS total_count
-       FROM "UserCredentials"`
+       FROM "UserCredentials" uc
+       LEFT JOIN "UsersPersonal" up ON up.id = uc.id
+       WHERE
+         ($1::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($1))
+         AND ($2::text IS NULL OR LOWER(COALESCE(uc.identity::text, '')) = LOWER($2))
+         AND ($3::text IS NULL OR LOWER(COALESCE(uc.credentials_status::text, '')) = LOWER($3))
+         AND (
+           $4::text IS NULL
+           OR uc.email ILIKE $4
+           OR uc.id::text ILIKE $4
+           OR TRIM(CONCAT_WS(
+             ' ',
+             up.first_name,
+             CASE
+               WHEN up.middle_name IS NOT NULL AND up.middle_name <> '' THEN LEFT(up.middle_name, 1) || '.'
+               ELSE NULL
+             END,
+             up.last_name,
+             up.suffix
+           )) ILIKE $4
+         )`,
+      [normalizedBranch, normalizedType, normalizedStatus, searchPattern]
     );
 
     const users = listResult.rows.map((row) => ({
       id: String(row.id),
-      name: row.name || row.email || `User ${row.id}`,
-      email: row.email || 'unknown',
+      name: row.name || '--',
+      email: row.email || '--',
       // Branch is sourced from UsersPersonal.branch only.
       branch: row.branch || '--',
       type: row.type || 'Unknown',
@@ -889,9 +925,17 @@ const Query = {
     };
   },
 
-  _listUserSessions: async (_, { userId }, { user, res }) => {
+  _listUserSessions: async (_, { userId, offset = 0, limit = 10 }, { user, res }) => {
     if (!userId) {
       throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    if (offset < 0) {
+      throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
+    }
+
+    if (limit < 1 || limit > 100) {
+      throwGraphQLError(res).message('limit must be between 1 and 100').status(400).throw();
     }
 
     const normalizedUserId = String(userId);
@@ -963,7 +1007,13 @@ const Query = {
       .sort((left, right) => (right._sortMs || 0) - (left._sortMs || 0))
       .map(({ _sortMs, ...session }) => session);
 
-    return sessions;
+    const totalCount = sessions.length;
+    const paginatedSessions = sessions.slice(offset, offset + limit);
+
+    return {
+      sessions: paginatedSessions,
+      totalCount,
+    };
   },
 
   _listPermissionTemplates: async (_, __, { user, res }) => {
