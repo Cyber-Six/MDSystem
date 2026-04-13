@@ -677,7 +677,7 @@ const Query = {
     return await getStaffModulePermissions(userId);
   },
 
-  _listUsers: async (_, { offset = 0, limit, search, branch, type, status }, { user, res }) => {
+  _listUsers: async (_, { offset = 0, limit, search, branch, type, status, includeUnverified = false }, { user, res }) => {
     if (offset < 0) {
       throwGraphQLError(res).message('offset must be >= 0').status(400).throw();
     }
@@ -703,6 +703,7 @@ const Query = {
     const normalizedType = normalizeOptionalFilter(type);
     const normalizedStatus = normalizeOptionalFilter(status);
     const normalizedSearch = normalizeOptionalFilter(search);
+    const shouldIncludeUnverified = Boolean(includeUnverified);
     const searchPattern = normalizedSearch ? `%${normalizedSearch}%` : null;
 
     const listResult = await db.query(
@@ -739,6 +740,11 @@ const Query = {
          AND ($4::text IS NULL OR LOWER(COALESCE(uc.identity::text, '')) = LOWER($4))
          AND ($5::text IS NULL OR LOWER(COALESCE(uc.credentials_status::text, '')) = LOWER($5))
          AND (
+           $7::boolean = true
+           OR LOWER(COALESCE(uc.credentials_status::text, '')) <> 'unverified'
+           OR LOWER(COALESCE($5::text, '')) = 'unverified'
+         )
+         AND (
            $6::text IS NULL
            OR uc.email ILIKE $6
            OR uc.id::text ILIKE $6
@@ -756,7 +762,7 @@ const Query = {
        ORDER BY uc.id DESC
        OFFSET $1
        LIMIT $2`,
-      [offset, limit, normalizedBranch, normalizedType, normalizedStatus, searchPattern]
+      [offset, limit, normalizedBranch, normalizedType, normalizedStatus, searchPattern, shouldIncludeUnverified]
     );
 
     const countResult = await db.query(
@@ -767,6 +773,11 @@ const Query = {
          ($1::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($1))
          AND ($2::text IS NULL OR LOWER(COALESCE(uc.identity::text, '')) = LOWER($2))
          AND ($3::text IS NULL OR LOWER(COALESCE(uc.credentials_status::text, '')) = LOWER($3))
+         AND (
+           $5::boolean = true
+           OR LOWER(COALESCE(uc.credentials_status::text, '')) <> 'unverified'
+           OR LOWER(COALESCE($3::text, '')) = 'unverified'
+         )
          AND (
            $4::text IS NULL
            OR uc.email ILIKE $4
@@ -782,17 +793,18 @@ const Query = {
              up.suffix
            )) ILIKE $4
          )`,
-      [normalizedBranch, normalizedType, normalizedStatus, searchPattern]
+      [normalizedBranch, normalizedType, normalizedStatus, searchPattern, shouldIncludeUnverified]
     );
 
     const users = listResult.rows.map((row) => {
       const resolvedStatus = String(row.status || 'Unknown');
-      const isUnverified = resolvedStatus.toLowerCase() === 'unverified';
+      const resolvedName = String(row.name || '').trim();
+      const isUnverified = resolvedStatus.toLowerCase() === 'unverified' || !resolvedName;
 
       return {
         id: String(row.id),
         // Name is sourced from UsersPersonal only. Unverified users use a fixed placeholder.
-        name: isUnverified ? 'Unverified User' : (row.name || 'Unknown User'),
+        name: isUnverified ? 'Unverified User' : resolvedName,
         // Email is sourced from UserCredentials.email.
         email: row.email || '--',
         // Branch is sourced from UsersPersonal.branch only.
@@ -865,13 +877,14 @@ const Query = {
       throwGraphQLError(res).message('hours must be an integer between 6 and 72').status(400).throw();
     }
 
-    const cutoffMs = Date.now() - normalizedHours * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const windowEndMs = nowMs + normalizedHours * 60 * 60 * 1000;
     const activeSessions = await getActiveRefreshSessionsAcrossUsers();
     const activeUserIds = new Set();
 
     for (const session of activeSessions) {
-      const activityMs = getSessionActivityMs(session);
-      if (Number.isFinite(activityMs) && activityMs >= cutoffMs) {
+      const expMs = Number(session?.expMs);
+      if (Number.isFinite(expMs) && expMs > nowMs && expMs <= windowEndMs) {
         activeUserIds.add(String(session.userId));
       }
     }

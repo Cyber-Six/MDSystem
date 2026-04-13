@@ -349,7 +349,7 @@ type Query {
   countActiveRefreshTokens: Int!
   countActiveUsersInDays(days: Int!): Int!
   countMaxActiveUsersInHours(hours: Int!): Int!
-  listUsers(offset: Int!, limit: Int!, search: String, branch: String, type: String, status: String): UserListPage!
+  listUsers(offset: Int!, limit: Int!, search: String, branch: String, type: String, status: String, includeUnverified: Boolean = false): UserListPage!
   listUserSessions(userId: ID!, offset: Int = 0, limit: Int = 10): [LinkedUserSession!]!
   listUserLoginAttempts(userId: ID!, offset: Int!, limit: Int!): [UserLoginAttempt!]!
   listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
