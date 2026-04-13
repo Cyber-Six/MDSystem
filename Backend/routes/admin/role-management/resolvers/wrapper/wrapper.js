@@ -17,6 +17,8 @@ const {
   setStaffModulePermissions,
   getStaffModulePermissions,
   clearMedicalPermits,
+  PERMISSION_GROUP_DEFINITIONS,
+  normalizeTemplatePermissionsInput,
 } = require('../../../../../services/permit.js');
 const {
   setKey,
@@ -164,6 +166,82 @@ function deriveModulePermissions(branchPermissions) {
   }
 
   return { modules, count: modules.length };
+}
+
+const DOCUMENT_PERMISSION_GROUP = PERMISSION_GROUP_DEFINITIONS.documents || null;
+const DOCUMENT_PERMISSION_KEYS = DOCUMENT_PERMISSION_GROUP?.childKeys || [];
+
+function getEnabledPermissionKeySet(permissionEntries) {
+  const enabledKeys = new Set();
+
+  for (const entry of permissionEntries || []) {
+    if (!entry) continue;
+
+    if (typeof entry === 'string') {
+      enabledKeys.add(entry);
+      continue;
+    }
+
+    const key = typeof entry.key === 'string' ? entry.key : null;
+    if (!key) continue;
+
+    const enabled = entry.enabled === undefined ? true : Boolean(entry.enabled);
+    if (enabled) {
+      enabledKeys.add(key);
+    }
+  }
+
+  return enabledKeys;
+}
+
+function summarizeDocumentPermissionChanges(beforePermissions, afterPermissions) {
+  const beforeEnabledKeys = getEnabledPermissionKeySet(beforePermissions);
+  const afterEnabledKeys = getEnabledPermissionKeySet(afterPermissions);
+
+  const before = DOCUMENT_PERMISSION_KEYS.filter((key) => beforeEnabledKeys.has(key));
+  const after = DOCUMENT_PERMISSION_KEYS.filter((key) => afterEnabledKeys.has(key));
+
+  const added = after.filter((key) => !beforeEnabledKeys.has(key));
+  const removed = before.filter((key) => !afterEnabledKeys.has(key));
+
+  return {
+    changed: added.length > 0 || removed.length > 0,
+    before,
+    after,
+    added,
+    removed,
+  };
+}
+
+async function logTemplateDocumentPermissionChange({
+  eventType,
+  action,
+  actorId,
+  templateId,
+  templateLabel,
+  changeSummary,
+}) {
+  if (!changeSummary?.changed) return;
+
+  await db.setSystemAuditLog({
+    eventType,
+    actorId,
+    actorType: 'Staff',
+    targetId: String(templateId),
+    action,
+    details: JSON.stringify({
+      templateId,
+      templateLabel,
+      documentPermissions: {
+        before: changeSummary.before,
+        after: changeSummary.after,
+        added: changeSummary.added,
+        removed: changeSummary.removed,
+      },
+      timestamp: new Date().toISOString(),
+    }),
+    changedBy: 'Medical',
+  });
 }
 
 async function ensureUserIdentityEnumValues() {
@@ -2363,22 +2441,49 @@ const Mutation = {
   },
 
   _createPermissionTemplate: async (_, { input }, { user, res }) => {
-    const { label, permissions: permissionsList, defaultBranch = 'Both' } = input;
+    const {
+      label,
+      permissions: permissionsList = [],
+      permissionGroups = [],
+      defaultBranch = 'Both',
+    } = input;
+
+    const hasPermissionPayload =
+      (Array.isArray(permissionsList) && permissionsList.length > 0)
+      || (Array.isArray(permissionGroups) && permissionGroups.length > 0);
 
     // Validate required fields
-    if (!label || !permissionsList || permissionsList.length === 0) {
+    if (!label || !hasPermissionPayload) {
       throwGraphQLError(res)
-        .message('label and permissions are required.')
+        .message('label and at least one permission payload are required.')
         .status(400)
         .throw();
     }
 
     try {
+      // Reuse shared template tiering normalization (flat + grouped input).
+      const normalizedPermissionsList = normalizeTemplatePermissionsInput({
+        permissionsList,
+        permissionGroups,
+        defaultBranch,
+      });
+
       const template = await createPermissionTemplate({
         label,
-        permissionsList,
+        permissionsList: normalizedPermissionsList,
         createdBy: user.id,
         defaultBranch
+      });
+
+      const hydratedTemplate = await getPermissionTemplate(template.id);
+      const documentChangeSummary = summarizeDocumentPermissionChanges([], hydratedTemplate?.permissions);
+      await logTemplateDocumentPermissionChange({
+        eventType: 'DOCUMENT_PERMISSION_TEMPLATE_CREATED',
+        action: 'CREATE_PERMISSION_TEMPLATE',
+        actorId: user.id,
+        templateId: template.id,
+        templateLabel: hydratedTemplate?.label || label,
+        changeSummary: documentChangeSummary,
       });
 
       logger.info(`Permission template created: templateId=${template.id}, by adminId=${user.id}`);
@@ -2386,7 +2491,7 @@ const Mutation = {
       return {
         ok: true,
         message: 'Permission template created successfully.',
-        template: await getPermissionTemplate(template.id)
+        template: hydratedTemplate
       };
     } catch (error) {
       logger.error(`Failed to create permission template: ${error.message}`);
@@ -2398,12 +2503,21 @@ const Mutation = {
   },
 
   _updatePermissionTemplate: async (_, { templateId, input }, { user, res }) => {
-    const { label, permissions: permissionsList, defaultBranch = 'Both' } = input;
+    const {
+      label,
+      permissions: permissionsList = [],
+      permissionGroups = [],
+      defaultBranch = 'Both',
+    } = input;
+
+    const hasPermissionPayload =
+      (Array.isArray(permissionsList) && permissionsList.length > 0)
+      || (Array.isArray(permissionGroups) && permissionGroups.length > 0);
 
     // Validate at least one field provided
-    if (label === undefined && (!permissionsList || permissionsList.length === 0)) {
+    if (label === undefined && !hasPermissionPayload) {
       throwGraphQLError(res)
-        .message('At least one field (label, permissions) must be provided.')
+        .message('At least one field (label, permissions, permissionGroups) must be provided.')
         .status(400)
         .throw();
     }
@@ -2418,11 +2532,20 @@ const Mutation = {
     }
 
     try {
+      // Reuse shared template tiering normalization (flat + grouped input).
+      const normalizedPermissionsList = hasPermissionPayload
+        ? normalizeTemplatePermissionsInput({
+          permissionsList,
+          permissionGroups,
+          defaultBranch,
+        })
+        : undefined;
+
       // Update template (this has its own transaction inside permit.js)
       const template = await updatePermissionTemplate({
         templateId,
         label,
-        permissionsList,
+        permissionsList: normalizedPermissionsList,
         defaultBranch
       });
 
@@ -2444,7 +2567,7 @@ const Mutation = {
         }
 
         // If permissions changed, propagate to all staff with this role
-        if (permissionsList && permissionsList.length > 0) {
+        if (normalizedPermissionsList && normalizedPermissionsList.length > 0) {
           const roleLabel = label || existingTemplate.label;
           const propagation = await propagateTemplatePermissions({
             templateId,
@@ -2456,6 +2579,19 @@ const Mutation = {
         }
 
         await client.query('COMMIT');
+
+        const documentChangeSummary = summarizeDocumentPermissionChanges(
+          existingTemplate?.permissions,
+          template?.permissions,
+        );
+        await logTemplateDocumentPermissionChange({
+          eventType: 'DOCUMENT_PERMISSION_TEMPLATE_UPDATED',
+          action: 'UPDATE_PERMISSION_TEMPLATE',
+          actorId: user.id,
+          templateId,
+          templateLabel: template?.label || label || existingTemplate?.label,
+          changeSummary: documentChangeSummary,
+        });
 
         logger.info(`Permission template updated: templateId=${templateId}, by adminId=${user.id}, affectedStaff=${affectedStaffCount}`);
 

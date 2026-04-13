@@ -59,6 +59,122 @@ const ADMIN_ONLY_KEYS = new Set([
   'role_management_allow_edit',
 ]);
 
+// ─── GROUPED TEMPLATE PERMISSIONS ───────────────────────────────────────────
+// Parent groups for template UX/API hierarchy. Each group is defined by its
+// child permission keys (keys in the `permissions` object above).
+const PERMISSION_GROUP_DEFINITIONS = Object.freeze({
+  documents: Object.freeze({
+    id: 'documents',
+    label: 'DOCUMENTS',
+    childKeys: Object.freeze([
+      'document_allow_view',
+      'document_allow_manage',
+      'document_allow_generate',
+    ]),
+  }),
+});
+
+function createDisabledPermissionEntry(key) {
+  return {
+    key,
+    label: permissions[key],
+    enabled: false,
+    branch: null,
+  };
+}
+
+/**
+ * Build hierarchical permission groups from a flat BranchPermission list.
+ * This is used by template APIs so frontend can render parent + children
+ * deterministically without inferring hierarchy client-side.
+ */
+function buildPermissionGroups(branchPermissions = []) {
+  const flatMap = new Map((branchPermissions || []).map((perm) => [perm.key, perm]));
+
+  return Object.values(PERMISSION_GROUP_DEFINITIONS).map((group) => {
+    const children = group.childKeys.map((key) => {
+      return flatMap.get(key) || createDisabledPermissionEntry(key);
+    });
+
+    const enabledChildCount = children.filter((child) => child.enabled).length;
+
+    return {
+      id: group.id,
+      label: group.label,
+      enabled: enabledChildCount > 0,
+      fullyEnabled: enabledChildCount === children.length && children.length > 0,
+      childCount: children.length,
+      enabledChildCount,
+      children,
+    };
+  });
+}
+
+/**
+ * Normalize template inputs where permissions can be provided as:
+ * 1) flat permission list, 2) grouped parent/children input, or both.
+ *
+ * Precedence rules (deterministic):
+ * - Flat permissions are loaded first.
+ * - Group parent `enabled` applies to all children when explicitly set.
+ * - If parent is OFF, child overrides are ignored.
+ * - If parent is ON/unspecified, explicit child entries override parent/default.
+ */
+function normalizeTemplatePermissionsInput({ permissionsList = [], permissionGroups = [], defaultBranch = 'Both' }) {
+  const merged = new Map();
+
+  const setPermission = (key, enabled, branch) => {
+    const label = permissions[key];
+    if (!label) {
+      throw new Error(`Invalid permission key: ${key}`);
+    }
+
+    merged.set(key, {
+      key,
+      enabled: Boolean(enabled),
+      branch: branch || defaultBranch || 'Both',
+    });
+  };
+
+  for (const perm of permissionsList || []) {
+    if (!perm || !perm.key) continue;
+    setPermission(perm.key, perm.enabled, perm.branch);
+  }
+
+  for (const groupInput of permissionGroups || []) {
+    if (!groupInput || !groupInput.groupId) continue;
+
+    const groupDef = PERMISSION_GROUP_DEFINITIONS[groupInput.groupId];
+    if (!groupDef) {
+      throw new Error(`Invalid permission group: ${groupInput.groupId}`);
+    }
+
+    const groupBranch = groupInput.branch || defaultBranch || 'Both';
+    const hasExplicitParent = typeof groupInput.enabled === 'boolean';
+
+    if (hasExplicitParent) {
+      for (const childKey of groupDef.childKeys) {
+        setPermission(childKey, groupInput.enabled, groupBranch);
+      }
+    }
+
+    // Parent OFF means children are not toggleable in that request.
+    if (groupInput.enabled === false) {
+      continue;
+    }
+
+    for (const child of groupInput.children || []) {
+      if (!child || !child.key) continue;
+      if (!groupDef.childKeys.includes(child.key)) {
+        throw new Error(`Permission key ${child.key} is not part of group ${groupDef.id}`);
+      }
+      setPermission(child.key, child.enabled, child.branch || groupBranch);
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
 async function isMedicalAdmin(userId) {
   return await findMedicalPermit(userId, permissions.is_admin);;
 }
@@ -601,6 +717,7 @@ async function getPermissionTemplate(templateId) {
     createdBy: String(template.created_by),
     createdAt: new Date(template.created_at).toISOString(),
     permissions: permsList,
+    permissionGroups: buildPermissionGroups(permsList),
     permissionCount: permsList.filter(p => p.enabled).length
   };
 }
@@ -651,6 +768,7 @@ async function listPermissionTemplates() {
       createdBy: String(row.created_by),
       createdAt: new Date(row.created_at).toISOString(),
       permissions: permsList,
+      permissionGroups: buildPermissionGroups(permsList),
       permissionCount: permsList.filter(p => p.enabled).length
     };
   });
@@ -1023,6 +1141,11 @@ const MODULE_PERMISSION_MAP = {
     'analytics_allow_view',
     'analytics_allow_export',
   ],
+  documents: [
+    'document_allow_view',
+    'document_allow_manage',
+    'document_allow_generate',
+  ],
   superiorAccess: [
     'privileged_to_perform_on_superior',  // ← Added to match frontend
   ],
@@ -1040,6 +1163,7 @@ const MODULE_LABELS = {
   healthChat: 'Health Chat',
   sendNotification: 'Send Notification',
   analytics: 'Analytics',
+  documents: 'Documents',
   superiorAccess: 'Superior Account Access',  // ← Added to match frontend
   // roleManagement excluded — admin-only access
 };
@@ -1172,6 +1296,9 @@ module.exports = {
   deletePermissionTemplate,
   applyTemplateToStaff,
   propagateTemplatePermissions,
+  PERMISSION_GROUP_DEFINITIONS,
+  buildPermissionGroups,
+  normalizeTemplatePermissionsInput,
   // Module-level permission functions
   MODULE_PERMISSION_MAP,
   MODULE_LABELS,
