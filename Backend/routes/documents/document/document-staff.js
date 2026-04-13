@@ -6,6 +6,7 @@ const { connect } = require('../../../config/query.js');
 const { promoteFile, deleteFile } = require('../../../config/multer.js');
 const docGen = require('../../../services/doc-generate-module/index.js');
 const { notifyUser } = require('../../../config/sockets/socket-emitter.js');
+const { permissions, isMedicalPermittedPatientBased } = require('../../../services/permit.js');
 
 const router = express.Router();
 
@@ -29,6 +30,11 @@ router.get('/required', jwtProtect('medical'), async (req, res) => {
 
     if (!patientId) {
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view this patient\'s documents.' });
     }
 
     // Get all document tags
@@ -109,6 +115,11 @@ router.get('/required/:documentId', jwtProtect('medical'), async (req, res) => {
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_view, patientId);
+    if (!isPermitted) {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to view this patient\'s documents.' });
+    }
+
     const result = await db.query(
       `SELECT rdt.id, rdt.label, rdt."isActive",
               prd.id as "submissionId", prd.file, prd.status,
@@ -172,6 +183,12 @@ router.post('/required/:documentId', jwtProtect('medical'), async (req, res) => 
     if (!patientId) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
     }
 
     // Check if the document tag exists
@@ -289,6 +306,12 @@ router.post('/required/:documentId/approve', jwtProtect('medical'), async (req, 
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
+    }    
+
     // Find the CURRENT (non-archived) submission
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
@@ -376,6 +399,12 @@ router.post('/required/:documentId/reject', jwtProtect('medical'), async (req, r
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
     }
 
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
+    }
+
     // Find the CURRENT (non-archived) submission - only Pending can be rejected
     const existingResult = await client.query(
       `SELECT prd.id, prd.status, rdt.label
@@ -458,6 +487,12 @@ router.delete('/required/:documentId/cancel', jwtProtect('medical'), async (req,
     if (!patientId) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
     }
 
     // Find the current submission
@@ -549,6 +584,12 @@ router.post('/required/:documentId/request', jwtProtect('medical'), async (req, 
     if (!patientId) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'PATIENT_ID_REQUIRED' });
+    }
+
+    const isPermitted = await isMedicalPermittedPatientBased(req.user.id, permissions.document_allow_manage, patientId);
+    if (!isPermitted) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Insufficient permissions to manage this patient\'s documents.' });
     }
 
     // Check if the document tag exists

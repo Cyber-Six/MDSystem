@@ -354,8 +354,9 @@ const Query = {
 
     const response = attachAccessState(row, canViewSuperiorDetails);
     if (response?.access_denied) {
+      const auditTs = new Date().toISOString();
       logger.warn(
-        `Restricted Superior details for user ID ${user.id} on patient ${args.userId}: access_denied=true`
+        `Restricted Superior details for user ID ${user.id} on patient ${args.userId} at ${auditTs}: access_denied=true`
       );
     }
 

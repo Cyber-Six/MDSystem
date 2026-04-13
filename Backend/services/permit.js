@@ -43,6 +43,9 @@ const permissions = {
   analytics_allow_view: "ALLOW_TO_VIEW_ANALYTICS",
   analytics_allow_export: "ALLOW_TO_EXPORT_ANALYTICS",
 
+  document_allow_view: "ALLOW_TO_VIEW_DOCUMENTS",
+  documents_allow_manage: "ALLOW_TO_MANAGE_DOCUMENTS",
+
   role_management_allow_access: "ALLOW_TO_ACCESS_ROLE_MANAGEMENT",
   role_management_allow_edit: "ALLOW_TO_EDIT_ROLE_MANAGEMENT",
 
