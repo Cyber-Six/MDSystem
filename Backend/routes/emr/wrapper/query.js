@@ -911,7 +911,7 @@ const Query = {
         END AS medicine_status,
         CASE
           WHEN latest_chat.status IN ('Open', 'Ongoing') THEN 'active'
-          ELSE 'inactive'
+          WHEN latest_chat.archived_at < NOW() + INTERVAL '1 day' THEN 'inactive'
         END AS healthchat_status,
         CASE
           WHEN latest_doc.status = 'Pending' THEN 'submitted'
@@ -958,7 +958,7 @@ const Query = {
         LIMIT 1
       ) latest_med ON true
       LEFT JOIN LATERAL (
-        SELECT hc.status
+        SELECT hc.status, hc.archived_at
         FROM "HealthChat" hc
         WHERE hc."patientId" = up.id
         ORDER BY hc.id DESC
