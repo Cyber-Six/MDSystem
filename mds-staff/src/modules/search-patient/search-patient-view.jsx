@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef, useCallback, lazy, Suspense, useMem
 import { searchPatients } from '../../services/patient-search-service';
 import { usePatientTabs } from '../../context/patient-tabs-context';
 import { usePermissions } from '../../context/permissions-context';
+import { useBanner } from '../../context/use-banner';
 import SearchBar from './components/search-bar';
 import SearchResultsList from './components/search-results-list';
+import { canExpandPatientDetails, SUPERIOR_DETAILS_DENIED_CUE } from './superior-access';
 
 const PatientRecordView = lazy(() => import('./patient-record-view.jsx'));
 
@@ -18,7 +20,8 @@ const TabLoader = () => (
 
 export default function SearchPatientView() {
   const { tabs, activeTabId, openTab, closeTab, setActiveTabId, switchToSearch, reorderTabs } = usePatientTabs();
-  const { branch: roleBranch, isLoading: permissionsLoading } = usePermissions();
+  const { branch: roleBranch, isLoading: permissionsLoading, hasPermission, isAdmin } = usePermissions();
+  const { showBanner } = useBanner();
 
   // ── Search state ────────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,9 +62,20 @@ export default function SearchPatientView() {
   const [dragOverTabId, setDragOverTabId] = useState(null);
 
   // ── Open patient record directly in a tab ─────────────────────────────────
+  const canViewSuperiorDetails = isAdmin || hasPermission('superiorAccess');
+
   const handleSelectPatient = useCallback((patient) => {
+    if (!canExpandPatientDetails(patient, canViewSuperiorDetails)) {
+      showBanner({
+        type: 'error',
+        message: SUPERIOR_DETAILS_DENIED_CUE,
+        duration: 5000,
+      });
+      return;
+    }
+
     openTab(patient, 'personal');
-  }, [openTab]);
+  }, [openTab, showBanner, canViewSuperiorDetails]);
 
   // ── Debounced search (shows loader immediately, waits before API call) ────
   useEffect(() => {

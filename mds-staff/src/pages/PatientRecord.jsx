@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { axiosRequest } from '../packages-core-adapter';
+import { SUPERIOR_DETAILS_DENIED_CUE } from '../modules/search-patient/superior-access';
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 const GQL_BASIC_INFO = `
@@ -10,6 +11,7 @@ const GQL_BASIC_INFO = `
       first_name last_name middle_name suffix
       profile_type program year department role
       latest_ticket_id latest_status latest_scope latest_updated_at
+      access_denied
     }
   }
 `;
@@ -136,6 +138,7 @@ const GQL_FULL_RECORD = `
       first_name last_name middle_name suffix
       profile_type program year department role
       latest_ticket_id latest_status latest_scope latest_updated_at
+      access_denied
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
     getUserMedicalHistory(userId: $userId, limit: 1) {
@@ -234,18 +237,40 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
     setIsLoading(true);
     setLoadError(null);
 
-    // Fetch EMR data and VitalSigns in parallel (VitalSigns moved to /staff/emr)
-    const emrPromise = axiosRequest.post('/emr/medical', { query: GQL_FULL_RECORD, variables: { userId: patientId } });
-    const vitalsPromise = axiosRequest.post('/staff/emr', { query: GQL_VITAL_SIGNS, variables: { patientId } })
-      .catch(err => { console.warn('[PatientRecord] VitalSigns fetch failed:', err.message); return null; });
+    const loadRecord = async () => {
+      try {
+        // Preflight access gate so Superior records never expand for unauthorized staff.
+        const probeRes = await axiosRequest.post('/emr/medical', {
+          query: GQL_BASIC_INFO,
+          variables: { userId: patientId },
+        });
 
-    Promise.all([emrPromise, vitalsPromise])
-      .then(([emrRes, vitalsRes]) => {
         if (cancelled) return;
+
+        const probeBasic = probeRes.data?.data?.getPatientBasicInfo;
+        if (!probeBasic) {
+          throw new Error(probeRes.data?.errors?.[0]?.message || 'Patient not found');
+        }
+
+        if (probeBasic.access_denied) {
+          setBasicInfo(probeBasic);
+          setLoadError(SUPERIOR_DETAILS_DENIED_CUE);
+          return;
+        }
+
+        // Fetch EMR data and VitalSigns in parallel (VitalSigns moved to /staff/emr).
+        const emrPromise = axiosRequest.post('/emr/medical', { query: GQL_FULL_RECORD, variables: { userId: patientId } });
+        const vitalsPromise = axiosRequest.post('/staff/emr', { query: GQL_VITAL_SIGNS, variables: { patientId } })
+          .catch(err => { console.warn('[PatientRecord] VitalSigns fetch failed:', err.message); return null; });
+
+        const [emrRes, vitalsRes] = await Promise.all([emrPromise, vitalsPromise]);
+        if (cancelled) return;
+
         const d = emrRes.data.data;
         if (!d?.getPatientBasicInfo) {
           throw new Error(emrRes.data.errors?.[0]?.message || 'Patient not found');
         }
+
         setBasicInfo(d.getPatientBasicInfo);
         setUpdateTicket(d.getUserUpdateTicket || null);
         setVitalSigns(vitalsRes?.data?.data?.getPatientVitalSigns?.[0] || null);
@@ -260,9 +285,16 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
         setVisionData(d.getUserVisualAcuityProfile?.[0] || null);
         setHospData(d.getUserHospitalizationProfile?.[0] || null);
         setOpData(d.getUserOperationProfile?.[0] || null);
-      })
-      .catch(err => { if (!cancelled) setLoadError(err.message || 'Failed to load patient.'); })
-      .finally(() => { if (!cancelled) setIsLoading(false); });
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err.message || 'Failed to load patient.');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    loadRecord();
 
     return () => { cancelled = true; };
   }, [patientId]);
@@ -510,7 +542,7 @@ const PatientRecord = ({ patientId: propPatientId, initialTab: propInitialTab, e
                 <h4 className="text-sm font-semibold text-secondary-900 dark:text-white uppercase tracking-wide">Emergency Contacts</h4>
               </div>
               <div className="p-6 grid md:grid-cols-2 gap-4">
-                {Object.entries(patient.emergencyContacts).map(([key, contact], idx) => (
+                {Object.entries(patient.emergencyContacts).map(([key, contact]) => (
                   <div key={key} className="p-4 bg-neutral-50 dark:bg-neutral-800/30 rounded-lg border border-neutral-200 dark:border-neutral-700">
                     <p className="text-sm font-bold text-secondary-900 dark:text-white mb-3">{contact.name}</p>
                     <div className="space-y-2 text-xs">

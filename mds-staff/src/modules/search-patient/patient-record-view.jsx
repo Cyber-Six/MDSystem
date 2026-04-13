@@ -5,6 +5,23 @@ import { GQL_FULL_RECORD, GQL_PERSONAL_PROFILE, MOCK_PATIENT_RECORDS, STATUS_BAN
 import * as consultationService from './consultation-service';
 import { ENUM_TO_CODE } from './components/tooth-chart-constants';
 import { fetchPatientMedicineRequests } from '../medical-inventory/medicine-request-service';
+import { SUPERIOR_DETAILS_DENIED_CUE } from './superior-access';
+
+const GQL_PATIENT_ACCESS_PROBE = `
+  query GetPatientAccessProbe($userId: ID!) {
+    getPatientBasicInfo(userId: $userId) {
+      id
+      identifier
+      branch
+      first_name
+      last_name
+      middle_name
+      suffix
+      profile_type
+      access_denied
+    }
+  }
+`;
 
 const GQL_CREATE_DENTAL_RECORD = `
   mutation CreateDentalRecord($patientId: ID!, $input: DentalRecordInput!) {
@@ -34,6 +51,7 @@ const GQL_BASIC_RECORD_FALLBACK = `
       latest_status
       latest_scope
       latest_updated_at
+      access_denied
     }
     getUserUpdateTicket(userId: $userId) {
       id
@@ -445,6 +463,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
   const isMockPatient = String(patientId || '').startsWith('mock-');
   const mockPatient = isMockPatient ? MOCK_PATIENT_RECORDS[String(patientId)] : null;
+  const isAccessDenied = !isMockPatient && Boolean(recordData?.getPatientBasicInfo?.access_denied);
 
   useEffect(() => {
     const requestedTab = initialTab || 'personal';
@@ -492,6 +511,27 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
     const loadRecord = async () => {
       try {
+        // Preflight access check: do not expand restricted Superior records.
+        const { data: accessProbeResp } = await axiosRequest.post('/emr/medical', {
+          query: GQL_PATIENT_ACCESS_PROBE,
+          variables: { userId: patientId },
+        });
+
+        if (cancelled) return;
+
+        const accessProbe = accessProbeResp?.data?.getPatientBasicInfo;
+        if (!accessProbe) {
+          throw new Error(accessProbeResp?.errors?.[0]?.message || 'Patient not found');
+        }
+
+        if (accessProbe.access_denied) {
+          setRecordData({ getPatientBasicInfo: accessProbe, getUserUpdateTicket: null });
+          setProfileData(null);
+          setVitalsData(null);
+          setLoadError(SUPERIOR_DETAILS_DENIED_CUE);
+          return;
+        }
+
         // Fetch EMR data, personal profile, VitalSigns, and dental data in parallel
         const [emrResult, profileResult, vitalsResult, staffDentalResult] = await Promise.allSettled([
           axiosRequest.post('/emr/medical', {
@@ -582,11 +622,12 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
           }
 
           setRecordData(fallbackPayload);
-          setLoadError(null);
+          setLoadError(fallbackPayload.getPatientBasicInfo?.access_denied ? SUPERIOR_DETAILS_DENIED_CUE : null);
         } catch (fallbackErr) {
           const fallbackPartial = fallbackErr?.response?.data?.data;
           if (fallbackPartial?.getPatientBasicInfo) {
             setRecordData(fallbackPartial);
+            setLoadError(fallbackPartial.getPatientBasicInfo?.access_denied ? SUPERIOR_DETAILS_DENIED_CUE : null);
             return;
           }
           if (!cancelled) {
@@ -608,9 +649,20 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
   const loadMedicineRequests = useCallback(async () => {
     const fetchId = ++medicineRequestsFetchIdRef.current;
 
+    if (isLoading) {
+      return;
+    }
+
     if (!patientId) {
       setMedicineRequests([]);
       setMedicineRequestsError('');
+      return;
+    }
+
+    if (isAccessDenied) {
+      setMedicineRequests([]);
+      setMedicineRequestsError('');
+      setIsLoadingMedicineRequests(false);
       return;
     }
 
@@ -636,7 +688,7 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         setIsLoadingMedicineRequests(false);
       }
     }
-  }, [patientId, isMockPatient, mockPatient]);
+  }, [patientId, isMockPatient, mockPatient, isAccessDenied, isLoading]);
 
   useEffect(() => {
     loadMedicineRequests();
@@ -662,7 +714,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
 
   // Fetch consultations from backend on page load
   useEffect(() => {
-    if (!patientId || isMockPatient) {
+    if (isLoading) return;
+
+    if (!patientId || isMockPatient || isAccessDenied) {
       setConsultations(mockPatient?.history?.consultations || []);
       return;
     }
@@ -689,11 +743,11 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     return () => {
       cancelled = true;
     };
-  }, [patientId, isMockPatient, mockPatient]);
+  }, [patientId, isMockPatient, mockPatient, isAccessDenied, isLoading]);
 
   const handleRefreshConsultations = async () => {
     try {
-      if (isMockPatient) {
+      if (isMockPatient || isAccessDenied) {
         // For mock patients, no need to refresh from backend
         return;
       }
@@ -957,7 +1011,6 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
         <div className="px-3 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto">
           <div className="flex gap-1.5 min-w-max" role="tablist" ref={tabsRef}>
             {tabs.map((tab) => {
-              const config = TAB_CONFIG[tab.id] || { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-200', category: '' };
               return (
                 <button
                   key={tab.id}

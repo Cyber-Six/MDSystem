@@ -22,6 +22,7 @@ const SEARCH_PATIENTS_QUERY = `
       latest_status
       latest_scope
       latest_updated_at
+      access_denied
     }
   }
 `;

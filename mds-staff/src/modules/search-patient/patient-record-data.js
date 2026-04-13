@@ -6,6 +6,7 @@ export const GQL_FULL_RECORD = `
       profile_type program year department role
       credentials_status
       latest_ticket_id latest_status latest_scope latest_updated_at
+      access_denied
     }
     getUserUpdateTicket(userId: $userId) { id patientId status scope }
     getUserMedicalHistory(userId: $userId, limit: 1) {

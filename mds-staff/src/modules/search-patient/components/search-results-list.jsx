@@ -111,8 +111,15 @@ const SearchResultsList = ({ patients, hasFired, isLoading, error, searchTerm, f
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                         p.profile_type === 'Student'
                           ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                          : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                          : p.profile_type === 'Superior'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                            : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
                       }`}>{p.profile_type}</span>
+                    )}
+                    {p.access_denied && (
+                      <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300">
+                        Restricted details
+                      </span>
                     )}
                     <span className="text-xs text-secondary-400 dark:text-neutral-500 truncate">{getProfileLabel(p)}</span>
                   </div>
