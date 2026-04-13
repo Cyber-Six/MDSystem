@@ -1325,7 +1325,7 @@ async function getFilterOptions() {
       INNER JOIN "patientUpdateLog" pul ON pul.id = pr.id AND pul.status = 'Approved'
       INNER JOIN "student_programs" spg ON spg.id = sp."programId"
       WHERE spg.label IS NOT NULL AND spg.label <> ''
-      ORDER BY sp.program
+      ORDER BY spg.label
     `),
   ]);
 
