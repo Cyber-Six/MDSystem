@@ -906,12 +906,12 @@ const Query = {
         CASE
           WHEN latest_med.status = 'Pending' THEN 'pending'
           WHEN latest_med.status = 'Approved' THEN 'approved'
-          WHEN latest_med.status = 'Completed' AND latest_med.updated_at < NOW() + INTERVAL '1 day' THEN 'dispensed'
+          WHEN latest_med.status = 'Completed' AND latest_med.updated_at + INTERVAL '1 day' > NOW() THEN 'dispensed'
           ELSE NULL
         END AS medicine_status,
         CASE
           WHEN latest_chat.status IN ('Open', 'Ongoing') THEN 'active'
-          WHEN latest_chat.archived_at < NOW() + INTERVAL '1 day' THEN 'inactive'
+          WHEN latest_chat.archived_at + INTERVAL '1 day' > NOW() THEN 'inactive'
         END AS healthchat_status,
         CASE
           WHEN latest_doc.status = 'Pending' THEN 'submitted'
