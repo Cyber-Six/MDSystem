@@ -906,7 +906,7 @@ const Query = {
         CASE
           WHEN latest_med.status = 'Pending' THEN 'pending'
           WHEN latest_med.status = 'Approved' THEN 'approved'
-          WHEN latest_med.status = 'Completed' AND latest_med.approved_by < NOW() + INTERVAL '1 day' THEN 'dispensed'
+          WHEN latest_med.status = 'Completed' AND latest_med.updated_at < NOW() + INTERVAL '1 day' THEN 'dispensed'
           ELSE NULL
         END AS medicine_status,
         CASE
@@ -951,7 +951,7 @@ const Query = {
         LIMIT 1
       ) latest_appt ON true
       LEFT JOIN LATERAL (
-        SELECT mrl.status, mrl.approved_by
+        SELECT mrl.status, mrl.updated_at
         FROM "MedicineRequestLog" mrl
         WHERE mrl."patientId" = up.id
         ORDER BY mrl.created_at DESC
