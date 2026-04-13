@@ -218,6 +218,7 @@ type UserListItem {
   type: String!
   userType: String!
   status: String!
+  inactiveExpiresAt: String
   lastLogin: String
 }
 

@@ -53,6 +53,9 @@ const REFRESH_SESSION_TTL_MS = REFRESH_SESSION_TTL_SECONDS * 1000;
 const USER_IDENTITY_ENUM_CANDIDATES = ['userIdentity', 'userIdentity_new'];
 const REQUIRED_USER_IDENTITY_VALUES = ['Student', 'Employee', 'Superior'];
 const SEMESTRAL_ALLOWED_IDENTITIES = ['Student', 'Employee'];
+const USER_LIST_BRANCH_VALUES = ['Manila', 'QuezonCity', 'Both'];
+const USER_LIST_IDENTITY_VALUES = ['Student', 'Employee', 'Medical', 'Superior'];
+const USER_LIST_STATUS_VALUES = ['Unverified', 'Active', 'Inactive', 'Locked'];
 
 /**
  * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────
@@ -869,9 +872,22 @@ const Query = {
       return normalized;
     };
 
-    const normalizedBranch = normalizeOptionalFilter(branch);
-    const normalizedType = normalizeOptionalFilter(type);
-    const normalizedStatus = normalizeOptionalFilter(status);
+    const normalizeAllowedFilter = (value, allowedValues) => {
+      const normalized = normalizeOptionalFilter(value);
+      if (!normalized) {
+        return null;
+      }
+
+      const resolved = allowedValues.find(
+        (allowedValue) => allowedValue.toLowerCase() === normalized.toLowerCase()
+      );
+
+      return resolved || null;
+    };
+
+    const normalizedBranch = normalizeAllowedFilter(branch, USER_LIST_BRANCH_VALUES);
+    const normalizedType = normalizeAllowedFilter(type, USER_LIST_IDENTITY_VALUES);
+    const normalizedStatus = normalizeAllowedFilter(status, USER_LIST_STATUS_VALUES);
     const normalizedSearch = normalizeOptionalFilter(search);
     const shouldIncludeUnverified = Boolean(includeUnverified);
     const searchPattern = normalizedSearch ? `%${normalizedSearch}%` : null;
@@ -900,19 +916,32 @@ const Query = {
            )),
            ''
          ) AS name,
+         inactive_ticket.expires_at AS inactive_expires_at,
          lla.last_login
        FROM "UserCredentials" uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
        LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
        LEFT JOIN LATERAL (
+         SELECT
+           pul.created_at,
+           pul.created_at + INTERVAL '7 days' AS expires_at
+         FROM "patientUpdateLog" pul
+         WHERE pul."patientId" = uc.id
+           AND pul.status IN ('InProgress', 'Pending', 'Revision', 'RevisionSubmitted')
+         ORDER BY pul.created_at DESC
+         LIMIT 1
+       ) inactive_ticket ON true
+       LEFT JOIN LATERAL (
          SELECT MAX(ula.attempted_at) AS last_login
          FROM "UserLoginAttempt" ula
          WHERE ula.user_id = uc.id
            AND ula.was_successful = true
-           AND ula.type = CASE
-             WHEN COALESCE(uc.identity::text, '') = 'Medical' OR mp.id IS NOT NULL THEN 'Medical'
-             ELSE 'Patient'
-           END
+           AND ula.type = (
+             CASE
+               WHEN COALESCE(uc.identity::text, '') = 'Medical' OR mp.id IS NOT NULL THEN 'Medical'
+               ELSE 'Patient'
+             END
+           )::"userType"
        ) lla ON true
        WHERE
          ($3::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($3))
@@ -991,6 +1020,9 @@ const Query = {
         type: row.type || 'Unknown',
         userType: row.user_type || 'patient',
         status: resolvedStatus,
+        inactiveExpiresAt: resolvedStatus.toLowerCase() === 'inactive' && row.inactive_expires_at
+          ? new Date(row.inactive_expires_at).toISOString()
+          : null,
         // Last login is sourced from UserLoginAttempt successful attempts only.
         lastLogin: row.last_login ? new Date(row.last_login).toISOString() : null,
       };
