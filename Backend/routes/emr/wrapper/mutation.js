@@ -52,7 +52,7 @@ const Mutation = {
         );
       }
 
-      await reloadCredentialStatus(_, { userId: args.userId, client }, { user, res }); // reload credential status after approval
+      await reloadCredentialStatus(_, { userId: args.userId, client, caller:"emr" }, { user, res }); // reload credential status after approval
       
       await client.query('COMMIT');
       logger.info(`User ID ${user.id} updated ticket ID ${recordId} to status ${newStatus}`);
