@@ -83,7 +83,11 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
   let clause = '';
   const params = [];
 
-  if (options.department) {
+  // Normalize and trim input values to prevent empty strings from being passed
+  const cleanedDept = options.department ? String(options.department).trim() : '';
+  const cleanedSex = options.sex ? String(options.sex).trim() : '';
+
+  if (cleanedDept) {
     // Filter by department OR program (since both are treated as department filter from frontend)
     clause += ` AND ${patientIdExpr} IN (
       SELECT DISTINCT pul_df."patientId" FROM "patientUpdateLog" pul_df
@@ -95,12 +99,12 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
       WHERE pul_df.status = 'Approved'
         AND (ep_df.department = $${startIdx} OR spg.label = $${startIdx})
     )`;
-    params.push(options.department);
+    params.push(cleanedDept);
     startIdx++;
   }
 
-  if (options.sex) {
-    const normalizedSex = normalizeSexFilterValue(options.sex);
+  if (cleanedSex) {
+    const normalizedSex = normalizeSexFilterValue(cleanedSex);
     if (normalizedSex) {
       clause += ` AND LOWER(COALESCE((
         SELECT up_sex.sex FROM "UsersPersonal" up_sex WHERE up_sex.id = ${patientIdExpr}
@@ -791,9 +795,11 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
   const params = [startDate, endDate];
   let paramIndex = 3;
 
-  const deptCteFilter = options.department ? `AND ep.department = $${paramIndex}` : '';
-  if (options.department) {
-    params.push(options.department);
+  // Trim and validate department input
+  const cleanedDept = options.department ? String(options.department).trim() : '';
+  const deptCteFilter = cleanedDept ? `AND ep.department = $${paramIndex}` : '';
+  if (cleanedDept) {
+    params.push(cleanedDept);
     paramIndex++;
   }
 
@@ -801,7 +807,9 @@ async function consultationsByDepartment(branch, startDate, endDate, options = {
   params.push(...bf.params);
   paramIndex += bf.params.length;
 
-  const normalizedSex = normalizeSexFilterValue(options.sex);
+  // Trim and validate sex input
+  const cleanedSex = options.sex ? String(options.sex).trim() : '';
+  const normalizedSex = normalizeSexFilterValue(cleanedSex);
   const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
@@ -838,9 +846,11 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
   const params = [startDate, endDate];
   let paramIndex = 3;
 
-  const programCteFilter = options.department ? `AND sp.program = $${paramIndex}` : '';
-  if (options.department) {
-    params.push(options.department);
+  // Trim and validate department input
+  const cleanedDept = options.department ? String(options.department).trim() : '';
+  const programCteFilter = cleanedDept ? `AND sp.program = $${paramIndex}` : '';
+  if (cleanedDept) {
+    params.push(cleanedDept);
     paramIndex++;
   }
 
@@ -848,7 +858,9 @@ async function consultationsByProgram(branch, startDate, endDate, options = {}) 
   params.push(...bf.params);
   paramIndex += bf.params.length;
 
-  const normalizedSex = normalizeSexFilterValue(options.sex);
+  // Trim and validate sex input
+  const cleanedSex = options.sex ? String(options.sex).trim() : '';
+  const normalizedSex = normalizeSexFilterValue(cleanedSex);
   const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
@@ -886,9 +898,11 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
   const params = [startDate, endDate];
   let paramIndex = 3;
 
-  const deptCteFilter = options.department ? `AND ep.department = $${paramIndex}` : '';
-  if (options.department) {
-    params.push(options.department);
+  // Trim and validate department input
+  const cleanedDept = options.department ? String(options.department).trim() : '';
+  const deptCteFilter = cleanedDept ? `AND ep.department = $${paramIndex}` : '';
+  if (cleanedDept) {
+    params.push(cleanedDept);
     paramIndex++;
   }
 
@@ -896,7 +910,9 @@ async function lifestyleRisksByDepartment(branch, startDate, endDate, options = 
   params.push(...bf.params);
   paramIndex += bf.params.length;
 
-  const normalizedSex = normalizeSexFilterValue(options.sex);
+  // Trim and validate sex input
+  const cleanedSex = options.sex ? String(options.sex).trim() : '';
+  const normalizedSex = normalizeSexFilterValue(cleanedSex);
   const sexFilter = normalizedSex ? `AND LOWER(COALESCE(up.sex, '')) = LOWER($${paramIndex})` : '';
   if (normalizedSex) {
     params.push(normalizedSex);
