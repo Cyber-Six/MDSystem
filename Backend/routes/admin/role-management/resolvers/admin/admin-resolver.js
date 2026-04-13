@@ -64,6 +64,11 @@ const Query = {
     return await Wrapper.Query._countActiveRefreshTokens(_, args, context);
   },
 
+  countActiveUsersInDays: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Query._countActiveUsersInDays(_, args, context);
+  },
+
   listUsers: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Query._listUsers(_, args, context);
@@ -131,6 +136,11 @@ const Mutation = {
   rotateStaffAnchor: async (_, args, context) => {
     await requireAdmin(context.user, context.res);
     return await Wrapper.Mutation._rotateStaffAnchor(_, args, context);
+  },
+
+  revokeUserSession: async (_, args, context) => {
+    await requireAdmin(context.user, context.res);
+    return await Wrapper.Mutation._revokeUserSession(_, args, context);
   },
 
   createPermissionTemplate: async (_, args, context) => {

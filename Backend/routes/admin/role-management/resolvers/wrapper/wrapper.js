@@ -19,6 +19,9 @@ const {
   clearMedicalPermits,
 } = require('../../../../../services/permit.js');
 const {
+  getKey,
+  setKey,
+  delKey,
   listUserSessions,
   listUserSessionsWithMeta,
   scanAllRefreshSessions,
@@ -361,6 +364,26 @@ function normalizeScannedRefreshSession(record, nowMs) {
   };
 }
 
+function getSessionActivityMs(session) {
+  const updatedAtMs = Number(session?.updatedAtMs);
+  if (Number.isFinite(updatedAtMs) && updatedAtMs > 0) {
+    return updatedAtMs;
+  }
+
+  const createdAtMs = Number(session?.createdAtMs);
+  if (Number.isFinite(createdAtMs) && createdAtMs > 0) {
+    return createdAtMs;
+  }
+
+  const expMs = Number(session?.expMs);
+  if (Number.isFinite(expMs) && expMs > 0) {
+    const inferredIssuedAtMs = expMs - REFRESH_SESSION_TTL_MS;
+    return inferredIssuedAtMs > 0 ? inferredIssuedAtMs : null;
+  }
+
+  return null;
+}
+
 async function getActiveRefreshSessionsAcrossUsers({ includeEmails = false } = {}) {
   const nowMs = Date.now();
   const scannedSessions = await scanAllRefreshSessionsWithMeta();
@@ -671,7 +694,7 @@ const Query = {
          uc.email,
          COALESCE(uc.identity::text, 'Unknown') AS type,
          COALESCE(uc.credentials_status::text, 'Unknown') AS status,
-         COALESCE(up.branch::text, '--') AS branch,
+         up.branch::text AS branch,
          COALESCE(
            NULLIF(
              TRIM(CONCAT_WS(
@@ -732,9 +755,11 @@ const Query = {
       id: String(row.id),
       name: row.name || row.email || `User ${row.id}`,
       email: row.email || 'unknown',
+      // Branch is sourced from UsersPersonal.branch only.
       branch: row.branch || '--',
       type: row.type || 'Unknown',
       status: row.status || 'Unknown',
+      // Last login is sourced from UserLoginAttempt successful attempts only.
       lastLogin: row.last_login ? new Date(row.last_login).toISOString() : null,
     }));
 
@@ -769,6 +794,27 @@ const Query = {
   _countActiveRefreshTokens: async (_, __, { user, res }) => {
     const activeSessions = await getActiveRefreshSessionsAcrossUsers();
     return activeSessions.length;
+  },
+
+  _countActiveUsersInDays: async (_, { days }, { user, res }) => {
+    const normalizedDays = Number(days);
+
+    if (!Number.isInteger(normalizedDays) || normalizedDays < 1 || normalizedDays > 365) {
+      throwGraphQLError(res).message('days must be an integer between 1 and 365').status(400).throw();
+    }
+
+    const cutoffMs = Date.now() - normalizedDays * 24 * 60 * 60 * 1000;
+    const activeSessions = await getActiveRefreshSessionsAcrossUsers();
+    const activeUserIds = new Set();
+
+    for (const session of activeSessions) {
+      const activityMs = getSessionActivityMs(session);
+      if (Number.isFinite(activityMs) && activityMs >= cutoffMs) {
+        activeUserIds.add(String(session.userId));
+      }
+    }
+
+    return activeUserIds.size;
   },
 
   _listAllSessions: async (_, { offset = 0, limit }, { user, res }) => {
@@ -1624,6 +1670,60 @@ const Mutation = {
     } finally {
       client.release();
     }
+  },
+
+  _revokeUserSession: async (_, { userId, deviceId }, { user, res }) => {
+    const normalizedUserId = String(userId || '').trim();
+    const normalizedDeviceId = String(deviceId || '').trim();
+
+    if (!normalizedUserId) {
+      throwGraphQLError(res).message('userId is required').status(400).throw();
+    }
+
+    if (!normalizedDeviceId) {
+      throwGraphQLError(res).message('deviceId is required').status(400).throw();
+    }
+
+    const sessionKey = `rt:${normalizedUserId}:${normalizedDeviceId}`;
+    const rawSession = await getKey(sessionKey);
+
+    if (!rawSession) {
+      return {
+        ok: true,
+        message: 'Session already revoked or expired.',
+      };
+    }
+
+    let parsedSession = null;
+    try {
+      parsedSession = JSON.parse(rawSession);
+    } catch {
+      parsedSession = null;
+    }
+
+    if (parsedSession && typeof parsedSession === 'object') {
+      const revokedPayload = {
+        ...parsedSession,
+        status: 'revoked',
+        updatedAt: Date.now(),
+      };
+
+      // Persist revoked status briefly before key deletion to satisfy audit semantics.
+      await setKey(sessionKey, JSON.stringify(revokedPayload), 5);
+    }
+
+    await delKey(sessionKey);
+
+    logger.info('User refresh session revoked by admin', {
+      adminId: String(user?.id || ''),
+      userId: normalizedUserId,
+      deviceId: normalizedDeviceId,
+    });
+
+    return {
+      ok: true,
+      message: 'Session revoked successfully.',
+    };
   },
 
   _createPermissionTemplate: async (_, { input }, { user, res }) => {
