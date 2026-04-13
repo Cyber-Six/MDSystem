@@ -51,6 +51,11 @@ const GQL_BASIC_RECORD_FALLBACK = `
       latest_status
       latest_scope
       latest_updated_at
+      medical_status
+      appointment_status
+      medicine_status
+      healthchat_status
+      document_status
       access_denied
     }
     getUserUpdateTicket(userId: $userId) {
@@ -90,7 +95,12 @@ function LoadingBlock({ label }) {
 }
 
 function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData) {
-  if (mockPatient) return mockPatient;
+  if (mockPatient) {
+    return {
+      ...mockPatient,
+      moduleStatuses: mockPatient.moduleStatuses || {},
+    };
+  }
 
   const basicInfo = data?.getPatientBasicInfo;
   const updateTicket = data?.getUserUpdateTicket || null;
@@ -198,6 +208,13 @@ function toDisplayPatient(patientId, data, mockPatient, profileData, vitalsData)
     status: updateTicket?.status || basicInfo?.latest_status || '',
     credentialStatus: basicInfo?.credentials_status || '',
     type: basicInfo?.profile_type || 'Student',
+    moduleStatuses: {
+      medical_status: basicInfo?.medical_status || null,
+      appointment_status: basicInfo?.appointment_status || null,
+      medicine_status: basicInfo?.medicine_status || null,
+      healthchat_status: basicInfo?.healthchat_status || null,
+      document_status: basicInfo?.document_status || null,
+    },
     avatar: null,
     personal: {
       firstName: basicInfo?.first_name || '',
@@ -400,6 +417,46 @@ const mapMedicineRequestsForDisplay = (requests = []) => {
     };
   });
 };
+
+const MODULE_STATUS_BADGE_CONFIG = Object.freeze({
+  medical_status: {
+    pending: { label: 'Pending Medical', cls: 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-400' },
+    approved: { label: 'Medical Approved', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+    completed: { label: 'Medical Completed', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+  },
+  appointment_status: {
+    scheduled: { label: 'Appointment Scheduled', cls: 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-400' },
+    pending: { label: 'Appointment Pending', cls: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400' },
+    completed: { label: 'Appointment Completed', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+  },
+  medicine_status: {
+    pending: { label: 'Medicine Request Pending', cls: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400' },
+    approved: { label: 'Medicine Request Approved', cls: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400' },
+    dispensed: { label: 'Medicine Dispensed', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+  },
+  healthchat_status: {
+    active: { label: 'HealthChat Active', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+    inactive: { label: 'HealthChat Inactive', cls: 'bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400' },
+  },
+  document_status: {
+    submitted: { label: 'Document Submitted', cls: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' },
+    pending: { label: 'Document Pending', cls: 'bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400' },
+    approved: { label: 'Document Approved', cls: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400' },
+  },
+});
+
+const MODULE_STATUS_ORDER = ['medical_status', 'appointment_status', 'medicine_status', 'healthchat_status', 'document_status'];
+
+function buildModuleStatusTags(moduleStatuses) {
+  return MODULE_STATUS_ORDER
+    .map((statusKey) => {
+      const rawValue = moduleStatuses?.[statusKey];
+      const normalizedValue = typeof rawValue === 'string' ? rawValue.toLowerCase() : '';
+      const config = MODULE_STATUS_BADGE_CONFIG[statusKey]?.[normalizedValue];
+      return config ? { id: statusKey, ...config } : null;
+    })
+    .filter(Boolean);
+}
 
 // ── Helper: Get icon and color for each tab category ──────────────────────────
 const TAB_CONFIG = {
@@ -882,6 +939,9 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
     .slice(0, 2)
     .toUpperCase();
 
+  // Keep header tags deterministic by relying on API-provided status flags only.
+  const moduleStatusTags = buildModuleStatusTags(patient.moduleStatuses);
+
   const renderTab = () => {
     switch (activeTab) {
       case 'personal':
@@ -974,7 +1034,17 @@ export default function PatientRecordView({ patientId, initialTab: initialTabPro
               {initials}
             </div>
             <div className="min-w-0 flex flex-col gap-0.5">
-              <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 style={{ lineHeight: 1.2, margin: 0 }} className="text-sm font-bold text-secondary-900 dark:text-white truncate">{patient.name || 'Unknown Patient'}</h2>
+                {moduleStatusTags.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${tag.cls}`}
+                  >
+                    {tag.label}
+                  </span>
+                ))}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {patient.personal?.studentNumber || patient.personal?.employeeNumber || patient.id ? (
                   <span className="text-xs font-mono text-secondary-500 dark:text-neutral-400">
