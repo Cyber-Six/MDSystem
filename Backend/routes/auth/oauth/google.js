@@ -85,6 +85,7 @@ router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
     }
   };
 
+  account_type = account_type.toLowerCase();
   // ✅ Required fields
   if (!credential) {
     await recordAttempt(false, null, null);

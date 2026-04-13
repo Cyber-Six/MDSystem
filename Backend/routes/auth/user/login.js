@@ -72,6 +72,8 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
     });
   }
 
+  account_type = account_type.toLowerCase();
+
   const loginTtl = await isLoginLocked(email, account_type);
   if (loginTtl > 0) {
     await recordAttempt(false, email);
