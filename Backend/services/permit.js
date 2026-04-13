@@ -337,12 +337,12 @@ async function isMedicalPermittedPatientBased(userId, label, patientId, strictSu
   } // Admin bypass
 
   const result = await db.query(
-    `SELECT uc.identity
+    `SELECT p.profile AS identity
      FROM "rolesMap" rm
      JOIN "rolesTable" rt ON rm."rolesId" = rt.id
      JOIN "MedicalPersonnel" mp ON mp.id = rm."personnelId"
      JOIN "UsersPersonal" up ON up.id = $3
-     JOIN "UserCredentials" uc ON uc.id = up.id
+     JOIN "Patients" p ON p.id = up.id
      WHERE rm."personnelId" = $1
        AND rt.label = $2
        AND (
