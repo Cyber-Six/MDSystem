@@ -764,6 +764,7 @@ type PatientSearchResult {
   latest_status: UpdateStatus
   latest_scope: UpdateScope
   latest_updated_at: Date
+  access_denied: Boolean
 }
 
 
