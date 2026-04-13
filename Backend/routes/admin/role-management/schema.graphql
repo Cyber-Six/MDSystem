@@ -129,6 +129,13 @@ type MutationResult {
   message: String!
 }
 
+type SemestralInactivationPreview {
+  ok: Boolean!
+  message: String!
+  scopedCount: Int!
+  willUpdateCount: Int!
+}
+
 type StaffAccountMutationResult {
   ok: Boolean!
   message: String!
@@ -209,6 +216,7 @@ type UserListItem {
   email: String!
   branch: String!
   type: String!
+  userType: String!
   status: String!
   lastLogin: String
 }
@@ -350,6 +358,7 @@ type Query {
   countActiveUsersInDays(days: Int!): Int!
   countMaxActiveUsersInHours(hours: Int!): Int!
   listUsers(offset: Int!, limit: Int!, search: String, branch: String, type: String, status: String, includeUnverified: Boolean = false): UserListPage!
+  previewSemestralInactivation(branch: String, department: String, identities: [Identity!]): SemestralInactivationPreview!
   listUserSessions(userId: ID!, offset: Int = 0, limit: Int = 10): [LinkedUserSession!]!
   listUserLoginAttempts(userId: ID!, offset: Int!, limit: Int!): [UserLoginAttempt!]!
   listAllSessions(offset: Int!, limit: Int!): UserSessionPage!
@@ -401,7 +410,7 @@ type Mutation {
   setUserAccountLocked(userId: ID!, locked: Boolean!): MutationResult!
   setUserSuperior(userId: ID!): MutationResult!
   setUserSuperiorStatus(userId: ID!, superior: Boolean!): MutationResult!
-  applySemestralInactivation(branch: String, department: String): MutationResult!
+  applySemestralInactivation(branch: String, department: String, identities: [Identity!]): MutationResult!
 
   # Permission Templates
   createPermissionTemplate(input: CreateTemplateInput!): TemplateMutationResult!

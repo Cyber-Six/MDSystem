@@ -52,6 +52,7 @@ const REFRESH_SESSION_TTL_SECONDS = Number(process.env.JWT_REFRESH_EXPIRATION) |
 const REFRESH_SESSION_TTL_MS = REFRESH_SESSION_TTL_SECONDS * 1000;
 const USER_IDENTITY_ENUM_CANDIDATES = ['userIdentity', 'userIdentity_new'];
 const REQUIRED_USER_IDENTITY_VALUES = ['Student', 'Employee', 'Superior'];
+const SEMESTRAL_ALLOWED_IDENTITIES = ['Student', 'Employee'];
 
 /**
  * ─── PERMISSIONS REFACTORING ──────────────────────────────────────────────
@@ -199,6 +200,85 @@ function normalizeOptionalScopeValue(value) {
   const normalized = value.trim();
   if (!normalized || normalized.toLowerCase() === 'all') return null;
   return normalized;
+}
+
+function resolveSemestralIdentities(identities, res) {
+  if (!Array.isArray(identities) || identities.length === 0) {
+    return [...SEMESTRAL_ALLOWED_IDENTITIES];
+  }
+
+  const normalized = [...new Set(
+    identities
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  )];
+
+  const invalid = normalized.filter((value) => !SEMESTRAL_ALLOWED_IDENTITIES.includes(value));
+  if (invalid.length > 0) {
+    throwGraphQLError(res)
+      .message('identities must only include Student and/or Employee.')
+      .status(400)
+      .throw();
+  }
+
+  return normalized;
+}
+
+function validateSemestralScope(branch, department, res) {
+  const normalizedBranch = normalizeOptionalScopeValue(branch);
+  const normalizedDepartment = normalizeOptionalScopeValue(department);
+
+  if (!normalizedBranch && !normalizedDepartment) {
+    throwGraphQLError(res)
+      .message('Either branch or department must be provided.')
+      .status(400)
+      .throw();
+  }
+
+  if (normalizedBranch && !['Manila', 'QuezonCity', 'Both'].includes(normalizedBranch)) {
+    throwGraphQLError(res)
+      .message('branch must be one of Manila, QuezonCity, or Both.')
+      .status(400)
+      .throw();
+  }
+
+  return { normalizedBranch, normalizedDepartment };
+}
+
+async function getSemestralScopeSummary({ identities, normalizedBranch, normalizedDepartment }) {
+  const summaryResult = await db.query(
+    `WITH scoped_users AS (
+       SELECT uc.id
+       FROM "UserCredentials" uc
+       LEFT JOIN "UsersPersonal" up ON up.id = uc.id
+       LEFT JOIN LATERAL (
+         SELECT ep.department
+         FROM "patientUpdateLog" pul
+         JOIN "profileRecord" pr ON pr.id = pul.id
+         JOIN "employee_profile" ep ON ep."profileId" = pr.id
+         WHERE pul."patientId" = uc.id
+           AND pr.profile_type = 'Employee'
+         ORDER BY pul.created_at DESC
+         LIMIT 1
+       ) latest_employee ON true
+       WHERE uc.identity::text = ANY($1::text[])
+         AND ($2::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($2))
+         AND ($3::text IS NULL OR LOWER(COALESCE(latest_employee.department, '')) = LOWER($3))
+     )
+     SELECT
+       COUNT(*)::int AS scoped_count,
+       COUNT(*) FILTER (
+         WHERE COALESCE(uc.credentials_status::text, '') <> 'Inactive'
+       )::int AS will_update_count
+     FROM scoped_users su
+     JOIN "UserCredentials" uc ON uc.id = su.id`,
+    [identities, normalizedBranch, normalizedDepartment]
+  );
+
+  return {
+    scopedCount: Number(summaryResult.rows?.[0]?.scoped_count) || 0,
+    willUpdateCount: Number(summaryResult.rows?.[0]?.will_update_count) || 0,
+  };
 }
 
 function normalizeMutableUserSessionRecord(record, expectedUserId) {
@@ -518,6 +598,7 @@ const Query = {
          SELECT user_id, MAX(attempted_at) AS last_login
          FROM "UserLoginAttempt"
          WHERE was_successful = true
+           AND COALESCE(type::text, 'Medical') = 'Medical'
          GROUP BY user_id
        ) lla ON lla.user_id = uc.id
        WHERE
@@ -595,6 +676,7 @@ const Query = {
          SELECT user_id, MAX(attempted_at) AS last_login
          FROM "UserLoginAttempt"
          WHERE was_successful = true
+           AND COALESCE(type::text, 'Medical') = 'Medical'
          GROUP BY user_id
        ) lla ON lla.user_id = uc.id
        WHERE uc.id = $1
@@ -799,6 +881,10 @@ const Query = {
          uc.id::text AS id,
          uc.email,
          COALESCE(uc.identity::text, 'Unknown') AS type,
+         CASE
+           WHEN mp.id IS NOT NULL THEN 'medical'
+           ELSE 'patient'
+         END AS user_type,
          COALESCE(uc.credentials_status::text, 'Unknown') AS status,
          up.branch::text AS branch,
          NULLIF(
@@ -817,12 +903,18 @@ const Query = {
          lla.last_login
        FROM "UserCredentials" uc
        LEFT JOIN "UsersPersonal" up ON up.id = uc.id
-       LEFT JOIN (
-         SELECT user_id, MAX(attempted_at) AS last_login
-         FROM "UserLoginAttempt"
-         WHERE was_successful = true
-         GROUP BY user_id
-       ) lla ON lla.user_id = uc.id
+       LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+       LEFT JOIN LATERAL (
+         SELECT MAX(ula.attempted_at) AS last_login
+         FROM "UserLoginAttempt" ula
+         WHERE ula.user_id = uc.id
+           AND ula.was_successful = true
+           AND (
+             (mp.id IS NOT NULL AND COALESCE(ula.type::text, 'Medical') = 'Medical')
+             OR
+             (mp.id IS NULL AND COALESCE(ula.type::text, 'Patient') = 'Patient')
+           )
+       ) lla ON true
        WHERE
          ($3::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($3))
          AND ($4::text IS NULL OR LOWER(COALESCE(uc.identity::text, '')) = LOWER($4))
@@ -898,6 +990,7 @@ const Query = {
         // Branch is sourced from UsersPersonal.branch only.
         branch: row.branch || '--',
         type: row.type || 'Unknown',
+        userType: row.user_type || 'patient',
         status: resolvedStatus,
         // Last login is sourced from UserLoginAttempt successful attempts only.
         lastLogin: row.last_login ? new Date(row.last_login).toISOString() : null,
@@ -907,6 +1000,26 @@ const Query = {
     return {
       users,
       totalCount: Number(countResult.rows?.[0]?.total_count) || 0,
+    };
+  },
+
+  _previewSemestralInactivation: async (_, { branch, department, identities }, { user, res }) => {
+    const { normalizedBranch, normalizedDepartment } = validateSemestralScope(branch, department, res);
+    const targetIdentities = resolveSemestralIdentities(identities, res);
+
+    const { scopedCount, willUpdateCount } = await getSemestralScopeSummary({
+      identities: targetIdentities,
+      normalizedBranch,
+      normalizedDepartment,
+    });
+
+    return {
+      ok: true,
+      message: scopedCount === 0
+        ? `No ${targetIdentities.join(' or ')} accounts matched the selected scope.`
+        : `${willUpdateCount} of ${scopedCount} account(s) will be set to Inactive.`,
+      scopedCount,
+      willUpdateCount,
     };
   },
 
@@ -2022,8 +2135,7 @@ const Mutation = {
     const nextStatus = shouldLock ? 'Locked' : 'Active';
     await db.query(
       `UPDATE "UserCredentials"
-       SET credentials_status = $1::"CredentialStatus",
-           locked_until = NULL
+       SET credentials_status = $1::"CredentialStatus"
        WHERE id = $2`,
       [nextStatus, normalizedUserId]
     );
@@ -2139,23 +2251,9 @@ const Mutation = {
     }
   },
 
-  _applySemestralInactivation: async (_, { branch, department }, { user, res }) => {
-    const normalizedBranch = normalizeOptionalScopeValue(branch);
-    const normalizedDepartment = normalizeOptionalScopeValue(department);
-
-    if (!normalizedBranch && !normalizedDepartment) {
-      throwGraphQLError(res)
-        .message('Either branch or department must be provided.')
-        .status(400)
-        .throw();
-    }
-
-    if (normalizedBranch && !['Manila', 'QuezonCity', 'Both'].includes(normalizedBranch)) {
-      throwGraphQLError(res)
-        .message('branch must be one of Manila, QuezonCity, or Both.')
-        .status(400)
-        .throw();
-    }
+  _applySemestralInactivation: async (_, { branch, department, identities }, { user, res }) => {
+    const { normalizedBranch, normalizedDepartment } = validateSemestralScope(branch, department, res);
+    const targetIdentities = resolveSemestralIdentities(identities, res);
 
     const summaryResult = await db.query(
       `WITH scoped_users AS (
@@ -2178,8 +2276,7 @@ const Mutation = {
        ),
        updated_users AS (
          UPDATE "UserCredentials" uc
-         SET credentials_status = 'Inactive'::"CredentialStatus",
-             locked_until = NULL
+         SET credentials_status = 'Inactive'::"CredentialStatus"
          FROM scoped_users su
          WHERE uc.id = su.id
            AND COALESCE(uc.credentials_status::text, '') <> 'Inactive'
@@ -2188,7 +2285,7 @@ const Mutation = {
        SELECT
          (SELECT COUNT(*)::int FROM scoped_users) AS scoped_count,
          (SELECT COUNT(*)::int FROM updated_users) AS updated_count`,
-      [['Student', 'Employee'], normalizedBranch, normalizedDepartment]
+      [targetIdentities, normalizedBranch, normalizedDepartment]
     );
 
     const scopedCount = Number(summaryResult.rows?.[0]?.scoped_count) || 0;
@@ -2197,7 +2294,7 @@ const Mutation = {
     if (scopedCount === 0) {
       return {
         ok: true,
-        message: 'No Student or Employee accounts matched the selected scope.',
+        message: `No ${targetIdentities.join(' or ')} accounts matched the selected scope.`,
       };
     }
 
@@ -2205,6 +2302,7 @@ const Mutation = {
       adminId: String(user?.id || ''),
       branch: normalizedBranch,
       department: normalizedDepartment,
+      identities: targetIdentities,
       scopedCount,
       updatedCount,
     });

@@ -49,6 +49,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
         email: targetEmail || null,
         userId,
         wasSuccessful,
+        userType: account_type,
         ipAddress: auditMetadata.ipAddress,
         userAgent: auditMetadata.userAgent,
       });
@@ -195,6 +196,7 @@ router.post("/", portalBasedIpRateLimiter(), async (req, res) => {
 router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   try {
   const { LoginKey: verificationKey } = req.body;
+  const portal = detectPortalFromSubdomain(req);
   const auditMetadata = getRequestAuditMetadata(req);
   const recordAttempt = async (wasSuccessful, targetEmail = null, userId = null) => {
     try {
@@ -202,6 +204,7 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
         email: targetEmail,
         userId,
         wasSuccessful,
+        userType: portal,
         ipAddress: auditMetadata.ipAddress,
         userAgent: auditMetadata.userAgent,
       });
@@ -274,7 +277,6 @@ router.post("/complete", portalBasedIpRateLimiter(), async (req, res) => {
   }
 
   // ✅ Staff portal gate: only allow users with IS_STAFF permission to complete staff login
-  const portal = detectPortalFromSubdomain(req);
   if (portal === "medical") {
     const isMedical = await query.isActiveMedicalPersonnel(session.user_id);
     if (!isMedical) {

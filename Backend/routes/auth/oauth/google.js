@@ -71,6 +71,7 @@ router.post("/google", portalBasedIpRateLimiter(), async (req, res) => {
         email: targetEmail,
         userId,
         wasSuccessful,
+        userType: account_type,
         ipAddress: auditMetadata.ipAddress,
         userAgent: auditMetadata.userAgent,
       });

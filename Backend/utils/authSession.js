@@ -6,7 +6,7 @@ const { detectPortalFromSubdomain } = require("./portal.js");
 class AuthSession {
   static async create(req, userId) {
     const deviceId = generateRandomKey();
-    const role = detectPortalFromSubdomain(req);
+    const role = detectPortalFromSubdomain(req).toLowerCase(); // "patient" or "medical"
 
     // Call your session-layer function
     const { accessToken, refreshToken: rawRefreshToken } = await handleLogin({

@@ -65,9 +65,9 @@ router.post("/:purpose", portalBasedIpRateLimiter(), async (req, res) => {
     }
 
     //add bearing for staff dashboard
-    const portal = detectPortalFromSubdomain(req);
+    const portal = detectPortalFromSubdomain(req).toLowerCase();
 
-    const profileName = portal === "patient" ? "PatientAuthentication" : "staffAuthentication";
+    const profileName = portal.toLowerCase() === "patient" ? "PatientAuthentication" : "staffAuthentication";
     const profile = rateLimitMatrix[profileName];
 
     const emailCooldown = purpose === "2fa" ? profile.emailCooldown_2fa : profile.emailCooldown_emailv;
@@ -144,7 +144,7 @@ router.post('/:purpose/verify', portalBasedIpRateLimiter(), async (req, res) => 
     }
 
     const code = purpose === "verification" ? "emailVerification" : "email2FA";
-    const portal = detectPortalFromSubdomain(req);
+    const portal = detectPortalFromSubdomain(req).toLowerCase();
 
     // ✅ Verify OTP using Redis (with lockout protection)
     const result = await verifyOTP(email, code, otp, portal);

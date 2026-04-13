@@ -61,7 +61,7 @@ router.post("/forget-password", ipRateLimiter("strictLimiter"), async (req, res)
     }
 
     // ✅ 4. Rate limiting (simplified)
-    const portal = detectPortalFromSubdomain(req);
+    const portal = detectPortalFromSubdomain(req).toLowerCase();
     const profileName = portal === "patient" ? "PatientAuthentication" : "staffAuthentication";
     const profile = rateLimitMatrix[profileName];
     const purpose = "resetpw";

@@ -4,10 +4,10 @@ function detectPortalFromSubdomain(req) {
   const host = req.get("x-forwarded-host") || req.get("host") || "";
 
   if (host.startsWith("staff.")) {
-    return "medical";
+    return "Medical";
   }
 
-  return "patient";
+  return "Patient";
 }
 
 module.exports = { detectPortalFromSubdomain };

@@ -314,8 +314,7 @@ async function getCredentialLockStateByEmail(email) {
   const sql = `
     SELECT
       id,
-      credentials_status AS status,
-      locked_until
+      credentials_status AS status
     FROM "UserCredentials"
     WHERE email = $1
     LIMIT 1;
@@ -328,7 +327,7 @@ async function getCredentialLockStateByEmail(email) {
     return {
       userId: result.rows[0].id,
       status: result.rows[0].status || null,
-      lockedUntil: result.rows[0].locked_until || null,
+      lockedUntil: null,
     };
   } catch (err) {
     logger.error(`Error fetching lock state by email=${email}:`, err);
@@ -341,8 +340,7 @@ async function getCredentialLockStateByUserId(userId) {
     SELECT
       id,
       email,
-      credentials_status AS status,
-      locked_until
+      credentials_status AS status
     FROM "UserCredentials"
     WHERE id = $1
     LIMIT 1;
@@ -356,7 +354,7 @@ async function getCredentialLockStateByUserId(userId) {
       userId: result.rows[0].id,
       email: result.rows[0].email || null,
       status: result.rows[0].status || null,
-      lockedUntil: result.rows[0].locked_until || null,
+      lockedUntil: null,
     };
   } catch (err) {
     logger.error(`Error fetching lock state by userId=${userId}:`, err);
@@ -399,9 +397,20 @@ async function recordLoginAttempt(emailOrInput, wasSuccessfulLegacy, metadata = 
   const userAgent = hasInputObject
     ? (emailOrInput.userAgent || null)
     : (metadata.userAgent || null);
+  const userTypeInput = hasInputObject
+    ? (emailOrInput.userType || emailOrInput.portal || null)
+    : (metadata.userType || metadata.portal || null);
+
+  const normalizedPortal = String(userTypeInput || '').trim().toLowerCase();
+  let loginType = null;
+  if (normalizedPortal === 'patient') {
+    loginType = 'Patient';
+  } else if (normalizedPortal === 'medical' || normalizedPortal === 'staff') {
+    loginType = 'Medical';
+  }
 
   const sql = `
-    INSERT INTO "UserLoginAttempt" (user_id, was_successful, ip_address, user_agent)
+    INSERT INTO "UserLoginAttempt" (user_id, was_successful, ip_address, user_agent, type)
     VALUES (
       COALESCE(
         $1::integer,
@@ -409,12 +418,13 @@ async function recordLoginAttempt(emailOrInput, wasSuccessfulLegacy, metadata = 
       ),
       $3,
       $4,
-      $5
+      $5,
+      $6::"userType"
     );
   `;
 
   try {
-    await query(sql, [explicitUserId, email, wasSuccessful, ipAddress, userAgent]);
+    await query(sql, [explicitUserId, email, wasSuccessful, ipAddress, userAgent, loginType]);
   } catch (err) {
     logger.error('Error recording login attempt:', err);
     throw err;
