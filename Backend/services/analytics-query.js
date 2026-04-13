@@ -91,8 +91,9 @@ function profileFilterClause(options = {}, patientIdExpr = 'p.id', startIdx = 3)
       LEFT JOIN "employee_profile" ep_df ON ep_df."profileId" = pr_df.id
       LEFT JOIN "profileRecord" pr_prog ON pr_prog.id = pul_df.id AND pr_prog.profile_type = 'Student'
       LEFT JOIN "student_profile" sp_prog ON sp_prog."profileId" = pr_prog.id
+      LEFT JOIN "student_programs" spg ON spg.id = sp_prog."programId"
       WHERE pul_df.status = 'Approved'
-        AND (ep_df.department = $${startIdx} OR sp_prog.program = $${startIdx})
+        AND (ep_df.department = $${startIdx} OR spg.label = $${startIdx})
     )`;
     params.push(options.department);
     startIdx++;
