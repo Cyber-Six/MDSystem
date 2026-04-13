@@ -140,12 +140,12 @@ const Query = {
       throwGraphQLError(res).message("Unauthorized").status(401).throw();
     }
     const sql = `
-      SELECT email, credentials_status, locked_until
+      SELECT
+        email,
+        credentials_status,
+        NULL::timestamp AS locked_until
       FROM "UserCredentials" uc
-      LEFT JOIN "UserLoginAttempts" ula ON uc.id = ula.user_id
-      WHERE 
-        uc.id = $1 AND 
-        (ula.was_successful = true OR ula.was_successful IS NULL)
+      WHERE uc.id = $1
       LIMIT 1;
     `;
     const result = await db.query(sql, [userId]);
@@ -400,7 +400,7 @@ const Mutation = {
     }
   },
 
-  _staffSetCredentialStatus: async (_, { userId, status, lockDays = 7 }, { user, res }) => {
+  _staffSetCredentialStatus: async (_, { userId, status }, { user, res }) => {
     const validStatuses = ["Locked", "Active"];
     if (!validStatuses.includes(status)) {
       throwGraphQLError(res).message("Invalid credential status").status(400).throw();
@@ -412,22 +412,20 @@ const Mutation = {
     if (status === "Locked") {
       query = `
         UPDATE "UserCredentials"
-        SET credentials_status = $1,
-            locked_until = NOW() + $3 * INTERVAL '1 day'
+        SET credentials_status = $1
         WHERE id = $2
         AND credentials_status != 'Unverified'
-        RETURNING credentials_status, locked_until;
+        RETURNING credentials_status, NULL::timestamp AS locked_until;
       `;
-      params = [status, userId, lockDays];
+      params = [status, userId];
     } else {
       // status = "Active"
       query = `
         UPDATE "UserCredentials"
-        SET credentials_status = $1,
-            locked_until = NULL
+        SET credentials_status = $1
         WHERE id = $2
         AND credentials_status != 'Unverified'
-        RETURNING credentials_status, locked_until;
+        RETURNING credentials_status, NULL::timestamp AS locked_until;
       `;
       params = [status, userId];
     }

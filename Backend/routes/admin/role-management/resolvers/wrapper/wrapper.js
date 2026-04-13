@@ -882,7 +882,7 @@ const Query = {
          uc.email,
          COALESCE(uc.identity::text, 'Unknown') AS type,
          CASE
-           WHEN mp.id IS NOT NULL THEN 'medical'
+           WHEN COALESCE(uc.identity::text, '') = 'Medical' OR mp.id IS NOT NULL THEN 'medical'
            ELSE 'patient'
          END AS user_type,
          COALESCE(uc.credentials_status::text, 'Unknown') AS status,
@@ -909,11 +909,10 @@ const Query = {
          FROM "UserLoginAttempt" ula
          WHERE ula.user_id = uc.id
            AND ula.was_successful = true
-           AND (
-             (mp.id IS NOT NULL AND ula.type = 'Medical')
-             OR
-             (mp.id IS NULL AND ula.type = 'Patient')
-           )
+           AND ula.type = CASE
+             WHEN COALESCE(uc.identity::text, '') = 'Medical' OR mp.id IS NOT NULL THEN 'Medical'
+             ELSE 'Patient'
+           END
        ) lla ON true
        WHERE
          ($3::text IS NULL OR LOWER(COALESCE(up.branch::text, '')) = LOWER($3))
@@ -1264,13 +1263,31 @@ const Query = {
     }
 
     const result = await db.query(
-      `SELECT
+      `WITH target_user AS (
+         SELECT EXISTS(
+           SELECT 1
+           FROM "UserCredentials" uc
+           LEFT JOIN "MedicalPersonnel" mp ON mp.id = uc.id
+           WHERE uc.id = $1
+             AND (
+               COALESCE(uc.identity::text, '') = 'Medical'
+               OR mp.id IS NOT NULL
+             )
+         ) AS is_medical
+       )
+       SELECT
          attempted_at,
          was_successful,
          ip_address,
          user_agent
-       FROM "UserLoginAttempt"
-       WHERE user_id = $1
+       FROM "UserLoginAttempt" ula
+       CROSS JOIN target_user tu
+       WHERE ula.user_id = $1
+         AND (
+           (tu.is_medical = true AND ula.type = 'Medical')
+           OR
+           (tu.is_medical = false AND ula.type = 'Patient')
+         )
        ORDER BY attempted_at DESC
        OFFSET $2
        LIMIT $3`,
