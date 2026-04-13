@@ -15,6 +15,7 @@ const RecordUpdateForm = ({
   skipPersonalSubmit = false,
   hideRecordChoice = false,
   onSubmissionSuccess = null,
+  isInactiveMode = false,
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({});
@@ -117,6 +118,21 @@ const RecordUpdateForm = ({
   const validateCurrentStep = () => {
     const stepName = steps[currentStep];
     const errors = [];
+
+    if (stepName === 'Personal Info') {
+      if (!formData.programId) {
+        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select a program before proceeding.' });
+      }
+      if (!formData.schoolYear) {
+        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please select your student category before proceeding.' });
+      }
+      if (!formData.emergencyContact1Name || !formData.emergencyContact1Relationship || !formData.emergencyContact1Number) {
+        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please complete all required Primary Emergency Contact fields.' });
+      }
+      if (!formData.emergencyContact2Name || !formData.emergencyContact2Relationship || !formData.emergencyContact2Number) {
+        errors.push({ section: 'Personal Info', sectionIndex: 0, message: 'Please complete all required Secondary Emergency Contact fields.' });
+      }
+    }
 
     if (stepName === 'Medical History') {
       // Lifestyle habits are always required
@@ -381,7 +397,8 @@ const RecordUpdateForm = ({
   };
 
   const handleChoiceSelect = (choice) => {
-    if (forceRecordType || hideRecordChoice) return;
+    if (hideRecordChoice) return;
+    if (forceRecordType && choice !== forceRecordType) return; // only allow the forced type
     setRecordType(choice);
     setCurrentStep(0);
     setFormData(prev => ({ sex: prev.sex }));
@@ -615,10 +632,21 @@ const RecordUpdateForm = ({
         </div>
       )}
 
-      {!effectiveRecordType && !hideRecordChoice ? (
-        <RecordChoicePage onSelect={handleChoiceSelect} />
+      {!recordType && !hideRecordChoice ? (
+        <RecordChoicePage
+          onSelect={handleChoiceSelect}
+          disabledChoiceIds={forceRecordType === 'both' ? ['medical', 'dental'] : []}
+        />
       ) : (
         <div className="max-w-5xl mx-auto px-4">
+          {isInactiveMode && (
+            <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
+              <p className="text-sm font-semibold text-yellow-800">Inactive Account Recovery Mode</p>
+              <p className="text-xs text-yellow-700 mt-1">
+                Complete your school information, emergency contacts, and medical and dental updates for staff re-checking and approval.
+              </p>
+            </div>
+          )}
           {/* Header Section */}
           <div className="rounded-2xl p-6 mb-6 bg-primary-500">
             <div className="flex items-center gap-4">

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Sidebar from './sidebar';
 import TopBar from './top-bar';
 
-const Layout = ({ children }) => {
+const Layout = ({ children, isInactive = false }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const toggleSidebar = () => {
@@ -16,7 +16,7 @@ const Layout = ({ children }) => {
   return (
     <div className="flex h-screen bg-stone-100 dark:bg-neutral-800">
       {/* Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
+      <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} isInactive={isInactive} />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden md:ml-24">

@@ -1,6 +1,6 @@
 import React from 'react';
 
-const RecordChoicePage = ({ onSelect }) => {
+const RecordChoicePage = ({ onSelect, disabledChoiceIds = [] }) => {
   const choices = [
     {
       id: 'medical',
@@ -74,23 +74,42 @@ const RecordChoicePage = ({ onSelect }) => {
 
       {/* Choices Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-        {choices.map((choice) => (
-          <button
-            key={choice.id}
-            onClick={() => onSelect(choice.id)}
-            className={`p-6 rounded-2xl border-2 shadow-md transition-all duration-200 text-left hover:scale-105 ${colorStyles[choice.color]}`}
-          >
-            <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 shadow-sm ${iconBgStyles[choice.color]} ${iconStyles[choice.color]}`}>
-              {choice.icon}
+        {choices.map((choice) => {
+          const isDisabled = disabledChoiceIds.includes(choice.id);
+          return isDisabled ? (
+            <div
+              key={choice.id}
+              title="Not available in this mode"
+              className={`p-6 rounded-2xl border-2 shadow-md text-left opacity-40 cursor-not-allowed select-none ${colorStyles[choice.color]}`}
+            >
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 shadow-sm ${iconBgStyles[choice.color]} ${iconStyles[choice.color]}`}>
+                {choice.icon}
+              </div>
+              <h3 className="font-heading font-bold text-base text-gray-900 dark:text-white mb-1">
+                {choice.title}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                {choice.description}
+              </p>
             </div>
-            <h3 className="font-heading font-bold text-base text-gray-900 dark:text-white mb-1">
-              {choice.title}
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-              {choice.description}
-            </p>
-          </button>
-        ))}
+          ) : (
+            <button
+              key={choice.id}
+              onClick={() => onSelect(choice.id)}
+              className={`p-6 rounded-2xl border-2 shadow-md transition-all duration-200 text-left hover:scale-105 ${colorStyles[choice.color]}`}
+            >
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 shadow-sm ${iconBgStyles[choice.color]} ${iconStyles[choice.color]}`}>
+                {choice.icon}
+              </div>
+              <h3 className="font-heading font-bold text-base text-gray-900 dark:text-white mb-1">
+                {choice.title}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                {choice.description}
+              </p>
+            </button>
+          );
+        })}
       </div>
 
       {/* Info Section */}
